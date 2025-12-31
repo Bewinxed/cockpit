@@ -1,37 +1,80 @@
+// ID generation utilities
+export {
+  generateId,
+  generateShortId,
+  generatePrefixedId,
+  generateMachineId,
+  getMachineFingerprint,
+  generateSessionId,
+  generateRequestId,
+  isValidUuid,
+  isValidPrefixedId,
+  getIdPrefix,
+  IdPrefix,
+  type IdPrefixValue,
+  generateAgentId,
+  generateInstanceId,
+  generateProjectId,
+  generateTaskId,
+} from './id.js';
+
+// Tailscale utilities
+export {
+  type TailscaleStatus,
+  type TailscalePeer,
+  type TailscalePeerInfo,
+  getTailscaleStatus,
+  getTailscaleIp,
+  getTailscaleHostname,
+  getOnlinePeers,
+  getAllPeers,
+  isTailscaleAvailable,
+  getTailnetName,
+} from './tailscale.js';
+
+// mDNS discovery utilities
+export {
+  COCKPIT_SERVICE_TYPE,
+  COCKPIT_DEFAULT_PORT,
+  type CockpitService,
+  type DiscoveryEvents,
+  type DiscoveryOptions,
+  DiscoveryService,
+  discoverHub,
+  discoverAll,
+} from './discovery.js';
+
+// General utilities
 import { randomUUID } from 'crypto';
 
 /**
- * Generate a unique ID
- */
-export function generateId(): string {
-  return randomUUID();
-}
-
-/**
- * Generate a short ID (first 8 chars of UUID)
- */
-export function generateShortId(): string {
-  return randomUUID().split('-')[0];
-}
-
-/**
  * Sleep for a given number of milliseconds
+ * @param ms - Milliseconds to sleep
  */
 export function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
  * Calculate exponential backoff delay
+ * @param attempt - The attempt number (0-indexed)
+ * @param baseDelay - Base delay in milliseconds (default: 1000)
+ * @param maxDelay - Maximum delay in milliseconds (default: 30000)
+ * @returns The calculated delay with jitter
  */
 export function exponentialBackoff(attempt: number, baseDelay = 1000, maxDelay = 30000): number {
   const delay = Math.min(baseDelay * Math.pow(2, attempt), maxDelay);
-  // Add jitter
+  // Add jitter (up to 1 second)
   return delay + Math.random() * 1000;
 }
 
 /**
  * Retry a function with exponential backoff
+ * @param fn - The async function to retry
+ * @param maxAttempts - Maximum number of attempts (default: 3)
+ * @param baseDelay - Base delay between attempts in milliseconds (default: 1000)
+ * @returns The result of the function
+ * @throws The last error if all attempts fail
  */
 export async function retry<T>(
   fn: () => Promise<T>,
@@ -55,13 +98,19 @@ export async function retry<T>(
 }
 
 /**
- * Create a deferred promise
+ * Deferred promise with external resolve/reject
  */
-export function deferred<T>(): {
+export interface Deferred<T> {
   promise: Promise<T>;
   resolve: (value: T) => void;
   reject: (reason: unknown) => void;
-} {
+}
+
+/**
+ * Create a deferred promise that can be resolved/rejected externally
+ * @returns A deferred object with promise, resolve, and reject
+ */
+export function deferred<T>(): Deferred<T> {
   let resolve!: (value: T) => void;
   let reject!: (reason: unknown) => void;
 
@@ -74,7 +123,12 @@ export function deferred<T>(): {
 }
 
 /**
- * Timeout wrapper for promises
+ * Wrap a promise with a timeout
+ * @param promise - The promise to wrap
+ * @param ms - Timeout in milliseconds
+ * @param message - Optional error message on timeout
+ * @returns The promise result
+ * @throws Error if the timeout is reached
  */
 export async function withTimeout<T>(
   promise: Promise<T>,
@@ -89,7 +143,9 @@ export async function withTimeout<T>(
 }
 
 /**
- * Safe JSON parse
+ * Safely parse JSON without throwing
+ * @param str - The JSON string to parse
+ * @returns The parsed object or null if parsing fails
  */
 export function safeJsonParse<T>(str: string): T | null {
   try {
@@ -100,15 +156,54 @@ export function safeJsonParse<T>(str: string): T | null {
 }
 
 /**
- * Get hostname
+ * Get the system hostname
+ * @returns The hostname
  */
 export function getHostname(): string {
   return process.env.HOSTNAME || require('os').hostname();
 }
 
 /**
- * Get platform info
+ * Get the current platform
+ * @returns The platform string (e.g., 'linux', 'darwin', 'win32')
  */
-export function getPlatform(): string {
+export function getPlatform(): NodeJS.Platform {
   return process.platform;
+}
+
+/**
+ * Normalize a platform string to AgentOS type
+ * @param platform - The platform string
+ * @returns The normalized OS type
+ */
+export function normalizeOS(platform: string): 'windows' | 'darwin' | 'linux' {
+  switch (platform) {
+    case 'win32':
+      return 'windows';
+    case 'darwin':
+      return 'darwin';
+    default:
+      return 'linux';
+  }
+}
+
+/**
+ * Check if running on Windows
+ */
+export function isWindows(): boolean {
+  return process.platform === 'win32';
+}
+
+/**
+ * Check if running on macOS
+ */
+export function isMacOS(): boolean {
+  return process.platform === 'darwin';
+}
+
+/**
+ * Check if running on Linux
+ */
+export function isLinux(): boolean {
+  return process.platform === 'linux';
 }
