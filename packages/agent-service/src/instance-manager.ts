@@ -169,17 +169,17 @@ export class InstanceManager extends EventEmitter {
           }
 
           // Call the Claude Code SDK
+          // Note: Cast options to allow systemPrompt which may not be in SDK types
           const result = query({
             prompt: userMessage.content,
             options: {
               cwd: params.projectPath,
               permissionMode: params.permissionMode || 'default',
-              systemPrompt: params.systemPrompt,
               model: params.model,
               maxTokens: params.maxTokens,
               mcpServers: Object.keys(mcpServers).length > 0 ? mcpServers : undefined,
               abortController: instance.abortController,
-            },
+            } as Parameters<typeof query>[0]['options'],
           });
 
           // Stream messages

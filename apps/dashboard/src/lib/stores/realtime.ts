@@ -206,7 +206,7 @@ export function connect(baseUrl: string = '') {
   });
 
   eventSource.addEventListener('instance:message', (event: Event) => {
-    const { instanceId, message, messageType, content } = JSON.parse((event as MessageEvent).data);
+    const { instanceId, messageType, content } = JSON.parse((event as MessageEvent).data);
     messages.update((msgs) => [
       ...msgs.slice(-99), // Keep last 100 messages
       {
