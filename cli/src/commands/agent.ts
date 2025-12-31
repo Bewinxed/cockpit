@@ -1,5 +1,4 @@
 import { AgentDaemon } from '@cockpit/agent-service';
-import { createDb } from '@cockpit/db';
 
 interface AgentOptions {
   hub?: string;
@@ -9,24 +8,19 @@ interface AgentOptions {
 
 export async function agent(options: AgentOptions) {
   console.log('🤖 Starting Cockpit Agent...');
-  console.log(`   Database: ${options.db}`);
   console.log(`   Hub: ${options.hub || 'auto-discover'}`);
   console.log(`   Discovery: ${options.discovery ? 'enabled' : 'disabled'}`);
   console.log('');
 
   try {
-    const db = createDb(options.db);
-
     const daemon = new AgentDaemon({
-      db,
       hubUrl: options.hub,
-      enableDiscovery: options.discovery,
+      useDiscovery: options.discovery,
     });
 
     await daemon.start();
 
     console.log('✨ Agent is running');
-    console.log('   Waiting for hub connection...');
     console.log('');
     console.log('Press Ctrl+C to stop');
 

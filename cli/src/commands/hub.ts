@@ -1,5 +1,4 @@
 import { startHub } from '@cockpit/hub-server';
-import { createDb } from '@cockpit/db';
 
 interface HubOptions {
   port: string;
@@ -9,25 +8,23 @@ interface HubOptions {
 
 export async function hub(options: HubOptions) {
   console.log('🚀 Starting Cockpit Hub...');
-  console.log(`   Port: ${options.port}`);
-  console.log(`   Database: ${options.db}`);
-  console.log(`   Discovery: ${options.discovery ? 'enabled' : 'disabled'}`);
-  console.log('');
 
   try {
-    const db = createDb(options.db);
-
-    await startHub({
+    const hubServer = await startHub({
       port: parseInt(options.port, 10),
-      db,
+      dbPath: options.db,
       enableDiscovery: options.discovery,
     });
 
-    console.log(`✨ Hub is running at http://localhost:${options.port}`);
-    console.log('   Dashboard: http://localhost:' + options.port);
-    console.log('   API: http://localhost:' + options.port + '/api');
-    console.log('');
-    console.log('Press Ctrl+C to stop');
+    // Handle graceful shutdown
+    const shutdown = () => {
+      console.log('\n🛑 Shutting down hub...');
+      hubServer.stop();
+      process.exit(0);
+    };
+
+    process.on('SIGINT', shutdown);
+    process.on('SIGTERM', shutdown);
   } catch (error) {
     console.error('❌ Failed to start hub:', error);
     process.exit(1);

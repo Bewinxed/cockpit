@@ -1,14 +1,15 @@
-import { Elysia, t } from 'elysia';
+import { Elysia } from 'elysia';
 import type { Db } from '@cockpit/db';
-import { agents, eq } from '@cockpit/db';
+import { agents } from '@cockpit/db';
 import {
-  isRequest,
-  isResponse,
-  isNotification,
+  isJsonRpcRequest,
+  isJsonRpcResponse,
+  isJsonRpcNotification,
   createResponse,
   createErrorResponse,
-  JSON_RPC_ERROR_CODES,
-  PROTOCOL_METHODS,
+  JsonRpcErrorCode,
+  CommandMethod,
+  EventMethod,
 } from '@cockpit/core/protocol';
 import type { JsonRpcRequest, JsonRpcResponse, JsonRpcNotification } from '@cockpit/core/protocol';
 import { getAgentRegistry } from '../services/agent-registry';
@@ -16,8 +17,8 @@ import { getBroadcastService } from '../services/broadcast';
 import { createInstanceTracker } from '../services/instance-tracker';
 import { safeJsonParse } from '@cockpit/core/utils';
 
-// Store agent ID by WebSocket for cleanup
-const wsToAgentId = new WeakMap<unknown, string>();
+// Store agent ID by WebSocket for cleanup - using object as key type
+const wsToAgentId = new WeakMap<object, string>();
 
 /**
  * WebSocket routes for agent connections
@@ -50,21 +51,21 @@ export function createWebsocketRoutes(db: Db) {
 
         if (!message) {
           ws.send(JSON.stringify(
-            createErrorResponse(0, JSON_RPC_ERROR_CODES.PARSE_ERROR, 'Invalid JSON')
+            createErrorResponse('0', JsonRpcErrorCode.PARSE_ERROR, 'Invalid JSON')
           ));
           return;
         }
 
         // Handle JSON-RPC request
-        if (isRequest(message)) {
+        if (isJsonRpcRequest(message)) {
           const response = await handleRequest(ws, message, db, agentRegistry, broadcast, instanceTracker);
           ws.send(JSON.stringify(response));
           return;
         }
 
         // Handle JSON-RPC response (from agent to pending hub request)
-        if (isResponse(message)) {
-          const agentId = wsToAgentId.get(ws);
+        if (isJsonRpcResponse(message)) {
+          const agentId = wsToAgentId.get(ws as object);
           if (agentId) {
             agentRegistry.handleResponse(agentId, message);
           }
@@ -72,8 +73,8 @@ export function createWebsocketRoutes(db: Db) {
         }
 
         // Handle JSON-RPC notification
-        if (isNotification(message)) {
-          const agentId = wsToAgentId.get(ws);
+        if (isJsonRpcNotification(message)) {
+          const agentId = wsToAgentId.get(ws as object);
           if (agentId) {
             await handleNotification(agentId, message, broadcast, instanceTracker);
           }
@@ -82,28 +83,19 @@ export function createWebsocketRoutes(db: Db) {
 
         // Unknown message format
         ws.send(JSON.stringify(
-          createErrorResponse(0, JSON_RPC_ERROR_CODES.INVALID_REQUEST, 'Invalid JSON-RPC message')
+          createErrorResponse('0', JsonRpcErrorCode.INVALID_REQUEST, 'Invalid JSON-RPC message')
         ));
       },
 
       // WebSocket close handler
       close(ws) {
-        const agentId = wsToAgentId.get(ws);
+        const agentId = wsToAgentId.get(ws as object);
         if (agentId) {
           console.log(`[Hub] Agent disconnected: ${agentId}`);
           agentRegistry.unregister(agentId);
 
           // Broadcast agent disconnection
           broadcast.broadcast('agent:disconnected', { agentId });
-        }
-      },
-
-      // WebSocket error handler
-      error(ws, error) {
-        console.error('[Hub] WebSocket error:', error);
-        const agentId = wsToAgentId.get(ws);
-        if (agentId) {
-          agentRegistry.unregister(agentId);
         }
       },
     });
@@ -123,7 +115,7 @@ async function handleRequest(
   const { id, method, params } = request;
 
   switch (method) {
-    case PROTOCOL_METHODS.AGENT_REGISTER: {
+    case 'agent.register': {
       // Agent registration
       const { machineId, hostname, tailscaleIp, os, instances: existingInstances } = params as {
         machineId: string;
@@ -134,12 +126,12 @@ async function handleRequest(
       };
 
       if (!machineId || !hostname || !tailscaleIp || !os) {
-        return createErrorResponse(id, JSON_RPC_ERROR_CODES.INVALID_PARAMS, 'Missing required registration parameters');
+        return createErrorResponse(id, JsonRpcErrorCode.INVALID_PARAMS, 'Missing required registration parameters');
       }
 
       // Register agent in registry
       const agent = agentRegistry.register(ws, { machineId, hostname, tailscaleIp, os });
-      wsToAgentId.set(ws, agent.id);
+      wsToAgentId.set(ws as object, agent.id);
 
       // Persist agent to database
       await db.insert(agents).values({
@@ -191,11 +183,11 @@ async function handleRequest(
       });
     }
 
-    case PROTOCOL_METHODS.AGENT_STATUS: {
+    case CommandMethod.AGENT_STATUS: {
       // Agent requesting hub status
-      const agentId = wsToAgentId.get(ws);
+      const agentId = wsToAgentId.get(ws as object);
       if (!agentId) {
-        return createErrorResponse(id, JSON_RPC_ERROR_CODES.INVALID_REQUEST, 'Agent not registered');
+        return createErrorResponse(id, JsonRpcErrorCode.INVALID_REQUEST, 'Agent not registered');
       }
 
       const activeInstances = await instanceTracker.getActiveByAgent(agentId);
@@ -208,7 +200,7 @@ async function handleRequest(
     }
 
     default:
-      return createErrorResponse(id, JSON_RPC_ERROR_CODES.METHOD_NOT_FOUND, `Unknown method: ${method}`);
+      return createErrorResponse(id, JsonRpcErrorCode.METHOD_NOT_FOUND, `Unknown method: ${method}`);
   }
 }
 
@@ -224,41 +216,41 @@ async function handleNotification(
   const { method, params } = notification;
 
   switch (method) {
-    case PROTOCOL_METHODS.AGENT_HEARTBEAT: {
+    case EventMethod.AGENT_HEARTBEAT: {
       // Update agent's last ping time
       const agentRegistry = getAgentRegistry();
       agentRegistry.updatePing(agentId);
       break;
     }
 
-    case PROTOCOL_METHODS.INSTANCE_STARTED: {
-      const { instanceId, sessionId } = params as { instanceId: string; sessionId?: string };
-      const instance = await instanceTracker.markStarted(instanceId, sessionId);
-      if (instance) {
-        broadcast.broadcast('instance:started', instance);
+    case EventMethod.INSTANCE_CREATED: {
+      const { instance } = params as { instance: { id: string; sessionId?: string } };
+      const updated = await instanceTracker.markStarted(instance.id, instance.sessionId);
+      if (updated) {
+        broadcast.broadcast('instance:started', updated);
       }
       break;
     }
 
-    case PROTOCOL_METHODS.INSTANCE_MESSAGE: {
-      const { instanceId, messageType, content, timestamp } = params as {
+    case EventMethod.INSTANCE_MESSAGE: {
+      const { instanceId, type, content, timestamp } = params as {
         instanceId: string;
-        messageType: string;
-        content: unknown;
-        timestamp: number;
+        type: string;
+        content: string;
+        timestamp: string;
       };
 
       // Broadcast message to dashboard
       broadcast.broadcast('instance:message', {
         instanceId,
-        messageType,
+        type,
         content,
         timestamp,
       });
       break;
     }
 
-    case PROTOCOL_METHODS.INSTANCE_STOPPED: {
+    case EventMethod.INSTANCE_STOPPED: {
       const { instanceId } = params as { instanceId: string };
       const instance = await instanceTracker.markStopped(instanceId);
       if (instance) {
@@ -267,19 +259,14 @@ async function handleNotification(
       break;
     }
 
-    case PROTOCOL_METHODS.INSTANCE_ERROR: {
-      const { instanceId, error } = params as { instanceId: string; error: string };
-      const instance = await instanceTracker.markError(instanceId);
-      if (instance) {
-        broadcast.broadcast('instance:error', { instanceId, error, instance });
+    case EventMethod.INSTANCE_STATUS_CHANGED: {
+      const { instanceId, newStatus } = params as { instanceId: string; newStatus: string };
+      if (newStatus === 'error') {
+        const instance = await instanceTracker.markError(instanceId);
+        if (instance) {
+          broadcast.broadcast('instance:error', { instanceId, instance });
+        }
       }
-      break;
-    }
-
-    case PROTOCOL_METHODS.SDK_MESSAGE: {
-      // Generic SDK message passthrough
-      const { instanceId, message } = params as { instanceId: string; message: unknown };
-      broadcast.broadcast('instance:message', { instanceId, message });
       break;
     }
 

@@ -179,3 +179,8 @@ export function createNotification<T>(method: string, params: T): JsonRpcNotific
     params,
   };
 }
+
+// Aliases for backward compatibility
+export const isRequest = isJsonRpcRequest;
+export const isResponse = isJsonRpcResponse;
+export const isNotification = isJsonRpcNotification;

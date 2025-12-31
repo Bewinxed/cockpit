@@ -264,7 +264,7 @@ export function createAgentRoutes(db: Db) {
 /**
  * Convert connected agent to API response
  */
-function connectedAgentToResponse(agent: ReturnType<typeof getAgentRegistry>['getAll'][0]) {
+function connectedAgentToResponse(agent: ReturnType<ReturnType<typeof getAgentRegistry>['getAll']>[0]) {
   return {
     id: agent.id,
     machineId: agent.machineId,

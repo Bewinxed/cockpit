@@ -1,7 +1,7 @@
 import { Elysia, t } from 'elysia';
 import type { Db } from '@cockpit/db';
 import type { SpawnInstanceData } from '@cockpit/core';
-import { PROTOCOL_METHODS } from '@cockpit/core/protocol';
+import { CommandMethod } from '@cockpit/core/protocol';
 import { createInstanceTracker } from '../services/instance-tracker';
 import { getAgentRegistry } from '../services/agent-registry';
 import { getBroadcastService } from '../services/broadcast';
@@ -107,7 +107,7 @@ export function createInstanceRoutes(db: Db) {
         // Send spawn request to agent
         const response = await agentRegistry.sendToAgent(
           body.agentId,
-          PROTOCOL_METHODS.INSTANCE_SPAWN,
+          CommandMethod.INSTANCE_SPAWN,
           {
             instanceId: instance.id,
             cwd: body.cwd,
@@ -173,7 +173,7 @@ export function createInstanceRoutes(db: Db) {
         // Send message to agent
         const response = await agentRegistry.sendToAgent(
           instance.agentId,
-          PROTOCOL_METHODS.INSTANCE_SEND,
+          CommandMethod.INSTANCE_SEND,
           {
             instanceId: params.id,
             message: body.message,
@@ -233,7 +233,7 @@ export function createInstanceRoutes(db: Db) {
         // Send stop request to agent
         const response = await agentRegistry.sendToAgent(
           instance.agentId,
-          PROTOCOL_METHODS.INSTANCE_STOP,
+          CommandMethod.INSTANCE_STOP,
           {
             instanceId: params.id,
           }
@@ -285,7 +285,7 @@ export function createInstanceRoutes(db: Db) {
         // Get live status from agent
         const response = await agentRegistry.sendToAgent(
           instance.agentId,
-          PROTOCOL_METHODS.INSTANCE_STATUS,
+          CommandMethod.AGENT_STATUS,
           {
             instanceId: params.id,
           }

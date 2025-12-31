@@ -11,6 +11,10 @@ export {
   isJsonRpcRequest,
   isJsonRpcResponse,
   isJsonRpcNotification,
+  // Backward compatibility aliases
+  isRequest,
+  isResponse,
+  isNotification,
   createRequest,
   createResponse,
   createErrorResponse,

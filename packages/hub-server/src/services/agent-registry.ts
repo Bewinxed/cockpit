@@ -1,14 +1,11 @@
-import type { Agent, AgentOS, CreateAgentData } from '@cockpit/core';
-import type {
-  JsonRpcRequest,
-  JsonRpcResponse,
-} from '@cockpit/core/protocol';
+import type { Agent, CreateAgentData } from '@cockpit/core';
+import type { JsonRpcResponse } from '@cockpit/core/protocol';
 import {
   createRequest,
   createErrorResponse,
-  JSON_RPC_ERROR_CODES,
+  JsonRpcErrorCode,
 } from '@cockpit/core/protocol';
-import { generateId, deferred, withTimeout } from '@cockpit/core/utils';
+import { generateId, deferred } from '@cockpit/core/utils';
 
 /**
  * Represents an agent currently connected via WebSocket
@@ -165,16 +162,16 @@ export class AgentRegistry {
 
     if (!agent) {
       return createErrorResponse(
-        0,
-        JSON_RPC_ERROR_CODES.AGENT_NOT_FOUND,
+        '0',
+        JsonRpcErrorCode.INTERNAL_ERROR,
         `Agent ${agentId} not found`
       );
     }
 
     if (agent.status !== 'online' || !agent.ws) {
       return createErrorResponse(
-        0,
-        JSON_RPC_ERROR_CODES.CONNECTION_ERROR,
+        '0',
+        JsonRpcErrorCode.INTERNAL_ERROR,
         `Agent ${agentId} is not connected`
       );
     }
@@ -203,7 +200,7 @@ export class AgentRegistry {
 
       return createErrorResponse(
         request.id,
-        JSON_RPC_ERROR_CODES.CONNECTION_ERROR,
+        JsonRpcErrorCode.INTERNAL_ERROR,
         error instanceof Error ? error.message : 'Failed to send request'
       );
     }
