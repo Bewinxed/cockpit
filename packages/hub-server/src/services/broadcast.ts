@@ -1,0 +1,204 @@
+import { generateId } from '@cockpit/core/utils';
+
+/**
+ * SSE client connection
+ */
+export interface SSEClient {
+  id: string;
+  controller: ReadableStreamDefaultController<Uint8Array>;
+  connectedAt: Date;
+  subscriptions: Set<string>; // Event types to subscribe to
+}
+
+/**
+ * Broadcast event types
+ */
+export type BroadcastEventType =
+  | 'agent:connected'
+  | 'agent:disconnected'
+  | 'agent:updated'
+  | 'instance:created'
+  | 'instance:updated'
+  | 'instance:started'
+  | 'instance:message'
+  | 'instance:stopped'
+  | 'instance:error'
+  | 'task:created'
+  | 'task:updated'
+  | 'task:completed'
+  | 'project:created'
+  | 'project:updated'
+  | 'project:deleted';
+
+/**
+ * Service for broadcasting events to dashboard clients via SSE
+ */
+export class BroadcastService {
+  private clients: Map<string, SSEClient> = new Map();
+  private encoder = new TextEncoder();
+
+  /**
+   * Add a new SSE client
+   */
+  addClient(controller: ReadableStreamDefaultController<Uint8Array>, subscriptions?: string[]): SSEClient {
+    const client: SSEClient = {
+      id: generateId(),
+      controller,
+      connectedAt: new Date(),
+      subscriptions: new Set(subscriptions ?? ['*']),
+    };
+
+    this.clients.set(client.id, client);
+
+    // Send initial connection message
+    this.sendToClient(client, 'connected', { clientId: client.id });
+
+    return client;
+  }
+
+  /**
+   * Remove a client
+   */
+  removeClient(clientId: string): boolean {
+    return this.clients.delete(clientId);
+  }
+
+  /**
+   * Get a client by ID
+   */
+  getClient(clientId: string): SSEClient | undefined {
+    return this.clients.get(clientId);
+  }
+
+  /**
+   * Get all connected clients
+   */
+  getAllClients(): SSEClient[] {
+    return Array.from(this.clients.values());
+  }
+
+  /**
+   * Update client subscriptions
+   */
+  updateSubscriptions(clientId: string, subscriptions: string[]): boolean {
+    const client = this.clients.get(clientId);
+    if (!client) return false;
+
+    client.subscriptions = new Set(subscriptions);
+    return true;
+  }
+
+  /**
+   * Send an event to a specific client
+   */
+  private sendToClient(client: SSEClient, event: string, data: unknown): boolean {
+    try {
+      const message = this.formatSSEMessage(event, data);
+      client.controller.enqueue(this.encoder.encode(message));
+      return true;
+    } catch {
+      // Client might be disconnected
+      this.clients.delete(client.id);
+      return false;
+    }
+  }
+
+  /**
+   * Format data as SSE message
+   */
+  private formatSSEMessage(event: string, data: unknown): string {
+    const lines: string[] = [];
+    lines.push(`event: ${event}`);
+    lines.push(`data: ${JSON.stringify(data)}`);
+    lines.push(`id: ${generateId()}`);
+    lines.push(''); // Empty line terminates the message
+    lines.push(''); // Extra newline for SSE format
+    return lines.join('\n');
+  }
+
+  /**
+   * Broadcast an event to all subscribed clients
+   */
+  broadcast(event: BroadcastEventType, data: unknown): void {
+    const eventCategory = event.split(':')[0];
+
+    for (const client of this.clients.values()) {
+      // Check if client is subscribed to this event
+      if (
+        client.subscriptions.has('*') ||
+        client.subscriptions.has(event) ||
+        client.subscriptions.has(`${eventCategory}:*`)
+      ) {
+        this.sendToClient(client, event, data);
+      }
+    }
+  }
+
+  /**
+   * Send a heartbeat to all clients (keep connection alive)
+   */
+  sendHeartbeat(): void {
+    const heartbeat = `: heartbeat ${Date.now()}\n\n`;
+    const encoded = this.encoder.encode(heartbeat);
+
+    for (const [clientId, client] of this.clients) {
+      try {
+        client.controller.enqueue(encoded);
+      } catch {
+        this.clients.delete(clientId);
+      }
+    }
+  }
+
+  /**
+   * Start automatic heartbeat interval
+   */
+  startHeartbeat(intervalMs: number = 30000): ReturnType<typeof setInterval> {
+    return setInterval(() => this.sendHeartbeat(), intervalMs);
+  }
+
+  /**
+   * Get connected client count
+   */
+  get clientCount(): number {
+    return this.clients.size;
+  }
+
+  /**
+   * Close all client connections
+   */
+  closeAll(): void {
+    for (const client of this.clients.values()) {
+      try {
+        client.controller.close();
+      } catch {
+        // Ignore errors during cleanup
+      }
+    }
+    this.clients.clear();
+  }
+}
+
+// Singleton instance
+let broadcastInstance: BroadcastService | null = null;
+let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
+
+export function getBroadcastService(): BroadcastService {
+  if (!broadcastInstance) {
+    broadcastInstance = new BroadcastService();
+    // Start heartbeat
+    heartbeatInterval = broadcastInstance.startHeartbeat();
+  }
+  return broadcastInstance;
+}
+
+export function resetBroadcastService(): void {
+  if (heartbeatInterval) {
+    clearInterval(heartbeatInterval);
+    heartbeatInterval = null;
+  }
+  if (broadcastInstance) {
+    broadcastInstance.closeAll();
+    broadcastInstance = null;
+  }
+}
