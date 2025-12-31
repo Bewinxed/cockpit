@@ -12,19 +12,7 @@
     "allowSyntheticDefaultImports": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "isolatedModules": true,
-    "declaration": true,
-    "declarationMap": true,
-    "composite": true,
-    "paths": {
-      "@cockpit/core": ["./packages/core/src"],
-      "@cockpit/core/*": ["./packages/core/src/*"],
-      "@cockpit/db": ["./packages/db/src"],
-      "@cockpit/db/*": ["./packages/db/src/*"],
-      "@cockpit/agent-service": ["./packages/agent-service/src"],
-      "@cockpit/hub-server": ["./packages/hub-server/src"],
-      "@cockpit/mcp-task-tracker": ["./packages/mcp-task-tracker/src"]
-    }
+    "isolatedModules": true
   },
   "exclude": ["node_modules", "**/dist/**"]
 }

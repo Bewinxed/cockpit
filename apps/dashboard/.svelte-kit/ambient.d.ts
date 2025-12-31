@@ -27,7 +27,6 @@
  */
 declare module '$env/static/private' {
 	export const SHELL: string;
-	export const npm_command: string;
 	export const COREPACK_ENABLE_AUTO_PIN: string;
 	export const COLORTERM: string;
 	export const NVM_INC: string;
@@ -52,7 +51,6 @@ declare module '$env/static/private' {
 	export const LS_COLORS: string;
 	export const WAYLAND_DISPLAY: string;
 	export const GIT_ASKPASS: string;
-	export const npm_lifecycle_script: string;
 	export const NVM_DIR: string;
 	export const VSCODE_GIT_ASKPASS_EXTRA_ARGS: string;
 	export const VSCODE_PYTHON_AUTOACTIVATE_GUARD: string;
@@ -64,7 +62,6 @@ declare module '$env/static/private' {
 	export const USER: string;
 	export const VSCODE_GIT_IPC_HANDLE: string;
 	export const DISPLAY: string;
-	export const npm_lifecycle_event: string;
 	export const SHLVL: string;
 	export const NVM_CD_FLAGS: string;
 	export const GIT_EDITOR: string;
@@ -73,8 +70,8 @@ declare module '$env/static/private' {
 	export const npm_execpath: string;
 	export const XDG_RUNTIME_DIR: string;
 	export const CLAUDE_CODE_ENTRYPOINT: string;
-	export const WSLENV: string;
 	export const npm_package_json: string;
+	export const WSLENV: string;
 	export const BUN_INSTALL: string;
 	export const VSCODE_GIT_ASKPASS_MAIN: string;
 	export const XDG_DATA_DIRS: string;
@@ -85,6 +82,7 @@ declare module '$env/static/private' {
 	export const PULSE_SERVER: string;
 	export const WT_PROFILE_ID: string;
 	export const npm_node_execpath: string;
+	export const OLDPWD: string;
 	export const TERM_PROGRAM: string;
 	export const VSCODE_IPC_HOOK_CLI: string;
 }
@@ -117,7 +115,6 @@ declare module '$env/static/public' {
 declare module '$env/dynamic/private' {
 	export const env: {
 		SHELL: string;
-		npm_command: string;
 		COREPACK_ENABLE_AUTO_PIN: string;
 		COLORTERM: string;
 		NVM_INC: string;
@@ -142,7 +139,6 @@ declare module '$env/dynamic/private' {
 		LS_COLORS: string;
 		WAYLAND_DISPLAY: string;
 		GIT_ASKPASS: string;
-		npm_lifecycle_script: string;
 		NVM_DIR: string;
 		VSCODE_GIT_ASKPASS_EXTRA_ARGS: string;
 		VSCODE_PYTHON_AUTOACTIVATE_GUARD: string;
@@ -154,7 +150,6 @@ declare module '$env/dynamic/private' {
 		USER: string;
 		VSCODE_GIT_IPC_HANDLE: string;
 		DISPLAY: string;
-		npm_lifecycle_event: string;
 		SHLVL: string;
 		NVM_CD_FLAGS: string;
 		GIT_EDITOR: string;
@@ -163,8 +158,8 @@ declare module '$env/dynamic/private' {
 		npm_execpath: string;
 		XDG_RUNTIME_DIR: string;
 		CLAUDE_CODE_ENTRYPOINT: string;
-		WSLENV: string;
 		npm_package_json: string;
+		WSLENV: string;
 		BUN_INSTALL: string;
 		VSCODE_GIT_ASKPASS_MAIN: string;
 		XDG_DATA_DIRS: string;
@@ -175,6 +170,7 @@ declare module '$env/dynamic/private' {
 		PULSE_SERVER: string;
 		WT_PROFILE_ID: string;
 		npm_node_execpath: string;
+		OLDPWD: string;
 		TERM_PROGRAM: string;
 		VSCODE_IPC_HOOK_CLI: string;
 		[key: `PUBLIC_${string}`]: undefined;

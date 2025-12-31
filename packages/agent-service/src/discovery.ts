@@ -166,7 +166,10 @@ export class AgentDiscovery extends EventEmitter {
    */
   unpublish(): void {
     if (this.publisher) {
-      this.publisher.stop();
+      // The stop method may not exist on all Service implementations
+      if (typeof this.publisher.stop === 'function') {
+        this.publisher.stop();
+      }
       this.publisher = null;
     }
   }
