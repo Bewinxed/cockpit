@@ -141,13 +141,13 @@ export function connect(baseUrl: string = '') {
   };
 
   // Event handlers
-  eventSource.addEventListener('connected', (event) => {
-    const data = JSON.parse(event.data);
+  eventSource.addEventListener('connected', (event: Event) => {
+    const data = JSON.parse((event as MessageEvent).data);
     console.log('[SSE] Client connected:', data.clientId);
   });
 
-  eventSource.addEventListener('agent:connected', (event) => {
-    const agent = JSON.parse(event.data);
+  eventSource.addEventListener('agent:connected', (event: Event) => {
+    const agent = JSON.parse((event as MessageEvent).data);
     agents.update((map) => {
       map.set(agent.id, {
         ...agent,
@@ -159,8 +159,8 @@ export function connect(baseUrl: string = '') {
     });
   });
 
-  eventSource.addEventListener('agent:disconnected', (event) => {
-    const { agentId } = JSON.parse(event.data);
+  eventSource.addEventListener('agent:disconnected', (event: Event) => {
+    const { agentId } = JSON.parse((event as MessageEvent).data);
     agents.update((map) => {
       const agent = map.get(agentId);
       if (agent) {
@@ -170,8 +170,8 @@ export function connect(baseUrl: string = '') {
     });
   });
 
-  eventSource.addEventListener('instance:created', (event) => {
-    const instance = JSON.parse(event.data);
+  eventSource.addEventListener('instance:created', (event: Event) => {
+    const instance = JSON.parse((event as MessageEvent).data);
     instances.update((map) => {
       map.set(instance.id, {
         ...instance,
@@ -183,8 +183,8 @@ export function connect(baseUrl: string = '') {
     });
   });
 
-  eventSource.addEventListener('instance:started', (event) => {
-    const instance = JSON.parse(event.data);
+  eventSource.addEventListener('instance:started', (event: Event) => {
+    const instance = JSON.parse((event as MessageEvent).data);
     instances.update((map) => {
       const existing = map.get(instance.id);
       if (existing) {
@@ -194,8 +194,8 @@ export function connect(baseUrl: string = '') {
     });
   });
 
-  eventSource.addEventListener('instance:stopped', (event) => {
-    const { instanceId, instance } = JSON.parse(event.data);
+  eventSource.addEventListener('instance:stopped', (event: Event) => {
+    const { instanceId, instance } = JSON.parse((event as MessageEvent).data);
     instances.update((map) => {
       const existing = map.get(instanceId);
       if (existing) {
@@ -205,8 +205,8 @@ export function connect(baseUrl: string = '') {
     });
   });
 
-  eventSource.addEventListener('instance:message', (event) => {
-    const { instanceId, message, messageType, content } = JSON.parse(event.data);
+  eventSource.addEventListener('instance:message', (event: Event) => {
+    const { instanceId, message, messageType, content } = JSON.parse((event as MessageEvent).data);
     messages.update((msgs) => [
       ...msgs.slice(-99), // Keep last 100 messages
       {
@@ -218,16 +218,16 @@ export function connect(baseUrl: string = '') {
     ]);
   });
 
-  eventSource.addEventListener('task:created', (event) => {
-    const task = JSON.parse(event.data);
+  eventSource.addEventListener('task:created', (event: Event) => {
+    const task = JSON.parse((event as MessageEvent).data);
     tasks.update((map) => {
       map.set(task.id, task);
       return map;
     });
   });
 
-  eventSource.addEventListener('task:updated', (event) => {
-    const task = JSON.parse(event.data);
+  eventSource.addEventListener('task:updated', (event: Event) => {
+    const task = JSON.parse((event as MessageEvent).data);
     tasks.update((map) => {
       map.set(task.id, { ...map.get(task.id), ...task });
       return map;
@@ -249,13 +249,20 @@ export function disconnect() {
   connectionStatus.set('disconnected');
 }
 
+// API response type
+interface ApiResponse<T> {
+  success: boolean;
+  data?: T;
+  error?: string;
+}
+
 // API helpers
 export async function fetchAgents(baseUrl: string = ''): Promise<void> {
   try {
     const response = await fetch(`${baseUrl}/api/agents`);
-    const result = await response.json();
+    const result = (await response.json()) as ApiResponse<Agent[]>;
     if (result.success && result.data) {
-      agents.set(new Map(result.data.map((a: Agent) => [a.id, { ...a, name: a.name || a.id }])));
+      agents.set(new Map(result.data.map((a) => [a.id, { ...a, name: a.name || a.id }])));
     }
   } catch (error) {
     console.error('Failed to fetch agents:', error);
@@ -265,9 +272,9 @@ export async function fetchAgents(baseUrl: string = ''): Promise<void> {
 export async function fetchInstances(baseUrl: string = ''): Promise<void> {
   try {
     const response = await fetch(`${baseUrl}/api/instances`);
-    const result = await response.json();
+    const result = (await response.json()) as ApiResponse<Instance[]>;
     if (result.success && result.data) {
-      instances.set(new Map(result.data.map((i: Instance) => [i.id, i])));
+      instances.set(new Map(result.data.map((i) => [i.id, i])));
     }
   } catch (error) {
     console.error('Failed to fetch instances:', error);
@@ -277,9 +284,9 @@ export async function fetchInstances(baseUrl: string = ''): Promise<void> {
 export async function fetchProjects(baseUrl: string = ''): Promise<void> {
   try {
     const response = await fetch(`${baseUrl}/api/projects`);
-    const result = await response.json();
+    const result = (await response.json()) as ApiResponse<Project[]>;
     if (result.success && result.data) {
-      projects.set(new Map(result.data.map((p: Project) => [p.id, p])));
+      projects.set(new Map(result.data.map((p) => [p.id, p])));
     }
   } catch (error) {
     console.error('Failed to fetch projects:', error);

@@ -21,6 +21,12 @@ export const JsonRpcErrorCode = {
   SERVER_ERROR_START: -32099,
   /** Server-defined errors end here */
   SERVER_ERROR_END: -32000,
+  /** Instance not found */
+  INSTANCE_NOT_FOUND: -32001,
+  /** Agent not found */
+  AGENT_NOT_FOUND: -32002,
+  /** Project not found */
+  PROJECT_NOT_FOUND: -32003,
 } as const;
 
 export type JsonRpcErrorCodeValue = (typeof JsonRpcErrorCode)[keyof typeof JsonRpcErrorCode];
@@ -184,3 +190,6 @@ export function createNotification<T>(method: string, params: T): JsonRpcNotific
 export const isRequest = isJsonRpcRequest;
 export const isResponse = isJsonRpcResponse;
 export const isNotification = isJsonRpcNotification;
+
+/** @deprecated Use JsonRpcErrorCode instead */
+export const JSON_RPC_ERROR_CODES = JsonRpcErrorCode;

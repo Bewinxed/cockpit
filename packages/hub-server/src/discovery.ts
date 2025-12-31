@@ -54,7 +54,7 @@ export class HubDiscovery {
 
     try {
       if (this.service) {
-        this.service.stop();
+        this.service.stop?.();
         this.service = null;
       }
 

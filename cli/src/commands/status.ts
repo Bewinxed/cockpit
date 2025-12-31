@@ -10,11 +10,13 @@ export async function status() {
     console.log(`   IP: ${tailscaleIp}`);
 
     const status = await getTailscaleStatus();
-    console.log(`   Hostname: ${status.Self.HostName}`);
-    console.log(`   Online: ${status.Self.Online}`);
+    if (status) {
+      console.log(`   Hostname: ${status.Self.HostName}`);
+      console.log(`   Online: ${status.Self.Online}`);
 
-    const onlinePeers = Object.values(status.Peer || {}).filter(p => p.Online);
-    console.log(`   Peers online: ${onlinePeers.length}`);
+      const onlinePeers = Object.values(status.Peer || {}).filter(p => p.Online);
+      console.log(`   Peers online: ${onlinePeers.length}`);
+    }
   } catch (error) {
     console.log('❌ Tailscale: not connected');
   }

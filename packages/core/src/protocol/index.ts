@@ -2,6 +2,7 @@
 export {
   JSONRPC_VERSION,
   JsonRpcErrorCode,
+  JSON_RPC_ERROR_CODES,
   type JsonRpcErrorCodeValue,
   type JsonRpcError,
   type JsonRpcRequest,
@@ -69,3 +70,33 @@ export {
   type AgentDisconnectedNotification,
   type AgentHeartbeatNotification,
 } from './events.js';
+
+import { CommandMethod } from './commands.js';
+import { EventMethod } from './events.js';
+
+/**
+ * All protocol methods (both commands and events)
+ */
+export const PROTOCOL_METHODS = {
+  // Commands (Hub -> Agent)
+  INSTANCE_SPAWN: CommandMethod.INSTANCE_SPAWN,
+  INSTANCE_STOP: CommandMethod.INSTANCE_STOP,
+  INSTANCE_SEND: CommandMethod.INSTANCE_SEND,
+  INSTANCE_STATUS: 'instance.status',
+  AGENT_STATUS: CommandMethod.AGENT_STATUS,
+  AGENT_PING: CommandMethod.AGENT_PING,
+  AGENT_REGISTER: 'agent.register',
+  AGENT_HEARTBEAT: EventMethod.AGENT_HEARTBEAT,
+
+  // Events (Agent -> Hub)
+  INSTANCE_CREATED: EventMethod.INSTANCE_CREATED,
+  INSTANCE_MESSAGE: EventMethod.INSTANCE_MESSAGE,
+  INSTANCE_STOPPED: EventMethod.INSTANCE_STOPPED,
+  INSTANCE_STATUS_CHANGED: EventMethod.INSTANCE_STATUS_CHANGED,
+  INSTANCE_STARTED: 'instance.started',
+  INSTANCE_ERROR: 'instance.error',
+  SDK_MESSAGE: 'sdk.message',
+  TASK_UPDATED: EventMethod.TASK_UPDATED,
+  AGENT_CONNECTED: EventMethod.AGENT_CONNECTED,
+  AGENT_DISCONNECTED: EventMethod.AGENT_DISCONNECTED,
+} as const;

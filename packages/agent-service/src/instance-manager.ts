@@ -1,6 +1,9 @@
-import { query, type Message as SDKMessage } from '@anthropic-ai/claude-code';
+import { query } from '@anthropic-ai/claude-code';
 import { EventEmitter } from 'events';
 import { generateId } from '@cockpit/core';
+
+/** Message type from Claude Code SDK */
+type SDKMessage = Awaited<ReturnType<typeof query>> extends AsyncIterable<infer T> ? T : never;
 import type {
   Instance,
   InstanceStatus,

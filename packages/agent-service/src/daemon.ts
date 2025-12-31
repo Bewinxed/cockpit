@@ -1,5 +1,4 @@
 import { EventEmitter } from 'events';
-import type { Message as SDKMessage } from '@anthropic-ai/claude-code';
 import {
   type JsonRpcRequest,
   type JsonRpcNotification,
@@ -255,7 +254,7 @@ export class AgentDaemon extends EventEmitter {
       });
     });
 
-    this.instanceManager.on('sdk.message', (instanceId: string, message: SDKMessage) => {
+    this.instanceManager.on('sdk.message', (instanceId: string, message: unknown) => {
       // Forward SDK messages to hub
       this.hubClient.notify(PROTOCOL_METHODS.SDK_MESSAGE, {
         agentId: this.agentId,
@@ -265,7 +264,7 @@ export class AgentDaemon extends EventEmitter {
       });
     });
 
-    this.instanceManager.on('instance.message', (instanceId: string, message: SDKMessage) => {
+    this.instanceManager.on('instance.message', (instanceId: string, message: unknown) => {
       this.hubClient.notify(PROTOCOL_METHODS.INSTANCE_MESSAGE, {
         agentId: this.agentId,
         instanceId,

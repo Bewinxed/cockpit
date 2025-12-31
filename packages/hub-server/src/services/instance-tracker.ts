@@ -209,11 +209,15 @@ export class InstanceTracker {
    * Delete an instance
    */
   async delete(id: string): Promise<boolean> {
-    const result = await this.db
+    // First check if it exists
+    const existing = await this.get(id);
+    if (!existing) return false;
+
+    await this.db
       .delete(instances)
       .where(eq(instances.id, id));
 
-    return result.rowsAffected > 0;
+    return true;
   }
 
   /**
