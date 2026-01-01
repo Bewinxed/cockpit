@@ -1,18 +1,6 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
   import InstanceCard from '$lib/components/InstanceCard.svelte';
-  import { instances, fetchInstances, connect, disconnect, connectionStatus } from '$lib/stores/realtime';
-
-  const HUB_URL = 'http://localhost:3456';
-
-  onMount(() => {
-    connect(HUB_URL);
-    fetchInstances(HUB_URL);
-  });
-
-  onDestroy(() => {
-    disconnect();
-  });
+  import { instances } from '$lib/stores/realtime';
 
   let statusFilter = 'all';
   let searchQuery = '';
@@ -21,8 +9,8 @@
   $: instancesList = Array.from($instances.values());
 
   $: filteredInstances = instancesList.filter(i => {
-    const matchesSearch = i.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          i.agent.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = (i.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          (i.agent || '').toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus = statusFilter === 'all' || i.status === statusFilter;
     return matchesSearch && matchesStatus;
   });

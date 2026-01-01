@@ -256,13 +256,61 @@ interface ApiResponse<T> {
   error?: string;
 }
 
+// API response types (match what hub-server returns)
+interface ApiAgent {
+  id: string;
+  machineId?: string;
+  hostname: string;
+  tailscaleIp?: string;
+  os: string;
+  status: 'online' | 'offline';
+  lastSeen?: string;
+  createdAt?: string;
+  connectedAt?: string;
+  lastPing?: string;
+}
+
+interface ApiInstance {
+  id: string;
+  agentId: string;
+  projectId?: string;
+  sessionId?: string;
+  cwd: string;
+  status: string;
+  model?: string;
+  totalCostUsd?: number;
+  lastPrompt?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+interface ApiProject {
+  id: string;
+  name: string;
+  description?: string;
+  rootPath?: string;
+  agentId?: string;
+  settings?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // API helpers
 export async function fetchAgents(baseUrl: string = ''): Promise<void> {
   try {
     const response = await fetch(`${baseUrl}/api/agents`);
-    const result = (await response.json()) as ApiResponse<Agent[]>;
+    const result = (await response.json()) as ApiResponse<ApiAgent[]>;
     if (result.success && result.data) {
-      agents.set(new Map(result.data.map((a) => [a.id, { ...a, name: a.name || a.id }])));
+      agents.set(new Map(result.data.map((a) => [a.id, {
+        id: a.id,
+        name: a.hostname || a.id,
+        os: (a.os as 'darwin' | 'linux' | 'windows') || 'linux',
+        status: a.status,
+        instances: 0, // Will be updated with instance count
+        ip: a.tailscaleIp || '',
+        connectedAt: a.connectedAt ? new Date(a.connectedAt) : undefined,
+        lastPing: a.lastPing ? new Date(a.lastPing) : undefined,
+      }])));
     }
   } catch (error) {
     console.error('Failed to fetch agents:', error);
@@ -272,9 +320,21 @@ export async function fetchAgents(baseUrl: string = ''): Promise<void> {
 export async function fetchInstances(baseUrl: string = ''): Promise<void> {
   try {
     const response = await fetch(`${baseUrl}/api/instances`);
-    const result = (await response.json()) as ApiResponse<Instance[]>;
+    const result = (await response.json()) as ApiResponse<ApiInstance[]>;
     if (result.success && result.data) {
-      instances.set(new Map(result.data.map((i) => [i.id, i])));
+      instances.set(new Map(result.data.map((i) => [i.id, {
+        id: i.id,
+        name: i.lastPrompt?.slice(0, 50) || 'Instance',
+        status: i.status as Instance['status'],
+        agent: '', // Will be resolved from agents
+        agentId: i.agentId,
+        project: null, // Will be resolved from projects
+        projectId: i.projectId || null,
+        lastActivity: i.updatedAt || new Date().toISOString(),
+        cwd: i.cwd,
+        model: i.model,
+        totalCostUsd: i.totalCostUsd,
+      }])));
     }
   } catch (error) {
     console.error('Failed to fetch instances:', error);
@@ -284,9 +344,18 @@ export async function fetchInstances(baseUrl: string = ''): Promise<void> {
 export async function fetchProjects(baseUrl: string = ''): Promise<void> {
   try {
     const response = await fetch(`${baseUrl}/api/projects`);
-    const result = (await response.json()) as ApiResponse<Project[]>;
+    const result = (await response.json()) as ApiResponse<ApiProject[]>;
     if (result.success && result.data) {
-      projects.set(new Map(result.data.map((p) => [p.id, p])));
+      projects.set(new Map(result.data.map((p) => [p.id, {
+        id: p.id,
+        name: p.name,
+        description: p.description,
+        rootPath: p.rootPath,
+        agentId: p.agentId,
+        instanceCount: 0, // Will be calculated
+        createdAt: new Date(p.createdAt),
+        updatedAt: new Date(p.updatedAt),
+      }])));
     }
   } catch (error) {
     console.error('Failed to fetch projects:', error);

@@ -1,12 +1,35 @@
 <script lang="ts">
   import '../app.css';
   import { page } from '$app/stores';
+  import { onMount, onDestroy } from 'svelte';
+  import { HUB_URL } from '$lib/config';
+  import {
+    connect,
+    disconnect,
+    fetchAgents,
+    fetchInstances,
+    fetchProjects,
+    connectionStatus,
+    stats
+  } from '$lib/stores/realtime';
 
   interface Props {
     children: import('svelte').Snippet;
   }
 
   let { children }: Props = $props();
+
+  // Connect to hub on mount
+  onMount(() => {
+    connect(HUB_URL);
+    fetchAgents(HUB_URL);
+    fetchInstances(HUB_URL);
+    fetchProjects(HUB_URL);
+  });
+
+  onDestroy(() => {
+    disconnect();
+  });
 
   const navItems = [
     { href: '/', label: 'Dashboard', icon: '◈' },
@@ -41,10 +64,30 @@
     </nav>
 
     <div class="pt-4 border-t border-ui-1">
-      <div class="flex items-center gap-2 text-sm text-flexoki-green">
-        <span class="w-2 h-2 rounded-full bg-flexoki-green animate-pulse"></span>
-        <span>Connected</span>
-      </div>
+      {#if $connectionStatus === 'connected'}
+        <div class="flex items-center gap-2 text-sm text-flexoki-green">
+          <span class="w-2 h-2 rounded-full bg-flexoki-green animate-pulse"></span>
+          <span>Connected</span>
+        </div>
+        <div class="mt-2 text-xs text-tx-3">
+          {$stats.onlineAgents} agents · {$stats.runningInstances} running
+        </div>
+      {:else if $connectionStatus === 'connecting'}
+        <div class="flex items-center gap-2 text-sm text-yellow-500">
+          <span class="w-2 h-2 rounded-full bg-yellow-500 animate-pulse"></span>
+          <span>Connecting...</span>
+        </div>
+      {:else if $connectionStatus === 'error'}
+        <div class="flex items-center gap-2 text-sm text-red-500">
+          <span class="w-2 h-2 rounded-full bg-red-500"></span>
+          <span>Connection error</span>
+        </div>
+      {:else}
+        <div class="flex items-center gap-2 text-sm text-tx-3">
+          <span class="w-2 h-2 rounded-full bg-tx-3"></span>
+          <span>Disconnected</span>
+        </div>
+      {/if}
     </div>
   </aside>
 
