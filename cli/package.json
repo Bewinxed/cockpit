@@ -6,7 +6,6 @@
     "cockpit": "./src/index.ts"
   },
   "scripts": {
-    "dev": "bun --watch src/index.ts",
     "build": "bun build src/index.ts --compile --outfile dist/cockpit",
     "typecheck": "tsc --noEmit"
   },

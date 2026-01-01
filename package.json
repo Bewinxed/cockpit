@@ -8,10 +8,17 @@
     "cli"
   ],
   "scripts": {
-    "dev": "bun run --filter '*' dev",
+    "dev": "bun run dev:hub",
+    "dev:hub": "bun run --filter @cockpit/hub-server --filter @cockpit/dashboard dev",
+    "dev:agent": "bun run --filter @cockpit/agent-service dev",
+    "dev:all": "bun run --filter '*' dev",
     "build": "bun run --filter '*' build",
+    "build:cli": "bun run --filter @cockpit/cli build",
     "lint": "bun run --filter '*' lint",
-    "typecheck": "bun run --filter '*' typecheck"
+    "typecheck": "bun run --filter '*' typecheck",
+    "hub": "bun cli/src/index.ts hub",
+    "agent": "bun cli/src/index.ts agent",
+    "status": "bun cli/src/index.ts status"
   },
   "devDependencies": {
     "@types/bun": "latest",
