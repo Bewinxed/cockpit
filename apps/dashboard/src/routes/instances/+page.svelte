@@ -1,33 +1,34 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import InstanceCard from '$lib/components/InstanceCard.svelte';
-  import { instances, fetchInstances } from '$lib/stores/realtime';
+  import { instances, fetchInstances, connect, disconnect, connectionStatus } from '$lib/stores/realtime';
+
+  const HUB_URL = 'http://localhost:3456';
 
   onMount(() => {
-    fetchInstances();
+    connect(HUB_URL);
+    fetchInstances(HUB_URL);
   });
 
-  // Mock data
-  const mockInstances = [
-    { id: '1', name: 'Frontend Refactor', status: 'running' as const, agent: 'MacBook Pro', project: 'Dashboard', lastActivity: '2 min ago' },
-    { id: '2', name: 'API Integration', status: 'running' as const, agent: 'WSL Desktop', project: 'Backend', lastActivity: '5 min ago' },
-    { id: '3', name: 'Bug Fix #234', status: 'stopped' as const, agent: 'MacBook Pro', project: null, lastActivity: '1 hour ago' },
-    { id: '4', name: 'Documentation Update', status: 'stopped' as const, agent: 'Windows Workstation', project: 'Docs', lastActivity: '2 hours ago' },
-    { id: '5', name: 'Test Suite', status: 'error' as const, agent: 'WSL Desktop', project: 'Backend', lastActivity: '3 hours ago' },
-  ];
+  onDestroy(() => {
+    disconnect();
+  });
 
   let statusFilter = 'all';
   let searchQuery = '';
 
-  $: filteredInstances = mockInstances.filter(i => {
+  // Get instances as array from Map store
+  $: instancesList = Array.from($instances.values());
+
+  $: filteredInstances = instancesList.filter(i => {
     const matchesSearch = i.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           i.agent.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus = statusFilter === 'all' || i.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
 
-  $: runningCount = mockInstances.filter(i => i.status === 'running').length;
-  $: stoppedCount = mockInstances.filter(i => i.status === 'stopped').length;
+  $: runningCount = instancesList.filter(i => i.status === 'running').length;
+  $: stoppedCount = instancesList.filter(i => i.status === 'stopped').length;
 </script>
 
 <svelte:head>

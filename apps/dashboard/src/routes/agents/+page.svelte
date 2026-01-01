@@ -1,28 +1,30 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import AgentCard from '$lib/components/AgentCard.svelte';
-  import { agents, fetchAgents } from '$lib/stores/realtime';
+  import { agents, fetchAgents, connect, disconnect, connectionStatus } from '$lib/stores/realtime';
+
+  const HUB_URL = 'http://localhost:3456';
 
   onMount(() => {
-    fetchAgents();
+    connect(HUB_URL);
+    fetchAgents(HUB_URL);
   });
 
-  // Mock data
-  const mockAgents = [
-    { id: '1', name: 'MacBook Pro', os: 'darwin' as const, status: 'online' as const, instances: 2, ip: '100.64.0.1' },
-    { id: '2', name: 'WSL Desktop', os: 'linux' as const, status: 'online' as const, instances: 1, ip: '100.64.0.2' },
-    { id: '3', name: 'Windows Workstation', os: 'windows' as const, status: 'online' as const, instances: 0, ip: '100.64.0.3' },
-    { id: '4', name: 'Cloud Server', os: 'linux' as const, status: 'offline' as const, instances: 0, ip: '100.64.0.4' },
-  ];
+  onDestroy(() => {
+    disconnect();
+  });
 
   let statusFilter = 'all';
 
-  $: filteredAgents = mockAgents.filter(a =>
+  // Get agents as array from Map store
+  $: agentsList = Array.from($agents.values());
+
+  $: filteredAgents = agentsList.filter(a =>
     statusFilter === 'all' || a.status === statusFilter
   );
 
-  $: onlineCount = mockAgents.filter(a => a.status === 'online').length;
-  $: totalInstances = mockAgents.reduce((sum, a) => sum + a.instances, 0);
+  $: onlineCount = agentsList.filter(a => a.status === 'online').length;
+  $: totalInstances = agentsList.reduce((sum, a) => sum + a.instances, 0);
 </script>
 
 <svelte:head>

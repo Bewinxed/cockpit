@@ -1,48 +1,41 @@
 <script lang="ts">
+  import { onMount, onDestroy } from 'svelte';
   import StatsCard from '$lib/components/StatsCard.svelte';
   import InstanceCard from '$lib/components/InstanceCard.svelte';
   import AgentCard from '$lib/components/AgentCard.svelte';
+  import {
+    agents,
+    instances,
+    stats,
+    recentInstances,
+    onlineAgents,
+    connect,
+    disconnect,
+    fetchAgents,
+    fetchInstances,
+    connectionStatus
+  } from '$lib/stores/realtime';
 
-  // Mock data - will be replaced with real data from stores
-  const stats = {
-    instances: { count: 3, label: 'Active Instances', trend: '+2 today' },
-    agents: { count: 4, label: 'Connected Agents', trend: 'All online' },
-    tasks: { count: 12, label: 'Tasks Completed', trend: '+5 this hour' },
-    cost: { value: '$2.34', label: "Today's Cost", trend: '↓ 15% vs yesterday' }
+  const HUB_URL = 'http://localhost:3456';
+
+  onMount(() => {
+    // Connect to SSE and fetch initial data
+    connect(HUB_URL);
+    fetchAgents(HUB_URL);
+    fetchInstances(HUB_URL);
+  });
+
+  onDestroy(() => {
+    disconnect();
+  });
+
+  // Reactive stats from store
+  $: statsData = {
+    instances: { count: $stats.runningInstances, label: 'Active Instances', trend: `${$stats.totalInstances} total` },
+    agents: { count: $stats.onlineAgents, label: 'Connected Agents', trend: `${$stats.totalAgents} total` },
+    tasks: { count: $stats.activeTasks, label: 'Active Tasks', trend: 'In progress' },
+    cost: { value: '$0.00', label: "Today's Cost", trend: 'No usage yet' }
   };
-
-  const recentInstances = [
-    {
-      id: '1',
-      name: 'Frontend Refactor',
-      status: 'running' as const,
-      agent: 'MacBook Pro',
-      project: 'Dashboard',
-      lastActivity: '2 min ago'
-    },
-    {
-      id: '2',
-      name: 'API Integration',
-      status: 'running' as const,
-      agent: 'WSL Desktop',
-      project: 'Backend',
-      lastActivity: '5 min ago'
-    },
-    {
-      id: '3',
-      name: 'Bug Fix #234',
-      status: 'stopped' as const,
-      agent: 'MacBook Pro',
-      project: null,
-      lastActivity: '1 hour ago'
-    }
-  ];
-
-  const agents = [
-    { id: '1', name: 'MacBook Pro', os: 'darwin' as const, status: 'online' as const, instances: 2, ip: '100.64.0.1' },
-    { id: '2', name: 'WSL Desktop', os: 'linux' as const, status: 'online' as const, instances: 1, ip: '100.64.0.2' },
-    { id: '3', name: 'Windows Workstation', os: 'windows' as const, status: 'online' as const, instances: 0, ip: '100.64.0.3' }
-  ];
 </script>
 
 <svelte:head>
@@ -66,30 +59,30 @@
   <section class="grid grid-cols-4 gap-4 mb-8">
     <StatsCard
       icon="○"
-      count={stats.instances.count}
-      label={stats.instances.label}
-      trend={stats.instances.trend}
+      count={statsData.instances.count}
+      label={statsData.instances.label}
+      trend={statsData.instances.trend}
       color="blue"
     />
     <StatsCard
       icon="●"
-      count={stats.agents.count}
-      label={stats.agents.label}
-      trend={stats.agents.trend}
+      count={statsData.agents.count}
+      label={statsData.agents.label}
+      trend={statsData.agents.trend}
       color="green"
     />
     <StatsCard
       icon="✓"
-      count={stats.tasks.count}
-      label={stats.tasks.label}
-      trend={stats.tasks.trend}
+      count={statsData.tasks.count}
+      label={statsData.tasks.label}
+      trend={statsData.tasks.trend}
       color="purple"
     />
     <StatsCard
       icon="◇"
-      count={stats.cost.value}
-      label={stats.cost.label}
-      trend={stats.cost.trend}
+      count={statsData.cost.value}
+      label={statsData.cost.label}
+      trend={statsData.cost.trend}
       color="orange"
     />
   </section>
@@ -105,8 +98,14 @@
         </a>
       </div>
       <div class="flex flex-col gap-3">
-        {#each recentInstances as instance}
+        {#each $recentInstances as instance}
           <InstanceCard {instance} />
+        {:else}
+          <div class="text-center py-8 text-tx-3">
+            <p class="text-2xl mb-2">💭</p>
+            <p class="text-sm">No instances yet</p>
+            <p class="text-xs mt-1">Start a new instance to get going</p>
+          </div>
         {/each}
       </div>
     </section>
@@ -120,10 +119,28 @@
         </a>
       </div>
       <div class="flex flex-col gap-3">
-        {#each agents as agent}
+        {#each $onlineAgents as agent}
           <AgentCard {agent} />
+        {:else}
+          <div class="text-center py-8 text-tx-3">
+            <p class="text-2xl mb-2">🖥️</p>
+            <p class="text-sm">No agents connected</p>
+            <p class="text-xs mt-1">Run <code class="bg-bg-3 px-1 rounded">cockpit agent</code> on a device</p>
+          </div>
         {/each}
       </div>
     </section>
   </div>
+
+  <!-- Connection Status -->
+  {#if $connectionStatus !== 'connected'}
+    <div class="fixed bottom-4 right-4 px-4 py-2 rounded-xl text-sm
+                {$connectionStatus === 'connecting' ? 'bg-yellow-500/20 text-yellow-600' : ''}
+                {$connectionStatus === 'error' ? 'bg-red-500/20 text-red-600' : ''}
+                {$connectionStatus === 'disconnected' ? 'bg-tx-3/20 text-tx-2' : ''}">
+      {$connectionStatus === 'connecting' ? '🔄 Connecting to hub...' : ''}
+      {$connectionStatus === 'error' ? '❌ Connection error' : ''}
+      {$connectionStatus === 'disconnected' ? '⚡ Disconnected' : ''}
+    </div>
+  {/if}
 </div>

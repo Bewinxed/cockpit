@@ -1,21 +1,24 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
-  import { projects, fetchProjects } from '$lib/stores/realtime';
+  import { onMount, onDestroy } from 'svelte';
+  import { projects, fetchProjects, connect, disconnect, connectionStatus } from '$lib/stores/realtime';
+
+  const HUB_URL = 'http://localhost:3456';
 
   onMount(() => {
-    fetchProjects();
+    connect(HUB_URL);
+    fetchProjects(HUB_URL);
   });
 
-  // Mock data for initial UI
-  const mockProjects = [
-    { id: '1', name: 'Dashboard', description: 'Cockpit dashboard UI', rootPath: '/home/user/dev/cockpit/apps/dashboard', instanceCount: 2, updatedAt: new Date() },
-    { id: '2', name: 'API Server', description: 'Backend API service', rootPath: '/home/user/dev/api-server', instanceCount: 1, updatedAt: new Date() },
-    { id: '3', name: 'CLI Tool', description: 'Command line interface', rootPath: '/home/user/dev/cli', instanceCount: 0, updatedAt: new Date() },
-  ];
+  onDestroy(() => {
+    disconnect();
+  });
 
   let searchQuery = '';
 
-  $: filteredProjects = mockProjects.filter(p =>
+  // Get projects as array from Map store
+  $: projectsList = Array.from($projects.values());
+
+  $: filteredProjects = projectsList.filter(p =>
     p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     p.description?.toLowerCase().includes(searchQuery.toLowerCase())
   );
