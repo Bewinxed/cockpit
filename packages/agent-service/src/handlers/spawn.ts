@@ -1,12 +1,18 @@
 import type { JsonRpcRequest } from '@cockpit/core';
 import { createResponse, createErrorResponse, JSON_RPC_ERROR_CODES } from '@cockpit/core';
+import { isAuthenticated, getValidAccessToken } from '@cockpit/auth';
 import type { InstanceManager, SpawnInstanceParams } from '../instance-manager.js';
 import type { HubClient } from '../hub-client.js';
 
 export interface SpawnHandlerParams {
-  projectPath: string;
+  /** Working directory (from hub) */
+  cwd?: string;
+  /** @deprecated Use cwd instead */
+  projectPath?: string;
+  instanceId?: string;
   sessionId?: string;
   systemPrompt?: string;
+  prompt?: string;
   permissionMode?: 'default' | 'acceptEdits' | 'bypassPermissions';
   mcpServers?: Array<{
     name: string;
@@ -18,6 +24,7 @@ export interface SpawnHandlerParams {
   maxTokens?: number;
   initialPrompt?: string;
   envVars?: Record<string, string>;
+  projectId?: string;
 }
 
 /**
@@ -30,12 +37,56 @@ export async function handleSpawn(
 ): Promise<void> {
   const params = request.params as SpawnHandlerParams | undefined;
 
-  if (!params || !params.projectPath) {
+  // Accept either cwd (from hub) or projectPath (legacy)
+  const workingDir = params?.cwd || params?.projectPath;
+
+  if (!params || !workingDir) {
     hubClient.sendResponse(
       createErrorResponse(
         request.id,
         JSON_RPC_ERROR_CODES.INVALID_PARAMS,
-        'Missing required parameter: projectPath'
+        'Missing required parameter: cwd (working directory)'
+      )
+    );
+    return;
+  }
+
+  // Check for OAuth credentials before spawning
+  try {
+    const hasAuth = await isAuthenticated();
+    if (!hasAuth) {
+      hubClient.sendResponse(
+        createErrorResponse(
+          request.id,
+          JSON_RPC_ERROR_CODES.AUTH_REQUIRED,
+          'Authentication required. Please run "cockpit login" to authenticate.',
+          { authRequired: true }
+        )
+      );
+      return;
+    }
+
+    // Validate token is actually usable
+    const token = await getValidAccessToken();
+    if (!token) {
+      hubClient.sendResponse(
+        createErrorResponse(
+          request.id,
+          JSON_RPC_ERROR_CODES.AUTH_FAILED,
+          'Failed to obtain valid access token. Please run "cockpit login" to re-authenticate.',
+          { authRequired: true }
+        )
+      );
+      return;
+    }
+  } catch (authError) {
+    const message = authError instanceof Error ? authError.message : String(authError);
+    hubClient.sendResponse(
+      createErrorResponse(
+        request.id,
+        JSON_RPC_ERROR_CODES.AUTH_FAILED,
+        `Authentication error: ${message}`,
+        { authRequired: true }
       )
     );
     return;
@@ -44,14 +95,14 @@ export async function handleSpawn(
   try {
     // Map params to SpawnInstanceParams
     const spawnParams: SpawnInstanceParams = {
-      projectPath: params.projectPath,
+      projectPath: workingDir,
       sessionId: params.sessionId,
       systemPrompt: params.systemPrompt,
       permissionMode: params.permissionMode,
       mcpServers: params.mcpServers,
       model: params.model,
       maxTokens: params.maxTokens,
-      initialPrompt: params.initialPrompt,
+      initialPrompt: params.initialPrompt || params.prompt,
       envVars: params.envVars,
     };
 

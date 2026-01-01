@@ -1,22 +1,24 @@
 <script lang="ts">
   import InstanceCard from '$lib/components/InstanceCard.svelte';
+  import NewInstanceModal from '$lib/components/NewInstanceModal.svelte';
   import { instances } from '$lib/stores/realtime';
 
-  let statusFilter = 'all';
-  let searchQuery = '';
+  let statusFilter = $state('all');
+  let searchQuery = $state('');
+  let showNewInstanceModal = $state(false);
 
   // Get instances as array from Map store
-  $: instancesList = Array.from($instances.values());
+  let instancesList = $derived(Array.from($instances.values()));
 
-  $: filteredInstances = instancesList.filter(i => {
+  let filteredInstances = $derived(instancesList.filter(i => {
     const matchesSearch = (i.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
                           (i.agent || '').toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus = statusFilter === 'all' || i.status === statusFilter;
     return matchesSearch && matchesStatus;
-  });
+  }));
 
-  $: runningCount = instancesList.filter(i => i.status === 'running').length;
-  $: stoppedCount = instancesList.filter(i => i.status === 'stopped').length;
+  let runningCount = $derived(instancesList.filter(i => i.status === 'running').length);
+  let stoppedCount = $derived(instancesList.filter(i => i.status === 'stopped').length);
 </script>
 
 <svelte:head>
@@ -31,11 +33,13 @@
         {runningCount} running, {stoppedCount} stopped
       </p>
     </div>
-    <button class="btn btn-primary">
+    <button class="btn btn-primary" onclick={() => showNewInstanceModal = true}>
       <span>+</span>
       New Instance
     </button>
   </header>
+
+  <NewInstanceModal bind:open={showNewInstanceModal} onClose={() => showNewInstanceModal = false} />
 
   <!-- Filters -->
   <div class="flex gap-4 mb-6">
@@ -94,7 +98,7 @@
         {searchQuery || statusFilter !== 'all' ? 'Try adjusting your filters' : 'Start a new Claude Code instance to get going'}
       </p>
       {#if !searchQuery && statusFilter === 'all'}
-        <button class="btn btn-primary">Start Instance</button>
+        <button class="btn btn-primary" onclick={() => showNewInstanceModal = true}>Start Instance</button>
       {/if}
     </div>
   {/if}

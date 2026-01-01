@@ -27,6 +27,10 @@ export const JsonRpcErrorCode = {
   AGENT_NOT_FOUND: -32002,
   /** Project not found */
   PROJECT_NOT_FOUND: -32003,
+  /** Authentication required - user needs to login */
+  AUTH_REQUIRED: -32004,
+  /** Authentication failed - token invalid or expired */
+  AUTH_FAILED: -32005,
 } as const;
 
 export type JsonRpcErrorCodeValue = (typeof JsonRpcErrorCode)[keyof typeof JsonRpcErrorCode];

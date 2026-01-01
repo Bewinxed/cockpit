@@ -15,6 +15,8 @@ export const CommandMethod = {
   AGENT_STATUS: 'agent.status',
   /** Ping the agent */
   AGENT_PING: 'agent.ping',
+  /** List filesystem directory */
+  FILESYSTEM_LIST: 'filesystem.list',
 } as const;
 
 export type CommandMethodValue = (typeof CommandMethod)[keyof typeof CommandMethod];
@@ -83,6 +85,32 @@ export interface AgentPingParams {
   timestamp?: number;
 }
 
+/**
+ * Parameters for listing filesystem directory
+ */
+export interface FilesystemListParams {
+  /** Directory path to list (defaults to home directory) */
+  path?: string;
+}
+
+/**
+ * A filesystem entry (file or directory)
+ */
+export interface FilesystemEntry {
+  /** Entry name */
+  name: string;
+  /** Full path */
+  path: string;
+  /** Whether this is a directory */
+  isDirectory: boolean;
+  /** Whether this is a symlink */
+  isSymlink?: boolean;
+  /** File size in bytes (for files only) */
+  size?: number;
+  /** Last modified timestamp */
+  modifiedAt?: string;
+}
+
 // ============================================================================
 // Command Results
 // ============================================================================
@@ -147,6 +175,20 @@ export interface AgentPingResult {
   serverTimestamp: number;
 }
 
+/**
+ * Result of filesystem list
+ */
+export interface FilesystemListResult {
+  /** Current directory path */
+  path: string;
+  /** Parent directory path (null if at root) */
+  parent: string | null;
+  /** List of entries in the directory */
+  entries: FilesystemEntry[];
+  /** Home directory path */
+  home: string;
+}
+
 // ============================================================================
 // Command Type Mapping
 // ============================================================================
@@ -160,6 +202,7 @@ export interface CommandParamsMap {
   [CommandMethod.INSTANCE_SEND]: SendMessageParams;
   [CommandMethod.AGENT_STATUS]: AgentStatusParams;
   [CommandMethod.AGENT_PING]: AgentPingParams;
+  [CommandMethod.FILESYSTEM_LIST]: FilesystemListParams;
 }
 
 /**
@@ -171,6 +214,7 @@ export interface CommandResultMap {
   [CommandMethod.INSTANCE_SEND]: SendMessageResult;
   [CommandMethod.AGENT_STATUS]: AgentStatusResult;
   [CommandMethod.AGENT_PING]: AgentPingResult;
+  [CommandMethod.FILESYSTEM_LIST]: FilesystemListResult;
 }
 
 // ============================================================================

@@ -31,11 +31,14 @@ export {
   type SendMessageParams,
   type AgentStatusParams,
   type AgentPingParams,
+  type FilesystemListParams,
+  type FilesystemEntry,
   type SpawnInstanceResult,
   type StopInstanceResult,
   type SendMessageResult,
   type AgentStatusResult,
   type AgentPingResult,
+  type FilesystemListResult,
   type CommandParamsMap,
   type CommandResultMap,
   type CommandRequest,
@@ -87,6 +90,7 @@ export const PROTOCOL_METHODS = {
   AGENT_PING: CommandMethod.AGENT_PING,
   AGENT_REGISTER: 'agent.register',
   AGENT_HEARTBEAT: EventMethod.AGENT_HEARTBEAT,
+  FILESYSTEM_LIST: CommandMethod.FILESYSTEM_LIST,
 
   // Events (Agent -> Hub)
   INSTANCE_CREATED: EventMethod.INSTANCE_CREATED,

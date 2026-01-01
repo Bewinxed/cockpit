@@ -1,15 +1,17 @@
 <script lang="ts">
+  import NewProjectModal from '$lib/components/NewProjectModal.svelte';
   import { projects } from '$lib/stores/realtime';
 
-  let searchQuery = '';
+  let searchQuery = $state('');
+  let showNewProjectModal = $state(false);
 
   // Get projects as array from Map store
-  $: projectsList = Array.from($projects.values());
+  let projectsList = $derived(Array.from($projects.values()));
 
-  $: filteredProjects = projectsList.filter(p =>
+  let filteredProjects = $derived(projectsList.filter(p =>
     p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     (p.description || '').toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  ));
 </script>
 
 <svelte:head>
@@ -22,11 +24,13 @@
       <h1 class="text-2xl font-semibold text-tx-1 mb-1">Projects</h1>
       <p class="text-sm text-tx-3">Organize your Claude Code instances by project</p>
     </div>
-    <button class="btn btn-primary">
+    <button class="btn btn-primary" onclick={() => showNewProjectModal = true}>
       <span>+</span>
       New Project
     </button>
   </header>
+
+  <NewProjectModal bind:open={showNewProjectModal} onClose={() => showNewProjectModal = false} />
 
   <!-- Search -->
   <div class="mb-6">
@@ -81,7 +85,7 @@
         {searchQuery ? 'Try a different search term' : 'Create your first project to organize your work'}
       </p>
       {#if !searchQuery}
-        <button class="btn btn-primary">Create Project</button>
+        <button class="btn btn-primary" onclick={() => showNewProjectModal = true}>Create Project</button>
       {/if}
     </div>
   {/if}

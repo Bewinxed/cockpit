@@ -197,12 +197,17 @@ export class HubClient extends EventEmitter {
     if (!this.isConnected) {
       // Queue message for later
       this.messageQueue.push(message);
+      console.log('[Agent WS] Not connected, queueing message');
       return;
     }
 
     try {
-      this.ws!.send(JSON.stringify(message));
+      const payload = JSON.stringify(message);
+      console.log('[Agent WS] Sending:', payload);
+      this.ws!.send(payload);
+      console.log('[Agent WS] Sent successfully');
     } catch (error) {
+      console.error('[Agent WS] Send failed:', error);
       // Queue message for retry
       this.messageQueue.push(message);
       this.emit('error', error instanceof Error ? error : new Error(String(error)));

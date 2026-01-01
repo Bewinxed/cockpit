@@ -38,18 +38,24 @@ export function createWebsocketRoutes(db: Db) {
 
       // WebSocket message handler
       async message(ws, rawMessage) {
+        console.log('[Hub WS] Received message:', typeof rawMessage, rawMessage);
         let message: unknown;
 
-        // Parse message
+        // Parse message - handle Buffer type from ws library
         if (typeof rawMessage === 'string') {
           message = safeJsonParse(rawMessage);
         } else if (rawMessage instanceof ArrayBuffer) {
           message = safeJsonParse(new TextDecoder().decode(rawMessage));
+        } else if (Buffer.isBuffer(rawMessage)) {
+          message = safeJsonParse(rawMessage.toString('utf-8'));
         } else {
           message = rawMessage;
         }
 
+        console.log('[Hub WS] Parsed message:', message);
+
         if (!message) {
+          console.log('[Hub WS] Failed to parse message');
           ws.send(JSON.stringify(
             createErrorResponse('0', JsonRpcErrorCode.PARSE_ERROR, 'Invalid JSON')
           ));
@@ -58,7 +64,9 @@ export function createWebsocketRoutes(db: Db) {
 
         // Handle JSON-RPC request
         if (isJsonRpcRequest(message)) {
+          console.log('[Hub WS] Handling request:', message.method);
           const response = await handleRequest(ws, message, db, agentRegistry, broadcast, instanceTracker);
+          console.log('[Hub WS] Sending response:', response);
           ws.send(JSON.stringify(response));
           return;
         }
@@ -116,6 +124,7 @@ async function handleRequest(
 
   switch (method) {
     case 'agent.register': {
+      console.log('[Hub WS] Processing agent.register');
       // Agent registration
       const { machineId, hostname, tailscaleIp, os, instances: existingInstances } = params as {
         machineId: string;
@@ -129,29 +138,38 @@ async function handleRequest(
         return createErrorResponse(id, JsonRpcErrorCode.INVALID_PARAMS, 'Missing required registration parameters');
       }
 
+      console.log('[Hub WS] Registering agent in memory');
       // Register agent in registry
       const agent = agentRegistry.register(ws, { machineId, hostname, tailscaleIp, os });
       wsToAgentId.set(ws as object, agent.id);
+      console.log('[Hub WS] Agent registered in memory:', agent.id);
 
       // Persist agent to database
-      await db.insert(agents).values({
-        id: agent.id,
-        machineId,
-        hostname,
-        tailscaleIp,
-        os,
-        status: 'online',
-        lastSeen: new Date(),
-        createdAt: agent.createdAt,
-      }).onConflictDoUpdate({
-        target: agents.machineId,
-        set: {
+      console.log('[Hub WS] Persisting to database...');
+      try {
+        await db.insert(agents).values({
+          id: agent.id,
+          machineId,
           hostname,
           tailscaleIp,
+          os,
           status: 'online',
           lastSeen: new Date(),
-        },
-      });
+          createdAt: agent.createdAt,
+        }).onConflictDoUpdate({
+          target: agents.machineId,
+          set: {
+            hostname,
+            tailscaleIp,
+            status: 'online',
+            lastSeen: new Date(),
+          },
+        });
+        console.log('[Hub WS] Database insert complete');
+      } catch (dbError) {
+        console.error('[Hub WS] Database error:', dbError);
+        throw dbError;
+      }
 
       // Update existing instances if reported
       if (existingInstances && Array.isArray(existingInstances)) {

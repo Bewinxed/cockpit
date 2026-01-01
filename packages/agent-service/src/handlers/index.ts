@@ -7,3 +7,4 @@ export {
   type InstanceStatusParams,
   type AgentStatusResponse,
 } from './status.js';
+export { handleFilesystemList } from './filesystem.js';

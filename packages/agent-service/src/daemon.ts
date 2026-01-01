@@ -7,6 +7,9 @@ import {
   generateId,
   getHostname,
   getPlatform,
+  normalizeOS,
+  getMachineFingerprint,
+  getTailscaleIp,
 } from '@cockpit/core';
 import { InstanceManager, type SpawnInstanceParams, type InstanceStatusInfo } from './instance-manager.js';
 import { HubClient, type HubClientOptions } from './hub-client.js';
@@ -17,6 +20,7 @@ import {
   handleStop,
   handleAgentStatus,
   handleInstanceStatus,
+  handleFilesystemList,
 } from './handlers/index.js';
 
 export interface AgentDaemonOptions {
@@ -120,7 +124,7 @@ export class AgentDaemon extends EventEmitter {
       if (!this.hubUrl && this.options.useDiscovery) {
         console.log('Discovering hub via mDNS...');
         const hub = await this.discovery.browseForHub();
-        this.hubUrl = `ws://${hub.host}:${hub.port}`;
+        this.hubUrl = `ws://${hub.host}:${hub.port}/ws/hub`;
         console.log(`Found hub at ${this.hubUrl}`);
       }
 
@@ -183,13 +187,35 @@ export class AgentDaemon extends EventEmitter {
    * Register agent with the hub
    */
   private async register(): Promise<void> {
-    await this.hubClient.request(PROTOCOL_METHODS.AGENT_REGISTER, {
-      agentId: this.agentId,
-      hostname: getHostname(),
-      platform: getPlatform(),
-      version: '0.0.1',
-    });
-    console.log('Registered with hub');
+    const hostname = getHostname();
+    const os = normalizeOS(getPlatform());
+    const machineId = getMachineFingerprint();
+
+    // Try to get Tailscale IP, fall back to localhost
+    let tailscaleIp = '127.0.0.1';
+    try {
+      const tsIp = await getTailscaleIp();
+      if (tsIp) tailscaleIp = tsIp;
+    } catch {
+      // Tailscale not available, use localhost
+    }
+
+    const result = await this.hubClient.request<{ agentId: string }>(
+      PROTOCOL_METHODS.AGENT_REGISTER,
+      {
+        machineId,
+        hostname,
+        tailscaleIp,
+        os,
+      }
+    );
+
+    // Use the agent ID assigned by the hub
+    if (result?.agentId) {
+      (this as any).agentId = result.agentId;
+    }
+
+    console.log(`Registered with hub as ${this.agentId}`);
   }
 
   /**
@@ -316,6 +342,10 @@ export class AgentDaemon extends EventEmitter {
         );
         break;
 
+      case PROTOCOL_METHODS.FILESYSTEM_LIST:
+        await handleFilesystemList(request, this.hubClient);
+        break;
+
       default:
         console.warn(`Unknown method: ${request.method}`);
     }
@@ -335,17 +365,14 @@ export class AgentDaemon extends EventEmitter {
   private startHeartbeat(): void {
     this.stopHeartbeat();
 
-    this.heartbeatTimer = setInterval(async () => {
+    this.heartbeatTimer = setInterval(() => {
       if (this.hubClient.isConnected) {
-        try {
-          await this.hubClient.request(PROTOCOL_METHODS.AGENT_HEARTBEAT, {
-            agentId: this.agentId,
-            instanceCount: this.instanceManager.listInstances().length,
-            timestamp: new Date().toISOString(),
-          });
-        } catch (error) {
-          console.error('Heartbeat failed:', error);
-        }
+        // Use notify instead of request - heartbeat doesn't need a response
+        this.hubClient.notify(PROTOCOL_METHODS.AGENT_HEARTBEAT, {
+          agentId: this.agentId,
+          instanceCount: this.instanceManager.listInstances().length,
+          timestamp: new Date().toISOString(),
+        });
       }
     }, this.options.heartbeatInterval);
   }

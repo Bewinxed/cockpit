@@ -72,8 +72,8 @@ export async function getTailscaleStatus(): Promise<TailscaleStatus | null> {
   try {
     const { stdout } = await execAsync('tailscale status --json');
     return JSON.parse(stdout) as TailscaleStatus;
-  } catch (error) {
-    console.error('Failed to get Tailscale status:', error);
+  } catch {
+    // Tailscale not installed or not running - this is fine
     return null;
   }
 }
@@ -92,8 +92,7 @@ export async function getTailscaleIp(): Promise<string | null> {
     // Find the IPv4 address (not IPv6)
     const ipv4 = status.Self.TailscaleIPs.find((ip) => !ip.includes(':'));
     return ipv4 || null;
-  } catch (error) {
-    console.error('Failed to get Tailscale IP:', error);
+  } catch {
     return null;
   }
 }
@@ -106,8 +105,7 @@ export async function getTailscaleHostname(): Promise<string | null> {
   try {
     const status = await getTailscaleStatus();
     return status?.Self?.HostName || null;
-  } catch (error) {
-    console.error('Failed to get Tailscale hostname:', error);
+  } catch {
     return null;
   }
 }
@@ -145,8 +143,7 @@ export async function getOnlinePeers(): Promise<TailscalePeerInfo[]> {
     }
 
     return peers;
-  } catch (error) {
-    console.error('Failed to get online peers:', error);
+  } catch {
     return [];
   }
 }
@@ -180,8 +177,7 @@ export async function getAllPeers(): Promise<TailscalePeerInfo[]> {
     }
 
     return peers;
-  } catch (error) {
-    console.error('Failed to get peers:', error);
+  } catch {
     return [];
   }
 }

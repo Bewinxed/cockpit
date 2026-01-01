@@ -2,17 +2,17 @@
   import AgentCard from '$lib/components/AgentCard.svelte';
   import { agents } from '$lib/stores/realtime';
 
-  let statusFilter = 'all';
+  let statusFilter = $state('all');
 
   // Get agents as array from Map store
-  $: agentsList = Array.from($agents.values());
+  let agentsList = $derived(Array.from($agents.values()));
 
-  $: filteredAgents = agentsList.filter(a =>
-    statusFilter === 'all' || a.status === statusFilter
+  let filteredAgents = $derived(
+    agentsList.filter(a => statusFilter === 'all' || a.status === statusFilter)
   );
 
-  $: onlineCount = agentsList.filter(a => a.status === 'online').length;
-  $: totalInstances = agentsList.reduce((sum, a) => sum + (a.instances || 0), 0);
+  let onlineCount = $derived(agentsList.filter(a => a.status === 'online').length);
+  let totalInstances = $derived(agentsList.reduce((sum, a) => sum + (a.instances || 0), 0));
 </script>
 
 <svelte:head>

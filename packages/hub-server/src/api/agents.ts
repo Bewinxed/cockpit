@@ -1,6 +1,7 @@
 import { Elysia, t } from 'elysia';
 import type { Db } from '@cockpit/db';
 import type { Agent } from '@cockpit/core';
+import { CommandMethod, type FilesystemListResult } from '@cockpit/core/protocol';
 import { agents, eq, desc } from '@cockpit/db';
 import { getAgentRegistry } from '../services/agent-registry';
 import { createInstanceTracker } from '../services/instance-tracker';
@@ -256,6 +257,50 @@ export function createAgentRoutes(db: Db) {
       {
         params: t.Object({
           id: t.String(),
+        }),
+      }
+    )
+
+    // List filesystem directory on agent
+    .get(
+      '/:id/filesystem',
+      async ({ params, query, set }) => {
+        const connected = agentRegistry.get(params.id);
+
+        if (!connected || connected.status !== 'online') {
+          set.status = 404;
+          return {
+            success: false,
+            error: 'Agent not found or offline',
+          };
+        }
+
+        // Forward request to agent
+        const response = await agentRegistry.sendToAgent(
+          params.id,
+          CommandMethod.FILESYSTEM_LIST,
+          { path: query.path }
+        );
+
+        if (response.error) {
+          set.status = 400;
+          return {
+            success: false,
+            error: response.error.message,
+          };
+        }
+
+        return {
+          success: true,
+          data: response.result as FilesystemListResult,
+        };
+      },
+      {
+        params: t.Object({
+          id: t.String(),
+        }),
+        query: t.Object({
+          path: t.Optional(t.String()),
         }),
       }
     );

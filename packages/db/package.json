@@ -19,7 +19,9 @@
     "drizzle-orm": "^0.44.0"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@types/bun": "latest",
+    "better-sqlite3": "^12.5.0",
     "drizzle-kit": "^0.31.0",
     "typescript": "^5.9.3"
   }

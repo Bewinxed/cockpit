@@ -2,6 +2,7 @@
   import StatsCard from '$lib/components/StatsCard.svelte';
   import InstanceCard from '$lib/components/InstanceCard.svelte';
   import AgentCard from '$lib/components/AgentCard.svelte';
+  import NewInstanceModal from '$lib/components/NewInstanceModal.svelte';
   import {
     stats,
     recentInstances,
@@ -9,13 +10,15 @@
     connectionStatus
   } from '$lib/stores/realtime';
 
+  let showNewInstanceModal = $state(false);
+
   // Reactive stats from store
-  $: statsData = {
+  let statsData = $derived({
     instances: { count: $stats.runningInstances, label: 'Active Instances', trend: `${$stats.totalInstances} total` },
     agents: { count: $stats.onlineAgents, label: 'Connected Agents', trend: `${$stats.totalAgents} total` },
     tasks: { count: $stats.activeTasks, label: 'Active Tasks', trend: 'In progress' },
     cost: { value: '$0.00', label: "Today's Cost", trend: 'No usage yet' }
-  };
+  });
 </script>
 
 <svelte:head>
@@ -29,11 +32,13 @@
       <h1 class="text-2xl font-semibold text-tx-1 mb-1">Dashboard</h1>
       <p class="text-sm text-tx-3">Manage your Claude Code instances across all devices</p>
     </div>
-    <button class="btn btn-primary">
+    <button class="btn btn-primary" onclick={() => showNewInstanceModal = true}>
       <span>+</span>
       New Instance
     </button>
   </header>
+
+  <NewInstanceModal bind:open={showNewInstanceModal} onClose={() => showNewInstanceModal = false} />
 
   <!-- Stats Grid -->
   <section class="grid grid-cols-4 gap-4 mb-8">

@@ -24,7 +24,7 @@ export class HubDiscovery {
       // Advertise the hub service
       this.service = this.bonjour.publish({
         name: 'cockpit-hub',
-        type: 'cockpit-hub',
+        type: '_cockpit-hub._tcp',
         port,
         txt: {
           version: '1.0.0',
@@ -100,7 +100,7 @@ export class HubBrowser {
       let foundHub: DiscoveredHub | null = null;
       let resolved = false;
 
-      this.browser = this.bonjour.find({ type: 'cockpit-hub' }, (service) => {
+      this.browser = this.bonjour.find({ type: '_cockpit-hub._tcp' }, (service) => {
         const hub: DiscoveredHub = {
           name: service.name,
           host: service.host,
