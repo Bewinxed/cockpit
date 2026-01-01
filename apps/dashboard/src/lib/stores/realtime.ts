@@ -1,4 +1,5 @@
 import { writable, derived, type Writable, type Readable } from 'svelte/store';
+import { api } from '$lib/api';
 
 // Types for real-time data
 export interface Agent {
@@ -249,59 +250,16 @@ export function disconnect() {
   connectionStatus.set('disconnected');
 }
 
-// API response type
-interface ApiResponse<T> {
-  success: boolean;
-  data?: T;
-  error?: string;
-}
-
-// API response types (match what hub-server returns)
-interface ApiAgent {
-  id: string;
-  machineId?: string;
-  hostname: string;
-  tailscaleIp?: string;
-  os: string;
-  status: 'online' | 'offline';
-  lastSeen?: string;
-  createdAt?: string;
-  connectedAt?: string;
-  lastPing?: string;
-}
-
-interface ApiInstance {
-  id: string;
-  agentId: string;
-  projectId?: string;
-  sessionId?: string;
-  cwd: string;
-  status: string;
-  model?: string;
-  totalCostUsd?: number;
-  lastPrompt?: string;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
-interface ApiProject {
-  id: string;
-  name: string;
-  description?: string;
-  rootPath?: string;
-  agentId?: string;
-  settings?: Record<string, unknown>;
-  createdAt: string;
-  updatedAt: string;
-}
-
-// API helpers
-export async function fetchAgents(baseUrl: string = ''): Promise<void> {
+// API helpers using Eden Treaty for type safety
+export async function fetchAgents(): Promise<void> {
   try {
-    const response = await fetch(`${baseUrl}/api/agents`);
-    const result = (await response.json()) as ApiResponse<ApiAgent[]>;
-    if (result.success && result.data) {
-      agents.set(new Map(result.data.map((a) => [a.id, {
+    const { data, error } = await api.api.agents.get();
+    if (error) {
+      console.error('Failed to fetch agents:', error);
+      return;
+    }
+    if (data?.success && data.data) {
+      agents.set(new Map(data.data.map((a) => [a.id, {
         id: a.id,
         name: a.hostname || a.id,
         os: (a.os as 'darwin' | 'linux' | 'windows') || 'linux',
@@ -317,12 +275,15 @@ export async function fetchAgents(baseUrl: string = ''): Promise<void> {
   }
 }
 
-export async function fetchInstances(baseUrl: string = ''): Promise<void> {
+export async function fetchInstances(): Promise<void> {
   try {
-    const response = await fetch(`${baseUrl}/api/instances`);
-    const result = (await response.json()) as ApiResponse<ApiInstance[]>;
-    if (result.success && result.data) {
-      instances.set(new Map(result.data.map((i) => [i.id, {
+    const { data, error } = await api.api.instances.get();
+    if (error) {
+      console.error('Failed to fetch instances:', error);
+      return;
+    }
+    if (data?.success && data.data) {
+      instances.set(new Map(data.data.map((i) => [i.id, {
         id: i.id,
         name: i.lastPrompt?.slice(0, 50) || 'Instance',
         status: i.status as Instance['status'],
@@ -330,7 +291,7 @@ export async function fetchInstances(baseUrl: string = ''): Promise<void> {
         agentId: i.agentId,
         project: null, // Will be resolved from projects
         projectId: i.projectId || null,
-        lastActivity: i.updatedAt || new Date().toISOString(),
+        lastActivity: i.createdAt instanceof Date ? i.createdAt.toISOString() : new Date().toISOString(),
         cwd: i.cwd,
         model: i.model,
         totalCostUsd: i.totalCostUsd,
@@ -341,12 +302,15 @@ export async function fetchInstances(baseUrl: string = ''): Promise<void> {
   }
 }
 
-export async function fetchProjects(baseUrl: string = ''): Promise<void> {
+export async function fetchProjects(): Promise<void> {
   try {
-    const response = await fetch(`${baseUrl}/api/projects`);
-    const result = (await response.json()) as ApiResponse<ApiProject[]>;
-    if (result.success && result.data) {
-      projects.set(new Map(result.data.map((p) => [p.id, {
+    const { data, error } = await api.api.projects.get();
+    if (error) {
+      console.error('Failed to fetch projects:', error);
+      return;
+    }
+    if (data?.success && data.data) {
+      projects.set(new Map(data.data.map((p) => [p.id, {
         id: p.id,
         name: p.name,
         description: p.description,

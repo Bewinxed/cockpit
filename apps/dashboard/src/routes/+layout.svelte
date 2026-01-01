@@ -22,9 +22,10 @@
   // Connect to hub on mount
   onMount(() => {
     connect(HUB_URL);
-    fetchAgents(HUB_URL);
-    fetchInstances(HUB_URL);
-    fetchProjects(HUB_URL);
+    // Fetch initial data using Eden Treaty (type-safe)
+    fetchAgents();
+    fetchInstances();
+    fetchProjects();
   });
 
   onDestroy(() => {

@@ -38,6 +38,7 @@ export interface HubOptions {
 
 /**
  * Create the hub server without starting it
+ * Returns the Elysia app instance
  */
 export function createHubServer(options: HubOptions) {
   const {
@@ -75,21 +76,25 @@ export function createHubServer(options: HubOptions) {
       name: 'Cockpit Hub',
       version: '1.0.0',
       endpoints: {
-        instances: '/instances',
-        projects: '/projects',
-        agents: '/agents',
-        events: '/events',
+        instances: '/api/instances',
+        projects: '/api/projects',
+        agents: '/api/agents',
+        events: '/api/events',
         websocket: '/ws/hub',
       },
     }))
 
-    // Mount API routes
-    .use(createInstanceRoutes(db))
-    .use(createProjectRoutes(db))
-    .use(createAgentRoutes(db))
+    // Mount API routes under /api prefix
+    .group('/api', (api) => api
+      .use(createInstanceRoutes(db))
+      .use(createProjectRoutes(db))
+      .use(createAgentRoutes(db))
+      .use(createEventRoutes())
+      .use(createInstanceEventRoutes())
+    )
+
+    // WebSocket routes at root level
     .use(createWebsocketRoutes(db))
-    .use(createEventRoutes())
-    .use(createInstanceEventRoutes())
 
     // Global error handler
     .onError(({ code, error, set }) => {
@@ -172,7 +177,7 @@ export async function startHub(options: HubOptions) {
   API:      http://localhost:${port}/api
   Health:   http://localhost:${port}/health
   WebSocket: ws://localhost:${port}/ws/hub
-  Events:   http://localhost:${port}/events
+  Events:   http://localhost:${port}/api/events
 ========================================
 `);
 
@@ -232,3 +237,6 @@ export * from './services';
 export * from './api';
 export { HubDiscovery, HubBrowser, createHubDiscovery, createHubBrowser } from './discovery';
 export type { DiscoveredHub } from './discovery';
+
+// Export App type for Eden Treaty
+export type App = ReturnType<typeof createHubServer>;

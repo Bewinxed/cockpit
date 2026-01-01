@@ -12,7 +12,8 @@
   "dependencies": {
     "@cockpit/core": "workspace:*",
     "@cockpit/db": "workspace:*",
-    "@cockpit/hub-server": "workspace:*"
+    "@cockpit/hub-server": "workspace:*",
+    "@elysiajs/eden": "^1.4.6"
   },
   "devDependencies": {
     "@sveltejs/adapter-node": "^5.2.0",

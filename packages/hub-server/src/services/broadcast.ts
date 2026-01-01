@@ -8,6 +8,7 @@ export interface SSEClient {
   controller: ReadableStreamDefaultController<Uint8Array>;
   connectedAt: Date;
   subscriptions: Set<string>; // Event types to subscribe to
+  closed: boolean; // Track if connection is closed
 }
 
 /**
@@ -46,6 +47,7 @@ export class BroadcastService {
       controller,
       connectedAt: new Date(),
       subscriptions: new Set(subscriptions ?? ['*']),
+      closed: false,
     };
 
     this.clients.set(client.id, client);
@@ -54,6 +56,17 @@ export class BroadcastService {
     this.sendToClient(client, 'connected', { clientId: client.id });
 
     return client;
+  }
+
+  /**
+   * Mark a client as closed (call when connection ends)
+   */
+  markClosed(clientId: string): void {
+    const client = this.clients.get(clientId);
+    if (client) {
+      client.closed = true;
+      this.clients.delete(clientId);
+    }
   }
 
   /**
@@ -92,12 +105,18 @@ export class BroadcastService {
    * Send an event to a specific client
    */
   private sendToClient(client: SSEClient, event: string, data: unknown): boolean {
+    // Skip if client is already marked as closed
+    if (client.closed) {
+      return false;
+    }
+
     try {
       const message = this.formatSSEMessage(event, data);
       client.controller.enqueue(this.encoder.encode(message));
       return true;
     } catch {
-      // Client might be disconnected
+      // Client might be disconnected, mark as closed
+      client.closed = true;
       this.clients.delete(client.id);
       return false;
     }
@@ -142,9 +161,15 @@ export class BroadcastService {
     const encoded = this.encoder.encode(heartbeat);
 
     for (const [clientId, client] of this.clients) {
+      if (client.closed) {
+        this.clients.delete(clientId);
+        continue;
+      }
+
       try {
         client.controller.enqueue(encoded);
       } catch {
+        client.closed = true;
         this.clients.delete(clientId);
       }
     }

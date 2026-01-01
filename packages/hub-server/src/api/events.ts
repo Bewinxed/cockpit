@@ -22,17 +22,24 @@ export function createEventRoutes() {
           ? query.subscribe.split(',').map((s) => s.trim())
           : undefined;
 
+        // Track client ID for cleanup
+        let clientId: string | null = null;
+
         // Create a readable stream for SSE
         const stream = new ReadableStream({
           start(controller) {
             // Register client with broadcast service
             const client = broadcast.addClient(controller, subscriptions);
+            clientId = client.id;
 
             console.log(`[SSE] Client connected: ${client.id}`);
           },
           cancel() {
-            // Client disconnected - handled by broadcast service
-            console.log('[SSE] Client disconnected');
+            // Mark client as closed to prevent writes to closed controller
+            if (clientId) {
+              broadcast.markClosed(clientId);
+              console.log(`[SSE] Client disconnected: ${clientId}`);
+            }
           },
         });
 
@@ -75,6 +82,7 @@ export function createInstanceEventRoutes() {
         set.headers['access-control-allow-origin'] = '*';
 
         const instanceId = params.id;
+        let clientId: string | null = null;
 
         // Create a filtered stream for this instance
         const stream = new ReadableStream({
@@ -87,11 +95,15 @@ export function createInstanceEventRoutes() {
               'instance:stopped',
               'instance:error',
             ]);
+            clientId = client.id;
 
             console.log(`[SSE] Instance stream connected: ${instanceId} (client: ${client.id})`);
           },
           cancel() {
-            console.log(`[SSE] Instance stream disconnected: ${instanceId}`);
+            if (clientId) {
+              broadcast.markClosed(clientId);
+              console.log(`[SSE] Instance stream disconnected: ${instanceId} (client: ${clientId})`);
+            }
           },
         });
 

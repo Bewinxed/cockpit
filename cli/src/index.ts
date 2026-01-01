@@ -15,7 +15,7 @@ program
 program
   .command('hub')
   .description('Start as hub (server mode with dashboard)')
-  .option('-p, --port <port>', 'Port to listen on', '3000')
+  .option('-p, --port <port>', 'Port to listen on', '3456')
   .option('-d, --db <path>', 'Database path', './cockpit.db')
   .option('--no-discovery', 'Disable mDNS discovery')
   .action(hub);
