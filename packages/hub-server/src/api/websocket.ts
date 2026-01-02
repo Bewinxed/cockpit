@@ -1,6 +1,6 @@
 import { Elysia } from 'elysia';
 import type { Db } from '@cockpit/db';
-import { agents } from '@cockpit/db';
+import { agents, eq } from '@cockpit/db';
 import {
   isJsonRpcRequest,
   isJsonRpcResponse,
@@ -130,29 +130,50 @@ async function handleRequest(
         return createErrorResponse(id, JsonRpcErrorCode.INVALID_PARAMS, 'Missing required registration parameters');
       }
 
-      // Register agent in registry
-      const agent = agentRegistry.register(ws, { machineId, hostname, tailscaleIp, os });
-      (ws as WsWithAgentId).agentId = agent.id;
+      // Check if this machine already exists in the database
+      const existingDbAgent = await db
+        .select()
+        .from(agents)
+        .where(eq(agents.machineId, machineId))
+        .limit(1);
 
-      // Persist agent to database
-      await db.insert(agents).values({
-        id: agent.id,
-        machineId,
-        hostname,
-        tailscaleIp,
-        os,
-        status: 'online',
-        lastSeen: new Date(),
-        createdAt: agent.createdAt,
-      }).onConflictDoUpdate({
-        target: agents.machineId,
-        set: {
+      let agentId: string;
+      const now = new Date();
+
+      if (existingDbAgent.length > 0) {
+        // Reuse existing database ID to maintain foreign key consistency
+        agentId = existingDbAgent[0].id;
+
+        // Update existing record
+        await db.update(agents)
+          .set({
+            hostname,
+            tailscaleIp,
+            status: 'online',
+            lastSeen: now,
+          })
+          .where(eq(agents.id, agentId));
+      } else {
+        // Register new agent in registry (will generate new ID)
+        const newAgent = agentRegistry.register(ws, { machineId, hostname, tailscaleIp, os });
+        agentId = newAgent.id;
+
+        // Insert new record
+        await db.insert(agents).values({
+          id: agentId,
+          machineId,
           hostname,
           tailscaleIp,
+          os,
           status: 'online',
-          lastSeen: new Date(),
-        },
-      });
+          lastSeen: now,
+          createdAt: now,
+        });
+      }
+
+      // Register/update agent in memory registry with correct ID
+      const agent = agentRegistry.registerWithId(ws, agentId, { machineId, hostname, tailscaleIp, os });
+      (ws as WsWithAgentId).agentId = agentId;
 
       // Update existing instances if reported
       if (existingInstances && Array.isArray(existingInstances)) {

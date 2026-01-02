@@ -79,6 +79,47 @@ export class AgentRegistry {
   }
 
   /**
+   * Register an agent with a specific ID (used when reusing database IDs)
+   */
+  registerWithId(ws: unknown, agentId: string, info: CreateAgentData): ConnectedAgent {
+    // Check if this agent ID is already registered
+    const existingAgent = this.agents.get(agentId);
+    if (existingAgent) {
+      // Update existing agent with new connection
+      existingAgent.ws = ws;
+      existingAgent.connectedAt = new Date();
+      existingAgent.lastPing = new Date();
+      existingAgent.status = 'online';
+      existingAgent.hostname = info.hostname;
+      existingAgent.tailscaleIp = info.tailscaleIp;
+      return existingAgent;
+    }
+
+    // Create new agent with specified ID
+    const now = new Date();
+
+    const agent: ConnectedAgent = {
+      id: agentId,
+      machineId: info.machineId,
+      hostname: info.hostname,
+      tailscaleIp: info.tailscaleIp,
+      os: info.os,
+      status: 'online',
+      lastSeen: now,
+      createdAt: now,
+      ws,
+      connectedAt: now,
+      lastPing: now,
+      pendingRequests: new Map(),
+    };
+
+    this.agents.set(agentId, agent);
+    this.machineIdToAgentId.set(info.machineId, agentId);
+
+    return agent;
+  }
+
+  /**
    * Unregister an agent (disconnect)
    */
   unregister(agentId: string): void {
