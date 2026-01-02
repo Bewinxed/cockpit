@@ -26,14 +26,18 @@
 <svelte:window onkeydown={handleKeydown} />
 
 {#if open}
-  <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
   <div
     class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
     onclick={handleBackdropClick}
+    onkeydown={handleKeydown}
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="modal-title"
+    tabindex="-1"
   >
     <div class="bg-bg-1 rounded-2xl shadow-xl border border-ui-1 w-full max-w-md mx-4 overflow-hidden">
       <div class="flex items-center justify-between px-6 py-4 border-b border-ui-1">
-        <h2 class="text-lg font-semibold text-tx-1">{title}</h2>
+        <h2 id="modal-title" class="text-lg font-semibold text-tx-1">{title}</h2>
         <button
           onclick={onClose}
           class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-bg-3 text-tx-2 hover:text-tx-1 transition-colors"

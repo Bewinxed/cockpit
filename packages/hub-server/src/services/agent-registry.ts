@@ -224,6 +224,23 @@ export class AgentRegistry {
   }
 
   /**
+   * Handle a response by request ID (searches all agents for the pending request)
+   * This is used when we can't determine the agent from the WebSocket
+   */
+  handleResponseByRequestId(response: JsonRpcResponse): boolean {
+    for (const agent of this.agents.values()) {
+      const pending = agent.pendingRequests.get(response.id);
+      if (pending) {
+        clearTimeout(pending.timeout);
+        agent.pendingRequests.delete(response.id);
+        pending.resolve(response);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
    * Broadcast a notification to all online agents
    */
   broadcast(method: string, params?: unknown): void {

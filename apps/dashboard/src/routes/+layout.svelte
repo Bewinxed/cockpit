@@ -1,6 +1,6 @@
 <script lang="ts">
   import '../app.css';
-  import { page } from '$app/stores';
+  import { page } from '$app/state';
   import { onMount, onDestroy } from 'svelte';
   import { HUB_URL } from '$lib/config';
   import {
@@ -53,8 +53,8 @@
         <a
           href={item.href}
           class="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150
-            {$page.url.pathname === item.href ||
-            (item.href !== '/' && $page.url.pathname.startsWith(item.href))
+            {page.url.pathname === item.href ||
+            (item.href !== '/' && page.url.pathname.startsWith(item.href))
               ? 'bg-primary text-white shadow-md'
               : 'text-tx-2 hover:bg-bg-3 hover:text-tx-1'}"
         >

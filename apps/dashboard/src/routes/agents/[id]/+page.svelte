@@ -1,23 +1,26 @@
 <script lang="ts">
-  import { page } from '$app/stores';
+  import { page } from '$app/state';
   import { agents, instances } from '$lib/stores/realtime';
   import NewInstanceModal from '$lib/components/NewInstanceModal.svelte';
 
   let showNewInstanceModal = $state(false);
 
+  // Get agent ID from params
+  let agentId = $derived(page.params.id ?? '');
+
   // Get agent from store
-  let agent = $derived($agents.get($page.params.id));
+  let agent = $derived($agents.get(agentId));
 
   // Get instances for this agent
   let agentInstances = $derived(
-    Array.from($instances.values()).filter(i => i.agentId === $page.params.id)
+    Array.from($instances.values()).filter(i => i.agentId === agentId)
   );
 
   let runningInstances = $derived(agentInstances.filter(i => i.status === 'running'));
 </script>
 
 <svelte:head>
-  <title>{agent?.hostname || 'Agent'} | Cockpit</title>
+  <title>{agent?.name || 'Agent'} | Cockpit</title>
 </svelte:head>
 
 {#if agent}
@@ -43,7 +46,7 @@
           </div>
           <div>
             <h1 class="text-2xl font-semibold text-tx-1 flex items-center gap-3">
-              {agent.hostname}
+              {agent.name}
               <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium
                 {agent.status === 'online'
                   ? 'bg-flexoki-green/10 text-flexoki-green'
@@ -53,7 +56,7 @@
               </span>
             </h1>
             <p class="text-sm text-tx-3 mt-1">
-              {agent.os} &middot; {agent.tailscaleIp}
+              {agent.os} &middot; {agent.ip || 'No IP'}
             </p>
           </div>
         </div>
