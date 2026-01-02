@@ -4,8 +4,10 @@ node_modules
 # output
 out
 dist
+build
 *.tgz
 .svelte-kit
+apps/dashboard/build
 
 # database
 *.db

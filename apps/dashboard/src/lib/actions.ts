@@ -18,13 +18,81 @@ export interface ActionResult<T = unknown> {
 }
 
 /**
+ * Extract a human-readable error message from various error types
+ * Handles Eden Treaty error format: { value: {...}, status: number, headers: {...} }
+ */
+function extractErrorMessage(error: unknown): string {
+  if (!error) return 'Unknown error';
+
+  // If it's already a string, return it
+  if (typeof error === 'string') return error;
+
+  // If it's an Error instance
+  if (error instanceof Error) return error.message;
+
+  // If it's an object, try to extract message
+  if (typeof error === 'object' && error !== null) {
+    const errObj = error as Record<string, unknown>;
+
+    // Eden Treaty format: { value: { success: false, error: "..." }, status: 400 }
+    // Check this FIRST since it's the most common format
+    if (errObj.value && typeof errObj.value === 'object') {
+      const valueObj = errObj.value as Record<string, unknown>;
+      if (typeof valueObj.error === 'string') return valueObj.error;
+      if (typeof valueObj.message === 'string') return valueObj.message;
+      // Check for nested details
+      if (typeof valueObj.details === 'string') return valueObj.details;
+      // Elysia validation format
+      if (typeof valueObj.summary === 'string') return valueObj.summary;
+    }
+
+    // Elysia validation error format (not wrapped in value)
+    if (errObj.type === 'validation' && typeof errObj.summary === 'string') {
+      return errObj.summary;
+    }
+
+    // Try common error message properties
+    if (typeof errObj.message === 'string') return errObj.message;
+    if (typeof errObj.error === 'string') return errObj.error;
+    if (typeof errObj.statusText === 'string') return errObj.statusText;
+    if (typeof errObj.summary === 'string') return errObj.summary;
+
+    // Check for HTTP status and provide meaningful message
+    if (typeof errObj.status === 'number') {
+      const status = errObj.status;
+      // Try to get error from value first
+      if (errObj.value && typeof errObj.value === 'object') {
+        const val = errObj.value as Record<string, unknown>;
+        if (typeof val.error === 'string') return val.error;
+      }
+      if (status === 400) return 'Bad request - please check your input';
+      if (status === 401) return 'Authentication required';
+      if (status === 403) return 'Access denied';
+      if (status === 404) return 'Resource not found';
+      if (status === 500) return 'Server error - please try again';
+      if (status >= 400) return `Request failed with status ${status}`;
+    }
+
+    // Last resort: try to stringify but limit length
+    try {
+      const str = JSON.stringify(error, null, 0);
+      if (str !== '{}' && str.length < 200) return str;
+      if (str !== '{}') return str.slice(0, 200) + '...';
+    } catch {
+      // Ignore stringify errors
+    }
+  }
+
+  return 'An unexpected error occurred';
+}
+
+/**
  * Check if an error indicates authentication is required
  */
 function isAuthError(error: unknown): boolean {
   if (!error) return false;
 
-  // Check error message for auth keywords
-  const errorStr = String(error).toLowerCase();
+  const errorStr = extractErrorMessage(error).toLowerCase();
   if (errorStr.includes('auth') || errorStr.includes('login') || errorStr.includes('credential')) {
     return true;
   }
@@ -54,11 +122,11 @@ export async function spawnInstance(params: {
     const { data, error } = await api.api.instances.post(params);
 
     if (error) {
-      console.error('Failed to spawn instance:', error);
-      const errorStr = String(error);
+      const errorMsg = extractErrorMessage(error);
+      console.error('Failed to spawn instance:', errorMsg, '| Raw error:', error);
       return {
         success: false,
-        error: errorStr,
+        error: errorMsg,
         authRequired: isAuthError(error),
       };
     }
@@ -77,10 +145,9 @@ export async function spawnInstance(params: {
 
     return { success: true, data: data?.data };
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
     return {
       success: false,
-      error: message,
+      error: extractErrorMessage(err),
       authRequired: isAuthError(err),
     };
   }
@@ -94,8 +161,9 @@ export async function stopInstance(instanceId: string): Promise<{ success: boole
     const { data, error } = await api.api.instances({ id: instanceId }).delete();
 
     if (error) {
-      console.error('Failed to stop instance:', error);
-      return { success: false, error: String(error) };
+      const errorMsg = extractErrorMessage(error);
+      console.error('Failed to stop instance:', errorMsg, '| Raw error:', error);
+      return { success: false, error: errorMsg };
     }
 
     // Refresh instances list
@@ -103,8 +171,7 @@ export async function stopInstance(instanceId: string): Promise<{ success: boole
 
     return { success: true };
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    return { success: false, error: message };
+    return { success: false, error: extractErrorMessage(err) };
   }
 }
 
@@ -113,20 +180,23 @@ export async function stopInstance(instanceId: string): Promise<{ success: boole
  */
 export async function sendMessage(
   instanceId: string,
-  message: string
+  content: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const { data, error } = await api.api.instances({ id: instanceId }).send.post({ message });
+    const { data, error } = await api.api.instances({ id: instanceId }).send.post({ message: content });
 
     if (error) {
-      console.error('Failed to send message:', error);
-      return { success: false, error: String(error) };
+      console.log('Raw error object:', error);
+      console.log('Error type:', typeof error);
+      console.log('Error keys:', Object.keys(error));
+      const errorMsg = extractErrorMessage(error);
+      console.error('Extracted message:', errorMsg);
+      return { success: false, error: errorMsg };
     }
 
     return { success: true };
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    return { success: false, error: message };
+    return { success: false, error: extractErrorMessage(err) };
   }
 }
 
@@ -144,7 +214,7 @@ export async function createProject(params: {
 
     if (error) {
       console.error('Failed to create project:', error);
-      return { success: false, error: String(error) };
+      return { success: false, error: extractErrorMessage(error) };
     }
 
     // Refresh projects list
@@ -152,8 +222,7 @@ export async function createProject(params: {
 
     return { success: true, data: data?.data };
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    return { success: false, error: message };
+    return { success: false, error: extractErrorMessage(err) };
   }
 }
 
@@ -174,7 +243,7 @@ export async function updateProject(
 
     if (error) {
       console.error('Failed to update project:', error);
-      return { success: false, error: String(error) };
+      return { success: false, error: extractErrorMessage(error) };
     }
 
     // Refresh projects list
@@ -182,8 +251,7 @@ export async function updateProject(
 
     return { success: true };
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    return { success: false, error: message };
+    return { success: false, error: extractErrorMessage(err) };
   }
 }
 
@@ -196,7 +264,7 @@ export async function deleteProject(projectId: string): Promise<{ success: boole
 
     if (error) {
       console.error('Failed to delete project:', error);
-      return { success: false, error: String(error) };
+      return { success: false, error: extractErrorMessage(error) };
     }
 
     // Refresh projects list
@@ -204,8 +272,7 @@ export async function deleteProject(projectId: string): Promise<{ success: boole
 
     return { success: true };
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    return { success: false, error: message };
+    return { success: false, error: extractErrorMessage(err) };
   }
 }
 

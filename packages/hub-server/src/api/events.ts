@@ -11,12 +11,7 @@ export function createEventRoutes() {
     // Main SSE endpoint for dashboard
     .get(
       '/',
-      ({ set, query }) => {
-        set.headers['content-type'] = 'text/event-stream';
-        set.headers['cache-control'] = 'no-cache';
-        set.headers['connection'] = 'keep-alive';
-        set.headers['access-control-allow-origin'] = '*';
-
+      ({ query }) => {
         // Parse subscriptions from query parameter
         const subscriptions = query.subscribe
           ? query.subscribe.split(',').map((s) => s.trim())
@@ -25,8 +20,8 @@ export function createEventRoutes() {
         // Track client ID for cleanup
         let clientId: string | null = null;
 
-        // Create a readable stream for SSE
-        const stream = new ReadableStream({
+        // Create a readable stream for SSE with string type
+        const stream = new ReadableStream<string>({
           start(controller) {
             // Register client with broadcast service
             const client = broadcast.addClient(controller, subscriptions);
@@ -43,7 +38,22 @@ export function createEventRoutes() {
           },
         });
 
-        return stream;
+        // Return as Response with explicit SSE headers
+        // Use TextEncoderStream to convert strings to bytes
+        const encoder = new TextEncoderStream();
+        stream.pipeTo(encoder.writable).catch(() => {
+          // Silently handle stream close errors
+        });
+
+        return new Response(encoder.readable, {
+          headers: {
+            'content-type': 'text/event-stream',
+            'cache-control': 'no-cache',
+            'connection': 'keep-alive',
+            'access-control-allow-origin': '*',
+            'x-accel-buffering': 'no',
+          },
+        });
       },
       {
         query: t.Object({
@@ -75,17 +85,12 @@ export function createInstanceEventRoutes() {
   return new Elysia({ prefix: '/instances/:id/events' })
     .get(
       '/',
-      ({ set, params }) => {
-        set.headers['content-type'] = 'text/event-stream';
-        set.headers['cache-control'] = 'no-cache';
-        set.headers['connection'] = 'keep-alive';
-        set.headers['access-control-allow-origin'] = '*';
-
+      ({ params }) => {
         const instanceId = params.id;
         let clientId: string | null = null;
 
-        // Create a filtered stream for this instance
-        const stream = new ReadableStream({
+        // Create a filtered stream for this instance with string type
+        const stream = new ReadableStream<string>({
           start(controller) {
             // Register client with instance-specific subscriptions
             const client = broadcast.addClient(controller, [
@@ -107,7 +112,22 @@ export function createInstanceEventRoutes() {
           },
         });
 
-        return stream;
+        // Return as Response with explicit SSE headers
+        // Use TextEncoderStream to convert strings to bytes
+        const encoder = new TextEncoderStream();
+        stream.pipeTo(encoder.writable).catch(() => {
+          // Silently handle stream close errors
+        });
+
+        return new Response(encoder.readable, {
+          headers: {
+            'content-type': 'text/event-stream',
+            'cache-control': 'no-cache',
+            'connection': 'keep-alive',
+            'access-control-allow-origin': '*',
+            'x-accel-buffering': 'no',
+          },
+        });
       },
       {
         params: t.Object({

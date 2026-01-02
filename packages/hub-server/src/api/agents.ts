@@ -1,10 +1,24 @@
 import { Elysia, t } from 'elysia';
 import type { Db } from '@cockpit/db';
 import type { Agent } from '@cockpit/core';
-import { CommandMethod, type FilesystemListResult } from '@cockpit/core/protocol';
+import { CommandMethod, type FilesystemListResult, type JsonRpcError } from '@cockpit/core/protocol';
 import { agents, eq, desc } from '@cockpit/db';
 import { getAgentRegistry } from '../services/agent-registry';
 import { createInstanceTracker } from '../services/instance-tracker';
+
+/**
+ * Safely extract error message from JsonRpcError or any error object
+ */
+function getErrorMessage(error: JsonRpcError | unknown): string {
+  if (!error) return 'Unknown error';
+  if (typeof error === 'string') return error;
+  if (typeof error === 'object' && error !== null) {
+    const err = error as Record<string, unknown>;
+    if (typeof err.message === 'string') return err.message;
+    if (typeof err.error === 'string') return err.error;
+  }
+  return String(error);
+}
 
 /**
  * Agent management routes
@@ -286,7 +300,7 @@ export function createAgentRoutes(db: Db) {
           set.status = 400;
           return {
             success: false,
-            error: response.error.message,
+            error: getErrorMessage(response.error),
           };
         }
 

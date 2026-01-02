@@ -1,10 +1,25 @@
 import { Elysia, t } from 'elysia';
 import type { Db } from '@cockpit/db';
 import type { SpawnInstanceData } from '@cockpit/core';
+import type { JsonRpcError } from '@cockpit/core/protocol';
 import { CommandMethod } from '@cockpit/core/protocol';
 import { createInstanceTracker } from '../services/instance-tracker';
 import { getAgentRegistry } from '../services/agent-registry';
 import { getBroadcastService } from '../services/broadcast';
+
+/**
+ * Safely extract error message from JsonRpcError or any error object
+ */
+function getErrorMessage(error: JsonRpcError | unknown): string {
+  if (!error) return 'Unknown error';
+  if (typeof error === 'string') return error;
+  if (typeof error === 'object' && error !== null) {
+    const err = error as Record<string, unknown>;
+    if (typeof err.message === 'string') return err.message;
+    if (typeof err.error === 'string') return err.error;
+  }
+  return String(error);
+}
 
 /**
  * Instance CRUD routes
@@ -124,7 +139,7 @@ export function createInstanceRoutes(db: Db) {
           set.status = 500;
           return {
             success: false,
-            error: response.error.message,
+            error: getErrorMessage(response.error),
             data: instance,
           };
         }
@@ -176,7 +191,7 @@ export function createInstanceRoutes(db: Db) {
           CommandMethod.INSTANCE_SEND,
           {
             instanceId: params.id,
-            message: body.message,
+            content: body.message,
           }
         );
 
@@ -184,7 +199,7 @@ export function createInstanceRoutes(db: Db) {
           set.status = 500;
           return {
             success: false,
-            error: response.error.message,
+            error: getErrorMessage(response.error),
           };
         }
 
@@ -240,14 +255,15 @@ export function createInstanceRoutes(db: Db) {
         );
 
         if (response.error) {
-          // Still mark as stopped in database
+          // Agent error - still mark as stopped in database
+          // This is common when instance was already stopped or agent restarted
           const stoppedInstance = await tracker.markStopped(params.id);
 
-          set.status = 500;
+          // Don't return 500 - this is expected when instance isn't known to agent
           return {
-            success: false,
-            error: response.error.message,
+            success: true,
             data: stoppedInstance,
+            message: 'Instance marked as stopped (agent returned: ' + getErrorMessage(response.error) + ')',
           };
         }
 
@@ -297,7 +313,7 @@ export function createInstanceRoutes(db: Db) {
             data: {
               instance,
               liveStatus: null,
-              error: response.error.message,
+              error: getErrorMessage(response.error),
             },
           };
         }

@@ -5,7 +5,7 @@ import { generateId } from '@cockpit/core/utils';
  */
 export interface SSEClient {
   id: string;
-  controller: ReadableStreamDefaultController<Uint8Array>;
+  controller: ReadableStreamDefaultController<string | Uint8Array>;
   connectedAt: Date;
   subscriptions: Set<string>; // Event types to subscribe to
   closed: boolean; // Track if connection is closed
@@ -36,12 +36,11 @@ export type BroadcastEventType =
  */
 export class BroadcastService {
   private clients: Map<string, SSEClient> = new Map();
-  private encoder = new TextEncoder();
 
   /**
    * Add a new SSE client
    */
-  addClient(controller: ReadableStreamDefaultController<Uint8Array>, subscriptions?: string[]): SSEClient {
+  addClient(controller: ReadableStreamDefaultController<string | Uint8Array>, subscriptions?: string[]): SSEClient {
     const client: SSEClient = {
       id: generateId(),
       controller,
@@ -52,8 +51,12 @@ export class BroadcastService {
 
     this.clients.set(client.id, client);
 
-    // Send initial connection message
-    this.sendToClient(client, 'connected', { clientId: client.id });
+    // Send initial connection message (deferred to avoid race condition)
+    queueMicrotask(() => {
+      if (!client.closed) {
+        this.sendToClient(client, 'connected', { clientId: client.id });
+      }
+    });
 
     return client;
   }
@@ -112,12 +115,14 @@ export class BroadcastService {
 
     try {
       const message = this.formatSSEMessage(event, data);
-      client.controller.enqueue(this.encoder.encode(message));
+      // Enqueue as raw string - will be encoded by the Response stream
+      client.controller.enqueue(message);
       return true;
-    } catch {
+    } catch (err) {
       // Client might be disconnected, mark as closed
       client.closed = true;
       this.clients.delete(client.id);
+      // Silently ignore "Controller is already closed" errors - they're expected when clients disconnect
       return false;
     }
   }
@@ -158,7 +163,6 @@ export class BroadcastService {
    */
   sendHeartbeat(): void {
     const heartbeat = `: heartbeat ${Date.now()}\n\n`;
-    const encoded = this.encoder.encode(heartbeat);
 
     for (const [clientId, client] of this.clients) {
       if (client.closed) {
@@ -167,7 +171,8 @@ export class BroadcastService {
       }
 
       try {
-        client.controller.enqueue(encoded);
+        // Enqueue as raw string
+        client.controller.enqueue(heartbeat);
       } catch {
         client.closed = true;
         this.clients.delete(clientId);

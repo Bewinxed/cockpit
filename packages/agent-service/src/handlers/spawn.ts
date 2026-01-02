@@ -96,6 +96,7 @@ export async function handleSpawn(
     // Map params to SpawnInstanceParams
     const spawnParams: SpawnInstanceParams = {
       projectPath: workingDir,
+      instanceId: params.instanceId, // Use hub's instanceId to keep in sync
       sessionId: params.sessionId,
       systemPrompt: params.systemPrompt,
       permissionMode: params.permissionMode,

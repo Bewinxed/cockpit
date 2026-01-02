@@ -42,6 +42,8 @@ interface UserMessage {
 
 export interface SpawnInstanceParams {
   projectPath: string;
+  /** Instance ID from hub - use this if provided to keep hub and agent in sync */
+  instanceId?: string;
   sessionId?: string;
   systemPrompt?: string;
   permissionMode?: PermissionMode;
@@ -83,7 +85,8 @@ export class InstanceManager extends EventEmitter {
    * Spawn a new Claude Code instance
    */
   async spawn(params: SpawnInstanceParams): Promise<string> {
-    const instanceId = generateId();
+    // Use provided instanceId from hub, or generate a new one
+    const instanceId = params.instanceId || generateId();
     const sessionId = params.sessionId || generateId();
 
     const instance: ManagedInstance = {

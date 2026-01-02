@@ -17,9 +17,17 @@ import { getBroadcastService } from '../services/broadcast';
 import { createInstanceTracker } from '../services/instance-tracker';
 import { safeJsonParse } from '@cockpit/core/utils';
 
-// Store agent ID on WebSocket object directly (WeakMap doesn't work with Elysia ws wrappers)
-interface WsWithAgentId {
-  agentId?: string;
+// Map to store agentId by connection ID
+// We use a module-level Map since Elysia ws wrappers don't preserve properties between calls
+const connectionAgentMap = new Map<string, string>();
+
+// Helper to get unique ID from ws object
+function getWsId(ws: unknown): string {
+  // Try to get a unique identifier from the ws object
+  const wsAny = ws as { id?: string; raw?: { remoteAddress?: string } };
+  if (wsAny.id) return wsAny.id;
+  // Fallback: use stringified reference (not ideal but works)
+  return String(ws);
 }
 
 /**
@@ -75,7 +83,8 @@ export function createWebsocketRoutes(db: Db) {
 
         // Handle JSON-RPC notification
         if (isJsonRpcNotification(message)) {
-          const agentId = (ws as WsWithAgentId).agentId;
+          const wsId = getWsId(ws);
+          const agentId = connectionAgentMap.get(wsId);
           if (agentId) {
             await handleNotification(agentId, message, broadcast, instanceTracker);
           }
@@ -90,10 +99,12 @@ export function createWebsocketRoutes(db: Db) {
 
       // WebSocket close handler
       close(ws) {
-        const agentId = (ws as WsWithAgentId).agentId;
+        const wsId = getWsId(ws);
+        const agentId = connectionAgentMap.get(wsId);
         if (agentId) {
           console.log(`[Hub] Agent disconnected: ${agentId}`);
           agentRegistry.unregister(agentId);
+          connectionAgentMap.delete(wsId);
 
           // Broadcast agent disconnection
           broadcast.broadcast('agent:disconnected', { agentId });
@@ -173,7 +184,8 @@ async function handleRequest(
 
       // Register/update agent in memory registry with correct ID
       const agent = agentRegistry.registerWithId(ws, agentId, { machineId, hostname, tailscaleIp, os });
-      (ws as WsWithAgentId).agentId = agentId;
+      const wsId = getWsId(ws);
+      connectionAgentMap.set(wsId, agentId);
 
       // Update existing instances if reported
       if (existingInstances && Array.isArray(existingInstances)) {
@@ -207,7 +219,8 @@ async function handleRequest(
 
     case CommandMethod.AGENT_STATUS: {
       // Agent requesting hub status
-      const agentId = (ws as WsWithAgentId).agentId;
+      const wsId = getWsId(ws);
+      const agentId = connectionAgentMap.get(wsId);
       if (!agentId) {
         return createErrorResponse(id, JsonRpcErrorCode.INVALID_REQUEST, 'Agent not registered');
       }
@@ -254,6 +267,16 @@ async function handleNotification(
       break;
     }
 
+    // Handle 'instance.started' from agent (different from INSTANCE_CREATED)
+    case 'instance.started': {
+      const { instanceId, sessionId } = params as { instanceId: string; sessionId?: string };
+      const updated = await instanceTracker.markStarted(instanceId, sessionId);
+      if (updated) {
+        broadcast.broadcast('instance:started', updated);
+      }
+      break;
+    }
+
     case EventMethod.INSTANCE_MESSAGE: {
       const { instanceId, type, content, timestamp } = params as {
         instanceId: string;
@@ -292,7 +315,26 @@ async function handleNotification(
       break;
     }
 
+    // Handle SDK messages from agent
+    case 'sdk.message': {
+      const { instanceId, message } = params as { instanceId: string; message: unknown };
+      // Forward SDK messages to dashboard
+      broadcast.broadcast('sdk:message', { instanceId, message });
+      break;
+    }
+
+    // Handle instance errors
+    case 'instance.error': {
+      const { instanceId, error: errorMsg } = params as { instanceId: string; error: string };
+      const instance = await instanceTracker.markError(instanceId);
+      if (instance) {
+        broadcast.broadcast('instance:error', { instanceId, instance, error: errorMsg });
+      }
+      break;
+    }
+
     default:
-      console.log(`[Hub] Unknown notification method: ${method}`);
+      // Don't log unknown methods - they're handled elsewhere or expected
+      break;
   }
 }

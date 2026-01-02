@@ -1,142 +1,213 @@
 <script lang="ts">
   import { page } from '$app/state';
+  import { goto } from '$app/navigation';
   import { agents, instances } from '$lib/stores/realtime';
   import NewInstanceModal from '$lib/components/NewInstanceModal.svelte';
+  import InstanceCard from '$lib/components/InstanceCard.svelte';
+  import { Button, Badge, Card, EmptyState } from '$lib/components/ui';
+  import AppleIcon from '$lib/components/icons/AppleIcon.svelte';
+  import LinuxIcon from '$lib/components/icons/LinuxIcon.svelte';
+  import WindowsIcon from '$lib/components/icons/WindowsIcon.svelte';
+  import { formatDistanceToNow } from '$lib/utils/time';
+  import {
+    ArrowLeft,
+    Plus,
+    Terminal,
+    Activity,
+    Clock,
+    Wifi,
+    AlertCircle
+  } from 'lucide-svelte';
 
   let showNewInstanceModal = $state(false);
 
   // Get agent ID from params
-  let agentId = $derived(page.params.id ?? '');
+  const agentId = $derived(page.params.id);
 
   // Get agent from store
-  let agent = $derived($agents.get(agentId));
+  const agent = $derived($agents.get(agentId));
 
   // Get instances for this agent
-  let agentInstances = $derived(
-    Array.from($instances.values()).filter(i => i.agentId === agentId)
+  const agentInstances = $derived(
+    Array.from($instances.values())
+      .filter((i) => i.agentId === agentId)
+      .sort((a, b) => new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime())
   );
 
-  let runningInstances = $derived(agentInstances.filter(i => i.status === 'running'));
+  const runningInstances = $derived(
+    agentInstances.filter((i) => i.status === 'running' || i.status === 'starting')
+  );
+
+  const osConfig = {
+    darwin: { icon: AppleIcon, label: 'macOS' },
+    linux: { icon: LinuxIcon, label: 'Linux' },
+    windows: { icon: WindowsIcon, label: 'Windows' },
+  };
+
+  const osInfo = $derived(agent ? osConfig[agent.os] : null);
+
+  const connectedTime = $derived(
+    agent?.connectedAt ? formatDistanceToNow(new Date(agent.connectedAt)) : null
+  );
 </script>
 
 <svelte:head>
   <title>{agent?.name || 'Agent'} | Cockpit</title>
 </svelte:head>
 
-{#if agent}
-  <div class="max-w-4xl">
+<div class="page-container animate-fade-in">
+  {#if agent}
     <!-- Header -->
     <header class="mb-8">
       <div class="flex items-center gap-4 mb-4">
-        <a href="/agents" class="text-tx-3 hover:text-tx-1 transition-colors">
-          &larr; Agents
+        <a
+          href="/agents"
+          class="p-2 rounded-lg hover:bg-surface-hover transition-colors"
+        >
+          <ArrowLeft class="w-5 h-5 text-text-secondary" />
         </a>
+        <span class="text-text-muted">Agents</span>
       </div>
 
       <div class="flex items-start justify-between">
-        <div class="flex items-center gap-4">
-          <div class="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center">
-            {#if agent.os === 'darwin'}
-              <span class="text-3xl"></span>
-            {:else if agent.os === 'windows'}
-              <span class="text-3xl"></span>
-            {:else}
-              <span class="text-3xl"></span>
+        <div class="flex items-center gap-5">
+          <div class="w-16 h-16 rounded-2xl bg-surface-hover flex items-center justify-center">
+            {#if osInfo}
+              <osInfo.icon class="w-8 h-8 text-text" />
             {/if}
           </div>
           <div>
-            <h1 class="text-2xl font-semibold text-tx-1 flex items-center gap-3">
-              {agent.name}
-              <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium
-                {agent.status === 'online'
-                  ? 'bg-flexoki-green/10 text-flexoki-green'
-                  : 'bg-tx-3/10 text-tx-3'}">
-                <span class="w-1.5 h-1.5 rounded-full {agent.status === 'online' ? 'bg-flexoki-green animate-pulse' : 'bg-tx-3'}"></span>
-                {agent.status}
-              </span>
-            </h1>
-            <p class="text-sm text-tx-3 mt-1">
-              {agent.os} &middot; {agent.ip || 'No IP'}
-            </p>
+            <div class="flex items-center gap-3 mb-1">
+              <h1 class="text-2xl font-semibold text-text">{agent.name}</h1>
+              <Badge
+                variant={agent.status === 'online' ? 'success' : 'default'}
+                dot
+                pulse={agent.status === 'online'}
+              >
+                {#snippet children()}{agent.status === 'online' ? 'Online' : 'Offline'}{/snippet}
+              </Badge>
+            </div>
+            <div class="flex items-center gap-4 text-sm text-text-secondary">
+              {#if osInfo}
+                <span>{osInfo.label}</span>
+                <span class="text-text-muted">·</span>
+              {/if}
+              <span class="font-mono">{agent.ip || 'No IP'}</span>
+              {#if connectedTime && agent.status === 'online'}
+                <span class="text-text-muted">·</span>
+                <span>Connected {connectedTime}</span>
+              {/if}
+            </div>
           </div>
         </div>
 
         {#if agent.status === 'online'}
-          <button
-            class="btn btn-primary"
-            onclick={() => showNewInstanceModal = true}
-          >
-            <span>+</span> New Instance
-          </button>
+          <Button variant="primary" onclick={() => showNewInstanceModal = true}>
+            {#snippet icon()}<Plus class="w-4 h-4" />{/snippet}
+            {#snippet children()}New Instance{/snippet}
+          </Button>
         {/if}
       </div>
     </header>
 
     <!-- Stats -->
-    <div class="grid grid-cols-3 gap-4 mb-8">
-      <div class="card p-4">
-        <div class="text-2xl font-semibold text-tx-1">{runningInstances.length}</div>
-        <div class="text-sm text-tx-3">Running Instances</div>
-      </div>
-      <div class="card p-4">
-        <div class="text-2xl font-semibold text-tx-1">{agentInstances.length}</div>
-        <div class="text-sm text-tx-3">Total Instances</div>
-      </div>
-      <div class="card p-4">
-        <div class="text-2xl font-semibold text-tx-1">
-          {agent.status === 'online' ? 'Connected' : 'Disconnected'}
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+      <Card padding="md">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-success-light flex items-center justify-center">
+            <Activity class="w-5 h-5 text-success" />
+          </div>
+          <div>
+            <div class="text-2xl font-bold text-text">{runningInstances.length}</div>
+            <div class="text-sm text-text-secondary">Running</div>
+          </div>
         </div>
-        <div class="text-sm text-tx-3">Status</div>
-      </div>
+      </Card>
+
+      <Card padding="md">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-primary-light flex items-center justify-center">
+            <Terminal class="w-5 h-5 text-primary" />
+          </div>
+          <div>
+            <div class="text-2xl font-bold text-text">{agentInstances.length}</div>
+            <div class="text-sm text-text-secondary">Total Instances</div>
+          </div>
+        </div>
+      </Card>
+
+      <Card padding="md">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-{agent.status === 'online' ? 'success' : 'surface'}-light flex items-center justify-center">
+            <Wifi class="w-5 h-5 {agent.status === 'online' ? 'text-success' : 'text-text-muted'}" />
+          </div>
+          <div>
+            <div class="text-xl font-bold text-text">
+              {agent.status === 'online' ? 'Connected' : 'Disconnected'}
+            </div>
+            <div class="text-sm text-text-secondary">Status</div>
+          </div>
+        </div>
+      </Card>
+
+      <Card padding="md">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-info-light flex items-center justify-center">
+            <Clock class="w-5 h-5 text-info" />
+          </div>
+          <div>
+            <div class="text-lg font-bold text-text">{connectedTime || 'N/A'}</div>
+            <div class="text-sm text-text-secondary">Uptime</div>
+          </div>
+        </div>
+      </Card>
     </div>
 
     <!-- Instances -->
     <section>
-      <h2 class="text-lg font-semibold text-tx-1 mb-4">Instances</h2>
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="section-title mb-0">Instances on this Agent</h2>
+        {#if agent.status === 'online' && agentInstances.length > 0}
+          <Button variant="ghost" size="sm" onclick={() => showNewInstanceModal = true}>
+            {#snippet icon()}<Plus class="w-4 h-4" />{/snippet}
+            {#snippet children()}Add{/snippet}
+          </Button>
+        {/if}
+      </div>
 
-      {#if agentInstances.length > 0}
-        <div class="space-y-3">
-          {#each agentInstances as instance}
-            <a
-              href="/instances/{instance.id}"
-              class="card card-interactive p-4 flex items-center justify-between"
-            >
-              <div>
-                <div class="font-medium text-tx-1">{instance.cwd}</div>
-                <div class="text-sm text-tx-3">{instance.status}</div>
-              </div>
-              <span class="w-2 h-2 rounded-full {
-                instance.status === 'running' ? 'bg-flexoki-green animate-pulse' :
-                instance.status === 'error' ? 'bg-flexoki-red' :
-                'bg-tx-3'
-              }"></span>
-            </a>
-          {/each}
-        </div>
-      {:else}
-        <div class="text-center py-12 text-tx-3">
-          <p>No instances yet.</p>
-          {#if agent.status === 'online'}
-            <button
-              class="btn btn-primary mt-4"
-              onclick={() => showNewInstanceModal = true}
-            >
-              Start First Instance
-            </button>
-          {/if}
-        </div>
-      {/if}
+      <div class="space-y-3">
+        {#each agentInstances as instance (instance.id)}
+          <InstanceCard {instance} />
+        {:else}
+          <Card padding="lg">
+            <EmptyState
+              icon={Terminal}
+              title="No instances yet"
+              description={agent.status === 'online'
+                ? 'Start a new Claude Code instance on this agent'
+                : 'This agent is offline. Connect it to start instances.'}
+              action={agent.status === 'online'
+                ? { label: 'New Instance', onClick: () => showNewInstanceModal = true }
+                : undefined}
+            />
+          </Card>
+        {/each}
+      </div>
     </section>
-  </div>
 
-  <NewInstanceModal
-    bind:open={showNewInstanceModal}
-    onClose={() => showNewInstanceModal = false}
-  />
-{:else}
-  <div class="text-center py-12">
-    <h1 class="text-xl font-semibold text-tx-1 mb-2">Agent Not Found</h1>
-    <p class="text-tx-3 mb-4">This agent may have disconnected or doesn't exist.</p>
-    <a href="/agents" class="btn btn-primary">Back to Agents</a>
-  </div>
-{/if}
+    <NewInstanceModal
+      bind:open={showNewInstanceModal}
+      onClose={() => showNewInstanceModal = false}
+    />
+  {:else}
+    <!-- Agent not found -->
+    <div class="flex items-center justify-center min-h-[400px]">
+      <EmptyState
+        icon={AlertCircle}
+        title="Agent not found"
+        description="This agent may have disconnected or doesn't exist"
+        action={{ label: 'Back to Agents', onClick: () => goto('/agents') }}
+      />
+    </div>
+  {/if}
+</div>

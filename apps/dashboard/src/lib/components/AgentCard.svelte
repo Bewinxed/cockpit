@@ -1,4 +1,12 @@
 <script lang="ts">
+  import Badge from '$lib/components/ui/Badge.svelte';
+  import { Monitor, Terminal, ArrowRight } from 'lucide-svelte';
+
+  // OS-specific icons as simple SVG components
+  import AppleIcon from '$lib/components/icons/AppleIcon.svelte';
+  import LinuxIcon from '$lib/components/icons/LinuxIcon.svelte';
+  import WindowsIcon from '$lib/components/icons/WindowsIcon.svelte';
+
   interface Agent {
     id: string;
     name: string;
@@ -10,45 +18,63 @@
 
   interface Props {
     agent: Agent;
+    compact?: boolean;
   }
 
-  let { agent }: Props = $props();
+  let { agent, compact = false }: Props = $props();
 
-  const osIcons = {
-    darwin: '🍎',
-    linux: '🐧',
-    windows: '🪟',
+  const osConfig = {
+    darwin: { icon: AppleIcon, label: 'macOS', color: 'text-text' },
+    linux: { icon: LinuxIcon, label: 'Linux', color: 'text-warning' },
+    windows: { icon: WindowsIcon, label: 'Windows', color: 'text-info' },
   };
 
-  const osLabels = {
-    darwin: 'macOS',
-    linux: 'Linux',
-    windows: 'Windows',
-  };
+  const config = $derived(osConfig[agent.os]);
 </script>
 
-<a href="/agents/{agent.id}" class="block card card-interactive group">
-  <div class="flex items-center gap-3">
-    <div class="w-10 h-10 rounded-lg bg-bg-3 flex items-center justify-center text-lg group-hover:scale-110 transition-transform">
-      {osIcons[agent.os]}
+<a
+  href="/agents/{agent.id}"
+  class="card card-interactive p-4 group"
+>
+  <div class="flex items-center gap-4">
+    <!-- OS Icon -->
+    <div class="flex-shrink-0">
+      <div class="w-12 h-12 rounded-xl bg-surface-hover flex items-center justify-center group-hover:scale-105 transition-transform">
+        <config.icon class="w-6 h-6 {config.color}" />
+      </div>
     </div>
+
+    <!-- Content -->
     <div class="flex-1 min-w-0">
-      <div class="flex items-center gap-2">
-        <h3 class="font-medium text-tx-1 truncate group-hover:text-primary transition-colors">
+      <div class="flex items-center gap-2 mb-1">
+        <h3 class="font-medium text-text truncate group-hover:text-primary transition-colors">
           {agent.name}
         </h3>
-        <span class="status-badge {agent.status === 'online' ? 'status-online' : 'status-offline'}">
-          <span class="status-dot" class:status-dot-active={agent.status === 'online'}></span>
-          {agent.status}
-        </span>
+        <Badge
+          variant={agent.status === 'online' ? 'success' : 'default'}
+          size="sm"
+          dot
+          pulse={agent.status === 'online'}
+        >
+          {#snippet children()}{agent.status === 'online' ? 'Online' : 'Offline'}{/snippet}
+        </Badge>
       </div>
-      <div class="flex items-center gap-3 mt-1 text-xs text-tx-3">
-        <span>{osLabels[agent.os]}</span>
-        <span>•</span>
-        <span>{agent.ip}</span>
-        <span>•</span>
-        <span>{agent.instances} {agent.instances === 1 ? 'instance' : 'instances'}</span>
+
+      <div class="flex items-center gap-3 text-sm text-text-secondary">
+        <span>{config.label}</span>
+        <span class="text-text-muted">·</span>
+        <span class="font-mono text-xs">{agent.ip}</span>
+        <span class="text-text-muted">·</span>
+        <div class="flex items-center gap-1">
+          <Terminal class="w-3.5 h-3.5" />
+          <span>{agent.instances} {agent.instances === 1 ? 'instance' : 'instances'}</span>
+        </div>
       </div>
+    </div>
+
+    <!-- Arrow -->
+    <div class="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+      <ArrowRight class="w-4 h-4 text-text-muted" />
     </div>
   </div>
 </a>

@@ -3,129 +3,200 @@
   import InstanceCard from '$lib/components/InstanceCard.svelte';
   import AgentCard from '$lib/components/AgentCard.svelte';
   import NewInstanceModal from '$lib/components/NewInstanceModal.svelte';
+  import { Button, Card, EmptyState } from '$lib/components/ui';
   import {
     stats,
     recentInstances,
     onlineAgents,
     connectionStatus
   } from '$lib/stores/realtime';
+  import {
+    Terminal,
+    Server,
+    CheckCircle,
+    DollarSign,
+    Plus,
+    ArrowRight,
+    Zap,
+    MessageSquare
+  } from 'lucide-svelte';
 
   let showNewInstanceModal = $state(false);
 
-  // Reactive stats from store
-  let statsData = $derived({
-    instances: { count: $stats.runningInstances, label: 'Active Instances', trend: `${$stats.totalInstances} total` },
-    agents: { count: $stats.onlineAgents, label: 'Connected Agents', trend: `${$stats.totalAgents} total` },
-    tasks: { count: $stats.activeTasks, label: 'Active Tasks', trend: 'In progress' },
-    cost: { value: '$0.00', label: "Today's Cost", trend: 'No usage yet' }
-  });
+  // Format cost from stats
+  const formattedCost = $derived(
+    $stats.totalCostUsd > 0 ? `$${$stats.totalCostUsd.toFixed(2)}` : '$0.00'
+  );
 </script>
 
 <svelte:head>
   <title>Dashboard | Cockpit</title>
 </svelte:head>
 
-<div class="max-w-6xl">
+<div class="page-container animate-fade-in">
   <!-- Header -->
-  <header class="flex justify-between items-start mb-8">
+  <header class="page-header">
     <div>
-      <h1 class="text-2xl font-semibold text-tx-1 mb-1">Dashboard</h1>
-      <p class="text-sm text-tx-3">Manage your Claude Code instances across all devices</p>
+      <h1 class="page-title">Dashboard</h1>
+      <p class="page-description">Manage your Claude Code instances across all devices</p>
     </div>
-    <button class="btn btn-primary" onclick={() => showNewInstanceModal = true}>
-      <span>+</span>
-      New Instance
-    </button>
+    <Button variant="primary" onclick={() => showNewInstanceModal = true}>
+      {#snippet icon()}<Plus class="w-4 h-4" />{/snippet}
+      {#snippet children()}New Instance{/snippet}
+    </Button>
   </header>
 
   <NewInstanceModal bind:open={showNewInstanceModal} onClose={() => showNewInstanceModal = false} />
 
   <!-- Stats Grid -->
-  <section class="grid grid-cols-4 gap-4 mb-8">
+  <section class="grid-stats mb-8">
     <StatsCard
-      icon="○"
-      count={statsData.instances.count}
-      label={statsData.instances.label}
-      trend={statsData.instances.trend}
-      color="blue"
+      icon={Terminal}
+      count={$stats.runningInstances}
+      label="Active Instances"
+      trend="{$stats.totalInstances} total"
+      color="primary"
     />
     <StatsCard
-      icon="●"
-      count={statsData.agents.count}
-      label={statsData.agents.label}
-      trend={statsData.agents.trend}
-      color="green"
+      icon={Server}
+      count={$stats.onlineAgents}
+      label="Connected Agents"
+      trend="{$stats.totalAgents} total"
+      color="success"
     />
     <StatsCard
-      icon="✓"
-      count={statsData.tasks.count}
-      label={statsData.tasks.label}
-      trend={statsData.tasks.trend}
-      color="purple"
+      icon={CheckCircle}
+      count={$stats.activeTasks}
+      label="Active Tasks"
+      trend="In progress"
+      color="secondary"
     />
     <StatsCard
-      icon="◇"
-      count={statsData.cost.value}
-      label={statsData.cost.label}
-      trend={statsData.cost.trend}
-      color="orange"
+      icon={DollarSign}
+      count={formattedCost}
+      label="Total Cost"
+      trend="All time"
+      color="warning"
     />
   </section>
 
   <!-- Content Grid -->
-  <div class="grid grid-cols-5 gap-6">
+  <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
     <!-- Recent Instances -->
-    <section class="col-span-3 bg-bg-2 rounded-2xl p-6 border border-ui-1">
-      <div class="flex justify-between items-center mb-5">
-        <h2 class="text-base font-semibold text-tx-1">Recent Instances</h2>
-        <a href="/instances" class="text-sm text-tx-3 hover:text-primary transition-colors">
-          View all →
-        </a>
-      </div>
-      <div class="flex flex-col gap-3">
-        {#each $recentInstances as instance}
-          <InstanceCard {instance} />
-        {:else}
-          <div class="text-center py-8 text-tx-3">
-            <p class="text-2xl mb-2">💭</p>
-            <p class="text-sm">No instances yet</p>
-            <p class="text-xs mt-1">Start a new instance to get going</p>
-          </div>
-        {/each}
-      </div>
+    <section class="lg:col-span-3">
+      <Card padding="lg">
+        <div class="flex justify-between items-center mb-5">
+          <h2 class="section-title mb-0">Recent Instances</h2>
+          <a href="/instances" class="text-sm text-text-secondary hover:text-primary transition-colors flex items-center gap-1">
+            View all
+            <ArrowRight class="w-4 h-4" />
+          </a>
+        </div>
+
+        <div class="space-y-3">
+          {#each $recentInstances as instance (instance.id)}
+            <InstanceCard {instance} compact />
+          {:else}
+            <EmptyState
+              icon={MessageSquare}
+              title="No instances yet"
+              description="Start a new instance to begin working with Claude Code"
+              size="sm"
+              action={{ label: 'New Instance', onClick: () => showNewInstanceModal = true }}
+            />
+          {/each}
+        </div>
+      </Card>
     </section>
 
     <!-- Connected Agents -->
-    <section class="col-span-2 bg-bg-2 rounded-2xl p-6 border border-ui-1">
-      <div class="flex justify-between items-center mb-5">
-        <h2 class="text-base font-semibold text-tx-1">Connected Agents</h2>
-        <a href="/agents" class="text-sm text-tx-3 hover:text-primary transition-colors">
-          View all →
-        </a>
-      </div>
-      <div class="flex flex-col gap-3">
-        {#each $onlineAgents as agent}
-          <AgentCard {agent} />
-        {:else}
-          <div class="text-center py-8 text-tx-3">
-            <p class="text-2xl mb-2">🖥️</p>
-            <p class="text-sm">No agents connected</p>
-            <p class="text-xs mt-1">Run <code class="bg-bg-3 px-1 rounded">cockpit agent</code> on a device</p>
-          </div>
-        {/each}
-      </div>
+    <section class="lg:col-span-2">
+      <Card padding="lg">
+        <div class="flex justify-between items-center mb-5">
+          <h2 class="section-title mb-0">Connected Agents</h2>
+          <a href="/agents" class="text-sm text-text-secondary hover:text-primary transition-colors flex items-center gap-1">
+            View all
+            <ArrowRight class="w-4 h-4" />
+          </a>
+        </div>
+
+        <div class="space-y-3">
+          {#each $onlineAgents as agent (agent.id)}
+            <AgentCard {agent} compact />
+          {:else}
+            <EmptyState
+              icon={Server}
+              title="No agents connected"
+              description="Run 'cockpit agent' on a device to connect it"
+              size="sm"
+            />
+          {/each}
+        </div>
+      </Card>
     </section>
   </div>
 
-  <!-- Connection Status -->
+  <!-- Quick Start Guide (shown when no activity) -->
+  {#if $stats.totalInstances === 0 && $stats.totalAgents === 0}
+    <section class="mt-8">
+      <Card padding="lg" class="bg-primary-light border-primary/20">
+        <div class="flex items-start gap-4">
+          <div class="flex items-center justify-center w-12 h-12 rounded-xl bg-primary text-white flex-shrink-0">
+            <Zap class="w-6 h-6" />
+          </div>
+          <div class="flex-1">
+            <h3 class="font-semibold text-text mb-2">Get Started with Cockpit</h3>
+            <p class="text-sm text-text-secondary mb-4">
+              Cockpit lets you manage Claude Code instances across multiple machines. Here's how to get started:
+            </p>
+            <div class="space-y-3">
+              <div class="flex items-start gap-3">
+                <span class="flex items-center justify-center w-6 h-6 rounded-full bg-primary text-white text-xs font-bold flex-shrink-0">1</span>
+                <div>
+                  <p class="text-sm font-medium text-text">Start an agent on your machine</p>
+                  <code class="text-xs font-mono bg-surface px-2 py-1 rounded mt-1 inline-block">cockpit agent</code>
+                </div>
+              </div>
+              <div class="flex items-start gap-3">
+                <span class="flex items-center justify-center w-6 h-6 rounded-full bg-primary text-white text-xs font-bold flex-shrink-0">2</span>
+                <div>
+                  <p class="text-sm font-medium text-text">Create a new instance</p>
+                  <p class="text-xs text-text-secondary">Click "New Instance" to spawn a Claude Code session</p>
+                </div>
+              </div>
+              <div class="flex items-start gap-3">
+                <span class="flex items-center justify-center w-6 h-6 rounded-full bg-primary text-white text-xs font-bold flex-shrink-0">3</span>
+                <div>
+                  <p class="text-sm font-medium text-text">Chat with Claude</p>
+                  <p class="text-xs text-text-secondary">Send messages and watch Claude work on your code</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Card>
+    </section>
+  {/if}
+
+  <!-- Connection Status Toast -->
   {#if $connectionStatus !== 'connected'}
-    <div class="fixed bottom-4 right-4 px-4 py-2 rounded-xl text-sm
-                {$connectionStatus === 'connecting' ? 'bg-yellow-500/20 text-yellow-600' : ''}
-                {$connectionStatus === 'error' ? 'bg-red-500/20 text-red-600' : ''}
-                {$connectionStatus === 'disconnected' ? 'bg-tx-3/20 text-tx-2' : ''}">
-      {$connectionStatus === 'connecting' ? '🔄 Connecting to hub...' : ''}
-      {$connectionStatus === 'error' ? '❌ Connection error' : ''}
-      {$connectionStatus === 'disconnected' ? '⚡ Disconnected' : ''}
+    <div class="fixed bottom-6 right-6 animate-fade-in-up">
+      <Card padding="sm" class="flex items-center gap-3 shadow-lg {
+        $connectionStatus === 'connecting' ? 'border-warning' :
+        $connectionStatus === 'error' ? 'border-error' :
+        'border-border'
+      }">
+        {#if $connectionStatus === 'connecting'}
+          <div class="w-2 h-2 rounded-full bg-warning animate-pulse-soft"></div>
+          <span class="text-sm text-warning">Connecting to hub...</span>
+        {:else if $connectionStatus === 'error'}
+          <div class="w-2 h-2 rounded-full bg-error"></div>
+          <span class="text-sm text-error">Connection error</span>
+        {:else}
+          <div class="w-2 h-2 rounded-full bg-text-muted"></div>
+          <span class="text-sm text-text-secondary">Disconnected</span>
+        {/if}
+      </Card>
     </div>
   {/if}
 </div>

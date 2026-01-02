@@ -1,6 +1,8 @@
 <script lang="ts">
   import NewProjectModal from '$lib/components/NewProjectModal.svelte';
-  import { projects } from '$lib/stores/realtime';
+  import { Button, Input, Card, EmptyState } from '$lib/components/ui';
+  import { projects, instances } from '$lib/stores/realtime';
+  import { Plus, Search, FolderKanban, Terminal, ArrowRight } from 'lucide-svelte';
 
   let searchQuery = $state('');
   let showNewProjectModal = $state(false);
@@ -8,85 +10,113 @@
   // Get projects as array from Map store
   let projectsList = $derived(Array.from($projects.values()));
 
-  let filteredProjects = $derived(projectsList.filter(p =>
-    p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (p.description || '').toLowerCase().includes(searchQuery.toLowerCase())
-  ));
+  let filteredProjects = $derived(
+    projectsList
+      .filter(
+        (p) =>
+          p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          (p.description || '').toLowerCase().includes(searchQuery.toLowerCase())
+      )
+      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+  );
+
+  // Get instance counts per project
+  function getProjectInstanceCount(projectId: string): number {
+    return Array.from($instances.values()).filter((i) => i.projectId === projectId).length;
+  }
+
+  // Get random gradient colors for project avatars
+  const gradients = [
+    'from-primary to-secondary',
+    'from-success to-info',
+    'from-warning to-error',
+    'from-info to-primary',
+    'from-secondary to-error',
+    'from-success to-warning',
+  ];
+
+  function getGradient(index: number): string {
+    return gradients[index % gradients.length];
+  }
 </script>
 
 <svelte:head>
   <title>Projects | Cockpit</title>
 </svelte:head>
 
-<div class="max-w-6xl">
-  <header class="flex justify-between items-start mb-8">
+<div class="page-container animate-fade-in">
+  <!-- Header -->
+  <header class="page-header">
     <div>
-      <h1 class="text-2xl font-semibold text-tx-1 mb-1">Projects</h1>
-      <p class="text-sm text-tx-3">Organize your Claude Code instances by project</p>
+      <h1 class="page-title">Projects</h1>
+      <p class="page-description">Organize your Claude Code instances by project</p>
     </div>
-    <button class="btn btn-primary" onclick={() => showNewProjectModal = true}>
-      <span>+</span>
-      New Project
-    </button>
+    <Button variant="primary" onclick={() => showNewProjectModal = true}>
+      {#snippet icon()}<Plus class="w-4 h-4" />{/snippet}
+      {#snippet children()}New Project{/snippet}
+    </Button>
   </header>
 
   <NewProjectModal bind:open={showNewProjectModal} onClose={() => showNewProjectModal = false} />
 
   <!-- Search -->
-  <div class="mb-6">
-    <input
+  <div class="mb-6 max-w-md">
+    <Input
       type="text"
       placeholder="Search projects..."
       bind:value={searchQuery}
-      class="w-full max-w-md px-4 py-2.5 rounded-xl bg-bg-2 border border-ui-1 text-tx-1
-             placeholder:text-tx-3 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20
-             transition-all"
+      icon={Search}
     />
   </div>
 
   <!-- Projects Grid -->
-  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-    {#each filteredProjects as project}
-      <a href="/projects/{project.id}" class="card card-interactive group">
-        <div class="flex items-start justify-between mb-3">
-          <div class="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary text-lg
-                      group-hover:bg-primary group-hover:text-white transition-colors">
-            <span class="font-medium">{project.name.charAt(0)}</span>
+  <div class="grid-cards">
+    {#each filteredProjects as project, i (project.id)}
+      {@const instanceCount = getProjectInstanceCount(project.id)}
+      <a href="/projects/{project.id}" class="card card-interactive p-5 group">
+        <div class="flex items-start justify-between mb-4">
+          <div class="w-12 h-12 rounded-xl bg-gradient-to-br {getGradient(i)} flex items-center justify-center
+                      text-white text-lg font-semibold shadow-sm">
+            {project.name.charAt(0).toUpperCase()}
           </div>
-          <span class="text-xs text-tx-3 bg-bg-3 px-2 py-1 rounded-lg">
-            {project.instanceCount} {project.instanceCount === 1 ? 'instance' : 'instances'}
-          </span>
+          <div class="flex items-center gap-1.5 text-xs text-text-secondary bg-surface-hover px-2 py-1 rounded-lg">
+            <Terminal class="w-3.5 h-3.5" />
+            <span>{instanceCount}</span>
+          </div>
         </div>
 
-        <h3 class="font-medium text-tx-1 mb-1 group-hover:text-primary transition-colors">
+        <h3 class="font-semibold text-text mb-1 group-hover:text-primary transition-colors">
           {project.name}
         </h3>
 
         {#if project.description}
-          <p class="text-sm text-tx-3 mb-3 line-clamp-2">{project.description}</p>
+          <p class="text-sm text-text-secondary mb-3 line-clamp-2">{project.description}</p>
+        {:else}
+          <p class="text-sm text-text-muted mb-3 italic">No description</p>
         {/if}
 
         {#if project.rootPath}
-          <p class="text-xs text-tx-3 font-mono truncate">{project.rootPath}</p>
+          <p class="text-xs text-text-muted font-mono truncate">{project.rootPath}</p>
         {/if}
+
+        <div class="mt-4 flex items-center gap-1 text-sm text-primary opacity-0 group-hover:opacity-100 transition-opacity">
+          <span>View project</span>
+          <ArrowRight class="w-4 h-4" />
+        </div>
       </a>
+    {:else}
+      <div class="col-span-full">
+        <EmptyState
+          icon={FolderKanban}
+          title={searchQuery ? 'No projects found' : 'No projects yet'}
+          description={searchQuery
+            ? 'Try a different search term'
+            : 'Create your first project to organize your work'}
+          action={!searchQuery
+            ? { label: 'Create Project', onClick: () => showNewProjectModal = true }
+            : undefined}
+        />
+      </div>
     {/each}
   </div>
-
-  {#if filteredProjects.length === 0}
-    <div class="text-center py-12">
-      <div class="text-4xl mb-4">
-        {searchQuery ? '🔍' : '📁'}
-      </div>
-      <h3 class="text-lg font-medium text-tx-1 mb-2">
-        {searchQuery ? 'No projects found' : 'No projects yet'}
-      </h3>
-      <p class="text-sm text-tx-3 mb-4">
-        {searchQuery ? 'Try a different search term' : 'Create your first project to organize your work'}
-      </p>
-      {#if !searchQuery}
-        <button class="btn btn-primary" onclick={() => showNewProjectModal = true}>Create Project</button>
-      {/if}
-    </div>
-  {/if}
 </div>

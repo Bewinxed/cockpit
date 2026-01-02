@@ -1,49 +1,98 @@
 <script lang="ts">
+  import Badge from '$lib/components/ui/Badge.svelte';
+  import { Server, Clock, ArrowRight } from 'lucide-svelte';
+  import { formatDistanceToNow } from '$lib/utils/time';
+
   interface Instance {
     id: string;
     name: string;
     status: 'starting' | 'running' | 'stopping' | 'stopped' | 'error';
     agent: string;
     project: string | null;
-    lastActivity: string;
+    cwd?: string;
+    lastActivity?: string | Date;
+    createdAt?: string | Date;
   }
 
   interface Props {
     instance: Instance;
+    compact?: boolean;
   }
 
-  let { instance }: Props = $props();
+  let { instance, compact = false }: Props = $props();
 
   const statusConfig = {
-    starting: { class: 'status-badge bg-flexoki-yellow/15 text-flexoki-yellow', label: 'Starting', dotActive: true },
-    running: { class: 'status-badge status-running', label: 'Running', dotActive: true },
-    stopping: { class: 'status-badge bg-flexoki-orange/15 text-flexoki-orange', label: 'Stopping', dotActive: true },
-    stopped: { class: 'status-badge status-offline', label: 'Stopped', dotActive: false },
-    error: { class: 'status-badge status-error', label: 'Error', dotActive: false },
+    starting: { variant: 'warning' as const, label: 'Starting', pulse: true },
+    running: { variant: 'success' as const, label: 'Running', pulse: true },
+    stopping: { variant: 'warning' as const, label: 'Stopping', pulse: true },
+    stopped: { variant: 'default' as const, label: 'Stopped', pulse: false },
+    error: { variant: 'error' as const, label: 'Error', pulse: false },
   };
+
+  const config = $derived(statusConfig[instance.status]);
+
+  // Format the display name from prompt or cwd
+  const displayName = $derived(
+    instance.name?.slice(0, 40) || instance.cwd?.split('/').pop() || 'Instance'
+  );
+
+  // Format the time
+  const timeAgo = $derived(
+    instance.lastActivity || instance.createdAt
+      ? formatDistanceToNow(new Date(instance.lastActivity || instance.createdAt!))
+      : null
+  );
 </script>
 
-<a href="/instances/{instance.id}" class="block card card-interactive group">
-  <div class="flex items-start justify-between mb-3">
-    <div>
-      <h3 class="font-medium text-tx-1 group-hover:text-primary transition-colors">
-        {instance.name}
-      </h3>
-      {#if instance.project}
-        <span class="text-xs text-tx-3 mt-1 block">{instance.project}</span>
+<a
+  href="/instances/{instance.id}"
+  class="card card-interactive p-4 group flex items-center gap-4"
+>
+  <!-- Status indicator -->
+  <div class="flex-shrink-0">
+    <div class="w-10 h-10 rounded-xl bg-{config.variant}-light flex items-center justify-center">
+      {#if config.pulse}
+        <span class="status-dot status-dot-pulse bg-{config.variant}"></span>
+      {:else}
+        <span class="status-dot bg-{config.variant === 'default' ? 'text-muted' : config.variant}"></span>
       {/if}
-    </div>
-    <div class={statusConfig[instance.status].class}>
-      <span class="status-dot" class:status-dot-active={statusConfig[instance.status].dotActive}></span>
-      {statusConfig[instance.status].label}
     </div>
   </div>
 
-  <div class="flex items-center justify-between text-sm text-tx-2">
-    <div class="flex items-center gap-2">
-      <span class="text-tx-3">●</span>
-      <span>{instance.agent}</span>
+  <!-- Content -->
+  <div class="flex-1 min-w-0">
+    <div class="flex items-center gap-2 mb-1">
+      <h3 class="font-medium text-text truncate group-hover:text-primary transition-colors">
+        {displayName}
+      </h3>
+      <Badge variant={config.variant} size="sm" dot pulse={config.pulse}>
+        {#snippet children()}{config.label}{/snippet}
+      </Badge>
     </div>
-    <span class="text-tx-3">{instance.lastActivity}</span>
+
+    <div class="flex items-center gap-3 text-sm text-text-secondary">
+      <div class="flex items-center gap-1.5">
+        <Server class="w-3.5 h-3.5 text-text-muted" />
+        <span class="truncate">{instance.agent}</span>
+      </div>
+      {#if timeAgo}
+        <span class="text-text-muted">·</span>
+        <div class="flex items-center gap-1.5">
+          <Clock class="w-3.5 h-3.5 text-text-muted" />
+          <span>{timeAgo}</span>
+        </div>
+      {/if}
+    </div>
+
+    {#if !compact && instance.cwd}
+      <div class="mt-1.5 text-xs text-text-muted font-mono truncate">
+        {instance.cwd}
+      </div>
+    {/if}
+  </div>
+
+  <!-- Arrow -->
+  <div class="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+    <ArrowRight class="w-4 h-4 text-text-muted" />
   </div>
 </a>

@@ -1,105 +1,114 @@
 <script lang="ts">
   import InstanceCard from '$lib/components/InstanceCard.svelte';
   import NewInstanceModal from '$lib/components/NewInstanceModal.svelte';
+  import { Button, Input, EmptyState } from '$lib/components/ui';
   import { instances } from '$lib/stores/realtime';
+  import { Plus, Search, Terminal } from 'lucide-svelte';
 
-  let statusFilter = $state('all');
+  let statusFilter = $state<'all' | 'running' | 'stopped' | 'error'>('all');
   let searchQuery = $state('');
   let showNewInstanceModal = $state(false);
 
   // Get instances as array from Map store
   let instancesList = $derived(Array.from($instances.values()));
 
-  let filteredInstances = $derived(instancesList.filter(i => {
-    const matchesSearch = (i.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          (i.agent || '').toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || i.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  }));
+  let filteredInstances = $derived(
+    instancesList
+      .filter((i) => {
+        const matchesSearch =
+          (i.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+          (i.agent || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+          (i.cwd || '').toLowerCase().includes(searchQuery.toLowerCase());
 
-  let runningCount = $derived(instancesList.filter(i => i.status === 'running').length);
-  let stoppedCount = $derived(instancesList.filter(i => i.status === 'stopped').length);
+        const matchesStatus =
+          statusFilter === 'all' ||
+          (statusFilter === 'running' && (i.status === 'running' || i.status === 'starting')) ||
+          (statusFilter === 'stopped' && (i.status === 'stopped' || i.status === 'stopping')) ||
+          (statusFilter === 'error' && i.status === 'error');
+
+        return matchesSearch && matchesStatus;
+      })
+      .sort((a, b) => new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime())
+  );
+
+  let runningCount = $derived(instancesList.filter((i) => i.status === 'running' || i.status === 'starting').length);
+  let stoppedCount = $derived(instancesList.filter((i) => i.status === 'stopped').length);
+
+  const filterButtons = $derived([
+    { value: 'all' as const, label: 'All', count: instancesList.length },
+    { value: 'running' as const, label: 'Running', count: runningCount },
+    { value: 'stopped' as const, label: 'Stopped', count: stoppedCount },
+  ]);
 </script>
 
 <svelte:head>
   <title>Instances | Cockpit</title>
 </svelte:head>
 
-<div class="max-w-6xl">
-  <header class="flex justify-between items-start mb-8">
+<div class="page-container animate-fade-in">
+  <!-- Header -->
+  <header class="page-header">
     <div>
-      <h1 class="text-2xl font-semibold text-tx-1 mb-1">Instances</h1>
-      <p class="text-sm text-tx-3">
+      <h1 class="page-title">Instances</h1>
+      <p class="page-description">
         {runningCount} running, {stoppedCount} stopped
       </p>
     </div>
-    <button class="btn btn-primary" onclick={() => showNewInstanceModal = true}>
-      <span>+</span>
-      New Instance
-    </button>
+    <Button variant="primary" onclick={() => showNewInstanceModal = true}>
+      {#snippet icon()}<Plus class="w-4 h-4" />{/snippet}
+      {#snippet children()}New Instance{/snippet}
+    </Button>
   </header>
 
   <NewInstanceModal bind:open={showNewInstanceModal} onClose={() => showNewInstanceModal = false} />
 
   <!-- Filters -->
-  <div class="flex gap-4 mb-6">
-    <input
-      type="text"
-      placeholder="Search instances..."
-      bind:value={searchQuery}
-      class="flex-1 max-w-md px-4 py-2.5 rounded-xl bg-bg-2 border border-ui-1 text-tx-1
-             placeholder:text-tx-3 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20
-             transition-all"
-    />
+  <div class="flex flex-col sm:flex-row gap-4 mb-6">
+    <div class="flex-1 max-w-md">
+      <Input
+        type="text"
+        placeholder="Search instances..."
+        bind:value={searchQuery}
+        icon={Search}
+      />
+    </div>
 
     <div class="flex gap-2">
-      <button
-        class="px-4 py-2 rounded-xl text-sm font-medium transition-all
-               {statusFilter === 'all' ? 'bg-primary text-white' : 'bg-bg-2 text-tx-2 hover:bg-bg-3'}"
-        onclick={() => statusFilter = 'all'}
-      >
-        All
-      </button>
-      <button
-        class="px-4 py-2 rounded-xl text-sm font-medium transition-all flex items-center gap-2
-               {statusFilter === 'running' ? 'bg-flexoki-green/20 text-flexoki-green' : 'bg-bg-2 text-tx-2 hover:bg-bg-3'}"
-        onclick={() => statusFilter = 'running'}
-      >
-        <span class="w-2 h-2 rounded-full bg-flexoki-green"></span>
-        Running
-      </button>
-      <button
-        class="px-4 py-2 rounded-xl text-sm font-medium transition-all flex items-center gap-2
-               {statusFilter === 'stopped' ? 'bg-tx-3/20 text-tx-2' : 'bg-bg-2 text-tx-2 hover:bg-bg-3'}"
-        onclick={() => statusFilter = 'stopped'}
-      >
-        <span class="w-2 h-2 rounded-full bg-tx-3"></span>
-        Stopped
-      </button>
+      {#each filterButtons as filter}
+        <button
+          class="px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150 flex items-center gap-2
+                 {statusFilter === filter.value
+                   ? 'bg-primary text-white'
+                   : 'bg-surface border border-border text-text-secondary hover:bg-surface-hover hover:text-text'}"
+          onclick={() => statusFilter = filter.value}
+        >
+          {#if filter.value === 'running'}
+            <span class="status-dot status-dot-pulse bg-success"></span>
+          {:else if filter.value === 'stopped'}
+            <span class="status-dot bg-text-muted"></span>
+          {/if}
+          {filter.label}
+          <span class="text-xs opacity-60">({filter.count})</span>
+        </button>
+      {/each}
     </div>
   </div>
 
   <!-- Instances List -->
-  <div class="flex flex-col gap-3">
-    {#each filteredInstances as instance}
+  <div class="space-y-3">
+    {#each filteredInstances as instance (instance.id)}
       <InstanceCard {instance} />
+    {:else}
+      <EmptyState
+        icon={Terminal}
+        title={searchQuery || statusFilter !== 'all' ? 'No instances found' : 'No instances yet'}
+        description={searchQuery || statusFilter !== 'all'
+          ? 'Try adjusting your filters or search query'
+          : 'Start a new Claude Code instance to begin working'}
+        action={!searchQuery && statusFilter === 'all'
+          ? { label: 'New Instance', onClick: () => showNewInstanceModal = true }
+          : undefined}
+      />
     {/each}
   </div>
-
-  {#if filteredInstances.length === 0}
-    <div class="text-center py-12">
-      <div class="text-4xl mb-4">
-        {searchQuery || statusFilter !== 'all' ? '🔍' : '💭'}
-      </div>
-      <h3 class="text-lg font-medium text-tx-1 mb-2">
-        {searchQuery || statusFilter !== 'all' ? 'No instances found' : 'No instances yet'}
-      </h3>
-      <p class="text-sm text-tx-3 mb-4">
-        {searchQuery || statusFilter !== 'all' ? 'Try adjusting your filters' : 'Start a new Claude Code instance to get going'}
-      </p>
-      {#if !searchQuery && statusFilter === 'all'}
-        <button class="btn btn-primary" onclick={() => showNewInstanceModal = true}>Start Instance</button>
-      {/if}
-    </div>
-  {/if}
 </div>

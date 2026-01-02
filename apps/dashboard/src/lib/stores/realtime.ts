@@ -62,7 +62,40 @@ export const agents: Writable<Map<string, Agent>> = writable(new Map());
 export const instances: Writable<Map<string, Instance>> = writable(new Map());
 export const projects: Writable<Map<string, Project>> = writable(new Map());
 export const tasks: Writable<Map<string, Task>> = writable(new Map());
-export const messages: Writable<Message[]> = writable([]);
+
+// Messages stored per-instance for better organization
+export const instanceMessages: Writable<Map<string, Message[]>> = writable(new Map());
+
+// Helper to get messages for a specific instance (for backwards compatibility)
+export const messages: Readable<Message[]> = derived(instanceMessages, ($instanceMessages) =>
+  Array.from($instanceMessages.values()).flat().sort((a, b) =>
+    new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+  )
+);
+
+// Get messages for a specific instance
+export function getInstanceMessages(instanceId: string): Readable<Message[]> {
+  return derived(instanceMessages, ($instanceMessages) => $instanceMessages.get(instanceId) || []);
+}
+
+// Add a message to an instance
+export function addMessage(instanceId: string, message: Omit<Message, 'instanceId'>): void {
+  instanceMessages.update((map) => {
+    const msgs = map.get(instanceId) || [];
+    // Keep last 500 messages per instance
+    const newMsgs = [...msgs, { ...message, instanceId }].slice(-500);
+    map.set(instanceId, newMsgs);
+    return map;
+  });
+}
+
+// Clear messages for an instance
+export function clearInstanceMessages(instanceId: string): void {
+  instanceMessages.update((map) => {
+    map.delete(instanceId);
+    return map;
+  });
+}
 
 // Connection state
 export const connectionStatus: Writable<'connecting' | 'connected' | 'disconnected' | 'error'> = writable('disconnected');
@@ -94,14 +127,19 @@ export const stats: Readable<{
   runningInstances: number;
   totalProjects: number;
   activeTasks: number;
-}> = derived([agents, instances, projects, tasks], ([$agents, $instances, $projects, $tasks]) => ({
-  totalAgents: $agents.size,
-  onlineAgents: Array.from($agents.values()).filter((a) => a.status === 'online').length,
-  totalInstances: $instances.size,
-  runningInstances: Array.from($instances.values()).filter((i) => i.status === 'running' || i.status === 'starting').length,
-  totalProjects: $projects.size,
-  activeTasks: Array.from($tasks.values()).filter((t) => t.status === 'in_progress').length,
-}));
+  totalCostUsd: number;
+}> = derived([agents, instances, projects, tasks], ([$agents, $instances, $projects, $tasks]) => {
+  const instancesArray = Array.from($instances.values());
+  return {
+    totalAgents: $agents.size,
+    onlineAgents: Array.from($agents.values()).filter((a) => a.status === 'online').length,
+    totalInstances: $instances.size,
+    runningInstances: instancesArray.filter((i) => i.status === 'running' || i.status === 'starting').length,
+    totalProjects: $projects.size,
+    activeTasks: Array.from($tasks.values()).filter((t) => t.status === 'in_progress').length,
+    totalCostUsd: instancesArray.reduce((sum, i) => sum + (i.totalCostUsd || 0), 0),
+  };
+});
 
 // SSE connection
 let eventSource: EventSource | null = null;
@@ -208,15 +246,11 @@ export function connect(baseUrl: string = '') {
 
   eventSource.addEventListener('instance:message', (event: Event) => {
     const { instanceId, messageType, content } = JSON.parse((event as MessageEvent).data);
-    messages.update((msgs) => [
-      ...msgs.slice(-99), // Keep last 100 messages
-      {
-        instanceId,
-        type: messageType || 'assistant',
-        content: typeof content === 'string' ? content : JSON.stringify(content),
-        timestamp: new Date(),
-      },
-    ]);
+    addMessage(instanceId, {
+      type: messageType || 'assistant',
+      content: typeof content === 'string' ? content : JSON.stringify(content),
+      timestamp: new Date(),
+    });
   });
 
   eventSource.addEventListener('task:created', (event: Event) => {
