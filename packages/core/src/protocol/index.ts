@@ -91,6 +91,7 @@ export const PROTOCOL_METHODS = {
   AGENT_REGISTER: 'agent.register',
   AGENT_HEARTBEAT: EventMethod.AGENT_HEARTBEAT,
   FILESYSTEM_LIST: CommandMethod.FILESYSTEM_LIST,
+  COMMANDS_LIST: CommandMethod.COMMANDS_LIST,
 
   // Events (Agent -> Hub)
   INSTANCE_CREATED: EventMethod.INSTANCE_CREATED,

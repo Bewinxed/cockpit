@@ -8,3 +8,4 @@ export {
   type AgentStatusResponse,
 } from './status.js';
 export { handleFilesystemList } from './filesystem.js';
+export { handleCommandsList } from './commands-discovery.js';

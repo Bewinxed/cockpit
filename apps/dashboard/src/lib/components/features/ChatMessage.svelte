@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { User, Bot, Wrench, FileText, AlertCircle, ChevronDown, ChevronRight, Copy, Check } from 'lucide-svelte';
+  import { User, Bot, Wrench, FileText, AlertCircle, ChevronDown, ChevronRight, Copy, Check, Loader2, CheckCircle2, XCircle, Settings } from 'lucide-svelte';
   import { formatTimestamp } from '$lib/utils/time';
   import type { Message } from '$lib/stores/realtime';
 
@@ -13,13 +13,33 @@
   let isExpanded = $state(false);
   let copied = $state(false);
 
-  // Parse tool content if it's JSON
-  const toolContent = $derived(() => {
+  // Get tool info from metadata or parse from content (backwards compatibility)
+  const toolInfo = $derived(() => {
     if (message.type !== 'tool_use' && message.type !== 'tool_result') return null;
+
+    // Use metadata if available (new format)
+    if (message.metadata?.toolName) {
+      return {
+        name: message.metadata.toolName,
+        id: message.metadata.toolId,
+        input: message.metadata.toolInput,
+        result: message.metadata.toolResult,
+        status: message.metadata.toolStatus || 'pending',
+      };
+    }
+
+    // Fallback: parse from content (old format)
     try {
-      return typeof message.content === 'string' ? JSON.parse(message.content) : message.content;
+      const parsed = typeof message.content === 'string' ? JSON.parse(message.content) : message.content;
+      return {
+        name: parsed?.name || 'Tool',
+        id: parsed?.id,
+        input: parsed?.input || parsed,
+        result: null,
+        status: 'success' as const,
+      };
     } catch {
-      return { raw: message.content };
+      return { name: 'Tool', input: message.content, result: null, status: 'success' as const };
     }
   });
 
@@ -62,8 +82,8 @@
     },
     system: {
       align: 'justify-center',
-      bubble: 'text-xs text-text-muted py-2',
-      icon: Bot,
+      bubble: 'text-xs text-text-muted py-2 px-4 bg-surface-hover/50 rounded-full inline-flex items-center gap-2',
+      icon: Settings,
       iconBg: 'bg-surface-hover',
     },
   };
@@ -94,23 +114,44 @@
             <ChevronRight class="w-4 h-4 text-text-muted flex-shrink-0" />
           {/if}
           <span class="font-medium text-text">
-            {message.type === 'tool_use' ? 'Tool Call' : 'Tool Result'}
+            {toolInfo()?.name || 'Tool'}
           </span>
-          {#if toolContent()?.name}
-            <span class="text-text-secondary">: {toolContent().name}</span>
+          <!-- Status indicator -->
+          {#if toolInfo()?.status === 'pending'}
+            <Loader2 class="w-4 h-4 text-warning animate-spin" />
+          {:else if toolInfo()?.status === 'error'}
+            <XCircle class="w-4 h-4 text-error" />
+          {:else}
+            <CheckCircle2 class="w-4 h-4 text-success" />
           {/if}
         </div>
       </button>
 
       {#if isExpanded}
-        <div class="w-full bg-bg-subtle rounded-lg p-3 mt-1 font-mono text-xs overflow-x-auto border border-border">
-          <pre class="whitespace-pre-wrap break-all text-text-secondary">{JSON.stringify(toolContent(), null, 2)}</pre>
+        {@const tool = toolInfo()}
+        <div class="w-full space-y-2 mt-1">
+          <!-- Input -->
+          <div class="bg-bg-subtle rounded-lg p-3 font-mono text-xs overflow-x-auto border border-border">
+            <div class="text-text-muted text-[10px] uppercase tracking-wide mb-1">Input</div>
+            <pre class="whitespace-pre-wrap break-all text-text-secondary">{JSON.stringify(tool?.input, null, 2)}</pre>
+          </div>
+
+          <!-- Result (if available) -->
+          {#if tool?.result !== undefined && tool?.result !== null}
+            <div class="bg-bg-subtle rounded-lg p-3 font-mono text-xs overflow-x-auto border border-border {tool?.status === 'error' ? 'border-error/30 bg-error/5' : 'border-success/30 bg-success/5'}">
+              <div class="text-text-muted text-[10px] uppercase tracking-wide mb-1">
+                {tool?.status === 'error' ? 'Error' : 'Result'}
+              </div>
+              <pre class="whitespace-pre-wrap break-all text-text-secondary">{typeof tool.result === 'string' ? tool.result : JSON.stringify(tool.result, null, 2)}</pre>
+            </div>
+          {/if}
         </div>
       {/if}
     {:else if message.type === 'system'}
-      <!-- System message -->
+      <!-- System message - subtle banner -->
       <div class="{config.bubble}">
-        {message.content}
+        <Settings class="w-3 h-3" />
+        <span>{message.content}</span>
       </div>
     {:else}
       <!-- Regular message -->

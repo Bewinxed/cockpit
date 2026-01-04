@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { FilesystemEntry, FilesystemListResult } from '@cockpit/core/protocol';
   import { api } from '$lib/api';
+  import { extractErrorMessage } from '$lib/utils/error';
 
   interface Props {
     agentId: string;
@@ -35,7 +36,7 @@
       });
 
       if (apiError) {
-        error = String(apiError) || 'Failed to load directory';
+        error = extractErrorMessage(apiError);
         return;
       }
 

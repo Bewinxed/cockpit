@@ -16,7 +16,7 @@ export interface Agent {
 export interface Instance {
   id: string;
   name: string;
-  status: 'starting' | 'running' | 'stopping' | 'stopped' | 'error';
+  status: 'starting' | 'running' | 'stopping' | 'stopped' | 'error' | 'disconnected';
   agent: string;
   agentId: string;
   project: string | null;
@@ -55,6 +55,31 @@ export interface Message {
   type: 'assistant' | 'user' | 'system' | 'tool_use' | 'tool_result' | 'error';
   content: string;
   timestamp: Date;
+  // Metadata for richer rendering
+  metadata?: {
+    // For tool_use messages
+    toolId?: string;
+    toolName?: string;
+    toolInput?: unknown;
+    toolResult?: unknown;
+    toolStatus?: 'pending' | 'success' | 'error';
+    // For system messages
+    model?: string;
+    cwd?: string;
+    tools?: string[];
+    sessionId?: string;
+  };
+}
+
+export interface StreamingState {
+  instanceId: string;
+  isStreaming: boolean;
+  inputTokens: number;
+  outputTokens: number;
+  sessionInputTokens: number;
+  sessionOutputTokens: number;
+  costUsd: number;
+  lastUpdate: Date;
 }
 
 // Stores
@@ -62,6 +87,7 @@ export const agents: Writable<Map<string, Agent>> = writable(new Map());
 export const instances: Writable<Map<string, Instance>> = writable(new Map());
 export const projects: Writable<Map<string, Project>> = writable(new Map());
 export const tasks: Writable<Map<string, Task>> = writable(new Map());
+export const streamingStates: Writable<Map<string, StreamingState>> = writable(new Map());
 
 // Messages stored per-instance for better organization
 export const instanceMessages: Writable<Map<string, Message[]>> = writable(new Map());
@@ -89,9 +115,62 @@ export function addMessage(instanceId: string, message: Omit<Message, 'instanceI
   });
 }
 
+// Update a tool message with its result (by toolId)
+export function updateToolResult(instanceId: string, toolId: string, result: unknown, isError = false): void {
+  instanceMessages.update((map) => {
+    const msgs = map.get(instanceId) || [];
+    const updated = msgs.map((msg) => {
+      if (msg.type === 'tool_use' && msg.metadata?.toolId === toolId) {
+        return {
+          ...msg,
+          metadata: {
+            ...msg.metadata,
+            toolResult: result,
+            toolStatus: isError ? 'error' as const : 'success' as const,
+          },
+        };
+      }
+      return msg;
+    });
+    map.set(instanceId, updated);
+    return map;
+  });
+}
+
 // Clear messages for an instance
 export function clearInstanceMessages(instanceId: string): void {
   instanceMessages.update((map) => {
+    map.delete(instanceId);
+    return map;
+  });
+}
+
+// Get streaming state for an instance
+export function getStreamingState(instanceId: string): Readable<StreamingState | null> {
+  return derived(streamingStates, ($states) => $states.get(instanceId) || null);
+}
+
+// Update streaming state
+export function updateStreamingState(instanceId: string, update: Partial<StreamingState>): void {
+  streamingStates.update((map) => {
+    const existing = map.get(instanceId) || {
+      instanceId,
+      isStreaming: false,
+      inputTokens: 0,
+      outputTokens: 0,
+      sessionInputTokens: 0,
+      sessionOutputTokens: 0,
+      costUsd: 0,
+      lastUpdate: new Date(),
+    };
+    map.set(instanceId, { ...existing, ...update, lastUpdate: new Date() });
+    return map;
+  });
+}
+
+// Clear streaming state for an instance
+export function clearStreamingState(instanceId: string): void {
+  streamingStates.update((map) => {
     map.delete(instanceId);
     return map;
   });
@@ -113,6 +192,20 @@ export const recentInstances: Readable<Instance[]> = derived(instances, ($instan
   Array.from($instances.values())
     .sort((a, b) => new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime())
     .slice(0, 5)
+);
+
+// Ad-hoc instances (no project)
+export const adhocInstances: Readable<Instance[]> = derived(instances, ($instances) =>
+  Array.from($instances.values())
+    .filter((i) => !i.projectId)
+    .sort((a, b) => new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime())
+);
+
+// Project instances
+export const projectInstances: Readable<Instance[]> = derived(instances, ($instances) =>
+  Array.from($instances.values())
+    .filter((i) => i.projectId)
+    .sort((a, b) => new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime())
 );
 
 export const activeTasks: Readable<Task[]> = derived(tasks, ($tasks) =>
@@ -244,15 +337,6 @@ export function connect(baseUrl: string = '') {
     });
   });
 
-  eventSource.addEventListener('instance:message', (event: Event) => {
-    const { instanceId, messageType, content } = JSON.parse((event as MessageEvent).data);
-    addMessage(instanceId, {
-      type: messageType || 'assistant',
-      content: typeof content === 'string' ? content : JSON.stringify(content),
-      timestamp: new Date(),
-    });
-  });
-
   eventSource.addEventListener('task:created', (event: Event) => {
     const task = JSON.parse((event as MessageEvent).data);
     tasks.update((map) => {
@@ -267,6 +351,193 @@ export function connect(baseUrl: string = '') {
       map.set(task.id, { ...map.get(task.id), ...task });
       return map;
     });
+  });
+
+  // Handle token usage updates
+  eventSource.addEventListener('instance:token_usage', (event: Event) => {
+    const { instanceId, inputTokens, outputTokens, costDelta } = JSON.parse((event as MessageEvent).data);
+    updateStreamingState(instanceId, {
+      inputTokens,
+      outputTokens,
+      sessionInputTokens: inputTokens,
+      sessionOutputTokens: outputTokens,
+      costUsd: costDelta,
+      isStreaming: false, // Result received = done streaming
+    });
+
+    // Also update instance cost
+    instances.update((map) => {
+      const instance = map.get(instanceId);
+      if (instance) {
+        map.set(instanceId, {
+          ...instance,
+          totalCostUsd: (instance.totalCostUsd || 0) + costDelta,
+        });
+      }
+      return map;
+    });
+  });
+
+  // Handle SDK messages for streaming state and chat display
+  eventSource.addEventListener('sdk:message', (event: Event) => {
+    const { instanceId, message } = JSON.parse((event as MessageEvent).data);
+    const msg = message as {
+      type?: string;
+      subtype?: string;
+      message?: { content?: unknown[] | string; role?: string };
+      result?: string;
+      isSynthetic?: boolean;
+      event?: { type?: string }; // For stream_event
+      session_id?: string;
+      cwd?: string;
+      model?: string;
+      tools?: string[];
+    };
+
+    // ========================================
+    // STREAMING STATE
+    // ========================================
+
+    // Mark as streaming when receiving assistant or stream_event messages
+    if (msg.type === 'assistant' || msg.type === 'stream_event') {
+      updateStreamingState(instanceId, { isStreaming: true });
+    }
+
+    // Mark as not streaming when result received
+    if (msg.type === 'result') {
+      updateStreamingState(instanceId, { isStreaming: false });
+    }
+
+    // ========================================
+    // USER MESSAGES
+    // ========================================
+
+    if (msg.type === 'user' && msg.message?.content) {
+      const content = msg.message.content;
+
+      // Check if this is a synthetic message (tool result wrapper)
+      // Synthetic messages have isSynthetic=true OR contain only tool_result blocks
+      const isSynthetic = msg.isSynthetic;
+
+      if (!isSynthetic) {
+        // Real user message - extract text content
+        let textContent = '';
+
+        if (typeof content === 'string') {
+          textContent = content;
+        } else if (Array.isArray(content)) {
+          for (const block of content) {
+            if (block && typeof block === 'object' && 'type' in block) {
+              if (block.type === 'text' && 'text' in block) {
+                textContent += (block.text as string);
+              }
+            }
+          }
+        }
+
+        if (textContent.trim()) {
+          addMessage(instanceId, {
+            type: 'user',
+            content: textContent.trim(),
+            timestamp: new Date(),
+          });
+        }
+      }
+
+      // Process tool_result blocks (from synthetic user messages)
+      // These update existing tool_use messages with their results
+      if (Array.isArray(content)) {
+        for (const block of content) {
+          if (block && typeof block === 'object' && 'type' in block && block.type === 'tool_result') {
+            const toolResult = block as {
+              tool_use_id?: string;
+              content?: unknown;
+              is_error?: boolean;
+            };
+            if (toolResult.tool_use_id) {
+              // Update the matching tool_use message with this result
+              updateToolResult(
+                instanceId,
+                toolResult.tool_use_id,
+                toolResult.content,
+                toolResult.is_error || false
+              );
+            }
+          }
+        }
+      }
+    }
+
+    // ========================================
+    // ASSISTANT MESSAGES
+    // ========================================
+
+    if (msg.type === 'assistant' && msg.message?.content) {
+      const content = msg.message.content;
+      if (Array.isArray(content)) {
+        for (const block of content) {
+          if (block && typeof block === 'object' && 'type' in block) {
+            // Text blocks -> assistant message
+            if (block.type === 'text' && 'text' in block) {
+              addMessage(instanceId, {
+                type: 'assistant',
+                content: block.text as string,
+                timestamp: new Date(),
+              });
+            }
+            // Tool use blocks -> tool_use message with metadata
+            else if (block.type === 'tool_use') {
+              const toolBlock = block as { id?: string; name?: string; input?: unknown };
+              addMessage(instanceId, {
+                type: 'tool_use',
+                content: toolBlock.name || 'Tool',
+                timestamp: new Date(),
+                metadata: {
+                  toolId: toolBlock.id,
+                  toolName: toolBlock.name,
+                  toolInput: toolBlock.input,
+                  toolStatus: 'pending',
+                },
+              });
+            }
+          }
+        }
+      }
+    }
+
+    // ========================================
+    // SYSTEM MESSAGES
+    // ========================================
+
+    if (msg.type === 'system' && msg.subtype === 'init') {
+      addMessage(instanceId, {
+        type: 'system',
+        content: `Session started with ${msg.model || 'Claude'}`,
+        timestamp: new Date(),
+        metadata: {
+          sessionId: msg.session_id,
+          model: msg.model,
+          cwd: msg.cwd,
+          tools: msg.tools,
+        },
+      });
+    }
+
+    // ========================================
+    // RESULT MESSAGES (completion stats)
+    // ========================================
+
+    // Result messages are handled by instance:token_usage event for cost/tokens
+    // The result.result field contains the final answer but we already have it from assistant messages
+
+    // ========================================
+    // STREAM EVENTS (for real-time updates)
+    // ========================================
+
+    // Stream events can be used for:
+    // 1. Typing indicator (already handled via isStreaming)
+    // 2. Partial text updates (future enhancement)
+    // Currently we just use them to set streaming state
   });
 }
 
@@ -284,7 +555,7 @@ export function disconnect() {
   connectionStatus.set('disconnected');
 }
 
-// API helpers using Eden Treaty for type safety
+// API helpers using Eden Treaty through the proxy
 export async function fetchAgents(): Promise<void> {
   try {
     const { data, error } = await api.api.agents.get();
@@ -325,7 +596,7 @@ export async function fetchInstances(): Promise<void> {
         agentId: i.agentId,
         project: null, // Will be resolved from projects
         projectId: i.projectId || null,
-        lastActivity: i.createdAt instanceof Date ? i.createdAt.toISOString() : new Date().toISOString(),
+        lastActivity: i.createdAt ? new Date(i.createdAt).toISOString() : new Date().toISOString(),
         cwd: i.cwd,
         model: i.model,
         totalCostUsd: i.totalCostUsd,

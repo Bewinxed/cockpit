@@ -21,6 +21,7 @@ import {
   handleAgentStatus,
   handleInstanceStatus,
   handleFilesystemList,
+  handleCommandsList,
 } from './handlers/index.js';
 
 export interface AgentDaemonOptions {
@@ -290,15 +291,6 @@ export class AgentDaemon extends EventEmitter {
       });
     });
 
-    this.instanceManager.on('instance.message', (instanceId: string, message: unknown) => {
-      this.hubClient.notify(PROTOCOL_METHODS.INSTANCE_MESSAGE, {
-        agentId: this.agentId,
-        instanceId,
-        message,
-        timestamp: new Date().toISOString(),
-      });
-    });
-
     // Discovery events
     this.discovery.on('hub.found', (service: HubService) => {
       console.log(`Hub discovered: ${service.name} at ${service.host}:${service.port}`);
@@ -344,6 +336,10 @@ export class AgentDaemon extends EventEmitter {
 
       case PROTOCOL_METHODS.FILESYSTEM_LIST:
         await handleFilesystemList(request, this.hubClient);
+        break;
+
+      case PROTOCOL_METHODS.COMMANDS_LIST:
+        await handleCommandsList(request, this.instanceManager, this.hubClient);
         break;
 
       default:

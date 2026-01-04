@@ -70,8 +70,16 @@ export function createWebsocketRoutes(db: Db) {
 
         // Handle JSON-RPC request
         if (isJsonRpcRequest(message)) {
-          const response = await handleRequest(ws, message, db, agentRegistry, broadcast, instanceTracker);
-          ws.send(JSON.stringify(response));
+          try {
+            const response = await handleRequest(ws, message, db, agentRegistry, broadcast, instanceTracker);
+            ws.send(JSON.stringify(response));
+          } catch (error) {
+            console.error(`[Hub] Error handling request ${message.method}:`, error);
+            ws.send(JSON.stringify(
+              createErrorResponse(message.id, JsonRpcErrorCode.INTERNAL_ERROR,
+                `Internal error: ${error instanceof Error ? error.message : String(error)}`)
+            ));
+          }
           return;
         }
 
@@ -98,11 +106,27 @@ export function createWebsocketRoutes(db: Db) {
       },
 
       // WebSocket close handler
-      close(ws) {
+      async close(ws) {
         const wsId = getWsId(ws);
         const agentId = connectionAgentMap.get(wsId);
         if (agentId) {
           console.log(`[Hub] Agent disconnected: ${agentId}`);
+
+          // Mark all active instances for this agent as stopped
+          const activeInstances = await instanceTracker.getActiveByAgent(agentId);
+          for (const instance of activeInstances) {
+            await instanceTracker.markStopped(instance.id);
+            broadcast.broadcast('instance:stopped', { instanceId: instance.id });
+          }
+          if (activeInstances.length > 0) {
+            console.log(`[Hub] Marked ${activeInstances.length} instances as stopped for disconnected agent`);
+          }
+
+          // Update agent status in database
+          await db.update(agents)
+            .set({ status: 'offline', lastSeen: new Date() })
+            .where(eq(agents.id, agentId));
+
           agentRegistry.unregister(agentId);
           connectionAgentMap.delete(wsId);
 
@@ -270,28 +294,12 @@ async function handleNotification(
     // Handle 'instance.started' from agent (different from INSTANCE_CREATED)
     case 'instance.started': {
       const { instanceId, sessionId } = params as { instanceId: string; sessionId?: string };
+      // Note: sessionId here is the agent's internal tracking ID
+      // The SDK's session_id (for resume) is stored separately as sdkSessionId
       const updated = await instanceTracker.markStarted(instanceId, sessionId);
       if (updated) {
         broadcast.broadcast('instance:started', updated);
       }
-      break;
-    }
-
-    case EventMethod.INSTANCE_MESSAGE: {
-      const { instanceId, type, content, timestamp } = params as {
-        instanceId: string;
-        type: string;
-        content: string;
-        timestamp: string;
-      };
-
-      // Broadcast message to dashboard
-      broadcast.broadcast('instance:message', {
-        instanceId,
-        type,
-        content,
-        timestamp,
-      });
       break;
     }
 
@@ -318,6 +326,47 @@ async function handleNotification(
     // Handle SDK messages from agent
     case 'sdk.message': {
       const { instanceId, message } = params as { instanceId: string; message: unknown };
+      const msg = message as { type?: string; session_id?: string; usage?: { input_tokens?: number; output_tokens?: number }; total_cost_usd?: number };
+
+      // Capture and persist SDK session ID (used for resume)
+      if (msg.session_id) {
+        try {
+          await instanceTracker.update(instanceId, {
+            sdkSessionId: msg.session_id,
+          });
+        } catch (err) {
+          console.error('[Hub] Failed to update SDK session ID:', err);
+        }
+      }
+
+      // Persist message to database
+      try {
+        await instanceTracker.saveMessage(instanceId, {
+          messageType: msg.type || 'unknown',
+          content: message,
+          timestamp: new Date(),
+        });
+      } catch (err) {
+        console.error('[Hub] Failed to save SDK message:', err);
+      }
+
+      // Extract token usage from result messages
+      if (msg.type === 'result' && msg.usage) {
+        const costDelta = msg.total_cost_usd || 0;
+
+        if (costDelta > 0) {
+          await instanceTracker.incrementCost(instanceId, costDelta);
+        }
+
+        // Broadcast token usage update
+        broadcast.broadcast('instance:token_usage', {
+          instanceId,
+          inputTokens: msg.usage.input_tokens || 0,
+          outputTokens: msg.usage.output_tokens || 0,
+          costDelta,
+        });
+      }
+
       // Forward SDK messages to dashboard
       broadcast.broadcast('sdk:message', { instanceId, message });
       break;

@@ -17,6 +17,8 @@ export const CommandMethod = {
   AGENT_PING: 'agent.ping',
   /** List filesystem directory */
   FILESYSTEM_LIST: 'filesystem.list',
+  /** List available commands for an instance */
+  COMMANDS_LIST: 'commands.list',
 } as const;
 
 export type CommandMethodValue = (typeof CommandMethod)[keyof typeof CommandMethod];
@@ -91,6 +93,16 @@ export interface AgentPingParams {
 export interface FilesystemListParams {
   /** Directory path to list (defaults to home directory) */
   path?: string;
+}
+
+/**
+ * Parameters for listing available commands
+ */
+export interface CommandsListParams {
+  /** Instance ID to get commands for */
+  instanceId: string;
+  /** Working directory to discover commands from */
+  cwd: string;
 }
 
 /**
@@ -189,6 +201,28 @@ export interface FilesystemListResult {
   home: string;
 }
 
+/**
+ * An available command
+ */
+export interface AvailableCommand {
+  /** Command name (e.g., '/help', '/my-command') */
+  name: string;
+  /** Type of command */
+  type: 'builtin' | 'custom' | 'skill' | 'mcp';
+  /** Description of the command */
+  description?: string;
+  /** Source file for custom commands */
+  source?: string;
+}
+
+/**
+ * Result of commands list
+ */
+export interface CommandsListResult {
+  /** List of available commands */
+  commands: AvailableCommand[];
+}
+
 // ============================================================================
 // Command Type Mapping
 // ============================================================================
@@ -203,6 +237,7 @@ export interface CommandParamsMap {
   [CommandMethod.AGENT_STATUS]: AgentStatusParams;
   [CommandMethod.AGENT_PING]: AgentPingParams;
   [CommandMethod.FILESYSTEM_LIST]: FilesystemListParams;
+  [CommandMethod.COMMANDS_LIST]: CommandsListParams;
 }
 
 /**
@@ -215,6 +250,7 @@ export interface CommandResultMap {
   [CommandMethod.AGENT_STATUS]: AgentStatusResult;
   [CommandMethod.AGENT_PING]: AgentPingResult;
   [CommandMethod.FILESYSTEM_LIST]: FilesystemListResult;
+  [CommandMethod.COMMANDS_LIST]: CommandsListResult;
 }
 
 // ============================================================================
@@ -254,3 +290,8 @@ export type AgentStatusCommand = CommandRequest<typeof CommandMethod.AGENT_STATU
  * Agent ping command
  */
 export type AgentPingCommand = CommandRequest<typeof CommandMethod.AGENT_PING>;
+
+/**
+ * Commands list command
+ */
+export type CommandsListCommand = CommandRequest<typeof CommandMethod.COMMANDS_LIST>;

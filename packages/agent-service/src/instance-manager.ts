@@ -17,6 +17,8 @@ import type {
 interface ManagedInstance {
   instanceId: string;
   sessionId: string;
+  /** SDK's session ID - captured from first message, used for resume */
+  sdkSessionId?: string;
   projectPath: string;
   state: InstanceStatus;
   conversationHistory: ConversationMessage[];
@@ -45,6 +47,8 @@ export interface SpawnInstanceParams {
   /** Instance ID from hub - use this if provided to keep hub and agent in sync */
   instanceId?: string;
   sessionId?: string;
+  /** Claude SDK session ID to resume a previous conversation */
+  resumeSessionId?: string;
   systemPrompt?: string;
   permissionMode?: PermissionMode;
   mcpServers?: McpServerConfig[];
@@ -63,7 +67,6 @@ export interface McpServerConfig {
 
 export interface InstanceManagerEvents {
   'instance.started': (instanceId: string, sessionId: string) => void;
-  'instance.message': (instanceId: string, message: SDKMessage) => void;
   'instance.stopped': (instanceId: string) => void;
   'instance.error': (instanceId: string, error: Error) => void;
   'sdk.message': (instanceId: string, message: SDKMessage) => void;
@@ -92,6 +95,8 @@ export class InstanceManager extends EventEmitter {
     const instance: ManagedInstance = {
       instanceId,
       sessionId,
+      // Use resumeSessionId if provided to continue a previous Claude conversation
+      sdkSessionId: params.resumeSessionId,
       projectPath: params.projectPath,
       state: 'starting',
       conversationHistory: [],
@@ -109,9 +114,11 @@ export class InstanceManager extends EventEmitter {
     // Start processing loop
     this.startProcessingLoop(instanceId, params);
 
-    // If there's an initial prompt, queue it
+    // If there's an initial prompt, queue it (don't await - let it process in background)
     if (params.initialPrompt) {
-      await this.sendMessage(instanceId, params.initialPrompt);
+      this.sendMessage(instanceId, params.initialPrompt).catch(err => {
+        console.error(`[InstanceManager] Initial prompt failed for ${instanceId}:`, err);
+      });
     }
 
     return instanceId;
@@ -172,7 +179,7 @@ export class InstanceManager extends EventEmitter {
           }
 
           // Call the Claude Code SDK
-          // Note: Cast options to allow systemPrompt which may not be in SDK types
+          // Use resume option if we have a session ID from previous messages
           const result = query({
             prompt: userMessage.content,
             options: {
@@ -182,6 +189,8 @@ export class InstanceManager extends EventEmitter {
               maxTokens: params.maxTokens,
               mcpServers: Object.keys(mcpServers).length > 0 ? mcpServers : undefined,
               abortController: instance.abortController,
+              // Resume the session if we have a previous SDK session ID
+              resume: instance.sdkSessionId,
             } as Parameters<typeof query>[0]['options'],
           });
 
@@ -190,9 +199,13 @@ export class InstanceManager extends EventEmitter {
           for await (const message of result) {
             instance.lastActivityAt = new Date();
 
+            // Capture SDK session ID from first message for session resume
+            if (!instance.sdkSessionId && 'session_id' in message && message.session_id) {
+              instance.sdkSessionId = message.session_id as string;
+            }
+
             // Emit SDK message event for forwarding to hub
             this.emit('sdk.message', instanceId, message);
-            this.emit('instance.message', instanceId, message);
 
             // Collect assistant text content
             if (message.type === 'assistant' && message.message?.content) {

@@ -11,6 +11,8 @@ export interface SpawnHandlerParams {
   projectPath?: string;
   instanceId?: string;
   sessionId?: string;
+  /** Claude SDK session ID to resume a previous conversation */
+  resumeSessionId?: string;
   systemPrompt?: string;
   prompt?: string;
   permissionMode?: 'default' | 'acceptEdits' | 'bypassPermissions';
@@ -98,6 +100,7 @@ export async function handleSpawn(
       projectPath: workingDir,
       instanceId: params.instanceId, // Use hub's instanceId to keep in sync
       sessionId: params.sessionId,
+      resumeSessionId: params.resumeSessionId, // Claude SDK session ID for resume
       systemPrompt: params.systemPrompt,
       permissionMode: params.permissionMode,
       mcpServers: params.mcpServers,

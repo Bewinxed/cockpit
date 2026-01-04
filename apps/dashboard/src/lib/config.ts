@@ -2,8 +2,9 @@
  * Dashboard configuration
  */
 
-// Hub API URL - in production this would be configured via environment
-export const HUB_URL = import.meta.env.VITE_HUB_URL || 'http://localhost:3456';
+// API URL - uses the SvelteKit backend as a proxy to the hub
+// This avoids CORS issues and works in cloud IDEs
+export const HUB_URL = '';
 
 // SSE reconnection settings
 export const SSE_RECONNECT_MAX_ATTEMPTS = 10;

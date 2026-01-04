@@ -22,6 +22,25 @@ function getErrorMessage(error: JsonRpcError | unknown): string {
 }
 
 /**
+ * Derive instance status based on agent connectivity
+ * If agent is offline, instance status should reflect that
+ */
+function deriveInstanceStatus(
+  instance: { status: string; agentId: string },
+  agentRegistry: ReturnType<typeof getAgentRegistry>
+): string {
+  const agent = agentRegistry.get(instance.agentId);
+  const isAgentOnline = agent?.status === 'online';
+
+  // If agent is offline and instance claims to be running, show as disconnected
+  if (!isAgentOnline && (instance.status === 'running' || instance.status === 'starting')) {
+    return 'disconnected';
+  }
+
+  return instance.status;
+}
+
+/**
  * Instance CRUD routes
  */
 export function createInstanceRoutes(db: Db) {
@@ -42,10 +61,16 @@ export function createInstanceRoutes(db: Db) {
           offset: query.offset ? parseInt(query.offset) : undefined,
         });
 
+        // Derive status based on agent connectivity
+        const instancesWithDerivedStatus = instances.map((inst) => ({
+          ...inst,
+          status: deriveInstanceStatus(inst, agentRegistry),
+        }));
+
         return {
           success: true,
-          data: instances,
-          total: instances.length,
+          data: instancesWithDerivedStatus,
+          total: instancesWithDerivedStatus.length,
         };
       },
       {
@@ -73,9 +98,15 @@ export function createInstanceRoutes(db: Db) {
           };
         }
 
+        // Derive status based on agent connectivity
+        const instanceWithDerivedStatus = {
+          ...instance,
+          status: deriveInstanceStatus(instance, agentRegistry),
+        };
+
         return {
           success: true,
-          data: instance,
+          data: instanceWithDerivedStatus,
         };
       },
       {
@@ -129,6 +160,7 @@ export function createInstanceRoutes(db: Db) {
             prompt: body.prompt,
             permissionMode: body.permissionMode,
             projectId: body.projectId,
+            resumeSessionId: body.resumeSessionId,
           }
         );
 
@@ -142,6 +174,15 @@ export function createInstanceRoutes(db: Db) {
             error: getErrorMessage(response.error),
             data: instance,
           };
+        }
+
+        // Save initial user prompt as message
+        if (body.prompt) {
+          await tracker.saveMessage(instance.id, {
+            messageType: 'user',
+            content: { type: 'user', content: body.prompt },
+            timestamp: new Date(),
+          });
         }
 
         // Broadcast instance creation
@@ -159,6 +200,7 @@ export function createInstanceRoutes(db: Db) {
           projectId: t.Optional(t.String()),
           prompt: t.Optional(t.String()),
           permissionMode: t.Optional(t.String()),
+          resumeSessionId: t.Optional(t.String()),
         }),
       }
     )
@@ -203,7 +245,13 @@ export function createInstanceRoutes(db: Db) {
           };
         }
 
-        // Update last prompt
+        // Save user message and update last prompt
+        await tracker.saveMessage(params.id, {
+          messageType: 'user',
+          content: { type: 'user', content: body.message },
+          timestamp: new Date(),
+        });
+
         await tracker.update(params.id, {
           lastPrompt: body.message,
         });
@@ -330,6 +378,216 @@ export function createInstanceRoutes(db: Db) {
         params: t.Object({
           id: t.String(),
         }),
+      }
+    )
+
+    // Get messages for an instance
+    .get(
+      '/:id/messages',
+      async ({ params, query, set }) => {
+        const instance = await tracker.get(params.id);
+
+        if (!instance) {
+          set.status = 404;
+          return {
+            success: false,
+            error: 'Instance not found',
+          };
+        }
+
+        const limit = query.limit ? parseInt(query.limit) : 100;
+        const offset = query.offset ? parseInt(query.offset) : 0;
+
+        const messages = await tracker.getMessages(params.id, limit, offset);
+        const total = await tracker.countMessages(params.id);
+
+        return {
+          success: true,
+          data: messages,
+          total,
+          limit,
+          offset,
+        };
+      },
+      {
+        params: t.Object({
+          id: t.String(),
+        }),
+        query: t.Object({
+          limit: t.Optional(t.String()),
+          offset: t.Optional(t.String()),
+        }),
+      }
+    )
+
+    // Get available commands for an instance
+    .get(
+      '/:id/commands',
+      async ({ params, set }) => {
+        const instance = await tracker.get(params.id);
+
+        if (!instance) {
+          set.status = 404;
+          return {
+            success: false,
+            error: 'Instance not found',
+          };
+        }
+
+        // Check if agent is online
+        const agent = agentRegistry.get(instance.agentId);
+        if (!agent || agent.status !== 'online') {
+          set.status = 503;
+          return {
+            success: false,
+            error: 'Agent is not online',
+          };
+        }
+
+        // Request commands from agent
+        const response = await agentRegistry.sendToAgent(
+          instance.agentId,
+          CommandMethod.COMMANDS_LIST,
+          {
+            instanceId: params.id,
+            cwd: instance.cwd,
+          }
+        );
+
+        if (response.error) {
+          set.status = 500;
+          return {
+            success: false,
+            error: getErrorMessage(response.error),
+          };
+        }
+
+        return {
+          success: true,
+          data: response.result,
+        };
+      },
+      {
+        params: t.Object({
+          id: t.String(),
+        }),
+      }
+    )
+
+    // Resume an instance - re-spawn with the same instance ID
+    .post(
+      '/:id/resume',
+      async ({ params, body, set }) => {
+        const instance = await tracker.get(params.id);
+
+        if (!instance) {
+          set.status = 404;
+          return {
+            success: false,
+            error: 'Instance not found',
+          };
+        }
+
+        // Check if agent is online
+        const agent = agentRegistry.get(instance.agentId);
+        if (!agent || agent.status !== 'online') {
+          set.status = 400;
+          return {
+            success: false,
+            error: 'Agent is not online',
+          };
+        }
+
+        // If instance is already running, just send the message
+        if (instance.status === 'running') {
+          if (body?.prompt) {
+            // Save user message
+            await tracker.saveMessage(params.id, {
+              messageType: 'user',
+              content: { type: 'user', content: body.prompt },
+              timestamp: new Date(),
+            });
+
+            const response = await agentRegistry.sendToAgent(
+              instance.agentId,
+              CommandMethod.INSTANCE_SEND,
+              {
+                instanceId: params.id,
+                content: body.prompt,
+              }
+            );
+
+            if (response.error) {
+              set.status = 500;
+              return {
+                success: false,
+                error: getErrorMessage(response.error),
+              };
+            }
+          }
+
+          return {
+            success: true,
+            data: instance,
+          };
+        }
+
+        // Instance is stopped - re-spawn with the SAME instance ID
+        // Update instance status to starting
+        await tracker.update(params.id, { status: 'starting' });
+
+        // Send spawn request to agent with the same instanceId
+        const response = await agentRegistry.sendToAgent(
+          instance.agentId,
+          CommandMethod.INSTANCE_SPAWN,
+          {
+            instanceId: params.id, // Reuse same ID!
+            cwd: instance.cwd,
+            prompt: body?.prompt,
+            permissionMode: instance.permissionMode,
+            projectId: instance.projectId,
+            resumeSessionId: instance.sdkSessionId, // Use stored SDK session ID
+          }
+        );
+
+        if (response.error) {
+          // Mark instance as errored if spawn failed
+          await tracker.markError(params.id);
+
+          set.status = 500;
+          return {
+            success: false,
+            error: getErrorMessage(response.error),
+          };
+        }
+
+        // Save user message for resume prompt
+        if (body?.prompt) {
+          await tracker.saveMessage(params.id, {
+            messageType: 'user',
+            content: { type: 'user', content: body.prompt },
+            timestamp: new Date(),
+          });
+        }
+
+        // Get updated instance
+        const updated = await tracker.get(params.id);
+
+        // Broadcast instance resumed
+        broadcast.broadcast('instance:resumed', updated);
+
+        return {
+          success: true,
+          data: updated,
+        };
+      },
+      {
+        params: t.Object({
+          id: t.String(),
+        }),
+        body: t.Optional(t.Object({
+          prompt: t.Optional(t.String()),
+        })),
       }
     );
 }

@@ -1,6 +1,6 @@
 import { Elysia } from 'elysia';
 import { cors } from '@elysiajs/cors';
-import { getDb } from '@cockpit/db';
+import { getDb, agents } from '@cockpit/db';
 
 import {
   createInstanceRoutes,
@@ -15,6 +15,7 @@ import {
   getBroadcastService,
   resetAgentRegistry,
   resetBroadcastService,
+  createInstanceTracker,
 } from './services';
 import { HubDiscovery } from './discovery';
 
@@ -53,6 +54,10 @@ export function createHubServer(options: HubOptions) {
   // Initialize services
   getAgentRegistry({ requestTimeout });
   getBroadcastService();
+
+  // Note: No startup cleanup needed - instance/agent status is derived from
+  // live WebSocket connections, not DB. The API returns 'disconnected' for
+  // any instance whose agent is offline.
 
   // Create Elysia app
   const app = new Elysia()
@@ -205,7 +210,8 @@ export async function startHub(options: HubOptions) {
  */
 async function main() {
   const port = parseInt(process.env.HUB_PORT || '3456', 10);
-  const dbPath = process.env.HUB_DB_PATH || './cockpit.db';
+  // Default to monorepo root's cockpit.db when running from packages/hub-server
+  const dbPath = process.env.HUB_DB_PATH || '../../cockpit.db';
   const enableDiscovery = process.env.HUB_DISCOVERY !== 'false';
 
   const hub = await startHub({

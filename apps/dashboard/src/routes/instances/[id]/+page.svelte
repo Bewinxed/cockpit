@@ -1,11 +1,12 @@
 <script lang="ts">
   import { page } from '$app/state';
   import { goto } from '$app/navigation';
-  import { tick } from 'svelte';
-  import { instances, instanceMessages, agents, addMessage, type Message } from '$lib/stores/realtime';
-  import { sendMessage, stopInstance } from '$lib/actions';
+  import { tick, onMount } from 'svelte';
+  import { instances, instanceMessages, agents, addMessage, getStreamingState, type Message } from '$lib/stores/realtime';
+  import { sendMessage, stopInstance, resumeInstance } from '$lib/actions';
+  import { api } from '$lib/api';
   import { Button, Badge, EmptyState } from '$lib/components/ui';
-  import { ChatMessage, ChatInput } from '$lib/components/features';
+  import { ChatMessage, ChatInput, StreamingIndicator } from '$lib/components/features';
   import { formatDistanceToNow } from '$lib/utils/time';
   import {
     ArrowLeft,
@@ -20,14 +21,113 @@
     AlertCircle
   } from 'lucide-svelte';
 
+  interface AvailableCommand {
+    name: string;
+    type: 'builtin' | 'custom' | 'skill' | 'mcp';
+    description?: string;
+    source?: string;
+  }
+
+  // Page data from load function
+  let { data } = $props();
+
   // Get instance ID from route
   const instanceId = $derived(page.params.id);
 
-  // Get instance from store
-  const instance = $derived($instances.get(instanceId));
+  // Get instance from store (prefer store for real-time updates, fallback to page data)
+  const storeInstance = $derived($instances.get(instanceId));
+  const instance = $derived(storeInstance || (data.instance ? {
+    id: data.instance.id,
+    name: data.instance.lastPrompt?.slice(0, 50) || 'Instance',
+    status: data.instance.status as 'starting' | 'running' | 'stopping' | 'stopped' | 'error',
+    agent: '',
+    agentId: data.instance.agentId,
+    project: null,
+    projectId: data.instance.projectId || null,
+    lastActivity: data.instance.createdAt ? new Date(data.instance.createdAt).toISOString() : new Date().toISOString(),
+    cwd: data.instance.cwd,
+    model: data.instance.model,
+    totalCostUsd: data.instance.totalCostUsd,
+  } : undefined));
 
   // Get agent info
   const agent = $derived(instance?.agentId ? $agents.get(instance.agentId) : undefined);
+
+  // Initialize messages from page data on mount
+  onMount(() => {
+    if (data.messages && data.messages.length > 0 && !$instanceMessages.get(instanceId)?.length) {
+      // Convert DB messages to UI Message format
+      for (const dbMsg of data.messages) {
+        const content = typeof dbMsg.content === 'string' ? JSON.parse(dbMsg.content) : dbMsg.content;
+        const sdkType = content?.type || dbMsg.messageType;
+
+        // Only add displayable messages
+        if (sdkType === 'user' && content?.content) {
+          // User messages
+          addMessage(instanceId, {
+            type: 'user',
+            content: content.content,
+            timestamp: new Date(dbMsg.timestamp),
+          });
+        } else if (sdkType === 'assistant' && content?.message?.content) {
+          for (const block of content.message.content) {
+            if (block?.type === 'text' && block.text) {
+              addMessage(instanceId, {
+                type: 'assistant',
+                content: block.text,
+                timestamp: new Date(dbMsg.timestamp),
+              });
+            } else if (block?.type === 'tool_use') {
+              addMessage(instanceId, {
+                type: 'tool_use',
+                content: block.name || 'Tool',
+                timestamp: new Date(dbMsg.timestamp),
+                metadata: {
+                  toolId: block.id,
+                  toolName: block.name,
+                  toolInput: block.input,
+                  toolStatus: 'success',
+                },
+              });
+            }
+          }
+        } else if (sdkType === 'system' && content?.subtype === 'init') {
+          addMessage(instanceId, {
+            type: 'system',
+            content: `Session started with ${content.model || 'Claude'}`,
+            timestamp: new Date(dbMsg.timestamp),
+          });
+        }
+      }
+    }
+  });
+
+  // Commands for the instance
+  let commands = $state<AvailableCommand[]>([]);
+
+  // Fetch commands when instance is available
+  $effect(() => {
+    if (instance && instance.status === 'running') {
+      fetchCommands();
+    }
+  });
+
+  async function fetchCommands() {
+    try {
+      const { data, error } = await api.api.instances({ id: instanceId }).commands.get();
+      if (error) {
+        console.error('Failed to fetch commands:', error);
+        return;
+      }
+      if (data?.success && data.data) {
+        const result = data.data as { commands?: AvailableCommand[] };
+        commands = result.commands || [];
+      }
+    } catch (err) {
+      console.error('Failed to fetch commands:', err);
+      // Commands are optional, don't show error
+    }
+  }
 
   // Get messages for this instance directly from the Map
   const currentMessages = $derived($instanceMessages.get(instanceId) || []);
@@ -35,6 +135,7 @@
   // UI State
   let sending = $state(false);
   let stopping = $state(false);
+  let restarting = $state(false);
   let error = $state<string | null>(null);
   let messagesContainer = $state<HTMLDivElement | null>(null);
 
@@ -57,15 +158,61 @@
     stopping: { variant: 'warning' as const, label: 'Stopping', pulse: true },
     stopped: { variant: 'default' as const, label: 'Stopped', pulse: false },
     error: { variant: 'error' as const, label: 'Error', pulse: false },
+    disconnected: { variant: 'warning' as const, label: 'Disconnected', pulse: false },
   };
 
   const status = $derived(instance ? statusConfig[instance.status] : null);
 
   async function handleSendMessage(message: string) {
-    if (!instance || sending) return;
+    if (!instance || sending || restarting) return;
 
     error = null;
+
+    // If instance is not running, resume it (re-spawn with same ID)
+    if (!isActive) {
+      restarting = true;
+
+      // Add user's message to current view immediately
+      addMessage(instanceId, {
+        type: 'user',
+        content: message,
+        timestamp: new Date(),
+      });
+
+      try {
+        // Resume instance - this re-spawns with the SAME instance ID
+        const result = await resumeInstance(instanceId, message);
+
+        if (!result.success) {
+          error = result.error || 'Failed to resume session';
+          return;
+        }
+
+        // Add system message about resumption
+        addMessage(instanceId, {
+          type: 'system',
+          content: 'Session resumed',
+          timestamp: new Date(),
+        });
+
+        // No navigation needed - we stay on the same page!
+      } catch (err) {
+        error = err instanceof Error ? err.message : 'Unknown error';
+      } finally {
+        restarting = false;
+      }
+      return;
+    }
+
+    // Instance is running - send message normally
     sending = true;
+
+    // Add user's message to current view immediately
+    addMessage(instanceId, {
+      type: 'user',
+      content: message,
+      timestamp: new Date(),
+    });
 
     try {
       const result = await sendMessage(instanceId, message);
@@ -177,6 +324,9 @@
                 <DollarSign class="w-4 h-4 text-text-muted" />
                 <span>{formattedCost}</span>
               </div>
+
+              <!-- Streaming Indicator -->
+              <StreamingIndicator {instanceId} />
             </div>
           </div>
         </div>
@@ -253,9 +403,12 @@
     <!-- Chat Input -->
     <ChatInput
       onSend={handleSendMessage}
-      disabled={!isActive}
-      loading={sending}
-      placeholder={isActive ? 'Type a message... (⌘↵ to send)' : 'Instance is not running'}
+      disabled={restarting}
+      loading={sending || restarting}
+      placeholder={restarting
+        ? 'Resuming session...'
+        : 'Type a message... (⌘↵ to send, / for commands)'}
+      {commands}
     />
   {:else}
     <!-- Instance not found -->

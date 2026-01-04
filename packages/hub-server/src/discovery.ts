@@ -22,10 +22,12 @@ export class HubDiscovery {
       this.bonjour = new Bonjour();
 
       // Advertise the hub service
+      // probe: false skips checking if service name exists (avoids collisions in dev)
       this.service = this.bonjour.publish({
         name: 'cockpit-hub',
         type: '_cockpit-hub._tcp',
         port,
+        probe: false,
         txt: {
           version: '1.0.0',
           protocol: 'json-rpc',

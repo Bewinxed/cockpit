@@ -1,11 +1,20 @@
 <script lang="ts">
   import { Send, Loader2 } from 'lucide-svelte';
   import { Button } from '$lib/components/ui';
+  import CommandPalette from './CommandPalette.svelte';
+
+  interface AvailableCommand {
+    name: string;
+    type: 'builtin' | 'custom' | 'skill' | 'mcp';
+    description?: string;
+    source?: string;
+  }
 
   interface Props {
     disabled?: boolean;
     loading?: boolean;
     placeholder?: string;
+    commands?: AvailableCommand[];
     onSend: (message: string) => void | Promise<void>;
   }
 
@@ -13,11 +22,35 @@
     disabled = false,
     loading = false,
     placeholder = 'Type a message...',
+    commands = [],
     onSend,
   }: Props = $props();
 
   let message = $state('');
   let textareaRef = $state<HTMLTextAreaElement | null>(null);
+  let showPalette = $state(false);
+  let selectedIndex = $state(0);
+
+  // Check if we should show command palette
+  $effect(() => {
+    // Show palette when message starts with / and has commands
+    const shouldShow = message.startsWith('/') && commands.length > 0 && !loading;
+    showPalette = shouldShow;
+
+    // Reset selection when filter changes
+    if (shouldShow) {
+      selectedIndex = 0;
+    }
+  });
+
+  // Get filtered commands count for navigation bounds
+  let filteredCommands = $derived(
+    commands.filter((cmd) => {
+      const searchTerm = message.toLowerCase().replace(/^\//, '');
+      return cmd.name.toLowerCase().includes(searchTerm) ||
+        (cmd.description?.toLowerCase().includes(searchTerm) ?? false);
+    })
+  );
 
   // Auto-resize textarea
   function handleInput(e: Event) {
@@ -34,6 +67,7 @@
 
     await onSend(trimmed);
     message = '';
+    showPalette = false;
 
     // Reset textarea height
     if (textareaRef) {
@@ -41,7 +75,51 @@
     }
   }
 
+  function handleCommandSelect(command: AvailableCommand) {
+    // Replace the current input with the command
+    message = command.name + ' ';
+    showPalette = false;
+
+    // Focus back on textarea
+    textareaRef?.focus();
+  }
+
   function handleKeydown(e: KeyboardEvent) {
+    // Handle palette navigation
+    if (showPalette && filteredCommands.length > 0) {
+      switch (e.key) {
+        case 'ArrowUp':
+          e.preventDefault();
+          selectedIndex = selectedIndex > 0 ? selectedIndex - 1 : filteredCommands.length - 1;
+          return;
+        case 'ArrowDown':
+          e.preventDefault();
+          selectedIndex = selectedIndex < filteredCommands.length - 1 ? selectedIndex + 1 : 0;
+          return;
+        case 'Enter':
+          if (!e.shiftKey && !e.metaKey && !e.ctrlKey) {
+            e.preventDefault();
+            const selected = filteredCommands[selectedIndex];
+            if (selected) {
+              handleCommandSelect(selected);
+            }
+            return;
+          }
+          break;
+        case 'Escape':
+          e.preventDefault();
+          showPalette = false;
+          return;
+        case 'Tab':
+          e.preventDefault();
+          const selected = filteredCommands[selectedIndex];
+          if (selected) {
+            handleCommandSelect(selected);
+          }
+          return;
+      }
+    }
+
     // Submit on Cmd/Ctrl + Enter
     if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
       e.preventDefault();
@@ -52,6 +130,15 @@
 
 <form class="flex gap-3 p-4 bg-surface border-t border-border" onsubmit={handleSubmit}>
   <div class="flex-1 relative">
+    <!-- Command Palette -->
+    <CommandPalette
+      {commands}
+      filter={message}
+      {selectedIndex}
+      onSelect={handleCommandSelect}
+      visible={showPalette}
+    />
+
     <textarea
       bind:this={textareaRef}
       bind:value={message}
@@ -66,7 +153,11 @@
     <!-- Character hint -->
     <div class="absolute right-3 bottom-2 text-[10px] text-text-muted pointer-events-none">
       {#if message.length > 0}
-        ⌘↵ to send
+        {#if message.startsWith('/')}
+          Type to filter commands
+        {:else}
+          ⌘↵ to send
+        {/if}
       {/if}
     </div>
   </div>

@@ -1,7 +1,8 @@
 /**
  * Possible states of a Claude Code instance
+ * - 'disconnected' is a derived status when agent is offline (can't confirm real status)
  */
-export type InstanceStatus = 'starting' | 'running' | 'stopping' | 'stopped' | 'error';
+export type InstanceStatus = 'starting' | 'running' | 'stopping' | 'stopped' | 'error' | 'disconnected';
 
 /**
  * Permission modes for Claude Code instances
@@ -16,8 +17,11 @@ export interface Instance {
   /** Unique identifier for the instance */
   id: string;
 
-  /** Claude Code's internal session ID (if available) */
+  /** Agent's internal session ID (for tracking) */
   sessionId?: string;
+
+  /** Claude SDK's session ID (for resume) */
+  sdkSessionId?: string;
 
   /** Project this instance belongs to (if any) */
   projectId?: string;
@@ -69,6 +73,7 @@ export interface SpawnInstanceData {
  */
 export interface UpdateInstanceData {
   sessionId?: string;
+  sdkSessionId?: string;
   status?: InstanceStatus;
   lastPrompt?: string;
   totalCostUsd?: number;

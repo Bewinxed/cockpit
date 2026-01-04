@@ -34,7 +34,8 @@ export const projects = sqliteTable('projects', {
 // instances - Claude Code sessions
 export const instances = sqliteTable('instances', {
   id: text('id').primaryKey(),
-  sessionId: text('session_id'),
+  sessionId: text('session_id'), // Agent's internal session ID (for tracking)
+  sdkSessionId: text('sdk_session_id'), // Claude SDK's session ID (for resume)
   projectId: text('project_id').references(() => projects.id),
   agentId: text('agent_id').references(() => agents.id).notNull(),
   cwd: text('cwd').notNull(),
@@ -47,6 +48,7 @@ export const instances = sqliteTable('instances', {
   stoppedAt: integer('stopped_at', { mode: 'timestamp' }),
 }, (table) => [
   index('instances_session_id_idx').on(table.sessionId),
+  index('instances_sdk_session_id_idx').on(table.sdkSessionId),
   index('instances_project_id_idx').on(table.projectId),
   index('instances_agent_id_idx').on(table.agentId),
   index('instances_status_idx').on(table.status),
