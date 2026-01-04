@@ -18,13 +18,12 @@
     Terminal,
     Server,
     Sparkles,
-    Settings,
-    HelpCircle,
+    ChevronRight,
     Wifi,
     WifiOff,
-    Loader2
+    Loader2,
+    Circle
   } from 'lucide-svelte';
-  import Badge from '$lib/components/ui/Badge.svelte';
 
   interface Props {
     children: import('svelte').Snippet;
@@ -45,10 +44,10 @@
   });
 
   const navItems = [
-    { href: '/', label: 'Dashboard', icon: LayoutDashboard },
-    { href: '/projects', label: 'Projects', icon: FolderKanban },
-    { href: '/instances', label: 'Instances', icon: Terminal },
-    { href: '/agents', label: 'Agents', icon: Server },
+    { href: '/', label: 'Dashboard', icon: LayoutDashboard, emoji: '🏠' },
+    { href: '/projects', label: 'Projects', icon: FolderKanban, emoji: '📁' },
+    { href: '/instances', label: 'Instances', icon: Terminal, emoji: '💻' },
+    { href: '/agents', label: 'Agents', icon: Server, emoji: '🤖' },
   ];
 
   function isActive(href: string): boolean {
@@ -57,68 +56,83 @@
     }
     return page.url.pathname.startsWith(href);
   }
+
+  // Connection status helpers
+  const statusConfig = $derived({
+    connected: { color: 'text-success', bg: 'bg-success', label: 'Connected' },
+    connecting: { color: 'text-warning', bg: 'bg-warning', label: 'Connecting...' },
+    error: { color: 'text-error', bg: 'bg-error', label: 'Error' },
+    disconnected: { color: 'text-text-muted', bg: 'bg-text-muted', label: 'Offline' },
+  }[$connectionStatus] || { color: 'text-text-muted', bg: 'bg-text-muted', label: 'Offline' });
 </script>
 
 <div class="flex min-h-screen bg-bg">
-  <!-- Sidebar -->
-  <aside class="fixed top-0 left-0 bottom-0 w-60 bg-surface border-r border-border flex flex-col">
-    <!-- Logo -->
-    <div class="flex items-center gap-2.5 px-5 py-5 border-b border-border">
-      <div class="flex items-center justify-center w-8 h-8 rounded-lg bg-primary">
-        <Sparkles class="w-4 h-4 text-white" />
+  <!-- Sidebar - Notion-inspired -->
+  <aside class="fixed top-0 left-0 bottom-0 w-56 bg-surface flex flex-col border-r border-border">
+    <!-- Logo & Workspace -->
+    <div class="flex items-center gap-2.5 px-3 py-3 hover:bg-surface-hover transition-colors cursor-pointer rounded-lg mx-2 mt-2">
+      <div class="flex items-center justify-center w-7 h-7 rounded-md bg-primary text-text-inverse text-sm font-bold">
+        C
       </div>
-      <span class="text-lg font-semibold text-text">Cockpit</span>
+      <div class="flex-1 min-w-0">
+        <span class="text-sm font-semibold text-text block truncate">Cockpit</span>
+        <span class="text-xs text-text-muted block truncate">AI Orchestration</span>
+      </div>
+      <ChevronRight class="w-4 h-4 text-text-muted flex-shrink-0" />
     </div>
 
     <!-- Navigation -->
-    <nav class="flex-1 px-3 py-4">
-      <div class="space-y-1">
+    <nav class="flex-1 px-2 py-3 overflow-y-auto">
+      <div class="space-y-0.5">
         {#each navItems as item}
           {@const active = isActive(item.href)}
           <a
             href={item.href}
-            class="nav-item {active ? 'nav-item-active' : ''}"
+            class="group flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-sm transition-all duration-100
+                   {active
+                     ? 'bg-primary-light text-primary font-medium'
+                     : 'text-text-secondary hover:bg-surface-hover hover:text-text'}"
           >
-            <item.icon class="w-5 h-5" />
-            <span>{item.label}</span>
+            <span class="text-base leading-none">{item.emoji}</span>
+            <span class="flex-1">{item.label}</span>
+            {#if active}
+              <div class="w-1.5 h-1.5 rounded-full bg-primary"></div>
+            {/if}
           </a>
         {/each}
       </div>
     </nav>
 
-    <!-- Footer -->
-    <div class="px-4 py-4 border-t border-border space-y-3">
+    <!-- Footer Stats -->
+    <div class="px-3 py-3 border-t border-border">
       <!-- Connection Status -->
-      <div class="flex items-center gap-2">
-        {#if $connectionStatus === 'connected'}
-          <div class="relative">
-            <Wifi class="w-4 h-4 text-success" />
-            <span class="absolute -top-0.5 -right-0.5 w-2 h-2 bg-success rounded-full animate-pulse-soft"></span>
-          </div>
-          <span class="text-sm text-success font-medium">Connected</span>
-        {:else if $connectionStatus === 'connecting'}
-          <Loader2 class="w-4 h-4 text-warning animate-spin" />
-          <span class="text-sm text-warning">Connecting...</span>
-        {:else if $connectionStatus === 'error'}
-          <WifiOff class="w-4 h-4 text-error" />
-          <span class="text-sm text-error">Error</span>
-        {:else}
-          <WifiOff class="w-4 h-4 text-text-muted" />
-          <span class="text-sm text-text-muted">Disconnected</span>
-        {/if}
+      <div class="flex items-center gap-2 mb-2">
+        <div class="relative">
+          {#if $connectionStatus === 'connected'}
+            <Circle class="w-2 h-2 fill-success text-success" />
+            <span class="absolute inset-0 rounded-full bg-success animate-pulse-soft"></span>
+          {:else if $connectionStatus === 'connecting'}
+            <Loader2 class="w-3 h-3 text-warning animate-spin" />
+          {:else}
+            <Circle class="w-2 h-2 fill-text-muted text-text-muted" />
+          {/if}
+        </div>
+        <span class="text-xs {statusConfig.color} font-medium">
+          {statusConfig.label}
+        </span>
       </div>
 
-      <!-- Stats Summary -->
+      <!-- Quick Stats -->
       {#if $connectionStatus === 'connected'}
-        <div class="flex items-center gap-3 text-xs text-text-secondary">
-          <div class="flex items-center gap-1.5">
-            <Server class="w-3.5 h-3.5" />
-            <span>{$stats.onlineAgents} agents</span>
+        <div class="flex items-center gap-3 text-xs text-text-muted">
+          <div class="flex items-center gap-1">
+            <span class="font-medium text-text-secondary">{$stats.onlineAgents}</span>
+            <span>agents</span>
           </div>
-          <span class="text-border">·</span>
-          <div class="flex items-center gap-1.5">
-            <Terminal class="w-3.5 h-3.5" />
-            <span>{$stats.runningInstances} running</span>
+          <span class="text-border">•</span>
+          <div class="flex items-center gap-1">
+            <span class="font-medium text-text-secondary">{$stats.runningInstances}</span>
+            <span>running</span>
           </div>
         </div>
       {/if}
@@ -126,9 +140,21 @@
   </aside>
 
   <!-- Main content -->
-  <main class="flex-1 ml-60 min-h-screen">
-    <div class="p-8">
+  <main class="flex-1 ml-56 min-h-screen">
+    <div class="p-6">
       {@render children()}
     </div>
   </main>
 </div>
+
+<style>
+  /* Subtle hover states */
+  aside {
+    transition: background-color 150ms ease;
+  }
+
+  /* Smooth navigation link transitions */
+  nav a {
+    will-change: background-color;
+  }
+</style>
