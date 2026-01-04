@@ -309,6 +309,40 @@ export class InstanceManager extends EventEmitter {
   }
 
   /**
+   * Interrupt an instance's current operation.
+   * Unlike stop(), interrupt keeps the instance resumable.
+   * Returns the SDK session ID for potential resume.
+   */
+  async interrupt(instanceId: string): Promise<string | undefined> {
+    const instance = this.instances.get(instanceId);
+    if (!instance) {
+      throw new Error(`Instance ${instanceId} not found`);
+    }
+
+    if (instance.state !== 'running' && instance.state !== 'starting') {
+      throw new Error(`Instance ${instanceId} is not running (state: ${instance.state})`);
+    }
+
+    console.log(`[InstanceManager] Interrupting instance ${instanceId}`);
+
+    // Clear idle timer
+    if (instance.idleTimer) {
+      clearTimeout(instance.idleTimer);
+    }
+
+    // Close the session - this aborts the current operation
+    instance.session?.close();
+
+    // Mark as sleeping so it can be resumed
+    instance.state = 'sleeping' as InstanceStatus;
+
+    // Emit sleeping event with SDK session ID for resume
+    this.emit('instance.sleeping', instanceId, instance.sdkSessionId);
+
+    return instance.sdkSessionId;
+  }
+
+  /**
    * Stop an instance explicitly.
    */
   async stop(instanceId: string): Promise<void> {

@@ -474,6 +474,82 @@ export function createInstanceRoutes(db: Db) {
       }
     )
 
+    // Interrupt an instance's current operation
+    .post(
+      '/:id/interrupt',
+      async ({ params, set }) => {
+        const instance = await tracker.get(params.id);
+
+        if (!instance) {
+          set.status = 404;
+          return {
+            success: false,
+            error: 'Instance not found',
+          };
+        }
+
+        if (instance.status !== 'running' && instance.status !== 'starting') {
+          set.status = 400;
+          return {
+            success: false,
+            error: `Instance is not running (status: ${instance.status})`,
+          };
+        }
+
+        // Check if agent is online
+        const agent = agentRegistry.get(instance.agentId);
+        if (!agent || agent.status !== 'online') {
+          set.status = 503;
+          return {
+            success: false,
+            error: 'Agent is not online',
+          };
+        }
+
+        // Send interrupt request to agent
+        const response = await agentRegistry.sendToAgent(
+          instance.agentId,
+          CommandMethod.INSTANCE_INTERRUPT,
+          {
+            instanceId: params.id,
+          }
+        );
+
+        if (response.error) {
+          set.status = 500;
+          return {
+            success: false,
+            error: getErrorMessage(response.error),
+          };
+        }
+
+        // Update instance status to sleeping
+        await tracker.update(params.id, {
+          status: 'sleeping',
+          sdkSessionId: (response.result as { sdkSessionId?: string })?.sdkSessionId,
+        });
+
+        // Broadcast instance sleeping
+        broadcast.broadcast('instance:sleeping', {
+          instanceId: params.id,
+          instance: await tracker.get(params.id),
+        });
+
+        return {
+          success: true,
+          data: {
+            interrupted: true,
+            sdkSessionId: (response.result as { sdkSessionId?: string })?.sdkSessionId,
+          },
+        };
+      },
+      {
+        params: t.Object({
+          id: t.String(),
+        }),
+      }
+    )
+
     // Resume an instance - re-spawn with the same instance ID
     .post(
       '/:id/resume',

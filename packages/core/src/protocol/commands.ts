@@ -11,6 +11,8 @@ export const CommandMethod = {
   INSTANCE_STOP: 'instance.stop',
   /** Send a message to an instance */
   INSTANCE_SEND: 'instance.send',
+  /** Interrupt current operation on an instance */
+  INSTANCE_INTERRUPT: 'instance.interrupt',
   /** Request agent status */
   AGENT_STATUS: 'agent.status',
   /** Ping the agent */
@@ -69,6 +71,14 @@ export interface SendMessageParams {
   message: string;
   /** Optional images to include (base64 encoded) */
   images?: string[];
+}
+
+/**
+ * Parameters for interrupting an instance
+ */
+export interface InterruptInstanceParams {
+  /** ID of the instance to interrupt */
+  instanceId: string;
 }
 
 /**
@@ -158,6 +168,16 @@ export interface SendMessageResult {
 }
 
 /**
+ * Result of interrupting an instance
+ */
+export interface InterruptInstanceResult {
+  /** Whether the interrupt was successful */
+  success: boolean;
+  /** SDK session ID for potential resume */
+  sdkSessionId?: string;
+}
+
+/**
  * Result of agent status request
  */
 export interface AgentStatusResult {
@@ -234,6 +254,7 @@ export interface CommandParamsMap {
   [CommandMethod.INSTANCE_SPAWN]: SpawnInstanceParams;
   [CommandMethod.INSTANCE_STOP]: StopInstanceParams;
   [CommandMethod.INSTANCE_SEND]: SendMessageParams;
+  [CommandMethod.INSTANCE_INTERRUPT]: InterruptInstanceParams;
   [CommandMethod.AGENT_STATUS]: AgentStatusParams;
   [CommandMethod.AGENT_PING]: AgentPingParams;
   [CommandMethod.FILESYSTEM_LIST]: FilesystemListParams;
@@ -247,6 +268,7 @@ export interface CommandResultMap {
   [CommandMethod.INSTANCE_SPAWN]: SpawnInstanceResult;
   [CommandMethod.INSTANCE_STOP]: StopInstanceResult;
   [CommandMethod.INSTANCE_SEND]: SendMessageResult;
+  [CommandMethod.INSTANCE_INTERRUPT]: InterruptInstanceResult;
   [CommandMethod.AGENT_STATUS]: AgentStatusResult;
   [CommandMethod.AGENT_PING]: AgentPingResult;
   [CommandMethod.FILESYSTEM_LIST]: FilesystemListResult;
@@ -280,6 +302,11 @@ export type StopInstanceCommand = CommandRequest<typeof CommandMethod.INSTANCE_S
  * Send message command
  */
 export type SendMessageCommand = CommandRequest<typeof CommandMethod.INSTANCE_SEND>;
+
+/**
+ * Interrupt instance command
+ */
+export type InterruptInstanceCommand = CommandRequest<typeof CommandMethod.INSTANCE_INTERRUPT>;
 
 /**
  * Agent status command

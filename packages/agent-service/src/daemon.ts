@@ -332,6 +332,10 @@ export class AgentDaemon extends EventEmitter {
         await handleStop(request, this.instanceManager, this.hubClient);
         break;
 
+      case PROTOCOL_METHODS.INSTANCE_INTERRUPT:
+        await this.handleInterrupt(request);
+        break;
+
       case PROTOCOL_METHODS.INSTANCE_STATUS:
         await handleInstanceStatus(request, this.instanceManager, this.hubClient);
         break;
@@ -414,6 +418,32 @@ export class AgentDaemon extends EventEmitter {
    */
   async stopInstance(instanceId: string): Promise<void> {
     return this.instanceManager.stop(instanceId);
+  }
+
+  /**
+   * Interrupt an instance's current operation
+   */
+  async interruptInstance(instanceId: string): Promise<string | undefined> {
+    return this.instanceManager.interrupt(instanceId);
+  }
+
+  /**
+   * Handle interrupt request from hub
+   */
+  private async handleInterrupt(request: JsonRpcRequest): Promise<void> {
+    const params = request.params as { instanceId: string };
+
+    try {
+      const sdkSessionId = await this.instanceManager.interrupt(params.instanceId);
+
+      this.hubClient.respond(request.id, {
+        success: true,
+        sdkSessionId,
+      });
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      this.hubClient.respondError(request.id, -32000, err.message);
+    }
   }
 
   /**

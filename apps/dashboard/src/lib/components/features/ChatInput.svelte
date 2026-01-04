@@ -13,17 +13,21 @@
   interface Props {
     disabled?: boolean;
     loading?: boolean;
+    streaming?: boolean;
     placeholder?: string;
     commands?: AvailableCommand[];
     onSend: (message: string) => void | Promise<void>;
+    onInterrupt?: () => void | Promise<void>;
   }
 
   let {
     disabled = false,
     loading = false,
+    streaming = false,
     placeholder = 'Type a message...',
     commands = [],
     onSend,
+    onInterrupt,
   }: Props = $props();
 
   let message = $state('');
@@ -120,10 +124,14 @@
       }
     }
 
-    // Submit on Cmd/Ctrl + Enter
+    // Ctrl/Cmd + Enter: Interrupt if streaming, otherwise submit
     if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
       e.preventDefault();
-      handleSubmit();
+      if (streaming && onInterrupt) {
+        onInterrupt();
+      } else {
+        handleSubmit();
+      }
     }
   }
 </script>
@@ -152,7 +160,9 @@
 
     <!-- Character hint -->
     <div class="absolute right-3 bottom-2 text-[10px] text-text-muted pointer-events-none">
-      {#if message.length > 0}
+      {#if streaming}
+        <span class="text-warning">⌘↵ to interrupt</span>
+      {:else if message.length > 0}
         {#if message.startsWith('/')}
           Type to filter commands
         {:else}

@@ -173,6 +173,25 @@ export async function deleteProject(projectId: string): Promise<{ success: boole
 }
 
 /**
+ * Interrupt an instance's current operation
+ * Unlike stop, interrupt allows the instance to be resumed
+ */
+export async function interruptInstance(instanceId: string): Promise<ActionResult> {
+  const { data, error } = await api.api.instances({ id: instanceId }).interrupt.post();
+
+  if (error) {
+    const errorMsg = extractErrorMessage(error);
+    console.error('Failed to interrupt instance:', errorMsg);
+    return { success: false, error: errorMsg };
+  }
+
+  // Refresh instances list
+  await fetchInstances();
+
+  return { success: true, data: data?.data };
+}
+
+/**
  * Resume a stopped instance (re-spawn with same ID)
  */
 export async function resumeInstance(

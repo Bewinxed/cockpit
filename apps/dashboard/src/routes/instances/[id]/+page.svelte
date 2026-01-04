@@ -3,7 +3,7 @@
   import { goto } from '$app/navigation';
   import { tick, onMount } from 'svelte';
   import { instances, instanceMessages, agents, addMessage, getStreamingState, getInstanceStatus, type Message } from '$lib/stores/realtime';
-  import { sendMessage, stopInstance, resumeInstance } from '$lib/actions';
+  import { sendMessage, stopInstance, resumeInstance, interruptInstance } from '$lib/actions';
   import { api } from '$lib/api';
   import { Button, Badge, EmptyState } from '$lib/components/ui';
   import { ChatMessage, ChatInput, StreamingIndicator } from '$lib/components/features';
@@ -11,6 +11,7 @@
   import {
     ArrowLeft,
     Square,
+    StopCircle,
     Server,
     FolderOpen,
     Clock,
@@ -136,8 +137,13 @@
   let sending = $state(false);
   let stopping = $state(false);
   let restarting = $state(false);
+  let interrupting = $state(false);
   let error = $state<string | null>(null);
   let messagesContainer = $state<HTMLDivElement | null>(null);
+
+  // Get streaming state for interrupt functionality
+  const streamingStateStore = $derived(getStreamingState(instanceId));
+  const isStreaming = $derived($streamingStateStore?.isStreaming ?? false);
 
   // Auto-scroll to bottom on new messages
   $effect(() => {
@@ -245,6 +251,31 @@
     }
   }
 
+  async function handleInterrupt() {
+    if (!instance || interrupting) return;
+
+    interrupting = true;
+    error = null;
+
+    try {
+      const result = await interruptInstance(instanceId);
+      if (!result.success) {
+        error = result.error || 'Failed to interrupt';
+      } else {
+        // Add system message about interruption
+        addMessage(instanceId, {
+          type: 'system',
+          content: 'Operation interrupted',
+          timestamp: new Date(),
+        });
+      }
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Unknown error';
+    } finally {
+      interrupting = false;
+    }
+  }
+
   const isActive = $derived(
     instance?.status === 'running' || instance?.status === 'starting'
   );
@@ -347,12 +378,25 @@
         <!-- Actions -->
         <div class="flex items-center gap-2">
           {#if isActive}
+            {#if isStreaming}
+              <!-- Show Interrupt button when streaming -->
+              <Button
+                variant="warning"
+                size="sm"
+                onclick={handleInterrupt}
+                loading={interrupting}
+                disabled={interrupting}
+              >
+                {#snippet icon()}<StopCircle class="w-4 h-4" />{/snippet}
+                {#snippet children()}Interrupt{/snippet}
+              </Button>
+            {/if}
             <Button
               variant="danger"
               size="sm"
               onclick={handleStop}
               loading={stopping}
-              disabled={stopping}
+              disabled={stopping || interrupting}
             >
               {#snippet icon()}<Square class="w-4 h-4" />{/snippet}
               {#snippet children()}Stop{/snippet}
@@ -416,11 +460,15 @@
     <!-- Chat Input -->
     <ChatInput
       onSend={handleSendMessage}
+      onInterrupt={handleInterrupt}
       disabled={restarting}
       loading={sending || restarting}
+      streaming={isStreaming}
       placeholder={restarting
         ? 'Resuming session...'
-        : 'Type a message... (⌘↵ to send, / for commands)'}
+        : isStreaming
+          ? 'Claude is responding... (⌘↵ to interrupt)'
+          : 'Type a message... (⌘↵ to send, / for commands)'}
       {commands}
     />
   {:else}
