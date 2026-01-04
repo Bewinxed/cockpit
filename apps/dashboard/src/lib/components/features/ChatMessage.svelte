@@ -1,5 +1,6 @@
 <script lang="ts">
   import { User, Bot, Wrench, FileText, AlertCircle, ChevronDown, ChevronRight, Copy, Check, Loader2, CheckCircle2, XCircle, Settings, Terminal, Scissors } from 'lucide-svelte';
+  import Markdown from '@humanspeak/svelte-markdown';
   import { formatTimestamp } from '$lib/utils/time';
   import type { Message } from '$lib/stores/realtime';
 
@@ -236,10 +237,10 @@
         <span>{message.content}</span>
       </div>
     {:else}
-      <!-- Regular message -->
+      <!-- Regular message with markdown support -->
       <div class="{config.bubble} relative">
-        <div class="prose prose-sm max-w-none {message.type === 'user' ? 'prose-invert' : ''}">
-          {message.content}
+        <div class="prose prose-sm max-w-none {message.type === 'user' ? 'prose-invert' : ''} [&_pre]:bg-bg-subtle [&_pre]:border [&_pre]:border-border [&_pre]:rounded-lg [&_code]:text-xs [&_code]:bg-bg-subtle [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded">
+          <Markdown source={message.content} />
         </div>
 
         <!-- Copy button -->
