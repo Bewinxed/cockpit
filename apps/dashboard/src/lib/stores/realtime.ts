@@ -52,7 +52,7 @@ export interface Task {
 
 export interface Message {
   instanceId: string;
-  type: 'assistant' | 'user' | 'system' | 'tool_use' | 'tool_result' | 'error';
+  type: 'assistant' | 'user' | 'system' | 'tool_use' | 'tool_result' | 'error' | 'hook_response';
   content: string;
   timestamp: Date;
   // Metadata for richer rendering
@@ -64,10 +64,19 @@ export interface Message {
     toolResult?: unknown;
     toolStatus?: 'pending' | 'success' | 'error';
     // For system messages
+    subtype?: 'init' | 'compact_boundary' | 'status' | 'hook_response';
     model?: string;
     cwd?: string;
     tools?: string[];
     sessionId?: string;
+    // For compact_boundary
+    preTokens?: number;
+    trigger?: 'manual' | 'auto';
+    // For hook_response
+    hookName?: string;
+    exitCode?: number;
+    stdout?: string;
+    stderr?: string;
   };
 }
 
@@ -88,6 +97,9 @@ export const instances: Writable<Map<string, Instance>> = writable(new Map());
 export const projects: Writable<Map<string, Project>> = writable(new Map());
 export const tasks: Writable<Map<string, Task>> = writable(new Map());
 export const streamingStates: Writable<Map<string, StreamingState>> = writable(new Map());
+
+// Transient instance status (compacting, etc.) - NOT stored in messages
+export const instanceStatuses: Writable<Map<string, string | null>> = writable(new Map());
 
 // Messages stored per-instance for better organization
 export const instanceMessages: Writable<Map<string, Message[]>> = writable(new Map());
@@ -174,6 +186,23 @@ export function clearStreamingState(instanceId: string): void {
     map.delete(instanceId);
     return map;
   });
+}
+
+// Set/clear transient instance status (compacting, etc.)
+export function setInstanceStatus(instanceId: string, status: string | null): void {
+  instanceStatuses.update((map) => {
+    if (status) {
+      map.set(instanceId, status);
+    } else {
+      map.delete(instanceId);
+    }
+    return map;
+  });
+}
+
+// Get transient status for a specific instance
+export function getInstanceStatus(instanceId: string): Readable<string | null> {
+  return derived(instanceStatuses, ($statuses) => $statuses.get(instanceId) || null);
 }
 
 // Connection state
@@ -533,18 +562,63 @@ export function connect(baseUrl: string = '') {
     // SYSTEM MESSAGES
     // ========================================
 
-    if (msg.type === 'system' && msg.subtype === 'init') {
-      addMessage(instanceId, {
-        type: 'system',
-        content: `Session started with ${msg.model || 'Claude'}`,
-        timestamp: new Date(),
-        metadata: {
-          sessionId: msg.session_id,
-          model: msg.model,
-          cwd: msg.cwd,
-          tools: msg.tools,
-        },
-      });
+    if (msg.type === 'system') {
+      switch (msg.subtype) {
+        case 'init':
+          addMessage(instanceId, {
+            type: 'system',
+            content: `Session started with ${msg.model || 'Claude'}`,
+            timestamp: new Date(),
+            metadata: {
+              subtype: 'init',
+              sessionId: msg.session_id,
+              model: msg.model,
+              cwd: msg.cwd,
+              tools: msg.tools,
+            },
+          });
+          break;
+
+        case 'compact_boundary':
+          addMessage(instanceId, {
+            type: 'system',
+            content: 'Context compacted',
+            timestamp: new Date(),
+            metadata: {
+              subtype: 'compact_boundary',
+              preTokens: (msg as { pre_tokens?: number }).pre_tokens,
+              trigger: (msg as { trigger?: 'manual' | 'auto' }).trigger,
+            },
+          });
+          break;
+
+        case 'status':
+          // Transient - use status store, not messages
+          setInstanceStatus(instanceId, (msg as { status?: string | null }).status || null);
+          break;
+
+        case 'hook_response': {
+          const hookMsg = msg as {
+            hook_name?: string;
+            exit_code?: number;
+            stdout?: string;
+            stderr?: string;
+          };
+          addMessage(instanceId, {
+            type: 'hook_response',
+            content: hookMsg.hook_name || 'Hook',
+            timestamp: new Date(),
+            metadata: {
+              subtype: 'hook_response',
+              hookName: hookMsg.hook_name,
+              exitCode: hookMsg.exit_code,
+              stdout: hookMsg.stdout,
+              stderr: hookMsg.stderr,
+            },
+          });
+          break;
+        }
+      }
     }
 
     // ========================================

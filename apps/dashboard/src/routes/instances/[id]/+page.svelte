@@ -2,7 +2,7 @@
   import { page } from '$app/state';
   import { goto } from '$app/navigation';
   import { tick, onMount } from 'svelte';
-  import { instances, instanceMessages, agents, addMessage, getStreamingState, type Message } from '$lib/stores/realtime';
+  import { instances, instanceMessages, agents, addMessage, getStreamingState, getInstanceStatus, type Message } from '$lib/stores/realtime';
   import { sendMessage, stopInstance, resumeInstance } from '$lib/actions';
   import { api } from '$lib/api';
   import { Button, Badge, EmptyState } from '$lib/components/ui';
@@ -260,6 +260,10 @@
       ? formatDistanceToNow(new Date(instance.lastActivity))
       : null
   );
+
+  // Get transient status for this instance (e.g., "compacting")
+  const transientStatusStore = $derived(getInstanceStatus(instanceId));
+  const transientStatus = $derived($transientStatusStore);
 </script>
 
 <svelte:head>
@@ -328,6 +332,14 @@
 
               <!-- Streaming Indicator -->
               <StreamingIndicator {instanceId} />
+
+              <!-- Transient Status (e.g., "compacting") -->
+              {#if transientStatus}
+                <div class="flex items-center gap-1.5 text-warning animate-pulse">
+                  <Loader2 class="w-4 h-4 animate-spin" />
+                  <span class="capitalize">{transientStatus}...</span>
+                </div>
+              {/if}
             </div>
           </div>
         </div>
