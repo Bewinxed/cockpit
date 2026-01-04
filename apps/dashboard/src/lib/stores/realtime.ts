@@ -16,7 +16,7 @@ export interface Agent {
 export interface Instance {
   id: string;
   name: string;
-  status: 'starting' | 'running' | 'stopping' | 'stopped' | 'error' | 'disconnected';
+  status: 'starting' | 'running' | 'stopping' | 'stopped' | 'sleeping' | 'error' | 'disconnected';
   agent: string;
   agentId: string;
   project: string | null;
@@ -335,6 +335,30 @@ export function connect(baseUrl: string = '') {
       }
       return map;
     });
+  });
+
+  eventSource.addEventListener('instance:sleeping', (event: Event) => {
+    const { instanceId, instance } = JSON.parse((event as MessageEvent).data);
+    instances.update((map) => {
+      const existing = map.get(instanceId);
+      if (existing) {
+        map.set(instanceId, { ...existing, ...instance, status: 'sleeping' });
+      }
+      return map;
+    });
+  });
+
+  eventSource.addEventListener('instance:resumed', (event: Event) => {
+    const instance = JSON.parse((event as MessageEvent).data);
+    if (instance) {
+      instances.update((map) => {
+        const existing = map.get(instance.id);
+        if (existing) {
+          map.set(instance.id, { ...existing, ...instance, status: 'starting' });
+        }
+        return map;
+      });
+    }
   });
 
   eventSource.addEventListener('task:created', (event: Event) => {

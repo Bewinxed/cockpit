@@ -312,6 +312,20 @@ async function handleNotification(
       break;
     }
 
+    case EventMethod.INSTANCE_SLEEPING: {
+      const { instanceId, sdkSessionId } = params as { instanceId: string; sdkSessionId?: string };
+      // Update instance with sleeping status
+      const instance = await instanceTracker.markSleeping(instanceId);
+      if (instance) {
+        // Also update SDK session ID if provided (for resume)
+        if (sdkSessionId) {
+          await instanceTracker.update(instanceId, { sdkSessionId });
+        }
+        broadcast.broadcast('instance:sleeping', { instanceId, instance, sdkSessionId });
+      }
+      break;
+    }
+
     case EventMethod.INSTANCE_STATUS_CHANGED: {
       const { instanceId, newStatus } = params as { instanceId: string; newStatus: string };
       if (newStatus === 'error') {

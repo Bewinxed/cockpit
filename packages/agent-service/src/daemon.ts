@@ -51,6 +51,7 @@ export interface AgentDaemonEvents {
   error: (error: Error) => void;
   'instance.started': (instanceId: string, sessionId: string) => void;
   'instance.stopped': (instanceId: string) => void;
+  'instance.sleeping': (instanceId: string) => void;
   'instance.error': (instanceId: string, error: Error) => void;
 }
 
@@ -267,6 +268,17 @@ export class AgentDaemon extends EventEmitter {
       this.hubClient.notify(PROTOCOL_METHODS.INSTANCE_STOPPED, {
         agentId: this.agentId,
         instanceId,
+        timestamp: new Date().toISOString(),
+      });
+    });
+
+    this.instanceManager.on('instance.sleeping', (instanceId: string) => {
+      const status = this.instanceManager.getStatus(instanceId);
+      this.emit('instance.sleeping', instanceId);
+      this.hubClient.notify(PROTOCOL_METHODS.INSTANCE_SLEEPING, {
+        agentId: this.agentId,
+        instanceId,
+        sdkSessionId: status?.sdkSessionId,
         timestamp: new Date().toISOString(),
       });
     });

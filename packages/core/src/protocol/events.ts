@@ -13,6 +13,8 @@ export const EventMethod = {
   INSTANCE_MESSAGE: 'instance.message',
   /** An instance was stopped */
   INSTANCE_STOPPED: 'instance.stopped',
+  /** An instance went to sleep (idle timeout) */
+  INSTANCE_SLEEPING: 'instance.sleeping',
   /** An instance's status changed */
   INSTANCE_STATUS_CHANGED: 'instance.statusChanged',
   /** A task was created or updated */
@@ -96,6 +98,20 @@ export interface InstanceStoppedEvent {
 }
 
 /**
+ * Event data for instance sleeping (idle timeout)
+ */
+export interface InstanceSleepingEvent {
+  /** Instance that went to sleep */
+  instanceId: string;
+  /** Agent running this instance */
+  agentId: string;
+  /** SDK session ID for resuming */
+  sdkSessionId?: string;
+  /** Timestamp when instance went to sleep */
+  timestamp: string;
+}
+
+/**
  * Event data for instance status change
  */
 export interface InstanceStatusChangedEvent {
@@ -172,6 +188,7 @@ export interface EventParamsMap {
   [EventMethod.INSTANCE_CREATED]: InstanceCreatedEvent;
   [EventMethod.INSTANCE_MESSAGE]: InstanceMessageEvent;
   [EventMethod.INSTANCE_STOPPED]: InstanceStoppedEvent;
+  [EventMethod.INSTANCE_SLEEPING]: InstanceSleepingEvent;
   [EventMethod.INSTANCE_STATUS_CHANGED]: InstanceStatusChangedEvent;
   [EventMethod.TASK_UPDATED]: TaskUpdatedEvent;
   [EventMethod.AGENT_CONNECTED]: AgentConnectedEvent;
@@ -206,6 +223,11 @@ export type InstanceMessageNotification = EventNotification<typeof EventMethod.I
  * Instance stopped notification
  */
 export type InstanceStoppedNotification = EventNotification<typeof EventMethod.INSTANCE_STOPPED>;
+
+/**
+ * Instance sleeping notification
+ */
+export type InstanceSleepingNotification = EventNotification<typeof EventMethod.INSTANCE_SLEEPING>;
 
 /**
  * Instance status changed notification

@@ -39,7 +39,7 @@
   const instance = $derived(storeInstance || (data.instance ? {
     id: data.instance.id,
     name: data.instance.lastPrompt?.slice(0, 50) || 'Instance',
-    status: data.instance.status as 'starting' | 'running' | 'stopping' | 'stopped' | 'error',
+    status: data.instance.status as 'starting' | 'running' | 'stopping' | 'stopped' | 'sleeping' | 'error' | 'disconnected',
     agent: '',
     agentId: data.instance.agentId,
     project: null,
@@ -157,6 +157,7 @@
     running: { variant: 'success' as const, label: 'Running', pulse: true },
     stopping: { variant: 'warning' as const, label: 'Stopping', pulse: true },
     stopped: { variant: 'default' as const, label: 'Stopped', pulse: false },
+    sleeping: { variant: 'info' as const, label: 'Sleeping', pulse: false },
     error: { variant: 'error' as const, label: 'Error', pulse: false },
     disconnected: { variant: 'warning' as const, label: 'Disconnected', pulse: false },
   };

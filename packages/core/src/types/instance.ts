@@ -1,8 +1,9 @@
 /**
  * Possible states of a Claude Code instance
  * - 'disconnected' is a derived status when agent is offline (can't confirm real status)
+ * - 'sleeping' is when instance went idle and process was closed (can resume with SDK session)
  */
-export type InstanceStatus = 'starting' | 'running' | 'stopping' | 'stopped' | 'error' | 'disconnected';
+export type InstanceStatus = 'starting' | 'running' | 'stopping' | 'stopped' | 'error' | 'disconnected' | 'sleeping';
 
 /**
  * Permission modes for Claude Code instances

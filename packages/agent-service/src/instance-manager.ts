@@ -1,15 +1,13 @@
-import { query } from '@anthropic-ai/claude-code';
 import { EventEmitter } from 'events';
 import { generateId } from '@cockpit/core';
+import {
+  PersistentSession,
+  createPersistentSession,
+  resumePersistentSession,
+  type SDKMessage,
+} from './persistent-session';
 
-/** Message type from Claude Code SDK */
-type SDKMessage = Awaited<ReturnType<typeof query>> extends AsyncIterable<infer T> ? T : never;
-import type {
-  Instance,
-  InstanceStatus,
-  SpawnInstanceData,
-  PermissionMode,
-} from '@cockpit/core';
+import type { InstanceStatus, PermissionMode } from '@cockpit/core';
 
 /**
  * Internal representation of a managed Claude Code instance
@@ -24,22 +22,24 @@ interface ManagedInstance {
   conversationHistory: ConversationMessage[];
   createdAt: Date;
   lastActivityAt: Date;
-  abortController?: AbortController;
+  /** The persistent session - stays alive for multi-turn */
+  session?: PersistentSession;
   error?: string;
   model?: string;
   permissionMode?: PermissionMode;
+  /** Idle timeout timer */
+  idleTimer?: ReturnType<typeof setTimeout>;
+  /**
+   * The last emitted session_id from a system init message.
+   * Used to dedupe repeated init messages while allowing new ones on session change.
+   */
+  lastEmittedInitSessionId?: string;
 }
 
 interface ConversationMessage {
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
-}
-
-interface UserMessage {
-  content: string;
-  resolve: (value: void) => void;
-  reject: (reason: unknown) => void;
 }
 
 export interface SpawnInstanceParams {
@@ -68,183 +68,111 @@ export interface McpServerConfig {
 export interface InstanceManagerEvents {
   'instance.started': (instanceId: string, sessionId: string) => void;
   'instance.stopped': (instanceId: string) => void;
+  'instance.sleeping': (instanceId: string, sdkSessionId?: string) => void;
   'instance.error': (instanceId: string, error: Error) => void;
   'sdk.message': (instanceId: string, message: SDKMessage) => void;
 }
 
+/** Idle timeout in milliseconds (60 minutes) */
+const IDLE_TIMEOUT_MS = 60 * 60 * 1000;
+
 /**
- * Manages Claude Code instances using the Claude Agent SDK
+ * Manages Claude Code instances using persistent sessions.
+ * Each instance stays alive for multiple send/receive cycles until stopped or idle timeout.
  */
 export class InstanceManager extends EventEmitter {
   private instances: Map<string, ManagedInstance> = new Map();
-  private inputQueues: Map<string, UserMessage[]> = new Map();
-  private processing: Map<string, boolean> = new Map();
 
   constructor() {
     super();
   }
 
   /**
-   * Spawn a new Claude Code instance
+   * Spawn a new Claude Code instance with a persistent session.
+   * The instance stays alive until explicitly stopped or idle timeout.
    */
   async spawn(params: SpawnInstanceParams): Promise<string> {
-    // Use provided instanceId from hub, or generate a new one
     const instanceId = params.instanceId || generateId();
     const sessionId = params.sessionId || generateId();
 
     const instance: ManagedInstance = {
       instanceId,
       sessionId,
-      // Use resumeSessionId if provided to continue a previous Claude conversation
       sdkSessionId: params.resumeSessionId,
       projectPath: params.projectPath,
       state: 'starting',
       conversationHistory: [],
       createdAt: new Date(),
       lastActivityAt: new Date(),
-      abortController: new AbortController(),
       model: params.model,
       permissionMode: params.permissionMode,
     };
 
     this.instances.set(instanceId, instance);
-    this.inputQueues.set(instanceId, []);
-    this.processing.set(instanceId, false);
-
-    // Start processing loop
-    this.startProcessingLoop(instanceId, params);
-
-    // If there's an initial prompt, queue it (don't await - let it process in background)
-    if (params.initialPrompt) {
-      this.sendMessage(instanceId, params.initialPrompt).catch(err => {
-        console.error(`[InstanceManager] Initial prompt failed for ${instanceId}:`, err);
-      });
-    }
-
-    return instanceId;
-  }
-
-  /**
-   * Start the processing loop for an instance
-   */
-  private async startProcessingLoop(
-    instanceId: string,
-    params: SpawnInstanceParams
-  ): Promise<void> {
-    const instance = this.instances.get(instanceId);
-    if (!instance) return;
 
     try {
-      // Mark as running
-      instance.state = 'running';
-      this.emit('instance.started', instanceId, instance.sessionId);
-
-      // Process messages in a loop
-      while (instance.state === 'running' || instance.state === 'starting') {
-        const queue = this.inputQueues.get(instanceId);
-        if (!queue || queue.length === 0) {
-          // No messages to process, wait a bit
-          await this.sleep(100);
-          continue;
-        }
-
-        // Get next message
-        const userMessage = queue.shift()!;
-        this.processing.set(instanceId, true);
-
-        try {
-          // Add to conversation history
-          instance.conversationHistory.push({
-            role: 'user',
-            content: userMessage.content,
-            timestamp: new Date(),
-          });
-
-          // Build conversation for SDK
-          const conversation = instance.conversationHistory.map(msg => ({
-            role: msg.role as 'user' | 'assistant',
-            content: msg.content,
-          }));
-
-          // Prepare MCP servers config
-          const mcpServers: Record<string, { command: string; args?: string[]; env?: Record<string, string> }> = {};
-          if (params.mcpServers) {
-            for (const server of params.mcpServers) {
-              mcpServers[server.name] = {
-                command: server.command,
-                args: server.args,
-                env: server.env,
-              };
-            }
-          }
-
-          // Call the Claude Code SDK
-          // Use resume option if we have a session ID from previous messages
-          const result = query({
-            prompt: userMessage.content,
-            options: {
-              cwd: params.projectPath,
-              permissionMode: params.permissionMode || 'default',
-              model: params.model,
-              maxTokens: params.maxTokens,
-              mcpServers: Object.keys(mcpServers).length > 0 ? mcpServers : undefined,
-              abortController: instance.abortController,
-              // Resume the session if we have a previous SDK session ID
-              resume: instance.sdkSessionId,
-            } as Parameters<typeof query>[0]['options'],
-          });
-
-          // Stream messages
-          let assistantContent = '';
-          for await (const message of result) {
-            instance.lastActivityAt = new Date();
-
-            // Capture SDK session ID from first message for session resume
-            if (!instance.sdkSessionId && 'session_id' in message && message.session_id) {
-              instance.sdkSessionId = message.session_id as string;
-            }
-
-            // Emit SDK message event for forwarding to hub
-            this.emit('sdk.message', instanceId, message);
-
-            // Collect assistant text content
-            if (message.type === 'assistant' && message.message?.content) {
-              for (const block of message.message.content) {
-                if (block.type === 'text') {
-                  assistantContent += block.text;
-                }
-              }
-            }
-          }
-
-          // Add assistant response to history
-          if (assistantContent) {
-            instance.conversationHistory.push({
-              role: 'assistant',
-              content: assistantContent,
-              timestamp: new Date(),
-            });
-          }
-
-          userMessage.resolve();
-        } catch (error) {
-          const err = error instanceof Error ? error : new Error(String(error));
-          userMessage.reject(err);
-          this.emit('instance.error', instanceId, err);
-        } finally {
-          this.processing.set(instanceId, false);
+      // Prepare MCP servers config
+      const mcpServers: Record<
+        string,
+        { command: string; args?: string[]; env?: Record<string, string> }
+      > = {};
+      if (params.mcpServers) {
+        for (const server of params.mcpServers) {
+          mcpServers[server.name] = {
+            command: server.command,
+            args: server.args,
+            env: server.env,
+          };
         }
       }
+
+      // Create the persistent session - uses V1 query() with full options
+      const session = params.resumeSessionId
+        ? resumePersistentSession(params.resumeSessionId, {
+            cwd: params.projectPath,
+            model: params.model,
+            permissionMode: params.permissionMode || 'default',
+            mcpServers: Object.keys(mcpServers).length > 0 ? mcpServers : undefined,
+            env: params.envVars,
+            systemPrompt: params.systemPrompt,
+          })
+        : createPersistentSession({
+            cwd: params.projectPath,
+            model: params.model,
+            permissionMode: params.permissionMode || 'default',
+            mcpServers: Object.keys(mcpServers).length > 0 ? mcpServers : undefined,
+            env: params.envVars,
+            systemPrompt: params.systemPrompt,
+          });
+
+      instance.session = session;
+      instance.state = 'running';
+
+      // Start idle timeout
+      this.resetIdleTimer(instanceId);
+
+      this.emit('instance.started', instanceId, instance.sessionId);
+
+      // If there's an initial prompt, send it
+      if (params.initialPrompt) {
+        this.sendMessage(instanceId, params.initialPrompt).catch((err) => {
+          console.error(`[InstanceManager] Initial prompt failed for ${instanceId}:`, err);
+        });
+      }
+
+      return instanceId;
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
       instance.state = 'error';
       instance.error = err.message;
       this.emit('instance.error', instanceId, err);
+      throw err;
     }
   }
 
   /**
-   * Send a message to an instance
+   * Send a message to an instance and stream responses.
+   * This is the key method for multi-turn conversations.
    */
   async sendMessage(instanceId: string, content: string): Promise<void> {
     const instance = this.instances.get(instanceId);
@@ -252,22 +180,136 @@ export class InstanceManager extends EventEmitter {
       throw new Error(`Instance ${instanceId} not found`);
     }
 
+    if (!instance.session) {
+      throw new Error(`Instance ${instanceId} has no session`);
+    }
+
+    // If sleeping, we need to wake it up (handled by hub calling spawn with resumeSessionId)
+    if (instance.state === 'sleeping') {
+      throw new Error(`Instance ${instanceId} is sleeping - call spawn with resumeSessionId to wake`);
+    }
+
     if (instance.state !== 'running' && instance.state !== 'starting') {
       throw new Error(`Instance ${instanceId} is not running (state: ${instance.state})`);
     }
 
-    const queue = this.inputQueues.get(instanceId);
-    if (!queue) {
-      throw new Error(`No input queue for instance ${instanceId}`);
-    }
-
-    return new Promise((resolve, reject) => {
-      queue.push({ content, resolve, reject });
+    // Add to conversation history
+    instance.conversationHistory.push({
+      role: 'user',
+      content,
+      timestamp: new Date(),
     });
+
+    instance.lastActivityAt = new Date();
+    this.resetIdleTimer(instanceId);
+
+    try {
+      // Send the message
+      await instance.session.send(content);
+
+      // Receive responses until result
+      let assistantContent = '';
+
+      for await (const message of instance.session.receive()) {
+        instance.lastActivityAt = new Date();
+        this.resetIdleTimer(instanceId);
+
+        // Handle system init messages specially - dedupe repeated inits
+        if (
+          message.type === 'system' &&
+          message.subtype === 'init' &&
+          'session_id' in message &&
+          message.session_id
+        ) {
+          const initSessionId = message.session_id as string;
+
+          // Always capture the SDK session ID for resume functionality
+          instance.sdkSessionId = initSessionId;
+
+          // Only emit init if it's a new session (first time or session changed)
+          if (instance.lastEmittedInitSessionId === initSessionId) {
+            // Skip duplicate init - same session, already emitted
+            continue;
+          }
+
+          // New session - emit and track
+          instance.lastEmittedInitSessionId = initSessionId;
+        }
+
+        // Emit SDK message event for forwarding to hub
+        this.emit('sdk.message', instanceId, message);
+
+        // Collect assistant text content
+        if (message.type === 'assistant' && message.message?.content) {
+          for (const block of message.message.content) {
+            if (block.type === 'text') {
+              assistantContent += block.text;
+            }
+          }
+        }
+
+        // On result message, save assistant response
+        if (message.type === 'result') {
+          if (assistantContent) {
+            instance.conversationHistory.push({
+              role: 'assistant',
+              content: assistantContent,
+              timestamp: new Date(),
+            });
+          }
+          // Result received - turn complete, but session still alive!
+          break;
+        }
+      }
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      if (err.name !== 'AbortError') {
+        instance.state = 'error';
+        instance.error = err.message;
+        this.emit('instance.error', instanceId, err);
+      }
+      throw err;
+    }
   }
 
   /**
-   * Stop an instance
+   * Reset the idle timer. After IDLE_TIMEOUT_MS of inactivity, the instance goes to sleep.
+   */
+  private resetIdleTimer(instanceId: string): void {
+    const instance = this.instances.get(instanceId);
+    if (!instance) return;
+
+    // Clear existing timer
+    if (instance.idleTimer) {
+      clearTimeout(instance.idleTimer);
+    }
+
+    // Set new timer
+    instance.idleTimer = setTimeout(() => {
+      this.sleep(instanceId);
+    }, IDLE_TIMEOUT_MS);
+  }
+
+  /**
+   * Put an instance to sleep due to idle timeout.
+   * The SDK session ID is preserved for later resume.
+   */
+  private async sleep(instanceId: string): Promise<void> {
+    const instance = this.instances.get(instanceId);
+    if (!instance || instance.state !== 'running') return;
+
+    console.log(`[InstanceManager] Instance ${instanceId} going to sleep due to idle timeout`);
+
+    // Close the session - this ends the query
+    instance.session?.close();
+
+    // Update state
+    instance.state = 'sleeping' as InstanceStatus;
+    this.emit('instance.sleeping', instanceId, instance.sdkSessionId);
+  }
+
+  /**
+   * Stop an instance explicitly.
    */
   async stop(instanceId: string): Promise<void> {
     const instance = this.instances.get(instanceId);
@@ -275,21 +317,15 @@ export class InstanceManager extends EventEmitter {
       throw new Error(`Instance ${instanceId} not found`);
     }
 
+    // Clear idle timer
+    if (instance.idleTimer) {
+      clearTimeout(instance.idleTimer);
+    }
+
     instance.state = 'stopping';
 
-    // Abort any ongoing operations
-    if (instance.abortController) {
-      instance.abortController.abort();
-    }
-
-    // Reject any pending messages
-    const queue = this.inputQueues.get(instanceId);
-    if (queue) {
-      for (const msg of queue) {
-        msg.reject(new Error('Instance stopped'));
-      }
-      queue.length = 0;
-    }
+    // Close the session
+    instance.session?.close();
 
     instance.state = 'stopped';
     this.emit('instance.stopped', instanceId);
@@ -305,13 +341,13 @@ export class InstanceManager extends EventEmitter {
     return {
       instanceId: instance.instanceId,
       sessionId: instance.sessionId,
+      sdkSessionId: instance.sdkSessionId,
       state: instance.state,
       projectPath: instance.projectPath,
       createdAt: instance.createdAt,
       lastActivityAt: instance.lastActivityAt,
       error: instance.error,
       messageCount: instance.conversationHistory.length,
-      isProcessing: this.processing.get(instanceId) || false,
     };
   }
 
@@ -348,9 +384,12 @@ export class InstanceManager extends EventEmitter {
       return false;
     }
 
+    // Clear idle timer
+    if (instance.idleTimer) {
+      clearTimeout(instance.idleTimer);
+    }
+
     this.instances.delete(instanceId);
-    this.inputQueues.delete(instanceId);
-    this.processing.delete(instanceId);
     return true;
   }
 
@@ -367,25 +406,18 @@ export class InstanceManager extends EventEmitter {
     }
     await Promise.allSettled(stopPromises);
   }
-
-  /**
-   * Helper to sleep
-   */
-  private sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  }
 }
 
 export interface InstanceStatusInfo {
   instanceId: string;
   sessionId: string;
+  sdkSessionId?: string;
   state: InstanceStatus;
   projectPath: string;
   createdAt: Date;
   lastActivityAt: Date;
   error?: string;
   messageCount: number;
-  isProcessing: boolean;
 }
 
 export default InstanceManager;

@@ -53,6 +53,7 @@ export class InstanceTracker {
     const newInstance = {
       id,
       sessionId: null,
+      sdkSessionId: null,
       projectId: data.projectId ?? null,
       agentId: data.agentId,
       cwd: data.cwd,
@@ -140,6 +141,15 @@ export class InstanceTracker {
     return this.update(id, {
       status: 'stopped',
       stoppedAt: new Date(),
+    });
+  }
+
+  /**
+   * Mark an instance as sleeping (idle timeout)
+   */
+  async markSleeping(id: string): Promise<Instance | null> {
+    return this.update(id, {
+      status: 'sleeping',
     });
   }
 
@@ -377,11 +387,13 @@ export class InstanceTracker {
    * Delete all messages for an instance
    */
   async deleteMessages(instanceId: string): Promise<number> {
-    const result = await this.db
+    // Count messages before deleting to return count
+    const count = await this.countMessages(instanceId);
+    await this.db
       .delete(messages)
       .where(eq(messages.instanceId, instanceId));
 
-    return result.changes ?? 0;
+    return count;
   }
 
   /**

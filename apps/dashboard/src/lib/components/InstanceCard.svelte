@@ -6,7 +6,7 @@
   interface Instance {
     id: string;
     name: string;
-    status: 'starting' | 'running' | 'stopping' | 'stopped' | 'error';
+    status: 'starting' | 'running' | 'stopping' | 'stopped' | 'error' | 'disconnected' | 'sleeping';
     agent: string;
     project: string | null;
     cwd?: string;
@@ -26,6 +26,8 @@
     running: { variant: 'success' as const, label: 'Running', pulse: true },
     stopping: { variant: 'warning' as const, label: 'Stopping', pulse: true },
     stopped: { variant: 'default' as const, label: 'Stopped', pulse: false },
+    sleeping: { variant: 'info' as const, label: 'Sleeping', pulse: false },
+    disconnected: { variant: 'warning' as const, label: 'Disconnected', pulse: false },
     error: { variant: 'error' as const, label: 'Error', pulse: false },
   };
 
