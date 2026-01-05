@@ -52,8 +52,8 @@
       <p class="page-description">Organize your Claude Code instances by project</p>
     </div>
     <Button variant="default" onclick={() => showNewProjectModal = true}>
-      {#snippet icon()}<Plus class="w-4 h-4" />{/snippet}
-      {#snippet children()}New Project{/snippet}
+      <Plus class="size-4" />
+      New Project
     </Button>
   </header>
 
