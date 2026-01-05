@@ -66,9 +66,7 @@
   {#if action}
     <div class="mt-4">
       <Button variant="default" size="sm" onclick={action.onClick}>
-        {#snippet children()}
-          {action.label}
-        {/snippet}
+        {action.label}
       </Button>
     </div>
   {/if}

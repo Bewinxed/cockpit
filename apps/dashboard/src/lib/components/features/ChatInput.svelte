@@ -196,19 +196,14 @@
   <Button
     type="submit"
     variant="default"
-    size="md"
     disabled={disabled || loading || !message.trim()}
     class="self-end"
   >
-    {#snippet icon()}
-      {#if loading}
-        <Loader2 class="w-4 h-4 animate-spin" />
-      {:else}
-        <Send class="w-4 h-4" />
-      {/if}
-    {/snippet}
-    {#snippet children()}
-      Send
-    {/snippet}
+    {#if loading}
+      <Loader2 class="size-4 animate-spin" />
+    {:else}
+      <Send class="size-4" />
+    {/if}
+    Send
   </Button>
 </form>
