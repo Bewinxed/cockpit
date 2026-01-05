@@ -37,6 +37,11 @@ export {
   type CommandsListParams,
   type CommandsListResult,
   type AvailableCommand,
+  type ModelsListParams,
+  type ModelsListResult,
+  type ModelsSetParams,
+  type ModelsSetResult,
+  type ModelInfo,
   type SpawnInstanceResult,
   type StopInstanceResult,
   type SendMessageResult,
@@ -101,6 +106,8 @@ export const PROTOCOL_METHODS = {
   AGENT_HEARTBEAT: EventMethod.AGENT_HEARTBEAT,
   FILESYSTEM_LIST: CommandMethod.FILESYSTEM_LIST,
   COMMANDS_LIST: CommandMethod.COMMANDS_LIST,
+  MODELS_LIST: CommandMethod.MODELS_LIST,
+  MODELS_SET: CommandMethod.MODELS_SET,
 
   // Events (Agent -> Hub)
   INSTANCE_CREATED: EventMethod.INSTANCE_CREATED,

@@ -6,6 +6,27 @@ Make slash commands functional in the dashboard, matching CLI behavior. This inc
 
 ## Latest Progress (2026-01-05)
 
+**MODEL SWITCHING IMPLEMENTED:**
+
+The `/model` command now works as an inline UI form (like `/login`):
+- ✅ Protocol methods: `models.list` and `models.set` added to core package
+- ✅ Agent handlers: `handleModelsList` and `handleModelsSet` wired to daemon
+- ✅ Hub API endpoints: `GET /instances/:id/models` and `PATCH /instances/:id/models`
+- ✅ Dashboard UI: Inline model picker form in chat messages (not a modal)
+- ✅ Keyboard navigation: Arrow up/down to select, Enter to apply, Escape to cancel
+
+**How it works:**
+1. User types `/model` in chat input
+2. System adds a `model_picker` message with loading state
+3. Frontend fetches available models from `/api/instances/:id/models`
+4. User selects a model with keyboard or click
+5. Frontend calls `PATCH /api/instances/:id/models` to apply
+6. SDK's `setModel()` method is called via the agent
+
+---
+
+**PREVIOUS FIXES:**
+
 **CRITICAL BUGS FOUND & FIXED:**
 
 1. **Credentials format mismatch**
@@ -37,6 +58,36 @@ Make slash commands functional in the dashboard, matching CLI behavior. This inc
    - OAuth tokens are for Claude Code sessions only
    - `Bearer $TOKEN` to `/v1/messages` returns "OAuth authentication is currently not supported"
    - This is expected - the token is designed for Claude Code, not direct API calls
+
+## Slash Commands Status
+
+| Command | Description | Implementation | Status |
+|---------|-------------|----------------|--------|
+| `/help` | Get help with using Claude Code | Pass to SDK | ✅ Works |
+| `/clear` | Clear conversation history | Pass to SDK | ✅ Works |
+| `/compact` | Clear history and compact context | Pass to SDK | ⏳ Untested |
+| `/config` | View or update configuration | Pass to SDK | ⏳ Untested |
+| `/cost` | Show token usage and cost | Pass to SDK | ⏳ Untested |
+| `/doctor` | Check Claude Code health | Pass to SDK | ⏳ Untested |
+| `/init` | Initialize project with CLAUDE.md | Pass to SDK | ⏳ Untested |
+| `/login` | Switch Claude accounts | **Client-side** (OAuth UI) | ✅ Implemented |
+| `/logout` | Sign out of your account | **Client-side** (clear creds) | ⏳ TODO |
+| `/memory` | Edit CLAUDE.md memory file | Pass to SDK | ⏳ Untested |
+| `/model` | Switch AI model | **Client-side** (inline picker) | ✅ Implemented |
+| `/permissions` | View or update permissions | Pass to SDK | ⏳ Untested |
+| `/pr-comments` | View PR comments | Pass to SDK | ⏳ Untested |
+| `/review` | Request code review | Pass to SDK | ⏳ Untested |
+| `/status` | View system status | Pass to SDK | ⏳ Untested |
+| `/terminal-setup` | Install shell integration | Pass to SDK | ⏳ Untested |
+| `/vim` | Toggle vim mode | Pass to SDK | ⏳ Untested |
+
+**Legend:**
+- ✅ Works - Tested and working
+- ⏳ Untested - Should work (passed to SDK) but needs verification
+- 🔧 In Progress - Currently being implemented
+- ❌ Broken - Known issues
+
+---
 
 ## Stop Condition
 

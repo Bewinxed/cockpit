@@ -755,5 +755,139 @@ export function createInstanceRoutes(db: Db) {
           prompt: t.Optional(t.String()),
         })),
       }
+    )
+
+    // Get available models for an instance
+    .get(
+      '/:id/models',
+      async ({ params, set }) => {
+        const instance = await tracker.get(params.id);
+
+        if (!instance) {
+          set.status = 404;
+          return {
+            success: false,
+            error: 'Instance not found',
+          };
+        }
+
+        // Check if agent is online
+        const agent = agentRegistry.get(instance.agentId);
+        if (!agent || agent.status !== 'online') {
+          set.status = 503;
+          return {
+            success: false,
+            error: 'Agent is not online',
+          };
+        }
+
+        // Check if instance is running
+        if (instance.status !== 'running') {
+          set.status = 400;
+          return {
+            success: false,
+            error: `Instance is not running (status: ${instance.status})`,
+          };
+        }
+
+        // Request models from agent
+        const response = await agentRegistry.sendToAgent(
+          instance.agentId,
+          CommandMethod.MODELS_LIST,
+          {
+            instanceId: params.id,
+          }
+        );
+
+        if (response.error) {
+          set.status = 500;
+          return {
+            success: false,
+            error: getErrorMessage(response.error),
+          };
+        }
+
+        return {
+          success: true,
+          data: response.result,
+        };
+      },
+      {
+        params: t.Object({
+          id: t.String(),
+        }),
+      }
+    )
+
+    // Set model for an instance
+    .patch(
+      '/:id/models',
+      async ({ params, body, set }) => {
+        const instance = await tracker.get(params.id);
+
+        if (!instance) {
+          set.status = 404;
+          return {
+            success: false,
+            error: 'Instance not found',
+          };
+        }
+
+        // Check if agent is online
+        const agent = agentRegistry.get(instance.agentId);
+        if (!agent || agent.status !== 'online') {
+          set.status = 503;
+          return {
+            success: false,
+            error: 'Agent is not online',
+          };
+        }
+
+        // Check if instance is running
+        if (instance.status !== 'running') {
+          set.status = 400;
+          return {
+            success: false,
+            error: `Instance is not running (status: ${instance.status})`,
+          };
+        }
+
+        // Send model change request to agent
+        const response = await agentRegistry.sendToAgent(
+          instance.agentId,
+          CommandMethod.MODELS_SET,
+          {
+            instanceId: params.id,
+            model: body.model,
+          }
+        );
+
+        if (response.error) {
+          set.status = 500;
+          return {
+            success: false,
+            error: getErrorMessage(response.error),
+          };
+        }
+
+        // Broadcast model changed event
+        broadcast.broadcast('instance:model-changed', {
+          instanceId: params.id,
+          model: body.model,
+        });
+
+        return {
+          success: true,
+          data: response.result,
+        };
+      },
+      {
+        params: t.Object({
+          id: t.String(),
+        }),
+        body: t.Object({
+          model: t.String(),
+        }),
+      }
     );
 }

@@ -408,6 +408,32 @@ export class InstanceManager extends EventEmitter {
   }
 
   /**
+   * Get the persistent session for an instance (for model operations etc)
+   */
+  getSession(instanceId: string): PersistentSession | undefined {
+    const instance = this.instances.get(instanceId);
+    return instance?.session;
+  }
+
+  /**
+   * Get the current model for an instance
+   */
+  getModel(instanceId: string): string | undefined {
+    const instance = this.instances.get(instanceId);
+    return instance?.model;
+  }
+
+  /**
+   * Set the model for an instance (tracking only, actual change via session.setModel)
+   */
+  setModel(instanceId: string, model: string): void {
+    const instance = this.instances.get(instanceId);
+    if (instance) {
+      instance.model = model;
+    }
+  }
+
+  /**
    * Remove a stopped instance from memory
    */
   cleanup(instanceId: string): boolean {

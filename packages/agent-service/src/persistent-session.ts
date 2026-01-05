@@ -238,6 +238,26 @@ export class PersistentSession {
   }
 
   /**
+   * Get the list of available models from the SDK.
+   */
+  async supportedModels(): Promise<Array<{ value: string; displayName: string; description: string }>> {
+    if (this._closed) {
+      throw new Error('Cannot get models from closed session');
+    }
+    return this.queryInstance.supportedModels();
+  }
+
+  /**
+   * Set the model for subsequent responses.
+   */
+  async setModel(model?: string): Promise<void> {
+    if (this._closed) {
+      throw new Error('Cannot set model on closed session');
+    }
+    return this.queryInstance.setModel(model);
+  }
+
+  /**
    * Async disposal support
    */
   async [Symbol.asyncDispose](): Promise<void> {

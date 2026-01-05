@@ -21,6 +21,10 @@ export const CommandMethod = {
   FILESYSTEM_LIST: 'filesystem.list',
   /** List available commands for an instance */
   COMMANDS_LIST: 'commands.list',
+  /** List available models for an instance */
+  MODELS_LIST: 'models.list',
+  /** Set model for an instance */
+  MODELS_SET: 'models.set',
 } as const;
 
 export type CommandMethodValue = (typeof CommandMethod)[keyof typeof CommandMethod];
@@ -113,6 +117,24 @@ export interface CommandsListParams {
   instanceId: string;
   /** Working directory to discover commands from */
   cwd: string;
+}
+
+/**
+ * Parameters for listing available models
+ */
+export interface ModelsListParams {
+  /** Instance ID to get models for */
+  instanceId: string;
+}
+
+/**
+ * Parameters for setting the model on an instance
+ */
+export interface ModelsSetParams {
+  /** Instance ID to set model for */
+  instanceId: string;
+  /** Model identifier to set (e.g., 'claude-sonnet-4-20250514') */
+  model: string;
 }
 
 /**
@@ -243,6 +265,38 @@ export interface CommandsListResult {
   commands: AvailableCommand[];
 }
 
+/**
+ * Information about an available model
+ */
+export interface ModelInfo {
+  /** Model identifier to use in API calls */
+  value: string;
+  /** Human-readable display name */
+  displayName: string;
+  /** Description of the model's capabilities */
+  description: string;
+}
+
+/**
+ * Result of models list
+ */
+export interface ModelsListResult {
+  /** List of available models */
+  models: ModelInfo[];
+  /** Currently selected model */
+  currentModel?: string;
+}
+
+/**
+ * Result of setting a model
+ */
+export interface ModelsSetResult {
+  /** Whether the model was set successfully */
+  success: boolean;
+  /** The model that was set */
+  model: string;
+}
+
 // ============================================================================
 // Command Type Mapping
 // ============================================================================
@@ -259,6 +313,8 @@ export interface CommandParamsMap {
   [CommandMethod.AGENT_PING]: AgentPingParams;
   [CommandMethod.FILESYSTEM_LIST]: FilesystemListParams;
   [CommandMethod.COMMANDS_LIST]: CommandsListParams;
+  [CommandMethod.MODELS_LIST]: ModelsListParams;
+  [CommandMethod.MODELS_SET]: ModelsSetParams;
 }
 
 /**
@@ -273,6 +329,8 @@ export interface CommandResultMap {
   [CommandMethod.AGENT_PING]: AgentPingResult;
   [CommandMethod.FILESYSTEM_LIST]: FilesystemListResult;
   [CommandMethod.COMMANDS_LIST]: CommandsListResult;
+  [CommandMethod.MODELS_LIST]: ModelsListResult;
+  [CommandMethod.MODELS_SET]: ModelsSetResult;
 }
 
 // ============================================================================

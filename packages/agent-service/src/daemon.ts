@@ -22,6 +22,8 @@ import {
   handleInstanceStatus,
   handleFilesystemList,
   handleCommandsList,
+  handleModelsList,
+  handleModelsSet,
 } from './handlers/index.js';
 
 export interface AgentDaemonOptions {
@@ -356,6 +358,14 @@ export class AgentDaemon extends EventEmitter {
 
       case PROTOCOL_METHODS.COMMANDS_LIST:
         await handleCommandsList(request, this.instanceManager, this.hubClient);
+        break;
+
+      case PROTOCOL_METHODS.MODELS_LIST:
+        await handleModelsList(request, this.instanceManager, this.hubClient);
+        break;
+
+      case PROTOCOL_METHODS.MODELS_SET:
+        await handleModelsSet(request, this.instanceManager, this.hubClient);
         break;
 
       default:

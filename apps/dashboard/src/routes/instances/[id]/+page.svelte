@@ -2,7 +2,7 @@
   import { page } from '$app/state';
   import { goto } from '$app/navigation';
   import { tick, onMount } from 'svelte';
-  import { instances, instanceMessages, agents, addMessage, getStreamingState, getInstanceStatus, type Message } from '$lib/stores/realtime';
+  import { instances, instanceMessages, agents, addMessage, removeMessage, getStreamingState, getInstanceStatus, type Message } from '$lib/stores/realtime';
   import { sendMessage, stopInstance, resumeInstance, interruptInstance } from '$lib/actions';
   import { api } from '$lib/api';
   import { Button, Badge, EmptyState } from '$lib/components/ui';
@@ -170,10 +170,284 @@
 
   const status = $derived(instance ? statusConfig[instance.status] : null);
 
+  // Client-side commands that need special handling
+  const CLIENT_COMMANDS = ['/login', '/logout', '/model'] as const;
+
+  function isClientCommand(msg: string): (typeof CLIENT_COMMANDS)[number] | null {
+    const trimmed = msg.trim().toLowerCase();
+    for (const cmd of CLIENT_COMMANDS) {
+      if (trimmed === cmd || trimmed.startsWith(cmd + ' ')) {
+        return cmd;
+      }
+    }
+    return null;
+  }
+
+  // Model state
+  let currentModel = $state<string | undefined>(instance?.model);
+
+  // Track pending OAuth state (verifier is stored server-side)
+  let pendingOAuthState = $state<string | null>(null);
+  let pendingAuthUrl = $state<string | null>(null);
+
+  async function handleClientCommand(command: (typeof CLIENT_COMMANDS)[number]) {
+    if (command === '/login') {
+      try {
+        // Call server to start OAuth flow - it generates PKCE and returns auth URL
+        const { data, error: startError } = await api.api.auth.oauth.start.post();
+
+        if (startError || !data?.success) {
+          throw new Error('Failed to start OAuth flow');
+        }
+
+        // Store state for later verification
+        pendingOAuthState = data.data.state;
+        pendingAuthUrl = data.data.authUrl;
+
+        // Add login prompt message with inline form
+        addMessage(instanceId, {
+          type: 'system',
+          content: 'Login to Claude',
+          timestamp: new Date(),
+          metadata: {
+            subtype: 'login_prompt',
+            authUrl: data.data.authUrl,
+            oauthState: data.data.state,
+          },
+        });
+      } catch (err) {
+        addMessage(instanceId, {
+          type: 'system',
+          content: `Login failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
+          timestamp: new Date(),
+        });
+      }
+    } else if (command === '/logout') {
+      try {
+        await api.api.auth.logout.delete();
+        addMessage(instanceId, {
+          type: 'system',
+          content: 'Logged out successfully',
+          timestamp: new Date(),
+        });
+      } catch (err) {
+        addMessage(instanceId, {
+          type: 'system',
+          content: `Logout failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
+          timestamp: new Date(),
+        });
+      }
+    } else if (command === '/model') {
+      // Show inline model picker
+      if (!isActive) {
+        addMessage(instanceId, {
+          type: 'system',
+          content: 'Cannot change model: Instance is not running',
+          timestamp: new Date(),
+        });
+        return;
+      }
+
+      // Add loading message first
+      const messageIndex = addMessage(instanceId, {
+        type: 'system',
+        content: 'Switch Model',
+        timestamp: new Date(),
+        metadata: {
+          subtype: 'model_picker',
+          loading: true,
+          models: [],
+          currentModel: currentModel,
+        },
+      });
+
+      // Track this as active model picker
+      pendingModelPickerIndex = currentMessages.length - 1;
+
+      // Fetch models
+      try {
+        const response = await fetch(`/api/instances/${instanceId}/models`);
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+          throw new Error(data.error || 'Failed to fetch models');
+        }
+
+        // Update the message with models
+        updateMessageMetadata(instanceId, pendingModelPickerIndex!, {
+          loading: false,
+          models: data.data.models || [],
+          currentModel: data.data.currentModel,
+        });
+        currentModel = data.data.currentModel;
+      } catch (err) {
+        // Update message with error
+        updateMessageMetadata(instanceId, pendingModelPickerIndex!, {
+          loading: false,
+          error: err instanceof Error ? err.message : 'Failed to fetch models',
+        });
+      }
+    }
+  }
+
+  // Track pending model picker message index
+  let pendingModelPickerIndex = $state<number | null>(null);
+
+  // Helper to update message metadata
+  function updateMessageMetadata(instId: string, index: number, metadata: Record<string, unknown>) {
+    const messages = $instanceMessages.get(instId);
+    if (messages && messages[index]) {
+      messages[index] = {
+        ...messages[index],
+        metadata: {
+          ...messages[index].metadata,
+          ...metadata,
+        },
+      };
+      // Trigger reactivity by updating the store
+      $instanceMessages.set(instId, [...messages]);
+    }
+  }
+
+  async function handleModelSelect(model: string): Promise<void> {
+    const response = await fetch(`/api/instances/${instanceId}/models`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || !data.success) {
+      throw new Error(data.error || 'Failed to set model');
+    }
+
+    // Update current model
+    currentModel = model;
+
+    // Mark model picker as complete
+    if (pendingModelPickerIndex !== null) {
+      updateMessageMetadata(instanceId, pendingModelPickerIndex, {
+        selectedModel: model,
+      });
+    }
+    pendingModelPickerIndex = null;
+
+    // Add success message
+    addMessage(instanceId, {
+      type: 'system',
+      content: `Model changed to ${model}`,
+      timestamp: new Date(),
+    });
+  }
+
+  function handleModelCancel() {
+    if (pendingModelPickerIndex !== null) {
+      // Just mark as inactive, don't delete
+      pendingModelPickerIndex = null;
+    }
+  }
+
+  // Check if message looks like an OAuth code (code#state format)
+  function isOAuthCode(msg: string): boolean {
+    const trimmed = msg.trim();
+    return trimmed.includes('#') && trimmed.length > 20 && !trimmed.startsWith('/');
+  }
+
+  // Handle login form submission from inline ChatMessage
+  async function handleLoginSubmit(code: string): Promise<void> {
+    if (!pendingOAuthState) {
+      throw new Error('No pending login. Please run /login first.');
+    }
+
+    // Send to server for token exchange (server has the PKCE verifier)
+    const { data, error: callbackError } = await api.api.auth.oauth.callback.post({
+      code: code.trim(),
+      state: pendingOAuthState,
+    });
+
+    if (callbackError || !data?.success) {
+      const errorMsg = callbackError?.message || (data as { error?: string })?.error || 'Token exchange failed';
+      throw new Error(errorMsg);
+    }
+
+    // Clear pending state
+    pendingOAuthState = null;
+    pendingAuthUrl = null;
+
+    // Add success message
+    addMessage(instanceId, {
+      type: 'system',
+      content: 'Login successful! You are now authenticated.',
+      timestamp: new Date(),
+    });
+  }
+
+  // Handle login cancellation
+  function handleLoginCancel() {
+    pendingOAuthState = null;
+    pendingAuthUrl = null;
+    addMessage(instanceId, {
+      type: 'system',
+      content: 'Login cancelled.',
+      timestamp: new Date(),
+    });
+  }
+
+  async function handleOAuthCode(codeWithState: string) {
+    if (!pendingOAuthState) {
+      addMessage(instanceId, {
+        type: 'system',
+        content: 'No pending login. Please run /login first.',
+        timestamp: new Date(),
+      });
+      return;
+    }
+
+    addMessage(instanceId, {
+      type: 'system',
+      content: 'Exchanging code for tokens...',
+      timestamp: new Date(),
+    });
+
+    try {
+      await handleLoginSubmit(codeWithState);
+    } catch (err) {
+      addMessage(instanceId, {
+        type: 'system',
+        content: `Login failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
+        timestamp: new Date(),
+      });
+    }
+  }
+
   async function handleSendMessage(message: string) {
     if (!instance || sending || restarting) return;
 
     error = null;
+
+    // Check for OAuth code paste (code#state format)
+    if (isOAuthCode(message)) {
+      addMessage(instanceId, {
+        type: 'user',
+        content: message,
+        timestamp: new Date(),
+      });
+      await handleOAuthCode(message);
+      return;
+    }
+
+    // Check for client-side commands first
+    const clientCmd = isClientCommand(message);
+    if (clientCmd) {
+      addMessage(instanceId, {
+        type: 'user',
+        content: message,
+        timestamp: new Date(),
+      });
+      await handleClientCommand(clientCmd);
+      return;
+    }
 
     // If instance is not running, resume it (re-spawn with same ID)
     if (!isActive) {
@@ -224,7 +498,35 @@
     try {
       const result = await sendMessage(instanceId, message);
       if (!result.success) {
-        error = result.error || 'Failed to send message';
+        // If instance not found, try to resume it
+        if (result.error?.toLowerCase().includes('not found')) {
+          sending = false;
+          restarting = true;
+
+          try {
+            const resumeResult = await resumeInstance(instanceId, message);
+            if (!resumeResult.success) {
+              // If resume also fails with not found, the instance doesn't exist at all
+              if (resumeResult.error?.toLowerCase().includes('not found')) {
+                error = 'This session no longer exists. Please start a new conversation.';
+              } else {
+                error = resumeResult.error || 'Failed to resume session';
+              }
+            } else {
+              addMessage(instanceId, {
+                type: 'system',
+                content: 'Session resumed',
+                timestamp: new Date(),
+              });
+            }
+          } catch (resumeErr) {
+            error = resumeErr instanceof Error ? resumeErr.message : 'Failed to resume';
+          } finally {
+            restarting = false;
+          }
+        } else {
+          error = result.error || 'Failed to send message';
+        }
       }
     } catch (err) {
       error = err instanceof Error ? err.message : 'Unknown error';
@@ -429,6 +731,13 @@
           <ChatMessage
             {message}
             showTimestamp={i === 0 || currentMessages[i - 1]?.type !== message.type}
+            onLoginSubmit={handleLoginSubmit}
+            onLoginCancel={handleLoginCancel}
+            onModelSelect={handleModelSelect}
+            onModelCancel={handleModelCancel}
+            onDismissMessage={() => removeMessage(instanceId, i)}
+            isLoginActive={message.metadata?.subtype === 'login_prompt' && pendingOAuthState === message.metadata?.oauthState}
+            isModelPickerActive={message.metadata?.subtype === 'model_picker' && pendingModelPickerIndex === i}
           />
         {/each}
 
@@ -471,6 +780,7 @@
           : 'Type a message... (⌘↵ to send, / for commands)'}
       {commands}
     />
+
   {:else}
     <!-- Instance not found -->
     <div class="flex-1 flex items-center justify-center bg-bg">
