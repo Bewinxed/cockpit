@@ -41,9 +41,9 @@
   const colors = $derived(colorClasses[color]);
 </script>
 
-<div class="card p-5 hover-lift group">
+<div class="bg-paper rounded-lg p-5 group" style="border: 1px dotted var(--color-border-dotted);">
   <div class="flex items-start justify-between mb-4">
-    <div class="flex items-center justify-center w-11 h-11 rounded-xl {colors.bg} transition-transform duration-200 group-hover:scale-110">
+    <div class="flex items-center justify-center w-11 h-11 rounded-xl {colors.bg}">
       <Icon class="w-5 h-5 {colors.icon}" />
     </div>
     {#if trend}

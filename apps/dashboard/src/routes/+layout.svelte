@@ -145,8 +145,8 @@
   </aside>
 
   <!-- Main content -->
-  <main class="flex-1 ml-60 min-h-screen">
-    <div class="p-6">
+  <main class="flex-1 ml-60 min-h-screen bg-bg">
+    <div class="px-12 py-8 max-w-6xl">
       {@render children()}
     </div>
   </main>

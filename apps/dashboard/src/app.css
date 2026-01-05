@@ -1,5 +1,5 @@
 @import "tailwindcss";
-@import url('https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;0,6..72,700;1,6..72,400&family=Inter:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600;8..60,700&family=Inter:wght@400;500;600&display=swap');
 
 /* Configure dark mode variant */
 @variant dark (:root.dark &);
@@ -65,11 +65,29 @@
   --color-purple: #6940a5;
   --color-purple-light: rgba(103, 36, 222, 0.12);
 
+  /* Foreground colors for shadcn compatibility */
+  --color-primary-foreground: #ffffff;
+  --color-secondary-foreground: #37352f;
+  --color-destructive: #c4554d;
+  --color-destructive-foreground: #ffffff;
+  --color-accent: rgba(55, 53, 47, 0.04);
+  --color-accent-foreground: #37352f;
+  --color-muted: #f7f6f3;
+  --color-muted-foreground: #6b6b6b;
+  --color-background: #fbfbfa;
+  --color-foreground: #37352f;
+  --color-card: #ffffff;
+  --color-card-foreground: #37352f;
+  --color-popover: #ffffff;
+  --color-popover-foreground: #37352f;
+  --color-input: rgba(55, 53, 47, 0.09);
+  --color-ring: rgba(55, 53, 47, 0.2);
+
   /* ═══════════════════════════════════════════════════════════════
      TYPOGRAPHY - Dual-font system: Serif for headlines, Sans for UI
      ═══════════════════════════════════════════════════════════════ */
 
-  --font-serif: 'Newsreader', Georgia, 'Times New Roman', serif;
+  --font-serif: 'Source Serif 4', Georgia, 'Times New Roman', serif;
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
 
@@ -157,9 +175,11 @@
   --color-primary: #ebebeb;
   --color-primary-hover: #ffffff;
   --color-primary-light: rgba(255, 255, 255, 0.1);
+  --color-primary-foreground: #191919;
 
   --color-secondary: #4a9eff;
   --color-secondary-light: rgba(74, 158, 255, 0.15);
+  --color-secondary-foreground: #ebebeb;
 
   /* Brighter semantic colors for dark */
   --color-success: #3aa99f;
@@ -170,9 +190,25 @@
 
   --color-error: #e06c64;
   --color-error-light: rgba(224, 108, 100, 0.2);
+  --color-destructive: #e06c64;
+  --color-destructive-foreground: #ffffff;
 
   --color-info: #4a9eff;
   --color-info-light: rgba(74, 158, 255, 0.2);
+
+  /* Dark mode foreground colors */
+  --color-accent: rgba(255, 255, 255, 0.08);
+  --color-accent-foreground: #ebebeb;
+  --color-muted: #212121;
+  --color-muted-foreground: #9b9b9b;
+  --color-background: #191919;
+  --color-foreground: #ebebeb;
+  --color-card: #252525;
+  --color-card-foreground: #ebebeb;
+  --color-popover: #252525;
+  --color-popover-foreground: #ebebeb;
+  --color-input: rgba(255, 255, 255, 0.1);
+  --color-ring: rgba(255, 255, 255, 0.2);
 }
 
 /* ═══════════════════════════════════════════════════════════════
