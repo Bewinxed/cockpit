@@ -112,6 +112,7 @@
       "name": "@cockpit/hub-server",
       "version": "0.0.1",
       "dependencies": {
+        "@cockpit/auth": "workspace:*",
         "@cockpit/core": "workspace:*",
         "@cockpit/db": "workspace:*",
         "@elysiajs/cors": "^1.3.0",

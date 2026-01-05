@@ -6,6 +6,7 @@ import {
   createInstanceRoutes,
   createProjectRoutes,
   createAgentRoutes,
+  createAuthRoutes,
   createWebsocketRoutes,
   createEventRoutes,
   createInstanceEventRoutes,
@@ -94,6 +95,7 @@ export function createHubServer(options: HubOptions) {
       .use(createInstanceRoutes(db))
       .use(createProjectRoutes(db))
       .use(createAgentRoutes(db))
+      .use(createAuthRoutes(db))
       .use(createEventRoutes())
       .use(createInstanceEventRoutes())
     )

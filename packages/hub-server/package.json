@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@cockpit/auth": "workspace:*",
     "@cockpit/core": "workspace:*",
     "@cockpit/db": "workspace:*",
     "@elysiajs/cors": "^1.3.0",

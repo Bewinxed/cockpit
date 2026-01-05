@@ -64,7 +64,7 @@ export interface Message {
     toolResult?: unknown;
     toolStatus?: 'pending' | 'success' | 'error';
     // For system messages
-    subtype?: 'init' | 'compact_boundary' | 'status' | 'hook_response';
+    subtype?: 'init' | 'compact_boundary' | 'status' | 'hook_response' | 'login_prompt';
     model?: string;
     cwd?: string;
     tools?: string[];
@@ -77,6 +77,9 @@ export interface Message {
     exitCode?: number;
     stdout?: string;
     stderr?: string;
+    // For login_prompt
+    authUrl?: string;
+    oauthState?: string;
   };
 }
 
@@ -123,6 +126,18 @@ export function addMessage(instanceId: string, message: Omit<Message, 'instanceI
     // Keep last 500 messages per instance
     const newMsgs = [...msgs, { ...message, instanceId }].slice(-500);
     map.set(instanceId, newMsgs);
+    return map;
+  });
+}
+
+// Remove a message from an instance by index
+export function removeMessage(instanceId: string, index: number): void {
+  instanceMessages.update((map) => {
+    const msgs = map.get(instanceId) || [];
+    if (index >= 0 && index < msgs.length) {
+      const newMsgs = [...msgs.slice(0, index), ...msgs.slice(index + 1)];
+      map.set(instanceId, newMsgs);
+    }
     return map;
   });
 }
