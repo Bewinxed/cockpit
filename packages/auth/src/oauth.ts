@@ -10,11 +10,12 @@ import { createHash, randomBytes } from 'crypto';
 export const OAUTH_CONFIG = {
   clientId: '9d1c250a-e61b-44d9-88ed-5944d1962f5e',
   authorizeUrl: 'https://claude.ai/oauth/authorize',
+  // Use /v1/oauth/token with JSON body (like OpenCode does)
   tokenUrl: 'https://console.anthropic.com/v1/oauth/token',
   scopes: ['org:create_api_key', 'user:profile', 'user:inference'],
   // For 3rd party apps, we use a special redirect URI that shows the code
   // The user copies and pastes the code back to the CLI
-  redirectUri: 'https://console.anthropic.com/oauth/code',
+  redirectUri: 'https://console.anthropic.com/oauth/code/callback',
 } as const;
 
 /**
@@ -23,8 +24,12 @@ export const OAUTH_CONFIG = {
 export interface OAuthTokens {
   accessToken: string;
   refreshToken: string;
-  expiresAt: number; // Unix timestamp
+  expiresAt: number; // Unix timestamp in milliseconds
   tokenType: string;
+  // Additional fields that may come from token exchange or profile endpoint
+  scopes?: string[];
+  subscriptionType?: string;
+  rateLimitTier?: string;
 }
 
 /**
@@ -34,7 +39,10 @@ export interface StoredCredentials {
   claudeAiOauth: {
     accessToken: string;
     refreshToken: string;
-    expiresAt: string; // ISO date string
+    expiresAt: number; // Unix timestamp in milliseconds
+    scopes?: string[];
+    subscriptionType?: string;
+    rateLimitTier?: string;
   };
 }
 
@@ -62,6 +70,7 @@ export function generateCodeChallenge(verifier: string): string {
  */
 export function buildAuthorizationUrl(codeChallenge: string, state: string): string {
   const params = new URLSearchParams({
+    code: 'true', // Required for code-based flow
     client_id: OAUTH_CONFIG.clientId,
     response_type: 'code',
     redirect_uri: OAUTH_CONFIG.redirectUri,
@@ -76,23 +85,44 @@ export function buildAuthorizationUrl(codeChallenge: string, state: string): str
 
 /**
  * Exchange authorization code for tokens
+ * Uses JSON body format like OpenCode (which is whitelisted by Anthropic)
  */
 export async function exchangeCodeForTokens(
   code: string,
-  codeVerifier: string
+  codeVerifier: string,
+  state?: string
 ): Promise<OAuthTokens> {
+  // Parse code#state format if code contains #
+  let actualCode = code;
+  let actualState = state;
+  if (code.includes('#')) {
+    const parts = code.split('#');
+    actualCode = parts[0];
+    actualState = parts[1] || state;
+  }
+
+  const body = {
+    code: actualCode,
+    state: actualState,
+    grant_type: 'authorization_code',
+    client_id: OAUTH_CONFIG.clientId,
+    redirect_uri: OAUTH_CONFIG.redirectUri,
+    code_verifier: codeVerifier,
+  };
+
+  console.log('[OAuth] Token exchange request:', {
+    ...body,
+    code: actualCode.slice(0, 10) + '...',
+    code_verifier: codeVerifier.slice(0, 10) + '...',
+  });
+
+  // Use JSON body format (like OpenCode does)
   const response = await fetch(OAUTH_CONFIG.tokenUrl, {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
+      'Content-Type': 'application/json',
     },
-    body: new URLSearchParams({
-      grant_type: 'authorization_code',
-      client_id: OAUTH_CONFIG.clientId,
-      code,
-      code_verifier: codeVerifier,
-      redirect_uri: OAUTH_CONFIG.redirectUri,
-    }),
+    body: JSON.stringify(body),
   });
 
   if (!response.ok) {
@@ -105,26 +135,38 @@ export async function exchangeCodeForTokens(
     refresh_token: string;
     expires_in: number;
     token_type: string;
+    // Additional fields that may be returned
+    scope?: string;
+    scopes?: string[];
+    subscription_type?: string;
+    rate_limit_tier?: string;
   };
+
+  console.log('[OAuth] Token exchange response fields:', Object.keys(data));
 
   return {
     accessToken: data.access_token,
     refreshToken: data.refresh_token,
     expiresAt: Date.now() + (data.expires_in * 1000),
     tokenType: data.token_type,
+    // Additional fields if present
+    scopes: data.scopes || (data.scope ? data.scope.split(' ') : undefined),
+    subscriptionType: data.subscription_type,
+    rateLimitTier: data.rate_limit_tier,
   };
 }
 
 /**
  * Refresh an expired access token
+ * Uses JSON body format like OpenCode
  */
 export async function refreshAccessToken(refreshToken: string): Promise<OAuthTokens> {
   const response = await fetch(OAUTH_CONFIG.tokenUrl, {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
+      'Content-Type': 'application/json',
     },
-    body: new URLSearchParams({
+    body: JSON.stringify({
       grant_type: 'refresh_token',
       client_id: OAUTH_CONFIG.clientId,
       refresh_token: refreshToken,

@@ -49,7 +49,11 @@ export async function saveCredentials(tokens: OAuthTokens): Promise<void> {
     claudeAiOauth: {
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
-      expiresAt: new Date(tokens.expiresAt).toISOString(),
+      expiresAt: tokens.expiresAt, // Store as number (Unix timestamp in ms)
+      // Include optional fields if present
+      ...(tokens.scopes && { scopes: tokens.scopes }),
+      ...(tokens.subscriptionType && { subscriptionType: tokens.subscriptionType }),
+      ...(tokens.rateLimitTier && { rateLimitTier: tokens.rateLimitTier }),
     },
   };
 
@@ -82,10 +86,9 @@ export async function getValidAccessToken(): Promise<string | null> {
   }
 
   const { accessToken, refreshToken, expiresAt } = credentials.claudeAiOauth;
-  const expiresAtMs = new Date(expiresAt).getTime();
 
-  // Check if token is expired
-  if (isTokenExpired(expiresAtMs)) {
+  // Check if token is expired (expiresAt is already a number in ms)
+  if (isTokenExpired(expiresAt)) {
     console.log('Access token expired, refreshing...');
     try {
       const newTokens = await refreshAccessToken(refreshToken);

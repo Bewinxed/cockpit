@@ -1,8 +1,10 @@
 import { Elysia, t } from 'elysia';
 import type { Db } from '@cockpit/db';
+import { credentials, eq } from '@cockpit/db';
 import type { SpawnInstanceData } from '@cockpit/core';
 import type { JsonRpcError } from '@cockpit/core/protocol';
 import { CommandMethod } from '@cockpit/core/protocol';
+import { isTokenExpired, refreshAccessToken } from '@cockpit/auth';
 import { createInstanceTracker } from '../services/instance-tracker';
 import { getAgentRegistry } from '../services/agent-registry';
 import { getBroadcastService } from '../services/broadcast';
@@ -19,6 +21,60 @@ function getErrorMessage(error: JsonRpcError | unknown): string {
     if (typeof err.error === 'string') return err.error;
   }
   return String(error);
+}
+
+interface OAuthCredentials {
+  accessToken: string;
+  refreshToken: string;
+  expiresAt: number;
+}
+
+/**
+ * Get OAuth credentials from database for passing to agents
+ */
+async function getOAuthCredentials(db: Db): Promise<OAuthCredentials | null> {
+  const result = await db
+    .select()
+    .from(credentials)
+    .where(eq(credentials.isDefault, true))
+    .limit(1);
+
+  if (result.length === 0) return null;
+
+  const cred = result[0];
+  if (cred.type !== 'oauth' || !cred.accessToken || !cred.refreshToken) return null;
+
+  // Auto-refresh if expired (expiresAt is stored as number in ms)
+  if (cred.expiresAt && isTokenExpired(cred.expiresAt)) {
+    if (cred.refreshToken) {
+      try {
+        const tokens = await refreshAccessToken(cred.refreshToken);
+        await db
+          .update(credentials)
+          .set({
+            accessToken: tokens.accessToken,
+            refreshToken: tokens.refreshToken,
+            expiresAt: tokens.expiresAt, // Store as number (ms)
+            updatedAt: Date.now(),
+          })
+          .where(eq(credentials.id, cred.id));
+        return {
+          accessToken: tokens.accessToken,
+          refreshToken: tokens.refreshToken,
+          expiresAt: tokens.expiresAt,
+        };
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
+
+  return {
+    accessToken: cred.accessToken,
+    refreshToken: cred.refreshToken,
+    expiresAt: cred.expiresAt || Date.now() + 3600000,
+  };
 }
 
 /**
@@ -139,6 +195,9 @@ export function createInstanceRoutes(db: Db) {
           };
         }
 
+        // Get credentials to pass to agent
+        const oauthCreds = await getOAuthCredentials(db);
+
         // Create instance in database
         const spawnData: SpawnInstanceData = {
           agentId: body.agentId,
@@ -150,7 +209,7 @@ export function createInstanceRoutes(db: Db) {
 
         const instance = await tracker.create(spawnData);
 
-        // Send spawn request to agent
+        // Send spawn request to agent with credentials
         const response = await agentRegistry.sendToAgent(
           body.agentId,
           CommandMethod.INSTANCE_SPAWN,
@@ -161,6 +220,11 @@ export function createInstanceRoutes(db: Db) {
             permissionMode: body.permissionMode,
             projectId: body.projectId,
             resumeSessionId: body.resumeSessionId,
+            envVars: oauthCreds ? {
+              COCKPIT_OAUTH_ACCESS_TOKEN: oauthCreds.accessToken,
+              COCKPIT_OAUTH_REFRESH_TOKEN: oauthCreds.refreshToken,
+              COCKPIT_OAUTH_EXPIRES_AT: String(oauthCreds.expiresAt),
+            } : undefined,
           }
         );
 
@@ -574,6 +638,9 @@ export function createInstanceRoutes(db: Db) {
           };
         }
 
+        // Track whether we already saved the user message (to avoid duplicates)
+        let messageSaved = false;
+
         // If instance is already running, just send the message
         if (instance.status === 'running') {
           if (body?.prompt) {
@@ -583,6 +650,7 @@ export function createInstanceRoutes(db: Db) {
               content: { type: 'user', content: body.prompt },
               timestamp: new Date(),
             });
+            messageSaved = true;
 
             const response = await agentRegistry.sendToAgent(
               instance.agentId,
@@ -594,21 +662,38 @@ export function createInstanceRoutes(db: Db) {
             );
 
             if (response.error) {
-              set.status = 500;
+              const errorMsg = getErrorMessage(response.error);
+              // If agent says "not found", the agent was restarted - fall through to re-spawn
+              if (errorMsg.toLowerCase().includes('not found')) {
+                console.log(`[Resume] Instance ${params.id} not found on agent, will re-spawn`);
+                // Don't return - fall through to re-spawn logic below
+              } else {
+                set.status = 500;
+                return {
+                  success: false,
+                  error: errorMsg,
+                };
+              }
+            } else {
+              // Send succeeded, return success
               return {
-                success: false,
-                error: getErrorMessage(response.error),
+                success: true,
+                data: instance,
               };
             }
+          } else {
+            // No prompt, just return success
+            return {
+              success: true,
+              data: instance,
+            };
           }
-
-          return {
-            success: true,
-            data: instance,
-          };
         }
 
-        // Instance is stopped - re-spawn with the SAME instance ID
+        // Instance is stopped or agent lost it - re-spawn with the SAME instance ID
+        // Get credentials to pass to agent
+        const oauthCreds = await getOAuthCredentials(db);
+
         // Update instance status to starting
         await tracker.update(params.id, { status: 'starting' });
 
@@ -623,6 +708,11 @@ export function createInstanceRoutes(db: Db) {
             permissionMode: instance.permissionMode,
             projectId: instance.projectId,
             resumeSessionId: instance.sdkSessionId, // Use stored SDK session ID
+            envVars: oauthCreds ? {
+              COCKPIT_OAUTH_ACCESS_TOKEN: oauthCreds.accessToken,
+              COCKPIT_OAUTH_REFRESH_TOKEN: oauthCreds.refreshToken,
+              COCKPIT_OAUTH_EXPIRES_AT: String(oauthCreds.expiresAt),
+            } : undefined,
           }
         );
 
@@ -637,8 +727,8 @@ export function createInstanceRoutes(db: Db) {
           };
         }
 
-        // Save user message for resume prompt
-        if (body?.prompt) {
+        // Save user message for resume prompt (only if not already saved above)
+        if (body?.prompt && !messageSaved) {
           await tracker.saveMessage(params.id, {
             messageType: 'user',
             content: { type: 'user', content: body.prompt },

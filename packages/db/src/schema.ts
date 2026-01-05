@@ -92,6 +92,26 @@ export const messages = sqliteTable('messages', {
   index('messages_message_type_idx').on(table.messageType),
 ]);
 
+// credentials - OAuth tokens and API keys for Claude authentication
+export const credentials = sqliteTable('credentials', {
+  id: text('id').primaryKey(),
+  type: text('type').notNull(), // 'oauth' | 'api_key'
+  // OAuth fields
+  accessToken: text('access_token'),
+  refreshToken: text('refresh_token'),
+  expiresAt: integer('expires_at'), // Unix timestamp in milliseconds
+  // API key field
+  apiKey: text('api_key'),
+  // Metadata
+  label: text('label'), // User-friendly name for this credential
+  isDefault: integer('is_default', { mode: 'boolean' }).default(false),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+}, (table) => [
+  index('credentials_type_idx').on(table.type),
+  index('credentials_is_default_idx').on(table.isDefault),
+]);
+
 // Inferred types for select and insert operations
 export type Agent = typeof agents.$inferSelect;
 export type NewAgent = typeof agents.$inferInsert;
@@ -108,9 +128,13 @@ export type NewTask = typeof tasks.$inferInsert;
 export type Message = typeof messages.$inferSelect;
 export type NewMessage = typeof messages.$inferInsert;
 
+export type Credential = typeof credentials.$inferSelect;
+export type NewCredential = typeof credentials.$inferInsert;
+
 // Status type literals for type safety
 export type AgentOS = 'windows' | 'darwin' | 'linux';
 export type AgentStatus = 'online' | 'offline';
 export type InstanceStatus = 'starting' | 'running' | 'stopping' | 'stopped' | 'error';
 export type TaskType = 'major' | 'minor';
 export type TaskStatus = 'in_progress' | 'completed' | 'blocked' | 'cancelled';
+export type CredentialType = 'oauth' | 'api_key';

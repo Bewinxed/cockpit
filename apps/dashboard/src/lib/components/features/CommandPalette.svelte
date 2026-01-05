@@ -24,6 +24,15 @@
     visible,
   }: Props = $props();
 
+  let itemRefs: HTMLButtonElement[] = [];
+
+  // Scroll selected item into view when index changes
+  $effect(() => {
+    if (visible && itemRefs[selectedIndex]) {
+      itemRefs[selectedIndex].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  });
+
   // Filter commands based on input
   let filteredCommands = $derived(
     commands.filter((cmd) => {
@@ -92,6 +101,7 @@
       {#each filteredCommands as command, index (command.name)}
         {@const Icon = getCommandIcon(command.type)}
         <button
+          bind:this={itemRefs[index]}
           type="button"
           class="w-full px-3 py-2 flex items-center gap-3 hover:bg-surface-hover transition-colors text-left
                  {index === selectedIndex ? 'bg-surface-hover' : ''}"

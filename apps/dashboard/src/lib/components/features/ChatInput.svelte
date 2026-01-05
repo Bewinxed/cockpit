@@ -34,9 +34,13 @@
   let textareaRef = $state<HTMLTextAreaElement | null>(null);
   let showPalette = $state(false);
   let selectedIndex = $state(0);
+  let commandSelected = $state(false); // Track if a command was just selected
 
   // Check if we should show command palette
   $effect(() => {
+    // Don't reopen palette immediately after selecting a command
+    if (commandSelected) return;
+
     // Show palette when message starts with / and has commands
     const shouldShow = message.startsWith('/') && commands.length > 0 && !loading;
     showPalette = shouldShow;
@@ -83,6 +87,7 @@
     // Replace the current input with the command
     message = command.name + ' ';
     showPalette = false;
+    commandSelected = true; // Prevent palette from reopening
 
     // Focus back on textarea
     textareaRef?.focus();
@@ -124,12 +129,28 @@
       }
     }
 
+    // Enter without modifiers: submit when palette is closed
+    if (e.key === 'Enter' && !e.shiftKey && !e.metaKey && !e.ctrlKey && !showPalette) {
+      e.preventDefault();
+      commandSelected = false; // Reset for next time
+      handleSubmit();
+      return;
+    }
+
     // Ctrl/Cmd + Enter: Interrupt if streaming, otherwise submit
     if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
       e.preventDefault();
       if (streaming && onInterrupt) {
         onInterrupt();
       } else {
+        // If palette is open, select the highlighted command first before submitting
+        if (showPalette && filteredCommands.length > 0) {
+          const selected = filteredCommands[selectedIndex];
+          if (selected) {
+            message = selected.name;
+          }
+        }
+        commandSelected = false;
         handleSubmit();
       }
     }
@@ -163,10 +184,10 @@
       {#if streaming}
         <span class="text-warning">⌘↵ to interrupt</span>
       {:else if message.length > 0}
-        {#if message.startsWith('/')}
-          Type to filter commands
+        {#if showPalette}
+          ↵ select · ↵ again to send
         {:else}
-          ⌘↵ to send
+          ↵ to send
         {/if}
       {/if}
     </div>
