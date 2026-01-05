@@ -67,8 +67,8 @@
       <h3 class="font-medium text-text truncate group-hover:text-primary transition-colors">
         {displayName}
       </h3>
-      <Badge variant={config.variant} size="sm" dot pulse={config.pulse}>
-        {#snippet children()}{config.label}{/snippet}
+      <Badge variant={config.variant}>
+        {config.label}
       </Badge>
     </div>
 

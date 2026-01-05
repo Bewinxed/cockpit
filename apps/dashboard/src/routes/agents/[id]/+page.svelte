@@ -79,12 +79,8 @@
           <div>
             <div class="flex items-center gap-3 mb-1">
               <h1 class="text-2xl font-semibold text-text">{agent.name}</h1>
-              <Badge
-                variant={agent.status === 'online' ? 'success' : 'default'}
-                dot
-                pulse={agent.status === 'online'}
-              >
-                {#snippet children()}{agent.status === 'online' ? 'Online' : 'Offline'}{/snippet}
+              <Badge variant={agent.status === 'online' ? 'default' : 'secondary'}>
+                {agent.status === 'online' ? 'Online' : 'Offline'}
               </Badge>
             </div>
             <div class="flex items-center gap-4 text-sm text-text-secondary">
@@ -103,8 +99,8 @@
 
         {#if agent.status === 'online'}
           <Button variant="default" onclick={() => showNewInstanceModal = true}>
-            {#snippet icon()}<Plus class="w-4 h-4" />{/snippet}
-            {#snippet children()}New Instance{/snippet}
+            <Plus class="size-4" />
+            New Instance
           </Button>
         {/if}
       </div>
@@ -169,8 +165,8 @@
         <h2 class="section-title mb-0">Instances on this Agent</h2>
         {#if agent.status === 'online' && agentInstances.length > 0}
           <Button variant="ghost" size="sm" onclick={() => showNewInstanceModal = true}>
-            {#snippet icon()}<Plus class="w-4 h-4" />{/snippet}
-            {#snippet children()}Add{/snippet}
+            <Plus class="size-4" />
+            Add
           </Button>
         {/if}
       </div>

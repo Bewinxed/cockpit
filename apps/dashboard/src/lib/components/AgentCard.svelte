@@ -51,12 +51,9 @@
           {agent.name}
         </h3>
         <Badge
-          variant={agent.status === 'online' ? 'success' : 'default'}
-          size="sm"
-          dot
-          pulse={agent.status === 'online'}
+          variant={agent.status === 'online' ? 'default' : 'secondary'}
         >
-          {#snippet children()}{agent.status === 'online' ? 'Online' : 'Offline'}{/snippet}
+          {agent.status === 'online' ? 'Online' : 'Offline'}
         </Badge>
       </div>
 
