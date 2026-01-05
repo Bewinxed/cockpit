@@ -5,7 +5,7 @@
   import { instances, instanceMessages, agents, addMessage, removeMessage, getStreamingState, getInstanceStatus, type Message } from '$lib/stores/realtime';
   import { sendMessage, stopInstance, resumeInstance, interruptInstance } from '$lib/actions';
   import { api } from '$lib/api';
-  import { Button, Badge, EmptyState } from '$lib/components/ui';
+  import { Button, Badge, EmptyState, LoadingButton } from '$lib/components/ui';
   import { ChatMessage, ChatInput, StreamingIndicator } from '$lib/components/features';
   import { formatDistanceToNow } from '$lib/utils/time';
   import {
@@ -623,8 +623,8 @@
                 {instance.name || 'Instance'}
               </h1>
               {#if status}
-                <Badge variant={status.variant} dot pulse={status.pulse}>
-                  {#snippet children()}{status.label}{/snippet}
+                <Badge variant={status.variant}>
+                  {status.label}
                 </Badge>
               {/if}
             </div>
@@ -682,27 +682,27 @@
           {#if isActive}
             {#if isStreaming}
               <!-- Show Interrupt button when streaming -->
-              <Button
-                variant="warning"
+              <LoadingButton
+                variant="outline"
                 size="sm"
                 onclick={handleInterrupt}
                 loading={interrupting}
                 disabled={interrupting}
               >
-                {#snippet icon()}<StopCircle class="w-4 h-4" />{/snippet}
-                {#snippet children()}Interrupt{/snippet}
-              </Button>
+                <StopCircle class="size-4" />
+                Interrupt
+              </LoadingButton>
             {/if}
-            <Button
+            <LoadingButton
               variant="destructive"
               size="sm"
               onclick={handleStop}
               loading={stopping}
               disabled={stopping || interrupting}
             >
-              {#snippet icon()}<Square class="w-4 h-4" />{/snippet}
-              {#snippet children()}Stop{/snippet}
-            </Button>
+              <Square class="size-4" />
+              Stop
+            </LoadingButton>
           {/if}
         </div>
       </div>
