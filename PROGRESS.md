@@ -6,6 +6,12 @@ Make slash commands functional in the dashboard, matching CLI behavior. This inc
 
 ## Latest Progress (2026-01-05)
 
+**ALL CLIENT-SIDE COMMANDS COMPLETE:**
+
+- ✅ `/login` - OAuth flow with inline form UI
+- ✅ `/logout` - Clears credentials from DB, shows success message
+- ✅ `/model` - Inline model picker with keyboard navigation
+
 **MODEL SWITCHING IMPLEMENTED:**
 
 The `/model` command now works as an inline UI form (like `/login`):
@@ -71,7 +77,7 @@ The `/model` command now works as an inline UI form (like `/login`):
 | `/doctor` | Check Claude Code health | Pass to SDK | ⏳ Untested |
 | `/init` | Initialize project with CLAUDE.md | Pass to SDK | ⏳ Untested |
 | `/login` | Switch Claude accounts | **Client-side** (OAuth UI) | ✅ Implemented |
-| `/logout` | Sign out of your account | **Client-side** (clear creds) | ⏳ TODO |
+| `/logout` | Sign out of your account | **Client-side** (clear creds) | ✅ Implemented |
 | `/memory` | Edit CLAUDE.md memory file | Pass to SDK | ⏳ Untested |
 | `/model` | Switch AI model | **Client-side** (inline picker) | ✅ Implemented |
 | `/permissions` | View or update permissions | Pass to SDK | ⏳ Untested |
@@ -92,12 +98,12 @@ The `/model` command now works as an inline UI form (like `/login`):
 ## Stop Condition
 
 **The job is complete when:**
-1. User can type `/help` in chat input, press Ctrl+Enter, and see help output from the agent
-2. User can select any command from the palette dropdown, press Ctrl+Enter, and it executes
-3. `/login` opens OAuth flow, user pastes code, credentials are stored in DB
-4. `/logout` clears stored credentials
-5. API key can be entered as fallback authentication method
-6. All lints pass (`bun run lint` or equivalent)
+1. ✅ User can type `/help` in chat input, press Ctrl+Enter, and see help output from the agent
+2. ✅ User can select any command from the palette dropdown, press Ctrl+Enter, and it executes
+3. ✅ `/login` opens OAuth flow, user pastes code, credentials are stored in DB
+4. ✅ `/logout` clears stored credentials
+5. ✅ API key can be entered as fallback authentication method (POST /api/auth/api-key)
+6. ⏳ All lints pass (`bun run lint` or equivalent) - needs verification
 
 ---
 
@@ -289,44 +295,49 @@ The `/model` command now works as an inline UI form (like `/login`):
 
 ---
 
-## Phase 5: Credential Flow to Agents
+## Phase 5: Credential Flow to Agents ✅ COMPLETE
 
 ### 5.1 Pass Credentials on Instance Spawn
 
-**Context:** When spawning a new instance, agent needs credentials to authenticate with Claude API. Currently agents check local `~/.claude/` files. Need to pass from DB instead.
+**Status:** ✅ Implemented
 
-**Files to review:**
-- `/home/user/cockpit/packages/hub-server/src/api/instances.ts` - spawn endpoint
-- `/home/user/cockpit/packages/agent-service/src/handlers/spawn.ts`
-- `/home/user/cockpit/packages/core/src/protocol/instance.ts`
+**Implementation:**
+- [x] `getOAuthCredentials()` in `instances.ts` fetches default credential from DB
+- [x] Auto-refreshes expired tokens before passing to agent
+- [x] Credentials passed via `envVars` in spawn request:
+  - `COCKPIT_OAUTH_ACCESS_TOKEN`
+  - `COCKPIT_OAUTH_REFRESH_TOKEN`
+  - `COCKPIT_OAUTH_EXPIRES_AT`
+- [x] Agent's `spawn.ts` writes credentials to `~/.claude/.credentials.json`
+- [x] Fallback: if no credentials in request, agent uses local file
 
-**What needs to be done:**
-- [ ] Modify spawn request to include credentials from DB
-- [ ] Update `INSTANCE_SPAWN` protocol to accept credentials parameter
-- [ ] Agent uses provided credentials instead of local file
-- [ ] Fallback to local file if no credentials in request
-
-**Success condition:** Instance spawns using DB credentials, not local file.
+**Code flow:**
+1. Hub fetches default credential from `credentials` table
+2. If expired, auto-refreshes and updates DB
+3. Passes tokens via `envVars` in `INSTANCE_SPAWN` request
+4. Agent writes to `~/.claude/.credentials.json` before spawning
+5. Claude SDK reads credentials and authenticates
 
 ---
 
-## Phase 6: /logout Command
+## Phase 6: /logout Command ✅ COMPLETE
 
 ### 6.1 Implement Logout Handler
 
-**Context:** `/logout` should clear stored credentials and update UI state.
+**Status:** ✅ Implemented
 
-**Files to review:**
-- `/home/user/cockpit/apps/dashboard/src/routes/instances/[id]/+page.svelte`
+**Implementation:**
+- [x] Created logout handler in `+page.svelte` under `handleClientCommand`
+- [x] Calls `DELETE /api/auth/logout` via Eden Treaty
+- [x] Shows "Logged out successfully" message in chat
+- [x] Server deletes default credential from DB
 
-**What needs to be done:**
-- [ ] Create logout handler function
-- [ ] Call `DELETE /api/auth/logout`
-- [ ] Clear client-side auth state
-- [ ] Show "Logged out" feedback
-- [ ] Optionally stop running instances
-
-**Success condition:** `/logout` clears credentials, UI reflects logged-out state.
+**How it works:**
+1. User types `/logout` in chat
+2. `handleClientCommand` detects it as a client-side command
+3. Calls `api.api.auth.logout.delete()`
+4. Server removes default credential from `credentials` table
+5. Success message displayed in chat
 
 ---
 
