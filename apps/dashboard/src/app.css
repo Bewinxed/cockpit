@@ -1,162 +1,182 @@
 @import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;0,6..72,700;1,6..72,400&family=Inter:wght@400;500;600&display=swap');
 
 /* Configure dark mode variant */
 @variant dark (:root.dark &);
 
-/* Cockpit Dashboard - Notion-inspired with Flexoki v2 Colors */
-/* A warm, inviting interface that feels like home */
+/* ═══════════════════════════════════════════════════════════════
+   WARM FUNCTIONAL DESIGN LANGUAGE
+   A digital space that feels like a well-designed book —
+   functional yet warm, dense yet breathable, precise yet human.
+   ═══════════════════════════════════════════════════════════════ */
 
 @theme {
   /* ═══════════════════════════════════════════════════════════════
-     FLEXOKI COLOR PALETTE - Warm & Inviting
+     BASE COLORS - Warm neutrals, never pure white or black
      ═══════════════════════════════════════════════════════════════ */
 
-  /* Base Neutrals - Light Mode (Notion-inspired) */
-  --color-paper: #FFFFFF;
-  --color-bg: #F7F6F3;
-  --color-bg-subtle: #EFEEEB;
-  --color-surface: #FFFFFF;
-  --color-surface-hover: #F7F6F3;
-  --color-surface-active: #EFEEEB;
-  --color-border: #E9E8E5;
-  --color-border-strong: #DDDCD8;
+  /* Backgrounds - Warm off-whites, like aged paper */
+  --color-paper: #fbfbfa;
+  --color-bg: #fbfbfa;
+  --color-bg-subtle: #f7f6f3;
+  --color-surface: #ffffff;
+  --color-surface-hover: rgba(55, 53, 47, 0.04);
+  --color-surface-active: rgba(55, 53, 47, 0.08);
+  --color-border: rgba(55, 53, 47, 0.09);
+  --color-border-strong: #d4d4d4;
+  --color-border-dotted: #d4d4d4;
 
-  /* Text Colors */
-  --color-text: #1C1B1A;
-  --color-text-secondary: #575653;
-  --color-text-muted: #878580;
-  --color-text-inverse: #FFFCF0;
+  /* Text - Warm darks with brown undertone */
+  --color-text: #37352f;
+  --color-text-secondary: #6b6b6b;
+  --color-text-muted: #9b9b9b;
+  --color-text-placeholder: #b4b4b4;
+  --color-text-inverse: #ffffff;
 
-  /* Primary - Blue (Notion-like) */
-  --color-primary: #2383E2;
-  --color-primary-hover: #1a6bc9;
-  --color-primary-light: rgba(35, 131, 226, 0.1);
-  --color-primary-muted: rgba(35, 131, 226, 0.06);
+  /* Primary Action - Dark and confident */
+  --color-primary: #37352f;
+  --color-primary-hover: #2f2d29;
+  --color-primary-light: rgba(55, 53, 47, 0.08);
+  --color-primary-muted: rgba(55, 53, 47, 0.04);
 
-  /* Secondary - Purple */
-  --color-secondary: #5E409D;
-  --color-secondary-hover: #4c3480;
-  --color-secondary-light: rgba(94, 64, 157, 0.12);
+  /* Secondary - Blue for links and alternate actions */
+  --color-secondary: #2383e2;
+  --color-secondary-hover: #1a6bc9;
+  --color-secondary-light: rgba(35, 131, 226, 0.12);
 
-  /* Semantic Colors - Flexoki Accents */
-  --color-success: #66800B;
-  --color-success-light: rgba(102, 128, 11, 0.12);
-  --color-success-dark: #4d6008;
+  /* Semantic Colors - Muted, semi-transparent backgrounds */
+  --color-success: #0f7b6c;
+  --color-success-light: rgba(15, 123, 108, 0.12);
+  --color-success-dark: #0c6358;
 
-  --color-warning: #AD8301;
-  --color-warning-light: rgba(173, 131, 1, 0.12);
-  --color-warning-dark: #8a6901;
+  --color-warning: #d9730d;
+  --color-warning-light: rgba(217, 115, 13, 0.12);
+  --color-warning-dark: #b35f0a;
 
-  --color-error: #AF3029;
-  --color-error-light: rgba(175, 48, 41, 0.12);
-  --color-error-dark: #8c2621;
+  --color-error: #c4554d;
+  --color-error-light: rgba(235, 87, 87, 0.12);
+  --color-error-dark: #a3463f;
 
-  --color-info: #24837B;
-  --color-info-light: rgba(36, 131, 123, 0.12);
-  --color-info-dark: #1d6963;
+  --color-info: #0b6bcb;
+  --color-info-light: rgba(35, 131, 226, 0.12);
+  --color-info-dark: #0958a8;
+
+  /* Purple accent */
+  --color-purple: #6940a5;
+  --color-purple-light: rgba(103, 36, 222, 0.12);
 
   /* ═══════════════════════════════════════════════════════════════
-     TYPOGRAPHY - Plus Jakarta Sans for friendliness
+     TYPOGRAPHY - Dual-font system: Serif for headlines, Sans for UI
      ═══════════════════════════════════════════════════════════════ */
 
-  --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-serif: 'Newsreader', Georgia, 'Times New Roman', serif;
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
 
+  /* Type Scale */
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 16px;
+  --text-lg: 18px;
+  --text-xl: 22px;
+  --text-2xl: 28px;
+  --text-3xl: 36px;
+  --text-4xl: 48px;
+
   /* ═══════════════════════════════════════════════════════════════
-     SPACING - Generous and breathing
+     SPACING - Generous whitespace as structural element
      ═══════════════════════════════════════════════════════════════ */
 
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;
-  --space-5: 20px;
   --space-6: 24px;
   --space-8: 32px;
-  --space-10: 40px;
   --space-12: 48px;
+  --space-16: 64px;
+  --space-24: 96px;
 
   /* ═══════════════════════════════════════════════════════════════
-     BORDER RADIUS - Notion-style generous corners
+     BORDER RADIUS - Minimal, not bubbly
      ═══════════════════════════════════════════════════════════════ */
 
   --radius-sm: 3px;
   --radius-md: 6px;
-  --radius-lg: 10px;
-  --radius-xl: 14px;
-  --radius-2xl: 18px;
+  --radius-lg: 8px;
   --radius-full: 9999px;
 
   /* ═══════════════════════════════════════════════════════════════
-     SHADOWS - Notion-style subtle and clean
+     SHADOWS - Subtle, almost invisible
      ═══════════════════════════════════════════════════════════════ */
 
-  --shadow-xs: 0 1px 2px rgba(15, 15, 15, 0.03);
-  --shadow-sm: 0 1px 3px rgba(15, 15, 15, 0.04);
-  --shadow-md: 0 4px 8px rgba(15, 15, 15, 0.06), 0 0 1px rgba(15, 15, 15, 0.04);
-  --shadow-lg: 0 8px 16px rgba(15, 15, 15, 0.08), 0 0 1px rgba(15, 15, 15, 0.04);
-  --shadow-xl: 0 16px 24px rgba(15, 15, 15, 0.10), 0 0 1px rgba(15, 15, 15, 0.04);
-  --shadow-glow-primary: 0 0 0 3px rgba(35, 131, 226, 0.1);
-  --shadow-glow-success: 0 0 0 3px rgba(102, 128, 11, 0.1);
+  --shadow-xs: none;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.08);
+  --shadow-glow-primary: 0 0 0 2px rgba(55, 53, 47, 0.1);
 
   /* ═══════════════════════════════════════════════════════════════
-     TRANSITIONS - Smooth and natural
+     TRANSITIONS - Quick, responsive, not performative
      ═══════════════════════════════════════════════════════════════ */
 
-  --transition-fast: 100ms ease-out;
+  --duration-fast: 75ms;
+  --duration-normal: 150ms;
+  --duration-slow: 300ms;
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+
+  --transition-fast: 75ms ease-out;
   --transition-base: 150ms ease-out;
-  --transition-slow: 250ms ease-out;
-  --transition-spring: 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  --transition-slow: 300ms ease-out;
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   DARK MODE - Warm, not cold
+   DARK MODE - Evening, not void
    ═══════════════════════════════════════════════════════════════ */
 
 :root.dark {
-  --color-paper: #1C1B1A;
-  --color-bg: #100F0F;
-  --color-bg-subtle: #1C1B1A;
-  --color-surface: #282726;
-  --color-surface-hover: #343331;
-  --color-surface-active: #403E3C;
-  --color-border: #403E3C;
-  --color-border-strong: #575653;
-  --color-text: #CECDC3;
-  --color-text-secondary: #9F9D96;
-  --color-text-muted: #6F6E69;
-  --color-text-inverse: #1C1B1A;
+  --color-paper: #191919;
+  --color-bg: #191919;
+  --color-bg-subtle: #212121;
+  --color-surface: #252525;
+  --color-surface-hover: rgba(255, 255, 255, 0.04);
+  --color-surface-active: rgba(255, 255, 255, 0.08);
+  --color-border: rgba(255, 255, 255, 0.1);
+  --color-border-strong: rgba(255, 255, 255, 0.15);
+  --color-border-dotted: rgba(255, 255, 255, 0.15);
 
-  /* Brighter accent colors for dark mode */
-  --color-primary: #4385BE;
-  --color-primary-hover: #5a9bd1;
-  --color-primary-light: rgba(67, 133, 190, 0.18);
+  --color-text: #ebebeb;
+  --color-text-secondary: #9b9b9b;
+  --color-text-muted: #6b6b6b;
+  --color-text-placeholder: #4b4b4b;
+  --color-text-inverse: #191919;
 
-  --color-secondary: #8B7EC8;
-  --color-secondary-light: rgba(139, 126, 200, 0.18);
+  /* Invert primary for dark mode */
+  --color-primary: #ebebeb;
+  --color-primary-hover: #ffffff;
+  --color-primary-light: rgba(255, 255, 255, 0.1);
 
-  --color-success: #879A39;
-  --color-success-light: rgba(135, 154, 57, 0.18);
+  --color-secondary: #4a9eff;
+  --color-secondary-light: rgba(74, 158, 255, 0.15);
 
-  --color-warning: #D0A215;
-  --color-warning-light: rgba(208, 162, 21, 0.18);
+  /* Brighter semantic colors for dark */
+  --color-success: #3aa99f;
+  --color-success-light: rgba(58, 169, 159, 0.2);
 
-  --color-error: #D14D41;
-  --color-error-light: rgba(209, 77, 65, 0.18);
+  --color-warning: #e8a634;
+  --color-warning-light: rgba(232, 166, 52, 0.2);
 
-  --color-info: #3AA99F;
-  --color-info-light: rgba(58, 169, 159, 0.18);
+  --color-error: #e06c64;
+  --color-error-light: rgba(224, 108, 100, 0.2);
 
-  /* Deeper shadows for dark mode */
-  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.25);
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.35), 0 1px 2px rgba(0, 0, 0, 0.25);
-  --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.30), 0 2px 4px rgba(0, 0, 0, 0.25);
-  --shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.35), 0 4px 8px rgba(0, 0, 0, 0.25);
-  --shadow-xl: 0 16px 32px rgba(0, 0, 0, 0.40), 0 8px 16px rgba(0, 0, 0, 0.30);
+  --color-info: #4a9eff;
+  --color-info-light: rgba(74, 158, 255, 0.2);
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   KEYFRAME ANIMATIONS
+   KEYFRAME ANIMATIONS - Subtle, earned motion
    ═══════════════════════════════════════════════════════════════ */
 
 @keyframes fade-in {
@@ -167,7 +187,7 @@
 @keyframes fade-in-up {
   from {
     opacity: 0;
-    transform: translateY(6px);
+    transform: translateY(4px);
   }
   to {
     opacity: 1;
@@ -175,26 +195,15 @@
   }
 }
 
-@keyframes fade-in-scale {
-  from {
-    opacity: 0;
-    transform: scale(0.97);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
 @keyframes pulse-soft {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0.6; }
+  50% { opacity: 0.5; }
 }
 
 @keyframes pulse-ring {
   0% {
     transform: scale(1);
-    opacity: 0.6;
+    opacity: 0.5;
   }
   100% {
     transform: scale(2);
@@ -213,18 +222,7 @@
 
 @keyframes typing-dot {
   0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
-  30% { transform: translateY(-3px); opacity: 1; }
-}
-
-@keyframes slide-in-left {
-  from {
-    opacity: 0;
-    transform: translateX(-8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
+  30% { transform: translateY(-2px); opacity: 1; }
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -240,29 +238,47 @@ html {
 body {
   @apply bg-bg text-text font-sans;
   font-size: 14px;
-  line-height: 1.65;
-  letter-spacing: -0.01em;
+  line-height: 1.6;
+  letter-spacing: 0;
 }
 
-/* Focus styles - Notion-style subtle ring */
+/* Headlines use serif */
+h1, h2, h3, .font-serif {
+  font-family: var(--font-serif);
+}
+
+/* Large text gets tight letter-spacing */
+h1, .text-2xl, .text-3xl, .text-4xl {
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+/* Focus styles - subtle, not screaming */
 :focus-visible {
   outline: none;
   box-shadow: var(--shadow-glow-primary);
 }
 
-/* Selection - warm highlight */
+/* Selection */
 ::selection {
   background: var(--color-primary-light);
   color: var(--color-text);
 }
 
+/* Links - underline, not color change */
+a:not([class]) {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-color: currentColor;
+}
+
 /* ═══════════════════════════════════════════════════════════════
-   SCROLLBAR - Minimal and warm
+   SCROLLBAR - Minimal
    ═══════════════════════════════════════════════════════════════ */
 
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-track {
@@ -271,9 +287,8 @@ body {
 
 ::-webkit-scrollbar-thumb {
   @apply bg-border-strong rounded-full;
-  border: 3px solid transparent;
+  border: 2px solid transparent;
   background-clip: padding-box;
-  transition: background-color 150ms ease;
 }
 
 ::-webkit-scrollbar-thumb:hover {
@@ -281,20 +296,15 @@ body {
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   UTILITY CLASSES
+   ANIMATION UTILITIES
    ═══════════════════════════════════════════════════════════════ */
 
-/* Animation utilities */
 @utility animate-fade-in {
-  animation: fade-in 200ms ease-out;
+  animation: fade-in 150ms ease-out;
 }
 
 @utility animate-fade-in-up {
-  animation: fade-in-up 200ms ease-out;
-}
-
-@utility animate-fade-in-scale {
-  animation: fade-in-scale 200ms ease-out;
+  animation: fade-in-up 150ms ease-out;
 }
 
 @utility animate-pulse-soft {
@@ -316,39 +326,13 @@ body {
   background-size: 200% 100%;
 }
 
-/* Skeleton loading */
-.skeleton {
-  @apply bg-surface-hover rounded-md;
-  animation: shimmer 2s linear infinite;
-  background: linear-gradient(
-    90deg,
-    var(--color-surface-hover) 0%,
-    var(--color-bg-subtle) 50%,
-    var(--color-surface-hover) 100%
-  );
-  background-size: 200% 100%;
-}
-
-/* Hover lift effect */
-@utility hover-lift {
-  @apply transition-all duration-150;
-  &:hover {
-    transform: translateY(-1px);
-    box-shadow: var(--shadow-md);
-  }
-  &:active {
-    transform: translateY(0);
-    box-shadow: var(--shadow-sm);
-  }
-}
-
 /* ═══════════════════════════════════════════════════════════════
-   COMPONENT STYLES - Notion-inspired
+   BUTTONS - Quiet confidence
    ═══════════════════════════════════════════════════════════════ */
 
-/* Buttons - Notion-style clean and refined */
 @utility btn {
-  @apply inline-flex items-center justify-center gap-2 font-medium rounded-md cursor-pointer transition-all duration-100 outline-none;
+  @apply inline-flex items-center justify-center gap-2 font-medium rounded-md cursor-pointer;
+  transition: background-color 150ms ease-out, border-color 150ms ease-out;
   @apply disabled:opacity-40 disabled:cursor-not-allowed disabled:pointer-events-none;
 }
 
@@ -364,92 +348,85 @@ body {
   @apply px-5 py-2.5 text-sm;
 }
 
+/* Primary - Dark and confident */
 @utility btn-primary {
-  @apply bg-primary text-text-inverse shadow-sm;
+  @apply bg-primary text-text-inverse;
   &:hover {
-    @apply bg-primary-hover shadow-md;
-  }
-  &:active {
-    transform: scale(0.98);
-    @apply shadow-sm;
+    @apply bg-primary-hover;
   }
 }
 
+/* Secondary - Transparent, text only */
 @utility btn-secondary {
-  @apply bg-paper text-text border border-border shadow-xs;
+  @apply bg-transparent text-text border border-border;
   &:hover {
-    @apply bg-surface-hover border-border-strong shadow-sm;
-  }
-  &:active {
-    @apply bg-surface-active shadow-xs;
+    @apply bg-surface-hover border-border-strong;
   }
 }
 
+/* Ghost - No border until hover */
 @utility btn-ghost {
   @apply bg-transparent text-text-secondary;
   &:hover {
     @apply bg-surface-hover text-text;
   }
-  &:active {
-    @apply bg-surface-active;
-  }
 }
 
 @utility btn-danger {
-  @apply bg-error text-text-inverse shadow-sm;
+  @apply bg-error text-text-inverse;
   &:hover {
-    @apply bg-error-dark shadow-md;
+    @apply bg-error-dark;
   }
 }
 
 @utility btn-success {
-  @apply bg-success text-text-inverse shadow-sm;
+  @apply bg-success text-text-inverse;
   &:hover {
-    @apply bg-success-dark shadow-md;
+    @apply bg-success-dark;
   }
 }
 
-@utility btn-warning {
-  @apply bg-warning text-text-inverse shadow-sm;
-  &:hover {
-    @apply bg-warning-dark shadow-md;
-  }
-}
-
-/* Icon button */
 @utility btn-icon {
   @apply p-2 rounded-md;
 }
 
-/* Cards - Notion-style clean with subtle elevation */
+/* ═══════════════════════════════════════════════════════════════
+   CARDS - Dotted border signature, no shadows
+   ═══════════════════════════════════════════════════════════════ */
+
 @utility card {
-  @apply bg-paper rounded-lg border border-border shadow-xs;
+  @apply bg-paper rounded-lg;
+  border: 1px dotted var(--color-border-dotted);
+}
+
+@utility card-solid {
+  @apply bg-paper rounded-lg border border-border;
 }
 
 @utility card-interactive {
-  @apply cursor-pointer transition-all duration-100;
+  @apply cursor-pointer;
+  transition: background-color 150ms ease-out;
   &:hover {
-    @apply bg-surface-hover border-border-strong shadow-sm;
-    transform: translateY(-1px);
-  }
-  &:active {
-    @apply bg-surface-active shadow-xs;
-    transform: translateY(0);
+    @apply bg-surface-hover;
   }
 }
 
-/* Inputs - Notion-style clean and spacious */
+/* ═══════════════════════════════════════════════════════════════
+   INPUTS - Simple, understated
+   ═══════════════════════════════════════════════════════════════ */
+
 @utility input {
-  @apply w-full px-3 py-2 text-sm bg-paper border border-border rounded-lg text-text transition-all duration-150 outline-none;
+  @apply w-full px-3 py-2 text-sm bg-paper border border-border rounded-md text-text;
+  transition: border-color 150ms ease-out;
   &::placeholder {
-    @apply text-text-muted;
+    color: var(--color-text-placeholder);
   }
   &:hover {
-    @apply border-border-strong bg-surface-hover;
+    @apply border-border-strong;
   }
   &:focus {
-    @apply border-primary bg-paper;
-    box-shadow: var(--shadow-glow-primary);
+    @apply border-text-muted;
+    outline: none;
   }
   &:disabled {
     @apply opacity-50 cursor-not-allowed bg-surface-hover;
@@ -460,21 +437,24 @@ body {
   @apply border-error;
   &:focus {
     @apply border-error;
-    box-shadow: 0 0 0 3px var(--color-error-light);
   }
 }
 
-/* Badges - Subtle with accent colors */
+/* ═══════════════════════════════════════════════════════════════
+   BADGES/TAGS - Small, semi-transparent, never uppercase
+   ═══════════════════════════════════════════════════════════════ */
+
 @utility badge {
-  @apply inline-flex items-center gap-1.5 px-2 py-0.5 text-xs font-medium rounded-md;
+  @apply inline-flex items-center gap-1.5 px-2 py-0.5 text-xs font-medium rounded-sm;
 }
 
 @utility badge-default {
-  @apply bg-surface-hover text-text-secondary border border-border;
+  background: rgba(55, 53, 47, 0.08);
+  @apply text-text-secondary;
 }
 
 @utility badge-primary {
-  @apply bg-primary-light text-primary;
+  @apply bg-primary-light text-text;
 }
 
 @utility badge-success {
@@ -493,7 +473,14 @@ body {
   @apply bg-info-light text-info;
 }
 
-/* Status dot */
+@utility badge-purple {
+  @apply bg-purple-light text-purple;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   STATUS DOT
+   ═══════════════════════════════════════════════════════════════ */
+
 @utility status-dot {
   @apply w-2 h-2 rounded-full;
 }
@@ -508,9 +495,157 @@ body {
   }
 }
 
-/* Avatar */
+/* ═══════════════════════════════════════════════════════════════
+   DIVIDERS - Dotted signature
+   ═══════════════════════════════════════════════════════════════ */
+
+@utility divider {
+  border-bottom: 1px dotted var(--color-border-dotted);
+}
+
+@utility divider-solid {
+  @apply h-px bg-border w-full;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   ARROW HOVER EFFECT - Signature interaction
+   ═══════════════════════════════════════════════════════════════ */
+
+@utility arrow-slide {
+  transition: transform 150ms ease-out;
+}
+
+.group:hover .arrow-slide,
+.arrow-slide:hover {
+  transform: translateX(4px);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   SKELETON LOADING
+   ═══════════════════════════════════════════════════════════════ */
+
+.skeleton {
+  @apply bg-surface-hover rounded-md;
+  animation: shimmer 2s linear infinite;
+  background: linear-gradient(
+    90deg,
+    var(--color-bg-subtle) 0%,
+    var(--color-surface-hover) 50%,
+    var(--color-bg-subtle) 100%
+  );
+  background-size: 200% 100%;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   CODE BLOCKS
+   ═══════════════════════════════════════════════════════════════ */
+
+@utility code-inline {
+  @apply px-1.5 py-0.5 text-sm font-mono rounded-sm;
+  background: rgba(55, 53, 47, 0.06);
+}
+
+@utility code-block {
+  @apply p-4 text-sm font-mono rounded-md overflow-x-auto;
+  background: var(--color-bg-subtle);
+  border: 1px solid var(--color-border);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   LAYOUT - Generous content margins
+   ═══════════════════════════════════════════════════════════════ */
+
+@utility page-container {
+  @apply max-w-5xl mx-auto px-6 md:px-12;
+}
+
+@utility page-header {
+  @apply flex items-start justify-between mb-8;
+}
+
+@utility page-title {
+  @apply text-2xl font-bold text-text font-serif;
+  letter-spacing: -0.02em;
+}
+
+@utility page-description {
+  @apply text-base text-text-secondary mt-2;
+}
+
+@utility section-title {
+  @apply text-sm font-medium text-text-muted mb-4;
+}
+
+/* Grid layouts */
+@utility grid-stats {
+  @apply grid grid-cols-2 md:grid-cols-4 gap-4;
+}
+
+@utility grid-cards {
+  @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   NAVIGATION - Subtle, content recedes
+   ═══════════════════════════════════════════════════════════════ */
+
+@utility nav-item {
+  @apply flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium;
+  @apply text-text-secondary;
+  transition: background-color 150ms ease-out, color 150ms ease-out;
+  &:hover {
+    @apply bg-surface-hover text-text;
+  }
+}
+
+@utility nav-item-active {
+  @apply bg-surface-active text-text;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   CHAT BUBBLES
+   ═══════════════════════════════════════════════════════════════ */
+
+@utility chat-bubble {
+  @apply px-4 py-3 rounded-lg max-w-[85%];
+}
+
+@utility chat-bubble-user {
+  @apply bg-primary text-text-inverse ml-auto;
+}
+
+@utility chat-bubble-assistant {
+  @apply bg-paper mr-auto;
+  border: 1px dotted var(--color-border-dotted);
+}
+
+@utility chat-bubble-tool {
+  @apply bg-bg-subtle text-sm;
+  border: 1px solid var(--color-border);
+}
+
+@utility chat-bubble-error {
+  @apply bg-error-light text-error;
+  border: 1px solid rgba(196, 85, 77, 0.2);
+}
+
+/* Typing indicator */
+@utility typing-indicator {
+  @apply flex gap-1.5 px-4 py-3;
+  & span {
+    @apply w-1.5 h-1.5 bg-text-muted rounded-full;
+    animation: typing-dot 1.4s ease-in-out infinite;
+  }
+  & span:nth-child(2) { animation-delay: 0.15s; }
+  & span:nth-child(3) { animation-delay: 0.3s; }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   AVATAR
+   ═══════════════════════════════════════════════════════════════ */
+
 @utility avatar {
-  @apply inline-flex items-center justify-center rounded-lg bg-primary-light text-primary font-semibold;
+  @apply inline-flex items-center justify-center rounded-md bg-primary-light text-text font-medium;
 }
 
 @utility avatar-sm {
@@ -525,130 +660,31 @@ body {
   @apply w-12 h-12 text-base;
 }
 
-/* Skeleton loading */
-@utility skeleton {
-  @apply bg-surface-hover rounded-md animate-shimmer;
-}
-
-/* Divider */
-@utility divider {
-  @apply h-px bg-border w-full;
-}
-
-/* Code blocks - Warm monospace */
-@utility code-inline {
-  @apply px-1.5 py-0.5 text-sm font-mono bg-surface-hover rounded text-text-secondary;
-}
-
-@utility code-block {
-  @apply p-4 text-sm font-mono bg-bg-subtle rounded-lg border border-border overflow-x-auto;
-}
-
 /* ═══════════════════════════════════════════════════════════════
-   LAYOUT UTILITIES
+   LIST ITEMS - Dotted dividers, arrow on hover
    ═══════════════════════════════════════════════════════════════ */
 
-@utility page-container {
-  @apply max-w-6xl mx-auto;
-}
-
-@utility page-header {
-  @apply flex items-start justify-between mb-6;
-}
-
-@utility page-title {
-  @apply text-xl font-semibold text-text tracking-tight;
-}
-
-@utility page-description {
-  @apply text-sm text-text-secondary mt-1;
-}
-
-@utility section-title {
-  @apply text-sm font-semibold text-text-muted uppercase tracking-wide mb-3;
-}
-
-/* Grid layouts */
-@utility grid-stats {
-  @apply grid grid-cols-2 md:grid-cols-4 gap-3;
-}
-
-@utility grid-cards {
-  @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3;
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   NAVIGATION STYLES - Notion sidebar feel
-   ═══════════════════════════════════════════════════════════════ */
-
-@utility nav-item {
-  @apply flex items-center gap-3 px-2.5 py-2 rounded-md text-sm font-medium transition-all duration-100;
-  @apply text-text-secondary;
+@utility list-item {
+  @apply flex items-center gap-4 px-4 py-3;
+  border-bottom: 1px dotted var(--color-border-dotted);
+  transition: background-color 150ms ease-out;
   &:hover {
-    @apply bg-surface-hover text-text;
+    @apply bg-surface-hover;
   }
-}
-
-@utility nav-item-active {
-  @apply bg-primary-light text-primary;
-  &:hover {
-    @apply bg-primary-light text-primary;
+  &:last-child {
+    border-bottom: none;
   }
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   CHAT MESSAGE STYLES - Notion-inspired clean bubbles
+   TOOLTIP
    ═══════════════════════════════════════════════════════════════ */
 
-@utility chat-bubble {
-  @apply px-4 py-3 rounded-lg max-w-[85%];
-}
-
-@utility chat-bubble-user {
-  @apply bg-primary text-text-inverse ml-auto shadow-sm;
-}
-
-@utility chat-bubble-assistant {
-  @apply bg-paper border border-border mr-auto shadow-xs;
-}
-
-@utility chat-bubble-tool {
-  @apply bg-surface-hover border border-border text-sm shadow-xs;
-}
-
-@utility chat-bubble-error {
-  @apply bg-error-light border border-error/20 text-error shadow-xs;
-}
-
-/* Typing indicator */
-@utility typing-indicator {
-  @apply flex gap-1.5 px-4 py-3;
-  & span {
-    @apply w-2 h-2 bg-text-muted rounded-full;
-    animation: typing-dot 1.4s ease-in-out infinite;
-  }
-  & span:nth-child(2) { animation-delay: 0.15s; }
-  & span:nth-child(3) { animation-delay: 0.3s; }
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   SPECIAL EFFECTS - Subtle paper texture
-   ═══════════════════════════════════════════════════════════════ */
-
-/* Optional noise texture overlay */
-.paper-texture::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  opacity: 0.02;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
-  pointer-events: none;
-}
-
-/* Tooltip styles */
 .tooltip {
-  @apply absolute z-50 px-2 py-1 text-xs font-medium bg-text text-text-inverse rounded shadow-lg;
-  @apply opacity-0 pointer-events-none transition-opacity duration-150;
+  @apply absolute z-50 px-2 py-1 text-xs font-medium bg-text text-text-inverse rounded-sm;
+  @apply opacity-0 pointer-events-none;
+  transition: opacity 150ms ease-out;
+  transition-delay: 150ms; /* Minimum delay before showing */
 }
 
 .tooltip-visible {

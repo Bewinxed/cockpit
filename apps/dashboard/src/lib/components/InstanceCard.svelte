@@ -93,8 +93,8 @@
     {/if}
   </div>
 
-  <!-- Arrow -->
+  <!-- Arrow with slide effect -->
   <div class="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-    <ArrowRight class="w-4 h-4 text-text-muted" />
+    <ArrowRight class="w-4 h-4 text-text-muted arrow-slide" />
   </div>
 </a>

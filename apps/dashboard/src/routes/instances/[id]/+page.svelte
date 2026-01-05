@@ -103,10 +103,29 @@
     }
   });
 
-  // Commands for the instance
-  let commands = $state<AvailableCommand[]>([]);
+  // Default builtin commands (always available as fallback)
+  const DEFAULT_COMMANDS: AvailableCommand[] = [
+    { name: '/help', type: 'builtin', description: 'Get help with using Claude Code' },
+    { name: '/clear', type: 'builtin', description: 'Clear conversation history' },
+    { name: '/compact', type: 'builtin', description: 'Clear history and compact context' },
+    { name: '/config', type: 'builtin', description: 'View or update configuration' },
+    { name: '/cost', type: 'builtin', description: 'Show token usage and cost' },
+    { name: '/doctor', type: 'builtin', description: 'Check Claude Code health' },
+    { name: '/init', type: 'builtin', description: 'Initialize project with CLAUDE.md' },
+    { name: '/login', type: 'builtin', description: 'Switch Claude accounts' },
+    { name: '/logout', type: 'builtin', description: 'Sign out of your account' },
+    { name: '/memory', type: 'builtin', description: 'Edit CLAUDE.md memory file' },
+    { name: '/model', type: 'builtin', description: 'Switch AI model' },
+    { name: '/permissions', type: 'builtin', description: 'View or update permissions' },
+    { name: '/review', type: 'builtin', description: 'Request code review' },
+    { name: '/status', type: 'builtin', description: 'View system status' },
+    { name: '/vim', type: 'builtin', description: 'Toggle vim mode' },
+  ];
 
-  // Fetch commands when instance is available
+  // Commands for the instance (starts with defaults)
+  let commands = $state<AvailableCommand[]>(DEFAULT_COMMANDS);
+
+  // Fetch commands when instance is running (merges with defaults)
   $effect(() => {
     if (instance && instance.status === 'running') {
       fetchCommands();
@@ -122,11 +141,15 @@
       }
       if (data?.success && data.data) {
         const result = data.data as { commands?: AvailableCommand[] };
-        commands = result.commands || [];
+        const fetchedCommands = result.commands || [];
+        // Merge: fetched commands take precedence, then defaults
+        const fetchedNames = new Set(fetchedCommands.map(c => c.name));
+        const uniqueDefaults = DEFAULT_COMMANDS.filter(c => !fetchedNames.has(c.name));
+        commands = [...fetchedCommands, ...uniqueDefaults];
       }
     } catch (err) {
       console.error('Failed to fetch commands:', err);
-      // Commands are optional, don't show error
+      // Keep default commands on error
     }
   }
 

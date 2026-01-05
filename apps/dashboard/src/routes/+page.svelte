@@ -87,9 +87,9 @@
       <Card padding="lg">
         <div class="flex justify-between items-center mb-5">
           <h2 class="section-title mb-0">Recent Instances</h2>
-          <a href="/instances" class="text-sm text-text-secondary hover:text-primary transition-colors flex items-center gap-1">
+          <a href="/instances" class="group text-sm text-text-secondary hover:text-text transition-colors flex items-center gap-1">
             View all
-            <ArrowRight class="w-4 h-4" />
+            <ArrowRight class="w-4 h-4 arrow-slide" />
           </a>
         </div>
 
@@ -114,9 +114,9 @@
       <Card padding="lg">
         <div class="flex justify-between items-center mb-5">
           <h2 class="section-title mb-0">Connected Agents</h2>
-          <a href="/agents" class="text-sm text-text-secondary hover:text-primary transition-colors flex items-center gap-1">
+          <a href="/agents" class="group text-sm text-text-secondary hover:text-text transition-colors flex items-center gap-1">
             View all
-            <ArrowRight class="w-4 h-4" />
+            <ArrowRight class="w-4 h-4 arrow-slide" />
           </a>
         </div>
 
