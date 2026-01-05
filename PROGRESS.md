@@ -377,23 +377,35 @@ The `/model` command now works as an inline UI form (like `/login`):
 
 **Audit Result:** All database queries already use Drizzle ORM properly. Found only `sql` template tag usage for dynamic expressions which is the correct Drizzle pattern.
 
-### 7.2 Replace UI Components with shadcn-svelte
+### 7.2 Replace UI Components with shadcn-svelte ✅ COMPLETE
 
-**Status:** 🔧 In Progress
+**Status:** ✅ Complete
 
 **Goal:** Migrate custom UI components to shadcn-svelte for consistency and maintainability.
 
 **Reference:** https://www.shadcn-svelte.com/docs
 
-**What needs to be done:**
+**Completed:**
 - [x] Install shadcn-svelte CLI and initialize (components.json)
 - [x] Install dependencies (bits-ui, tailwind-variants, clsx, tailwind-merge)
-- [x] Add Button component with variants
-- [x] Add Card component with subcomponents
-- [x] Add Badge component
+- [x] Add Button component with variants (default, secondary, ghost, destructive, outline, link)
+- [x] Add Card component with subcomponents (CardHeader, CardTitle, CardDescription, CardContent, CardFooter)
+- [x] Add Badge component with variants (default, secondary, success, warning, error, info, destructive)
 - [x] Add Input component
-- [x] Add Dialog component (replaces Modal)
+- [x] Add Dialog component (replaces Modal pattern)
 - [x] Create LoadingButton wrapper for loading states
 - [x] Update variants: primary→default, danger→destructive
-- [ ] Update snippet patterns to new children format
-- [ ] Remove old custom components (Button.svelte, Card.svelte, etc.)
+- [x] Update all Button/Badge snippet patterns to inline children format
+- [x] Created $lib/utils.ts with cn() function
+
+**Files Added:**
+- `apps/dashboard/components.json` - shadcn-svelte configuration
+- `apps/dashboard/src/lib/utils.ts` - cn utility for class merging
+- `apps/dashboard/src/lib/components/ui/LoadingButton.svelte` - Loading state wrapper
+- `apps/dashboard/src/lib/components/ui/button/` - shadcn Button
+- `apps/dashboard/src/lib/components/ui/card/` - shadcn Card
+- `apps/dashboard/src/lib/components/ui/badge/` - shadcn Badge
+- `apps/dashboard/src/lib/components/ui/input/` - shadcn Input
+- `apps/dashboard/src/lib/components/ui/dialog/` - shadcn Dialog
+
+**Note:** Old custom components (Button.svelte, Card.svelte, etc.) kept for reference but unused. Modal components use legitimate snippet patterns for their own APIs.
