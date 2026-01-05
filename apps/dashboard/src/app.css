@@ -1,5 +1,7 @@
 @import "tailwindcss";
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap');
+
+/* Configure dark mode variant */
+@variant dark (:root.dark &);
 
 /* Cockpit Dashboard - Notion-inspired with Flexoki v2 Colors */
 /* A warm, inviting interface that feels like home */
@@ -9,15 +11,15 @@
      FLEXOKI COLOR PALETTE - Warm & Inviting
      ═══════════════════════════════════════════════════════════════ */
 
-  /* Base Neutrals - Light Mode */
-  --color-paper: #FFFCF0;
-  --color-bg: #F2F0E5;
-  --color-bg-subtle: #E6E4D9;
-  --color-surface: #FFFCF0;
-  --color-surface-hover: #F2F0E5;
-  --color-surface-active: #E6E4D9;
-  --color-border: #DAD8CE;
-  --color-border-strong: #CECDC3;
+  /* Base Neutrals - Light Mode (Notion-inspired) */
+  --color-paper: #FFFFFF;
+  --color-bg: #F7F6F3;
+  --color-bg-subtle: #EFEEEB;
+  --color-surface: #FFFFFF;
+  --color-surface-hover: #F7F6F3;
+  --color-surface-active: #EFEEEB;
+  --color-border: #E9E8E5;
+  --color-border-strong: #DDDCD8;
 
   /* Text Colors */
   --color-text: #1C1B1A;
@@ -26,10 +28,10 @@
   --color-text-inverse: #FFFCF0;
 
   /* Primary - Blue (Notion-like) */
-  --color-primary: #205EA6;
-  --color-primary-hover: #1a4d87;
-  --color-primary-light: rgba(32, 94, 166, 0.12);
-  --color-primary-muted: rgba(32, 94, 166, 0.08);
+  --color-primary: #2383E2;
+  --color-primary-hover: #1a6bc9;
+  --color-primary-light: rgba(35, 131, 226, 0.1);
+  --color-primary-muted: rgba(35, 131, 226, 0.06);
 
   /* Secondary - Purple */
   --color-secondary: #5E409D;
@@ -75,27 +77,27 @@
   --space-12: 48px;
 
   /* ═══════════════════════════════════════════════════════════════
-     BORDER RADIUS - Soft but not overly playful
+     BORDER RADIUS - Notion-style generous corners
      ═══════════════════════════════════════════════════════════════ */
 
-  --radius-sm: 4px;
+  --radius-sm: 3px;
   --radius-md: 6px;
-  --radius-lg: 8px;
-  --radius-xl: 12px;
-  --radius-2xl: 16px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+  --radius-2xl: 18px;
   --radius-full: 9999px;
 
   /* ═══════════════════════════════════════════════════════════════
-     SHADOWS - Warm and subtle like paper
+     SHADOWS - Notion-style subtle and clean
      ═══════════════════════════════════════════════════════════════ */
 
-  --shadow-xs: 0 1px 2px rgba(28, 27, 26, 0.04);
-  --shadow-sm: 0 1px 3px rgba(28, 27, 26, 0.05), 0 1px 2px rgba(28, 27, 26, 0.03);
-  --shadow-md: 0 4px 8px rgba(28, 27, 26, 0.06), 0 2px 4px rgba(28, 27, 26, 0.04);
-  --shadow-lg: 0 8px 16px rgba(28, 27, 26, 0.08), 0 4px 8px rgba(28, 27, 26, 0.04);
-  --shadow-xl: 0 16px 32px rgba(28, 27, 26, 0.10), 0 8px 16px rgba(28, 27, 26, 0.05);
-  --shadow-glow-primary: 0 0 20px rgba(32, 94, 166, 0.15);
-  --shadow-glow-success: 0 0 20px rgba(102, 128, 11, 0.15);
+  --shadow-xs: 0 1px 2px rgba(15, 15, 15, 0.03);
+  --shadow-sm: 0 1px 3px rgba(15, 15, 15, 0.04);
+  --shadow-md: 0 4px 8px rgba(15, 15, 15, 0.06), 0 0 1px rgba(15, 15, 15, 0.04);
+  --shadow-lg: 0 8px 16px rgba(15, 15, 15, 0.08), 0 0 1px rgba(15, 15, 15, 0.04);
+  --shadow-xl: 0 16px 24px rgba(15, 15, 15, 0.10), 0 0 1px rgba(15, 15, 15, 0.04);
+  --shadow-glow-primary: 0 0 0 3px rgba(35, 131, 226, 0.1);
+  --shadow-glow-success: 0 0 0 3px rgba(102, 128, 11, 0.1);
 
   /* ═══════════════════════════════════════════════════════════════
      TRANSITIONS - Smooth and natural
@@ -111,48 +113,46 @@
    DARK MODE - Warm, not cold
    ═══════════════════════════════════════════════════════════════ */
 
-@media (prefers-color-scheme: dark) {
-  @theme {
-    --color-paper: #1C1B1A;
-    --color-bg: #100F0F;
-    --color-bg-subtle: #1C1B1A;
-    --color-surface: #282726;
-    --color-surface-hover: #343331;
-    --color-surface-active: #403E3C;
-    --color-border: #403E3C;
-    --color-border-strong: #575653;
-    --color-text: #CECDC3;
-    --color-text-secondary: #9F9D96;
-    --color-text-muted: #6F6E69;
-    --color-text-inverse: #1C1B1A;
+:root.dark {
+  --color-paper: #1C1B1A;
+  --color-bg: #100F0F;
+  --color-bg-subtle: #1C1B1A;
+  --color-surface: #282726;
+  --color-surface-hover: #343331;
+  --color-surface-active: #403E3C;
+  --color-border: #403E3C;
+  --color-border-strong: #575653;
+  --color-text: #CECDC3;
+  --color-text-secondary: #9F9D96;
+  --color-text-muted: #6F6E69;
+  --color-text-inverse: #1C1B1A;
 
-    /* Brighter accent colors for dark mode */
-    --color-primary: #4385BE;
-    --color-primary-hover: #5a9bd1;
-    --color-primary-light: rgba(67, 133, 190, 0.18);
+  /* Brighter accent colors for dark mode */
+  --color-primary: #4385BE;
+  --color-primary-hover: #5a9bd1;
+  --color-primary-light: rgba(67, 133, 190, 0.18);
 
-    --color-secondary: #8B7EC8;
-    --color-secondary-light: rgba(139, 126, 200, 0.18);
+  --color-secondary: #8B7EC8;
+  --color-secondary-light: rgba(139, 126, 200, 0.18);
 
-    --color-success: #879A39;
-    --color-success-light: rgba(135, 154, 57, 0.18);
+  --color-success: #879A39;
+  --color-success-light: rgba(135, 154, 57, 0.18);
 
-    --color-warning: #D0A215;
-    --color-warning-light: rgba(208, 162, 21, 0.18);
+  --color-warning: #D0A215;
+  --color-warning-light: rgba(208, 162, 21, 0.18);
 
-    --color-error: #D14D41;
-    --color-error-light: rgba(209, 77, 65, 0.18);
+  --color-error: #D14D41;
+  --color-error-light: rgba(209, 77, 65, 0.18);
 
-    --color-info: #3AA99F;
-    --color-info-light: rgba(58, 169, 159, 0.18);
+  --color-info: #3AA99F;
+  --color-info-light: rgba(58, 169, 159, 0.18);
 
-    /* Deeper shadows for dark mode */
-    --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.25);
-    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.35), 0 1px 2px rgba(0, 0, 0, 0.25);
-    --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.30), 0 2px 4px rgba(0, 0, 0, 0.25);
-    --shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.35), 0 4px 8px rgba(0, 0, 0, 0.25);
-    --shadow-xl: 0 16px 32px rgba(0, 0, 0, 0.40), 0 8px 16px rgba(0, 0, 0, 0.30);
-  }
+  /* Deeper shadows for dark mode */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.25);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.35), 0 1px 2px rgba(0, 0, 0, 0.25);
+  --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.30), 0 2px 4px rgba(0, 0, 0, 0.25);
+  --shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.35), 0 4px 8px rgba(0, 0, 0, 0.25);
+  --shadow-xl: 0 16px 32px rgba(0, 0, 0, 0.40), 0 8px 16px rgba(0, 0, 0, 0.30);
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -244,10 +244,10 @@ body {
   letter-spacing: -0.01em;
 }
 
-/* Focus styles - subtle ring */
+/* Focus styles - Notion-style subtle ring */
 :focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px var(--color-paper), 0 0 0 4px var(--color-primary);
+  box-shadow: var(--shadow-glow-primary);
 }
 
 /* Selection - warm highlight */
@@ -346,41 +346,42 @@ body {
    COMPONENT STYLES - Notion-inspired
    ═══════════════════════════════════════════════════════════════ */
 
-/* Buttons */
+/* Buttons - Notion-style clean and refined */
 @utility btn {
-  @apply inline-flex items-center justify-center gap-2 font-medium rounded-md cursor-pointer transition-all duration-150 outline-none;
-  @apply disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none;
+  @apply inline-flex items-center justify-center gap-2 font-medium rounded-md cursor-pointer transition-all duration-100 outline-none;
+  @apply disabled:opacity-40 disabled:cursor-not-allowed disabled:pointer-events-none;
 }
 
 @utility btn-sm {
-  @apply px-2.5 py-1.5 text-sm;
+  @apply px-3 py-1.5 text-sm;
 }
 
 @utility btn-md {
-  @apply px-3 py-2 text-sm;
+  @apply px-4 py-2 text-sm;
 }
 
 @utility btn-lg {
-  @apply px-4 py-2.5 text-sm;
+  @apply px-5 py-2.5 text-sm;
 }
 
 @utility btn-primary {
-  @apply bg-primary text-text-inverse;
+  @apply bg-primary text-text-inverse shadow-sm;
   &:hover {
-    @apply bg-primary-hover;
+    @apply bg-primary-hover shadow-md;
   }
   &:active {
     transform: scale(0.98);
+    @apply shadow-sm;
   }
 }
 
 @utility btn-secondary {
-  @apply bg-surface text-text border border-border;
+  @apply bg-paper text-text border border-border shadow-xs;
   &:hover {
-    @apply bg-surface-hover border-border-strong;
+    @apply bg-surface-hover border-border-strong shadow-sm;
   }
   &:active {
-    @apply bg-surface-active;
+    @apply bg-surface-active shadow-xs;
   }
 }
 
@@ -395,23 +396,23 @@ body {
 }
 
 @utility btn-danger {
-  @apply bg-error text-text-inverse;
+  @apply bg-error text-text-inverse shadow-sm;
   &:hover {
-    @apply bg-error-dark;
+    @apply bg-error-dark shadow-md;
   }
 }
 
 @utility btn-success {
-  @apply bg-success text-text-inverse;
+  @apply bg-success text-text-inverse shadow-sm;
   &:hover {
-    @apply bg-success-dark;
+    @apply bg-success-dark shadow-md;
   }
 }
 
 @utility btn-warning {
-  @apply bg-warning text-text-inverse;
+  @apply bg-warning text-text-inverse shadow-sm;
   &:hover {
-    @apply bg-warning-dark;
+    @apply bg-warning-dark shadow-md;
   }
 }
 
@@ -420,33 +421,35 @@ body {
   @apply p-2 rounded-md;
 }
 
-/* Cards - Paper-like with subtle depth */
+/* Cards - Notion-style clean with subtle elevation */
 @utility card {
-  @apply bg-surface rounded-lg border border-border;
+  @apply bg-paper rounded-lg border border-border shadow-xs;
 }
 
 @utility card-interactive {
-  @apply cursor-pointer transition-all duration-150;
+  @apply cursor-pointer transition-all duration-100;
   &:hover {
-    @apply bg-surface-hover border-border-strong;
+    @apply bg-surface-hover border-border-strong shadow-sm;
+    transform: translateY(-1px);
   }
   &:active {
-    @apply bg-surface-active;
+    @apply bg-surface-active shadow-xs;
+    transform: translateY(0);
   }
 }
 
-/* Inputs - Clean and warm */
+/* Inputs - Notion-style clean and spacious */
 @utility input {
-  @apply w-full px-3 py-2 text-sm bg-surface border border-border rounded-md text-text transition-all duration-150 outline-none;
+  @apply w-full px-3 py-2 text-sm bg-paper border border-border rounded-lg text-text transition-all duration-150 outline-none;
   &::placeholder {
     @apply text-text-muted;
   }
   &:hover {
-    @apply border-border-strong;
+    @apply border-border-strong bg-surface-hover;
   }
   &:focus {
     @apply border-primary bg-paper;
-    box-shadow: 0 0 0 3px var(--color-primary-light);
+    box-shadow: var(--shadow-glow-primary);
   }
   &:disabled {
     @apply opacity-50 cursor-not-allowed bg-surface-hover;
@@ -594,27 +597,27 @@ body {
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   CHAT MESSAGE STYLES
+   CHAT MESSAGE STYLES - Notion-inspired clean bubbles
    ═══════════════════════════════════════════════════════════════ */
 
 @utility chat-bubble {
-  @apply px-4 py-3 rounded-xl max-w-[85%];
+  @apply px-4 py-3 rounded-lg max-w-[85%];
 }
 
 @utility chat-bubble-user {
-  @apply bg-primary text-text-inverse ml-auto rounded-br-sm;
+  @apply bg-primary text-text-inverse ml-auto shadow-sm;
 }
 
 @utility chat-bubble-assistant {
-  @apply bg-surface border border-border mr-auto rounded-bl-sm;
+  @apply bg-paper border border-border mr-auto shadow-xs;
 }
 
 @utility chat-bubble-tool {
-  @apply bg-surface-hover border border-border text-sm;
+  @apply bg-surface-hover border border-border text-sm shadow-xs;
 }
 
 @utility chat-bubble-error {
-  @apply bg-error-light border border-error/30 text-error;
+  @apply bg-error-light border border-error/20 text-error shadow-xs;
 }
 
 /* Typing indicator */

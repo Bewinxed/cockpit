@@ -136,7 +136,7 @@
   }
 </script>
 
-<form class="flex gap-3 p-4 bg-surface border-t border-border" onsubmit={handleSubmit}>
+<form class="flex gap-3 px-6 py-4 bg-paper border-t border-border" onsubmit={handleSubmit}>
   <div class="flex-1 relative">
     <!-- Command Palette -->
     <CommandPalette
@@ -153,7 +153,7 @@
       {placeholder}
       disabled={disabled || loading}
       rows={1}
-      class="input resize-none min-h-[42px] max-h-[200px] py-2.5 pr-12 disabled:bg-surface-hover disabled:cursor-not-allowed"
+      class="input resize-none min-h-[44px] max-h-[200px] py-3 pr-12 disabled:bg-surface-hover disabled:cursor-not-allowed text-[15px] leading-relaxed"
       oninput={handleInput}
       onkeydown={handleKeydown}
     ></textarea>

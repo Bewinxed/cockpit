@@ -24,6 +24,8 @@
     Loader2,
     Circle
   } from 'lucide-svelte';
+  import { ThemeSwitcher } from '$lib/components/ui';
+  import '$lib/stores/theme'; // Initialize theme store
 
   interface Props {
     children: import('svelte').Snippet;
@@ -68,35 +70,35 @@
 
 <div class="flex min-h-screen bg-bg">
   <!-- Sidebar - Notion-inspired -->
-  <aside class="fixed top-0 left-0 bottom-0 w-56 bg-surface flex flex-col border-r border-border">
+  <aside class="fixed top-0 left-0 bottom-0 w-60 bg-paper flex flex-col border-r border-border">
     <!-- Logo & Workspace -->
-    <div class="flex items-center gap-2.5 px-3 py-3 hover:bg-surface-hover transition-colors cursor-pointer rounded-lg mx-2 mt-2">
-      <div class="flex items-center justify-center w-7 h-7 rounded-md bg-primary text-text-inverse text-sm font-bold">
+    <div class="flex items-center gap-3 px-4 py-3 hover:bg-surface-hover transition-all duration-100 cursor-pointer rounded-md mx-3 mt-3">
+      <div class="flex items-center justify-center w-8 h-8 rounded-lg bg-primary text-text-inverse text-base font-bold shadow-sm">
         C
       </div>
       <div class="flex-1 min-w-0">
-        <span class="text-sm font-semibold text-text block truncate">Cockpit</span>
+        <span class="text-[15px] font-semibold text-text block truncate">Cockpit</span>
         <span class="text-xs text-text-muted block truncate">AI Orchestration</span>
       </div>
-      <ChevronRight class="w-4 h-4 text-text-muted flex-shrink-0" />
+      <ChevronRight class="w-3.5 h-3.5 text-text-muted flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
     </div>
 
     <!-- Navigation -->
-    <nav class="flex-1 px-2 py-3 overflow-y-auto">
-      <div class="space-y-0.5">
+    <nav class="flex-1 px-3 py-4 overflow-y-auto">
+      <div class="space-y-1">
         {#each navItems as item}
           {@const active = isActive(item.href)}
           <a
             href={item.href}
-            class="group flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-sm transition-all duration-100
+            class="group flex items-center gap-3 px-3 py-2 rounded-md text-[15px] transition-all duration-100
                    {active
                      ? 'bg-primary-light text-primary font-medium'
                      : 'text-text-secondary hover:bg-surface-hover hover:text-text'}"
           >
-            <span class="text-base leading-none">{item.emoji}</span>
+            <span class="text-lg leading-none">{item.emoji}</span>
             <span class="flex-1">{item.label}</span>
             {#if active}
-              <div class="w-1.5 h-1.5 rounded-full bg-primary"></div>
+              <div class="w-1.5 h-1.5 rounded-full bg-primary shadow-glow-primary"></div>
             {/if}
           </a>
         {/each}
@@ -104,9 +106,9 @@
     </nav>
 
     <!-- Footer Stats -->
-    <div class="px-3 py-3 border-t border-border">
+    <div class="px-4 py-4 border-t border-border bg-surface-hover/30">
       <!-- Connection Status -->
-      <div class="flex items-center gap-2 mb-2">
+      <div class="flex items-center gap-2 mb-3">
         <div class="relative">
           {#if $connectionStatus === 'connected'}
             <Circle class="w-2 h-2 fill-success text-success" />
@@ -124,7 +126,7 @@
 
       <!-- Quick Stats -->
       {#if $connectionStatus === 'connected'}
-        <div class="flex items-center gap-3 text-xs text-text-muted">
+        <div class="flex items-center gap-3 text-xs text-text-muted mb-3">
           <div class="flex items-center gap-1">
             <span class="font-medium text-text-secondary">{$stats.onlineAgents}</span>
             <span>agents</span>
@@ -136,11 +138,14 @@
           </div>
         </div>
       {/if}
+
+      <!-- Theme Switcher -->
+      <ThemeSwitcher />
     </div>
   </aside>
 
   <!-- Main content -->
-  <main class="flex-1 ml-56 min-h-screen">
+  <main class="flex-1 ml-60 min-h-screen">
     <div class="p-6">
       {@render children()}
     </div>

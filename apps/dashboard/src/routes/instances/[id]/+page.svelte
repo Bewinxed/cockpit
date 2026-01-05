@@ -301,10 +301,10 @@
   <title>{instance?.name || 'Instance'} | Cockpit</title>
 </svelte:head>
 
-<div class="h-[calc(100vh-64px)] flex flex-col -m-8">
+<div class="h-screen flex flex-col -m-6 bg-bg">
   {#if instance}
     <!-- Header -->
-    <header class="flex-shrink-0 bg-surface border-b border-border px-6 py-4">
+    <header class="flex-shrink-0 bg-paper border-b border-border px-6 py-4">
       <div class="flex items-start justify-between">
         <div class="flex items-start gap-4">
           <!-- Back button -->
