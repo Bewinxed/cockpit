@@ -366,3 +366,36 @@ The `/model` command now works as an inline UI form (like `/login`):
 - OAuth endpoints: `https://claude.ai/oauth/authorize`, `https://console.anthropic.com/v1/oauth/token`
 - Client ID: `9d1c250a-e61b-44d9-88ed-5944d1962f5e`
 - Drizzle ORM: https://orm.drizzle.team/docs/sql-schema-declaration
+
+---
+
+## Phase 7: Database & UI Modernization
+
+### 7.1 Replace Raw SQL with Drizzle ORM
+
+**Status:** 🔧 In Progress
+
+**Goal:** Ensure all database queries use Drizzle ORM for type safety and consistency.
+
+**What needs to be done:**
+- [ ] Audit all packages for raw SQL queries
+- [ ] Replace any raw SQL with Drizzle query builder
+- [ ] Verify all queries use proper Drizzle patterns
+
+### 7.2 Replace UI Components with shadcn-svelte
+
+**Status:** 🔧 In Progress
+
+**Goal:** Migrate custom UI components to shadcn-svelte for consistency and maintainability.
+
+**Reference:** https://www.shadcn-svelte.com/docs
+
+**What needs to be done:**
+- [ ] Install shadcn-svelte CLI and initialize
+- [ ] Replace Button component with shadcn Button
+- [ ] Replace Card component with shadcn Card
+- [ ] Replace Badge component with shadcn Badge
+- [ ] Replace Input component with shadcn Input
+- [ ] Replace Modal component with shadcn Dialog
+- [ ] Replace other components as needed
+- [ ] Update imports across the dashboard

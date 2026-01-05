@@ -195,7 +195,7 @@
 
   <Button
     type="submit"
-    variant="primary"
+    variant="default"
     size="md"
     disabled={disabled || loading || !message.trim()}
     class="self-end"

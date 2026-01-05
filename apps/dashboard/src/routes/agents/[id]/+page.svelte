@@ -102,7 +102,7 @@
         </div>
 
         {#if agent.status === 'online'}
-          <Button variant="primary" onclick={() => showNewInstanceModal = true}>
+          <Button variant="default" onclick={() => showNewInstanceModal = true}>
             {#snippet icon()}<Plus class="w-4 h-4" />{/snippet}
             {#snippet children()}New Instance{/snippet}
           </Button>

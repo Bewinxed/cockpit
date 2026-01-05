@@ -5,7 +5,7 @@
   import { deleteProject, updateProject } from '$lib/actions';
   import InstanceCard from '$lib/components/InstanceCard.svelte';
   import NewInstanceModal from '$lib/components/NewInstanceModal.svelte';
-  import { Button, Badge, Card, EmptyState, Input } from '$lib/components/ui';
+  import { Button, Badge, Card, EmptyState, Input, LoadingButton } from '$lib/components/ui';
   import { formatDistanceToNow, formatTimestamp } from '$lib/utils/time';
   import {
     ArrowLeft,
@@ -184,13 +184,13 @@
             {/if}
 
             <div class="flex items-center gap-3 pt-2">
-              <Button variant="primary" onclick={saveChanges} loading={saving}>
-                {#snippet icon()}<Save class="w-4 h-4" />{/snippet}
-                {#snippet children()}Save Changes{/snippet}
-              </Button>
+              <LoadingButton variant="default" onclick={saveChanges} loading={saving}>
+                <Save class="size-4" />
+                Save Changes
+              </LoadingButton>
               <Button variant="ghost" onclick={cancelEditing} disabled={saving}>
-                {#snippet icon()}<X class="w-4 h-4" />{/snippet}
-                {#snippet children()}Cancel{/snippet}
+                <X class="size-4" />
+                Cancel
               </Button>
             </div>
           </div>
@@ -227,13 +227,13 @@
 
           <div class="flex items-center gap-2">
             <Button variant="ghost" size="sm" onclick={startEditing}>
-              {#snippet icon()}<Pencil class="w-4 h-4" />{/snippet}
-              {#snippet children()}Edit{/snippet}
+              <Pencil class="size-4" />
+              Edit
             </Button>
-            <Button variant="danger" size="sm" onclick={handleDelete} loading={deleting}>
-              {#snippet icon()}<Trash2 class="w-4 h-4" />{/snippet}
-              {#snippet children()}Delete{/snippet}
-            </Button>
+            <LoadingButton variant="destructive" size="sm" onclick={handleDelete} loading={deleting}>
+              <Trash2 class="size-4" />
+              Delete
+            </LoadingButton>
           </div>
         </div>
       {/if}
@@ -294,9 +294,9 @@
     <section>
       <div class="flex items-center justify-between mb-4">
         <h2 class="section-title mb-0">Instances in this Project</h2>
-        <Button variant="primary" size="sm" onclick={() => showNewInstanceModal = true}>
-          {#snippet icon()}<Plus class="w-4 h-4" />{/snippet}
-          {#snippet children()}New Instance{/snippet}
+        <Button variant="default" size="sm" onclick={() => showNewInstanceModal = true}>
+          <Plus class="size-4" />
+          New Instance
         </Button>
       </div>
 

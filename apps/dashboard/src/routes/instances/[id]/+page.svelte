@@ -694,7 +694,7 @@
               </Button>
             {/if}
             <Button
-              variant="danger"
+              variant="destructive"
               size="sm"
               onclick={handleStop}
               loading={stopping}
