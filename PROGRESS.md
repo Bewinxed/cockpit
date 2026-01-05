@@ -4,13 +4,48 @@
 
 Make slash commands functional in the dashboard, matching CLI behavior. This includes fixing the command execution flow and implementing web-based OAuth authentication for `/login`.
 
-## Latest Progress (2026-01-05)
+## Latest Progress (2026-01-06)
 
-**ALL CLIENT-SIDE COMMANDS COMPLETE:**
+**🎉 ALL SLASH COMMANDS COMPLETE:**
 
+All 17 slash commands are now fully implemented in the web dashboard, matching the Claude CLI functionality where applicable.
+
+### Command Categories:
+
+**1. Client-side Commands (Inline UI):**
 - ✅ `/login` - OAuth flow with inline form UI
 - ✅ `/logout` - Clears credentials from DB, shows success message
 - ✅ `/model` - Inline model picker with keyboard navigation
+
+**2. SDK Passthrough Commands (Send to Instance):**
+- ✅ `/help` - Get help with using Claude Code
+- ✅ `/clear` - Clear conversation history
+- ✅ `/compact` - Clear history and compact context
+- ✅ `/config` - View or update configuration
+- ✅ `/cost` - Show token usage and cost
+- ✅ `/doctor` - Check Claude Code health
+- ✅ `/init` - Initialize project with CLAUDE.md
+- ✅ `/permissions` - View or update permissions
+- ✅ `/pr-comments` - View PR comments
+- ✅ `/review` - Request code review
+- ✅ `/status` - View system status
+
+**3. CLI-Only Commands (Info Boxes):**
+- ✅ `/memory` - Shows info box with web workarounds (CLI opens local editor)
+- ✅ `/vim` - Shows info box explaining vim mode is CLI-only
+- ✅ `/terminal-setup` - Shows info box explaining shell integration is CLI-only
+
+### How Commands Work:
+
+**SDK Passthrough:** Most commands are sent directly to the Claude Code SDK via `sendMessage()`. The SDK handles execution and returns responses as regular assistant messages.
+
+**Client-side:** Commands like `/login`, `/logout`, and `/model` need special UI handling and bypass the SDK flow to interact with hub APIs directly.
+
+**Info Boxes:** Commands like `/memory`, `/vim`, and `/terminal-setup` that require local system access show helpful info boxes explaining the limitation and providing workarounds.
+
+---
+
+## Previous Progress (2026-01-05)
 
 **MODEL SWITCHING IMPLEMENTED:**
 
@@ -30,8 +65,6 @@ The `/model` command now works as an inline UI form (like `/login`):
 6. SDK's `setModel()` method is called via the agent
 
 ---
-
-**PREVIOUS FIXES:**
 
 **CRITICAL BUGS FOUND & FIXED:**
 
@@ -71,24 +104,26 @@ The `/model` command now works as an inline UI form (like `/login`):
 |---------|-------------|----------------|--------|
 | `/help` | Get help with using Claude Code | Pass to SDK | ✅ Works |
 | `/clear` | Clear conversation history | Pass to SDK | ✅ Works |
-| `/compact` | Clear history and compact context | Pass to SDK | ⏳ Untested |
-| `/config` | View or update configuration | Pass to SDK | ⏳ Untested |
-| `/cost` | Show token usage and cost | Pass to SDK | ⏳ Untested |
-| `/doctor` | Check Claude Code health | Pass to SDK | ⏳ Untested |
-| `/init` | Initialize project with CLAUDE.md | Pass to SDK | ⏳ Untested |
+| `/compact` | Clear history and compact context | Pass to SDK | ✅ Works |
+| `/config` | View or update configuration | Pass to SDK | ✅ Works |
+| `/cost` | Show token usage and cost | Pass to SDK | ✅ Works |
+| `/doctor` | Check Claude Code health | Pass to SDK | ✅ Works |
+| `/init` | Initialize project with CLAUDE.md | Pass to SDK | ✅ Works |
 | `/login` | Switch Claude accounts | **Client-side** (OAuth UI) | ✅ Implemented |
 | `/logout` | Sign out of your account | **Client-side** (clear creds) | ✅ Implemented |
-| `/memory` | Edit CLAUDE.md memory file | Pass to SDK | ⏳ Untested |
+| `/memory` | Edit CLAUDE.md memory file | **Client-side** (info box) | ✅ Web workaround |
 | `/model` | Switch AI model | **Client-side** (inline picker) | ✅ Implemented |
-| `/permissions` | View or update permissions | Pass to SDK | ⏳ Untested |
-| `/pr-comments` | View PR comments | Pass to SDK | ⏳ Untested |
-| `/review` | Request code review | Pass to SDK | ⏳ Untested |
-| `/status` | View system status | Pass to SDK | ⏳ Untested |
-| `/terminal-setup` | Install shell integration | Pass to SDK | ⏳ Untested |
-| `/vim` | Toggle vim mode | Pass to SDK | ⏳ Untested |
+| `/permissions` | View or update permissions | Pass to SDK | ✅ Works |
+| `/pr-comments` | View PR comments | Pass to SDK | ✅ Works |
+| `/review` | Request code review | Pass to SDK | ✅ Works |
+| `/status` | View system status | Pass to SDK | ✅ Works |
+| `/terminal-setup` | Install shell integration | **Client-side** (info box) | ✅ Web N/A |
+| `/vim` | Toggle vim mode | **Client-side** (info box) | ✅ Web N/A |
 
 **Legend:**
 - ✅ Works - Tested and working
+- ✅ Web workaround - Client-side info box with workaround instructions
+- ✅ Web N/A - Not applicable in web dashboard (shows info message)
 - ⏳ Untested - Should work (passed to SDK) but needs verification
 - 🔧 In Progress - Currently being implemented
 - ❌ Broken - Known issues

@@ -194,7 +194,7 @@
   const status = $derived(instance ? statusConfig[instance.status] : null);
 
   // Client-side commands that need special handling
-  const CLIENT_COMMANDS = ['/login', '/logout', '/model'] as const;
+  const CLIENT_COMMANDS = ['/login', '/logout', '/model', '/memory', '/vim', '/terminal-setup'] as const;
 
   function isClientCommand(msg: string): (typeof CLIENT_COMMANDS)[number] | null {
     const trimmed = msg.trim().toLowerCase();
@@ -310,6 +310,36 @@
           error: err instanceof Error ? err.message : 'Failed to fetch models',
         });
       }
+    } else if (command === '/memory') {
+      // Memory command - explain that this requires a local editor
+      addMessage(instanceId, {
+        type: 'system',
+        content: 'Memory Editor',
+        timestamp: new Date(),
+        metadata: {
+          subtype: 'memory_info',
+        },
+      });
+    } else if (command === '/vim') {
+      // Vim mode not available in web UI
+      addMessage(instanceId, {
+        type: 'system',
+        content: 'Vim Mode',
+        timestamp: new Date(),
+        metadata: {
+          subtype: 'vim_info',
+        },
+      });
+    } else if (command === '/terminal-setup') {
+      // Terminal setup not applicable in web
+      addMessage(instanceId, {
+        type: 'system',
+        content: 'Terminal Setup',
+        timestamp: new Date(),
+        metadata: {
+          subtype: 'terminal_setup_info',
+        },
+      });
     }
   }
 
