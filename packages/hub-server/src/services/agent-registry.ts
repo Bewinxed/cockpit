@@ -231,8 +231,10 @@ export class AgentRegistry {
 
     try {
       // Send the request via WebSocket
+      const serialized = JSON.stringify(request);
+      console.log(`[AgentRegistry] Sending to agent ${agentId}:`, serialized.slice(0, 300));
       // @ts-expect-error - ws type varies by runtime
-      agent.ws.send(JSON.stringify(request));
+      agent.ws.send(serialized);
 
       return await promise;
     } catch (error) {
@@ -245,6 +247,36 @@ export class AgentRegistry {
         error instanceof Error ? error.message : 'Failed to send request'
       );
     }
+  }
+
+  /**
+   * Send a JSON-RPC request to an agent by machineId (stable identifier)
+   * Falls back to agentId if machineId lookup fails
+   */
+  async sendToAgentByMachineId(
+    machineId: string | undefined,
+    agentId: string,
+    method: string,
+    params?: unknown
+  ): Promise<JsonRpcResponse> {
+    // Try to find agent by machineId first (stable across hub restarts)
+    let agent = machineId ? this.getByMachineId(machineId) : undefined;
+
+    // Fall back to agentId if machineId lookup fails
+    if (!agent) {
+      agent = this.agents.get(agentId);
+    }
+
+    if (!agent) {
+      return createErrorResponse(
+        '0',
+        JsonRpcErrorCode.INTERNAL_ERROR,
+        `Agent not found (machineId: ${machineId}, agentId: ${agentId})`
+      );
+    }
+
+    // Use the found agent's actual ID for the request
+    return this.sendToAgent(agent.id, method, params);
   }
 
   /**

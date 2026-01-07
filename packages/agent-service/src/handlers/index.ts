@@ -10,3 +10,4 @@ export {
 export { handleFilesystemList } from './filesystem.js';
 export { handleCommandsList } from './commands-discovery.js';
 export { handleModelsList, handleModelsSet } from './models.js';
+export { handleClaudeVersion } from './version.js';

@@ -1,7 +1,7 @@
 import { Elysia, t } from 'elysia';
 import type { Db } from '@cockpit/db';
 import type { Agent } from '@cockpit/core';
-import { CommandMethod, type FilesystemListResult, type JsonRpcError } from '@cockpit/core/protocol';
+import { CommandMethod, type FilesystemListResult, type ClaudeVersionResult, type JsonRpcError } from '@cockpit/core/protocol';
 import { agents, eq, desc } from '@cockpit/db';
 import { getAgentRegistry } from '../services/agent-registry';
 import { createInstanceTracker } from '../services/instance-tracker';
@@ -315,6 +315,47 @@ export function createAgentRoutes(db: Db) {
         }),
         query: t.Object({
           path: t.Optional(t.String()),
+        }),
+      }
+    )
+
+    // Get Claude CLI version from agent
+    .get(
+      '/:id/claude-version',
+      async ({ params, set }) => {
+        const connected = agentRegistry.get(params.id);
+
+        if (!connected || connected.status !== 'online') {
+          set.status = 404;
+          return {
+            success: false,
+            error: 'Agent not found or offline',
+          };
+        }
+
+        // Forward request to agent
+        const response = await agentRegistry.sendToAgent(
+          params.id,
+          CommandMethod.CLAUDE_VERSION,
+          {}
+        );
+
+        if (response.error) {
+          set.status = 400;
+          return {
+            success: false,
+            error: getErrorMessage(response.error),
+          };
+        }
+
+        return {
+          success: true,
+          data: response.result as ClaudeVersionResult,
+        };
+      },
+      {
+        params: t.Object({
+          id: t.String(),
         }),
       }
     );

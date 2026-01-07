@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { getStreamingState, type StreamingState } from '$lib/stores/realtime';
+  import { getStreamingState, type StreamingState } from '$lib/stores/realtime.svelte';
   import { derived, type Readable } from 'svelte/store';
 
   export let instanceId: string;

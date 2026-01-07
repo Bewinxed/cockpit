@@ -1,7 +1,7 @@
 <script lang="ts">
   import AgentCard from '$lib/components/AgentCard.svelte';
   import { EmptyState, Card } from '$lib/components/ui';
-  import { agents } from '$lib/stores/realtime';
+  import { agents } from '$lib/stores/realtime.svelte';
   import { Server, Terminal, Copy, Check } from 'lucide-svelte';
 
   let statusFilter = $state<'all' | 'online' | 'offline'>('all');

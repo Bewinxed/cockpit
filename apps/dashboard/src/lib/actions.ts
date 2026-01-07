@@ -4,7 +4,7 @@
  */
 
 import { api } from '$lib/api';
-import { fetchAgents, fetchInstances, fetchProjects } from './stores/realtime';
+import { fetchAgents, fetchInstances, fetchProjects } from './stores/realtime.svelte';
 import { extractErrorMessage } from '$lib/utils/error';
 
 /** Error codes that indicate authentication issues */

@@ -2,7 +2,7 @@
   import InstanceCard from '$lib/components/InstanceCard.svelte';
   import NewInstanceModal from '$lib/components/NewInstanceModal.svelte';
   import { Button, Input, EmptyState } from '$lib/components/ui';
-  import { instances, adhocInstances, projectInstances } from '$lib/stores/realtime';
+  import { instances, adhocInstances, projectInstances } from '$lib/stores/realtime.svelte';
   import { Plus, Search, Terminal, Folder, Zap } from 'lucide-svelte';
 
   let statusFilter = $state<'all' | 'running' | 'stopped' | 'error'>('all');

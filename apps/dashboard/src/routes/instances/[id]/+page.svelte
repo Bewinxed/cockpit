@@ -1,8 +1,8 @@
 <script lang="ts">
   import { page } from '$app/state';
   import { goto } from '$app/navigation';
-  import { tick, onMount } from 'svelte';
-  import { instances, instanceMessages, agents, addMessage, removeMessage, getStreamingState, getInstanceStatus, type Message } from '$lib/stores/realtime';
+  import { onMount, onDestroy } from 'svelte';
+  import { instances, instanceMessages, agents, addMessage, removeMessage, updateMessageMetadata, getStreamingState, getInstanceStatus, type Message } from '$lib/stores/realtime.svelte';
   import { sendMessage, stopInstance, resumeInstance, interruptInstance } from '$lib/actions';
   import { api } from '$lib/api';
   import { Button, Badge, EmptyState, LoadingButton } from '$lib/components/ui';
@@ -54,8 +54,23 @@
   // Get agent info
   const agent = $derived(instance?.agentId ? $agents.get(instance.agentId) : undefined);
 
+  // Cleanup function for auth event listener
+  let authCleanup: (() => void) | null = null;
+
   // Initialize messages from page data on mount
   onMount(() => {
+    // Listen for auth-required events - auto-trigger login flow
+    const handleAuthRequired = (event: Event) => {
+      const { instanceId: errorInstanceId } = (event as CustomEvent).detail;
+      if (errorInstanceId === instanceId) {
+        startLoginFlow();
+      }
+    };
+    window.addEventListener('cockpit:auth-required', handleAuthRequired);
+
+    // Store cleanup function
+    authCleanup = () => window.removeEventListener('cockpit:auth-required', handleAuthRequired);
+
     if (data.messages && data.messages.length > 0 && !$instanceMessages.get(instanceId)?.length) {
       // Convert DB messages to UI Message format
       for (const dbMsg of data.messages) {
@@ -103,24 +118,12 @@
     }
   });
 
-  // Default builtin commands (always available as fallback)
-  const DEFAULT_COMMANDS: AvailableCommand[] = [
-    { name: '/help', type: 'builtin', description: 'Get help with using Claude Code' },
-    { name: '/clear', type: 'builtin', description: 'Clear conversation history' },
-    { name: '/compact', type: 'builtin', description: 'Clear history and compact context' },
-    { name: '/config', type: 'builtin', description: 'View or update configuration' },
-    { name: '/cost', type: 'builtin', description: 'Show token usage and cost' },
-    { name: '/doctor', type: 'builtin', description: 'Check Claude Code health' },
-    { name: '/init', type: 'builtin', description: 'Initialize project with CLAUDE.md' },
-    { name: '/login', type: 'builtin', description: 'Switch Claude accounts' },
-    { name: '/logout', type: 'builtin', description: 'Sign out of your account' },
-    { name: '/memory', type: 'builtin', description: 'Edit CLAUDE.md memory file' },
-    { name: '/model', type: 'builtin', description: 'Switch AI model' },
-    { name: '/permissions', type: 'builtin', description: 'View or update permissions' },
-    { name: '/review', type: 'builtin', description: 'Request code review' },
-    { name: '/status', type: 'builtin', description: 'View system status' },
-    { name: '/vim', type: 'builtin', description: 'Toggle vim mode' },
-  ];
+  onDestroy(() => {
+    authCleanup?.();
+  });
+
+  // Commands for the instance
+  let commands = $state<AvailableCommand[]>([]);
 
   // Commands for the instance (starts with defaults)
   let commands = $state<AvailableCommand[]>(DEFAULT_COMMANDS);
@@ -194,7 +197,8 @@
   const status = $derived(instance ? statusConfig[instance.status] : null);
 
   // Client-side commands that need special handling
-  const CLIENT_COMMANDS = ['/login', '/logout', '/model', '/memory', '/vim', '/terminal-setup'] as const;
+  // These are commands handled locally because the SDK doesn't emit their output
+  const CLIENT_COMMANDS = ['/help', '/login', '/logout', '/model'] as const;
 
   function isClientCommand(msg: string): (typeof CLIENT_COMMANDS)[number] | null {
     const trimmed = msg.trim().toLowerCase();
@@ -213,38 +217,74 @@
   let pendingOAuthState = $state<string | null>(null);
   let pendingAuthUrl = $state<string | null>(null);
 
-  async function handleClientCommand(command: (typeof CLIENT_COMMANDS)[number]) {
-    if (command === '/login') {
-      try {
-        // Call server to start OAuth flow - it generates PKCE and returns auth URL
-        const { data, error: startError } = await api.api.auth.oauth.start.post();
+  // Start the login flow - reusable by /login command and auth_required errors
+  async function startLoginFlow() {
+    try {
+      // Call server to start OAuth flow - it generates PKCE and returns auth URL
+      const { data, error: startError } = await api.api.auth.oauth.start.post();
 
-        if (startError || !data?.success) {
-          throw new Error('Failed to start OAuth flow');
-        }
-
-        // Store state for later verification
-        pendingOAuthState = data.data.state;
-        pendingAuthUrl = data.data.authUrl;
-
-        // Add login prompt message with inline form
-        addMessage(instanceId, {
-          type: 'system',
-          content: 'Login to Claude',
-          timestamp: new Date(),
-          metadata: {
-            subtype: 'login_prompt',
-            authUrl: data.data.authUrl,
-            oauthState: data.data.state,
-          },
-        });
-      } catch (err) {
-        addMessage(instanceId, {
-          type: 'system',
-          content: `Login failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
-          timestamp: new Date(),
-        });
+      if (startError || !data?.success) {
+        throw new Error('Failed to start OAuth flow');
       }
+
+      // Store state for later verification
+      pendingOAuthState = data.data.state;
+      pendingAuthUrl = data.data.authUrl;
+
+      // Add login prompt message with inline form
+      addMessage(instanceId, {
+        type: 'system',
+        content: 'Login to Claude',
+        timestamp: new Date(),
+        metadata: {
+          subtype: 'login_prompt',
+          authUrl: data.data.authUrl,
+          oauthState: data.data.state,
+        },
+      });
+    } catch (err) {
+      addMessage(instanceId, {
+        type: 'system',
+        content: `Login failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
+        timestamp: new Date(),
+      });
+    }
+  }
+
+  async function handleClientCommand(command: (typeof CLIENT_COMMANDS)[number]) {
+    if (command === '/help') {
+      // Re-fetch commands to ensure we have the latest
+      await fetchCommands();
+
+      // Fetch Claude version from agent
+      let version = 'unknown';
+      if (instance?.agentId) {
+        try {
+          const versionResponse = await api.api.agents({ id: instance.agentId })['claude-version'].get();
+          if (versionResponse.data?.success && versionResponse.data.data?.version) {
+            version = versionResponse.data.data.version;
+          }
+        } catch {
+          // Fall back to unknown if we can't fetch
+        }
+      }
+
+      // Use the new help_menu message type with Claude CLI-style tabbed UI
+      addMessage(instanceId, {
+        type: 'help_menu',
+        content: '',
+        timestamp: new Date(),
+        metadata: {
+          version,
+          commands: commands.map(c => ({
+            name: c.name,
+            description: c.description,
+            type: c.type,
+          })),
+        },
+      });
+    } else if (command === '/login') {
+      await startLoginFlow();
     } else if (command === '/logout') {
       try {
         await api.api.auth.logout.delete();
@@ -272,7 +312,7 @@
       }
 
       // Add loading message first
-      const messageIndex = addMessage(instanceId, {
+      addMessage(instanceId, {
         type: 'system',
         content: 'Switch Model',
         timestamp: new Date(),
@@ -284,8 +324,9 @@
         },
       });
 
-      // Track this as active model picker
-      pendingModelPickerIndex = currentMessages.length - 1;
+      // Track this as active model picker - get index AFTER adding message
+      const messages = $instanceMessages.get(instanceId) || [];
+      pendingModelPickerIndex = messages.length - 1;
 
       // Fetch models
       try {
@@ -345,22 +386,6 @@
 
   // Track pending model picker message index
   let pendingModelPickerIndex = $state<number | null>(null);
-
-  // Helper to update message metadata
-  function updateMessageMetadata(instId: string, index: number, metadata: Record<string, unknown>) {
-    const messages = $instanceMessages.get(instId);
-    if (messages && messages[index]) {
-      messages[index] = {
-        ...messages[index],
-        metadata: {
-          ...messages[index].metadata,
-          ...metadata,
-        },
-      };
-      // Trigger reactivity by updating the store
-      $instanceMessages.set(instId, [...messages]);
-    }
-  }
 
   async function handleModelSelect(model: string): Promise<void> {
     const response = await fetch(`/api/instances/${instanceId}/models`, {

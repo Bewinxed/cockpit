@@ -52,7 +52,7 @@ export interface Task {
 
 export interface Message {
   instanceId: string;
-  type: 'assistant' | 'user' | 'system' | 'tool_use' | 'tool_result' | 'error' | 'hook_response';
+  type: 'assistant' | 'user' | 'system' | 'tool_use' | 'tool_result' | 'error' | 'hook_response' | 'command_output' | 'help_menu';
   content: string;
   timestamp: Date;
   // Metadata for richer rendering
@@ -64,7 +64,9 @@ export interface Message {
     toolResult?: unknown;
     toolStatus?: 'pending' | 'success' | 'error';
     // For system messages
-    subtype?: 'init' | 'compact_boundary' | 'status' | 'hook_response' | 'login_prompt';
+    subtype?: 'init' | 'compact_boundary' | 'status' | 'hook_response' | 'login_prompt' | 'auth_required' | 'model_picker';
+    // For command_output messages
+    command?: string;
     model?: string;
     cwd?: string;
     tools?: string[];
@@ -80,6 +82,15 @@ export interface Message {
     // For login_prompt
     authUrl?: string;
     oauthState?: string;
+    // For model_picker
+    loading?: boolean;
+    error?: string;
+    models?: Array<{ value: string; displayName: string; description: string }>;
+    currentModel?: string;
+    selectedModel?: string;
+    // For help_menu
+    version?: string;
+    commands?: Array<{ name: string; description?: string; type: 'builtin' | 'custom' | 'skill' | 'mcp' }>;
   };
 }
 
@@ -168,6 +179,25 @@ export function updateToolResult(instanceId: string, toolId: string, result: unk
 export function clearInstanceMessages(instanceId: string): void {
   instanceMessages.update((map) => {
     map.delete(instanceId);
+    return map;
+  });
+}
+
+// Update metadata on a specific message by index
+export function updateMessageMetadata(instanceId: string, index: number, metadata: Record<string, unknown>): void {
+  instanceMessages.update((map) => {
+    const messages = map.get(instanceId);
+    if (messages && messages[index]) {
+      const updatedMessages = [...messages];
+      updatedMessages[index] = {
+        ...messages[index],
+        metadata: {
+          ...messages[index].metadata,
+          ...metadata,
+        },
+      };
+      map.set(instanceId, updatedMessages);
+    }
     return map;
   });
 }
@@ -392,6 +422,36 @@ export function connect(baseUrl: string = '') {
     });
   });
 
+  eventSource.addEventListener('instance:error', (event: Event) => {
+    const { instanceId, instance, error } = JSON.parse((event as MessageEvent).data);
+    instances.update((map) => {
+      const existing = map.get(instanceId);
+      if (existing) {
+        map.set(instanceId, { ...existing, ...instance, status: 'error' });
+      }
+      return map;
+    });
+    // Check for auth-related errors
+    const isAuthError = error?.includes('auth') ||
+                        error?.includes('401') ||
+                        error?.includes('403') ||
+                        error?.includes('token') ||
+                        error?.includes('credentials') ||
+                        error?.includes('login');
+
+    if (isAuthError) {
+      // Dispatch custom event for auth errors - page component will handle login flow
+      window.dispatchEvent(new CustomEvent('cockpit:auth-required', { detail: { instanceId, error } }));
+    } else {
+      // Only add error message for non-auth errors
+      addMessage(instanceId, {
+        type: 'error',
+        content: error || 'An error occurred',
+        timestamp: new Date(),
+      });
+    }
+  });
+
   eventSource.addEventListener('instance:resumed', (event: Event) => {
     const instance = JSON.parse((event as MessageEvent).data);
     if (instance) {
@@ -455,12 +515,33 @@ export function connect(baseUrl: string = '') {
       message?: { content?: unknown[] | string; role?: string };
       result?: string;
       isSynthetic?: boolean;
+      isReplay?: boolean;
+      tool_use_result?: unknown;
       event?: { type?: string }; // For stream_event
       session_id?: string;
       cwd?: string;
       model?: string;
       tools?: string[];
     };
+
+    // Handle replay messages specially
+    if (msg.isReplay && msg.type === 'user') {
+      // Check if this is a local command output (wrapped in <local-command-stdout> tags)
+      const content = msg.message?.content;
+      if (typeof content === 'string' && content.includes('<local-command-stdout>')) {
+        // Extract the content between tags and display as assistant message
+        const match = content.match(/<local-command-stdout>([\s\S]*?)<\/local-command-stdout>/);
+        if (match && match[1]?.trim()) {
+          addMessage(instanceId, {
+            type: 'assistant',
+            content: match[1].trim(),
+            timestamp: new Date(),
+          });
+        }
+      }
+      // Skip all other replay messages to avoid duplicates
+      return;
+    }
 
     // ========================================
     // STREAMING STATE
@@ -483,11 +564,44 @@ export function connect(baseUrl: string = '') {
     if (msg.type === 'user' && msg.message?.content) {
       const content = msg.message.content;
 
-      // Check if this is a synthetic message (tool result wrapper)
-      // Synthetic messages have isSynthetic=true OR contain only tool_result blocks
-      const isSynthetic = msg.isSynthetic;
+      // Synthetic messages are system-generated (local commands, tool results)
+      if (msg.isSynthetic) {
+        // Handle local command results (like /cost, /help)
+        if (msg.tool_use_result) {
+          const resultText = typeof msg.tool_use_result === 'string'
+            ? msg.tool_use_result
+            : JSON.stringify(msg.tool_use_result, null, 2);
+          if (resultText.trim()) {
+            addMessage(instanceId, {
+              type: 'assistant',
+              content: resultText.trim(),
+              timestamp: new Date(),
+            });
+          }
+        }
 
-      if (!isSynthetic) {
+        // Process tool_result blocks (from synthetic user messages)
+        // These update existing tool_use messages with their results
+        if (Array.isArray(content)) {
+          for (const block of content) {
+            if (block && typeof block === 'object' && 'type' in block && block.type === 'tool_result') {
+              const toolResult = block as {
+                tool_use_id?: string;
+                content?: unknown;
+                is_error?: boolean;
+              };
+              if (toolResult.tool_use_id) {
+                updateToolResult(
+                  instanceId,
+                  toolResult.tool_use_id,
+                  toolResult.content,
+                  toolResult.is_error || false
+                );
+              }
+            }
+          }
+        }
+      } else {
         // Real user message - extract text content
         let textContent = '';
 
@@ -509,29 +623,6 @@ export function connect(baseUrl: string = '') {
             content: textContent.trim(),
             timestamp: new Date(),
           });
-        }
-      }
-
-      // Process tool_result blocks (from synthetic user messages)
-      // These update existing tool_use messages with their results
-      if (Array.isArray(content)) {
-        for (const block of content) {
-          if (block && typeof block === 'object' && 'type' in block && block.type === 'tool_result') {
-            const toolResult = block as {
-              tool_use_id?: string;
-              content?: unknown;
-              is_error?: boolean;
-            };
-            if (toolResult.tool_use_id) {
-              // Update the matching tool_use message with this result
-              updateToolResult(
-                instanceId,
-                toolResult.tool_use_id,
-                toolResult.content,
-                toolResult.is_error || false
-              );
-            }
-          }
         }
       }
     }
@@ -641,7 +732,7 @@ export function connect(baseUrl: string = '') {
     // ========================================
 
     // Result messages are handled by instance:token_usage event for cost/tokens
-    // The result.result field contains the final answer but we already have it from assistant messages
+    // Local command outputs are handled via synthetic user messages with tool_use_result
 
     // ========================================
     // STREAM EVENTS (for real-time updates)

@@ -211,7 +211,30 @@ async function handleRequest(
       const wsId = getWsId(ws);
       connectionAgentMap.set(wsId, agentId);
 
-      // Update existing instances if reported
+      // Reconcile instances: sync agent's actual state with DB
+      // This handles agent restarts where instances are lost from memory
+      const agentInstanceIds = new Set(
+        (existingInstances || []).map((inst: { id: string }) => inst.id)
+      );
+
+      // Get all instances in DB that are marked as running for this machine
+      const dbRunningInstances = await instanceTracker.getActiveByMachineId(machineId);
+
+      let orphanedCount = 0;
+      for (const dbInstance of dbRunningInstances) {
+        if (!agentInstanceIds.has(dbInstance.id)) {
+          // Instance is in DB as running but agent doesn't have it
+          // Mark as sleeping (can be resumed with sdkSessionId)
+          await instanceTracker.markSleeping(dbInstance.id);
+          broadcast.broadcast('instance:sleeping', {
+            instanceId: dbInstance.id,
+            reason: 'agent_reconnect_reconciliation'
+          });
+          orphanedCount++;
+        }
+      }
+
+      // Update instances that agent reports
       if (existingInstances && Array.isArray(existingInstances)) {
         for (const inst of existingInstances) {
           const existing = await instanceTracker.get(inst.id);
@@ -224,7 +247,14 @@ async function handleRequest(
         }
       }
 
-      console.log(`[Hub] Agent registered: ${agent.id} (${hostname})`);
+      if (orphanedCount > 0) {
+        console.log(`[Hub] Reconciled ${orphanedCount} orphaned instances for agent ${hostname} (marked as sleeping)`);
+      }
+      console.log(`[Hub] Agent registered: ${agent.id} (${hostname}), ${agentInstanceIds.size} running instances`);
+
+      // Backfill machineId for any instances that don't have it set
+      // This handles instances created before machineId was added
+      await instanceTracker.backfillMachineId(agentId, machineId);
 
       // Broadcast agent connection
       broadcast.broadcast('agent:connected', {

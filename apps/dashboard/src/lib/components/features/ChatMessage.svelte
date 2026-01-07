@@ -1,8 +1,9 @@
 <script lang="ts">
-  import { User, Bot, Wrench, FileText, AlertCircle, ChevronDown, ChevronRight, Copy, Check, Loader2, CheckCircle2, XCircle, Settings, Terminal, Scissors, ExternalLink, ArrowRight, KeyRound, Cpu, BookOpen, Info, FileCode } from 'lucide-svelte';
+  import { User, Bot, Wrench, FileText, AlertCircle, ChevronDown, ChevronRight, Copy, Check, Loader2, CheckCircle2, XCircle, Settings, Terminal, Scissors, ExternalLink, ArrowRight, KeyRound, Cpu, HelpCircle } from 'lucide-svelte';
   import Markdown from '@humanspeak/svelte-markdown';
   import { formatTimestamp } from '$lib/utils/time';
-  import type { Message } from '$lib/stores/realtime';
+  import type { Message } from '$lib/stores/realtime.svelte';
+  import HelpMenu from './HelpMenu.svelte';
 
   interface ModelInfo {
     value: string;
@@ -112,20 +113,6 @@
     message.type === 'system' && message.metadata?.subtype === 'model_picker'
   );
 
-  // Check if this is a memory_info system message
-  const isMemoryInfo = $derived(
-    message.type === 'system' && message.metadata?.subtype === 'memory_info'
-  );
-
-  // Check if this is a vim_info system message
-  const isVimInfo = $derived(
-    message.type === 'system' && message.metadata?.subtype === 'vim_info'
-  );
-
-  // Check if this is a terminal_setup_info system message
-  const isTerminalSetupInfo = $derived(
-    message.type === 'system' && message.metadata?.subtype === 'terminal_setup_info'
-  );
 
   // Model picker state
   let models = $derived<ModelInfo[]>((message.metadata?.models as ModelInfo[]) || []);
@@ -223,6 +210,18 @@
       icon: Terminal,
       iconBg: 'bg-info-light',
     },
+    command_output: {
+      align: 'justify-start',
+      bubble: 'chat-bubble chat-bubble-assistant',
+      icon: Terminal,
+      iconBg: 'bg-surface-hover',
+    },
+    help_menu: {
+      align: 'justify-start',
+      bubble: '',
+      icon: HelpCircle,
+      iconBg: 'bg-primary/10',
+    },
   };
 
   const config = $derived(messageConfig[message.type] || messageConfig.assistant);
@@ -231,7 +230,7 @@
 <svelte:window onkeydown={handleModelKeydown} />
 
 <div class="flex {config.align} gap-3 group animate-fade-in-up">
-  {#if message.type !== 'user' && message.type !== 'system' && !isCompactBoundary && !isLoginPrompt && !isModelPicker && !isMemoryInfo && !isVimInfo && !isTerminalSetupInfo}
+  {#if message.type !== 'user' && message.type !== 'system' && message.type !== 'help_menu' && !isCompactBoundary && !isLoginPrompt && !isModelPicker}
     <!-- Avatar -->
     <div class="flex-shrink-0 w-8 h-8 rounded-lg {config.iconBg} flex items-center justify-center">
       <config.icon class="w-4 h-4 {message.type === 'error' ? 'text-error' : 'text-text-secondary'}" />
@@ -239,7 +238,7 @@
   {/if}
 
   <!-- Message Content -->
-  <div class="flex flex-col gap-1 {message.type === 'user' ? 'items-end' : 'items-start'} {isCompactBoundary || isLoginPrompt || isModelPicker || isMemoryInfo || isVimInfo || isTerminalSetupInfo ? 'w-full' : 'max-w-[85%]'}">
+  <div class="flex flex-col gap-1 {message.type === 'user' ? 'items-end' : 'items-start'} {isCompactBoundary || isLoginPrompt || isModelPicker || message.type === 'help_menu' ? 'w-full' : 'max-w-[85%]'}">
     {#if message.type === 'tool_use' || message.type === 'tool_result'}
       <!-- Tool message - collapsible -->
       <button
@@ -574,87 +573,30 @@
           {/if}
         </div>
       {/if}
-    {:else if message.type === 'system' && isMemoryInfo}
-      <!-- Memory Info - explain that /memory requires a local editor -->
-      <div class="w-full max-w-md">
-        <div class="border border-info/30 rounded-lg p-4 bg-info/5 space-y-3">
-          <div class="flex items-start gap-3">
-            <div class="w-9 h-9 rounded-lg bg-info/10 flex items-center justify-center flex-shrink-0">
-              <BookOpen class="w-4 h-4 text-info" />
-            </div>
-            <div>
-              <h3 class="font-semibold text-text text-sm">Memory Editor (CLI Only)</h3>
-              <p class="text-xs text-text-secondary mt-1 leading-relaxed">
-                The <code class="px-1.5 py-0.5 bg-bg-subtle rounded text-[11px] font-mono">/memory</code> command opens your local text editor to edit CLAUDE.md files.
-              </p>
-            </div>
+    {:else if message.type === 'command_output'}
+      <!-- Command output (like /help) - rendered with markdown and terminal styling -->
+      <div class="chat-bubble chat-bubble-assistant relative bg-bg-subtle border border-border">
+        {#if message.metadata?.command}
+          <div class="flex items-center gap-1.5 text-xs text-text-muted mb-2 pb-2 border-b border-border">
+            <Terminal class="w-3 h-3" />
+            <code class="font-mono">{message.metadata.command}</code>
           </div>
-          <div class="ml-12 space-y-2">
-            <p class="text-xs text-text-muted">
-              In the web dashboard, you can manage memory files by:
-            </p>
-            <ul class="text-xs text-text-secondary space-y-1.5 list-disc list-inside">
-              <li>Asking Claude to read or update CLAUDE.md directly</li>
-              <li>Using <code class="px-1 py-0.5 bg-bg-subtle rounded text-[10px] font-mono">/init</code> to create a new memory file</li>
-              <li>Using the Claude Code CLI locally for full editor access</li>
-            </ul>
-          </div>
+        {/if}
+        <div class="prose prose-sm max-w-none [&_pre]:bg-bg-subtle [&_pre]:border [&_pre]:border-border [&_pre]:rounded-lg [&_code]:text-xs [&_code]:bg-bg-subtle [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded">
+          <Markdown source={message.content} options={{ breaks: true }} />
         </div>
       </div>
-    {:else if message.type === 'system' && isVimInfo}
-      <!-- Vim Info - explain that vim mode is CLI only -->
-      <div class="w-full max-w-md">
-        <div class="border border-warning/30 rounded-lg p-4 bg-warning/5 space-y-3">
-          <div class="flex items-start gap-3">
-            <div class="w-9 h-9 rounded-lg bg-warning/10 flex items-center justify-center flex-shrink-0">
-              <FileCode class="w-4 h-4 text-warning" />
-            </div>
-            <div>
-              <h3 class="font-semibold text-text text-sm">Vim Mode (CLI Only)</h3>
-              <p class="text-xs text-text-secondary mt-1 leading-relaxed">
-                Vim keybindings are not available in the web dashboard. The <code class="px-1.5 py-0.5 bg-bg-subtle rounded text-[11px] font-mono">/vim</code> command enables vim-style editing in the Claude Code CLI.
-              </p>
-            </div>
-          </div>
-          <div class="ml-12">
-            <p class="text-xs text-text-muted">
-              Use the Claude Code CLI to toggle vim mode: <code class="px-1.5 py-0.5 bg-bg-subtle rounded text-[10px] font-mono">claude</code>
-            </p>
-          </div>
-        </div>
-      </div>
-    {:else if message.type === 'system' && isTerminalSetupInfo}
-      <!-- Terminal Setup Info - explain that this is for CLI installation -->
-      <div class="w-full max-w-md">
-        <div class="border border-secondary/30 rounded-lg p-4 bg-secondary/5 space-y-3">
-          <div class="flex items-start gap-3">
-            <div class="w-9 h-9 rounded-lg bg-secondary/10 flex items-center justify-center flex-shrink-0">
-              <Terminal class="w-4 h-4 text-secondary" />
-            </div>
-            <div>
-              <h3 class="font-semibold text-text text-sm">Terminal Setup (CLI Only)</h3>
-              <p class="text-xs text-text-secondary mt-1 leading-relaxed">
-                The <code class="px-1.5 py-0.5 bg-bg-subtle rounded text-[11px] font-mono">/terminal-setup</code> command installs shell integration scripts for the Claude Code CLI.
-              </p>
-            </div>
-          </div>
-          <div class="ml-12 space-y-2">
-            <p class="text-xs text-text-muted">
-              Shell integration enables features like:
-            </p>
-            <ul class="text-xs text-text-secondary space-y-1 list-disc list-inside">
-              <li>Automatic context from recent terminal output</li>
-              <li>Command history integration</li>
-              <li>Enhanced terminal awareness</li>
-            </ul>
-            <p class="text-xs text-text-muted mt-2">
-              Run this in your terminal: <code class="px-1.5 py-0.5 bg-bg-subtle rounded text-[10px] font-mono">claude /terminal-setup</code>
-            </p>
-          </div>
-        </div>
+    {:else if message.type === 'help_menu'}
+      <!-- Help menu with tabs (Claude CLI-style) -->
+      <div class="w-full max-w-2xl">
+        <HelpMenu
+          version={message.metadata?.version || 'unknown'}
+          commands={message.metadata?.commands || []}
+          onClose={onDismissMessage}
+        />
       </div>
     {:else if message.type === 'system'}
-      <!-- System message - subtle banner -->
+      <!-- Simple system message - subtle banner -->
       <div class="{config.bubble}">
         <Settings class="w-3 h-3" />
         <span>{message.content}</span>

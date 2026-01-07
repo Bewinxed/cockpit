@@ -1,6 +1,6 @@
 import type { JsonRpcRequest } from '@cockpit/core';
 import { createResponse, createErrorResponse, JSON_RPC_ERROR_CODES } from '@cockpit/core';
-import { isAuthenticated, getValidAccessToken, saveCredentials } from '@cockpit/auth';
+import { saveCredentials } from '@cockpit/auth';
 import type { InstanceManager, SpawnInstanceParams } from '../instance-manager.js';
 import type { HubClient } from '../hub-client.js';
 
@@ -53,17 +53,15 @@ export async function handleSpawn(
     return;
   }
 
-  // Check for OAuth credentials - either passed from hub or local
-  // First check if credentials were passed from hub
+  // If credentials were passed from hub, save them for SDK to use
+  // We don't pre-validate - let the SDK handle auth and propagate errors
   if (params.envVars?.COCKPIT_OAUTH_ACCESS_TOKEN && params.envVars?.COCKPIT_OAUTH_REFRESH_TOKEN) {
-    // Save credentials from hub to local file so SDK can use them
     try {
       await saveCredentials({
         accessToken: params.envVars.COCKPIT_OAUTH_ACCESS_TOKEN,
         refreshToken: params.envVars.COCKPIT_OAUTH_REFRESH_TOKEN,
         expiresAt: parseInt(params.envVars.COCKPIT_OAUTH_EXPIRES_AT || '0') || Date.now() + 3600000,
         tokenType: 'Bearer',
-        // Additional fields required by CLI
         scopes: params.envVars.COCKPIT_OAUTH_SCOPES ?
           JSON.parse(params.envVars.COCKPIT_OAUTH_SCOPES) :
           ['user:inference', 'user:profile', 'user:sessions:claude_code'],
@@ -73,49 +71,8 @@ export async function handleSpawn(
       console.log('[Spawn] Saved credentials from hub to local file');
     } catch (saveError) {
       console.error('[Spawn] Failed to save credentials from hub:', saveError);
-      // Continue anyway - might still work if local creds exist
+      // Continue anyway - SDK will handle auth errors
     }
-  }
-
-  // Now verify we have valid credentials (either just saved or pre-existing)
-  try {
-    const hasAuth = await isAuthenticated();
-    if (!hasAuth) {
-      hubClient.sendResponse(
-        createErrorResponse(
-          request.id,
-          JSON_RPC_ERROR_CODES.AUTH_REQUIRED,
-          'Authentication required. Please login via the dashboard.',
-          { authRequired: true }
-        )
-      );
-      return;
-    }
-
-    const accessToken = await getValidAccessToken();
-    if (!accessToken) {
-      hubClient.sendResponse(
-        createErrorResponse(
-          request.id,
-          JSON_RPC_ERROR_CODES.AUTH_FAILED,
-          'Failed to obtain valid access token. Please re-authenticate.',
-          { authRequired: true }
-        )
-      );
-      return;
-    }
-    console.log('[Spawn] Credentials validated successfully');
-  } catch (authError) {
-    const message = authError instanceof Error ? authError.message : String(authError);
-    hubClient.sendResponse(
-      createErrorResponse(
-        request.id,
-        JSON_RPC_ERROR_CODES.AUTH_FAILED,
-        `Authentication error: ${message}`,
-        { authRequired: true }
-      )
-    );
-    return;
   }
 
   try {

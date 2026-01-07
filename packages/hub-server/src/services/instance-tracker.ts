@@ -56,6 +56,7 @@ export class InstanceTracker {
       sdkSessionId: null,
       projectId: data.projectId ?? null,
       agentId: data.agentId,
+      machineId: data.machineId ?? null,
       cwd: data.cwd,
       status: 'starting' as InstanceStatus,
       model: data.model ?? null,
@@ -234,6 +235,47 @@ export class InstanceTracker {
       agentId,
       status: ['starting', 'running'],
     });
+  }
+
+  /**
+   * Get active instances for a specific machine (by machineId)
+   * Used for reconciliation when agent reconnects
+   */
+  async getActiveByMachineId(machineId: string): Promise<Instance[]> {
+    const results = await this.db
+      .select()
+      .from(instances)
+      .where(and(
+        eq(instances.machineId, machineId),
+        inArray(instances.status, ['starting', 'running'])
+      ));
+
+    return results.map((row) => this.dbRowToInstance(row));
+  }
+
+  /**
+   * Backfill machineId for all instances belonging to an agent that don't have it set.
+   * This handles instances created before machineId was added.
+   */
+  async backfillMachineId(agentId: string, machineId: string): Promise<number> {
+    const result = await this.db
+      .update(instances)
+      .set({ machineId })
+      .where(and(
+        eq(instances.agentId, agentId),
+        sql`${instances.machineId} IS NULL`
+      ));
+
+    // SQLite doesn't return affected rows easily, so we count manually
+    const updated = await this.db
+      .select({ count: sql<number>`count(*)` })
+      .from(instances)
+      .where(and(
+        eq(instances.agentId, agentId),
+        eq(instances.machineId, machineId)
+      ));
+
+    return updated[0]?.count ?? 0;
   }
 
   /**
@@ -418,6 +460,7 @@ export class InstanceTracker {
       sdkSessionId: row.sdkSessionId ?? undefined,
       projectId: row.projectId ?? undefined,
       agentId: row.agentId,
+      machineId: row.machineId ?? undefined,
       cwd: row.cwd,
       status: row.status as InstanceStatus,
       model: row.model ?? undefined,

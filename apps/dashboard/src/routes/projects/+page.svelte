@@ -1,7 +1,7 @@
 <script lang="ts">
   import NewProjectModal from '$lib/components/NewProjectModal.svelte';
   import { Button, Input, Card, EmptyState } from '$lib/components/ui';
-  import { projects, instances } from '$lib/stores/realtime';
+  import { projects, instances } from '$lib/stores/realtime.svelte';
   import { Plus, Search, FolderKanban, Terminal, ArrowRight } from 'lucide-svelte';
 
   let searchQuery = $state('');

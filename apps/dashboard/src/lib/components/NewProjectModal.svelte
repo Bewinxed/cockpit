@@ -1,6 +1,6 @@
 <script lang="ts">
   import Modal from './Modal.svelte';
-  import { agents } from '$lib/stores/realtime';
+  import { agents } from '$lib/stores/realtime.svelte';
   import { createProject } from '$lib/actions';
 
   interface Props {

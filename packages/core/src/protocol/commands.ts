@@ -13,6 +13,8 @@ export const CommandMethod = {
   INSTANCE_SEND: 'instance.send',
   /** Interrupt current operation on an instance */
   INSTANCE_INTERRUPT: 'instance.interrupt',
+  /** Get status of a specific instance */
+  INSTANCE_STATUS: 'instance.status',
   /** Request agent status */
   AGENT_STATUS: 'agent.status',
   /** Ping the agent */
@@ -25,6 +27,8 @@ export const CommandMethod = {
   MODELS_LIST: 'models.list',
   /** Set model for an instance */
   MODELS_SET: 'models.set',
+  /** Get Claude CLI version */
+  CLAUDE_VERSION: 'claude.version',
 } as const;
 
 export type CommandMethodValue = (typeof CommandMethod)[keyof typeof CommandMethod];
@@ -135,6 +139,13 @@ export interface ModelsSetParams {
   instanceId: string;
   /** Model identifier to set (e.g., 'claude-sonnet-4-20250514') */
   model: string;
+}
+
+/**
+ * Parameters for getting Claude CLI version (empty)
+ */
+export interface ClaudeVersionParams {
+  // No parameters needed
 }
 
 /**
@@ -297,6 +308,14 @@ export interface ModelsSetResult {
   model: string;
 }
 
+/**
+ * Result of getting Claude CLI version
+ */
+export interface ClaudeVersionResult {
+  /** Claude CLI version string (e.g., '2.0.55') */
+  version: string;
+}
+
 // ============================================================================
 // Command Type Mapping
 // ============================================================================
@@ -315,6 +334,7 @@ export interface CommandParamsMap {
   [CommandMethod.COMMANDS_LIST]: CommandsListParams;
   [CommandMethod.MODELS_LIST]: ModelsListParams;
   [CommandMethod.MODELS_SET]: ModelsSetParams;
+  [CommandMethod.CLAUDE_VERSION]: ClaudeVersionParams;
 }
 
 /**
@@ -331,6 +351,7 @@ export interface CommandResultMap {
   [CommandMethod.COMMANDS_LIST]: CommandsListResult;
   [CommandMethod.MODELS_LIST]: ModelsListResult;
   [CommandMethod.MODELS_SET]: ModelsSetResult;
+  [CommandMethod.CLAUDE_VERSION]: ClaudeVersionResult;
 }
 
 // ============================================================================

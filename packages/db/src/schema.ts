@@ -38,6 +38,7 @@ export const instances = sqliteTable('instances', {
   sdkSessionId: text('sdk_session_id'), // Claude SDK's session ID (for resume)
   projectId: text('project_id').references(() => projects.id),
   agentId: text('agent_id').references(() => agents.id).notNull(),
+  machineId: text('machine_id'), // Stable machine identifier - used for routing after hub restart
   cwd: text('cwd').notNull(),
   status: text('status').notNull(), // 'starting' | 'running' | 'stopping' | 'stopped' | 'error'
   model: text('model'),
@@ -51,6 +52,7 @@ export const instances = sqliteTable('instances', {
   index('instances_sdk_session_id_idx').on(table.sdkSessionId),
   index('instances_project_id_idx').on(table.projectId),
   index('instances_agent_id_idx').on(table.agentId),
+  index('instances_machine_id_idx').on(table.machineId),
   index('instances_status_idx').on(table.status),
   index('instances_created_at_idx').on(table.createdAt),
 ]);

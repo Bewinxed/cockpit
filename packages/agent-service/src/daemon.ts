@@ -24,6 +24,7 @@ import {
   handleCommandsList,
   handleModelsList,
   handleModelsSet,
+  handleClaudeVersion,
 } from './handlers/index.js';
 
 export interface AgentDaemonOptions {
@@ -137,11 +138,9 @@ export class AgentDaemon extends EventEmitter {
       }
 
       // Connect to hub
+      // Registration happens automatically via 'connected' event handler
       console.log(`Connecting to hub at ${this.hubUrl}...`);
       await this.hubClient.connect(this.hubUrl);
-
-      // Register with hub
-      await this.register();
 
       // Start heartbeat
       this.startHeartbeat();
@@ -204,6 +203,18 @@ export class AgentDaemon extends EventEmitter {
       // Tailscale not available, use localhost
     }
 
+    // Get all running instances to send with registration
+    // This allows hub to reconcile state (mark orphaned instances as sleeping)
+    const runningInstances = this.instanceManager.listInstances()
+      .filter(inst => inst.state === 'running' || inst.state === 'starting')
+      .map(inst => ({
+        id: inst.instanceId,
+        sessionId: inst.sessionId,
+        sdkSessionId: inst.sdkSessionId,
+        cwd: inst.projectPath,
+        status: inst.state,
+      }));
+
     const result = await this.hubClient.request<{ agentId: string }>(
       PROTOCOL_METHODS.AGENT_REGISTER,
       {
@@ -211,6 +222,7 @@ export class AgentDaemon extends EventEmitter {
         hostname,
         tailscaleIp,
         os,
+        instances: runningInstances,
       }
     );
 
@@ -227,8 +239,16 @@ export class AgentDaemon extends EventEmitter {
    */
   private setupEventHandlers(): void {
     // Hub client events
-    this.hubClient.on('connected', () => {
+    this.hubClient.on('connected', async () => {
       console.log('Connected to hub');
+      // Always re-register on connection (handles both initial connect and reconnects)
+      // This ensures the hub knows about this agent after hub restarts
+      try {
+        await this.register();
+      } catch (error) {
+        console.error('Failed to re-register with hub:', error);
+        this.emit('error', error instanceof Error ? error : new Error(String(error)));
+      }
       this.emit('connected');
     });
 
@@ -366,6 +386,10 @@ export class AgentDaemon extends EventEmitter {
 
       case PROTOCOL_METHODS.MODELS_SET:
         await handleModelsSet(request, this.instanceManager, this.hubClient);
+        break;
+
+      case PROTOCOL_METHODS.CLAUDE_VERSION:
+        await handleClaudeVersion(request, this.hubClient);
         break;
 
       default:

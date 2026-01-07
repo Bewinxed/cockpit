@@ -1,7 +1,7 @@
 <script lang="ts">
   import { page } from '$app/state';
   import { goto } from '$app/navigation';
-  import { agents, instances } from '$lib/stores/realtime';
+  import { agents, instances } from '$lib/stores/realtime.svelte';
   import NewInstanceModal from '$lib/components/NewInstanceModal.svelte';
   import InstanceCard from '$lib/components/InstanceCard.svelte';
   import { Button, Badge, Card, EmptyState } from '$lib/components/ui';

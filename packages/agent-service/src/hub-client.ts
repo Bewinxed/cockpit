@@ -6,6 +6,8 @@ import {
   type JsonRpcNotification,
   createRequest,
   createNotification,
+  createResponse,
+  createErrorResponse,
   isRequest,
   isResponse,
   isNotification,
@@ -225,10 +227,25 @@ export class HubClient extends EventEmitter {
   }
 
   /**
+   * Send a success response (convenience method)
+   */
+  respond(requestId: string | number, result: unknown): void {
+    this.sendResponse(createResponse(requestId, result));
+  }
+
+  /**
+   * Send an error response (convenience method)
+   */
+  respondError(requestId: string | number, code: number, message: string, data?: unknown): void {
+    this.sendResponse(createErrorResponse(requestId, code, message, data));
+  }
+
+  /**
    * Handle incoming WebSocket message
    */
   private handleMessage(data: WebSocket.Data): void {
     const str = data.toString();
+    console.log('[HubClient] Raw message received:', str.slice(0, 500));
     const message = safeJsonParse<unknown>(str);
 
     if (!message) {
@@ -237,13 +254,16 @@ export class HubClient extends EventEmitter {
     }
 
     if (isResponse(message)) {
+      console.log('[HubClient] Received response:', JSON.stringify(message).slice(0, 200));
       this.handleResponse(message);
     } else if (isRequest(message)) {
+      console.log('[HubClient] Received request:', (message as { method?: string }).method);
       this.emit('request', message);
     } else if (isNotification(message)) {
+      console.log('[HubClient] Received notification:', (message as { method?: string }).method);
       this.emit('notification', message);
     } else {
-      console.warn('Unknown message type:', message);
+      console.warn('[HubClient] Unknown message type:', message);
     }
   }
 

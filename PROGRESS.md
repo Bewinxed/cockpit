@@ -4,65 +4,71 @@
 
 Make slash commands functional in the dashboard, matching CLI behavior. This includes fixing the command execution flow and implementing web-based OAuth authentication for `/login`.
 
-## Latest Progress (2026-01-06)
+## Latest Progress (2026-01-07)
 
-**🎉 ALL SLASH COMMANDS COMPLETE:**
+**HELP MENU - 1:1 CLAUDE CLI MATCH:**
 
-All 17 slash commands are now fully implemented in the web dashboard, matching the Claude CLI functionality where applicable.
+Implemented a fully-featured help menu matching Claude CLI's `/help` TUI:
+- ✅ New `HelpMenu.svelte` component with tabbed interface
+- ✅ Three tabs: `general | commands | custom-commands` (Tab key cycles)
+- ✅ General tab: shortcuts (`!`, `/`, `@`, `&`), keyboard shortcuts, version info
+- ✅ Commands tab: lists all built-in slash commands with descriptions
+- ✅ Custom-commands tab: lists user-defined commands, skills, and MCP commands
+- ✅ `help_menu` message type for rich rendering (not markdown)
+- ✅ Escape key closes the help menu
+- ✅ Version synced dynamically from agent via `claude.version` RPC
+- ✅ Commands synced via existing `commands.list` RPC
 
-### Command Categories:
-
-**1. Client-side Commands (Inline UI):**
-- ✅ `/login` - OAuth flow with inline form UI
-- ✅ `/logout` - Clears credentials from DB, shows success message
-- ✅ `/model` - Inline model picker with keyboard navigation
-
-**2. SDK Passthrough Commands (Send to Instance):**
-- ✅ `/help` - Get help with using Claude Code
-- ✅ `/clear` - Clear conversation history
-- ✅ `/compact` - Clear history and compact context
-- ✅ `/config` - View or update configuration
-- ✅ `/cost` - Show token usage and cost
-- ✅ `/doctor` - Check Claude Code health
-- ✅ `/init` - Initialize project with CLAUDE.md
-- ✅ `/permissions` - View or update permissions
-- ✅ `/pr-comments` - View PR comments
-- ✅ `/review` - Request code review
-- ✅ `/status` - View system status
-
-**3. CLI-Only Commands (Info Boxes):**
-- ✅ `/memory` - Shows info box with web workarounds (CLI opens local editor)
-- ✅ `/vim` - Shows info box explaining vim mode is CLI-only
-- ✅ `/terminal-setup` - Shows info box explaining shell integration is CLI-only
-
-### How Commands Work:
-
-**SDK Passthrough:** Most commands are sent directly to the Claude Code SDK via `sendMessage()`. The SDK handles execution and returns responses as regular assistant messages.
-
-**Client-side:** Commands like `/login`, `/logout`, and `/model` need special UI handling and bypass the SDK flow to interact with hub APIs directly.
-
-**Info Boxes:** Commands like `/memory`, `/vim`, and `/terminal-setup` that require local system access show helpful info boxes explaining the limitation and providing workarounds.
+**Version Sync Implementation:**
+- Added `CLAUDE_VERSION` protocol method in `@cockpit/core`
+- Agent handler runs `claude --version` (with caching)
+- Hub API route: `GET /api/agents/:id/claude-version`
+- Dashboard fetches version when showing `/help`
 
 ---
 
-## Previous Progress (2026-01-05)
+**PREVIOUS: COMMAND OUTPUT MESSAGE TYPE:**
 
-**MODEL SWITCHING IMPLEMENTED:**
+Added new `command_output` message type for slash command output:
+- ✅ New message type `command_output` in realtime store
+- ✅ Dedicated rendering in `ChatMessage.svelte` with Terminal icon header
+- ✅ Markdown rendering with `breaks: true` option for proper line breaks
 
-The `/model` command now works as an inline UI form (like `/login`):
+**SDK SLASH COMMAND OUTPUT FIX:**
+
+Several slash commands (`/help`, `/doctor`, `/status`) don't emit output through the SDK's `query()` API - they write directly to stdout in CLI mode.
+
+**Fix:** Implemented client-side handling for commands where SDK doesn't emit output:
+- ✅ `/help` - Rich TUI matching Claude CLI (tabbed help menu)
+- ✅ `/model` - Inline model picker form with keyboard navigation
+- ✅ `/login` - OAuth flow with inline form
+- ✅ `/logout` - Clears credentials via API
+
+**AGENT RECONNECTION & INSTANCE RECONCILIATION:**
+
+Fixed issue where agents wouldn't re-register after hub restart, and stale instance statuses in DB:
+
+1. **Agent reconnection fix:**
+   - Agent now calls `register()` on every 'connected' event (not just initial connect)
+   - This ensures hub always knows about agents after restarts
+
+2. **Instance reconciliation on agent connect:**
+   - Agent sends its running instances during registration (`daemon.ts`)
+   - Hub compares agent's instances with DB records (`websocket.ts`)
+   - Orphaned instances (in DB as "running" but not on agent) are marked as "sleeping"
+   - Added `getActiveByMachineId()` to instance tracker for reconciliation
+   - Tested: Setting instance to "running" in DB, then starting agent -> instance marked as "sleeping"
+
+---
+
+**PREVIOUS: MODEL SWITCHING (2026-01-05)**
+
+The `/model` command works as an inline UI form:
 - ✅ Protocol methods: `models.list` and `models.set` added to core package
 - ✅ Agent handlers: `handleModelsList` and `handleModelsSet` wired to daemon
 - ✅ Hub API endpoints: `GET /instances/:id/models` and `PATCH /instances/:id/models`
 - ✅ Dashboard UI: Inline model picker form in chat messages (not a modal)
 - ✅ Keyboard navigation: Arrow up/down to select, Enter to apply, Escape to cancel
-
-**How it works:**
-1. User types `/model` in chat input
-2. System adds a `model_picker` message with loading state
-3. Frontend fetches available models from `/api/instances/:id/models`
-4. User selects a model with keyboard or click
-5. Frontend calls `PATCH /api/instances/:id/models` to apply
-6. SDK's `setModel()` method is called via the agent
 
 ---
 
@@ -102,31 +108,44 @@ The `/model` command now works as an inline UI form (like `/login`):
 
 | Command | Description | Implementation | Status |
 |---------|-------------|----------------|--------|
-| `/help` | Get help with using Claude Code | Pass to SDK | ✅ Works |
+| `/help` | Get help with using Claude Code | **Client-side** (tabbed TUI, synced version/commands) | ✅ Works |
 | `/clear` | Clear conversation history | Pass to SDK | ✅ Works |
-| `/compact` | Clear history and compact context | Pass to SDK | ✅ Works |
-| `/config` | View or update configuration | Pass to SDK | ✅ Works |
-| `/cost` | Show token usage and cost | Pass to SDK | ✅ Works |
-| `/doctor` | Check Claude Code health | Pass to SDK | ✅ Works |
-| `/init` | Initialize project with CLAUDE.md | Pass to SDK | ✅ Works |
-| `/login` | Switch Claude accounts | **Client-side** (OAuth UI) | ✅ Implemented |
-| `/logout` | Sign out of your account | **Client-side** (clear creds) | ✅ Implemented |
-| `/memory` | Edit CLAUDE.md memory file | **Client-side** (info box) | ✅ Web workaround |
-| `/model` | Switch AI model | **Client-side** (inline picker) | ✅ Implemented |
-| `/permissions` | View or update permissions | Pass to SDK | ✅ Works |
-| `/pr-comments` | View PR comments | Pass to SDK | ✅ Works |
-| `/review` | Request code review | Pass to SDK | ✅ Works |
-| `/status` | View system status | Pass to SDK | ✅ Works |
-| `/terminal-setup` | Install shell integration | **Client-side** (info box) | ✅ Web N/A |
-| `/vim` | Toggle vim mode | **Client-side** (info box) | ✅ Web N/A |
+| `/compact` | Clear history and compact context | Pass to SDK | ⏳ Untested |
+| `/config` | View or update configuration | Pass to SDK | ⏳ Untested |
+| `/cost` | Show token usage and cost | Pass to SDK | ⏳ Untested |
+| `/doctor` | Check Claude Code health | Pass to SDK (**no output**) | ⚠️ SDK limitation |
+| `/init` | Initialize project with CLAUDE.md | Pass to SDK | ⏳ Untested |
+| `/login` | Switch Claude accounts | **Client-side** (OAuth inline form) | ✅ Works |
+| `/logout` | Sign out of your account | **Client-side** (clear creds via API) | ✅ Works |
+| `/memory` | Edit CLAUDE.md memory file | Pass to SDK | ⏳ Untested |
+| `/model` | Switch AI model | **Client-side** (inline picker, keyboard nav) | ✅ Works |
+| `/permissions` | View or update permissions | Pass to SDK | ⏳ Untested |
+| `/pr-comments` | View PR comments | Pass to SDK | ⏳ Untested |
+| `/review` | Request code review | Pass to SDK | ⏳ Untested |
+| `/status` | View system status | Pass to SDK (**no output**) | ⚠️ SDK limitation |
+| `/terminal-setup` | Install shell integration | Pass to SDK | ⏳ Untested |
+| `/vim` | Toggle vim mode | Pass to SDK | ⏳ Untested |
 
 **Legend:**
 - ✅ Works - Tested and working
 - ✅ Web workaround - Client-side info box with workaround instructions
 - ✅ Web N/A - Not applicable in web dashboard (shows info message)
 - ⏳ Untested - Should work (passed to SDK) but needs verification
+- ⚠️ SDK limitation - Command works but SDK doesn't emit output (writes to stdout only)
 - 🔧 In Progress - Currently being implemented
 - ❌ Broken - Known issues
+
+**Note:** Some slash commands (`/help`, `/doctor`, `/status`) don't emit output through the SDK's `query()` API. They write directly to stdout in CLI mode. For these, we either implement client-side alternatives or accept that they won't show output in the dashboard.
+
+## Infrastructure Status
+
+| Feature | Description | Status |
+|---------|-------------|--------|
+| Agent reconnection | Agent re-registers on hub restart | ✅ Works |
+| Instance reconciliation | Orphaned instances marked as sleeping | ✅ Works |
+| Credentials flow | Hub passes creds to agent via env vars | ✅ Works |
+| OAuth authentication | Web-based OAuth with PKCE | ✅ Works |
+| API key fallback | Alternative to OAuth | ✅ Works |
 
 ---
 

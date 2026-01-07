@@ -42,6 +42,8 @@ export {
   type ModelsSetParams,
   type ModelsSetResult,
   type ModelInfo,
+  type ClaudeVersionParams,
+  type ClaudeVersionResult,
   type SpawnInstanceResult,
   type StopInstanceResult,
   type SendMessageResult,
@@ -99,7 +101,7 @@ export const PROTOCOL_METHODS = {
   INSTANCE_STOP: CommandMethod.INSTANCE_STOP,
   INSTANCE_SEND: CommandMethod.INSTANCE_SEND,
   INSTANCE_INTERRUPT: CommandMethod.INSTANCE_INTERRUPT,
-  INSTANCE_STATUS: 'instance.status',
+  INSTANCE_STATUS: CommandMethod.INSTANCE_STATUS,
   AGENT_STATUS: CommandMethod.AGENT_STATUS,
   AGENT_PING: CommandMethod.AGENT_PING,
   AGENT_REGISTER: 'agent.register',
@@ -108,6 +110,7 @@ export const PROTOCOL_METHODS = {
   COMMANDS_LIST: CommandMethod.COMMANDS_LIST,
   MODELS_LIST: CommandMethod.MODELS_LIST,
   MODELS_SET: CommandMethod.MODELS_SET,
+  CLAUDE_VERSION: CommandMethod.CLAUDE_VERSION,
 
   // Events (Agent -> Hub)
   INSTANCE_CREATED: EventMethod.INSTANCE_CREATED,

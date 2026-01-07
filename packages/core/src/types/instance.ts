@@ -27,8 +27,11 @@ export interface Instance {
   /** Project this instance belongs to (if any) */
   projectId?: string;
 
-  /** Agent running this instance */
+  /** Agent running this instance (ephemeral ID, changes on hub restart) */
   agentId: string;
+
+  /** Stable machine identifier - used for routing after hub restart */
+  machineId?: string;
 
   /** Current working directory */
   cwd: string;
@@ -60,6 +63,8 @@ export interface Instance {
  */
 export interface SpawnInstanceData {
   agentId: string;
+  /** Stable machine identifier - used for routing after hub restart */
+  machineId?: string;
   cwd: string;
   projectId?: string;
   model?: string;

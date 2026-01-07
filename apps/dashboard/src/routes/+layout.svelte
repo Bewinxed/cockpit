@@ -11,7 +11,7 @@
     fetchProjects,
     connectionStatus,
     stats
-  } from '$lib/stores/realtime';
+  } from '$lib/stores/realtime.svelte';
   import {
     LayoutDashboard,
     FolderKanban,

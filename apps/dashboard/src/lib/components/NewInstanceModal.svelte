@@ -2,7 +2,7 @@
   import Modal from './Modal.svelte';
   import AuthRequiredModal from './AuthRequiredModal.svelte';
   import FileBrowser from './FileBrowser.svelte';
-  import { agents, projects } from '$lib/stores/realtime';
+  import { agents, projects } from '$lib/stores/realtime.svelte';
   import { spawnInstance } from '$lib/actions';
 
   interface Props {

@@ -65,6 +65,7 @@ export async function handleInstanceStatus(
   hubClient: HubClient
 ): Promise<void> {
   const params = request.params as InstanceStatusParams | undefined;
+  console.log(`[handleInstanceStatus] Request for instanceId=${params?.instanceId}, known instances:`, instanceManager.listInstances().map(i => i.instanceId));
 
   if (!params || !params.instanceId) {
     hubClient.sendResponse(

@@ -214,6 +214,8 @@ export class InstanceManager extends EventEmitter {
         instance.lastActivityAt = new Date();
         this.resetIdleTimer(instanceId);
 
+        console.log(`[InstanceManager] Received message type=${message.type} subtype=${(message as Record<string,unknown>).subtype}`);
+
         // Handle system init messages specially - dedupe repeated inits
         if (
           message.type === 'system' &&

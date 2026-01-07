@@ -1,7 +1,7 @@
 <script lang="ts">
   import { page } from '$app/state';
   import { goto } from '$app/navigation';
-  import { projects, instances, agents } from '$lib/stores/realtime';
+  import { projects, instances, agents } from '$lib/stores/realtime.svelte';
   import { deleteProject, updateProject } from '$lib/actions';
   import InstanceCard from '$lib/components/InstanceCard.svelte';
   import NewInstanceModal from '$lib/components/NewInstanceModal.svelte';

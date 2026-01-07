@@ -9,7 +9,7 @@
     recentInstances,
     onlineAgents,
     connectionStatus
-  } from '$lib/stores/realtime';
+  } from '$lib/stores/realtime.svelte';
   import {
     Terminal,
     Server,
