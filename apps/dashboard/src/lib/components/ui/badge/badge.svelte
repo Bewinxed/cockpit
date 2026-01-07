@@ -27,6 +27,10 @@
 	import type { HTMLAnchorAttributes } from "svelte/elements";
 	import { cn, type WithElementRef } from "$lib/utils.js";
 
+	export type BadgeProps = WithElementRef<HTMLAnchorAttributes> & {
+		variant?: BadgeVariant;
+	};
+
 	let {
 		ref = $bindable(null),
 		href,
@@ -34,9 +38,7 @@
 		variant = "default",
 		children,
 		...restProps
-	}: WithElementRef<HTMLAnchorAttributes> & {
-		variant?: BadgeVariant;
-	} = $props();
+	}: BadgeProps = $props();
 </script>
 
 <svelte:element

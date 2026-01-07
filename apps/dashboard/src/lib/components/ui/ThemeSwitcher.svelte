@@ -5,11 +5,13 @@
   const themeIcons = {
     light: Sun,
     dark: Moon,
+    system: Sun, // Use Sun as fallback for system
   };
 
   const themeLabels = {
     light: 'Light mode',
     dark: 'Dark mode',
+    system: 'System',
   };
 
   const Icon = $derived(themeIcons[$theme] || Sun);

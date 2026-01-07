@@ -155,10 +155,10 @@ export function createRequest<T>(id: string, method: string, params: T): JsonRpc
 /**
  * Create a JSON-RPC success response
  */
-export function createResponse<T>(id: string, result: T): JsonRpcResponse<T> {
+export function createResponse<T>(id: string | number, result: T): JsonRpcResponse<T> {
   return {
     jsonrpc: '2.0',
-    id,
+    id: String(id),
     result,
   };
 }
@@ -167,14 +167,14 @@ export function createResponse<T>(id: string, result: T): JsonRpcResponse<T> {
  * Create a JSON-RPC error response
  */
 export function createErrorResponse(
-  id: string,
+  id: string | number,
   code: number,
   message: string,
   data?: unknown
 ): JsonRpcResponse<never> {
   return {
     jsonrpc: '2.0',
-    id,
+    id: String(id),
     error: { code, message, data },
   };
 }

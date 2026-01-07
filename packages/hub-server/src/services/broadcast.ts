@@ -27,6 +27,7 @@ export type BroadcastEventType =
   | 'instance:resumed'
   | 'instance:error'
   | 'instance:token_usage'
+  | 'instance:model-changed'
   | 'sdk:message'
   | 'task:created'
   | 'task:updated'

@@ -1,8 +1,9 @@
 <script lang="ts">
-  import type { Component } from 'svelte';
+  import type { ComponentType, SvelteComponent } from 'svelte';
 
   interface Props {
-    icon: Component<{ class?: string }>;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    icon: ComponentType<SvelteComponent<any>>;
     count: number | string;
     label: string;
     trend?: string;

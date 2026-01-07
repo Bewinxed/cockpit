@@ -1,7 +1,7 @@
 <script lang="ts">
   import { page } from '$app/state';
   import { goto } from '$app/navigation';
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount, onDestroy, tick } from 'svelte';
   import { instances, instanceMessages, agents, addMessage, removeMessage, updateMessageMetadata, getStreamingState, getInstanceStatus, type Message } from '$lib/stores/realtime.svelte';
   import { sendMessage, stopInstance, resumeInstance, interruptInstance } from '$lib/actions';
   import { api } from '$lib/api';
@@ -29,11 +29,30 @@
     source?: string;
   }
 
+  interface DbMessage {
+    content: string | Record<string, unknown>;
+    messageType: string;
+    timestamp: string | Date;
+  }
+
+  // Default commands available in all instances
+  const DEFAULT_COMMANDS: AvailableCommand[] = [
+    { name: '/help', type: 'builtin', description: 'Show available commands' },
+    { name: '/clear', type: 'builtin', description: 'Clear conversation history' },
+    { name: '/compact', type: 'builtin', description: 'Clear conversation but keep a summary' },
+    { name: '/model', type: 'builtin', description: 'Switch Claude model' },
+    { name: '/login', type: 'builtin', description: 'Login to Claude with API key' },
+    { name: '/logout', type: 'builtin', description: 'Logout from Claude' },
+    { name: '/memory', type: 'builtin', description: 'View/edit CLAUDE.md memory files' },
+    { name: '/vim', type: 'builtin', description: 'Toggle vim mode' },
+    { name: '/terminal-setup', type: 'builtin', description: 'Configure terminal settings' },
+  ];
+
   // Page data from load function
   let { data } = $props();
 
   // Get instance ID from route
-  const instanceId = $derived(page.params.id);
+  const instanceId = $derived(page.params.id ?? '');
 
   // Get instance from store (prefer store for real-time updates, fallback to page data)
   const storeInstance = $derived($instances.get(instanceId));
@@ -73,7 +92,7 @@
 
     if (data.messages && data.messages.length > 0 && !$instanceMessages.get(instanceId)?.length) {
       // Convert DB messages to UI Message format
-      for (const dbMsg of data.messages) {
+      for (const dbMsg of data.messages as DbMessage[]) {
         const content = typeof dbMsg.content === 'string' ? JSON.parse(dbMsg.content) : dbMsg.content;
         const sdkType = content?.type || dbMsg.messageType;
 
@@ -121,9 +140,6 @@
   onDestroy(() => {
     authCleanup?.();
   });
-
-  // Commands for the instance
-  let commands = $state<AvailableCommand[]>([]);
 
   // Commands for the instance (starts with defaults)
   let commands = $state<AvailableCommand[]>(DEFAULT_COMMANDS);
@@ -445,7 +461,7 @@
     });
 
     if (callbackError || !data?.success) {
-      const errorMsg = callbackError?.message || (data as { error?: string })?.error || 'Token exchange failed';
+      const errorMsg = (callbackError as { value?: { message?: string } })?.value?.message || (data as { error?: string })?.error || 'Token exchange failed';
       throw new Error(errorMsg);
     }
 

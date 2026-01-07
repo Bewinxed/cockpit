@@ -48,7 +48,7 @@ export function createAuthRoutes(db: Db) {
 
       // Check if OAuth token is expired
       if (cred.type === 'oauth' && cred.expiresAt) {
-        const isExpired = isTokenExpired(cred.expiresAt.getTime());
+        const isExpired = isTokenExpired(cred.expiresAt);
         if (isExpired && cred.refreshToken) {
           // Try to refresh
           try {
@@ -58,7 +58,7 @@ export function createAuthRoutes(db: Db) {
               .set({
                 accessToken: tokens.accessToken,
                 refreshToken: tokens.refreshToken,
-                expiresAt: new Date(tokens.expiresAt),
+                expiresAt: tokens.expiresAt,
                 updatedAt: new Date(),
               })
               .where(eq(credentials.id, cred.id));
@@ -156,7 +156,7 @@ export function createAuthRoutes(db: Db) {
             type: 'oauth',
             accessToken: tokens.accessToken,
             refreshToken: tokens.refreshToken,
-            expiresAt: new Date(tokens.expiresAt),
+            expiresAt: tokens.expiresAt,
             label: body.label || 'Claude MAX',
             isDefault: true,
             createdAt: now,
@@ -208,7 +208,7 @@ export function createAuthRoutes(db: Db) {
           type: 'oauth',
           accessToken: body.accessToken,
           refreshToken: body.refreshToken,
-          expiresAt: new Date(body.expiresAt),
+          expiresAt: body.expiresAt,
           label: body.label || 'Claude MAX',
           isDefault: true,
           createdAt: now,
@@ -294,7 +294,7 @@ export function createAuthRoutes(db: Db) {
       const cred = result[0];
 
       // Auto-refresh OAuth tokens if needed
-      if (cred.type === 'oauth' && cred.expiresAt && isTokenExpired(cred.expiresAt.getTime())) {
+      if (cred.type === 'oauth' && cred.expiresAt && isTokenExpired(cred.expiresAt)) {
         if (cred.refreshToken) {
           try {
             const tokens = await refreshAccessToken(cred.refreshToken);
@@ -303,7 +303,7 @@ export function createAuthRoutes(db: Db) {
               .set({
                 accessToken: tokens.accessToken,
                 refreshToken: tokens.refreshToken,
-                expiresAt: new Date(tokens.expiresAt),
+                expiresAt: tokens.expiresAt,
                 updatedAt: new Date(),
               })
               .where(eq(credentials.id, cred.id));

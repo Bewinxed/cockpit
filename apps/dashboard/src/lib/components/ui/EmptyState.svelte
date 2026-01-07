@@ -1,9 +1,12 @@
 <script lang="ts">
-  import type { Snippet, Component } from 'svelte';
-  import Button from './Button.svelte';
+  import type { Snippet, ComponentType, SvelteComponent } from 'svelte';
+  import { Button } from './button';
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  type IconComponent = ComponentType<SvelteComponent<any>>;
 
   interface Props {
-    icon: Component<{ class?: string }>;
+    icon: IconComponent;
     title: string;
     description: string;
     action?: {

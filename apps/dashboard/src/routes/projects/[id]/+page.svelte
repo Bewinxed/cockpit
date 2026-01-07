@@ -23,7 +23,7 @@
   } from 'lucide-svelte';
 
   // Get project ID from params
-  const projectId = $derived(page.params.id);
+  const projectId = $derived(page.params.id ?? '');
 
   // Get project from store
   const project = $derived($projects.get(projectId));

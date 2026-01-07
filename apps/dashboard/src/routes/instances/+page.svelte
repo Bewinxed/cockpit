@@ -84,7 +84,6 @@
           type="text"
           placeholder="Search instances..."
           bind:value={searchQuery}
-          icon={Search}
         />
       </div>
 

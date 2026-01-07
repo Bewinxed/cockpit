@@ -65,7 +65,6 @@
       type="text"
       placeholder="Search projects..."
       bind:value={searchQuery}
-      icon={Search}
     />
   </div>
 

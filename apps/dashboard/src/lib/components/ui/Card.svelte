@@ -1,12 +1,14 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
-  import type { HTMLAttributes } from 'svelte/elements';
 
-  interface Props extends HTMLAttributes<HTMLDivElement> {
+  interface Props {
     interactive?: boolean;
     padding?: 'none' | 'sm' | 'md' | 'lg';
     href?: string;
     children: Snippet;
+    class?: string;
+    onclick?: (event: MouseEvent) => void;
+    onkeydown?: (event: KeyboardEvent) => void;
   }
 
   let {
@@ -15,7 +17,8 @@
     href,
     children,
     class: className = '',
-    ...rest
+    onclick,
+    onkeydown,
   }: Props = $props();
 
   const paddingClasses = {
@@ -30,7 +33,6 @@
   <a
     {href}
     class="card block {interactive ? 'card-interactive' : ''} {paddingClasses[padding]} {className}"
-    {...rest}
   >
     {@render children()}
   </a>
@@ -39,14 +41,15 @@
     class="card card-interactive {paddingClasses[padding]} {className}"
     role="button"
     tabindex={0}
-    {...rest}
+    {onclick}
+    {onkeydown}
   >
     {@render children()}
   </div>
 {:else}
   <div
     class="card {paddingClasses[padding]} {className}"
-    {...rest}
+    {onclick}
   >
     {@render children()}
   </div>

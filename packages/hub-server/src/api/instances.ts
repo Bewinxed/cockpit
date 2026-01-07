@@ -55,7 +55,7 @@ async function getOAuthCredentials(db: Db): Promise<OAuthCredentials | null> {
             accessToken: tokens.accessToken,
             refreshToken: tokens.refreshToken,
             expiresAt: tokens.expiresAt, // Store as number (ms)
-            updatedAt: Date.now(),
+            updatedAt: new Date(),
           })
           .where(eq(credentials.id, cred.id));
         return {

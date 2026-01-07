@@ -22,7 +22,7 @@
   let showNewInstanceModal = $state(false);
 
   // Get agent ID from params
-  const agentId = $derived(page.params.id);
+  const agentId = $derived(page.params.id ?? '');
 
   // Get agent from store
   const agent = $derived($agents.get(agentId));

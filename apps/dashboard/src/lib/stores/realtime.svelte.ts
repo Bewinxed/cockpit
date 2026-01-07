@@ -64,7 +64,7 @@ export interface Message {
     toolResult?: unknown;
     toolStatus?: 'pending' | 'success' | 'error';
     // For system messages
-    subtype?: 'init' | 'compact_boundary' | 'status' | 'hook_response' | 'login_prompt' | 'auth_required' | 'model_picker';
+    subtype?: 'init' | 'compact_boundary' | 'status' | 'hook_response' | 'login_prompt' | 'auth_required' | 'model_picker' | 'memory_info' | 'vim_info' | 'terminal_setup_info';
     // For command_output messages
     command?: string;
     model?: string;
