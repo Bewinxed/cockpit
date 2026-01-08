@@ -152,23 +152,43 @@
     };
   });
 
-  // Check if a tool is a file edit tool that should show a diff
-  function isFileEditTool(toolName: string | undefined): boolean {
+  // Check if a tool is a file modification tool that should show a diff
+  function isFileDiffTool(toolName: string | undefined): boolean {
     if (!toolName) return false;
-    const editTools = ['Edit', 'edit', 'str_replace_editor', 'str_replace', 'file_edit'];
-    return editTools.includes(toolName);
+    const diffTools = [
+      // Edit tools (partial file modification)
+      'Edit', 'edit', 'str_replace_editor', 'str_replace', 'file_edit',
+      // Write tools (full file write)
+      'Write', 'write', 'create_file', 'write_file',
+    ];
+    return diffTools.includes(toolName);
   }
 
-  // Extract diff info from tool input for file edit tools
-  function getDiffInfo(input: Record<string, unknown> | undefined): { filePath: string; oldContent: string; newContent: string } | null {
+  // Check if this is a write (full file) vs edit (partial) tool
+  function isWriteTool(toolName: string | undefined): boolean {
+    if (!toolName) return false;
+    const writeTools = ['Write', 'write', 'create_file', 'write_file'];
+    return writeTools.includes(toolName);
+  }
+
+  // Extract diff info from tool input for file modification tools
+  function getDiffInfo(input: Record<string, unknown> | undefined, toolName: string | undefined): { filePath: string; oldContent: string; newContent: string } | null {
     if (!input) return null;
 
     // Handle different tool input formats
     const filePath = (input.file_path || input.path || input.filename) as string | undefined;
-    const oldContent = (input.old_string || input.old_str || '') as string;
-    const newContent = (input.new_string || input.new_str || input.content || '') as string;
 
     if (!filePath) return null;
+
+    // For write tools, old content is empty (new file or full overwrite)
+    if (isWriteTool(toolName)) {
+      const newContent = (input.content || '') as string;
+      return { filePath, oldContent: '', newContent };
+    }
+
+    // For edit tools, get old and new strings
+    const oldContent = (input.old_string || input.old_str || '') as string;
+    const newContent = (input.new_string || input.new_str || input.content || '') as string;
 
     return { filePath, oldContent, newContent };
   }
@@ -432,10 +452,10 @@
 
       {#if isExpanded}
         {@const tool = toolInfo()}
-        {@const diffInfo = getDiffInfo(tool?.input as Record<string, unknown> | undefined)}
+        {@const diffInfo = getDiffInfo(tool?.input as Record<string, unknown> | undefined, tool?.name)}
         <div class="w-full space-y-2 mt-1">
-          <!-- Input: Show diff for file edit tools, JSON for others -->
-          {#if isFileEditTool(tool?.name) && diffInfo}
+          <!-- Input: Show diff for file modification tools, JSON for others -->
+          {#if isFileDiffTool(tool?.name) && diffInfo}
             <DiffView
               filePath={diffInfo.filePath}
               oldContent={diffInfo.oldContent}
