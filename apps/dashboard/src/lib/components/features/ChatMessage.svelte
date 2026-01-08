@@ -457,6 +457,7 @@
           <!-- Input: Show diff for file modification tools, JSON for others -->
           {#if isFileDiffTool(tool?.name) && diffInfo}
             <DiffView
+              id={tool?.id || message.id}
               filePath={diffInfo.filePath}
               oldContent={diffInfo.oldContent}
               newContent={diffInfo.newContent}

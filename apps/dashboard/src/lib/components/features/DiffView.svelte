@@ -1,22 +1,22 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { FileDiff, type FileContents } from '@pierre/diffs';
-  import { Maximize2 } from 'lucide-svelte';
+  import { Maximize2, AlertCircle, Loader2 } from 'lucide-svelte';
   import DiffModal from './DiffModal.svelte';
 
   interface Props {
+    id: string;
     filePath: string;
     oldContent: string;
     newContent: string;
   }
 
-  let { filePath, oldContent, newContent }: Props = $props();
+  let { id, filePath, oldContent, newContent }: Props = $props();
   let container: HTMLDivElement;
   let diffInstance: FileDiff | null = null;
   let showModal = $state(false);
-
-  // Unique ID for view transitions
-  const viewTransitionId = `diff-${Math.random().toString(36).slice(2, 9)}`;
+  let loading = $state(true);
+  let error = $state<string | null>(null);
 
   // Get file extension for syntax highlighting
   function getLanguageFromPath(path: string): string | undefined {
@@ -67,30 +67,40 @@
   onMount(async () => {
     if (!container) return;
 
-    const lang = getLanguageFromPath(filePath);
-    const fileName = getFileName(filePath);
+    try {
+      const lang = getLanguageFromPath(filePath);
+      const fileName = getFileName(filePath);
 
-    const oldFile: FileContents = {
-      name: fileName,
-      contents: oldContent,
-      lang: lang as any,
-    };
+      const oldFile: FileContents = {
+        name: fileName,
+        contents: oldContent,
+        lang: lang as any,
+      };
 
-    const newFile: FileContents = {
-      name: fileName,
-      contents: newContent,
-      lang: lang as any,
-    };
+      const newFile: FileContents = {
+        name: fileName,
+        contents: newContent,
+        lang: lang as any,
+      };
 
-    diffInstance = new FileDiff({
-      disableFileHeader: true,
-    });
+      diffInstance = new FileDiff({
+        disableFileHeader: true,
+      });
 
-    diffInstance.render({
-      oldFile,
-      newFile,
-      fileContainer: container,
-    });
+      // Pass container as containerWrapper, not fileContainer
+      // The library creates its own diffs-container custom element with shadowRoot
+      diffInstance.render({
+        oldFile,
+        newFile,
+        containerWrapper: container,
+      });
+
+      loading = false;
+    } catch (e) {
+      console.error('[DiffView] Failed to render diff:', e);
+      error = e instanceof Error ? e.message : 'Failed to render diff';
+      loading = false;
+    }
   });
 
   onDestroy(() => {
@@ -101,42 +111,40 @@
   });
 
   function openModal() {
-    // Use View Transitions API if available
-    if (document.startViewTransition) {
-      document.startViewTransition(() => {
-        showModal = true;
-      });
-    } else {
-      showModal = true;
-    }
+    showModal = true;
   }
 
   function closeModal() {
-    if (document.startViewTransition) {
-      document.startViewTransition(() => {
-        showModal = false;
-      });
-    } else {
-      showModal = false;
-    }
+    showModal = false;
   }
 </script>
 
-<div
-  class="diff-view-container"
-  style="view-transition-name: {viewTransitionId}"
->
+<div class="diff-view-container">
   <div class="diff-header">
     <span class="diff-path">{filePath}</span>
     <button
       onclick={openModal}
       class="expand-btn"
       title="Expand diff (full view)"
+      disabled={loading || !!error}
     >
       <Maximize2 class="w-3.5 h-3.5" />
     </button>
   </div>
-  <div bind:this={container} class="diff-content"></div>
+
+  {#if loading}
+    <div class="diff-loading">
+      <Loader2 class="w-5 h-5 animate-spin text-text-muted" />
+      <span>Loading diff...</span>
+    </div>
+  {:else if error}
+    <div class="diff-error">
+      <AlertCircle class="w-5 h-5 text-error" />
+      <span>{error}</span>
+    </div>
+  {/if}
+
+  <div bind:this={container} class="diff-content" class:hidden={loading || !!error}></div>
 </div>
 
 {#if showModal}
@@ -145,7 +153,6 @@
     {oldContent}
     {newContent}
     onClose={closeModal}
-    viewTransitionName={viewTransitionId}
   />
 {/if}
 
@@ -198,6 +205,30 @@
   .diff-content {
     overflow-x: auto;
     max-height: 400px;
+  }
+
+  .diff-content.hidden {
+    display: none;
+  }
+
+  .diff-loading,
+  .diff-error {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 2rem;
+    font-size: 0.875rem;
+    color: var(--color-text-muted);
+  }
+
+  .diff-error {
+    color: var(--color-error);
+  }
+
+  .expand-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 
   /* Override @pierre/diffs default styles to match our theme */

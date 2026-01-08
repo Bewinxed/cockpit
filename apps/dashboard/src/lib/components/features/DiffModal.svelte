@@ -8,10 +8,9 @@
     oldContent: string;
     newContent: string;
     onClose: () => void;
-    viewTransitionName?: string;
   }
 
-  let { filePath, oldContent, newContent, onClose, viewTransitionName }: Props = $props();
+  let { filePath, oldContent, newContent, onClose }: Props = $props();
   let container: HTMLDivElement;
   let diffInstance: FileDiff | null = null;
   let diffStyle = $state<'unified' | 'split'>('unified');
@@ -103,10 +102,12 @@
       hunkSeparators: 'line-info',
     });
 
+    // Pass container as containerWrapper, not fileContainer
+    // The library creates its own diffs-container custom element with shadowRoot
     diffInstance.render({
       oldFile,
       newFile,
-      fileContainer: container,
+      containerWrapper: container,
     });
   }
 
@@ -179,7 +180,6 @@
 >
   <div
     class="relative w-[95vw] h-[90vh] max-w-7xl bg-bg rounded-xl shadow-2xl border border-border flex flex-col overflow-hidden animate-scale-in"
-    style={viewTransitionName ? `view-transition-name: ${viewTransitionName}` : ''}
   >
     <!-- Header -->
     <div class="flex items-center justify-between px-4 py-3 border-b border-border bg-surface">
