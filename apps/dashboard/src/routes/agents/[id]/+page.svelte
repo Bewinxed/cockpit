@@ -21,16 +21,16 @@
 
   let showNewInstanceModal = $state(false);
 
-  // Get agent ID from params
-  const agentId = $derived(page.params.id ?? '');
+  // Get machine ID from params (URL still uses /agents/:id for backwards compat)
+  const machineId = $derived(page.params.id ?? '');
 
-  // Get agent from store
-  const agent = $derived($agents.get(agentId));
+  // Get agent (machine) from store
+  const agent = $derived($agents.get(machineId));
 
-  // Get instances for this agent
+  // Get instances for this machine
   const agentInstances = $derived(
     Array.from($instances.values())
-      .filter((i) => i.agentId === agentId)
+      .filter((i) => i.machineId === machineId)
       .sort((a, b) => new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime())
   );
 

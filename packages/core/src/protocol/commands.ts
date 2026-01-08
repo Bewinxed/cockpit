@@ -260,8 +260,8 @@ export interface RewindFilesResult {
  * Result of agent status request
  */
 export interface AgentStatusResult {
-  /** Agent ID */
-  agentId: string;
+  /** Machine ID (stable, hardware-derived) */
+  machineId: string;
   /** Current status */
   status: 'online' | 'offline';
   /** Number of running instances */

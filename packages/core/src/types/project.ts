@@ -23,7 +23,7 @@ export interface ProjectSettings {
 
 /**
  * Represents a project or workspace that can contain Claude Code instances.
- * Projects help organize work and can be associated with specific agents.
+ * Projects help organize work and can be associated with specific machines.
  */
 export interface Project {
   /** Unique identifier for the project */
@@ -35,11 +35,11 @@ export interface Project {
   /** Optional description of the project */
   description?: string;
 
-  /** Root path of the project on the agent's filesystem */
+  /** Root path of the project on the machine's filesystem */
   rootPath?: string;
 
-  /** Agent this project is associated with (if any) */
-  agentId?: string;
+  /** Machine this project is associated with (if any) */
+  machineId?: string;
 
   /** Project-specific settings */
   settings?: ProjectSettings;
@@ -58,7 +58,7 @@ export interface CreateProjectData {
   name: string;
   description?: string;
   rootPath?: string;
-  agentId?: string;
+  machineId?: string;
   settings?: ProjectSettings;
 }
 
@@ -69,6 +69,6 @@ export interface UpdateProjectData {
   name?: string;
   description?: string;
   rootPath?: string;
-  agentId?: string;
+  machineId?: string;
   settings?: ProjectSettings;
 }

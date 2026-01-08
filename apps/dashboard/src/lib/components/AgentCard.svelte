@@ -8,7 +8,7 @@
   import WindowsIcon from '$lib/components/icons/WindowsIcon.svelte';
 
   interface Agent {
-    id: string;
+    machineId: string;
     name: string;
     os: 'darwin' | 'linux' | 'windows';
     status: 'online' | 'reconnecting' | 'offline';
@@ -33,7 +33,7 @@
 </script>
 
 <a
-  href="/agents/{agent.id}"
+  href="/agents/{agent.machineId}"
   class="card card-interactive p-4 group"
 >
   <div class="flex items-center gap-4">

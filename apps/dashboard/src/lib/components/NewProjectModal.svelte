@@ -13,7 +13,7 @@
   let name = $state('');
   let description = $state('');
   let rootPath = $state('');
-  let agentId = $state('');
+  let machineId = $state('');
   let loading = $state(false);
   let error = $state('');
 
@@ -32,7 +32,7 @@
       name: name.trim(),
       description: description.trim() || undefined,
       rootPath: rootPath.trim() || undefined,
-      agentId: agentId || undefined,
+      machineId: machineId || undefined,
     });
 
     loading = false;
@@ -42,7 +42,7 @@
       name = '';
       description = '';
       rootPath = '';
-      agentId = '';
+      machineId = '';
       onClose();
     } else {
       error = result.error || 'Failed to create project';
@@ -110,17 +110,17 @@
 
       <div>
         <label for="agent" class="block text-sm font-medium text-tx-2 mb-1.5">
-          Default Agent (optional)
+          Default Machine (optional)
         </label>
         <select
           id="agent"
-          bind:value={agentId}
+          bind:value={machineId}
           class="w-full px-4 py-2.5 rounded-xl bg-bg-2 border border-ui-1 text-tx-1
                  focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
         >
-          <option value="">Any available agent</option>
+          <option value="">Any available machine</option>
           {#each Array.from($agents.values()) as agent}
-            <option value={agent.id}>{agent.name} ({agent.os})</option>
+            <option value={agent.machineId}>{agent.name} ({agent.os})</option>
           {/each}
         </select>
       </div>

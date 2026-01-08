@@ -13,13 +13,16 @@ export type PermissionMode = 'default' | 'acceptEdits' | 'bypassPermissions' | '
 
 /**
  * Represents a running or stopped Claude Code session.
- * Instances are the actual Claude Code processes managed by agents.
+ * Instances are the actual Claude Code processes managed by machines.
+ *
+ * An instance is tied to a machine (via machineId) for its entire lifecycle.
+ * The machineId is stable and never changes - it's the routing key.
  */
 export interface Instance {
   /** Unique identifier for the instance */
   id: string;
 
-  /** Agent's internal session ID (for tracking) */
+  /** Agent service's internal session ID (for tracking) */
   sessionId?: string;
 
   /** Claude SDK's session ID (for resume) */
@@ -28,11 +31,11 @@ export interface Instance {
   /** Project this instance belongs to (if any) */
   projectId?: string;
 
-  /** Agent running this instance (ephemeral ID, changes on hub restart) */
-  agentId: string;
-
-  /** Stable machine identifier - used for routing after hub restart */
-  machineId?: string;
+  /**
+   * Machine running this instance (stable, hardware-derived).
+   * This is the routing key - used to find the WebSocket connection.
+   */
+  machineId: string;
 
   /** Current working directory */
   cwd: string;
@@ -63,9 +66,11 @@ export interface Instance {
  * Data required to spawn a new instance
  */
 export interface SpawnInstanceData {
-  agentId: string;
-  /** Stable machine identifier - used for routing after hub restart */
-  machineId?: string;
+  /**
+   * Machine to spawn the instance on (stable, hardware-derived).
+   * Required - instances must be tied to a machine.
+   */
+  machineId: string;
   cwd: string;
   projectId?: string;
   model?: string;

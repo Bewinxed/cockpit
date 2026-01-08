@@ -132,7 +132,7 @@
         </div>
 
         <div class="divide-y divide-border">
-          {#each $onlineAgents as agent (agent.id)}
+          {#each $onlineAgents as agent (agent.machineId)}
             <div class="p-4">
               <AgentCard {agent} compact />
             </div>

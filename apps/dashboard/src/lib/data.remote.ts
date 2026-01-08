@@ -8,10 +8,10 @@ import * as v from 'valibot';
 const HUB_URL = process.env.HUB_URL || 'http://localhost:3456';
 
 interface AgentData {
-  id: string;
+  machineId: string;
   hostname?: string;
   os?: string;
-  status: 'online' | 'offline';
+  status: 'online' | 'offline' | 'reconnecting';
   tailscaleIp?: string;
   connectedAt?: string;
   lastPing?: string;
@@ -21,7 +21,7 @@ interface InstanceData {
   id: string;
   lastPrompt?: string;
   status: string;
-  agentId: string;
+  machineId: string;
   projectId?: string;
   createdAt?: string;
   cwd: string;
@@ -34,7 +34,7 @@ interface ProjectData {
   name: string;
   description?: string;
   rootPath?: string;
-  agentId?: string;
+  machineId?: string;
   createdAt: string;
   updatedAt: string;
 }

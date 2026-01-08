@@ -12,14 +12,17 @@ export type AgentOS = 'windows' | 'darwin' | 'linux';
 export type AgentStatus = 'online' | 'reconnecting' | 'offline';
 
 /**
- * Represents a connected device running the Cockpit agent.
- * Each agent corresponds to a machine that can run Claude Code instances.
+ * Represents a connected machine running the Cockpit agent service.
+ * Each machine can run multiple Claude Code instances.
+ *
+ * The machineId is the primary identifier - it's stable and hardware-derived.
+ * There is no separate "agentId" - the machine IS the agent.
  */
 export interface Agent {
-  /** Unique identifier for the agent */
-  id: string;
-
-  /** Unique machine identifier (hardware-based) */
+  /**
+   * Unique machine identifier (hardware-based, stable).
+   * This is the PRIMARY KEY - used for all routing and references.
+   */
   machineId: string;
 
   /** Hostname of the machine */

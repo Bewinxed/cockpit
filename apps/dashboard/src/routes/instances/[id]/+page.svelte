@@ -66,7 +66,7 @@
     name: ssrInstance.lastPrompt?.slice(0, 50) || 'Instance',
     status: ssrInstance.status as 'starting' | 'running' | 'stopping' | 'stopped' | 'sleeping' | 'error' | 'disconnected',
     agent: '',
-    agentId: ssrInstance.agentId,
+    machineId: ssrInstance.machineId,
     project: null,
     projectId: ssrInstance.projectId || null,
     lastActivity: ssrInstance.createdAt ? new Date(ssrInstance.createdAt).toISOString() : new Date().toISOString(),
@@ -75,8 +75,8 @@
     totalCostUsd: ssrInstance.totalCostUsd,
   } : undefined));
 
-  // Get agent info
-  const agent = $derived(instance?.agentId ? $agents.get(instance.agentId) : undefined);
+  // Get agent (machine) info
+  const agent = $derived(instance?.machineId ? $agents.get(instance.machineId) : undefined);
 
   // Get pending permission requests for this instance
   const permissionRequests = getInstancePermissions(instanceId);
@@ -302,11 +302,11 @@
       // Re-fetch commands to ensure we have the latest
       await fetchCommands();
 
-      // Fetch Claude version from agent
+      // Fetch Claude version from machine
       let version = 'unknown';
-      if (instance?.agentId) {
+      if (instance?.machineId) {
         try {
-          const versionResponse = await api.api.agents({ id: instance.agentId })['claude-version'].get();
+          const versionResponse = await api.api.agents({ id: instance.machineId })['claude-version'].get();
           if (versionResponse.data?.success && versionResponse.data.data?.version) {
             version = versionResponse.data.data.version;
           }

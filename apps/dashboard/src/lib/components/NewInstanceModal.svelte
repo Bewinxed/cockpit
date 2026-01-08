@@ -12,7 +12,7 @@
 
   let { open = $bindable(), onClose }: Props = $props();
 
-  let agentId = $state('');
+  let machineId = $state('');
   let cwd = $state('');
   let projectId = $state('');
   let prompt = $state('');
@@ -25,22 +25,22 @@
   // Get online agents
   $effect(() => {
     const onlineAgents = Array.from($agents.values()).filter(a => a.status === 'online');
-    if (onlineAgents.length > 0 && !agentId) {
-      agentId = onlineAgents[0].id;
+    if (onlineAgents.length > 0 && !machineId) {
+      machineId = onlineAgents[0].machineId;
     }
   });
 
   // Get selected agent name for auth modal
   let selectedAgentName = $derived(
-    $agents.get(agentId)?.name || 'the agent'
+    $agents.get(machineId)?.name || 'the agent'
   );
 
   async function handleSubmit(e: SubmitEvent) {
     e.preventDefault();
     error = '';
 
-    if (!agentId) {
-      error = 'Please select an agent';
+    if (!machineId) {
+      error = 'Please select a machine';
       return;
     }
 
@@ -52,7 +52,7 @@
     loading = true;
 
     const result = await spawnInstance({
-      agentId,
+      machineId,
       cwd,
       projectId: projectId || undefined,
       prompt: prompt || undefined,
@@ -62,7 +62,7 @@
 
     if (result.success) {
       // Reset form and close
-      agentId = '';
+      machineId = '';
       cwd = '';
       projectId = '';
       prompt = '';
@@ -88,7 +88,7 @@
   }
 
   function openFileBrowser() {
-    if (agentId) {
+    if (machineId) {
       showFileBrowser = true;
     }
   }
@@ -108,20 +108,20 @@
 
       <div class="space-y-1.5">
         <label for="agent" class="block text-sm font-medium text-text">
-          Agent <span class="text-error">*</span>
+          Machine <span class="text-error">*</span>
         </label>
         <select
           id="agent"
-          bind:value={agentId}
+          bind:value={machineId}
           class="input"
         >
-          <option value="">Select an agent...</option>
+          <option value="">Select a machine...</option>
           {#each Array.from($agents.values()).filter(a => a.status === 'online') as agent}
-            <option value={agent.id}>{agent.name} ({agent.os})</option>
+            <option value={agent.machineId}>{agent.name} ({agent.os})</option>
           {/each}
         </select>
         {#if Array.from($agents.values()).filter(a => a.status === 'online').length === 0}
-          <p class="text-xs text-text-muted italic">No agents online. Start an agent with <code class="px-1 bg-surface-hover rounded text-[10px]">cockpit agent</code></p>
+          <p class="text-xs text-text-muted italic">No machines online. Start an agent with <code class="px-1 bg-surface-hover rounded text-[10px]">cockpit agent</code></p>
         {/if}
       </div>
 
@@ -129,10 +129,10 @@
         <label for="cwd" class="block text-sm font-medium text-text">
           Working Directory <span class="text-error">*</span>
         </label>
-        {#if showFileBrowser && agentId}
+        {#if showFileBrowser && machineId}
           <div class="h-80 rounded-lg border border-border overflow-hidden bg-bg">
             <FileBrowser
-              agentId={agentId}
+              machineId={machineId}
               initialPath={cwd || undefined}
               onSelect={handlePathSelect}
             />
@@ -156,10 +156,10 @@
             <button
               type="button"
               onclick={openFileBrowser}
-              disabled={!agentId}
+              disabled={!machineId}
               class="px-3 rounded-md border border-border hover:bg-surface-hover text-text-secondary
                      disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-              title={agentId ? 'Browse files on agent' : 'Select an agent first'}
+              title={machineId ? 'Browse files on machine' : 'Select a machine first'}
             >
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
@@ -208,7 +208,7 @@
         </button>
         <button
           type="submit"
-          disabled={loading || !agentId || !cwd}
+          disabled={loading || !machineId || !cwd}
           class="btn btn-primary flex-1"
         >
           {#if loading}

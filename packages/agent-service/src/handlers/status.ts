@@ -4,7 +4,7 @@ import type { InstanceManager, InstanceStatusInfo } from '../instance-manager.js
 import type { HubClient } from '../hub-client.js';
 
 export interface AgentStatusParams {
-  agentId?: string;
+  machineId?: string;
 }
 
 export interface InstanceStatusParams {
@@ -12,7 +12,7 @@ export interface InstanceStatusParams {
 }
 
 export interface AgentStatusResponse {
-  agentId: string;
+  machineId: string;
   hostname: string;
   platform: string;
   uptime: number;
@@ -26,7 +26,7 @@ export async function handleAgentStatus(
   request: JsonRpcRequest,
   instanceManager: InstanceManager,
   hubClient: HubClient,
-  agentId: string,
+  machineId: string,
   startTime: Date
 ): Promise<void> {
   try {
@@ -36,7 +36,7 @@ export async function handleAgentStatus(
     const uptime = Date.now() - startTime.getTime();
 
     const response: AgentStatusResponse = {
-      agentId,
+      machineId,
       hostname,
       platform,
       uptime,

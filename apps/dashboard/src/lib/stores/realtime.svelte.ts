@@ -3,7 +3,7 @@ import { api } from '$lib/api';
 
 // Types for real-time data
 export interface Agent {
-  id: string;
+  machineId: string;
   name: string;
   os: 'darwin' | 'linux' | 'windows';
   status: 'online' | 'reconnecting' | 'offline';
@@ -18,7 +18,7 @@ export interface Instance {
   name: string;
   status: 'starting' | 'running' | 'stopping' | 'stopped' | 'sleeping' | 'error' | 'disconnected';
   agent: string;
-  agentId: string;
+  machineId: string;
   project: string | null;
   projectId: string | null;
   lastActivity: string;
@@ -32,7 +32,7 @@ export interface Project {
   name: string;
   description?: string;
   rootPath?: string;
-  agentId?: string;
+  machineId?: string;
   instanceCount: number;
   createdAt: Date;
   updatedAt: Date;
@@ -116,7 +116,7 @@ export interface StreamingState {
 export interface PermissionRequest {
   requestId: string;
   instanceId: string;
-  agentId: string;
+  machineId: string;
   toolName: string;
   toolInput: Record<string, unknown>;
   toolUseID: string;
@@ -310,7 +310,7 @@ export const populatedInstances: Readable<Instance[]> = derived(
   [instances, agents, projects],
   ([$instances, $agents, $projects]) => {
     return Array.from($instances.values()).map((instance) => {
-      const agent = $agents.get(instance.agentId);
+      const agent = $agents.get(instance.machineId);
       const project = instance.projectId ? $projects.get(instance.projectId) : null;
       return {
         ...instance,
@@ -423,7 +423,7 @@ export function connect(baseUrl: string = '') {
   eventSource.addEventListener('agent:connected', (event: Event) => {
     const agent = JSON.parse((event as MessageEvent).data);
     agents.update((map) => {
-      map.set(agent.id, {
+      map.set(agent.machineId, {
         ...agent,
         name: agent.hostname,
         status: 'online',
@@ -434,22 +434,22 @@ export function connect(baseUrl: string = '') {
   });
 
   eventSource.addEventListener('agent:disconnected', (event: Event) => {
-    const { agentId } = JSON.parse((event as MessageEvent).data);
+    const { machineId } = JSON.parse((event as MessageEvent).data);
     agents.update((map) => {
-      const agent = map.get(agentId);
+      const agent = map.get(machineId);
       if (agent) {
-        map.set(agentId, { ...agent, status: 'offline' });
+        map.set(machineId, { ...agent, status: 'offline' });
       }
       return map;
     });
   });
 
   eventSource.addEventListener('agent:reconnecting', (event: Event) => {
-    const { agentId } = JSON.parse((event as MessageEvent).data);
+    const { machineId } = JSON.parse((event as MessageEvent).data);
     agents.update((map) => {
-      const agent = map.get(agentId);
+      const agent = map.get(machineId);
       if (agent) {
-        map.set(agentId, { ...agent, status: 'reconnecting' });
+        map.set(machineId, { ...agent, status: 'reconnecting' });
       }
       return map;
     });
@@ -850,10 +850,10 @@ export function disconnect() {
 // Initialize stores from SSR-loaded data
 export function initializeFromSSR(
   agentsData: Array<{
-    id: string;
+    machineId: string;
     hostname?: string;
     os?: string;
-    status: 'online' | 'offline';
+    status: 'online' | 'offline' | 'reconnecting';
     tailscaleIp?: string;
     connectedAt?: string;
     lastPing?: string;
@@ -862,7 +862,7 @@ export function initializeFromSSR(
     id: string;
     lastPrompt?: string;
     status: string;
-    agentId: string;
+    machineId: string;
     projectId?: string;
     createdAt?: string;
     cwd: string;
@@ -874,14 +874,14 @@ export function initializeFromSSR(
     name: string;
     description?: string;
     rootPath?: string;
-    agentId?: string;
+    machineId?: string;
     createdAt: string;
     updatedAt: string;
   }>
 ): void {
-  agents.set(new Map(agentsData.map((a) => [a.id, {
-    id: a.id,
-    name: a.hostname || a.id,
+  agents.set(new Map(agentsData.map((a) => [a.machineId, {
+    machineId: a.machineId,
+    name: a.hostname || a.machineId,
     os: (a.os as 'darwin' | 'linux' | 'windows') || 'linux',
     status: a.status,
     instances: 0,
@@ -895,7 +895,7 @@ export function initializeFromSSR(
     name: i.lastPrompt?.slice(0, 50) || 'Instance',
     status: i.status as Instance['status'],
     agent: '',
-    agentId: i.agentId,
+    machineId: i.machineId,
     project: null,
     projectId: i.projectId || null,
     lastActivity: i.createdAt ? new Date(i.createdAt).toISOString() : new Date().toISOString(),
@@ -909,7 +909,7 @@ export function initializeFromSSR(
     name: p.name,
     description: p.description,
     rootPath: p.rootPath,
-    agentId: p.agentId,
+    machineId: p.machineId,
     instanceCount: 0,
     createdAt: new Date(p.createdAt),
     updatedAt: new Date(p.updatedAt),
@@ -925,9 +925,9 @@ export async function fetchAgents(): Promise<void> {
       return;
     }
     if (data?.success && data.data) {
-      agents.set(new Map(data.data.map((a) => [a.id, {
-        id: a.id,
-        name: a.hostname || a.id,
+      agents.set(new Map(data.data.map((a) => [a.machineId, {
+        machineId: a.machineId,
+        name: a.hostname || a.machineId,
         os: (a.os as 'darwin' | 'linux' | 'windows') || 'linux',
         status: a.status,
         instances: 0, // Will be updated with instance count
@@ -954,7 +954,7 @@ export async function fetchInstances(): Promise<void> {
         name: i.lastPrompt?.slice(0, 50) || 'Instance',
         status: i.status as Instance['status'],
         agent: '', // Will be resolved from agents
-        agentId: i.agentId,
+        machineId: i.machineId,
         project: null, // Will be resolved from projects
         projectId: i.projectId || null,
         lastActivity: i.createdAt ? new Date(i.createdAt).toISOString() : new Date().toISOString(),
@@ -981,7 +981,7 @@ export async function fetchProjects(): Promise<void> {
         name: p.name,
         description: p.description,
         rootPath: p.rootPath,
-        agentId: p.agentId,
+        machineId: p.machineId,
         instanceCount: 0, // Will be calculated
         createdAt: new Date(p.createdAt),
         updatedAt: new Date(p.updatedAt),

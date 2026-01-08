@@ -41,10 +41,10 @@ function isAuthError(error: unknown): boolean {
 }
 
 /**
- * Spawn a new instance on an agent
+ * Spawn a new instance on a machine
  */
 export async function spawnInstance(params: {
-  agentId: string;
+  machineId: string;
   cwd: string;
   projectId?: string;
   prompt?: string;
@@ -112,7 +112,7 @@ export async function createProject(params: {
   name: string;
   description?: string;
   rootPath?: string;
-  agentId?: string;
+  machineId?: string;
 }): Promise<{ success: boolean; data?: unknown; error?: string }> {
   const { data, error } = await api.api.projects.post(params);
 
@@ -137,7 +137,7 @@ export async function updateProject(
     name?: string;
     description?: string;
     rootPath?: string;
-    agentId?: string;
+    machineId?: string;
   }
 ): Promise<{ success: boolean; error?: string }> {
   const { error } = await api.api.projects({ id: projectId }).patch(params);

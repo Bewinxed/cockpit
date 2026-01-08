@@ -8,7 +8,8 @@ import {
 import { generateId, deferred } from '@cockpit/core/utils';
 
 /**
- * Represents an agent currently connected via WebSocket
+ * Represents a machine currently connected via WebSocket.
+ * The machineId is the primary key - stable and hardware-derived.
  */
 export interface ConnectedAgent extends Agent {
   ws: unknown; // Elysia WebSocket instance
@@ -22,11 +23,14 @@ export interface ConnectedAgent extends Agent {
 }
 
 /**
- * Registry for tracking connected agents
+ * Registry for tracking connected machines.
+ *
+ * Uses machineId as the primary key - no ephemeral agentId needed.
+ * The machineId is stable and hardware-derived, so it never changes.
  */
 export class AgentRegistry {
+  // Key is machineId (stable, hardware-derived)
   private agents: Map<string, ConnectedAgent> = new Map();
-  private machineIdToAgentId: Map<string, string> = new Map();
   private requestTimeout: number;
 
   constructor(options: { requestTimeout?: number } = {}) {
@@ -34,56 +38,12 @@ export class AgentRegistry {
   }
 
   /**
-   * Register a new agent connection
+   * Register a machine connection.
+   * Uses machineId as the identifier - if already registered, updates the connection.
    */
   register(ws: unknown, info: CreateAgentData): ConnectedAgent {
-    // Check if this machine is already registered
-    const existingAgentId = this.machineIdToAgentId.get(info.machineId);
-    if (existingAgentId) {
-      // Update existing agent with new connection
-      const existingAgent = this.agents.get(existingAgentId);
-      if (existingAgent) {
-        existingAgent.ws = ws;
-        existingAgent.connectedAt = new Date();
-        existingAgent.lastPing = new Date();
-        existingAgent.status = 'online';
-        existingAgent.hostname = info.hostname;
-        existingAgent.tailscaleIp = info.tailscaleIp;
-        return existingAgent;
-      }
-    }
+    const existingAgent = this.agents.get(info.machineId);
 
-    // Create new agent
-    const agentId = generateId();
-    const now = new Date();
-
-    const agent: ConnectedAgent = {
-      id: agentId,
-      machineId: info.machineId,
-      hostname: info.hostname,
-      tailscaleIp: info.tailscaleIp,
-      os: info.os,
-      status: 'online',
-      lastSeen: now,
-      createdAt: now,
-      ws,
-      connectedAt: now,
-      lastPing: now,
-      pendingRequests: new Map(),
-    };
-
-    this.agents.set(agentId, agent);
-    this.machineIdToAgentId.set(info.machineId, agentId);
-
-    return agent;
-  }
-
-  /**
-   * Register an agent with a specific ID (used when reusing database IDs)
-   */
-  registerWithId(ws: unknown, agentId: string, info: CreateAgentData): ConnectedAgent {
-    // Check if this agent ID is already registered
-    const existingAgent = this.agents.get(agentId);
     if (existingAgent) {
       // Update existing agent with new connection
       existingAgent.ws = ws;
@@ -95,11 +55,10 @@ export class AgentRegistry {
       return existingAgent;
     }
 
-    // Create new agent with specified ID
+    // Create new agent entry keyed by machineId
     const now = new Date();
 
     const agent: ConnectedAgent = {
-      id: agentId,
       machineId: info.machineId,
       hostname: info.hostname,
       tailscaleIp: info.tailscaleIp,
@@ -113,26 +72,25 @@ export class AgentRegistry {
       pendingRequests: new Map(),
     };
 
-    this.agents.set(agentId, agent);
-    this.machineIdToAgentId.set(info.machineId, agentId);
+    this.agents.set(info.machineId, agent);
 
     return agent;
   }
 
   /**
-   * Unregister an agent (disconnect)
-   * @param agentId - The agent ID to unregister
+   * Unregister a machine (disconnect).
+   * @param machineId - The machine ID to unregister
    * @param ws - Optional: only unregister if this is the current WebSocket (prevents race conditions)
    * @returns object with status info, or null if skipped (ws mismatch or not found)
    */
-  unregister(agentId: string, ws?: unknown): { agentId: string; newStatus: 'reconnecting' } | null {
-    const agent = this.agents.get(agentId);
+  unregister(machineId: string, ws?: unknown): { machineId: string; newStatus: 'reconnecting' } | null {
+    const agent = this.agents.get(machineId);
     if (!agent) return null;
 
     // If ws is provided, only unregister if it matches the current connection
     // This prevents race conditions where old WebSocket close events fire after reconnection
     if (ws !== undefined && agent.ws !== ws) {
-      console.log(`[AgentRegistry] Skipping unregister for ${agentId} - WebSocket mismatch (stale close event)`);
+      console.log(`[AgentRegistry] Skipping unregister for ${machineId} - WebSocket mismatch (stale close event)`);
       return null;
     }
 
@@ -149,46 +107,32 @@ export class AgentRegistry {
     agent.lastSeen = new Date();
     agent.ws = null;
 
-    return { agentId, newStatus: 'reconnecting' };
+    return { machineId, newStatus: 'reconnecting' };
   }
 
   /**
-   * Remove an agent completely from registry
+   * Remove a machine completely from registry
    */
-  remove(agentId: string): boolean {
-    const agent = this.agents.get(agentId);
-    if (agent) {
-      this.machineIdToAgentId.delete(agent.machineId);
-      this.agents.delete(agentId);
-      return true;
-    }
-    return false;
+  remove(machineId: string): boolean {
+    return this.agents.delete(machineId);
   }
 
   /**
-   * Get an agent by ID
+   * Get a machine by machineId
    */
-  get(agentId: string): ConnectedAgent | undefined {
-    return this.agents.get(agentId);
+  get(machineId: string): ConnectedAgent | undefined {
+    return this.agents.get(machineId);
   }
 
   /**
-   * Get an agent by machine ID
-   */
-  getByMachineId(machineId: string): ConnectedAgent | undefined {
-    const agentId = this.machineIdToAgentId.get(machineId);
-    return agentId ? this.agents.get(agentId) : undefined;
-  }
-
-  /**
-   * Get all registered agents
+   * Get all registered machines
    */
   getAll(): ConnectedAgent[] {
     return Array.from(this.agents.values());
   }
 
   /**
-   * Get all online agents
+   * Get all online machines
    */
   getOnline(): ConnectedAgent[] {
     return Array.from(this.agents.values()).filter(
@@ -197,10 +141,10 @@ export class AgentRegistry {
   }
 
   /**
-   * Update agent's last ping time
+   * Update machine's last ping time
    */
-  updatePing(agentId: string): void {
-    const agent = this.agents.get(agentId);
+  updatePing(machineId: string): void {
+    const agent = this.agents.get(machineId);
     if (agent) {
       agent.lastPing = new Date();
       agent.lastSeen = new Date();
@@ -208,16 +152,17 @@ export class AgentRegistry {
   }
 
   /**
-   * Send a JSON-RPC request to an agent and wait for response
+   * Send a JSON-RPC request to a machine and wait for response.
+   * Uses machineId as the identifier.
    */
-  async sendToAgent(agentId: string, method: string, params?: unknown): Promise<JsonRpcResponse> {
-    const agent = this.agents.get(agentId);
+  async sendToMachine(machineId: string, method: string, params?: unknown): Promise<JsonRpcResponse> {
+    const agent = this.agents.get(machineId);
 
     if (!agent) {
       return createErrorResponse(
         '0',
         JsonRpcErrorCode.INTERNAL_ERROR,
-        `Agent ${agentId} not found`
+        `Machine ${machineId} not found`
       );
     }
 
@@ -225,8 +170,8 @@ export class AgentRegistry {
       return createErrorResponse(
         '0',
         JsonRpcErrorCode.INTERNAL_ERROR,
-        `Agent ${agentId} is reconnecting`,
-        { code: 'AGENT_RECONNECTING', agentId }
+        `Machine ${machineId} is reconnecting`,
+        { code: 'AGENT_RECONNECTING', machineId }
       );
     }
 
@@ -234,8 +179,8 @@ export class AgentRegistry {
       return createErrorResponse(
         '0',
         JsonRpcErrorCode.INTERNAL_ERROR,
-        `Agent ${agentId} is not connected`,
-        { code: 'AGENT_OFFLINE', agentId }
+        `Machine ${machineId} is not connected`,
+        { code: 'AGENT_OFFLINE', machineId }
       );
     }
 
@@ -245,7 +190,7 @@ export class AgentRegistry {
     // Set up timeout
     const timeout = setTimeout(() => {
       agent.pendingRequests.delete(request.id);
-      reject(new Error(`Request to agent ${agentId} timed out`));
+      reject(new Error(`Request to machine ${machineId} timed out`));
     }, this.requestTimeout);
 
     // Store pending request
@@ -254,7 +199,7 @@ export class AgentRegistry {
     try {
       // Send the request via WebSocket
       const serialized = JSON.stringify(request);
-      console.log(`[AgentRegistry] Sending to agent ${agentId}:`, serialized.slice(0, 300));
+      console.log(`[AgentRegistry] Sending to machine ${machineId}:`, serialized.slice(0, 300));
       // @ts-expect-error - ws type varies by runtime
       agent.ws.send(serialized);
 
@@ -272,40 +217,10 @@ export class AgentRegistry {
   }
 
   /**
-   * Send a JSON-RPC request to an agent by machineId (stable identifier)
-   * Falls back to agentId if machineId lookup fails
+   * Handle a response from a machine
    */
-  async sendToAgentByMachineId(
-    machineId: string | undefined,
-    agentId: string,
-    method: string,
-    params?: unknown
-  ): Promise<JsonRpcResponse> {
-    // Try to find agent by machineId first (stable across hub restarts)
-    let agent = machineId ? this.getByMachineId(machineId) : undefined;
-
-    // Fall back to agentId if machineId lookup fails
-    if (!agent) {
-      agent = this.agents.get(agentId);
-    }
-
-    if (!agent) {
-      return createErrorResponse(
-        '0',
-        JsonRpcErrorCode.INTERNAL_ERROR,
-        `Agent not found (machineId: ${machineId}, agentId: ${agentId})`
-      );
-    }
-
-    // Use the found agent's actual ID for the request
-    return this.sendToAgent(agent.id, method, params);
-  }
-
-  /**
-   * Handle a response from an agent
-   */
-  handleResponse(agentId: string, response: JsonRpcResponse): boolean {
-    const agent = this.agents.get(agentId);
+  handleResponse(machineId: string, response: JsonRpcResponse): boolean {
+    const agent = this.agents.get(machineId);
     if (!agent) return false;
 
     const pending = agent.pendingRequests.get(response.id);
@@ -319,8 +234,8 @@ export class AgentRegistry {
   }
 
   /**
-   * Handle a response by request ID (searches all agents for the pending request)
-   * This is used when we can't determine the agent from the WebSocket
+   * Handle a response by request ID (searches all machines for the pending request)
+   * This is used when we can't determine the machine from the WebSocket
    */
   handleResponseByRequestId(response: JsonRpcResponse): boolean {
     for (const agent of this.agents.values()) {
@@ -336,7 +251,7 @@ export class AgentRegistry {
   }
 
   /**
-   * Broadcast a notification to all online agents
+   * Broadcast a notification to all online machines
    */
   broadcast(method: string, params?: unknown): void {
     const notification = {
@@ -358,10 +273,10 @@ export class AgentRegistry {
   }
 
   /**
-   * Send a notification to a specific agent (no response expected)
+   * Send a notification to a specific machine (no response expected)
    */
-  notifyAgent(agentId: string, method: string, params?: unknown): boolean {
-    const agent = this.agents.get(agentId);
+  notifyMachine(machineId: string, method: string, params?: unknown): boolean {
+    const agent = this.agents.get(machineId);
 
     if (!agent || agent.status !== 'online' || !agent.ws) {
       return false;
@@ -383,14 +298,14 @@ export class AgentRegistry {
   }
 
   /**
-   * Get count of connected agents
+   * Get count of connected machines
    */
   get onlineCount(): number {
     return this.getOnline().length;
   }
 
   /**
-   * Get total count of registered agents
+   * Get total count of registered machines
    */
   get totalCount(): number {
     return this.agents.size;

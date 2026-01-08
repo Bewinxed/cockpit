@@ -20,11 +20,7 @@ async function main() {
         options.hubUrl = nextArg;
         i++;
         break;
-      case '--agent-id':
-      case '-i':
-        options.agentId = nextArg;
-        i++;
-        break;
+      // Note: --agent-id is deprecated - machineId is now derived from hardware
       case '--no-discovery':
         options.useDiscovery = false;
         break;
@@ -92,16 +88,17 @@ Usage: bun run src/cli.ts [options]
 
 Options:
   -h, --hub-url <url>         Hub WebSocket URL to connect to
-  -i, --agent-id <id>         Agent ID (auto-generated if not provided)
   --no-discovery              Disable mDNS discovery
   --advertise                 Advertise agent via mDNS
   --advertise-port <port>     Port for advertising
   --heartbeat-interval <ms>   Heartbeat interval in milliseconds
   --help                      Show this help message
 
+Note: Machine ID is automatically derived from hardware identifiers.
+
 Examples:
   bun run src/cli.ts --hub-url ws://localhost:3001
-  bun run src/cli.ts --agent-id my-agent --no-discovery --hub-url ws://hub.local:3001
+  bun run src/cli.ts --no-discovery --hub-url ws://hub.local:3001
 `);
 }
 

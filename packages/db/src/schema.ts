@@ -1,17 +1,17 @@
 import { sqliteTable, text, integer, real, index } from 'drizzle-orm/sqlite-core';
 
-// agents - connected devices
+// agents - connected machines (machineId is the primary key)
+// The "agent" is just the daemon running on a machine - machineId IS the identity
 export const agents = sqliteTable('agents', {
-  id: text('id').primaryKey(),
-  machineId: text('machine_id').notNull().unique(),
+  // machineId is the PRIMARY KEY - stable, hardware-derived identifier
+  machineId: text('machine_id').primaryKey(),
   hostname: text('hostname').notNull(),
   tailscaleIp: text('tailscale_ip').notNull(),
   os: text('os').notNull(), // 'windows' | 'darwin' | 'linux'
-  status: text('status').notNull(), // 'online' | 'offline'
+  status: text('status').notNull(), // 'online' | 'offline' | 'reconnecting'
   lastSeen: integer('last_seen', { mode: 'timestamp' }).notNull(),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
 }, (table) => [
-  index('agents_machine_id_idx').on(table.machineId),
   index('agents_status_idx').on(table.status),
   index('agents_last_seen_idx').on(table.lastSeen),
 ]);
@@ -22,25 +22,27 @@ export const projects = sqliteTable('projects', {
   name: text('name').notNull(),
   description: text('description'),
   rootPath: text('root_path'),
-  agentId: text('agent_id').references(() => agents.id),
+  // Machine this project is associated with (optional)
+  machineId: text('machine_id').references(() => agents.machineId),
   settings: text('settings', { mode: 'json' }),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
 }, (table) => [
-  index('projects_agent_id_idx').on(table.agentId),
+  index('projects_machine_id_idx').on(table.machineId),
   index('projects_name_idx').on(table.name),
 ]);
 
 // instances - Claude Code sessions
+// Instances are tied to a machine via machineId (stable, never changes)
 export const instances = sqliteTable('instances', {
   id: text('id').primaryKey(),
-  sessionId: text('session_id'), // Agent's internal session ID (for tracking)
+  sessionId: text('session_id'), // Agent service's internal session ID (for tracking)
   sdkSessionId: text('sdk_session_id'), // Claude SDK's session ID (for resume)
   projectId: text('project_id').references(() => projects.id),
-  agentId: text('agent_id').references(() => agents.id).notNull(),
-  machineId: text('machine_id'), // Stable machine identifier - used for routing after hub restart
+  // Machine running this instance - FK to agents.machineId, REQUIRED
+  machineId: text('machine_id').references(() => agents.machineId).notNull(),
   cwd: text('cwd').notNull(),
-  status: text('status').notNull(), // 'starting' | 'running' | 'stopping' | 'stopped' | 'error'
+  status: text('status').notNull(), // 'starting' | 'running' | 'stopping' | 'stopped' | 'error' | 'sleeping'
   model: text('model'),
   permissionMode: text('permission_mode'),
   lastPrompt: text('last_prompt'),
@@ -51,7 +53,6 @@ export const instances = sqliteTable('instances', {
   index('instances_session_id_idx').on(table.sessionId),
   index('instances_sdk_session_id_idx').on(table.sdkSessionId),
   index('instances_project_id_idx').on(table.projectId),
-  index('instances_agent_id_idx').on(table.agentId),
   index('instances_machine_id_idx').on(table.machineId),
   index('instances_status_idx').on(table.status),
   index('instances_created_at_idx').on(table.createdAt),
@@ -135,8 +136,8 @@ export type NewCredential = typeof credentials.$inferInsert;
 
 // Status type literals for type safety
 export type AgentOS = 'windows' | 'darwin' | 'linux';
-export type AgentStatus = 'online' | 'offline';
-export type InstanceStatus = 'starting' | 'running' | 'stopping' | 'stopped' | 'error';
+export type AgentStatus = 'online' | 'offline' | 'reconnecting';
+export type InstanceStatus = 'starting' | 'running' | 'stopping' | 'stopped' | 'error' | 'sleeping' | 'disconnected';
 export type TaskType = 'major' | 'minor';
 export type TaskStatus = 'in_progress' | 'completed' | 'blocked' | 'cancelled';
 export type CredentialType = 'oauth' | 'api_key';

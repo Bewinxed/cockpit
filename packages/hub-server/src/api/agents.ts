@@ -21,7 +21,8 @@ function getErrorMessage(error: JsonRpcError | unknown): string {
 }
 
 /**
- * Agent management routes
+ * Machine (Agent) management routes.
+ * Routes use machineId as the primary identifier.
  */
 export function createAgentRoutes(db: Db) {
   // Note: Don't cache agentRegistry here - get fresh reference on each request
@@ -29,23 +30,23 @@ export function createAgentRoutes(db: Db) {
   const instanceTracker = createInstanceTracker(db);
 
   return new Elysia({ prefix: '/agents' })
-    // List all agents (from both registry and database)
+    // List all machines (from both registry and database)
     .get(
       '/',
       async ({ query }) => {
-        // Get agents from registry (connected agents with live status)
-        const connectedAgents = getAgentRegistry().getAll();
-        const connectedAgentIds = new Set(connectedAgents.map((a) => a.id));
+        // Get machines from registry (connected with live status)
+        const connectedMachines = getAgentRegistry().getAll();
+        const connectedMachineIds = new Set(connectedMachines.map((a) => a.machineId));
 
-        // Get agents from database
+        // Get machines from database
         let dbQuery = db.select().from(agents).$dynamic();
 
         if (query.status === 'online') {
-          // Only return online agents from registry
+          // Only return online machines from registry
           return {
             success: true,
-            data: connectedAgents.map(connectedAgentToResponse),
-            total: connectedAgents.length,
+            data: connectedMachines.map(connectedMachineToResponse),
+            total: connectedMachines.length,
           };
         }
 
@@ -55,31 +56,31 @@ export function createAgentRoutes(db: Db) {
           dbQuery = dbQuery.limit(parseInt(query.limit));
         }
 
-        const dbAgents = await dbQuery;
+        const dbMachines = await dbQuery;
 
-        // Merge database agents with live status from registry
-        const agentsWithStatus = dbAgents.map((dbAgent) => {
-          const connected = connectedAgents.find((a) => a.id === dbAgent.id);
+        // Merge database machines with live status from registry
+        const machinesWithStatus = dbMachines.map((dbMachine) => {
+          const connected = connectedMachines.find((a) => a.machineId === dbMachine.machineId);
           return {
-            ...dbAgentToResponse(dbAgent),
+            ...dbMachineToResponse(dbMachine),
             status: connected ? 'online' as const : 'offline' as const,
             connectedAt: connected?.connectedAt,
             lastPing: connected?.lastPing,
           };
         });
 
-        // Add any connected agents not in database (newly connected)
-        for (const connected of connectedAgents) {
-          if (!agentsWithStatus.find((a) => a.id === connected.id)) {
-            agentsWithStatus.unshift(connectedAgentToResponse(connected));
+        // Add any connected machines not in database (newly connected)
+        for (const connected of connectedMachines) {
+          if (!machinesWithStatus.find((a) => a.machineId === connected.machineId)) {
+            machinesWithStatus.unshift(connectedMachineToResponse(connected));
           }
         }
 
         return {
           success: true,
-          data: agentsWithStatus,
-          total: agentsWithStatus.length,
-          online: connectedAgents.length,
+          data: machinesWithStatus,
+          total: machinesWithStatus.length,
+          online: connectedMachines.length,
         };
       },
       {
@@ -90,21 +91,21 @@ export function createAgentRoutes(db: Db) {
       }
     )
 
-    // Get agent by ID
+    // Get machine by machineId
     .get(
-      '/:id',
+      '/:machineId',
       async ({ params, set }) => {
-        // First check registry for connected agent
-        const connected = getAgentRegistry().get(params.id);
+        // First check registry for connected machine
+        const connected = getAgentRegistry().get(params.machineId);
 
         if (connected) {
           // Get instance count
-          const instances = await instanceTracker.getActiveByAgent(params.id);
+          const instances = await instanceTracker.getActiveByMachineId(params.machineId);
 
           return {
             success: true,
             data: {
-              ...connectedAgentToResponse(connected),
+              ...connectedMachineToResponse(connected),
               activeInstances: instances.length,
             },
           };
@@ -114,23 +115,23 @@ export function createAgentRoutes(db: Db) {
         const result = await db
           .select()
           .from(agents)
-          .where(eq(agents.id, params.id))
+          .where(eq(agents.machineId, params.machineId))
           .limit(1);
 
         if (result.length === 0) {
           set.status = 404;
           return {
             success: false,
-            error: 'Agent not found',
+            error: 'Machine not found',
           };
         }
 
-        const instances = await instanceTracker.getActiveByAgent(params.id);
+        const instances = await instanceTracker.getActiveByMachineId(params.machineId);
 
         return {
           success: true,
           data: {
-            ...dbAgentToResponse(result[0]),
+            ...dbMachineToResponse(result[0]),
             status: 'offline' as const,
             activeInstances: instances.length,
           },
@@ -138,33 +139,33 @@ export function createAgentRoutes(db: Db) {
       },
       {
         params: t.Object({
-          id: t.String(),
+          machineId: t.String(),
         }),
       }
     )
 
-    // Get agent's instances
+    // Get machine's instances
     .get(
-      '/:id/instances',
+      '/:machineId/instances',
       async ({ params, query, set }) => {
-        // Check if agent exists
-        const connected = getAgentRegistry().get(params.id);
-        const dbAgent = await db
+        // Check if machine exists
+        const connected = getAgentRegistry().get(params.machineId);
+        const dbMachine = await db
           .select()
           .from(agents)
-          .where(eq(agents.id, params.id))
+          .where(eq(agents.machineId, params.machineId))
           .limit(1);
 
-        if (!connected && dbAgent.length === 0) {
+        if (!connected && dbMachine.length === 0) {
           set.status = 404;
           return {
             success: false,
-            error: 'Agent not found',
+            error: 'Machine not found',
           };
         }
 
         const instances = await instanceTracker.list({
-          agentId: params.id,
+          machineId: params.machineId,
           status: query.status as any,
           limit: query.limit ? parseInt(query.limit) : undefined,
         });
@@ -177,7 +178,7 @@ export function createAgentRoutes(db: Db) {
       },
       {
         params: t.Object({
-          id: t.String(),
+          machineId: t.String(),
         }),
         query: t.Object({
           status: t.Optional(t.String()),
@@ -186,30 +187,30 @@ export function createAgentRoutes(db: Db) {
       }
     )
 
-    // Get agent statistics
+    // Get machine statistics
     .get(
-      '/:id/stats',
+      '/:machineId/stats',
       async ({ params, set }) => {
-        // Check if agent exists
-        const connected = getAgentRegistry().get(params.id);
-        const dbAgent = await db
+        // Check if machine exists
+        const connected = getAgentRegistry().get(params.machineId);
+        const dbMachine = await db
           .select()
           .from(agents)
-          .where(eq(agents.id, params.id))
+          .where(eq(agents.machineId, params.machineId))
           .limit(1);
 
-        if (!connected && dbAgent.length === 0) {
+        if (!connected && dbMachine.length === 0) {
           set.status = 404;
           return {
             success: false,
-            error: 'Agent not found',
+            error: 'Machine not found',
           };
         }
 
         const [totalInstances, activeInstances, totalCost] = await Promise.all([
-          instanceTracker.count({ agentId: params.id }),
-          instanceTracker.count({ agentId: params.id, status: ['starting', 'running'] }),
-          instanceTracker.getTotalCostByAgent(params.id),
+          instanceTracker.count({ machineId: params.machineId }),
+          instanceTracker.count({ machineId: params.machineId, status: ['starting', 'running'] }),
+          instanceTracker.getTotalCostByMachineId(params.machineId),
         ]);
 
         return {
@@ -223,30 +224,30 @@ export function createAgentRoutes(db: Db) {
       },
       {
         params: t.Object({
-          id: t.String(),
+          machineId: t.String(),
         }),
       }
     )
 
-    // Get agent status (live from registry)
+    // Get machine status (live from registry)
     .get(
-      '/:id/status',
+      '/:machineId/status',
       async ({ params, set }) => {
-        const connected = getAgentRegistry().get(params.id);
+        const connected = getAgentRegistry().get(params.machineId);
 
         if (!connected) {
           // Check database
-          const dbAgent = await db
+          const dbMachine = await db
             .select()
             .from(agents)
-            .where(eq(agents.id, params.id))
+            .where(eq(agents.machineId, params.machineId))
             .limit(1);
 
-          if (dbAgent.length === 0) {
+          if (dbMachine.length === 0) {
             set.status = 404;
             return {
               success: false,
-              error: 'Agent not found',
+              error: 'Machine not found',
             };
           }
 
@@ -254,7 +255,7 @@ export function createAgentRoutes(db: Db) {
             success: true,
             data: {
               status: 'offline',
-              lastSeen: dbAgent[0].lastSeen,
+              lastSeen: dbMachine[0].lastSeen,
             },
           };
         }
@@ -271,28 +272,28 @@ export function createAgentRoutes(db: Db) {
       },
       {
         params: t.Object({
-          id: t.String(),
+          machineId: t.String(),
         }),
       }
     )
 
-    // List filesystem directory on agent
+    // List filesystem directory on machine
     .get(
-      '/:id/filesystem',
+      '/:machineId/filesystem',
       async ({ params, query, set }) => {
-        const connected = getAgentRegistry().get(params.id);
+        const connected = getAgentRegistry().get(params.machineId);
 
         if (!connected || connected.status !== 'online') {
           set.status = 404;
           return {
             success: false,
-            error: 'Agent not found or offline',
+            error: 'Machine not found or offline',
           };
         }
 
-        // Forward request to agent
-        const response = await getAgentRegistry().sendToAgent(
-          params.id,
+        // Forward request to machine
+        const response = await getAgentRegistry().sendToMachine(
+          params.machineId,
           CommandMethod.FILESYSTEM_LIST,
           { path: query.path }
         );
@@ -312,7 +313,7 @@ export function createAgentRoutes(db: Db) {
       },
       {
         params: t.Object({
-          id: t.String(),
+          machineId: t.String(),
         }),
         query: t.Object({
           path: t.Optional(t.String()),
@@ -320,23 +321,23 @@ export function createAgentRoutes(db: Db) {
       }
     )
 
-    // Get Claude CLI version from agent
+    // Get Claude CLI version from machine
     .get(
-      '/:id/claude-version',
+      '/:machineId/claude-version',
       async ({ params, set }) => {
-        const connected = getAgentRegistry().get(params.id);
+        const connected = getAgentRegistry().get(params.machineId);
 
         if (!connected || connected.status !== 'online') {
           set.status = 404;
           return {
             success: false,
-            error: 'Agent not found or offline',
+            error: 'Machine not found or offline',
           };
         }
 
-        // Forward request to agent
-        const response = await getAgentRegistry().sendToAgent(
-          params.id,
+        // Forward request to machine
+        const response = await getAgentRegistry().sendToMachine(
+          params.machineId,
           CommandMethod.CLAUDE_VERSION,
           {}
         );
@@ -356,42 +357,40 @@ export function createAgentRoutes(db: Db) {
       },
       {
         params: t.Object({
-          id: t.String(),
+          machineId: t.String(),
         }),
       }
     );
 }
 
 /**
- * Convert connected agent to API response
+ * Convert connected machine to API response
  */
-function connectedAgentToResponse(agent: ReturnType<ReturnType<typeof getAgentRegistry>['getAll']>[0]) {
+function connectedMachineToResponse(machine: ReturnType<ReturnType<typeof getAgentRegistry>['getAll']>[0]) {
   return {
-    id: agent.id,
-    machineId: agent.machineId,
-    hostname: agent.hostname,
-    tailscaleIp: agent.tailscaleIp,
-    os: agent.os,
+    machineId: machine.machineId,
+    hostname: machine.hostname,
+    tailscaleIp: machine.tailscaleIp,
+    os: machine.os,
     status: 'online' as const,
-    lastSeen: agent.lastSeen,
-    createdAt: agent.createdAt,
-    connectedAt: agent.connectedAt,
-    lastPing: agent.lastPing,
+    lastSeen: machine.lastSeen,
+    createdAt: machine.createdAt,
+    connectedAt: machine.connectedAt,
+    lastPing: machine.lastPing,
   };
 }
 
 /**
- * Convert database agent to API response
+ * Convert database machine to API response
  */
-function dbAgentToResponse(agent: typeof agents.$inferSelect) {
+function dbMachineToResponse(machine: typeof agents.$inferSelect) {
   return {
-    id: agent.id,
-    machineId: agent.machineId,
-    hostname: agent.hostname,
-    tailscaleIp: agent.tailscaleIp,
-    os: agent.os,
-    status: agent.status as 'online' | 'offline',
-    lastSeen: agent.lastSeen,
-    createdAt: agent.createdAt,
+    machineId: machine.machineId,
+    hostname: machine.hostname,
+    tailscaleIp: machine.tailscaleIp,
+    os: machine.os,
+    status: machine.status as 'online' | 'offline' | 'reconnecting',
+    lastSeen: machine.lastSeen,
+    createdAt: machine.createdAt,
   };
 }

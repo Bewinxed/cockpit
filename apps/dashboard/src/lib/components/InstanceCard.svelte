@@ -8,7 +8,7 @@
     id: string;
     name: string;
     status: 'starting' | 'running' | 'stopping' | 'stopped' | 'error' | 'disconnected' | 'sleeping';
-    agentId: string;
+    machineId: string;
     project: string | null;
     cwd?: string;
     lastActivity?: string | Date;
@@ -22,7 +22,7 @@
 
   let { instance, compact = false }: Props = $props();
 
-  const agent = $derived($agents.get(instance.agentId));
+  const agent = $derived($agents.get(instance.machineId));
   const agentName = $derived(agent?.name || 'Unknown Agent');
 
   const statusConfig = {

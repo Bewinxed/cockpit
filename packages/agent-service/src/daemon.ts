@@ -4,7 +4,6 @@ import {
   type JsonRpcNotification,
   createNotification,
   PROTOCOL_METHODS,
-  generateId,
   getHostname,
   getPlatform,
   normalizeOS,
@@ -30,8 +29,6 @@ import {
 } from './handlers/index.js';
 
 export interface AgentDaemonOptions {
-  /** Agent ID (auto-generated if not provided) */
-  agentId?: string;
   /** Hub URL to connect to (if known) */
   hubUrl?: string;
   /** Use mDNS discovery to find hub */
@@ -61,14 +58,17 @@ export interface AgentDaemonEvents {
 }
 
 /**
- * Main service that orchestrates the agent components
+ * Main service that orchestrates the agent components.
+ *
+ * The agent identifies itself by machineId (stable, hardware-derived).
+ * No ephemeral agentId is used - machineId IS the identity.
  */
 export class AgentDaemon extends EventEmitter {
-  private readonly agentId: string;
+  private readonly machineId: string;
   private readonly instanceManager: InstanceManager;
   private readonly hubClient: HubClient;
   private readonly discovery: AgentDiscovery;
-  private readonly options: Required<Omit<AgentDaemonOptions, 'agentId' | 'hubUrl' | 'hubClientOptions' | 'discoveryOptions'>>;
+  private readonly options: Required<Omit<AgentDaemonOptions, 'hubUrl' | 'hubClientOptions' | 'discoveryOptions'>>;
   private hubUrl: string | null;
 
   private isRunning: boolean = false;
@@ -78,7 +78,8 @@ export class AgentDaemon extends EventEmitter {
   constructor(options: AgentDaemonOptions = {}) {
     super();
 
-    this.agentId = options.agentId ?? generateId();
+    // machineId is stable and hardware-derived
+    this.machineId = getMachineFingerprint();
     this.hubUrl = options.hubUrl ?? null;
     this.options = {
       useDiscovery: options.useDiscovery ?? true,
@@ -95,10 +96,10 @@ export class AgentDaemon extends EventEmitter {
   }
 
   /**
-   * Get the agent ID
+   * Get the machine ID (stable identifier)
    */
   get id(): string {
-    return this.agentId;
+    return this.machineId;
   }
 
   /**
@@ -153,7 +154,7 @@ export class AgentDaemon extends EventEmitter {
       }
 
       this.emit('started');
-      console.log(`Agent daemon started (id: ${this.agentId})`);
+      console.log(`Agent daemon started (machineId: ${this.machineId})`);
     } catch (error) {
       this.isRunning = false;
       throw error;
@@ -189,12 +190,11 @@ export class AgentDaemon extends EventEmitter {
   }
 
   /**
-   * Register agent with the hub
+   * Register agent with the hub using machineId as identity
    */
   private async register(): Promise<void> {
     const hostname = getHostname();
     const os = normalizeOS(getPlatform());
-    const machineId = getMachineFingerprint();
 
     // Try to get Tailscale IP, fall back to localhost
     let tailscaleIp = '127.0.0.1';
@@ -217,10 +217,10 @@ export class AgentDaemon extends EventEmitter {
         status: inst.state,
       }));
 
-    const result = await this.hubClient.request<{ agentId: string }>(
+    const result = await this.hubClient.request<{ machineId: string; registered: boolean }>(
       PROTOCOL_METHODS.AGENT_REGISTER,
       {
-        machineId,
+        machineId: this.machineId,
         hostname,
         tailscaleIp,
         os,
@@ -228,12 +228,7 @@ export class AgentDaemon extends EventEmitter {
       }
     );
 
-    // Use the agent ID assigned by the hub
-    if (result?.agentId) {
-      (this as any).agentId = result.agentId;
-    }
-
-    console.log(`Registered with hub as ${this.agentId}`);
+    console.log(`Registered with hub (machineId: ${this.machineId})`);
   }
 
   /**
@@ -244,11 +239,11 @@ export class AgentDaemon extends EventEmitter {
     this.hubClient.on('connected', async () => {
       console.log('Connected to hub');
       // Always re-register on connection (handles both initial connect and reconnects)
-      // This ensures the hub knows about this agent after hub restarts
+      // This ensures the hub knows about this machine after hub restarts
       try {
         await this.register();
       } catch (error) {
-        console.error('Failed to re-register with hub:', error);
+        console.error('Failed to register with hub:', error);
         this.emit('error', error instanceof Error ? error : new Error(String(error)));
       }
       this.emit('connected');
@@ -280,7 +275,7 @@ export class AgentDaemon extends EventEmitter {
     this.instanceManager.on('instance.started', (instanceId: string, sessionId: string) => {
       this.emit('instance.started', instanceId, sessionId);
       this.hubClient.notify(PROTOCOL_METHODS.INSTANCE_STARTED, {
-        agentId: this.agentId,
+        machineId: this.machineId,
         instanceId,
         sessionId,
         timestamp: new Date().toISOString(),
@@ -290,7 +285,7 @@ export class AgentDaemon extends EventEmitter {
     this.instanceManager.on('instance.stopped', (instanceId: string) => {
       this.emit('instance.stopped', instanceId);
       this.hubClient.notify(PROTOCOL_METHODS.INSTANCE_STOPPED, {
-        agentId: this.agentId,
+        machineId: this.machineId,
         instanceId,
         timestamp: new Date().toISOString(),
       });
@@ -300,7 +295,7 @@ export class AgentDaemon extends EventEmitter {
       const status = this.instanceManager.getStatus(instanceId);
       this.emit('instance.sleeping', instanceId);
       this.hubClient.notify(PROTOCOL_METHODS.INSTANCE_SLEEPING, {
-        agentId: this.agentId,
+        machineId: this.machineId,
         instanceId,
         sdkSessionId: status?.sdkSessionId,
         timestamp: new Date().toISOString(),
@@ -310,7 +305,7 @@ export class AgentDaemon extends EventEmitter {
     this.instanceManager.on('instance.error', (instanceId: string, error: Error) => {
       this.emit('instance.error', instanceId, error);
       this.hubClient.notify(PROTOCOL_METHODS.INSTANCE_ERROR, {
-        agentId: this.agentId,
+        machineId: this.machineId,
         instanceId,
         error: error.message,
         timestamp: new Date().toISOString(),
@@ -319,7 +314,7 @@ export class AgentDaemon extends EventEmitter {
 
     this.instanceManager.on('instance.statusChanged', (instanceId: string, previousStatus: string, newStatus: string) => {
       this.hubClient.notify(PROTOCOL_METHODS.INSTANCE_STATUS_CHANGED, {
-        agentId: this.agentId,
+        machineId: this.machineId,
         instanceId,
         previousStatus,
         newStatus,
@@ -330,7 +325,7 @@ export class AgentDaemon extends EventEmitter {
     this.instanceManager.on('sdk.message', (instanceId: string, message: unknown) => {
       // Forward SDK messages to hub
       this.hubClient.notify(PROTOCOL_METHODS.SDK_MESSAGE, {
-        agentId: this.agentId,
+        machineId: this.machineId,
         instanceId,
         message,
         timestamp: new Date().toISOString(),
@@ -341,7 +336,7 @@ export class AgentDaemon extends EventEmitter {
     this.instanceManager.on('permission.request', (request) => {
       // Forward permission requests to hub
       this.hubClient.notify(PROTOCOL_METHODS.PERMISSION_REQUEST, {
-        agentId: this.agentId,
+        machineId: this.machineId,
         ...request,
         timestamp: new Date().toISOString(),
       });
@@ -393,7 +388,7 @@ export class AgentDaemon extends EventEmitter {
           request,
           this.instanceManager,
           this.hubClient,
-          this.agentId,
+          this.machineId,
           this.startTime
         );
         break;
@@ -472,7 +467,7 @@ export class AgentDaemon extends EventEmitter {
       if (this.hubClient.isConnected) {
         // Use notify instead of request - heartbeat doesn't need a response
         this.hubClient.notify(PROTOCOL_METHODS.AGENT_HEARTBEAT, {
-          agentId: this.agentId,
+          machineId: this.machineId,
           instanceCount: this.instanceManager.listInstances().length,
           timestamp: new Date().toISOString(),
         });

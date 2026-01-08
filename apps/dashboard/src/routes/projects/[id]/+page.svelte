@@ -39,8 +39,8 @@
     projectInstances.filter((i) => i.status === 'running' || i.status === 'starting')
   );
 
-  // Get agent for this project
-  const agent = $derived(project?.agentId ? $agents.get(project.agentId) : undefined);
+  // Get agent (machine) for this project
+  const agent = $derived(project?.machineId ? $agents.get(project.machineId) : undefined);
 
   // Calculate total cost
   const totalCost = $derived(
@@ -283,8 +283,8 @@
             <FolderKanban class="w-5 h-5 text-info" />
           </div>
           <div>
-            <div class="text-lg font-bold text-text truncate">{agent?.name || 'Any Agent'}</div>
-            <div class="text-sm text-text-secondary">Default Agent</div>
+            <div class="text-lg font-bold text-text truncate">{agent?.name || 'Any Machine'}</div>
+            <div class="text-sm text-text-secondary">Default Machine</div>
           </div>
         </div>
       </Card>

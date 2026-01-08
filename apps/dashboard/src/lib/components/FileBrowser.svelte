@@ -15,12 +15,12 @@
   } from 'lucide-svelte';
 
   interface Props {
-    agentId: string;
+    machineId: string;
     initialPath?: string;
     onSelect?: (path: string) => void;
   }
 
-  let { agentId, initialPath, onSelect }: Props = $props();
+  let { machineId, initialPath, onSelect }: Props = $props();
 
   let currentPath = $state('');
   let parentPath = $state<string | null>(null);
@@ -32,7 +32,7 @@
 
   // Load initial directory
   $effect(() => {
-    if (agentId) {
+    if (machineId) {
       loadDirectory(initialPath);
     }
   });
@@ -42,7 +42,7 @@
     error = '';
 
     try {
-      const { data, error: apiError } = await api.api.agents({ id: agentId }).filesystem.get({
+      const { data, error: apiError } = await api.api.agents({ id: machineId }).filesystem.get({
         query: path ? { path } : {}
       });
 

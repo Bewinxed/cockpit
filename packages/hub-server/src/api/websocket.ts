@@ -17,9 +17,9 @@ import { getBroadcastService } from '../services/broadcast';
 import { createInstanceTracker } from '../services/instance-tracker';
 import { safeJsonParse } from '@cockpit/core/utils';
 
-// Map to store agentId by connection ID
+// Map to store machineId by WebSocket connection ID
 // We use a module-level Map since Elysia ws wrappers don't preserve properties between calls
-const connectionAgentMap = new Map<string, string>();
+const connectionMachineMap = new Map<string, string>();
 
 // Helper to get unique ID from ws object
 function getWsId(ws: unknown): string {
@@ -31,7 +31,7 @@ function getWsId(ws: unknown): string {
 }
 
 /**
- * WebSocket routes for agent connections
+ * WebSocket routes for machine connections
  */
 export function createWebsocketRoutes(db: Db) {
   // Note: Don't cache agentRegistry/broadcast here - get fresh reference on each request
@@ -43,7 +43,7 @@ export function createWebsocketRoutes(db: Db) {
       // WebSocket open handler
       open(ws) {
         console.log('[Hub] New WebSocket connection');
-        // Agent will send registration message
+        // Machine will send registration message
       },
 
       // WebSocket message handler
@@ -83,7 +83,7 @@ export function createWebsocketRoutes(db: Db) {
           return;
         }
 
-        // Handle JSON-RPC response (from agent to pending hub request)
+        // Handle JSON-RPC response (from machine to pending hub request)
         if (isJsonRpcResponse(message)) {
           getAgentRegistry().handleResponseByRequestId(message);
           return;
@@ -92,9 +92,9 @@ export function createWebsocketRoutes(db: Db) {
         // Handle JSON-RPC notification
         if (isJsonRpcNotification(message)) {
           const wsId = getWsId(ws);
-          const agentId = connectionAgentMap.get(wsId);
-          if (agentId) {
-            await handleNotification(agentId, message, instanceTracker);
+          const machineId = connectionMachineMap.get(wsId);
+          if (machineId) {
+            await handleNotification(machineId, message, instanceTracker);
           }
           return;
         }
@@ -108,37 +108,37 @@ export function createWebsocketRoutes(db: Db) {
       // WebSocket close handler
       async close(ws) {
         const wsId = getWsId(ws);
-        const agentId = connectionAgentMap.get(wsId);
-        if (agentId) {
+        const machineId = connectionMachineMap.get(wsId);
+        if (machineId) {
           // Pass ws to unregister - it will skip if this is a stale close event
-          // (i.e., agent already reconnected with a new WebSocket)
-          const result = getAgentRegistry().unregister(agentId, ws);
+          // (i.e., machine already reconnected with a new WebSocket)
+          const result = getAgentRegistry().unregister(machineId, ws);
 
           if (!result) {
-            // Stale close event - agent already reconnected, just clean up our map
-            connectionAgentMap.delete(wsId);
+            // Stale close event - machine already reconnected, just clean up our map
+            connectionMachineMap.delete(wsId);
             return;
           }
 
-          console.log(`[Hub] Agent reconnecting: ${agentId}`);
+          console.log(`[Hub] Machine reconnecting: ${machineId}`);
 
-          // Update agent status in database to reconnecting
+          // Update machine status in database to reconnecting
           await db.update(agents)
             .set({ status: 'reconnecting', lastSeen: new Date() })
-            .where(eq(agents.id, agentId));
+            .where(eq(agents.machineId, machineId));
 
-          connectionAgentMap.delete(wsId);
+          connectionMachineMap.delete(wsId);
 
-          // Broadcast agent is reconnecting - UI shows "reconnecting" state
-          // Don't mark instances as stopped yet - agent may reconnect quickly
-          getBroadcastService().broadcast('agent:reconnecting', { agentId });
+          // Broadcast machine is reconnecting - UI shows "reconnecting" state
+          // Don't mark instances as stopped yet - machine may reconnect quickly
+          getBroadcastService().broadcast('agent:reconnecting', { machineId });
         }
       },
     });
 }
 
 /**
- * Handle incoming JSON-RPC requests from agents
+ * Handle incoming JSON-RPC requests from machines
  */
 async function handleRequest(
   ws: unknown,
@@ -150,7 +150,7 @@ async function handleRequest(
 
   switch (method) {
     case 'agent.register': {
-      // Agent registration
+      // Machine registration - machineId is the primary identifier
       const { machineId, hostname, tailscaleIp, os, instances: existingInstances } = params as {
         machineId: string;
         hostname: string;
@@ -163,49 +163,28 @@ async function handleRequest(
         return createErrorResponse(id, JsonRpcErrorCode.INVALID_PARAMS, 'Missing required registration parameters');
       }
 
-      // Check if this machine already exists in the database
-      // First try by machineId (stable identifier)
-      let existingDbAgent = await db
+      const now = new Date();
+
+      // Check if this machine already exists in the database (by machineId - primary key)
+      const existingDbAgent = await db
         .select()
         .from(agents)
         .where(eq(agents.machineId, machineId))
         .limit(1);
 
-      // Fallback: try by hostname for old records that don't have machineId
-      // This handles backwards compatibility during hot reloads in development
-      if (existingDbAgent.length === 0) {
-        existingDbAgent = await db
-          .select()
-          .from(agents)
-          .where(eq(agents.hostname, hostname))
-          .limit(1);
-      }
-
-      let agentId: string;
-      const now = new Date();
-
       if (existingDbAgent.length > 0) {
-        // Reuse existing database ID to maintain foreign key consistency
-        agentId = existingDbAgent[0].id;
-
-        // Update existing record - always set machineId to ensure it's populated
+        // Update existing machine record
         await db.update(agents)
           .set({
-            machineId, // Ensure machineId is set (fixes old records)
             hostname,
             tailscaleIp,
             status: 'online',
             lastSeen: now,
           })
-          .where(eq(agents.id, agentId));
+          .where(eq(agents.machineId, machineId));
       } else {
-        // Register new agent in registry (will generate new ID)
-        const newAgent = getAgentRegistry().register(ws, { machineId, hostname, tailscaleIp, os });
-        agentId = newAgent.id;
-
-        // Insert new record
+        // Insert new machine record - machineId is the primary key
         await db.insert(agents).values({
-          id: agentId,
           machineId,
           hostname,
           tailscaleIp,
@@ -216,14 +195,14 @@ async function handleRequest(
         });
       }
 
-      // Register/update agent in memory registry with correct ID
-      const agent = getAgentRegistry().registerWithId(ws, agentId, { machineId, hostname, tailscaleIp, os });
+      // Register machine in memory registry
+      const agent = getAgentRegistry().register(ws, { machineId, hostname, tailscaleIp, os });
       const wsId = getWsId(ws);
-      connectionAgentMap.set(wsId, agentId);
+      connectionMachineMap.set(wsId, machineId);
 
-      // Reconcile instances: sync agent's actual state with DB
-      // This handles agent restarts where instances are lost from memory
-      const agentInstanceIds = new Set(
+      // Reconcile instances: sync machine's actual state with DB
+      // This handles machine restarts where instances are lost from memory
+      const machineInstanceIds = new Set(
         (existingInstances || []).map((inst: { id: string }) => inst.id)
       );
 
@@ -232,8 +211,8 @@ async function handleRequest(
 
       let orphanedCount = 0;
       for (const dbInstance of dbRunningInstances) {
-        if (!agentInstanceIds.has(dbInstance.id)) {
-          // Instance is in DB as running but agent doesn't have it
+        if (!machineInstanceIds.has(dbInstance.id)) {
+          // Instance is in DB as running but machine doesn't have it
           // Mark as sleeping (can be resumed with sdkSessionId)
           await instanceTracker.markSleeping(dbInstance.id);
           getBroadcastService().broadcast('instance:sleeping', {
@@ -244,7 +223,7 @@ async function handleRequest(
         }
       }
 
-      // Update instances that agent reports
+      // Update instances that machine reports
       if (existingInstances && Array.isArray(existingInstances)) {
         for (const inst of existingInstances) {
           const existing = await instanceTracker.get(inst.id);
@@ -258,17 +237,12 @@ async function handleRequest(
       }
 
       if (orphanedCount > 0) {
-        console.log(`[Hub] Reconciled ${orphanedCount} orphaned instances for agent ${hostname} (marked as sleeping)`);
+        console.log(`[Hub] Reconciled ${orphanedCount} orphaned instances for machine ${hostname} (marked as sleeping)`);
       }
-      console.log(`[Hub] Agent registered: ${agent.id} (${hostname}), ${agentInstanceIds.size} running instances`);
+      console.log(`[Hub] Machine registered: ${machineId} (${hostname}), ${machineInstanceIds.size} running instances`);
 
-      // Backfill machineId for any instances that don't have it set
-      // This handles instances created before machineId was added
-      await instanceTracker.backfillMachineId(agentId, machineId);
-
-      // Broadcast agent connection
+      // Broadcast machine connection
       getBroadcastService().broadcast('agent:connected', {
-        id: agent.id,
         machineId,
         hostname,
         tailscaleIp,
@@ -276,24 +250,24 @@ async function handleRequest(
       });
 
       return createResponse(id, {
-        agentId: agent.id,
+        machineId,
         registered: true,
       });
     }
 
     case CommandMethod.AGENT_STATUS: {
-      // Agent requesting hub status
+      // Machine requesting hub status
       const wsId = getWsId(ws);
-      const agentId = connectionAgentMap.get(wsId);
-      if (!agentId) {
-        return createErrorResponse(id, JsonRpcErrorCode.INVALID_REQUEST, 'Agent not registered');
+      const machineId = connectionMachineMap.get(wsId);
+      if (!machineId) {
+        return createErrorResponse(id, JsonRpcErrorCode.INVALID_REQUEST, 'Machine not registered');
       }
 
-      const activeInstances = await instanceTracker.getActiveByAgent(agentId);
+      const activeInstances = await instanceTracker.getActiveByMachineId(machineId);
 
       return createResponse(id, {
         hubVersion: '1.0.0',
-        connectedAgents: getAgentRegistry().onlineCount,
+        connectedMachines: getAgentRegistry().onlineCount,
         yourInstances: activeInstances.length,
       });
     }
@@ -304,10 +278,10 @@ async function handleRequest(
 }
 
 /**
- * Handle incoming JSON-RPC notifications from agents
+ * Handle incoming JSON-RPC notifications from machines
  */
 async function handleNotification(
-  agentId: string,
+  machineId: string,
   notification: JsonRpcNotification,
   instanceTracker: ReturnType<typeof createInstanceTracker>
 ): Promise<void> {
@@ -315,8 +289,8 @@ async function handleNotification(
 
   switch (method) {
     case EventMethod.AGENT_HEARTBEAT: {
-      // Update agent's last ping time
-      getAgentRegistry().updatePing(agentId);
+      // Update machine's last ping time
+      getAgentRegistry().updatePing(machineId);
       break;
     }
 
@@ -329,10 +303,10 @@ async function handleNotification(
       break;
     }
 
-    // Handle 'instance.started' from agent (different from INSTANCE_CREATED)
+    // Handle 'instance.started' from machine (different from INSTANCE_CREATED)
     case 'instance.started': {
       const { instanceId, sessionId } = params as { instanceId: string; sessionId?: string };
-      // Note: sessionId here is the agent's internal tracking ID
+      // Note: sessionId here is the machine's internal tracking ID
       // The SDK's session_id (for resume) is stored separately as sdkSessionId
       const updated = await instanceTracker.markStarted(instanceId, sessionId);
       if (updated) {
@@ -375,7 +349,7 @@ async function handleNotification(
       break;
     }
 
-    // Handle SDK messages from agent
+    // Handle SDK messages from machine
     case 'sdk.message': {
       const { instanceId, message } = params as { instanceId: string; message: unknown };
       const msg = message as { type?: string; session_id?: string; usage?: { input_tokens?: number; output_tokens?: number }; total_cost_usd?: number };
@@ -434,7 +408,7 @@ async function handleNotification(
       break;
     }
 
-    // Handle permission requests from agent
+    // Handle permission requests from machine
     case 'permission.request': {
       const {
         requestId,
@@ -464,7 +438,7 @@ async function handleNotification(
       getBroadcastService().broadcast('permission:request', {
         requestId,
         instanceId,
-        agentId,
+        machineId,
         toolName,
         toolInput,
         toolUseID,

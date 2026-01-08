@@ -19,8 +19,8 @@ export function createProjectRoutes(db: Db) {
       async ({ query }) => {
         let dbQuery = db.select().from(projects).$dynamic();
 
-        if (query.agentId) {
-          dbQuery = dbQuery.where(eq(projects.agentId, query.agentId));
+        if (query.machineId) {
+          dbQuery = dbQuery.where(eq(projects.machineId, query.machineId));
         }
 
         if (query.search) {
@@ -47,7 +47,7 @@ export function createProjectRoutes(db: Db) {
       },
       {
         query: t.Object({
-          agentId: t.Optional(t.String()),
+          machineId: t.Optional(t.String()),
           search: t.Optional(t.String()),
           limit: t.Optional(t.String()),
           offset: t.Optional(t.String()),
@@ -97,7 +97,7 @@ export function createProjectRoutes(db: Db) {
           name: body.name,
           description: body.description ?? null,
           rootPath: body.rootPath ?? null,
-          agentId: body.agentId ?? null,
+          machineId: body.machineId ?? null,
           settings: body.settings ? JSON.stringify(body.settings) : null,
           createdAt: now,
           updatedAt: now,
@@ -120,7 +120,7 @@ export function createProjectRoutes(db: Db) {
           name: t.String({ minLength: 1 }),
           description: t.Optional(t.String()),
           rootPath: t.Optional(t.String()),
-          agentId: t.Optional(t.String()),
+          machineId: t.Optional(t.String()),
           settings: t.Optional(t.Record(t.String(), t.Unknown())),
         }),
       }
@@ -152,7 +152,7 @@ export function createProjectRoutes(db: Db) {
         if (body.name !== undefined) updateData.name = body.name;
         if (body.description !== undefined) updateData.description = body.description;
         if (body.rootPath !== undefined) updateData.rootPath = body.rootPath;
-        if (body.agentId !== undefined) updateData.agentId = body.agentId;
+        if (body.machineId !== undefined) updateData.machineId = body.machineId;
         if (body.settings !== undefined) updateData.settings = JSON.stringify(body.settings);
 
         await db
@@ -185,7 +185,7 @@ export function createProjectRoutes(db: Db) {
           name: t.Optional(t.String({ minLength: 1 })),
           description: t.Optional(t.String()),
           rootPath: t.Optional(t.String()),
-          agentId: t.Optional(t.String()),
+          machineId: t.Optional(t.String()),
           settings: t.Optional(t.Record(t.String(), t.Unknown())),
         }),
       }
@@ -237,7 +237,7 @@ function dbRowToProject(row: typeof projects.$inferSelect) {
     name: row.name,
     description: row.description ?? undefined,
     rootPath: row.rootPath ?? undefined,
-    agentId: row.agentId ?? undefined,
+    machineId: row.machineId ?? undefined,
     settings: row.settings ? (typeof row.settings === 'string' ? JSON.parse(row.settings) : row.settings) : undefined,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,

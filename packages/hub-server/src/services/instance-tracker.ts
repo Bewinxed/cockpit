@@ -27,7 +27,7 @@ export interface StoredMessage {
  * Filters for querying instances
  */
 export interface InstanceFilters {
-  agentId?: string;
+  machineId?: string;
   projectId?: string;
   status?: InstanceStatus | InstanceStatus[];
   sessionId?: string;
@@ -38,7 +38,8 @@ export interface InstanceFilters {
 }
 
 /**
- * Service for tracking Claude Code instances
+ * Service for tracking Claude Code instances.
+ * Instances are keyed by instanceId and routed by machineId.
  */
 export class InstanceTracker {
   constructor(private db: Db) {}
@@ -55,8 +56,7 @@ export class InstanceTracker {
       sessionId: null,
       sdkSessionId: null,
       projectId: data.projectId ?? null,
-      agentId: data.agentId,
-      machineId: data.machineId ?? null,
+      machineId: data.machineId, // Required - instances must be tied to a machine
       cwd: data.cwd,
       status: 'starting' as InstanceStatus,
       model: data.model ?? null,
@@ -172,8 +172,8 @@ export class InstanceTracker {
 
     const conditions: ReturnType<typeof eq>[] = [];
 
-    if (filters?.agentId) {
-      conditions.push(eq(instances.agentId, filters.agentId));
+    if (filters?.machineId) {
+      conditions.push(eq(instances.machineId, filters.machineId));
     }
 
     if (filters?.projectId) {
@@ -221,25 +221,15 @@ export class InstanceTracker {
   }
 
   /**
-   * Get instances for a specific agent
+   * Get instances for a specific machine
    */
-  async getByAgent(agentId: string): Promise<Instance[]> {
-    return this.list({ agentId });
+  async getByMachineId(machineId: string): Promise<Instance[]> {
+    return this.list({ machineId });
   }
 
   /**
-   * Get active instances for a specific agent
-   */
-  async getActiveByAgent(agentId: string): Promise<Instance[]> {
-    return this.list({
-      agentId,
-      status: ['starting', 'running'],
-    });
-  }
-
-  /**
-   * Get active instances for a specific machine (by machineId)
-   * Used for reconciliation when agent reconnects
+   * Get active instances for a specific machine
+   * Used for reconciliation when machine reconnects
    */
   async getActiveByMachineId(machineId: string): Promise<Instance[]> {
     const results = await this.db
@@ -251,31 +241,6 @@ export class InstanceTracker {
       ));
 
     return results.map((row) => this.dbRowToInstance(row));
-  }
-
-  /**
-   * Backfill machineId for all instances belonging to an agent that don't have it set.
-   * This handles instances created before machineId was added.
-   */
-  async backfillMachineId(agentId: string, machineId: string): Promise<number> {
-    const result = await this.db
-      .update(instances)
-      .set({ machineId })
-      .where(and(
-        eq(instances.agentId, agentId),
-        sql`${instances.machineId} IS NULL`
-      ));
-
-    // SQLite doesn't return affected rows easily, so we count manually
-    const updated = await this.db
-      .select({ count: sql<number>`count(*)` })
-      .from(instances)
-      .where(and(
-        eq(instances.agentId, agentId),
-        eq(instances.machineId, machineId)
-      ));
-
-    return updated[0]?.count ?? 0;
   }
 
   /**
@@ -296,7 +261,7 @@ export class InstanceTracker {
   /**
    * Count instances with optional filters
    */
-  async count(filters?: Pick<InstanceFilters, 'agentId' | 'projectId' | 'status'>): Promise<number> {
+  async count(filters?: Pick<InstanceFilters, 'machineId' | 'projectId' | 'status'>): Promise<number> {
     let query = this.db
       .select({ count: sql<number>`count(*)` })
       .from(instances)
@@ -304,8 +269,8 @@ export class InstanceTracker {
 
     const conditions: ReturnType<typeof eq>[] = [];
 
-    if (filters?.agentId) {
-      conditions.push(eq(instances.agentId, filters.agentId));
+    if (filters?.machineId) {
+      conditions.push(eq(instances.machineId, filters.machineId));
     }
 
     if (filters?.projectId) {
@@ -329,13 +294,13 @@ export class InstanceTracker {
   }
 
   /**
-   * Get total cost for an agent
+   * Get total cost for a machine
    */
-  async getTotalCostByAgent(agentId: string): Promise<number> {
+  async getTotalCostByMachineId(machineId: string): Promise<number> {
     const result = await this.db
       .select({ total: sql<number>`COALESCE(SUM(total_cost_usd), 0)` })
       .from(instances)
-      .where(eq(instances.agentId, agentId));
+      .where(eq(instances.machineId, machineId));
 
     return result[0]?.total ?? 0;
   }
@@ -459,8 +424,7 @@ export class InstanceTracker {
       sessionId: row.sessionId ?? undefined,
       sdkSessionId: row.sdkSessionId ?? undefined,
       projectId: row.projectId ?? undefined,
-      agentId: row.agentId,
-      machineId: row.machineId ?? undefined,
+      machineId: row.machineId,
       cwd: row.cwd,
       status: row.status as InstanceStatus,
       model: row.model ?? undefined,

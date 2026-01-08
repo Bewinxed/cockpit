@@ -56,7 +56,7 @@ describe('Agent API', () => {
     const res = await api('/api/agents');
     const agent = res.data?.[0];
     expect(agent).toBeDefined();
-    expect(agent.id).toBeDefined();
+    expect(agent.machineId).toBeDefined();
     expect(agent.hostname).toBeDefined();
     expect(agent.os).toBeDefined();
     expect(agent.status).toBeDefined();
@@ -64,17 +64,17 @@ describe('Agent API', () => {
 });
 
 describe('Instance API', () => {
-  let testAgentId: string;
+  let testMachineId: string;
   let testInstanceId: string;
 
   beforeAll(async () => {
-    // Get an online agent
+    // Get an online agent (machine)
     const agentsRes = await api('/api/agents');
     const onlineAgent = agentsRes.data?.find((a: any) => a.status === 'online');
     if (!onlineAgent) {
       throw new Error('No online agent available for testing');
     }
-    testAgentId = onlineAgent.id;
+    testMachineId = onlineAgent.machineId;
   });
 
   test('lists instances', async () => {
@@ -87,7 +87,7 @@ describe('Instance API', () => {
     const res = await api('/api/instances', {
       method: 'POST',
       body: JSON.stringify({
-        agentId: testAgentId,
+        machineId: testMachineId,
         cwd: '/tmp',
       }),
     });
@@ -96,7 +96,7 @@ describe('Instance API', () => {
     expect(res.data).toBeDefined();
     expect(res.data.id).toBeDefined();
     expect(res.data.status).toBe('starting');
-    expect(res.data.agentId).toBe(testAgentId);
+    expect(res.data.machineId).toBe(testMachineId);
 
     testInstanceId = res.data.id;
   });
@@ -193,7 +193,7 @@ describe('Instance API', () => {
     const res = await api('/api/instances', {
       method: 'POST',
       body: JSON.stringify({
-        agentId: 'invalid-agent-id',
+        machineId: 'invalid-agent-id',
         cwd: '/tmp',
       }),
     });
@@ -273,17 +273,17 @@ describe('Project API', () => {
 });
 
 describe('Instance Resume Flow', () => {
-  let testAgentId: string;
+  let testMachineId: string;
   let testInstanceId: string;
 
   beforeAll(async () => {
-    // Get an online agent
+    // Get an online agent (machine)
     const agentsRes = await api('/api/agents');
     const onlineAgent = agentsRes.data?.find((a: any) => a.status === 'online');
     if (!onlineAgent) {
       throw new Error('No online agent available for testing');
     }
-    testAgentId = onlineAgent.id;
+    testMachineId = onlineAgent.machineId;
   });
 
   test('spawn instance, stop it, resume with same ID', async () => {
@@ -291,7 +291,7 @@ describe('Instance Resume Flow', () => {
     const spawnRes = await api('/api/instances', {
       method: 'POST',
       body: JSON.stringify({
-        agentId: testAgentId,
+        machineId: testMachineId,
         cwd: '/tmp',
       }),
     });

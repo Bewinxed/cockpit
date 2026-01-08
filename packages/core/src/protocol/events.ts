@@ -39,8 +39,8 @@ export type EventMethodValue = (typeof EventMethod)[keyof typeof EventMethod];
 export interface InstanceCreatedEvent {
   /** The created instance */
   instance: Instance;
-  /** Agent that created it */
-  agentId: string;
+  /** Machine that created it */
+  machineId: string;
 }
 
 /**
@@ -103,8 +103,8 @@ export interface InstanceStoppedEvent {
 export interface InstanceSleepingEvent {
   /** Instance that went to sleep */
   instanceId: string;
-  /** Agent running this instance */
-  agentId: string;
+  /** Machine running this instance */
+  machineId: string;
   /** SDK session ID for resuming */
   sdkSessionId?: string;
   /** Timestamp when instance went to sleep */
@@ -142,7 +142,7 @@ export interface TaskUpdatedEvent {
  */
 export interface AgentConnectedEvent {
   /** Agent that connected */
-  agent: Pick<Agent, 'id' | 'machineId' | 'hostname' | 'tailscaleIp' | 'os'>;
+  agent: Pick<Agent, 'machineId' | 'hostname' | 'tailscaleIp' | 'os'>;
   /** Whether this is a reconnection */
   isReconnect: boolean;
   /** Agent version */
@@ -153,8 +153,8 @@ export interface AgentConnectedEvent {
  * Event data for agent disconnection
  */
 export interface AgentDisconnectedEvent {
-  /** Agent that disconnected */
-  agentId: string;
+  /** Machine that disconnected */
+  machineId: string;
   /** Reason for disconnection */
   reason: 'graceful' | 'timeout' | 'error';
   /** Error message if applicable */
@@ -165,8 +165,8 @@ export interface AgentDisconnectedEvent {
  * Event data for agent heartbeat
  */
 export interface AgentHeartbeatEvent {
-  /** Agent ID */
-  agentId: string;
+  /** Machine ID */
+  machineId: string;
   /** Number of running instances */
   instanceCount: number;
   /** System load (0-1) */

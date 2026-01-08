@@ -78,32 +78,18 @@ async function getOAuthCredentials(db: Db): Promise<OAuthCredentials | null> {
 }
 
 /**
- * Find the agent for an instance using machineId (stable) or agentId (fallback)
- * Always gets fresh registry reference to avoid stale state after hot reload
- */
-function findAgentForInstance(instance: { agentId: string; machineId?: string }) {
-  const registry = getAgentRegistry();
-  // Try machineId first (stable across hub restarts)
-  if (instance.machineId) {
-    const agent = registry.getByMachineId(instance.machineId);
-    if (agent) return agent;
-  }
-  // Fall back to agentId
-  return registry.get(instance.agentId);
-}
-
-/**
- * Derive instance status based on agent connectivity
- * If agent is offline, instance status should reflect that
+ * Derive instance status based on machine connectivity.
+ * If machine is offline, instance status should reflect that.
  */
 function deriveInstanceStatus(
-  instance: { status: string; agentId: string; machineId?: string }
+  instance: { status: string; machineId: string }
 ): string {
-  const agent = findAgentForInstance(instance);
-  const isAgentOnline = agent?.status === 'online';
+  const registry = getAgentRegistry();
+  const agent = registry.get(instance.machineId);
+  const isMachineOnline = agent?.status === 'online';
 
-  // If agent is offline and instance claims to be running, show as disconnected
-  if (!isAgentOnline && (instance.status === 'running' || instance.status === 'starting')) {
+  // If machine is offline and instance claims to be running, show as disconnected
+  if (!isMachineOnline && (instance.status === 'running' || instance.status === 'starting')) {
     return 'disconnected';
   }
 
@@ -124,14 +110,14 @@ export function createInstanceRoutes(db: Db) {
       '/',
       async ({ query }) => {
         const instances = await tracker.list({
-          agentId: query.agentId,
+          machineId: query.machineId,
           projectId: query.projectId,
           status: query.status as any,
           limit: query.limit ? parseInt(query.limit) : undefined,
           offset: query.offset ? parseInt(query.offset) : undefined,
         });
 
-        // Derive status based on agent connectivity
+        // Derive status based on machine connectivity
         const instancesWithDerivedStatus = instances.map((inst) => ({
           ...inst,
           status: deriveInstanceStatus(inst),
@@ -145,7 +131,7 @@ export function createInstanceRoutes(db: Db) {
       },
       {
         query: t.Object({
-          agentId: t.Optional(t.String()),
+          machineId: t.Optional(t.String()),
           projectId: t.Optional(t.String()),
           status: t.Optional(t.String()),
           limit: t.Optional(t.String()),
@@ -168,7 +154,7 @@ export function createInstanceRoutes(db: Db) {
           };
         }
 
-        // Derive status based on agent connectivity
+        // Derive status based on machine connectivity
         const instanceWithDerivedStatus = {
           ...instance,
           status: deriveInstanceStatus(instance),
@@ -190,32 +176,31 @@ export function createInstanceRoutes(db: Db) {
     .post(
       '/',
       async ({ body, set }) => {
-        // Check if agent exists and is online
-        const agent = getAgentRegistry().get(body.agentId);
+        // Check if machine exists and is online
+        const machine = getAgentRegistry().get(body.machineId);
 
-        if (!agent) {
+        if (!machine) {
           set.status = 404;
           return {
             success: false,
-            error: 'Agent not found',
+            error: 'Machine not found',
           };
         }
 
-        if (agent.status !== 'online') {
+        if (machine.status !== 'online') {
           set.status = 400;
           return {
             success: false,
-            error: 'Agent is not online',
+            error: 'Machine is not online',
           };
         }
 
-        // Get credentials to pass to agent
+        // Get credentials to pass to machine
         const oauthCreds = await getOAuthCredentials(db);
 
-        // Create instance in database - include machineId for stable routing
+        // Create instance in database
         const spawnData: SpawnInstanceData = {
-          agentId: body.agentId,
-          machineId: agent.machineId, // Stable identifier for routing after hub restart
+          machineId: body.machineId,
           cwd: body.cwd,
           projectId: body.projectId,
           permissionMode: body.permissionMode as SpawnInstanceData['permissionMode'],
@@ -224,9 +209,9 @@ export function createInstanceRoutes(db: Db) {
 
         const instance = await tracker.create(spawnData);
 
-        // Send spawn request to agent with credentials
-        const response = await getAgentRegistry().sendToAgent(
-          body.agentId,
+        // Send spawn request to machine with credentials
+        const response = await getAgentRegistry().sendToMachine(
+          body.machineId,
           CommandMethod.INSTANCE_SPAWN,
           {
             instanceId: instance.id,
@@ -274,7 +259,7 @@ export function createInstanceRoutes(db: Db) {
       },
       {
         body: t.Object({
-          agentId: t.String(),
+          machineId: t.String(),
           cwd: t.String(),
           projectId: t.Optional(t.String()),
           prompt: t.Optional(t.String()),
@@ -298,22 +283,21 @@ export function createInstanceRoutes(db: Db) {
           };
         }
 
-        // Query agent for live status - use machineId for stable routing
-        console.log(`[Send] Querying instance status from agent machineId=${instance.machineId} agentId=${instance.agentId}`);
-        const statusResponse = await getAgentRegistry().sendToAgentByMachineId(
+        // Query machine for live status
+        console.log(`[Send] Querying instance status from machine ${instance.machineId}`);
+        const statusResponse = await getAgentRegistry().sendToMachine(
           instance.machineId,
-          instance.agentId,
           CommandMethod.INSTANCE_STATUS,
           { instanceId: params.id }
         );
         console.log(`[Send] INSTANCE_STATUS response:`, JSON.stringify(statusResponse));
 
-        // If agent doesn't have the instance or it's not running, return appropriate error
+        // If machine doesn't have the instance or it's not running, return appropriate error
         if (statusResponse.error) {
           set.status = 400;
           return {
             success: false,
-            error: 'Instance not running on agent',
+            error: 'Instance not running on machine',
             code: 'INSTANCE_NOT_RUNNING',
           };
         }
@@ -328,10 +312,9 @@ export function createInstanceRoutes(db: Db) {
           };
         }
 
-        // Send message to agent - use machineId for stable routing
-        const response = await getAgentRegistry().sendToAgentByMachineId(
+        // Send message to machine
+        const response = await getAgentRegistry().sendToMachine(
           instance.machineId,
-          instance.agentId,
           CommandMethod.INSTANCE_SEND,
           {
             instanceId: params.id,
@@ -395,10 +378,9 @@ export function createInstanceRoutes(db: Db) {
           };
         }
 
-        // Send stop request to agent
-        const response = await getAgentRegistry().sendToAgentByMachineId(
+        // Send stop request to machine
+        const response = await getAgentRegistry().sendToMachine(
           instance.machineId,
-          instance.agentId,
           CommandMethod.INSTANCE_STOP,
           {
             instanceId: params.id,
@@ -406,15 +388,15 @@ export function createInstanceRoutes(db: Db) {
         );
 
         if (response.error) {
-          // Agent error - still mark as stopped in database
-          // This is common when instance was already stopped or agent restarted
+          // Machine error - still mark as stopped in database
+          // This is common when instance was already stopped or machine restarted
           const stoppedInstance = await tracker.markStopped(params.id);
 
-          // Don't return 500 - this is expected when instance isn't known to agent
+          // Don't return 500 - this is expected when instance isn't known to machine
           return {
             success: true,
             data: stoppedInstance,
-            message: 'Instance marked as stopped (agent returned: ' + getErrorMessage(response.error) + ')',
+            message: 'Instance marked as stopped (machine returned: ' + getErrorMessage(response.error) + ')',
           };
         }
 
@@ -435,7 +417,7 @@ export function createInstanceRoutes(db: Db) {
       }
     )
 
-    // Get instance status from agent
+    // Get instance status from machine
     .get(
       '/:id/status',
       async ({ params, set }) => {
@@ -449,10 +431,9 @@ export function createInstanceRoutes(db: Db) {
           };
         }
 
-        // Get live status from agent
-        const response = await getAgentRegistry().sendToAgentByMachineId(
+        // Get live status from machine
+        const response = await getAgentRegistry().sendToMachine(
           instance.machineId,
-          instance.agentId,
           CommandMethod.AGENT_STATUS,
           {
             instanceId: params.id,
@@ -538,10 +519,9 @@ export function createInstanceRoutes(db: Db) {
           };
         }
 
-        // Request commands from agent
-        const response = await getAgentRegistry().sendToAgentByMachineId(
+        // Request commands from machine
+        const response = await getAgentRegistry().sendToMachine(
           instance.machineId,
-          instance.agentId,
           CommandMethod.COMMANDS_LIST,
           {
             instanceId: params.id,
@@ -591,10 +571,9 @@ export function createInstanceRoutes(db: Db) {
           };
         }
 
-        // Send interrupt request to agent
-        const response = await getAgentRegistry().sendToAgentByMachineId(
+        // Send interrupt request to machine
+        const response = await getAgentRegistry().sendToMachine(
           instance.machineId,
-          instance.agentId,
           CommandMethod.INSTANCE_INTERRUPT,
           {
             instanceId: params.id,
@@ -664,9 +643,8 @@ export function createInstanceRoutes(db: Db) {
             });
             messageSaved = true;
 
-            const response = await getAgentRegistry().sendToAgentByMachineId(
+            const response = await getAgentRegistry().sendToMachine(
               instance.machineId,
-              instance.agentId,
               CommandMethod.INSTANCE_SEND,
               {
                 instanceId: params.id,
@@ -676,9 +654,9 @@ export function createInstanceRoutes(db: Db) {
 
             if (response.error) {
               const errorMsg = getErrorMessage(response.error);
-              // If agent says "not found", the agent was restarted - fall through to re-spawn
+              // If machine says "not found", the machine was restarted - fall through to re-spawn
               if (errorMsg.toLowerCase().includes('not found')) {
-                console.log(`[Resume] Instance ${params.id} not found on agent, will re-spawn`);
+                console.log(`[Resume] Instance ${params.id} not found on machine, will re-spawn`);
                 // Don't return - fall through to re-spawn logic below
               } else {
                 set.status = 500;
@@ -703,17 +681,16 @@ export function createInstanceRoutes(db: Db) {
           }
         }
 
-        // Instance is stopped or agent lost it - re-spawn with the SAME instance ID
-        // Get credentials to pass to agent
+        // Instance is stopped or machine lost it - re-spawn with the SAME instance ID
+        // Get credentials to pass to machine
         const oauthCreds = await getOAuthCredentials(db);
 
         // Update instance status to starting
         await tracker.update(params.id, { status: 'starting' });
 
-        // Send spawn request to agent with the same instanceId
-        const response = await getAgentRegistry().sendToAgentByMachineId(
+        // Send spawn request to machine with the same instanceId
+        const response = await getAgentRegistry().sendToMachine(
           instance.machineId,
-          instance.agentId,
           CommandMethod.INSTANCE_SPAWN,
           {
             instanceId: params.id, // Reuse same ID!
@@ -794,10 +771,9 @@ export function createInstanceRoutes(db: Db) {
           };
         }
 
-        // Request models from agent
-        const response = await getAgentRegistry().sendToAgentByMachineId(
+        // Request models from machine
+        const response = await getAgentRegistry().sendToMachine(
           instance.machineId,
-          instance.agentId,
           CommandMethod.MODELS_LIST,
           {
             instanceId: params.id,
@@ -838,10 +814,9 @@ export function createInstanceRoutes(db: Db) {
           };
         }
 
-        // Send model change request to agent
-        const response = await getAgentRegistry().sendToAgentByMachineId(
+        // Send model change request to machine
+        const response = await getAgentRegistry().sendToMachine(
           instance.machineId,
-          instance.agentId,
           CommandMethod.MODELS_SET,
           {
             instanceId: params.id,
@@ -892,11 +867,9 @@ export function createInstanceRoutes(db: Db) {
           };
         }
 
-        // Just try to send - sendToAgentByMachineId handles agent lookup
-        // and will return an error if agent is not available
-        const response = await getAgentRegistry().sendToAgentByMachineId(
+        // Send memory read request to machine
+        const response = await getAgentRegistry().sendToMachine(
           instance.machineId,
-          instance.agentId,
           CommandMethod.MEMORY_READ,
           {
             type: query.type as 'project' | 'user',
@@ -941,11 +914,9 @@ export function createInstanceRoutes(db: Db) {
           };
         }
 
-        // Just try to send - sendToAgentByMachineId handles agent lookup
-        // and will return an error if agent is not available
-        const response = await getAgentRegistry().sendToAgentByMachineId(
+        // Send memory write request to machine
+        const response = await getAgentRegistry().sendToMachine(
           instance.machineId,
-          instance.agentId,
           CommandMethod.MEMORY_WRITE,
           {
             type: body.type,
@@ -992,10 +963,9 @@ export function createInstanceRoutes(db: Db) {
           };
         }
 
-        // Send rewind request to agent
-        const response = await getAgentRegistry().sendToAgentByMachineId(
+        // Send rewind request to machine
+        const response = await getAgentRegistry().sendToMachine(
           instance.machineId,
-          instance.agentId,
           CommandMethod.INSTANCE_REWIND,
           {
             instanceId: params.id,
@@ -1040,21 +1010,20 @@ export function createInstanceRoutes(db: Db) {
           };
         }
 
-        // Forward permission response to agent as notification
+        // Forward permission response to machine as notification
         const agentRegistry = getAgentRegistry();
-        const agent = (instance.machineId ? agentRegistry.getByMachineId(instance.machineId) : undefined) ||
-                      agentRegistry.get(instance.agentId);
+        const machine = agentRegistry.get(instance.machineId);
 
-        if (!agent) {
+        if (!machine) {
           set.status = 400;
           return {
             success: false,
-            error: 'Agent not connected',
+            error: 'Machine not connected',
           };
         }
 
-        // Send permission response as notification to agent
-        agentRegistry.notifyAgent(agent.id, 'permission.response', {
+        // Send permission response as notification to machine
+        agentRegistry.notifyMachine(instance.machineId, 'permission.response', {
           requestId: body.requestId,
           instanceId: params.id,
           behavior: body.behavior,
