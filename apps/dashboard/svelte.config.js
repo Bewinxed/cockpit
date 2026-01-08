@@ -9,6 +9,14 @@ const config = {
     alias: {
       '$lib': './src/lib',
       '$lib/*': './src/lib/*'
+    },
+    experimental: {
+      remoteFunctions: true
+    }
+  },
+  compilerOptions: {
+    experimental: {
+      async: true
     }
   }
 };

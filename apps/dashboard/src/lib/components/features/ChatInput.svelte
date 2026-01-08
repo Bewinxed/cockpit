@@ -73,7 +73,8 @@
     const trimmed = message.trim();
     if (!trimmed || disabled || loading) return;
 
-    await onSend(trimmed);
+    // Capture and clear immediately for fluidity
+    const msgToSend = trimmed;
     message = '';
     showPalette = false;
 
@@ -81,6 +82,8 @@
     if (textareaRef) {
       textareaRef.style.height = 'auto';
     }
+
+    await onSend(msgToSend);
   }
 
   function handleCommandSelect(command: AvailableCommand) {
@@ -157,8 +160,8 @@
   }
 </script>
 
-<form class="flex gap-3 px-6 py-4 bg-paper border-t border-border" onsubmit={handleSubmit}>
-  <div class="flex-1 relative">
+<form class="flex gap-3 px-6 py-5 bg-paper border-t border-border shadow-[0_-4px_12px_rgba(0,0,0,0.02)]" onsubmit={handleSubmit}>
+  <div class="flex-1 relative group">
     <!-- Command Palette -->
     <CommandPalette
       {commands}
@@ -174,36 +177,35 @@
       {placeholder}
       disabled={disabled || loading}
       rows={1}
-      class="input resize-none min-h-[44px] max-h-[200px] py-3 pr-12 disabled:bg-surface-hover disabled:cursor-not-allowed text-[15px] leading-relaxed"
+      class="input resize-none min-h-[48px] max-h-[200px] py-3.5 px-4 pr-12 disabled:bg-surface-hover disabled:cursor-not-allowed text-[15px] leading-relaxed transition-all"
       oninput={handleInput}
       onkeydown={handleKeydown}
     ></textarea>
 
     <!-- Character hint -->
-    <div class="absolute right-3 bottom-2 text-[10px] text-text-muted pointer-events-none">
+    <div class="absolute right-3 bottom-3 text-[10px] text-text-muted pointer-events-none opacity-0 group-focus-within:opacity-100 transition-opacity">
       {#if streaming}
-        <span class="text-warning">⌘↵ to interrupt</span>
+        <span class="text-warning font-medium">⌘↵ to interrupt</span>
       {:else if message.length > 0}
         {#if showPalette}
           ↵ select · ↵ again to send
         {:else}
-          ↵ to send
+          <span class="font-medium">⌘↵ to send</span>
         {/if}
       {/if}
     </div>
   </div>
 
-  <Button
+  <button
     type="submit"
-    variant="default"
     disabled={disabled || loading || !message.trim()}
-    class="self-end"
+    class="btn btn-primary h-[48px] w-[48px] self-end rounded-full p-0 flex items-center justify-center shrink-0"
+    title="Send message"
   >
     {#if loading}
-      <Loader2 class="size-4 animate-spin" />
+      <Loader2 class="size-5 animate-spin" />
     {:else}
-      <Send class="size-4" />
+      <Send class="size-5 translate-x-0.5" />
     {/if}
-    Send
-  </Button>
+  </button>
 </form>

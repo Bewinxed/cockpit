@@ -722,6 +722,9 @@ export function createInstanceRoutes(db: Db) {
             permissionMode: instance.permissionMode,
             projectId: instance.projectId,
             resumeSessionId: instance.sdkSessionId, // Use stored SDK session ID
+            resumeFromMessageId: body?.resumeFromMessageId, // Optional: resume from specific message
+            forkSession: body?.forkSession, // Optional: fork to new session
+            enableFileCheckpointing: body?.enableFileCheckpointing, // Optional: enable file checkpointing
             envVars: oauthCreds ? {
               COCKPIT_OAUTH_ACCESS_TOKEN: oauthCreds.accessToken,
               COCKPIT_OAUTH_REFRESH_TOKEN: oauthCreds.refreshToken,
@@ -767,6 +770,12 @@ export function createInstanceRoutes(db: Db) {
         }),
         body: t.Optional(t.Object({
           prompt: t.Optional(t.String()),
+          /** Resume from a specific message UUID (discards subsequent messages) */
+          resumeFromMessageId: t.Optional(t.String()),
+          /** Fork to a new session ID instead of modifying original */
+          forkSession: t.Optional(t.Boolean()),
+          /** Enable file checkpointing for rewind functionality */
+          enableFileCheckpointing: t.Optional(t.Boolean()),
         })),
       }
     )
@@ -965,6 +974,115 @@ export function createInstanceRoutes(db: Db) {
         body: t.Object({
           type: t.String(), // 'project' | 'user'
           content: t.String(),
+        }),
+      }
+    )
+
+    // Rewind files to a previous message state
+    .post(
+      '/:id/rewind',
+      async ({ params, body, set }) => {
+        const instance = await tracker.get(params.id);
+
+        if (!instance) {
+          set.status = 404;
+          return {
+            success: false,
+            error: 'Instance not found',
+          };
+        }
+
+        // Send rewind request to agent
+        const response = await getAgentRegistry().sendToAgentByMachineId(
+          instance.machineId,
+          instance.agentId,
+          CommandMethod.INSTANCE_REWIND,
+          {
+            instanceId: params.id,
+            userMessageId: body.userMessageId,
+          }
+        );
+
+        if (response.error) {
+          set.status = 500;
+          return {
+            success: false,
+            error: getErrorMessage(response.error),
+          };
+        }
+
+        return {
+          success: true,
+          data: response.result,
+        };
+      },
+      {
+        params: t.Object({
+          id: t.String(),
+        }),
+        body: t.Object({
+          userMessageId: t.String(),
+        }),
+      }
+    )
+
+    // Respond to a permission request
+    .post(
+      '/:id/permission',
+      async ({ params, body, set }) => {
+        const instance = await tracker.get(params.id);
+
+        if (!instance) {
+          set.status = 404;
+          return {
+            success: false,
+            error: 'Instance not found',
+          };
+        }
+
+        // Forward permission response to agent as notification
+        const agentRegistry = getAgentRegistry();
+        const agent = (instance.machineId ? agentRegistry.getByMachineId(instance.machineId) : undefined) ||
+                      agentRegistry.get(instance.agentId);
+
+        if (!agent) {
+          set.status = 400;
+          return {
+            success: false,
+            error: 'Agent not connected',
+          };
+        }
+
+        // Send permission response as notification to agent
+        agentRegistry.notifyAgent(agent.id, 'permission.response', {
+          requestId: body.requestId,
+          instanceId: params.id,
+          behavior: body.behavior,
+          updatedInput: body.updatedInput,
+          updatedPermissions: body.updatedPermissions,
+          message: body.message,
+          interrupt: body.interrupt,
+        });
+
+        return {
+          success: true,
+          data: {
+            requestId: body.requestId,
+            behavior: body.behavior,
+          },
+        };
+      },
+      {
+        params: t.Object({
+          id: t.String(),
+        }),
+        body: t.Object({
+          requestId: t.String(),
+          behavior: t.Union([t.Literal('allow'), t.Literal('deny')]),
+          updatedInput: t.Optional(t.Record(t.String(), t.Unknown())),
+          updatedPermissions: t.Optional(t.Array(t.Unknown())),
+          message: t.Optional(t.String()),
+          interrupt: t.Optional(t.Boolean()),
         }),
       }
     );

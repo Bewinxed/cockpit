@@ -28,3 +28,13 @@ export type {
   UpdateTaskData,
   TaskSummary,
 } from './task.js';
+
+// Permission types
+export type {
+  PermissionUpdateDestination,
+  PermissionBehavior,
+  PermissionRuleValue,
+  PermissionUpdate,
+  PermissionRequest,
+  PermissionResponse,
+} from './permission.js';

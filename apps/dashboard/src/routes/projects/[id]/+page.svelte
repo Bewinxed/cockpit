@@ -184,7 +184,7 @@
             {/if}
 
             <div class="flex items-center gap-3 pt-2">
-              <LoadingButton variant="default" onclick={saveChanges} loading={saving}>
+              <LoadingButton variant="primary" onclick={saveChanges} loading={saving}>
                 <Save class="size-4" />
                 Save Changes
               </LoadingButton>
@@ -294,7 +294,7 @@
     <section>
       <div class="flex items-center justify-between mb-4">
         <h2 class="section-title mb-0">Instances in this Project</h2>
-        <Button variant="default" size="sm" onclick={() => showNewInstanceModal = true}>
+        <Button variant="primary" size="sm" onclick={() => showNewInstanceModal = true}>
           <Plus class="size-4" />
           New Instance
         </Button>

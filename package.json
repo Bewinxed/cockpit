@@ -16,6 +16,7 @@
     "build:cli": "bun run --filter @cockpit/cli build",
     "lint": "bun run --filter '*' lint",
     "typecheck": "bun run --filter '*' typecheck",
+    "check": "bun build packages/agent-service/src/index.ts packages/hub-server/src/index.ts --target=bun --outdir /tmp/cockpit-check",
 
     "hub": "bun cli/src/index.ts hub",
     "agent": "bun cli/src/index.ts agent",
@@ -28,6 +29,9 @@
     "cli": "bun cli/src/index.ts",
 
     "db:push": "bun run --filter @cockpit/db db:push"
+  },
+  "overrides": {
+    "vite": "npm:rolldown-vite@latest"
   },
   "devDependencies": {
     "@types/bun": "latest",

@@ -1,8 +1,8 @@
 <script lang="ts">
   import NewProjectModal from '$lib/components/NewProjectModal.svelte';
   import { Button, Input, Card, EmptyState } from '$lib/components/ui';
-  import { projects, instances } from '$lib/stores/realtime.svelte';
-  import { Plus, Search, FolderKanban, Terminal, ArrowRight } from 'lucide-svelte';
+  import { projects, populatedInstances } from '$lib/stores/realtime.svelte';
+  import { Plus, Search, FolderKanban, Terminal, ArrowUpRight } from 'lucide-svelte';
 
   let searchQuery = $state('');
   let showNewProjectModal = $state(false);
@@ -22,21 +22,21 @@
 
   // Get instance counts per project
   function getProjectInstanceCount(projectId: string): number {
-    return Array.from($instances.values()).filter((i) => i.projectId === projectId).length;
+    return $populatedInstances.filter((i) => i.projectId === projectId).length;
   }
 
-  // Get random gradient colors for project avatars
-  const gradients = [
-    'from-primary to-secondary',
-    'from-success to-info',
-    'from-warning to-error',
-    'from-info to-primary',
-    'from-secondary to-error',
-    'from-success to-warning',
+  // Project accent colors (Swiss industrial palette)
+  const accentColors = [
+    'bg-primary',
+    'bg-accent-blue',
+    'bg-secondary',
+    'bg-success',
+    'bg-warning',
+    'bg-error',
   ];
 
-  function getGradient(index: number): string {
-    return gradients[index % gradients.length];
+  function getAccentColor(index: number): string {
+    return accentColors[index % accentColors.length];
   }
 </script>
 
@@ -44,14 +44,15 @@
   <title>Projects | Cockpit</title>
 </svelte:head>
 
-<div class="page-container animate-fade-in">
+<div class="p-8 max-w-[1400px] mx-auto animate-fade-in">
   <!-- Header -->
-  <header class="page-header">
+  <header class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-10">
     <div>
-      <h1 class="page-title">Projects</h1>
-      <p class="page-description">Organize your Claude Code instances by project</p>
+      <span class="text-[10px] font-mono text-text-muted uppercase tracking-[0.2em] mb-2 block">Organization</span>
+      <h1 class="text-4xl font-serif font-bold text-text tracking-tight">Projects</h1>
+      <p class="text-text-secondary mt-2 text-sm">Organize your Claude Code instances by project</p>
     </div>
-    <Button variant="default" onclick={() => showNewProjectModal = true}>
+    <Button variant="primary" onclick={() => showNewProjectModal = true}>
       <Plus class="size-4" />
       New Project
     </Button>
@@ -60,51 +61,74 @@
   <NewProjectModal bind:open={showNewProjectModal} onClose={() => showNewProjectModal = false} />
 
   <!-- Search -->
-  <div class="mb-6 max-w-md">
-    <Input
-      type="text"
-      placeholder="Search projects..."
-      bind:value={searchQuery}
-    />
+  <div class="bg-surface border border-border mb-6">
+    <div class="p-4 border-b border-border">
+      <span class="text-[10px] font-mono text-text-muted uppercase tracking-[0.15em]">Search</span>
+    </div>
+    <div class="p-4">
+      <div class="max-w-md">
+        <Input
+          type="text"
+          placeholder="Search projects..."
+          bind:value={searchQuery}
+        />
+      </div>
+    </div>
   </div>
 
   <!-- Projects Grid -->
-  <div class="grid-cards">
-    {#each filteredProjects as project, i (project.id)}
-      {@const instanceCount = getProjectInstanceCount(project.id)}
-      <a href="/projects/{project.id}" class="card card-interactive p-5 group">
-        <div class="flex items-start justify-between mb-4">
-          <div class="w-12 h-12 rounded-xl bg-gradient-to-br {getGradient(i)} flex items-center justify-center
-                      text-white text-lg font-semibold shadow-sm">
-            {project.name.charAt(0).toUpperCase()}
-          </div>
-          <div class="flex items-center gap-1.5 text-xs text-text-secondary bg-surface-hover px-2 py-1 rounded-lg">
-            <Terminal class="w-3.5 h-3.5" />
-            <span>{instanceCount}</span>
-          </div>
-        </div>
+  <div class="bg-surface border border-border">
+    <div class="p-4 border-b border-border flex items-center gap-3">
+      <div class="w-1.5 h-1.5 rounded-full bg-primary"></div>
+      <span class="text-[10px] font-mono text-text-muted uppercase tracking-[0.15em]">
+        {filteredProjects.length} {filteredProjects.length === 1 ? 'Project' : 'Projects'}
+      </span>
+    </div>
 
-        <h3 class="font-semibold text-text mb-1 group-hover:text-primary transition-colors">
-          {project.name}
-        </h3>
+    {#if filteredProjects.length > 0}
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-px bg-border">
+        {#each filteredProjects as project, i (project.id)}
+          {@const instanceCount = getProjectInstanceCount(project.id)}
+          <a href="/projects/{project.id}" class="bg-surface p-5 group hover:bg-surface-hover/50 transition-colors relative">
+            <!-- Accent stripe -->
+            <div class="absolute top-0 left-0 w-1 h-full {getAccentColor(i)}"></div>
 
-        {#if project.description}
-          <p class="text-sm text-text-secondary mb-3 line-clamp-2">{project.description}</p>
-        {:else}
-          <p class="text-sm text-text-muted mb-3 italic">No description</p>
-        {/if}
+            <div class="pl-3">
+              <div class="flex items-start justify-between mb-4">
+                <div class="w-10 h-10 {getAccentColor(i)} flex items-center justify-center
+                            text-text-inverse text-lg font-serif font-bold">
+                  {project.name.charAt(0).toUpperCase()}
+                </div>
+                <div class="flex items-center gap-1.5 text-[10px] font-mono text-text-muted uppercase tracking-wider bg-bg-subtle border border-border px-2 py-1">
+                  <Terminal class="w-3 h-3" />
+                  <span>{instanceCount}</span>
+                </div>
+              </div>
 
-        {#if project.rootPath}
-          <p class="text-xs text-text-muted font-mono truncate">{project.rootPath}</p>
-        {/if}
+              <h3 class="font-serif font-bold text-lg text-text mb-1 group-hover:text-primary transition-colors">
+                {project.name}
+              </h3>
 
-        <div class="mt-4 flex items-center gap-1 text-sm text-primary opacity-0 group-hover:opacity-100 transition-opacity">
-          <span>View project</span>
-          <ArrowRight class="w-4 h-4" />
-        </div>
-      </a>
+              {#if project.description}
+                <p class="text-sm text-text-secondary mb-3 line-clamp-2">{project.description}</p>
+              {:else}
+                <p class="text-sm text-text-muted mb-3 italic">No description</p>
+              {/if}
+
+              {#if project.rootPath}
+                <p class="text-[10px] text-text-muted font-mono truncate bg-bg-subtle border border-border px-2 py-1 inline-block max-w-full">{project.rootPath}</p>
+              {/if}
+
+              <div class="mt-4 flex items-center gap-1 text-xs font-mono text-primary uppercase tracking-wider opacity-0 group-hover:opacity-100 transition-opacity">
+                <span>View</span>
+                <ArrowUpRight class="w-3.5 h-3.5" />
+              </div>
+            </div>
+          </a>
+        {/each}
+      </div>
     {:else}
-      <div class="col-span-full">
+      <div class="p-12">
         <EmptyState
           icon={FolderKanban}
           title={searchQuery ? 'No projects found' : 'No projects yet'}
@@ -116,6 +140,6 @@
             : undefined}
         />
       </div>
-    {/each}
+    {/if}
   </div>
 </div>

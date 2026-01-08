@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { User, Bot, Wrench, FileText, AlertCircle, ChevronDown, ChevronRight, Copy, Check, Loader2, CheckCircle2, XCircle, Settings, Terminal, Scissors, ExternalLink, ArrowRight, KeyRound, Cpu, HelpCircle, BookOpen, FolderOpen, Home } from 'lucide-svelte';
+  import { User, Bot, Wrench, FileText, AlertCircle, ChevronDown, ChevronRight, Copy, Check, Loader2, CheckCircle2, XCircle, Settings, Terminal, Scissors, ExternalLink, ArrowRight, KeyRound, Cpu, HelpCircle, BookOpen, FolderOpen, Home, Edit3 } from 'lucide-svelte';
   import Markdown from '@humanspeak/svelte-markdown';
   import { formatTimestamp } from '$lib/utils/time';
   import type { Message } from '$lib/stores/realtime.svelte';
@@ -28,15 +28,19 @@
     onMemorySave?: (content: string) => Promise<void>;
     onMemoryCancel?: () => void;
     onDismissMessage?: () => void;
+    /** Callback when user wants to edit this message and continue from here */
+    onEditMessage?: (messageId: string, newContent: string) => Promise<void>;
     /** Whether this login prompt is currently active (pending) */
     isLoginActive?: boolean;
     /** Whether this model picker is currently active */
     isModelPickerActive?: boolean;
     /** Whether this memory picker is currently active */
     isMemoryPickerActive?: boolean;
+    /** Whether editing is supported for this message */
+    canEdit?: boolean;
   }
 
-  let { message, showTimestamp = false, onLoginSubmit, onLoginCancel, onModelSelect, onModelCancel, onMemorySelect, onMemorySave, onMemoryCancel, onDismissMessage, isLoginActive = false, isModelPickerActive = false, isMemoryPickerActive = false }: Props = $props();
+  let { message, showTimestamp = false, onLoginSubmit, onLoginCancel, onModelSelect, onModelCancel, onMemorySelect, onMemorySave, onMemoryCancel, onDismissMessage, onEditMessage, isLoginActive = false, isModelPickerActive = false, isMemoryPickerActive = false, canEdit = false }: Props = $props();
 
   // Login prompt state
   let loginCode = $state('');
@@ -57,6 +61,8 @@
   }
 
   function handleLoginKeydown(e: KeyboardEvent) {
+    if (!isLoginActive) return;
+
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleLoginSubmit();
@@ -67,6 +73,42 @@
 
   let isExpanded = $state(false);
   let copied = $state(false);
+
+  // Message editing state
+  let isEditing = $state(false);
+  let editContent = $state('');
+  let editLoading = $state(false);
+
+  function startEditing() {
+    editContent = message.content;
+    isEditing = true;
+  }
+
+  function cancelEditing() {
+    isEditing = false;
+    editContent = '';
+  }
+
+  async function submitEdit() {
+    if (!onEditMessage || !message.id || !editContent.trim()) return;
+    editLoading = true;
+    try {
+      await onEditMessage(message.id, editContent.trim());
+      isEditing = false;
+    } finally {
+      editLoading = false;
+    }
+  }
+
+  function handleEditKeydown(e: KeyboardEvent) {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      cancelEditing();
+    } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      submitEdit();
+    }
+  }
 
   // Get tool info from metadata or parse from content (backwards compatibility)
   const toolInfo = $derived(() => {
@@ -138,14 +180,14 @@
   let modelError = $state<string | null>(null);
 
   // Memory picker state
-  let memoryContent = $state<string>(message.metadata?.memoryContent as string || '');
+  let memoryContent = $state('');
   let memorySaving = $state(false);
   let selectedMemoryOption = $state<'project' | 'user' | null>(null);
 
   // Initialize memory content when it changes in metadata
   $effect(() => {
-    if (isMemoryPicker && message.metadata?.memoryContent) {
-      memoryContent = message.metadata.memoryContent as string;
+    if (isMemoryPicker) {
+      memoryContent = (message.metadata?.memoryContent as string) || '';
     }
   });
 
@@ -164,25 +206,16 @@
     }
   }
 
-  function handleMemoryKeydown(e: KeyboardEvent) {
-    if (!isMemoryPickerActive) return;
-    
-    // If editing, handle Escape (cancel) and CTRL+Enter (save)
-    if (message.metadata?.memoryPhase === 'editing') {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        onMemoryCancel?.();
-      } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-        e.preventDefault();
-        handleMemorySave();
-      }
-      return;
-    }
+  // Derived state for memory phase to ensure reactivity
+  const isMemoryEditing = $derived(message.metadata?.memoryPhase === 'editing');
+  const isMemorySelecting = $derived(isMemoryPickerActive && !isMemoryEditing);
 
-    // Selection phase navigation
+  // Handle keyboard in memory selection phase (not editing)
+  function handleMemorySelectionKeydown(e: KeyboardEvent) {
+    if (!isMemorySelecting) return;
+
     if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
       e.preventDefault();
-      // If nothing selected, default to project. Otherwise toggle.
       if (!selectedMemoryOption) {
         selectedMemoryOption = 'project';
       } else {
@@ -190,7 +223,6 @@
       }
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      // Only confirm if an option is selected (guards against accidental Enter press)
       if (selectedMemoryOption) {
         onMemorySelect?.(selectedMemoryOption);
       }
@@ -203,6 +235,23 @@
     } else if (e.key === '2') {
       e.preventDefault();
       onMemorySelect?.('user');
+    }
+  }
+
+  // Handle keyboard in memory editor (textarea) - Escape cancels, Ctrl+Enter saves
+  // Plain Enter must work for newlines, so we stop propagation to prevent window handlers
+  function handleMemoryEditorKeydown(e: KeyboardEvent) {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      onMemoryCancel?.();
+    } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      e.stopPropagation();
+      handleMemorySave();
+    } else if (e.key === 'Enter') {
+      // Stop propagation so window handlers don't intercept plain Enter
+      e.stopPropagation();
     }
   }
 
@@ -247,8 +296,11 @@
   }
 
   function handleWindowKeydown(e: KeyboardEvent) {
+    // Don't intercept keys when typing in textarea/input
+    if (e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement) return;
+
     handleModelKeydown(e);
-    // handleMemoryKeydown is now local to the container to prevent Enter bleed
+    handleMemorySelectionKeydown(e);
     handleLoginKeydown(e);
   }
 
@@ -701,7 +753,11 @@
               </div>
             {:else if message.metadata?.memoryPhase === 'editing'}
               <!-- Editor phase -->
-              <div class="space-y-3" onkeydown={handleMemoryKeydown}>
+              <div
+                class="space-y-3"
+                role="group"
+                aria-label="Memory editor"
+              >
                 <div class="flex items-center gap-2 text-xs text-text-muted">
                   {#if message.metadata?.selectedMemoryType === 'project'}
                     <FolderOpen class="w-3.5 h-3.5" />
@@ -722,6 +778,7 @@
                     const target = e.target as HTMLTextAreaElement;
                     if (target) memoryContent = target.value;
                   }}
+                  onkeydown={handleMemoryEditorKeydown}
                 ></textarea>
                 <p class="text-xs text-text-muted">
                   Markdown format. Changes will be saved to the file on the agent.
@@ -758,7 +815,9 @@
                 class="space-y-2 outline-none"
                 tabindex="-1"
                 use:autofocus
-                onkeydown={handleMemoryKeydown}
+                onkeydown={handleMemorySelectionKeydown}
+                role="listbox"
+                aria-label="Memory location selection"
               >
                 <button
                   type="button"
@@ -870,25 +929,81 @@
       </div>
     {:else}
       <!-- Regular message with markdown support -->
-      <div class="{config.bubble} relative">
-        <div class="prose prose-sm max-w-none {message.type === 'user' ? 'prose-invert' : ''} [&_pre]:bg-bg-subtle [&_pre]:border [&_pre]:border-border [&_pre]:rounded-lg [&_code]:text-xs [&_code]:bg-bg-subtle [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded">
-          <Markdown source={message.content} />
+      {#if message.type === 'user' && isEditing}
+        <!-- User message in edit mode -->
+        <div class="w-full max-w-[85%]">
+          <div class="bg-surface border border-primary/30 rounded-lg p-3 space-y-3">
+            <textarea
+              class="w-full min-h-[80px] px-3 py-2 bg-bg border border-border rounded-lg text-sm
+                     placeholder:text-text-muted focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20
+                     resize-y transition-colors"
+              placeholder="Edit your message..."
+              bind:value={editContent}
+              onkeydown={handleEditKeydown}
+              disabled={editLoading}
+            ></textarea>
+            <div class="flex items-center justify-between">
+              <p class="text-xs text-text-muted">
+                This will restart the conversation from this point
+              </p>
+              <div class="flex items-center gap-2">
+                <button
+                  onclick={cancelEditing}
+                  disabled={editLoading}
+                  class="px-3 py-1.5 text-sm text-text-secondary hover:text-text transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onclick={submitEdit}
+                  disabled={!editContent.trim() || editLoading}
+                  class="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-white rounded-md text-sm font-medium
+                         hover:bg-primary-dark disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  {#if editLoading}
+                    <Loader2 class="w-3.5 h-3.5 animate-spin" />
+                  {:else}
+                    <Check class="w-3.5 h-3.5" />
+                  {/if}
+                  <span>Submit</span>
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
+      {:else}
+        <div class="{config.bubble} relative">
+          <div class="prose prose-sm max-w-none {message.type === 'user' ? 'prose-invert' : ''} [&_pre]:bg-bg-subtle [&_pre]:border [&_pre]:border-border [&_pre]:rounded-lg [&_code]:text-xs [&_code]:bg-bg-subtle [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded">
+            <Markdown source={message.content} />
+          </div>
 
-        <!-- Copy button -->
-        <button
-          class="absolute -right-2 -top-2 p-1.5 rounded-md bg-surface border border-border shadow-sm
-                 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-surface-hover"
-          onclick={copyContent}
-          title="Copy message"
-        >
-          {#if copied}
-            <Check class="w-3.5 h-3.5 text-success" />
-          {:else}
-            <Copy class="w-3.5 h-3.5 text-text-muted" />
-          {/if}
-        </button>
-      </div>
+          <!-- Action buttons -->
+          <div class="absolute -right-2 -top-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            {#if message.type === 'user' && canEdit && onEditMessage}
+              <!-- Edit button for user messages -->
+              <button
+                class="p-1.5 rounded-md bg-surface border border-border shadow-sm hover:bg-surface-hover"
+                onclick={startEditing}
+                title="Edit message and restart from here"
+              >
+                <Edit3 class="w-3.5 h-3.5 text-text-muted" />
+              </button>
+            {/if}
+            <!-- Copy button -->
+            <button
+              class="p-1.5 rounded-md bg-surface border border-border shadow-sm hover:bg-surface-hover"
+              onclick={copyContent}
+              title="Copy message"
+            >
+              {#if copied}
+                <Check class="w-3.5 h-3.5 text-success" />
+              {:else}
+                <Copy class="w-3.5 h-3.5 text-text-muted" />
+              {/if}
+            </button>
+          </div>
+        </div>
+      {/if}
     {/if}
 
     <!-- Timestamp -->

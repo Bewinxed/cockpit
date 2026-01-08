@@ -30,6 +30,8 @@ export {
   type StopInstanceParams,
   type SendMessageParams,
   type InterruptInstanceParams,
+  type RewindFilesParams,
+  type RewindFilesResult,
   type AgentStatusParams,
   type AgentPingParams,
   type FilesystemListParams,
@@ -117,6 +119,7 @@ export const PROTOCOL_METHODS = {
   CLAUDE_VERSION: CommandMethod.CLAUDE_VERSION,
   MEMORY_READ: CommandMethod.MEMORY_READ,
   MEMORY_WRITE: CommandMethod.MEMORY_WRITE,
+  INSTANCE_REWIND: CommandMethod.INSTANCE_REWIND,
 
   // Events (Agent -> Hub)
   INSTANCE_CREATED: EventMethod.INSTANCE_CREATED,
@@ -130,4 +133,8 @@ export const PROTOCOL_METHODS = {
   TASK_UPDATED: EventMethod.TASK_UPDATED,
   AGENT_CONNECTED: EventMethod.AGENT_CONNECTED,
   AGENT_DISCONNECTED: EventMethod.AGENT_DISCONNECTED,
+
+  // Permission handling
+  PERMISSION_REQUEST: 'permission.request',
+  PERMISSION_RESPONSE: 'permission.response',
 } as const;

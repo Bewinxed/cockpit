@@ -16,6 +16,7 @@ export interface SSEClient {
  */
 export type BroadcastEventType =
   | 'agent:connected'
+  | 'agent:reconnecting'
   | 'agent:disconnected'
   | 'agent:updated'
   | 'instance:created'
@@ -34,7 +35,8 @@ export type BroadcastEventType =
   | 'task:completed'
   | 'project:created'
   | 'project:updated'
-  | 'project:deleted';
+  | 'project:deleted'
+  | 'permission:request';
 
 /**
  * Service for broadcasting events to dashboard clients via SSE

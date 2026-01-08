@@ -13,58 +13,55 @@
 
 <Modal {open} title="Authentication Required" onClose={onClose}>
   {#snippet children()}
-    <div class="space-y-4">
-      <div class="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20">
+    <div class="space-y-5">
+      <div class="p-4 rounded-lg bg-warning-light border border-warning/20">
         <div class="flex items-start gap-3">
-          <span class="text-2xl">🔐</span>
+          <span class="text-2xl mt-0.5">🔐</span>
           <div>
-            <h3 class="font-medium text-tx-1 mb-1">Claude MAX Login Required</h3>
-            <p class="text-sm text-tx-2">
-              {agentName} needs authentication to spawn Claude Code instances.
+            <h3 class="font-semibold text-text mb-1">Claude Authentication Required</h3>
+            <p class="text-sm text-text-secondary leading-relaxed">
+              <span class="font-medium text-text">{agentName}</span> requires authentication to run Claude Code instances.
             </p>
           </div>
         </div>
       </div>
 
       {#if error}
-        <div class="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-sm text-red-600">
+        <div class="p-3 rounded-lg bg-error-light border border-error/20 text-sm text-error">
           {error}
         </div>
       {/if}
 
       <div class="space-y-3">
-        <h4 class="font-medium text-tx-1 text-sm">To authenticate:</h4>
-        <ol class="list-decimal list-inside text-sm text-tx-2 space-y-2">
-          <li>
-            Open a terminal on <span class="font-medium text-tx-1">{agentName}</span>
+        <h4 class="font-medium text-text text-sm uppercase tracking-wide">Next Steps</h4>
+        <ol class="list-decimal list-inside text-sm text-text-secondary space-y-2.5">
+          <li class="pl-1">
+            Open a terminal on <span class="font-medium text-text">{agentName}</span>
           </li>
-          <li>
-            Run: <code class="bg-bg-3 px-2 py-0.5 rounded text-tx-1 font-mono">cockpit login</code>
+          <li class="pl-1">
+            Run: <code class="bg-surface-hover px-2 py-0.5 rounded text-text font-mono text-xs">cockpit login</code>
           </li>
-          <li>
-            Follow the prompts to log in with your Claude account
+          <li class="pl-1">
+            Complete the authentication in your browser
           </li>
-          <li>
-            Return here and try again
+          <li class="pl-1">
+            Return here and start your instance
           </li>
         </ol>
       </div>
 
-      <div class="p-3 rounded-lg bg-bg-3 text-sm">
-        <p class="text-tx-3">
-          This login uses Claude Pro/Max OAuth and is stored securely on the agent machine.
-          Credentials are used to authenticate Claude Code instances.
-        </p>
+      <div class="p-4 rounded-lg bg-bg-subtle border border-border text-xs text-text-muted leading-relaxed">
+        This login uses Anthropic OAuth and is stored securely on the agent machine. 
+        It is required for Claude Code to function properly.
       </div>
 
-      <div class="flex gap-3 pt-2">
+      <div class="flex pt-2">
         <button
           type="button"
           onclick={onClose}
-          class="flex-1 px-4 py-2.5 rounded-xl bg-primary text-white font-medium
-                 hover:bg-primary/90 transition-colors"
+          class="btn btn-primary w-full"
         >
-          Got it
+          Close
         </button>
       </div>
     </div>

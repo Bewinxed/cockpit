@@ -15,6 +15,8 @@ export const CommandMethod = {
   INSTANCE_INTERRUPT: 'instance.interrupt',
   /** Get status of a specific instance */
   INSTANCE_STATUS: 'instance.status',
+  /** Rewind files to a previous message state */
+  INSTANCE_REWIND: 'instance.rewind',
   /** Request agent status */
   AGENT_STATUS: 'agent.status',
   /** Ping the agent */
@@ -91,6 +93,16 @@ export interface SendMessageParams {
 export interface InterruptInstanceParams {
   /** ID of the instance to interrupt */
   instanceId: string;
+}
+
+/**
+ * Parameters for rewinding files to a previous message state
+ */
+export interface RewindFilesParams {
+  /** ID of the instance */
+  instanceId: string;
+  /** UUID of the user message to rewind to */
+  userMessageId: string;
 }
 
 /**
@@ -237,6 +249,14 @@ export interface InterruptInstanceResult {
 }
 
 /**
+ * Result of rewinding files
+ */
+export interface RewindFilesResult {
+  /** Whether the rewind was successful */
+  success: boolean;
+}
+
+/**
  * Result of agent status request
  */
 export interface AgentStatusResult {
@@ -376,6 +396,7 @@ export interface CommandParamsMap {
   [CommandMethod.INSTANCE_STOP]: StopInstanceParams;
   [CommandMethod.INSTANCE_SEND]: SendMessageParams;
   [CommandMethod.INSTANCE_INTERRUPT]: InterruptInstanceParams;
+  [CommandMethod.INSTANCE_REWIND]: RewindFilesParams;
   [CommandMethod.AGENT_STATUS]: AgentStatusParams;
   [CommandMethod.AGENT_PING]: AgentPingParams;
   [CommandMethod.FILESYSTEM_LIST]: FilesystemListParams;
@@ -395,6 +416,7 @@ export interface CommandResultMap {
   [CommandMethod.INSTANCE_STOP]: StopInstanceResult;
   [CommandMethod.INSTANCE_SEND]: SendMessageResult;
   [CommandMethod.INSTANCE_INTERRUPT]: InterruptInstanceResult;
+  [CommandMethod.INSTANCE_REWIND]: RewindFilesResult;
   [CommandMethod.AGENT_STATUS]: AgentStatusResult;
   [CommandMethod.AGENT_PING]: AgentPingResult;
   [CommandMethod.FILESYSTEM_LIST]: FilesystemListResult;

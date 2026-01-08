@@ -2,7 +2,7 @@
   import type { Snippet } from 'svelte';
 
   interface Props {
-    variant?: 'default' | 'primary' | 'secondary' | 'success' | 'warning' | 'error' | 'info';
+    variant?: 'default' | 'primary' | 'secondary' | 'success' | 'warning' | 'error' | 'info' | 'outline' | 'destructive';
     size?: 'sm' | 'md';
     dot?: boolean;
     pulse?: boolean;
@@ -27,6 +27,8 @@
     warning: 'badge-warning',
     error: 'badge-error',
     info: 'badge-info',
+    outline: 'bg-transparent border border-border text-text-secondary',
+    destructive: 'badge-error',
   };
 
   const dotColors = {
@@ -37,6 +39,8 @@
     warning: 'bg-warning',
     error: 'bg-error',
     info: 'bg-info',
+    outline: 'bg-text-muted',
+    destructive: 'bg-error',
   };
 
   const sizeClasses = {

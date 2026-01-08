@@ -98,7 +98,7 @@
         </div>
 
         {#if agent.status === 'online'}
-          <Button variant="default" onclick={() => showNewInstanceModal = true}>
+          <Button variant="primary" onclick={() => showNewInstanceModal = true}>
             <Plus class="size-4" />
             New Instance
           </Button>

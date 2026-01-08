@@ -110,28 +110,28 @@ export function createWebsocketRoutes(db: Db) {
         const wsId = getWsId(ws);
         const agentId = connectionAgentMap.get(wsId);
         if (agentId) {
-          console.log(`[Hub] Agent disconnected: ${agentId}`);
+          // Pass ws to unregister - it will skip if this is a stale close event
+          // (i.e., agent already reconnected with a new WebSocket)
+          const result = getAgentRegistry().unregister(agentId, ws);
 
-          // Mark all active instances for this agent as stopped
-          const activeInstances = await instanceTracker.getActiveByAgent(agentId);
-          for (const instance of activeInstances) {
-            await instanceTracker.markStopped(instance.id);
-            getBroadcastService().broadcast('instance:stopped', { instanceId: instance.id });
-          }
-          if (activeInstances.length > 0) {
-            console.log(`[Hub] Marked ${activeInstances.length} instances as stopped for disconnected agent`);
+          if (!result) {
+            // Stale close event - agent already reconnected, just clean up our map
+            connectionAgentMap.delete(wsId);
+            return;
           }
 
-          // Update agent status in database
+          console.log(`[Hub] Agent reconnecting: ${agentId}`);
+
+          // Update agent status in database to reconnecting
           await db.update(agents)
-            .set({ status: 'offline', lastSeen: new Date() })
+            .set({ status: 'reconnecting', lastSeen: new Date() })
             .where(eq(agents.id, agentId));
 
-          getAgentRegistry().unregister(agentId);
           connectionAgentMap.delete(wsId);
 
-          // Broadcast agent disconnection
-          getBroadcastService().broadcast('agent:disconnected', { agentId });
+          // Broadcast agent is reconnecting - UI shows "reconnecting" state
+          // Don't mark instances as stopped yet - agent may reconnect quickly
+          getBroadcastService().broadcast('agent:reconnecting', { agentId });
         }
       },
     });
@@ -431,6 +431,49 @@ async function handleNotification(
       if (instance) {
         getBroadcastService().broadcast('instance:error', { instanceId, instance, error: errorMsg });
       }
+      break;
+    }
+
+    // Handle permission requests from agent
+    case 'permission.request': {
+      const {
+        requestId,
+        instanceId,
+        toolName,
+        toolInput,
+        toolUseID,
+        decisionReason,
+        blockedPath,
+        agentID: subAgentID,
+        suggestions,
+        createdAt,
+      } = params as {
+        requestId: string;
+        instanceId: string;
+        toolName: string;
+        toolInput: Record<string, unknown>;
+        toolUseID: string;
+        decisionReason?: string;
+        blockedPath?: string;
+        agentID?: string;
+        suggestions?: unknown[];
+        createdAt: number;
+      };
+
+      // Broadcast permission request to dashboard clients
+      getBroadcastService().broadcast('permission:request', {
+        requestId,
+        instanceId,
+        agentId,
+        toolName,
+        toolInput,
+        toolUseID,
+        decisionReason,
+        blockedPath,
+        subAgentID,
+        suggestions,
+        createdAt,
+      });
       break;
     }
 

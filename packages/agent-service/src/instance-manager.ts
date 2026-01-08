@@ -5,9 +5,12 @@ import {
   createPersistentSession,
   resumePersistentSession,
   type SDKMessage,
+  type CanUseTool,
+  type CanUseToolOptions,
+  type PermissionResult,
 } from './persistent-session';
 
-import type { InstanceStatus, PermissionMode } from '@cockpit/core';
+import type { InstanceStatus, PermissionMode, PermissionRequest, PermissionResponse, PermissionUpdate } from '@cockpit/core';
 
 /**
  * Internal representation of a managed Claude Code instance
@@ -49,6 +52,23 @@ export interface SpawnInstanceParams {
   sessionId?: string;
   /** Claude SDK session ID to resume a previous conversation */
   resumeSessionId?: string;
+  /**
+   * Message UUID to resume from. When set with resumeSessionId,
+   * the conversation will continue from this specific message,
+   * discarding any messages after it.
+   */
+  resumeFromMessageId?: string;
+  /**
+   * Whether to fork to a new session ID when resuming.
+   * Use with resumeSessionId to create a branch without modifying the original.
+   * (For future: viewing multiple forks)
+   */
+  forkSession?: boolean;
+  /**
+   * Enable file checkpointing to track file changes during the session.
+   * When enabled, files can be rewound to their state at any user message.
+   */
+  enableFileCheckpointing?: boolean;
   systemPrompt?: string;
   permissionMode?: PermissionMode;
   mcpServers?: McpServerConfig[];
@@ -71,6 +91,14 @@ export interface InstanceManagerEvents {
   'instance.sleeping': (instanceId: string, sdkSessionId?: string) => void;
   'instance.error': (instanceId: string, error: Error) => void;
   'sdk.message': (instanceId: string, message: SDKMessage) => void;
+  'permission.request': (request: PermissionRequest) => void;
+}
+
+/** Pending permission request with resolver */
+interface PendingPermissionRequest {
+  request: PermissionRequest;
+  resolve: (result: PermissionResult) => void;
+  reject: (error: Error) => void;
 }
 
 /** Idle timeout in milliseconds (60 minutes) */
@@ -82,9 +110,99 @@ const IDLE_TIMEOUT_MS = 60 * 60 * 1000;
  */
 export class InstanceManager extends EventEmitter {
   private instances: Map<string, ManagedInstance> = new Map();
+  /** Pending permission requests awaiting user response */
+  private pendingPermissions: Map<string, PendingPermissionRequest> = new Map();
 
   constructor() {
     super();
+  }
+
+  /**
+   * Create a canUseTool callback for an instance that emits permission requests
+   */
+  private createCanUseTool(instanceId: string): CanUseTool {
+    return async (
+      toolName: string,
+      input: Record<string, unknown>,
+      options: CanUseToolOptions
+    ): Promise<PermissionResult> => {
+      const requestId = generateId();
+
+      const request: PermissionRequest = {
+        requestId,
+        instanceId,
+        toolName,
+        toolInput: input,
+        toolUseID: options.toolUseID,
+        decisionReason: options.decisionReason,
+        blockedPath: options.blockedPath,
+        agentID: options.agentID,
+        suggestions: options.suggestions as PermissionUpdate[] | undefined,
+        createdAt: Date.now(),
+      };
+
+      // Create a promise that will be resolved when user responds
+      return new Promise<PermissionResult>((resolve, reject) => {
+        // Handle abort signal
+        if (options.signal.aborted) {
+          reject(new Error('Permission request aborted'));
+          return;
+        }
+
+        options.signal.addEventListener('abort', () => {
+          this.pendingPermissions.delete(requestId);
+          reject(new Error('Permission request aborted'));
+        });
+
+        // Store the pending request
+        this.pendingPermissions.set(requestId, { request, resolve, reject });
+
+        // Emit the permission request event
+        this.emit('permission.request', request);
+      });
+    };
+  }
+
+  /**
+   * Resolve a pending permission request with user's response
+   */
+  resolvePermission(response: PermissionResponse): boolean {
+    const pending = this.pendingPermissions.get(response.requestId);
+    if (!pending) {
+      console.warn(`[InstanceManager] No pending permission request found for ${response.requestId}`);
+      return false;
+    }
+
+    this.pendingPermissions.delete(response.requestId);
+
+    if (response.behavior === 'allow') {
+      pending.resolve({
+        behavior: 'allow',
+        updatedInput: response.updatedInput || pending.request.toolInput,
+        updatedPermissions: response.updatedPermissions,
+      });
+    } else {
+      pending.resolve({
+        behavior: 'deny',
+        message: response.message || 'Permission denied by user',
+        interrupt: response.interrupt,
+      });
+    }
+
+    return true;
+  }
+
+  /**
+   * Get pending permission requests for an instance
+   */
+  getPendingPermissions(instanceId?: string): PermissionRequest[] {
+    const requests: PermissionRequest[] = [];
+    for (const pending of this.pendingPermissions.values()) {
+      if (!instanceId || pending.request.instanceId === instanceId) {
+        requests.push(pending.request);
+      }
+    }
+    return requests;
   }
 
   /**
@@ -127,22 +245,55 @@ export class InstanceManager extends EventEmitter {
       }
 
       // Create the persistent session - uses V1 query() with full options
+      // Always load CLAUDE.md files from both project and user settings
+      const settingSources: ('user' | 'project' | 'local')[] = ['project', 'user'];
+
+      // Default to 'default' mode with our canUseTool callback for interactive permission handling
+      // User can explicitly set 'bypassPermissions' to skip all permission checks
+      const permissionMode = params.permissionMode || 'default';
+      const allowDangerouslySkipPermissions = permissionMode === 'bypassPermissions';
+
+      // Only use canUseTool callback when not bypassing permissions
+      const canUseTool = permissionMode !== 'bypassPermissions'
+        ? this.createCanUseTool(instanceId)
+        : undefined;
+
+      // Debug log session creation options
+      console.log(`[InstanceManager] Creating session for ${instanceId}:`, {
+        resumeSessionId: params.resumeSessionId,
+        resumeFromMessageId: params.resumeFromMessageId,
+        forkSession: params.forkSession,
+        enableFileCheckpointing: params.enableFileCheckpointing,
+        permissionMode,
+        hasCanUseTool: !!canUseTool,
+      });
+
       const session = params.resumeSessionId
         ? resumePersistentSession(params.resumeSessionId, {
             cwd: params.projectPath,
             model: params.model,
-            permissionMode: params.permissionMode || 'default',
+            permissionMode,
+            allowDangerouslySkipPermissions,
+            canUseTool,
             mcpServers: Object.keys(mcpServers).length > 0 ? mcpServers : undefined,
             env: params.envVars,
             systemPrompt: params.systemPrompt,
+            settingSources,
+            resumeSessionAt: params.resumeFromMessageId,
+            forkSession: params.forkSession,
+            enableFileCheckpointing: params.enableFileCheckpointing,
           })
         : createPersistentSession({
             cwd: params.projectPath,
             model: params.model,
-            permissionMode: params.permissionMode || 'default',
+            permissionMode,
+            allowDangerouslySkipPermissions,
+            canUseTool,
             mcpServers: Object.keys(mcpServers).length > 0 ? mcpServers : undefined,
             env: params.envVars,
             systemPrompt: params.systemPrompt,
+            settingSources,
+            enableFileCheckpointing: params.enableFileCheckpointing,
           });
 
       instance.session = session;
@@ -433,6 +584,26 @@ export class InstanceManager extends EventEmitter {
     if (instance) {
       instance.model = model;
     }
+  }
+
+  /**
+   * Rewind tracked files to their state at a specific user message.
+   * Requires file checkpointing to have been enabled when spawning the instance.
+   *
+   * @param instanceId - The instance ID
+   * @param userMessageId - UUID of the user message to rewind to
+   */
+  async rewindFiles(instanceId: string, userMessageId: string): Promise<void> {
+    const instance = this.instances.get(instanceId);
+    if (!instance) {
+      throw new Error(`Instance ${instanceId} not found`);
+    }
+
+    if (!instance.session) {
+      throw new Error(`Instance ${instanceId} has no session`);
+    }
+
+    await instance.session.rewindFiles(userMessageId);
   }
 
   /**

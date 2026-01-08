@@ -1,6 +1,6 @@
 <script lang="ts">
-  import type { Snippet, ComponentType, SvelteComponent } from 'svelte';
-  import { Button } from './button';
+  import type { ComponentType, SvelteComponent } from 'svelte';
+  import { Button } from './index';
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   type IconComponent = ComponentType<SvelteComponent<any>>;
@@ -31,21 +31,21 @@
       container: 'py-6',
       icon: 'w-8 h-8',
       iconBg: 'w-12 h-12',
-      title: 'text-sm',
+      title: 'text-sm font-semibold',
       description: 'text-xs',
     },
     md: {
       container: 'py-10',
       icon: 'w-10 h-10',
       iconBg: 'w-16 h-16',
-      title: 'text-base',
+      title: 'text-base font-semibold',
       description: 'text-sm',
     },
     lg: {
       container: 'py-16',
       icon: 'w-12 h-12',
       iconBg: 'w-20 h-20',
-      title: 'text-lg',
+      title: 'text-lg font-bold',
       description: 'text-base',
     },
   };
@@ -54,11 +54,11 @@
 </script>
 
 <div class="flex flex-col items-center justify-center text-center {styles.container} {className}">
-  <div class="flex items-center justify-center {styles.iconBg} rounded-2xl bg-surface-hover mb-4">
+  <div class="flex items-center justify-center {styles.iconBg} rounded-2xl bg-bg-subtle border border-border mb-4">
     <Icon class="{styles.icon} text-text-muted" />
   </div>
 
-  <h3 class="font-medium text-text {styles.title} mb-1">
+  <h3 class="text-text {styles.title} mb-1 font-serif tracking-tight">
     {title}
   </h3>
 
@@ -67,8 +67,8 @@
   </p>
 
   {#if action}
-    <div class="mt-4">
-      <Button variant="default" size="sm" onclick={action.onClick}>
+    <div class="mt-6">
+      <Button variant="primary" size="sm" onclick={action.onClick}>
         {action.label}
       </Button>
     </div>

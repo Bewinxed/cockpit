@@ -6,7 +6,7 @@ export interface Agent {
   id: string;
   name: string;
   os: 'darwin' | 'linux' | 'windows';
-  status: 'online' | 'offline';
+  status: 'online' | 'reconnecting' | 'offline';
   instances: number;
   ip: string;
   connectedAt?: Date;
@@ -51,10 +51,13 @@ export interface Task {
 }
 
 export interface Message {
+  id?: string;
   instanceId: string;
   type: 'assistant' | 'user' | 'system' | 'tool_use' | 'tool_result' | 'error' | 'hook_response' | 'command_output' | 'help_menu';
   content: string;
   timestamp: Date;
+  /** SDK message UUID - used for resumeSessionAt when editing */
+  sdkUuid?: string;
   // Metadata for richer rendering
   metadata?: {
     // For tool_use messages
@@ -110,9 +113,24 @@ export interface StreamingState {
   lastUpdate: Date;
 }
 
+export interface PermissionRequest {
+  requestId: string;
+  instanceId: string;
+  agentId: string;
+  toolName: string;
+  toolInput: Record<string, unknown>;
+  toolUseID: string;
+  decisionReason?: string;
+  blockedPath?: string;
+  subAgentID?: string;
+  suggestions?: unknown[];
+  createdAt: number;
+}
+
 // Stores
 export const agents: Writable<Map<string, Agent>> = writable(new Map());
 export const instances: Writable<Map<string, Instance>> = writable(new Map());
+export const pendingPermissions: Writable<Map<string, PermissionRequest>> = writable(new Map());
 export const projects: Writable<Map<string, Project>> = writable(new Map());
 export const tasks: Writable<Map<string, Task>> = writable(new Map());
 export const streamingStates: Writable<Map<string, StreamingState>> = writable(new Map());
@@ -139,8 +157,14 @@ export function getInstanceMessages(instanceId: string): Readable<Message[]> {
 export function addMessage(instanceId: string, message: Omit<Message, 'instanceId'>): void {
   instanceMessages.update((map) => {
     const msgs = map.get(instanceId) || [];
+    // Ensure message has an ID for animations
+    const msgWithId = {
+      ...message,
+      instanceId,
+      id: message.id || crypto.randomUUID()
+    };
     // Keep last 500 messages per instance
-    const newMsgs = [...msgs, { ...message, instanceId }].slice(-500);
+    const newMsgs = [...msgs, msgWithId].slice(-500);
     map.set(instanceId, newMsgs);
     return map;
   });
@@ -255,34 +279,73 @@ export function getInstanceStatus(instanceId: string): Readable<string | null> {
   return derived(instanceStatuses, ($statuses) => $statuses.get(instanceId) || null);
 }
 
+// Add a pending permission request
+export function addPermissionRequest(request: PermissionRequest): void {
+  pendingPermissions.update((map) => {
+    map.set(request.requestId, request);
+    return map;
+  });
+}
+
+// Remove a pending permission request (after response)
+export function removePermissionRequest(requestId: string): void {
+  pendingPermissions.update((map) => {
+    map.delete(requestId);
+    return map;
+  });
+}
+
+// Get pending permission requests for an instance
+export function getInstancePermissions(instanceId: string): Readable<PermissionRequest[]> {
+  return derived(pendingPermissions, ($permissions) =>
+    Array.from($permissions.values()).filter((p) => p.instanceId === instanceId)
+  );
+}
+
 // Connection state
 export const connectionStatus: Writable<'connecting' | 'connected' | 'disconnected' | 'error'> = writable('disconnected');
+
+// Populated instances with agent and project info
+export const populatedInstances: Readable<Instance[]> = derived(
+  [instances, agents, projects],
+  ([$instances, $agents, $projects]) => {
+    return Array.from($instances.values()).map((instance) => {
+      const agent = $agents.get(instance.agentId);
+      const project = instance.projectId ? $projects.get(instance.projectId) : null;
+      return {
+        ...instance,
+        agent: agent?.name || 'Unknown Agent',
+        project: project?.name || null,
+      };
+    });
+  }
+);
 
 // Derived stores
 export const onlineAgents: Readable<Agent[]> = derived(agents, ($agents) =>
   Array.from($agents.values()).filter((a) => a.status === 'online')
 );
 
-export const runningInstances: Readable<Instance[]> = derived(instances, ($instances) =>
-  Array.from($instances.values()).filter((i) => i.status === 'running' || i.status === 'starting')
+export const runningInstances: Readable<Instance[]> = derived(populatedInstances, ($instances) =>
+  $instances.filter((i) => i.status === 'running' || i.status === 'starting')
 );
 
-export const recentInstances: Readable<Instance[]> = derived(instances, ($instances) =>
-  Array.from($instances.values())
+export const recentInstances: Readable<Instance[]> = derived(populatedInstances, ($instances) =>
+  [...$instances]
     .sort((a, b) => new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime())
     .slice(0, 5)
 );
 
 // Ad-hoc instances (no project)
-export const adhocInstances: Readable<Instance[]> = derived(instances, ($instances) =>
-  Array.from($instances.values())
+export const adhocInstances: Readable<Instance[]> = derived(populatedInstances, ($instances) =>
+  $instances
     .filter((i) => !i.projectId)
     .sort((a, b) => new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime())
 );
 
 // Project instances
-export const projectInstances: Readable<Instance[]> = derived(instances, ($instances) =>
-  Array.from($instances.values())
+export const projectInstances: Readable<Instance[]> = derived(populatedInstances, ($instances) =>
+  $instances
     .filter((i) => i.projectId)
     .sort((a, b) => new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime())
 );
@@ -376,6 +439,17 @@ export function connect(baseUrl: string = '') {
       const agent = map.get(agentId);
       if (agent) {
         map.set(agentId, { ...agent, status: 'offline' });
+      }
+      return map;
+    });
+  });
+
+  eventSource.addEventListener('agent:reconnecting', (event: Event) => {
+    const { agentId } = JSON.parse((event as MessageEvent).data);
+    agents.update((map) => {
+      const agent = map.get(agentId);
+      if (agent) {
+        map.set(agentId, { ...agent, status: 'reconnecting' });
       }
       return map;
     });
@@ -486,6 +560,12 @@ export function connect(baseUrl: string = '') {
     });
   });
 
+  // Handle permission requests from agents
+  eventSource.addEventListener('permission:request', (event: Event) => {
+    const request = JSON.parse((event as MessageEvent).data) as PermissionRequest;
+    addPermissionRequest(request);
+  });
+
   // Handle token usage updates
   eventSource.addEventListener('instance:token_usage', (event: Event) => {
     const { instanceId, inputTokens, outputTokens, costDelta } = JSON.parse((event as MessageEvent).data);
@@ -517,6 +597,7 @@ export function connect(baseUrl: string = '') {
     const msg = message as {
       type?: string;
       subtype?: string;
+      uuid?: string; // SDK message UUID for resumeSessionAt
       message?: { content?: unknown[] | string; role?: string };
       result?: string;
       isSynthetic?: boolean;
@@ -627,6 +708,7 @@ export function connect(baseUrl: string = '') {
             type: 'user',
             content: textContent.trim(),
             timestamp: new Date(),
+            sdkUuid: msg.uuid, // Store SDK UUID for resumeSessionAt
           });
         }
       }
@@ -647,6 +729,7 @@ export function connect(baseUrl: string = '') {
                 type: 'assistant',
                 content: block.text as string,
                 timestamp: new Date(),
+                sdkUuid: msg.uuid, // Store SDK UUID for resumeSessionAt
               });
             }
             // Tool use blocks -> tool_use message with metadata
@@ -764,7 +847,76 @@ export function disconnect() {
   connectionStatus.set('disconnected');
 }
 
-// API helpers using Eden Treaty through the proxy
+// Initialize stores from SSR-loaded data
+export function initializeFromSSR(
+  agentsData: Array<{
+    id: string;
+    hostname?: string;
+    os?: string;
+    status: 'online' | 'offline';
+    tailscaleIp?: string;
+    connectedAt?: string;
+    lastPing?: string;
+  }>,
+  instancesData: Array<{
+    id: string;
+    lastPrompt?: string;
+    status: string;
+    agentId: string;
+    projectId?: string;
+    createdAt?: string;
+    cwd: string;
+    model?: string;
+    totalCostUsd?: number;
+  }>,
+  projectsData: Array<{
+    id: string;
+    name: string;
+    description?: string;
+    rootPath?: string;
+    agentId?: string;
+    createdAt: string;
+    updatedAt: string;
+  }>
+): void {
+  agents.set(new Map(agentsData.map((a) => [a.id, {
+    id: a.id,
+    name: a.hostname || a.id,
+    os: (a.os as 'darwin' | 'linux' | 'windows') || 'linux',
+    status: a.status,
+    instances: 0,
+    ip: a.tailscaleIp || '',
+    connectedAt: a.connectedAt ? new Date(a.connectedAt) : undefined,
+    lastPing: a.lastPing ? new Date(a.lastPing) : undefined,
+  }])));
+
+  instances.set(new Map(instancesData.map((i) => [i.id, {
+    id: i.id,
+    name: i.lastPrompt?.slice(0, 50) || 'Instance',
+    status: i.status as Instance['status'],
+    agent: '',
+    agentId: i.agentId,
+    project: null,
+    projectId: i.projectId || null,
+    lastActivity: i.createdAt ? new Date(i.createdAt).toISOString() : new Date().toISOString(),
+    cwd: i.cwd,
+    model: i.model,
+    totalCostUsd: i.totalCostUsd,
+  }])));
+
+  projects.set(new Map(projectsData.map((p) => [p.id, {
+    id: p.id,
+    name: p.name,
+    description: p.description,
+    rootPath: p.rootPath,
+    agentId: p.agentId,
+    instanceCount: 0,
+    createdAt: new Date(p.createdAt),
+    updatedAt: new Date(p.updatedAt),
+  }])));
+}
+
+// API helpers using Eden Treaty through the proxy (kept for client-side refresh)
 export async function fetchAgents(): Promise<void> {
   try {
     const { data, error } = await api.api.agents.get();

@@ -10,6 +10,15 @@ export {
   type InstanceStatusInfo,
 } from './instance-manager.js';
 
+// Persistent session types
+export {
+  type SettingSource,
+  type PersistentSessionOptions,
+  type CanUseTool,
+  type CanUseToolOptions,
+  type PermissionResult,
+} from './persistent-session.js';
+
 // Hub client
 export {
   HubClient,

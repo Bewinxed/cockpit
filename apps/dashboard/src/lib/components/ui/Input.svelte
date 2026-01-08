@@ -8,6 +8,7 @@
     error?: string;
     label?: string;
     hint?: string;
+    value?: string;
   }
 
   let {
@@ -17,6 +18,7 @@
     label,
     hint,
     id,
+    value = $bindable(''),
     class: className = '',
     ...rest
   }: Props = $props();
@@ -42,6 +44,7 @@
 
     <input
       id={inputId}
+      bind:value
       class="input {Icon ? 'pl-9' : ''} {IconRight ? 'pr-9' : ''} {error ? 'input-error' : ''} {className}"
       {...rest}
     />

@@ -5,11 +5,25 @@
  * This wrapper provides the same send/receive pattern but with full option support.
  */
 
-import { query, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
+import {
+  query,
+  type SDKUserMessage,
+  type PermissionUpdate,
+  type PermissionResult,
+  type CanUseTool,
+  type PermissionBehavior,
+  type PermissionRuleValue,
+} from '@anthropic-ai/claude-agent-sdk';
 import type { PermissionMode } from '@cockpit/core';
 
 /** Message type from Claude Code SDK */
 type SDKMessage = Awaited<ReturnType<typeof query>> extends AsyncIterable<infer T> ? T : never;
+
+// Extract CanUseToolOptions from the CanUseTool callback's third parameter
+export type CanUseToolOptions = Parameters<CanUseTool>[2];
+
+// Re-export SDK types for consumers
+export type { PermissionUpdate, PermissionResult, CanUseTool, PermissionBehavior, PermissionRuleValue };
 
 /**
  * Internal stream class that stays open until done() is called.
@@ -68,6 +82,9 @@ class InputStream implements AsyncIterable<SDKUserMessage> {
   }
 }
 
+/** Setting source for loading filesystem-based settings */
+export type SettingSource = 'user' | 'project' | 'local';
+
 export interface PersistentSessionOptions {
   /** Model to use */
   model?: string;
@@ -75,6 +92,11 @@ export interface PersistentSessionOptions {
   cwd: string;
   /** Permission mode */
   permissionMode?: PermissionMode;
+  /**
+   * Must be set to true when using permissionMode: 'bypassPermissions'.
+   * This is a safety measure to ensure intentional bypassing of permissions.
+   */
+  allowDangerouslySkipPermissions?: boolean;
   /** Allowed tools */
   allowedTools?: string[];
   /** Disallowed tools */
@@ -83,6 +105,16 @@ export interface PersistentSessionOptions {
   mcpServers?: Record<string, { command: string; args?: string[]; env?: Record<string, string> }>;
   /** Resume a previous session */
   resume?: string;
+  /**
+   * When resuming, only resume messages up to and including the message with this UUID.
+   * Use with `resume`. This allows you to fork from a specific point in the conversation.
+   * The message ID should be from SDKAssistantMessage.uuid.
+   */
+  resumeSessionAt?: string;
+  /**
+   * When resuming, fork to a new session ID rather than continuing the previous session.
+   */
+  forkSession?: boolean;
   /** Max thinking tokens */
   maxThinkingTokens?: number;
   /** Max turns */
@@ -97,6 +129,28 @@ export interface PersistentSessionOptions {
   systemPrompt?: string;
   /** Include partial messages */
   includePartialMessages?: boolean;
+  /**
+   * Control which filesystem settings to load.
+   * - 'user' - Global user settings (~/.claude/settings.json)
+   * - 'project' - Project settings (.claude/settings.json)
+   * - 'local' - Local settings (.claude/settings.local.json)
+   *
+   * When omitted or empty, no filesystem settings are loaded (SDK isolation mode).
+   * Must include 'project' to load CLAUDE.md files.
+   */
+  settingSources?: SettingSource[];
+  /**
+   * Custom permission handler for controlling tool usage.
+   * Called before each tool execution to determine if it should be allowed or denied.
+   * If not provided and permissionMode is 'default', SDK will use its default behavior.
+   */
+  canUseTool?: CanUseTool;
+  /**
+   * Enable file checkpointing to track file changes during the session.
+   * When enabled, files can be rewound to their state at any user message
+   * using `rewindFiles()`.
+   */
+  enableFileCheckpointing?: boolean;
 }
 
 /**
@@ -122,10 +176,14 @@ export class PersistentSession {
         cwd: options.cwd,
         model: options.model,
         permissionMode: options.permissionMode || 'default',
+        allowDangerouslySkipPermissions: options.allowDangerouslySkipPermissions,
+        canUseTool: options.canUseTool,
         allowedTools: options.allowedTools,
         disallowedTools: options.disallowedTools,
         mcpServers: options.mcpServers,
         resume: options.resume,
+        resumeSessionAt: options.resumeSessionAt,
+        forkSession: options.forkSession,
         maxThinkingTokens: options.maxThinkingTokens,
         maxTurns: options.maxTurns,
         maxBudgetUsd: options.maxBudgetUsd,
@@ -133,6 +191,10 @@ export class PersistentSession {
         env: options.env,
         systemPrompt: options.systemPrompt,
         includePartialMessages: options.includePartialMessages,
+        // Enable loading of CLAUDE.md files from project and user settings
+        settingSources: options.settingSources,
+        // Enable file checkpointing for rewind functionality
+        enableFileCheckpointing: options.enableFileCheckpointing,
       },
     });
   }
@@ -255,6 +317,29 @@ export class PersistentSession {
       throw new Error('Cannot set model on closed session');
     }
     return this.queryInstance.setModel(model);
+  }
+
+  /**
+   * Rewind tracked files to their state at a specific user message.
+   * Requires file checkpointing to be enabled via the `enableFileCheckpointing` option.
+   *
+   * @param userMessageId - UUID of the user message to rewind to
+   */
+  async rewindFiles(userMessageId: string): Promise<void> {
+    if (this._closed) {
+      throw new Error('Cannot rewind on closed session');
+    }
+    return this.queryInstance.rewindFiles(userMessageId);
+  }
+
+  /**
+   * Interrupt the current query execution.
+   */
+  async interrupt(): Promise<void> {
+    if (this._closed) {
+      throw new Error('Cannot interrupt closed session');
+    }
+    return this.queryInstance.interrupt();
   }
 
   /**

@@ -13,6 +13,12 @@ export interface SpawnHandlerParams {
   sessionId?: string;
   /** Claude SDK session ID to resume a previous conversation */
   resumeSessionId?: string;
+  /** Message UUID to resume from (discards subsequent messages) */
+  resumeFromMessageId?: string;
+  /** Fork to a new session ID when resuming */
+  forkSession?: boolean;
+  /** Enable file checkpointing for rewind functionality */
+  enableFileCheckpointing?: boolean;
   systemPrompt?: string;
   prompt?: string;
   permissionMode?: 'default' | 'acceptEdits' | 'bypassPermissions';
@@ -82,6 +88,9 @@ export async function handleSpawn(
       instanceId: params.instanceId, // Use hub's instanceId to keep in sync
       sessionId: params.sessionId,
       resumeSessionId: params.resumeSessionId, // Claude SDK session ID for resume
+      resumeFromMessageId: params.resumeFromMessageId, // Resume from specific message
+      forkSession: params.forkSession, // Fork to new session
+      enableFileCheckpointing: params.enableFileCheckpointing, // Enable file checkpointing
       systemPrompt: params.systemPrompt,
       permissionMode: params.permissionMode,
       mcpServers: params.mcpServers,

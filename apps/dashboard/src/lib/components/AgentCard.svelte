@@ -11,7 +11,7 @@
     id: string;
     name: string;
     os: 'darwin' | 'linux' | 'windows';
-    status: 'online' | 'offline';
+    status: 'online' | 'reconnecting' | 'offline';
     instances: number;
     ip: string;
   }
@@ -51,9 +51,9 @@
           {agent.name}
         </h3>
         <Badge
-          variant={agent.status === 'online' ? 'default' : 'secondary'}
+          variant={agent.status === 'online' ? 'default' : agent.status === 'reconnecting' ? 'warning' : 'secondary'}
         >
-          {agent.status === 'online' ? 'Online' : 'Offline'}
+          {agent.status === 'online' ? 'Online' : agent.status === 'reconnecting' ? 'Reconnecting' : 'Offline'}
         </Badge>
       </div>
 

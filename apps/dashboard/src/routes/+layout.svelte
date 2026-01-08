@@ -6,26 +6,24 @@
   import {
     connect,
     disconnect,
-    fetchAgents,
-    fetchInstances,
-    fetchProjects,
+    initializeFromSSR,
     connectionStatus,
     stats
   } from '$lib/stores/realtime.svelte';
+  import { getAgents, getInstances, getProjects } from '$lib/data.remote';
   import {
     LayoutDashboard,
     FolderKanban,
     Terminal,
     Server,
-    Sparkles,
     ChevronRight,
-    Wifi,
-    WifiOff,
     Loader2,
-    Circle
+    Plus,
+    ArrowUpRight,
+    Hexagon
   } from 'lucide-svelte';
   import { ThemeSwitcher } from '$lib/components/ui';
-  import '$lib/stores/theme'; // Initialize theme store
+  import '$lib/stores/theme';
 
   interface Props {
     children: import('svelte').Snippet;
@@ -33,12 +31,15 @@
 
   let { children }: Props = $props();
 
-  // Connect to hub on mount
+  // Load data during SSR via remote functions
+  const agentsData = await getAgents();
+  const instancesData = await getInstances();
+  const projectsData = await getProjects();
+
+  // Initialize stores from SSR data and connect to real-time updates
   onMount(() => {
+    initializeFromSSR(agentsData, instancesData, projectsData);
     connect(HUB_URL);
-    fetchAgents();
-    fetchInstances();
-    fetchProjects();
   });
 
   onDestroy(() => {
@@ -46,10 +47,10 @@
   });
 
   const navItems = [
-    { href: '/', label: 'Dashboard', icon: LayoutDashboard, emoji: '🏠' },
-    { href: '/projects', label: 'Projects', icon: FolderKanban, emoji: '📁' },
-    { href: '/instances', label: 'Instances', icon: Terminal, emoji: '💻' },
-    { href: '/agents', label: 'Agents', icon: Server, emoji: '🤖' },
+    { href: '/', label: 'Dashboard', icon: LayoutDashboard, shortcut: '1' },
+    { href: '/projects', label: 'Projects', icon: FolderKanban, shortcut: '2' },
+    { href: '/instances', label: 'Instances', icon: Terminal, shortcut: '3' },
+    { href: '/agents', label: 'Agents', icon: Server, shortcut: '4' },
   ];
 
   function isActive(href: string): boolean {
@@ -59,107 +60,156 @@
     return page.url.pathname.startsWith(href);
   }
 
-  // Connection status helpers
+  // Connection status config
   const statusConfig = $derived({
-    connected: { color: 'text-success', bg: 'bg-success', label: 'Connected' },
-    connecting: { color: 'text-warning', bg: 'bg-warning', label: 'Connecting...' },
-    error: { color: 'text-error', bg: 'bg-error', label: 'Error' },
-    disconnected: { color: 'text-text-muted', bg: 'bg-text-muted', label: 'Offline' },
-  }[$connectionStatus] || { color: 'text-text-muted', bg: 'bg-text-muted', label: 'Offline' });
+    connected: { color: 'text-success', label: 'Online' },
+    connecting: { color: 'text-warning', label: 'Connecting' },
+    error: { color: 'text-error', label: 'Error' },
+    disconnected: { color: 'text-text-muted', label: 'Offline' },
+  }[$connectionStatus] || { color: 'text-text-muted', label: 'Offline' });
 </script>
 
-<div class="flex min-h-screen bg-bg">
-  <!-- Sidebar - Notion-inspired -->
-  <aside class="fixed top-0 left-0 bottom-0 w-60 bg-paper flex flex-col border-r border-border">
-    <!-- Logo & Workspace -->
-    <div class="flex items-center gap-3 px-4 py-3 hover:bg-surface-hover transition-all duration-100 cursor-pointer rounded-md mx-3 mt-3">
-      <div class="flex items-center justify-center w-8 h-8 rounded-lg bg-primary text-text-inverse text-base font-bold shadow-sm">
-        C
-      </div>
-      <div class="flex-1 min-w-0">
-        <span class="text-[15px] font-semibold text-text block truncate">Cockpit</span>
-        <span class="text-xs text-text-muted block truncate">AI Orchestration</span>
-      </div>
-      <ChevronRight class="w-3.5 h-3.5 text-text-muted flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
-    </div>
+<div class="min-h-screen bg-bg relative">
+  <!-- Noise Overlay -->
+  <div class="fixed inset-0 pointer-events-none z-50 opacity-[0.02] mix-blend-overlay">
+    <svg class="w-full h-full">
+      <filter id="noiseFilter">
+        <feTurbulence type="fractalNoise" baseFrequency="0.6" numOctaves="3" stitchTiles="stitch" />
+      </filter>
+      <rect width="100%" height="100%" filter="url(#noiseFilter)" />
+    </svg>
+  </div>
 
-    <!-- Navigation -->
-    <nav class="flex-1 px-3 py-4 overflow-y-auto">
-      <div class="space-y-1">
-        {#each navItems as item}
-          {@const active = isActive(item.href)}
-          <a
-            href={item.href}
-            class="group flex items-center gap-3 px-3 py-2 rounded-md text-[15px] transition-all duration-100
-                   {active
-                     ? 'bg-primary-light text-primary font-medium'
-                     : 'text-text-secondary hover:bg-surface-hover hover:text-text'}"
-          >
-            <span class="text-lg leading-none">{item.emoji}</span>
-            <span class="flex-1">{item.label}</span>
-            {#if active}
-              <div class="w-1.5 h-1.5 rounded-full bg-primary shadow-glow-primary"></div>
-            {/if}
-          </a>
-        {/each}
-      </div>
-    </nav>
+  <!-- Grid Lines Overlay (subtle) -->
+  <div class="fixed inset-0 pointer-events-none z-0 hidden lg:block">
+    <div class="max-w-[1600px] mx-auto h-full border-x border-border/30"></div>
+  </div>
 
-    <!-- Footer Stats -->
-    <div class="px-4 py-4 border-t border-border bg-surface-hover/30">
-      <!-- Connection Status -->
-      <div class="flex items-center gap-2 mb-3">
-        <div class="relative">
-          {#if $connectionStatus === 'connected'}
-            <Circle class="w-2 h-2 fill-success text-success" />
-            <span class="absolute inset-0 rounded-full bg-success animate-pulse-soft"></span>
-          {:else if $connectionStatus === 'connecting'}
-            <Loader2 class="w-3 h-3 text-warning animate-spin" />
-          {:else}
-            <Circle class="w-2 h-2 fill-text-muted text-text-muted" />
-          {/if}
-        </div>
-        <span class="text-xs {statusConfig.color} font-medium">
-          {statusConfig.label}
-        </span>
-      </div>
+  <div class="flex relative z-10">
+    <!-- Sidebar - Swiss Industrial Style -->
+    <aside class="fixed top-0 left-0 bottom-0 w-64 bg-surface flex flex-col border-r border-border z-30">
 
-      <!-- Quick Stats -->
-      {#if $connectionStatus === 'connected'}
-        <div class="flex items-center gap-3 text-xs text-text-muted mb-3">
-          <div class="flex items-center gap-1">
-            <span class="font-medium text-text-secondary">{$stats.onlineAgents}</span>
-            <span>agents</span>
+      <!-- Logo Header -->
+      <div class="p-6 border-b border-border">
+        <div class="flex items-center gap-3 group cursor-pointer">
+          <div class="relative">
+            <div class="w-10 h-10 bg-primary flex items-center justify-center">
+              <span class="text-text-inverse font-serif font-bold text-xl italic">C</span>
+            </div>
+            <div class="absolute -top-1 -right-1 w-2 h-2 bg-accent-blue rounded-full animate-pulse"></div>
           </div>
-          <span class="text-border">•</span>
-          <div class="flex items-center gap-1">
-            <span class="font-medium text-text-secondary">{$stats.runningInstances}</span>
-            <span>running</span>
+          <div class="flex-1">
+            <h1 class="text-lg font-serif font-bold tracking-tight text-text">
+              Cockpit
+            </h1>
+            <span class="text-[10px] font-mono text-text-muted uppercase tracking-[0.2em]">
+              Orchestration
+            </span>
           </div>
         </div>
-      {/if}
+      </div>
 
-      <!-- Theme Switcher -->
-      <ThemeSwitcher />
-    </div>
-  </aside>
+      <!-- Tech Specs Banner -->
+      <div class="px-6 py-4 border-b border-border bg-bg-subtle/50">
+        <div class="flex items-center gap-2 mb-2">
+          <div class="w-1.5 h-1.5 rounded-full {$connectionStatus === 'connected' ? 'bg-success animate-pulse' : 'bg-text-muted'}"></div>
+          <span class="text-[10px] font-mono uppercase tracking-widest {statusConfig.color}">
+            {statusConfig.label}
+          </span>
+        </div>
+        {#if $connectionStatus === 'connected'}
+          <div class="flex items-center gap-4 text-[11px] font-mono text-text-muted">
+            <span><span class="text-text-secondary font-bold">{$stats.onlineAgents}</span> agents</span>
+            <span class="text-border">·</span>
+            <span><span class="text-text-secondary font-bold">{$stats.runningInstances}</span> active</span>
+          </div>
+        {/if}
+      </div>
 
-  <!-- Main content -->
-  <main class="flex-1 ml-60 min-h-screen bg-bg">
-    <div class="px-12 py-8 max-w-6xl">
+      <!-- Navigation -->
+      <nav class="flex-1 py-6 overflow-y-auto">
+        <div class="px-4 mb-4">
+          <span class="text-[10px] font-mono text-text-muted uppercase tracking-[0.2em]">Navigation</span>
+        </div>
+
+        <div class="space-y-1 px-3">
+          {#each navItems as item}
+            {@const active = isActive(item.href)}
+            {@const Icon = item.icon}
+            <a
+              href={item.href}
+              class="group flex items-center gap-3 px-4 py-3 transition-all duration-200 relative
+                     {active
+                       ? 'bg-primary text-text-inverse'
+                       : 'text-text-secondary hover:bg-surface-hover hover:text-text'}"
+            >
+              {#if active}
+                <div class="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-accent-blue"></div>
+              {/if}
+              <Icon class="w-4 h-4 {active ? 'text-text-inverse' : 'text-text-muted group-hover:text-text'} transition-colors" />
+              <span class="flex-1 text-sm font-medium">{item.label}</span>
+              <span class="text-[10px] font-mono {active ? 'text-text-inverse/60' : 'text-text-muted'} opacity-0 group-hover:opacity-100 transition-opacity">
+                {item.shortcut}
+              </span>
+              {#if active}
+                <ArrowUpRight class="w-3.5 h-3.5 text-text-inverse/60" />
+              {/if}
+            </a>
+          {/each}
+        </div>
+      </nav>
+
+      <!-- Footer -->
+      <div class="border-t border-border">
+        <!-- Stats Row -->
+        {#if $connectionStatus === 'connected'}
+          <div class="grid grid-cols-2 divide-x divide-border text-center">
+            <div class="py-4">
+              <div class="text-2xl font-bold text-text tracking-tight">{$stats.totalInstances}</div>
+              <div class="text-[10px] font-mono text-text-muted uppercase tracking-widest">Instances</div>
+            </div>
+            <div class="py-4">
+              <div class="text-2xl font-bold text-text tracking-tight">{$stats.totalProjects}</div>
+              <div class="text-[10px] font-mono text-text-muted uppercase tracking-widest">Projects</div>
+            </div>
+          </div>
+        {/if}
+
+        <!-- Bottom Bar -->
+        <div class="px-4 py-4 border-t border-border bg-bg-subtle/50 flex items-center justify-between">
+          <ThemeSwitcher />
+          <span class="text-[10px] font-mono text-text-muted tracking-widest">v0.1.0</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 ml-64 min-h-screen">
       {@render children()}
-    </div>
-  </main>
+    </main>
+  </div>
 </div>
 
 <style>
-  /* Subtle hover states */
+  /* Smooth sidebar transitions */
   aside {
-    transition: background-color 150ms ease;
+    transition: width 300ms cubic-bezier(0.16, 1, 0.3, 1);
   }
 
-  /* Smooth navigation link transitions */
-  nav a {
-    will-change: background-color;
+  /* Navigation link hover underline effect */
+  nav a::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: var(--color-border);
+    transform: scaleX(0);
+    transition: transform 200ms ease-out;
+  }
+
+  nav a:hover::after {
+    transform: scaleX(1);
   }
 </style>

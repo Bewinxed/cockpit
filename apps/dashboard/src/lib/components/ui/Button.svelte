@@ -4,7 +4,7 @@
   import { Loader2 } from 'lucide-svelte';
 
   interface Props extends HTMLButtonAttributes {
-    variant?: 'primary' | 'secondary' | 'ghost' | 'danger' | 'success';
+    variant?: 'primary' | 'secondary' | 'ghost' | 'danger' | 'success' | 'outline' | 'destructive';
     size?: 'sm' | 'md' | 'lg';
     loading?: boolean;
     icon?: Snippet;
@@ -30,6 +30,8 @@
     ghost: 'btn-ghost',
     danger: 'btn-danger',
     success: 'btn-success',
+    outline: 'bg-transparent border border-border text-text-secondary hover:bg-surface-hover hover:text-text',
+    destructive: 'btn-danger',
   };
 
   const sizeClasses = {

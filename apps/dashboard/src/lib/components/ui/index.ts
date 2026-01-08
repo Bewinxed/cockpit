@@ -1,27 +1,9 @@
-// UI Components barrel export - shadcn-svelte components
-export { Button, buttonVariants, type ButtonProps } from './button';
-export { Badge, badgeVariants, type BadgeProps } from './badge';
-export {
-  Card,
-  CardHeader,
-  CardFooter,
-  CardTitle,
-  CardDescription,
-  CardContent,
-} from './card';
-export { Input } from './input';
-export {
-  Dialog,
-  DialogTrigger,
-  DialogContent,
-  DialogHeader,
-  DialogFooter,
-  DialogTitle,
-  DialogDescription,
-  DialogClose,
-} from './dialog';
-
-// Custom components (no shadcn equivalent)
+// UI Components barrel export
+export { default as Button } from './Button.svelte';
+export { default as Badge } from './Badge.svelte';
+export { default as Card } from './Card.svelte';
+export { default as Input } from './Input.svelte';
+export { default as Modal } from './Modal.svelte';
 export { default as EmptyState } from './EmptyState.svelte';
 export { default as Skeleton } from './Skeleton.svelte';
 export { default as ThemeSwitcher } from './ThemeSwitcher.svelte';

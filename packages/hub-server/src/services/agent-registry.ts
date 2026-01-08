@@ -121,23 +121,35 @@ export class AgentRegistry {
 
   /**
    * Unregister an agent (disconnect)
+   * @param agentId - The agent ID to unregister
+   * @param ws - Optional: only unregister if this is the current WebSocket (prevents race conditions)
+   * @returns object with status info, or null if skipped (ws mismatch or not found)
    */
-  unregister(agentId: string): void {
+  unregister(agentId: string, ws?: unknown): { agentId: string; newStatus: 'reconnecting' } | null {
     const agent = this.agents.get(agentId);
-    if (agent) {
-      // Reject all pending requests
-      for (const [, pending] of agent.pendingRequests) {
-        clearTimeout(pending.timeout);
-        pending.reject(new Error('Agent disconnected'));
-      }
-      agent.pendingRequests.clear();
+    if (!agent) return null;
 
-      // Mark as offline but keep in registry
-      agent.status = 'offline';
-      agent.lastSeen = new Date();
-      // Remove WebSocket reference
-      agent.ws = null;
+    // If ws is provided, only unregister if it matches the current connection
+    // This prevents race conditions where old WebSocket close events fire after reconnection
+    if (ws !== undefined && agent.ws !== ws) {
+      console.log(`[AgentRegistry] Skipping unregister for ${agentId} - WebSocket mismatch (stale close event)`);
+      return null;
     }
+
+    // Reject all pending requests
+    for (const [, pending] of agent.pendingRequests) {
+      clearTimeout(pending.timeout);
+      pending.reject(new Error('Agent disconnected'));
+    }
+    agent.pendingRequests.clear();
+
+    // Mark as reconnecting - hub broadcasts this, UI shows "reconnecting" state
+    // When agent reconnects, hub broadcasts 'agent:connected' and UI updates
+    agent.status = 'reconnecting';
+    agent.lastSeen = new Date();
+    agent.ws = null;
+
+    return { agentId, newStatus: 'reconnecting' };
   }
 
   /**
@@ -209,11 +221,21 @@ export class AgentRegistry {
       );
     }
 
+    if (agent.status === 'reconnecting') {
+      return createErrorResponse(
+        '0',
+        JsonRpcErrorCode.INTERNAL_ERROR,
+        `Agent ${agentId} is reconnecting`,
+        { code: 'AGENT_RECONNECTING', agentId }
+      );
+    }
+
     if (agent.status !== 'online' || !agent.ws) {
       return createErrorResponse(
         '0',
         JsonRpcErrorCode.INTERNAL_ERROR,
-        `Agent ${agentId} is not connected`
+        `Agent ${agentId} is not connected`,
+        { code: 'AGENT_OFFLINE', agentId }
       );
     }
 
@@ -332,6 +354,31 @@ export class AgentRegistry {
       } catch {
         // Ignore send errors for broadcasts
       }
+    }
+  }
+
+  /**
+   * Send a notification to a specific agent (no response expected)
+   */
+  notifyAgent(agentId: string, method: string, params?: unknown): boolean {
+    const agent = this.agents.get(agentId);
+
+    if (!agent || agent.status !== 'online' || !agent.ws) {
+      return false;
+    }
+
+    const notification = {
+      jsonrpc: '2.0' as const,
+      method,
+      params,
+    };
+
+    try {
+      // @ts-expect-error - ws type varies by runtime
+      agent.ws.send(JSON.stringify(notification));
+      return true;
+    } catch {
+      return false;
     }
   }
 

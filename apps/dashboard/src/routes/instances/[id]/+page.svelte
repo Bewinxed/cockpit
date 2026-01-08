@@ -2,12 +2,15 @@
   import { page } from '$app/state';
   import { goto } from '$app/navigation';
   import { onMount, onDestroy, tick } from 'svelte';
-  import { instances, instanceMessages, agents, addMessage, removeMessage, updateMessageMetadata, clearInstanceMessages, getStreamingState, getInstanceStatus, type Message } from '$lib/stores/realtime.svelte';
+  import { flip } from 'svelte/animate';
+  import { fly } from 'svelte/transition';
+  import { instances, instanceMessages, agents, addMessage, removeMessage, updateMessageMetadata, clearInstanceMessages, getStreamingState, getInstanceStatus, getInstancePermissions, type Message } from '$lib/stores/realtime.svelte';
   import { sendMessage, stopInstance, resumeInstance, interruptInstance } from '$lib/actions';
   import { api } from '$lib/api';
-  import { Button, Badge, EmptyState, LoadingButton } from '$lib/components/ui';
-  import { ChatMessage, ChatInput, StreamingIndicator } from '$lib/components/features';
+  import { Badge, LoadingButton, EmptyState } from '$lib/components/ui';
+  import { ChatMessage, ChatInput, StreamingIndicator, PermissionRequest } from '$lib/components/features';
   import { formatDistanceToNow } from '$lib/utils/time';
+  import { getInstance, getInstanceMessages } from '$lib/data.remote';
   import {
     ArrowLeft,
     Square,
@@ -30,6 +33,7 @@
   }
 
   interface DbMessage {
+    id: string;
     content: string | Record<string, unknown>;
     messageType: string;
     timestamp: string | Date;
@@ -48,35 +52,39 @@
     { name: '/terminal-setup', type: 'builtin', description: 'Configure terminal settings' },
   ];
 
-  // Page data from load function
-  let { data } = $props();
-
-  // Get instance ID from route
+  // Get instance ID from route params
   const instanceId = $derived(page.params.id ?? '');
 
-  // Get instance from store (prefer store for real-time updates, fallback to page data)
+  // SSR data via remote functions - $derived with await for reactive SSR queries
+  const ssrInstance = $derived(await getInstance(instanceId));
+  const ssrMessages = $derived(await getInstanceMessages(instanceId));
+
+  // Get instance from store (prefer store for real-time updates, fallback to SSR data)
   const storeInstance = $derived($instances.get(instanceId));
-  const instance = $derived(storeInstance || (data.instance ? {
-    id: data.instance.id,
-    name: data.instance.lastPrompt?.slice(0, 50) || 'Instance',
-    status: data.instance.status as 'starting' | 'running' | 'stopping' | 'stopped' | 'sleeping' | 'error' | 'disconnected',
+  const instance = $derived(storeInstance || (ssrInstance ? {
+    id: ssrInstance.id,
+    name: ssrInstance.lastPrompt?.slice(0, 50) || 'Instance',
+    status: ssrInstance.status as 'starting' | 'running' | 'stopping' | 'stopped' | 'sleeping' | 'error' | 'disconnected',
     agent: '',
-    agentId: data.instance.agentId,
+    agentId: ssrInstance.agentId,
     project: null,
-    projectId: data.instance.projectId || null,
-    lastActivity: data.instance.createdAt ? new Date(data.instance.createdAt).toISOString() : new Date().toISOString(),
-    cwd: data.instance.cwd,
-    model: data.instance.model,
-    totalCostUsd: data.instance.totalCostUsd,
+    projectId: ssrInstance.projectId || null,
+    lastActivity: ssrInstance.createdAt ? new Date(ssrInstance.createdAt).toISOString() : new Date().toISOString(),
+    cwd: ssrInstance.cwd,
+    model: ssrInstance.model,
+    totalCostUsd: ssrInstance.totalCostUsd,
   } : undefined));
 
   // Get agent info
   const agent = $derived(instance?.agentId ? $agents.get(instance.agentId) : undefined);
 
+  // Get pending permission requests for this instance
+  const permissionRequests = getInstancePermissions(instanceId);
+
   // Cleanup function for auth event listener
   let authCleanup: (() => void) | null = null;
 
-  // Initialize messages from page data on mount
+  // Initialize messages from SSR data on mount
   onMount(() => {
     // Listen for auth-required events - auto-trigger login flow
     const handleAuthRequired = (event: Event) => {
@@ -90,9 +98,9 @@
     // Store cleanup function
     authCleanup = () => window.removeEventListener('cockpit:auth-required', handleAuthRequired);
 
-    if (data.messages && data.messages.length > 0 && !$instanceMessages.get(instanceId)?.length) {
+    if (ssrMessages && ssrMessages.length > 0 && !$instanceMessages.get(instanceId)?.length) {
       // Convert DB messages to UI Message format
-      for (const dbMsg of data.messages as DbMessage[]) {
+      for (const dbMsg of ssrMessages as DbMessage[]) {
         const content = typeof dbMsg.content === 'string' ? JSON.parse(dbMsg.content) : dbMsg.content;
         const sdkType = content?.type || dbMsg.messageType;
 
@@ -100,6 +108,7 @@
         if (sdkType === 'user' && content?.content) {
           // User messages
           addMessage(instanceId, {
+            id: dbMsg.id,
             type: 'user',
             content: content.content,
             timestamp: new Date(dbMsg.timestamp),
@@ -108,12 +117,14 @@
           for (const block of content.message.content) {
             if (block?.type === 'text' && block.text) {
               addMessage(instanceId, {
+                id: dbMsg.id,
                 type: 'assistant',
                 content: block.text,
                 timestamp: new Date(dbMsg.timestamp),
               });
             } else if (block?.type === 'tool_use') {
               addMessage(instanceId, {
+                id: dbMsg.id + '-' + block.id,
                 type: 'tool_use',
                 content: block.name || 'Tool',
                 timestamp: new Date(dbMsg.timestamp),
@@ -128,6 +139,7 @@
           }
         } else if (sdkType === 'system' && content?.subtype === 'init') {
           addMessage(instanceId, {
+            id: dbMsg.id,
             type: 'system',
             content: `Session started with ${content.model || 'Claude'}`,
             timestamp: new Date(dbMsg.timestamp),
@@ -193,9 +205,20 @@
   const streamingStateStore = $derived(getStreamingState(instanceId));
   const isStreaming = $derived($streamingStateStore?.isStreaming ?? false);
 
+  // Smart scroll logic
+  let userHasScrolledUp = $state(false);
+
+  function handleScroll() {
+    if (!messagesContainer) return;
+    const { scrollTop, scrollHeight, clientHeight } = messagesContainer;
+    // If we are more than 150px from the bottom, the user has scrolled up
+    const distanceToBottom = scrollHeight - scrollTop - clientHeight;
+    userHasScrolledUp = distanceToBottom > 150;
+  }
+
   // Auto-scroll to bottom on new messages
   $effect(() => {
-    if (currentMessages.length && messagesContainer) {
+    if (currentMessages.length && messagesContainer && !userHasScrolledUp) {
       tick().then(() => {
         messagesContainer?.scrollTo({
           top: messagesContainer.scrollHeight,
@@ -799,6 +822,73 @@
     instance?.status === 'running' || instance?.status === 'starting'
   );
 
+  // Handle editing a user message and restarting from that point
+  async function handleEditMessage(messageId: string, newContent: string): Promise<void> {
+    if (!instance) return;
+
+    // Find the message
+    const messages = $instanceMessages.get(instanceId) || [];
+    const msgIndex = messages.findIndex(m => m.id === messageId);
+    if (msgIndex === -1) return;
+
+    const editedMessage = messages[msgIndex];
+
+    // We need the SDK UUID to use resumeSessionAt properly
+    // The SDK expects the UUID of the message BEFORE the one we want to edit
+    // So we need the previous assistant message's UUID, not the user message's
+    // Actually, resumeSessionAt takes the message to resume AT (inclusive)
+    // For editing, we want to go back to BEFORE this user message
+
+    // Find the previous message's SDK UUID (if it exists)
+    // If editing first message, we just start fresh
+    let resumeFromUuid: string | undefined;
+    if (msgIndex > 0) {
+      // Find the last assistant message before this user message
+      for (let i = msgIndex - 1; i >= 0; i--) {
+        if (messages[i].sdkUuid) {
+          resumeFromUuid = messages[i].sdkUuid;
+          break;
+        }
+      }
+    }
+
+    // Remove all messages from the edited message onwards in the UI
+    const messagesToRemove = messages.length - msgIndex;
+    for (let i = 0; i < messagesToRemove; i++) {
+      removeMessage(instanceId, msgIndex);
+    }
+
+    // Add the edited user message to UI
+    addMessage(instanceId, {
+      type: 'user',
+      content: newContent,
+      timestamp: new Date(),
+    });
+
+    // Resume the instance with the edited message
+    restarting = true;
+    try {
+      // Only pass resumeFromMessageId if we have a valid UUID
+      // If no UUID found (e.g., first message), don't use resumeSessionAt - just send the message
+      const resumeParams: { prompt: string; resumeFromMessageId?: string } = {
+        prompt: newContent,
+      };
+      if (resumeFromUuid) {
+        resumeParams.resumeFromMessageId = resumeFromUuid;
+      }
+
+      const result = await api.api.instances({ id: instanceId }).resume.post(resumeParams);
+
+      if (result.error || !result.data?.success) {
+        throw new Error((result.error as { message?: string })?.message || 'Failed to resume');
+      }
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Failed to edit message';
+    } finally {
+      restarting = false;
+    }
+  }
+
   const formattedCost = $derived(
     instance?.totalCostUsd
       ? `$${instance.totalCostUsd.toFixed(4)}`
@@ -820,74 +910,73 @@
   <title>{instance?.name || 'Instance'} | Cockpit</title>
 </svelte:head>
 
-<div class="h-screen flex flex-col -m-6 bg-bg">
+<div class="h-screen flex flex-col bg-bg overflow-hidden relative">
   {#if instance}
     <!-- Header -->
-    <header class="flex-shrink-0 bg-paper border-b border-border px-6 py-4">
-      <div class="flex items-start justify-between">
-        <div class="flex items-start gap-4">
+    <header class="flex-shrink-0 bg-paper/80 backdrop-blur-md border-b border-border px-6 py-3 z-10 shadow-sm">
+      <div class="flex items-center justify-between gap-4">
+        <div class="flex items-center gap-3 min-w-0">
           <!-- Back button -->
           <a
             href="/instances"
-            class="mt-1 p-2 rounded-lg hover:bg-surface-hover transition-colors"
+            class="p-2 rounded-lg hover:bg-surface-hover transition-colors shrink-0"
+            title="Back to instances"
           >
             <ArrowLeft class="w-5 h-5 text-text-secondary" />
           </a>
 
-          <div>
-            <div class="flex items-center gap-3 mb-1">
-              <h1 class="text-xl font-semibold text-text">
-                {instance.name || 'Instance'}
+          <div class="min-w-0">
+            <div class="flex items-center gap-2.5 mb-0.5">
+              <h1 class="text-lg font-bold text-text truncate font-serif tracking-tight">
+                {instance.name || 'Untitled Session'}
               </h1>
               {#if status}
-                <Badge variant={status.variant}>
+                <Badge variant={status.variant} class="shrink-0 scale-90 origin-left">
                   {status.label}
                 </Badge>
               {/if}
             </div>
 
-            <div class="flex flex-wrap items-center gap-4 text-sm text-text-secondary">
+            <div class="flex items-center gap-3 text-xs text-text-muted overflow-hidden">
               {#if agent}
-                <div class="flex items-center gap-1.5">
-                  <Server class="w-4 h-4 text-text-muted" />
-                  <span>{agent.name}</span>
+                <div class="flex items-center gap-1 shrink-0" title="Running on {agent.name}">
+                  <Server class="w-3.5 h-3.5" />
+                  <span class="truncate max-w-[100px]">{agent.name}</span>
                 </div>
+                <span>•</span>
               {/if}
 
               {#if instance.cwd}
-                <div class="flex items-center gap-1.5">
-                  <FolderOpen class="w-4 h-4 text-text-muted" />
-                  <span class="font-mono text-xs truncate max-w-[200px]">{instance.cwd}</span>
+                <div class="flex items-center gap-1 shrink-0" title="CWD: {instance.cwd}">
+                  <FolderOpen class="w-3.5 h-3.5" />
+                  <span class="font-mono truncate max-w-[150px]">{instance.cwd.split('/').pop() || instance.cwd}</span>
                 </div>
+                <span>•</span>
               {/if}
 
               {#if instance.model}
-                <div class="flex items-center gap-1.5">
-                  <Cpu class="w-4 h-4 text-text-muted" />
-                  <span>{instance.model}</span>
+                <div class="flex items-center gap-1 shrink-0">
+                  <Cpu class="w-3.5 h-3.5" />
+                  <span>{instance.model.replace('claude-3-5-', '')}</span>
                 </div>
+                <span>•</span>
               {/if}
 
-              {#if timeAgo}
-                <div class="flex items-center gap-1.5">
-                  <Clock class="w-4 h-4 text-text-muted" />
-                  <span>{timeAgo}</span>
-                </div>
-              {/if}
-
-              <div class="flex items-center gap-1.5">
-                <DollarSign class="w-4 h-4 text-text-muted" />
+              <div class="flex items-center gap-1 shrink-0">
+                <DollarSign class="w-3.5 h-3.5" />
                 <span>{formattedCost}</span>
               </div>
 
               <!-- Streaming Indicator -->
-              <StreamingIndicator {instanceId} />
+              <div class="ml-2 border-l border-border pl-3">
+                <StreamingIndicator {instanceId} />
+              </div>
 
               <!-- Transient Status (e.g., "compacting") -->
               {#if transientStatus}
-                <div class="flex items-center gap-1.5 text-warning animate-pulse">
-                  <Loader2 class="w-4 h-4 animate-spin" />
-                  <span class="capitalize">{transientStatus}...</span>
+                <div class="flex items-center gap-1.5 text-warning animate-pulse ml-2">
+                  <Loader2 class="w-3.5 h-3.5 animate-spin" />
+                  <span class="capitalize font-medium">{transientStatus}...</span>
                 </div>
               {/if}
             </div>
@@ -895,39 +984,42 @@
         </div>
 
         <!-- Actions -->
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 shrink-0">
           {#if isActive}
             {#if isStreaming}
-              <!-- Show Interrupt button when streaming -->
-              <LoadingButton
-                variant="outline"
-                size="sm"
+              <button
+                class="btn btn-secondary btn-sm h-9 px-3 gap-1.5 border-warning/30 text-warning hover:bg-warning-light"
                 onclick={handleInterrupt}
-                loading={interrupting}
                 disabled={interrupting}
               >
-                <StopCircle class="size-4" />
-                Interrupt
-              </LoadingButton>
+                {#if interrupting}
+                  <Loader2 class="size-3.5 animate-spin" />
+                {:else}
+                  <StopCircle class="size-3.5" />
+                {/if}
+                <span>Interrupt</span>
+              </button>
             {/if}
-            <LoadingButton
-              variant="destructive"
-              size="sm"
+            <button
+              class="btn btn-ghost btn-sm h-9 w-9 p-0 text-error hover:bg-error-light"
               onclick={handleStop}
-              loading={stopping}
               disabled={stopping || interrupting}
+              title="Stop instance"
             >
-              <Square class="size-4" />
-              Stop
-            </LoadingButton>
+              {#if stopping}
+                <Loader2 class="size-4 animate-spin" />
+              {:else}
+                <Square class="size-4" />
+              {/if}
+            </button>
           {/if}
         </div>
       </div>
 
       {#if error}
-        <div class="mt-3 flex items-center gap-2 text-sm text-error bg-error-light rounded-lg px-3 py-2">
-          <AlertCircle class="w-4 h-4 flex-shrink-0" />
-          <span class="flex-1">{error}</span>
+        <div class="mt-2 flex items-center gap-2 text-xs text-error bg-error-light rounded-md px-3 py-1.5 animate-fade-in" in:fly={{ y: -5, duration: 200 }}>
+          <AlertCircle class="w-3.5 h-3.5 flex-shrink-0" />
+          <span class="flex-1 font-medium">{error}</span>
           <button
             class="text-error-dark hover:underline flex-shrink-0"
             onclick={() => error = null}
@@ -939,77 +1031,122 @@
     </header>
 
     <!-- Messages Area -->
-    <div
-      bind:this={messagesContainer}
-      class="flex-1 overflow-y-auto p-6 space-y-4 bg-bg"
-    >
-      {#if currentMessages.length > 0}
-        {#each currentMessages as message, i (i)}
-          <ChatMessage
-            {message}
-            showTimestamp={i === 0 || currentMessages[i - 1]?.type !== message.type}
-            onLoginSubmit={handleLoginSubmit}
-            onLoginCancel={handleLoginCancel}
-            onModelSelect={handleModelSelect}
-            onModelCancel={handleModelCancel}
-            onMemorySelect={handleMemorySelect}
-            onMemorySave={handleMemorySave}
-            onMemoryCancel={handleMemoryCancel}
-            onDismissMessage={() => removeMessage(instanceId, i)}
-            isLoginActive={message.metadata?.subtype === 'login_prompt' && pendingOAuthState === message.metadata?.oauthState}
-            isModelPickerActive={message.metadata?.subtype === 'model_picker' && pendingModelPickerIndex === i}
-            isMemoryPickerActive={message.metadata?.subtype === 'memory_picker' && pendingMemoryPickerIndex === i}
-          />
-        {/each}
+    <div class="flex-1 relative overflow-hidden flex flex-col">
+      <div
+        bind:this={messagesContainer}
+        onscroll={handleScroll}
+        class="flex-1 overflow-y-auto p-6 space-y-6 bg-bg scroll-smooth selection:bg-primary-light"
+      >
+        {#if currentMessages.length > 0}
+          {#each currentMessages as message, i (message.id)}
+            <div
+              animate:flip={{ duration: 300 }}
+              in:fly={{ y: 20, duration: 300 }}
+              out:fly={{ y: -20, duration: 200 }}
+            >
+              <ChatMessage
+                {message}
+                showTimestamp={i === 0 || currentMessages[i - 1]?.type !== message.type}
+                onLoginSubmit={handleLoginSubmit}
+                onLoginCancel={handleLoginCancel}
+                onModelSelect={handleModelSelect}
+                onModelCancel={handleModelCancel}
+                onMemorySelect={handleMemorySelect}
+                onMemorySave={handleMemorySave}
+                onMemoryCancel={handleMemoryCancel}
+                onDismissMessage={() => removeMessage(instanceId, i)}
+                onEditMessage={handleEditMessage}
+                canEdit={message.type === 'user' && !!message.sdkUuid}
+                isLoginActive={message.metadata?.subtype === 'login_prompt' && pendingOAuthState === message.metadata?.oauthState}
+                isModelPickerActive={message.metadata?.subtype === 'model_picker' && pendingModelPickerIndex === i}
+                isMemoryPickerActive={message.metadata?.subtype === 'memory_picker' && pendingMemoryPickerIndex === i}
+              />
+            </div>
+          {/each}
 
-        {#if sending}
-          <div class="flex items-center gap-3 animate-fade-in">
-            <div class="flex-shrink-0 w-8 h-8 rounded-lg bg-secondary-light flex items-center justify-center">
-              <Loader2 class="w-4 h-4 text-secondary animate-spin" />
+          {#if sending || restarting}
+            <div class="flex items-center gap-3 animate-fade-in py-2" in:fly={{ y: 10, duration: 200 }}>
+              <div class="flex-shrink-0 w-8 h-8 rounded-lg bg-primary-light flex items-center justify-center">
+                <Loader2 class="w-4 h-4 text-primary animate-spin" />
+              </div>
+              {#if restarting}
+                <span class="text-xs text-text-muted italic animate-pulse">Resuming session...</span>
+              {:else}
+                <div class="typing-indicator bg-surface border border-border rounded-2xl">
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                </div>
+              {/if}
             </div>
-            <div class="typing-indicator bg-surface border border-border rounded-2xl">
-              <span></span>
-              <span></span>
-              <span></span>
-            </div>
+          {/if}
+        {:else}
+          <div class="h-full flex items-center justify-center" in:fly={{ y: 20, duration: 400 }}>
+            <EmptyState
+              icon={MessageSquare}
+              title="New Conversation"
+              description={isActive
+                ? "What project are we working on today?"
+                : "This instance is currently idle. Send a message to start."}
+            />
           </div>
         {/if}
-      {:else}
-        <div class="h-full flex items-center justify-center">
-          <EmptyState
-            icon={MessageSquare}
-            title="No messages yet"
-            description={isActive
-              ? "Send a message to start working with Claude"
-              : "This instance has no message history"}
-          />
+      </div>
+
+      {#if userHasScrolledUp}
+        <div class="absolute bottom-4 left-1/2 -translate-x-1/2 z-20">
+          <button
+            class="px-4 py-2 bg-primary text-white rounded-full shadow-lg border border-primary-hover
+                   flex items-center gap-2 text-sm font-medium animate-fade-in-up hover:bg-primary-hover transition-all"
+            onclick={() => {
+              userHasScrolledUp = false;
+              messagesContainer?.scrollTo({
+                top: messagesContainer.scrollHeight,
+                behavior: 'smooth'
+              });
+            }}
+          >
+            <span>Jump to present</span>
+            <ArrowLeft class="w-4 h-4 -rotate-90" />
+          </button>
         </div>
       {/if}
     </div>
 
+    <!-- Pending Permission Requests -->
+    {#if $permissionRequests.length > 0}
+      <div class="flex-shrink-0 px-4 py-2 border-t border-border bg-surface space-y-2">
+        {#each $permissionRequests as request (request.requestId)}
+          <PermissionRequest {request} />
+        {/each}
+      </div>
+    {/if}
+
     <!-- Chat Input -->
-    <ChatInput
-      onSend={handleSendMessage}
-      onInterrupt={handleInterrupt}
-      disabled={restarting}
-      loading={sending || restarting}
-      streaming={isStreaming}
-      placeholder={restarting
-        ? 'Resuming session...'
-        : isStreaming
-          ? 'Claude is responding... (⌘↵ to interrupt)'
-          : 'Type a message... (⌘↵ to send, / for commands)'}
-      {commands}
-    />
+    <div class="flex-shrink-0 relative z-10">
+      <ChatInput
+        onSend={handleSendMessage}
+        onInterrupt={handleInterrupt}
+        disabled={restarting}
+        loading={sending || restarting}
+        streaming={isStreaming}
+        placeholder={restarting
+          ? 'Resuming session...'
+          : isStreaming
+            ? 'Claude is responding... (⌘↵ to interrupt)'
+            : 'Ask Claude anything... (⌘↵ to send)'}
+        {commands}
+      />
+    </div>
 
   {:else}
     <!-- Instance not found -->
-    <div class="flex-1 flex items-center justify-center bg-bg">
+    <div class="flex-1 flex items-center justify-center bg-bg" in:fly={{ y: 20, duration: 400 }}>
       <EmptyState
         icon={AlertCircle}
-        title="Instance not found"
-        description="This instance may have been removed or doesn't exist"
-        action={{ label: 'Back to Instances', onClick: () => goto('/instances') }}
+        title="Session not found"
+        description="This session might have been closed or removed from the agent."
+        action={{ label: 'Back to Dashboard', onClick: () => goto('/') }}
       />
     </div>
   {/if}

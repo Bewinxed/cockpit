@@ -7,8 +7,9 @@ export type InstanceStatus = 'starting' | 'running' | 'stopping' | 'stopped' | '
 
 /**
  * Permission modes for Claude Code instances
+ * Matches SDK's PermissionMode type
  */
-export type PermissionMode = 'default' | 'acceptEdits' | 'bypassPermissions';
+export type PermissionMode = 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan' | 'delegate' | 'dontAsk';
 
 /**
  * Represents a running or stopped Claude Code session.

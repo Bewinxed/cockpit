@@ -96,22 +96,24 @@
 
 <Modal {open} title="New Instance" onClose={handleClose}>
   {#snippet children()}
-    <form onsubmit={handleSubmit} class="space-y-4">
+    <form onsubmit={handleSubmit} class="space-y-5">
       {#if error}
-        <div class="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-600 text-sm">
-          {error}
+        <div class="flex items-center gap-2 p-3 rounded-lg bg-error-light border border-error/20 text-error text-sm">
+          <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span>{error}</span>
         </div>
       {/if}
 
-      <div>
-        <label for="agent" class="block text-sm font-medium text-tx-2 mb-1.5">
-          Agent <span class="text-red-500">*</span>
+      <div class="space-y-1.5">
+        <label for="agent" class="block text-sm font-medium text-text">
+          Agent <span class="text-error">*</span>
         </label>
         <select
           id="agent"
           bind:value={agentId}
-          class="w-full px-4 py-2.5 rounded-xl bg-bg-2 border border-ui-1 text-tx-1
-                 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+          class="input"
         >
           <option value="">Select an agent...</option>
           {#each Array.from($agents.values()).filter(a => a.status === 'online') as agent}
@@ -119,16 +121,16 @@
           {/each}
         </select>
         {#if Array.from($agents.values()).filter(a => a.status === 'online').length === 0}
-          <p class="mt-1 text-xs text-tx-3">No agents online. Start an agent with "cockpit agent"</p>
+          <p class="text-xs text-text-muted italic">No agents online. Start an agent with <code class="px-1 bg-surface-hover rounded text-[10px]">cockpit agent</code></p>
         {/if}
       </div>
 
-      <div>
-        <label for="cwd" class="block text-sm font-medium text-tx-2 mb-1.5">
-          Working Directory <span class="text-red-500">*</span>
+      <div class="space-y-1.5">
+        <label for="cwd" class="block text-sm font-medium text-text">
+          Working Directory <span class="text-error">*</span>
         </label>
         {#if showFileBrowser && agentId}
-          <div class="h-80 rounded-xl border border-ui-1 overflow-hidden bg-bg-1">
+          <div class="h-80 rounded-lg border border-border overflow-hidden bg-bg">
             <FileBrowser
               agentId={agentId}
               initialPath={cwd || undefined}
@@ -138,7 +140,7 @@
           <button
             type="button"
             onclick={() => showFileBrowser = false}
-            class="mt-2 text-sm text-tx-3 hover:text-tx-1 transition-colors"
+            class="mt-2 text-sm text-secondary hover:underline transition-colors"
           >
             Cancel browsing
           </button>
@@ -149,16 +151,14 @@
               type="text"
               bind:value={cwd}
               placeholder="/path/to/project"
-              class="flex-1 px-4 py-2.5 rounded-xl bg-bg-2 border border-ui-1 text-tx-1
-                     placeholder:text-tx-3 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+              class="input font-mono"
             />
             <button
               type="button"
               onclick={openFileBrowser}
               disabled={!agentId}
-              class="px-4 py-2.5 rounded-xl bg-bg-2 border border-ui-1 text-tx-2
-                     hover:bg-bg-3 hover:text-tx-1 transition-colors
-                     disabled:opacity-50 disabled:cursor-not-allowed"
+              class="px-3 rounded-md border border-border hover:bg-surface-hover text-text-secondary
+                     disabled:opacity-40 disabled:cursor-not-allowed transition-all"
               title={agentId ? 'Browse files on agent' : 'Select an agent first'}
             >
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -169,15 +169,14 @@
         {/if}
       </div>
 
-      <div>
-        <label for="project" class="block text-sm font-medium text-tx-2 mb-1.5">
-          Project (optional)
+      <div class="space-y-1.5">
+        <label for="project" class="block text-sm font-medium text-text">
+          Project <span class="text-text-muted font-normal text-xs">(optional)</span>
         </label>
         <select
           id="project"
           bind:value={projectId}
-          class="w-full px-4 py-2.5 rounded-xl bg-bg-2 border border-ui-1 text-tx-1
-                 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+          class="input"
         >
           <option value="">No project</option>
           {#each Array.from($projects.values()) as project}
@@ -186,18 +185,16 @@
         </select>
       </div>
 
-      <div>
-        <label for="prompt" class="block text-sm font-medium text-tx-2 mb-1.5">
-          Initial Prompt (optional)
+      <div class="space-y-1.5">
+        <label for="prompt" class="block text-sm font-medium text-text">
+          Initial Prompt <span class="text-text-muted font-normal text-xs">(optional)</span>
         </label>
         <textarea
           id="prompt"
           bind:value={prompt}
           placeholder="What would you like Claude to do?"
           rows="3"
-          class="w-full px-4 py-2.5 rounded-xl bg-bg-2 border border-ui-1 text-tx-1
-                 placeholder:text-tx-3 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20
-                 resize-none"
+          class="input resize-none"
         ></textarea>
       </div>
 
@@ -205,18 +202,21 @@
         <button
           type="button"
           onclick={handleClose}
-          class="flex-1 px-4 py-2.5 rounded-xl bg-bg-2 text-tx-2 font-medium
-                 hover:bg-bg-3 transition-colors"
+          class="btn btn-secondary flex-1"
         >
           Cancel
         </button>
         <button
           type="submit"
           disabled={loading || !agentId || !cwd}
-          class="flex-1 px-4 py-2.5 rounded-xl bg-primary text-white font-medium
-                 hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          class="btn btn-primary flex-1"
         >
-          {loading ? 'Starting...' : 'Start Instance'}
+          {#if loading}
+            <svg class="w-4 h-4 animate-spin" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+            <span>Starting...</span>
+          {:else}
+            <span>Start Instance</span>
+          {/if}
         </button>
       </div>
     </form>

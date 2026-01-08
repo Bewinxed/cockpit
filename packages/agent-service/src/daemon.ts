@@ -337,6 +337,16 @@ export class AgentDaemon extends EventEmitter {
       });
     });
 
+    // Permission request events
+    this.instanceManager.on('permission.request', (request) => {
+      // Forward permission requests to hub
+      this.hubClient.notify(PROTOCOL_METHODS.PERMISSION_REQUEST, {
+        agentId: this.agentId,
+        ...request,
+        timestamp: new Date().toISOString(),
+      });
+    });
+
     // Discovery events
     this.discovery.on('hub.found', (service: HubService) => {
       console.log(`Hub discovered: ${service.name} at ${service.host}:${service.port}`);
@@ -368,6 +378,10 @@ export class AgentDaemon extends EventEmitter {
 
       case PROTOCOL_METHODS.INSTANCE_INTERRUPT:
         await this.handleInterrupt(request);
+        break;
+
+      case PROTOCOL_METHODS.INSTANCE_REWIND:
+        await this.handleRewind(request);
         break;
 
       case PROTOCOL_METHODS.INSTANCE_STATUS:
@@ -422,7 +436,30 @@ export class AgentDaemon extends EventEmitter {
    */
   private handleNotification(notification: JsonRpcNotification): void {
     console.log(`Received notification: ${notification.method}`);
-    // Currently no notifications to handle from hub
+
+    switch (notification.method) {
+      case PROTOCOL_METHODS.PERMISSION_RESPONSE: {
+        const params = notification.params as {
+          requestId: string;
+          instanceId: string;
+          behavior: 'allow' | 'deny';
+          updatedInput?: Record<string, unknown>;
+          updatedPermissions?: unknown[];
+          message?: string;
+          interrupt?: boolean;
+        };
+        this.instanceManager.resolvePermission({
+          requestId: params.requestId,
+          instanceId: params.instanceId,
+          behavior: params.behavior,
+          updatedInput: params.updatedInput,
+          updatedPermissions: params.updatedPermissions as any,
+          message: params.message,
+          interrupt: params.interrupt,
+        });
+        break;
+      }
+    }
   }
 
   /**
@@ -493,6 +530,24 @@ export class AgentDaemon extends EventEmitter {
       this.hubClient.respond(request.id, {
         success: true,
         sdkSessionId,
+      });
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      this.hubClient.respondError(request.id, -32000, err.message);
+    }
+  }
+
+  /**
+   * Handle rewind files request from hub
+   */
+  private async handleRewind(request: JsonRpcRequest): Promise<void> {
+    const params = request.params as { instanceId: string; userMessageId: string };
+
+    try {
+      await this.instanceManager.rewindFiles(params.instanceId, params.userMessageId);
+
+      this.hubClient.respond(request.id, {
+        success: true,
       });
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));

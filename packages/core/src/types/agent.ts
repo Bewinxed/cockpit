@@ -5,8 +5,11 @@ export type AgentOS = 'windows' | 'darwin' | 'linux';
 
 /**
  * Connection status of an agent
+ * - 'online': Agent is connected and ready
+ * - 'reconnecting': Agent disconnected but expected to reconnect soon
+ * - 'offline': Agent is disconnected
  */
-export type AgentStatus = 'online' | 'offline';
+export type AgentStatus = 'online' | 'reconnecting' | 'offline';
 
 /**
  * Represents a connected device running the Cockpit agent.
