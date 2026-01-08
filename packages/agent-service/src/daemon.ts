@@ -317,6 +317,16 @@ export class AgentDaemon extends EventEmitter {
       });
     });
 
+    this.instanceManager.on('instance.statusChanged', (instanceId: string, previousStatus: string, newStatus: string) => {
+      this.hubClient.notify(PROTOCOL_METHODS.INSTANCE_STATUS_CHANGED, {
+        agentId: this.agentId,
+        instanceId,
+        previousStatus,
+        newStatus,
+        timestamp: new Date().toISOString(),
+      });
+    });
+
     this.instanceManager.on('sdk.message', (instanceId: string, message: unknown) => {
       // Forward SDK messages to hub
       this.hubClient.notify(PROTOCOL_METHODS.SDK_MESSAGE, {

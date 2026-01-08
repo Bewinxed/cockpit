@@ -64,7 +64,7 @@ export interface Message {
     toolResult?: unknown;
     toolStatus?: 'pending' | 'success' | 'error';
     // For system messages
-    subtype?: 'init' | 'compact_boundary' | 'status' | 'hook_response' | 'login_prompt' | 'auth_required' | 'model_picker' | 'memory_info' | 'vim_info' | 'terminal_setup_info';
+    subtype?: 'init' | 'compact_boundary' | 'status' | 'hook_response' | 'login_prompt' | 'auth_required' | 'model_picker' | 'memory_info' | 'vim_info' | 'terminal_setup_info' | 'memory_picker';
     // For command_output messages
     command?: string;
     model?: string;
@@ -88,6 +88,11 @@ export interface Message {
     models?: Array<{ value: string; displayName: string; description: string }>;
     currentModel?: string;
     selectedModel?: string;
+    // For memory_picker
+    memoryPhase?: 'selection' | 'editing';
+    selectedMemoryType?: 'project' | 'user';
+    memoryContent?: string;
+    memoryPath?: string;
     // For help_menu
     version?: string;
     commands?: Array<{ name: string; description?: string; type: 'builtin' | 'custom' | 'skill' | 'mcp' }>;
