@@ -6,6 +6,25 @@ Make slash commands functional in the dashboard, matching CLI behavior. This inc
 
 ## Latest Progress (2026-01-08)
 
+**AGENT RELIABILITY & LIVE STATE:**
+
+1. **Robust Reconnection (The "Agent not found" Fix):**
+   - Fixed race condition where agent connection failures didn't trigger retries if 'close' event wasn't emitted
+   - Implemented `isReconnecting` guard to prevent duplicate connection loops
+   - Agent now reliably reconnects after hub restart or network blips
+
+2. **Granular Live Updates:**
+   - Enabled `includePartialMessages: true` in SDK session creation
+   - This forces Claude SDK to emit token-by-token updates instead of buffering
+   - Added `instance.statusChanged` events to Daemon and InstanceManager
+   - Result: Dashboard terminal now shows real-time "typing" effect and immediate status changes (thinking -> running -> etc)
+
+3. **Memory Feature (`/memory`):**
+   - Implemented full read/write support for project (`./CLAUDE.md`) and user (`~/.claude/CLAUDE.md`) memory
+   - Added `MEMORY_READ` and `MEMORY_WRITE` protocol methods
+   - Added Agent handlers to safely read/write files
+   - Updated Dashboard UI to handle memory picker and editing state
+
 **/CLEAR COMMAND FIX & PERFORMANCE IMPROVEMENTS:**
 
 Fixed the `/clear` command and addressed performance issues:

@@ -140,6 +140,7 @@
   // Memory picker state
   let memoryContent = $state<string>(message.metadata?.memoryContent as string || '');
   let memorySaving = $state(false);
+  let selectedMemoryOption = $state<'project' | 'user' | null>(null);
 
   // Initialize memory content when it changes in metadata
   $effect(() => {
@@ -148,6 +149,11 @@
     }
   });
 
+  // Action to autofocus elements when they mount
+  function autofocus(node: HTMLElement) {
+    node.focus();
+  }
+
   async function handleMemorySave() {
     if (!onMemorySave || memorySaving) return;
     memorySaving = true;
@@ -155,6 +161,48 @@
       await onMemorySave(memoryContent);
     } finally {
       memorySaving = false;
+    }
+  }
+
+  function handleMemoryKeydown(e: KeyboardEvent) {
+    if (!isMemoryPickerActive) return;
+    
+    // If editing, handle Escape (cancel) and CTRL+Enter (save)
+    if (message.metadata?.memoryPhase === 'editing') {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onMemoryCancel?.();
+      } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        handleMemorySave();
+      }
+      return;
+    }
+
+    // Selection phase navigation
+    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      // If nothing selected, default to project. Otherwise toggle.
+      if (!selectedMemoryOption) {
+        selectedMemoryOption = 'project';
+      } else {
+        selectedMemoryOption = selectedMemoryOption === 'project' ? 'user' : 'project';
+      }
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      // Only confirm if an option is selected (guards against accidental Enter press)
+      if (selectedMemoryOption) {
+        onMemorySelect?.(selectedMemoryOption);
+      }
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      onMemoryCancel?.();
+    } else if (e.key === '1') {
+      e.preventDefault();
+      onMemorySelect?.('project');
+    } else if (e.key === '2') {
+      e.preventDefault();
+      onMemorySelect?.('user');
     }
   }
 
@@ -196,6 +244,12 @@
     } else if (e.key === 'Escape') {
       onModelCancel?.();
     }
+  }
+
+  function handleWindowKeydown(e: KeyboardEvent) {
+    handleModelKeydown(e);
+    // handleMemoryKeydown is now local to the container to prevent Enter bleed
+    handleLoginKeydown(e);
   }
 
   async function copyContent() {
@@ -264,7 +318,7 @@
   const config = $derived(messageConfig[message.type] || messageConfig.assistant);
 </script>
 
-<svelte:window onkeydown={handleModelKeydown} />
+<svelte:window onkeydown={handleWindowKeydown} />
 
 <div class="flex {config.align} gap-3 group animate-fade-in-up">
   {#if message.type !== 'user' && message.type !== 'system' && message.type !== 'help_menu' && !isCompactBoundary && !isLoginPrompt && !isModelPicker && !isMemoryPicker}
@@ -647,7 +701,7 @@
               </div>
             {:else if message.metadata?.memoryPhase === 'editing'}
               <!-- Editor phase -->
-              <div class="space-y-3">
+              <div class="space-y-3" onkeydown={handleMemoryKeydown}>
                 <div class="flex items-center gap-2 text-xs text-text-muted">
                   {#if message.metadata?.selectedMemoryType === 'project'}
                     <FolderOpen class="w-3.5 h-3.5" />
@@ -658,8 +712,9 @@
                   {/if}
                 </div>
                 <textarea
+                  use:autofocus
                   class="w-full h-64 px-3 py-2 bg-bg border border-border rounded-lg font-mono text-sm
-                         placeholder:text-text-muted focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20
+                         placeholder:text-text-muted focus:outline-none focus:border-border-strong focus:ring-0
                          resize-y transition-colors"
                   placeholder="# Memory instructions for Claude..."
                   value={message.metadata?.memoryContent || ''}
@@ -699,11 +754,20 @@
               </div>
             {:else}
               <!-- Selection phase -->
-              <div class="space-y-2">
+              <div
+                class="space-y-2 outline-none"
+                tabindex="-1"
+                use:autofocus
+                onkeydown={handleMemoryKeydown}
+              >
                 <button
                   type="button"
-                  class="w-full text-left px-4 py-3 rounded-lg border border-border hover:border-amber-500/50 hover:bg-amber-500/5 transition-colors flex items-start gap-3 group"
+                  class="w-full text-left px-4 py-3 rounded-lg border transition-colors flex items-start gap-3 group
+                    {selectedMemoryOption === 'project'
+                      ? 'border-amber-500/50 bg-amber-500/10'
+                      : 'border-border hover:border-amber-500/50 hover:bg-amber-500/5'}"
                   onclick={() => onMemorySelect?.('project')}
+                  onmouseenter={() => selectedMemoryOption = 'project'}
                 >
                   <div class="flex-shrink-0 w-6 h-6 rounded bg-amber-500/10 flex items-center justify-center mt-0.5">
                     <FolderOpen class="w-3.5 h-3.5 text-amber-600" />
@@ -722,8 +786,12 @@
 
                 <button
                   type="button"
-                  class="w-full text-left px-4 py-3 rounded-lg border border-border hover:border-amber-500/50 hover:bg-amber-500/5 transition-colors flex items-start gap-3 group"
+                  class="w-full text-left px-4 py-3 rounded-lg border transition-colors flex items-start gap-3 group
+                    {selectedMemoryOption === 'user'
+                      ? 'border-amber-500/50 bg-amber-500/10'
+                      : 'border-border hover:border-amber-500/50 hover:bg-amber-500/5'}"
                   onclick={() => onMemorySelect?.('user')}
+                  onmouseenter={() => selectedMemoryOption = 'user'}
                 >
                   <div class="flex-shrink-0 w-6 h-6 rounded bg-amber-500/10 flex items-center justify-center mt-0.5">
                     <Home class="w-3.5 h-3.5 text-amber-600" />
