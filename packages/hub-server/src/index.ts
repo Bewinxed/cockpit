@@ -212,8 +212,8 @@ export async function startHub(options: HubOptions) {
  */
 async function main() {
   const port = parseInt(process.env.HUB_PORT || '3456', 10);
-  // Default to monorepo root's cockpit.db when running from packages/hub-server
-  const dbPath = process.env.HUB_DB_PATH || '../../cockpit.db';
+  // Default to cockpit.db at project root
+  const dbPath = process.env.HUB_DB_PATH || `${import.meta.dir}/../../../cockpit.db`;
   const enableDiscovery = process.env.HUB_DISCOVERY !== 'false';
 
   const hub = await startHub({

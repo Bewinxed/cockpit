@@ -1,6 +1,5 @@
 CREATE TABLE `agents` (
-	`id` text PRIMARY KEY NOT NULL,
-	`machine_id` text NOT NULL,
+	`machine_id` text PRIMARY KEY NOT NULL,
 	`hostname` text NOT NULL,
 	`tailscale_ip` text NOT NULL,
 	`os` text NOT NULL,
@@ -9,15 +8,29 @@ CREATE TABLE `agents` (
 	`created_at` integer NOT NULL
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `agents_machine_id_unique` ON `agents` (`machine_id`);--> statement-breakpoint
-CREATE INDEX `agents_machine_id_idx` ON `agents` (`machine_id`);--> statement-breakpoint
 CREATE INDEX `agents_status_idx` ON `agents` (`status`);--> statement-breakpoint
 CREATE INDEX `agents_last_seen_idx` ON `agents` (`last_seen`);--> statement-breakpoint
+CREATE TABLE `credentials` (
+	`id` text PRIMARY KEY NOT NULL,
+	`type` text NOT NULL,
+	`access_token` text,
+	`refresh_token` text,
+	`expires_at` integer,
+	`api_key` text,
+	`label` text,
+	`is_default` integer DEFAULT false,
+	`created_at` integer NOT NULL,
+	`updated_at` integer NOT NULL
+);
+--> statement-breakpoint
+CREATE INDEX `credentials_type_idx` ON `credentials` (`type`);--> statement-breakpoint
+CREATE INDEX `credentials_is_default_idx` ON `credentials` (`is_default`);--> statement-breakpoint
 CREATE TABLE `instances` (
 	`id` text PRIMARY KEY NOT NULL,
 	`session_id` text,
+	`sdk_session_id` text,
 	`project_id` text,
-	`agent_id` text NOT NULL,
+	`machine_id` text NOT NULL,
 	`cwd` text NOT NULL,
 	`status` text NOT NULL,
 	`model` text,
@@ -27,12 +40,13 @@ CREATE TABLE `instances` (
 	`created_at` integer NOT NULL,
 	`stopped_at` integer,
 	FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`agent_id`) REFERENCES `agents`(`id`) ON UPDATE no action ON DELETE no action
+	FOREIGN KEY (`machine_id`) REFERENCES `agents`(`machine_id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
 CREATE INDEX `instances_session_id_idx` ON `instances` (`session_id`);--> statement-breakpoint
+CREATE INDEX `instances_sdk_session_id_idx` ON `instances` (`sdk_session_id`);--> statement-breakpoint
 CREATE INDEX `instances_project_id_idx` ON `instances` (`project_id`);--> statement-breakpoint
-CREATE INDEX `instances_agent_id_idx` ON `instances` (`agent_id`);--> statement-breakpoint
+CREATE INDEX `instances_machine_id_idx` ON `instances` (`machine_id`);--> statement-breakpoint
 CREATE INDEX `instances_status_idx` ON `instances` (`status`);--> statement-breakpoint
 CREATE INDEX `instances_created_at_idx` ON `instances` (`created_at`);--> statement-breakpoint
 CREATE TABLE `messages` (
@@ -52,14 +66,14 @@ CREATE TABLE `projects` (
 	`name` text NOT NULL,
 	`description` text,
 	`root_path` text,
-	`agent_id` text,
+	`machine_id` text,
 	`settings` text,
 	`created_at` integer NOT NULL,
 	`updated_at` integer NOT NULL,
-	FOREIGN KEY (`agent_id`) REFERENCES `agents`(`id`) ON UPDATE no action ON DELETE no action
+	FOREIGN KEY (`machine_id`) REFERENCES `agents`(`machine_id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
-CREATE INDEX `projects_agent_id_idx` ON `projects` (`agent_id`);--> statement-breakpoint
+CREATE INDEX `projects_machine_id_idx` ON `projects` (`machine_id`);--> statement-breakpoint
 CREATE INDEX `projects_name_idx` ON `projects` (`name`);--> statement-breakpoint
 CREATE TABLE `tasks` (
 	`id` text PRIMARY KEY NOT NULL,

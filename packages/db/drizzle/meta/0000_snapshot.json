@@ -1,23 +1,16 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "792bc80d-3ffc-46d4-81d5-3c06c05c2cdb",
+  "id": "7d2f5bb1-832b-4eb1-912b-cf609e30ee25",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "agents": {
       "name": "agents",
       "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
         "machine_id": {
           "name": "machine_id",
           "type": "text",
-          "primaryKey": false,
+          "primaryKey": true,
           "notNull": true,
           "autoincrement": false
         },
@@ -65,20 +58,6 @@
         }
       },
       "indexes": {
-        "agents_machine_id_unique": {
-          "name": "agents_machine_id_unique",
-          "columns": [
-            "machine_id"
-          ],
-          "isUnique": true
-        },
-        "agents_machine_id_idx": {
-          "name": "agents_machine_id_idx",
-          "columns": [
-            "machine_id"
-          ],
-          "isUnique": false
-        },
         "agents_status_idx": {
           "name": "agents_status_idx",
           "columns": [
@@ -90,6 +69,102 @@
           "name": "agents_last_seen_idx",
           "columns": [
             "last_seen"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "credentials": {
+      "name": "credentials",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "type": {
+          "name": "type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "access_token": {
+          "name": "access_token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "refresh_token": {
+          "name": "refresh_token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "api_key": {
+          "name": "api_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "label": {
+          "name": "label",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "is_default": {
+          "name": "is_default",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false,
+          "default": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "credentials_type_idx": {
+          "name": "credentials_type_idx",
+          "columns": [
+            "type"
+          ],
+          "isUnique": false
+        },
+        "credentials_is_default_idx": {
+          "name": "credentials_is_default_idx",
+          "columns": [
+            "is_default"
           ],
           "isUnique": false
         }
@@ -116,6 +191,13 @@
           "notNull": false,
           "autoincrement": false
         },
+        "sdk_session_id": {
+          "name": "sdk_session_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "project_id": {
           "name": "project_id",
           "type": "text",
@@ -123,8 +205,8 @@
           "notNull": false,
           "autoincrement": false
         },
-        "agent_id": {
-          "name": "agent_id",
+        "machine_id": {
+          "name": "machine_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -196,6 +278,13 @@
           ],
           "isUnique": false
         },
+        "instances_sdk_session_id_idx": {
+          "name": "instances_sdk_session_id_idx",
+          "columns": [
+            "sdk_session_id"
+          ],
+          "isUnique": false
+        },
         "instances_project_id_idx": {
           "name": "instances_project_id_idx",
           "columns": [
@@ -203,10 +292,10 @@
           ],
           "isUnique": false
         },
-        "instances_agent_id_idx": {
-          "name": "instances_agent_id_idx",
+        "instances_machine_id_idx": {
+          "name": "instances_machine_id_idx",
           "columns": [
-            "agent_id"
+            "machine_id"
           ],
           "isUnique": false
         },
@@ -239,15 +328,15 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "instances_agent_id_agents_id_fk": {
-          "name": "instances_agent_id_agents_id_fk",
+        "instances_machine_id_agents_machine_id_fk": {
+          "name": "instances_machine_id_agents_machine_id_fk",
           "tableFrom": "instances",
           "tableTo": "agents",
           "columnsFrom": [
-            "agent_id"
+            "machine_id"
           ],
           "columnsTo": [
-            "id"
+            "machine_id"
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
@@ -369,8 +458,8 @@
           "notNull": false,
           "autoincrement": false
         },
-        "agent_id": {
-          "name": "agent_id",
+        "machine_id": {
+          "name": "machine_id",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
@@ -399,10 +488,10 @@
         }
       },
       "indexes": {
-        "projects_agent_id_idx": {
-          "name": "projects_agent_id_idx",
+        "projects_machine_id_idx": {
+          "name": "projects_machine_id_idx",
           "columns": [
-            "agent_id"
+            "machine_id"
           ],
           "isUnique": false
         },
@@ -415,15 +504,15 @@
         }
       },
       "foreignKeys": {
-        "projects_agent_id_agents_id_fk": {
-          "name": "projects_agent_id_agents_id_fk",
+        "projects_machine_id_agents_machine_id_fk": {
+          "name": "projects_machine_id_agents_machine_id_fk",
           "tableFrom": "projects",
           "tableTo": "agents",
           "columnsFrom": [
-            "agent_id"
+            "machine_id"
           ],
           "columnsTo": [
-            "id"
+            "machine_id"
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
