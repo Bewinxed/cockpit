@@ -29,39 +29,33 @@ export async function handleCommand(
     return;
   }
 
-  try {
-    // Check if instance exists
-    const status = instanceManager.getStatus(params.instanceId);
-    if (!status) {
-      hubClient.sendResponse(
-        createErrorResponse(
-          request.id,
-          JSON_RPC_ERROR_CODES.INSTANCE_NOT_FOUND,
-          `Instance ${params.instanceId} not found`
-        )
-      );
-      return;
-    }
-
-    // Send message (this queues it for processing)
-    await instanceManager.sendMessage(params.instanceId, params.content);
-
-    hubClient.sendResponse(
-      createResponse(request.id, {
-        success: true,
-        instanceId: params.instanceId,
-      })
-    );
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+  // Check if instance exists
+  const status = instanceManager.getStatus(params.instanceId);
+  if (!status) {
     hubClient.sendResponse(
       createErrorResponse(
         request.id,
-        JSON_RPC_ERROR_CODES.INTERNAL_ERROR,
-        `Failed to send message: ${message}`
+        JSON_RPC_ERROR_CODES.INSTANCE_NOT_FOUND,
+        `Instance ${params.instanceId} not found`
       )
     );
+    return;
   }
+
+  // Respond immediately - message processing happens asynchronously
+  // The hub will receive streaming updates via the sdk.message events
+  hubClient.sendResponse(
+    createResponse(request.id, {
+      success: true,
+      instanceId: params.instanceId,
+    })
+  );
+
+  // Start message processing asynchronously (don't await)
+  // Errors will be emitted as sdk.message events with type='error'
+  instanceManager.sendMessage(params.instanceId, params.content).catch((error) => {
+    console.error(`[Command] Message processing failed for ${params.instanceId}:`, error);
+  });
 }
 
 export interface StopInstanceParams {
