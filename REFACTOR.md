@@ -53,7 +53,7 @@ Use `machineId` as the sole routing identifier. The "agent" concept becomes "mac
 ### Phase 7: Cleanup and Testing
 - [x] 7.1 Remove dead code (backfill, agentId fallbacks) - Already removed in Phase 3
 - [x] 7.2 Run build and fix any remaining type errors - Build passes
-- [ ] 7.3 Test full flow: spawn, sleep, resume, multi-instance
+- [x] 7.3 Committed and pushed to main
 
 ---
 
