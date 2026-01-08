@@ -2,7 +2,7 @@
   import { page } from '$app/state';
   import { goto } from '$app/navigation';
   import { onMount, onDestroy, tick } from 'svelte';
-  import { instances, instanceMessages, agents, addMessage, removeMessage, updateMessageMetadata, getStreamingState, getInstanceStatus, type Message } from '$lib/stores/realtime.svelte';
+  import { instances, instanceMessages, agents, addMessage, removeMessage, updateMessageMetadata, clearInstanceMessages, getStreamingState, getInstanceStatus, type Message } from '$lib/stores/realtime.svelte';
   import { sendMessage, stopInstance, resumeInstance, interruptInstance } from '$lib/actions';
   import { api } from '$lib/api';
   import { Button, Badge, EmptyState, LoadingButton } from '$lib/components/ui';
@@ -143,11 +143,17 @@
 
   // Commands for the instance (starts with defaults)
   let commands = $state<AvailableCommand[]>(DEFAULT_COMMANDS);
+  let commandsFetched = $state(false);
 
-  // Fetch commands when instance is running (merges with defaults)
+  // Fetch commands when instance becomes running (only once per running state)
   $effect(() => {
-    if (instance && instance.status === 'running') {
+    const isRunning = instance && instance.status === 'running';
+    if (isRunning && !commandsFetched) {
+      commandsFetched = true;
       fetchCommands();
+    } else if (!isRunning) {
+      // Reset when no longer running so we fetch again if it starts again
+      commandsFetched = false;
     }
   });
 
@@ -214,7 +220,7 @@
 
   // Client-side commands that need special handling
   // These are commands handled locally because the SDK doesn't emit their output
-  const CLIENT_COMMANDS = ['/help', '/login', '/logout', '/model'] as const;
+  const CLIENT_COMMANDS = ['/help', '/login', '/logout', '/model', '/clear', '/memory', '/vim', '/terminal-setup'] as const;
 
   function isClientCommand(msg: string): (typeof CLIENT_COMMANDS)[number] | null {
     const trimmed = msg.trim().toLowerCase();
@@ -226,7 +232,8 @@
     return null;
   }
 
-  // Model state
+  // Model state - initialized from instance, updated when model is changed
+  // svelte-ignore state_referenced_locally
   let currentModel = $state<string | undefined>(instance?.model);
 
   // Track pending OAuth state (verifier is stored server-side)
@@ -368,15 +375,21 @@
         });
       }
     } else if (command === '/memory') {
-      // Memory command - explain that this requires a local editor
+      // Auto-resume is handled by handleSendMessage before calling handleClientCommand
+      // Show memory picker UI (selection phase)
       addMessage(instanceId, {
         type: 'system',
-        content: 'Memory Editor',
+        content: 'Edit Memory',
         timestamp: new Date(),
         metadata: {
-          subtype: 'memory_info',
+          subtype: 'memory_picker',
+          memoryPhase: 'selection', // 'selection' or 'editing'
         },
       });
+
+      // Track this as active memory picker - get index AFTER adding message
+      const messages = $instanceMessages.get(instanceId) || [];
+      pendingMemoryPickerIndex = messages.length - 1;
     } else if (command === '/vim') {
       // Vim mode not available in web UI
       addMessage(instanceId, {
@@ -397,11 +410,29 @@
           subtype: 'terminal_setup_info',
         },
       });
+    } else if (command === '/clear') {
+      // Clear both local messages and send to SDK to clear server-side
+      clearInstanceMessages(instanceId);
+
+      // Send /clear to SDK to clear the conversation on the server
+      if (isActive) {
+        await sendMessage(instanceId, '/clear');
+      }
+
+      // Add a system message indicating the clear was successful
+      addMessage(instanceId, {
+        type: 'system',
+        content: 'Conversation cleared',
+        timestamp: new Date(),
+      });
     }
   }
 
   // Track pending model picker message index
   let pendingModelPickerIndex = $state<number | null>(null);
+
+  // Track pending memory picker message index
+  let pendingMemoryPickerIndex = $state<number | null>(null);
 
   async function handleModelSelect(model: string): Promise<void> {
     const response = await fetch(`/api/instances/${instanceId}/models`, {
@@ -439,6 +470,82 @@
     if (pendingModelPickerIndex !== null) {
       // Just mark as inactive, don't delete
       pendingModelPickerIndex = null;
+    }
+  }
+
+  // Memory picker handlers
+  async function handleMemorySelect(memoryType: 'project' | 'user'): Promise<void> {
+    if (pendingMemoryPickerIndex === null) return;
+
+    // Update message to show loading state
+    updateMessageMetadata(instanceId, pendingMemoryPickerIndex, {
+      loading: true,
+      selectedMemoryType: memoryType,
+      memoryPhase: 'editing',
+    });
+
+    // Fetch memory content from agent
+    try {
+      const response = await fetch(`/api/instances/${instanceId}/memory?type=${memoryType}`);
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to fetch memory');
+      }
+
+      // Update message with content for editing
+      updateMessageMetadata(instanceId, pendingMemoryPickerIndex, {
+        loading: false,
+        memoryContent: data.data?.content || '',
+        memoryPath: data.data?.path || (memoryType === 'project' ? './CLAUDE.md' : '~/.claude/CLAUDE.md'),
+      });
+    } catch (err) {
+      updateMessageMetadata(instanceId, pendingMemoryPickerIndex, {
+        loading: false,
+        error: err instanceof Error ? err.message : 'Failed to fetch memory',
+      });
+    }
+  }
+
+  async function handleMemorySave(content: string): Promise<void> {
+    if (pendingMemoryPickerIndex === null) return;
+
+    const messages = $instanceMessages.get(instanceId) || [];
+    const message = messages[pendingMemoryPickerIndex];
+    const memoryType = message?.metadata?.selectedMemoryType as 'project' | 'user';
+
+    if (!memoryType) {
+      throw new Error('No memory type selected');
+    }
+
+    // Save memory content to agent
+    const response = await fetch(`/api/instances/${instanceId}/memory`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: memoryType, content }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || !data.success) {
+      throw new Error(data.error || 'Failed to save memory');
+    }
+
+    // Mark picker as inactive
+    pendingMemoryPickerIndex = null;
+
+    // Add success message
+    addMessage(instanceId, {
+      type: 'system',
+      content: `Memory saved (${memoryType})`,
+      timestamp: new Date(),
+    });
+  }
+
+  function handleMemoryCancel() {
+    if (pendingMemoryPickerIndex !== null) {
+      // Just mark as inactive, don't delete
+      pendingMemoryPickerIndex = null;
     }
   }
 
@@ -531,20 +638,16 @@
       return;
     }
 
-    // Check for client-side commands first
+    // Check for client-side commands
     const clientCmd = isClientCommand(message);
-    if (clientCmd) {
-      addMessage(instanceId, {
-        type: 'user',
-        content: message,
-        timestamp: new Date(),
-      });
-      await handleClientCommand(clientCmd);
-      return;
-    }
 
-    // If instance is not running, resume it (re-spawn with same ID)
-    if (!isActive) {
+    // Commands that don't need instance running (purely local UI)
+    const LOCAL_ONLY_COMMANDS = ['/help', '/login', '/logout', '/clear', '/vim', '/terminal-setup'] as const;
+    const needsInstance = clientCmd && !LOCAL_ONLY_COMMANDS.includes(clientCmd as typeof LOCAL_ONLY_COMMANDS[number]);
+
+    // Auto-resume: If instance is not running and we need it, resume first
+    // This applies to regular messages AND commands that need the instance (like /memory, /model)
+    if (!isActive && (needsInstance || !clientCmd)) {
       restarting = true;
 
       // Add user's message to current view immediately
@@ -555,8 +658,10 @@
       });
 
       try {
-        // Resume instance - this re-spawns with the SAME instance ID
-        const result = await resumeInstance(instanceId, message);
+        // Resume instance - for commands, don't send the message as prompt
+        // For regular messages, send them as the initial prompt
+        const promptToSend = clientCmd ? '' : message;
+        const result = await resumeInstance(instanceId, promptToSend);
 
         if (!result.success) {
           error = result.error || 'Failed to resume session';
@@ -570,12 +675,30 @@
           timestamp: new Date(),
         });
 
-        // No navigation needed - we stay on the same page!
+        // For regular messages, we're done (message was sent with resume)
+        // For commands, continue to handle the command now that instance is running
+        if (!clientCmd) {
+          return;
+        }
       } catch (err) {
         error = err instanceof Error ? err.message : 'Unknown error';
+        return;
       } finally {
         restarting = false;
       }
+    }
+
+    // Handle client-side commands
+    if (clientCmd) {
+      // Only add user message if we didn't already (from auto-resume above)
+      if (isActive) {
+        addMessage(instanceId, {
+          type: 'user',
+          content: message,
+          timestamp: new Date(),
+        });
+      }
+      await handleClientCommand(clientCmd);
       return;
     }
 
@@ -829,9 +952,13 @@
             onLoginCancel={handleLoginCancel}
             onModelSelect={handleModelSelect}
             onModelCancel={handleModelCancel}
+            onMemorySelect={handleMemorySelect}
+            onMemorySave={handleMemorySave}
+            onMemoryCancel={handleMemoryCancel}
             onDismissMessage={() => removeMessage(instanceId, i)}
             isLoginActive={message.metadata?.subtype === 'login_prompt' && pendingOAuthState === message.metadata?.oauthState}
             isModelPickerActive={message.metadata?.subtype === 'model_picker' && pendingModelPickerIndex === i}
+            isMemoryPickerActive={message.metadata?.subtype === 'memory_picker' && pendingMemoryPickerIndex === i}
           />
         {/each}
 

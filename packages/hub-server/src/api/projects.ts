@@ -9,7 +9,8 @@ import { getBroadcastService } from '../services/broadcast';
  * Project CRUD routes
  */
 export function createProjectRoutes(db: Db) {
-  const broadcast = getBroadcastService();
+  // Note: Don't cache broadcast here - get fresh reference on each request
+  // to avoid stale references after hot reload
 
   return new Elysia({ prefix: '/projects' })
     // List all projects
@@ -107,7 +108,7 @@ export function createProjectRoutes(db: Db) {
         const project = dbRowToProject(newProject);
 
         // Broadcast project creation
-        broadcast.broadcast('project:created', project);
+        getBroadcastService().broadcast('project:created', project);
 
         return {
           success: true,
@@ -169,7 +170,7 @@ export function createProjectRoutes(db: Db) {
         const project = dbRowToProject(result[0]);
 
         // Broadcast project update
-        broadcast.broadcast('project:updated', project);
+        getBroadcastService().broadcast('project:updated', project);
 
         return {
           success: true,
@@ -212,7 +213,7 @@ export function createProjectRoutes(db: Db) {
         await db.delete(projects).where(eq(projects.id, params.id));
 
         // Broadcast project deletion
-        broadcast.broadcast('project:deleted', { id: params.id });
+        getBroadcastService().broadcast('project:deleted', { id: params.id });
 
         return {
           success: true,

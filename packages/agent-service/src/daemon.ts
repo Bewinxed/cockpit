@@ -25,6 +25,8 @@ import {
   handleModelsList,
   handleModelsSet,
   handleClaudeVersion,
+  handleMemoryRead,
+  handleMemoryWrite,
 } from './handlers/index.js';
 
 export interface AgentDaemonOptions {
@@ -390,6 +392,14 @@ export class AgentDaemon extends EventEmitter {
 
       case PROTOCOL_METHODS.CLAUDE_VERSION:
         await handleClaudeVersion(request, this.hubClient);
+        break;
+
+      case PROTOCOL_METHODS.MEMORY_READ:
+        await handleMemoryRead(request, this.hubClient);
+        break;
+
+      case PROTOCOL_METHODS.MEMORY_WRITE:
+        await handleMemoryWrite(request, this.hubClient);
         break;
 
       default:

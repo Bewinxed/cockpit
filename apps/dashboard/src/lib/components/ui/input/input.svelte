@@ -24,8 +24,8 @@
 </script>
 
 {#if label}
-<div class="flex flex-col gap-1.5">
-	<label class="text-sm font-medium text-text">{label}</label>
+<label class="flex flex-col gap-1.5">
+	<span class="text-sm font-medium text-text">{label}</span>
 	{#if type === "file"}
 		<input
 			bind:this={ref}
@@ -59,7 +59,7 @@
 	{#if hint}
 		<span class="text-xs text-text-muted">{hint}</span>
 	{/if}
-</div>
+</label>
 {:else}
 	{#if type === "file"}
 		<input

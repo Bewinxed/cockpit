@@ -34,8 +34,8 @@ function getWsId(ws: unknown): string {
  * WebSocket routes for agent connections
  */
 export function createWebsocketRoutes(db: Db) {
-  const agentRegistry = getAgentRegistry();
-  const broadcast = getBroadcastService();
+  // Note: Don't cache agentRegistry/broadcast here - get fresh reference on each request
+  // to avoid stale references after hot reload
   const instanceTracker = createInstanceTracker(db);
 
   return new Elysia({ prefix: '/ws' })
@@ -71,7 +71,7 @@ export function createWebsocketRoutes(db: Db) {
         // Handle JSON-RPC request
         if (isJsonRpcRequest(message)) {
           try {
-            const response = await handleRequest(ws, message, db, agentRegistry, broadcast, instanceTracker);
+            const response = await handleRequest(ws, message, db, instanceTracker);
             ws.send(JSON.stringify(response));
           } catch (error) {
             console.error(`[Hub] Error handling request ${message.method}:`, error);
@@ -85,7 +85,7 @@ export function createWebsocketRoutes(db: Db) {
 
         // Handle JSON-RPC response (from agent to pending hub request)
         if (isJsonRpcResponse(message)) {
-          agentRegistry.handleResponseByRequestId(message);
+          getAgentRegistry().handleResponseByRequestId(message);
           return;
         }
 
@@ -94,7 +94,7 @@ export function createWebsocketRoutes(db: Db) {
           const wsId = getWsId(ws);
           const agentId = connectionAgentMap.get(wsId);
           if (agentId) {
-            await handleNotification(agentId, message, broadcast, instanceTracker);
+            await handleNotification(agentId, message, instanceTracker);
           }
           return;
         }
@@ -116,7 +116,7 @@ export function createWebsocketRoutes(db: Db) {
           const activeInstances = await instanceTracker.getActiveByAgent(agentId);
           for (const instance of activeInstances) {
             await instanceTracker.markStopped(instance.id);
-            broadcast.broadcast('instance:stopped', { instanceId: instance.id });
+            getBroadcastService().broadcast('instance:stopped', { instanceId: instance.id });
           }
           if (activeInstances.length > 0) {
             console.log(`[Hub] Marked ${activeInstances.length} instances as stopped for disconnected agent`);
@@ -127,11 +127,11 @@ export function createWebsocketRoutes(db: Db) {
             .set({ status: 'offline', lastSeen: new Date() })
             .where(eq(agents.id, agentId));
 
-          agentRegistry.unregister(agentId);
+          getAgentRegistry().unregister(agentId);
           connectionAgentMap.delete(wsId);
 
           // Broadcast agent disconnection
-          broadcast.broadcast('agent:disconnected', { agentId });
+          getBroadcastService().broadcast('agent:disconnected', { agentId });
         }
       },
     });
@@ -144,8 +144,6 @@ async function handleRequest(
   ws: unknown,
   request: JsonRpcRequest,
   db: Db,
-  agentRegistry: ReturnType<typeof getAgentRegistry>,
-  broadcast: ReturnType<typeof getBroadcastService>,
   instanceTracker: ReturnType<typeof createInstanceTracker>
 ): Promise<JsonRpcResponse> {
   const { id, method, params } = request;
@@ -166,11 +164,22 @@ async function handleRequest(
       }
 
       // Check if this machine already exists in the database
-      const existingDbAgent = await db
+      // First try by machineId (stable identifier)
+      let existingDbAgent = await db
         .select()
         .from(agents)
         .where(eq(agents.machineId, machineId))
         .limit(1);
+
+      // Fallback: try by hostname for old records that don't have machineId
+      // This handles backwards compatibility during hot reloads in development
+      if (existingDbAgent.length === 0) {
+        existingDbAgent = await db
+          .select()
+          .from(agents)
+          .where(eq(agents.hostname, hostname))
+          .limit(1);
+      }
 
       let agentId: string;
       const now = new Date();
@@ -179,9 +188,10 @@ async function handleRequest(
         // Reuse existing database ID to maintain foreign key consistency
         agentId = existingDbAgent[0].id;
 
-        // Update existing record
+        // Update existing record - always set machineId to ensure it's populated
         await db.update(agents)
           .set({
+            machineId, // Ensure machineId is set (fixes old records)
             hostname,
             tailscaleIp,
             status: 'online',
@@ -190,7 +200,7 @@ async function handleRequest(
           .where(eq(agents.id, agentId));
       } else {
         // Register new agent in registry (will generate new ID)
-        const newAgent = agentRegistry.register(ws, { machineId, hostname, tailscaleIp, os });
+        const newAgent = getAgentRegistry().register(ws, { machineId, hostname, tailscaleIp, os });
         agentId = newAgent.id;
 
         // Insert new record
@@ -207,7 +217,7 @@ async function handleRequest(
       }
 
       // Register/update agent in memory registry with correct ID
-      const agent = agentRegistry.registerWithId(ws, agentId, { machineId, hostname, tailscaleIp, os });
+      const agent = getAgentRegistry().registerWithId(ws, agentId, { machineId, hostname, tailscaleIp, os });
       const wsId = getWsId(ws);
       connectionAgentMap.set(wsId, agentId);
 
@@ -226,7 +236,7 @@ async function handleRequest(
           // Instance is in DB as running but agent doesn't have it
           // Mark as sleeping (can be resumed with sdkSessionId)
           await instanceTracker.markSleeping(dbInstance.id);
-          broadcast.broadcast('instance:sleeping', {
+          getBroadcastService().broadcast('instance:sleeping', {
             instanceId: dbInstance.id,
             reason: 'agent_reconnect_reconciliation'
           });
@@ -257,7 +267,7 @@ async function handleRequest(
       await instanceTracker.backfillMachineId(agentId, machineId);
 
       // Broadcast agent connection
-      broadcast.broadcast('agent:connected', {
+      getBroadcastService().broadcast('agent:connected', {
         id: agent.id,
         machineId,
         hostname,
@@ -283,7 +293,7 @@ async function handleRequest(
 
       return createResponse(id, {
         hubVersion: '1.0.0',
-        connectedAgents: agentRegistry.onlineCount,
+        connectedAgents: getAgentRegistry().onlineCount,
         yourInstances: activeInstances.length,
       });
     }
@@ -299,7 +309,6 @@ async function handleRequest(
 async function handleNotification(
   agentId: string,
   notification: JsonRpcNotification,
-  broadcast: ReturnType<typeof getBroadcastService>,
   instanceTracker: ReturnType<typeof createInstanceTracker>
 ): Promise<void> {
   const { method, params } = notification;
@@ -307,8 +316,7 @@ async function handleNotification(
   switch (method) {
     case EventMethod.AGENT_HEARTBEAT: {
       // Update agent's last ping time
-      const agentRegistry = getAgentRegistry();
-      agentRegistry.updatePing(agentId);
+      getAgentRegistry().updatePing(agentId);
       break;
     }
 
@@ -316,7 +324,7 @@ async function handleNotification(
       const { instance } = params as { instance: { id: string; sessionId?: string } };
       const updated = await instanceTracker.markStarted(instance.id, instance.sessionId);
       if (updated) {
-        broadcast.broadcast('instance:started', updated);
+        getBroadcastService().broadcast('instance:started', updated);
       }
       break;
     }
@@ -328,7 +336,7 @@ async function handleNotification(
       // The SDK's session_id (for resume) is stored separately as sdkSessionId
       const updated = await instanceTracker.markStarted(instanceId, sessionId);
       if (updated) {
-        broadcast.broadcast('instance:started', updated);
+        getBroadcastService().broadcast('instance:started', updated);
       }
       break;
     }
@@ -337,7 +345,7 @@ async function handleNotification(
       const { instanceId } = params as { instanceId: string };
       const instance = await instanceTracker.markStopped(instanceId);
       if (instance) {
-        broadcast.broadcast('instance:stopped', { instanceId, instance });
+        getBroadcastService().broadcast('instance:stopped', { instanceId, instance });
       }
       break;
     }
@@ -351,7 +359,7 @@ async function handleNotification(
         if (sdkSessionId) {
           await instanceTracker.update(instanceId, { sdkSessionId });
         }
-        broadcast.broadcast('instance:sleeping', { instanceId, instance, sdkSessionId });
+        getBroadcastService().broadcast('instance:sleeping', { instanceId, instance, sdkSessionId });
       }
       break;
     }
@@ -361,7 +369,7 @@ async function handleNotification(
       if (newStatus === 'error') {
         const instance = await instanceTracker.markError(instanceId);
         if (instance) {
-          broadcast.broadcast('instance:error', { instanceId, instance });
+          getBroadcastService().broadcast('instance:error', { instanceId, instance });
         }
       }
       break;
@@ -403,7 +411,7 @@ async function handleNotification(
         }
 
         // Broadcast token usage update
-        broadcast.broadcast('instance:token_usage', {
+        getBroadcastService().broadcast('instance:token_usage', {
           instanceId,
           inputTokens: msg.usage.input_tokens || 0,
           outputTokens: msg.usage.output_tokens || 0,
@@ -412,7 +420,7 @@ async function handleNotification(
       }
 
       // Forward SDK messages to dashboard
-      broadcast.broadcast('sdk:message', { instanceId, message });
+      getBroadcastService().broadcast('sdk:message', { instanceId, message });
       break;
     }
 
@@ -421,7 +429,7 @@ async function handleNotification(
       const { instanceId, error: errorMsg } = params as { instanceId: string; error: string };
       const instance = await instanceTracker.markError(instanceId);
       if (instance) {
-        broadcast.broadcast('instance:error', { instanceId, instance, error: errorMsg });
+        getBroadcastService().broadcast('instance:error', { instanceId, instance, error: errorMsg });
       }
       break;
     }

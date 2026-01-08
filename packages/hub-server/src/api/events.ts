@@ -5,7 +5,8 @@ import { getBroadcastService } from '../services/broadcast';
  * SSE routes for dashboard real-time updates
  */
 export function createEventRoutes() {
-  const broadcast = getBroadcastService();
+  // Note: Don't cache broadcast here - get fresh reference on each request
+  // to avoid stale references after hot reload
 
   return new Elysia({ prefix: '/events' })
     // Main SSE endpoint for dashboard
@@ -24,7 +25,7 @@ export function createEventRoutes() {
         const stream = new ReadableStream<string>({
           start(controller) {
             // Register client with broadcast service
-            const client = broadcast.addClient(controller, subscriptions);
+            const client = getBroadcastService().addClient(controller, subscriptions);
             clientId = client.id;
 
             console.log(`[SSE] Client connected: ${client.id}`);
@@ -32,7 +33,7 @@ export function createEventRoutes() {
           cancel() {
             // Mark client as closed to prevent writes to closed controller
             if (clientId) {
-              broadcast.markClosed(clientId);
+              getBroadcastService().markClosed(clientId);
               console.log(`[SSE] Client disconnected: ${clientId}`);
             }
           },
@@ -65,14 +66,14 @@ export function createEventRoutes() {
     // Health check endpoint
     .get('/health', () => ({
       success: true,
-      clients: broadcast.clientCount,
+      clients: getBroadcastService().clientCount,
       timestamp: Date.now(),
     }))
 
     // Get current client count
     .get('/clients', () => ({
       success: true,
-      count: broadcast.clientCount,
+      count: getBroadcastService().clientCount,
     }));
 }
 
@@ -80,7 +81,8 @@ export function createEventRoutes() {
  * Instance-specific SSE endpoint
  */
 export function createInstanceEventRoutes() {
-  const broadcast = getBroadcastService();
+  // Note: Don't cache broadcast here - get fresh reference on each request
+  // to avoid stale references after hot reload
 
   return new Elysia({ prefix: '/instances/:id/events' })
     .get(
@@ -93,7 +95,7 @@ export function createInstanceEventRoutes() {
         const stream = new ReadableStream<string>({
           start(controller) {
             // Register client with instance-specific subscriptions
-            const client = broadcast.addClient(controller, [
+            const client = getBroadcastService().addClient(controller, [
               `instance:${instanceId}:*`,
               'instance:message',
               'instance:updated',
@@ -106,7 +108,7 @@ export function createInstanceEventRoutes() {
           },
           cancel() {
             if (clientId) {
-              broadcast.markClosed(clientId);
+              getBroadcastService().markClosed(clientId);
               console.log(`[SSE] Instance stream disconnected: ${instanceId} (client: ${clientId})`);
             }
           },

@@ -79,18 +79,17 @@ async function getOAuthCredentials(db: Db): Promise<OAuthCredentials | null> {
 
 /**
  * Find the agent for an instance using machineId (stable) or agentId (fallback)
+ * Always gets fresh registry reference to avoid stale state after hot reload
  */
-function findAgentForInstance(
-  instance: { agentId: string; machineId?: string },
-  agentRegistry: ReturnType<typeof getAgentRegistry>
-) {
+function findAgentForInstance(instance: { agentId: string; machineId?: string }) {
+  const registry = getAgentRegistry();
   // Try machineId first (stable across hub restarts)
   if (instance.machineId) {
-    const agent = agentRegistry.getByMachineId(instance.machineId);
+    const agent = registry.getByMachineId(instance.machineId);
     if (agent) return agent;
   }
   // Fall back to agentId
-  return agentRegistry.get(instance.agentId);
+  return registry.get(instance.agentId);
 }
 
 /**
@@ -98,10 +97,9 @@ function findAgentForInstance(
  * If agent is offline, instance status should reflect that
  */
 function deriveInstanceStatus(
-  instance: { status: string; agentId: string; machineId?: string },
-  agentRegistry: ReturnType<typeof getAgentRegistry>
+  instance: { status: string; agentId: string; machineId?: string }
 ): string {
-  const agent = findAgentForInstance(instance, agentRegistry);
+  const agent = findAgentForInstance(instance);
   const isAgentOnline = agent?.status === 'online';
 
   // If agent is offline and instance claims to be running, show as disconnected
@@ -117,8 +115,8 @@ function deriveInstanceStatus(
  */
 export function createInstanceRoutes(db: Db) {
   const tracker = createInstanceTracker(db);
-  const agentRegistry = getAgentRegistry();
-  const broadcast = getBroadcastService();
+  // Note: Don't cache agentRegistry/broadcast here - get fresh reference on each request
+  // to avoid stale references after hot reload
 
   return new Elysia({ prefix: '/instances' })
     // List all instances
@@ -136,7 +134,7 @@ export function createInstanceRoutes(db: Db) {
         // Derive status based on agent connectivity
         const instancesWithDerivedStatus = instances.map((inst) => ({
           ...inst,
-          status: deriveInstanceStatus(inst, agentRegistry),
+          status: deriveInstanceStatus(inst),
         }));
 
         return {
@@ -173,7 +171,7 @@ export function createInstanceRoutes(db: Db) {
         // Derive status based on agent connectivity
         const instanceWithDerivedStatus = {
           ...instance,
-          status: deriveInstanceStatus(instance, agentRegistry),
+          status: deriveInstanceStatus(instance),
         };
 
         return {
@@ -193,7 +191,7 @@ export function createInstanceRoutes(db: Db) {
       '/',
       async ({ body, set }) => {
         // Check if agent exists and is online
-        const agent = agentRegistry.get(body.agentId);
+        const agent = getAgentRegistry().get(body.agentId);
 
         if (!agent) {
           set.status = 404;
@@ -227,7 +225,7 @@ export function createInstanceRoutes(db: Db) {
         const instance = await tracker.create(spawnData);
 
         // Send spawn request to agent with credentials
-        const response = await agentRegistry.sendToAgent(
+        const response = await getAgentRegistry().sendToAgent(
           body.agentId,
           CommandMethod.INSTANCE_SPAWN,
           {
@@ -267,7 +265,7 @@ export function createInstanceRoutes(db: Db) {
         }
 
         // Broadcast instance creation
-        broadcast.broadcast('instance:created', instance);
+        getBroadcastService().broadcast('instance:created', instance);
 
         return {
           success: true,
@@ -302,7 +300,7 @@ export function createInstanceRoutes(db: Db) {
 
         // Query agent for live status - use machineId for stable routing
         console.log(`[Send] Querying instance status from agent machineId=${instance.machineId} agentId=${instance.agentId}`);
-        const statusResponse = await agentRegistry.sendToAgentByMachineId(
+        const statusResponse = await getAgentRegistry().sendToAgentByMachineId(
           instance.machineId,
           instance.agentId,
           CommandMethod.INSTANCE_STATUS,
@@ -331,7 +329,7 @@ export function createInstanceRoutes(db: Db) {
         }
 
         // Send message to agent - use machineId for stable routing
-        const response = await agentRegistry.sendToAgentByMachineId(
+        const response = await getAgentRegistry().sendToAgentByMachineId(
           instance.machineId,
           instance.agentId,
           CommandMethod.INSTANCE_SEND,
@@ -398,7 +396,7 @@ export function createInstanceRoutes(db: Db) {
         }
 
         // Send stop request to agent
-        const response = await agentRegistry.sendToAgentByMachineId(
+        const response = await getAgentRegistry().sendToAgentByMachineId(
           instance.machineId,
           instance.agentId,
           CommandMethod.INSTANCE_STOP,
@@ -423,7 +421,7 @@ export function createInstanceRoutes(db: Db) {
         const stoppedInstance = await tracker.markStopped(params.id);
 
         // Broadcast instance stopped
-        broadcast.broadcast('instance:stopped', { instanceId: params.id });
+        getBroadcastService().broadcast('instance:stopped', { instanceId: params.id });
 
         return {
           success: true,
@@ -452,7 +450,7 @@ export function createInstanceRoutes(db: Db) {
         }
 
         // Get live status from agent
-        const response = await agentRegistry.sendToAgentByMachineId(
+        const response = await getAgentRegistry().sendToAgentByMachineId(
           instance.machineId,
           instance.agentId,
           CommandMethod.AGENT_STATUS,
@@ -540,18 +538,8 @@ export function createInstanceRoutes(db: Db) {
           };
         }
 
-        // Check if agent is online (use machineId for stable lookup)
-        const agent = findAgentForInstance(instance, agentRegistry);
-        if (!agent || agent.status !== 'online') {
-          set.status = 503;
-          return {
-            success: false,
-            error: 'Agent is not online',
-          };
-        }
-
         // Request commands from agent
-        const response = await agentRegistry.sendToAgentByMachineId(
+        const response = await getAgentRegistry().sendToAgentByMachineId(
           instance.machineId,
           instance.agentId,
           CommandMethod.COMMANDS_LIST,
@@ -603,18 +591,8 @@ export function createInstanceRoutes(db: Db) {
           };
         }
 
-        // Check if agent is online (use machineId for stable lookup)
-        const agent = findAgentForInstance(instance, agentRegistry);
-        if (!agent || agent.status !== 'online') {
-          set.status = 503;
-          return {
-            success: false,
-            error: 'Agent is not online',
-          };
-        }
-
         // Send interrupt request to agent
-        const response = await agentRegistry.sendToAgentByMachineId(
+        const response = await getAgentRegistry().sendToAgentByMachineId(
           instance.machineId,
           instance.agentId,
           CommandMethod.INSTANCE_INTERRUPT,
@@ -638,7 +616,7 @@ export function createInstanceRoutes(db: Db) {
         });
 
         // Broadcast instance sleeping
-        broadcast.broadcast('instance:sleeping', {
+        getBroadcastService().broadcast('instance:sleeping', {
           instanceId: params.id,
           instance: await tracker.get(params.id),
         });
@@ -672,16 +650,6 @@ export function createInstanceRoutes(db: Db) {
           };
         }
 
-        // Check if agent is online (use machineId for stable lookup)
-        const agent = findAgentForInstance(instance, agentRegistry);
-        if (!agent || agent.status !== 'online') {
-          set.status = 400;
-          return {
-            success: false,
-            error: 'Agent is not online',
-          };
-        }
-
         // Track whether we already saved the user message (to avoid duplicates)
         let messageSaved = false;
 
@@ -696,7 +664,7 @@ export function createInstanceRoutes(db: Db) {
             });
             messageSaved = true;
 
-            const response = await agentRegistry.sendToAgentByMachineId(
+            const response = await getAgentRegistry().sendToAgentByMachineId(
               instance.machineId,
               instance.agentId,
               CommandMethod.INSTANCE_SEND,
@@ -743,7 +711,7 @@ export function createInstanceRoutes(db: Db) {
         await tracker.update(params.id, { status: 'starting' });
 
         // Send spawn request to agent with the same instanceId
-        const response = await agentRegistry.sendToAgentByMachineId(
+        const response = await getAgentRegistry().sendToAgentByMachineId(
           instance.machineId,
           instance.agentId,
           CommandMethod.INSTANCE_SPAWN,
@@ -786,7 +754,7 @@ export function createInstanceRoutes(db: Db) {
         const updated = await tracker.get(params.id);
 
         // Broadcast instance resumed
-        broadcast.broadcast('instance:resumed', updated);
+        getBroadcastService().broadcast('instance:resumed', updated);
 
         return {
           success: true,
@@ -817,27 +785,8 @@ export function createInstanceRoutes(db: Db) {
           };
         }
 
-        // Check if agent is online (use machineId for stable lookup)
-        const agent = findAgentForInstance(instance, agentRegistry);
-        if (!agent || agent.status !== 'online') {
-          set.status = 503;
-          return {
-            success: false,
-            error: 'Agent is not online',
-          };
-        }
-
-        // Check if instance is running
-        if (instance.status !== 'running') {
-          set.status = 400;
-          return {
-            success: false,
-            error: `Instance is not running (status: ${instance.status})`,
-          };
-        }
-
         // Request models from agent
-        const response = await agentRegistry.sendToAgentByMachineId(
+        const response = await getAgentRegistry().sendToAgentByMachineId(
           instance.machineId,
           instance.agentId,
           CommandMethod.MODELS_LIST,
@@ -880,27 +829,8 @@ export function createInstanceRoutes(db: Db) {
           };
         }
 
-        // Check if agent is online (use machineId for stable lookup)
-        const agent = findAgentForInstance(instance, agentRegistry);
-        if (!agent || agent.status !== 'online') {
-          set.status = 503;
-          return {
-            success: false,
-            error: 'Agent is not online',
-          };
-        }
-
-        // Check if instance is running
-        if (instance.status !== 'running') {
-          set.status = 400;
-          return {
-            success: false,
-            error: `Instance is not running (status: ${instance.status})`,
-          };
-        }
-
         // Send model change request to agent
-        const response = await agentRegistry.sendToAgentByMachineId(
+        const response = await getAgentRegistry().sendToAgentByMachineId(
           instance.machineId,
           instance.agentId,
           CommandMethod.MODELS_SET,
@@ -919,7 +849,7 @@ export function createInstanceRoutes(db: Db) {
         }
 
         // Broadcast model changed event
-        broadcast.broadcast('instance:model-changed', {
+        getBroadcastService().broadcast('instance:model-changed', {
           instanceId: params.id,
           model: body.model,
         });
@@ -935,6 +865,106 @@ export function createInstanceRoutes(db: Db) {
         }),
         body: t.Object({
           model: t.String(),
+        }),
+      }
+    )
+
+    // Get memory content for an instance
+    .get(
+      '/:id/memory',
+      async ({ params, query, set }) => {
+        const instance = await tracker.get(params.id);
+
+        if (!instance) {
+          set.status = 404;
+          return {
+            success: false,
+            error: 'Instance not found',
+          };
+        }
+
+        // Just try to send - sendToAgentByMachineId handles agent lookup
+        // and will return an error if agent is not available
+        const response = await getAgentRegistry().sendToAgentByMachineId(
+          instance.machineId,
+          instance.agentId,
+          CommandMethod.MEMORY_READ,
+          {
+            type: query.type as 'project' | 'user',
+            cwd: instance.cwd,
+          }
+        );
+
+        if (response.error) {
+          set.status = 500;
+          return {
+            success: false,
+            error: getErrorMessage(response.error),
+          };
+        }
+
+        return {
+          success: true,
+          data: response.result,
+        };
+      },
+      {
+        params: t.Object({
+          id: t.String(),
+        }),
+        query: t.Object({
+          type: t.String(), // 'project' | 'user'
+        }),
+      }
+    )
+
+    // Write memory content for an instance
+    .put(
+      '/:id/memory',
+      async ({ params, body, set }) => {
+        const instance = await tracker.get(params.id);
+
+        if (!instance) {
+          set.status = 404;
+          return {
+            success: false,
+            error: 'Instance not found',
+          };
+        }
+
+        // Just try to send - sendToAgentByMachineId handles agent lookup
+        // and will return an error if agent is not available
+        const response = await getAgentRegistry().sendToAgentByMachineId(
+          instance.machineId,
+          instance.agentId,
+          CommandMethod.MEMORY_WRITE,
+          {
+            type: body.type,
+            content: body.content,
+            cwd: instance.cwd,
+          }
+        );
+
+        if (response.error) {
+          set.status = 500;
+          return {
+            success: false,
+            error: getErrorMessage(response.error),
+          };
+        }
+
+        return {
+          success: true,
+          data: response.result,
+        };
+      },
+      {
+        params: t.Object({
+          id: t.String(),
+        }),
+        body: t.Object({
+          type: t.String(), // 'project' | 'user'
+          content: t.String(),
         }),
       }
     );

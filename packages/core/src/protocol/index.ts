@@ -44,6 +44,10 @@ export {
   type ModelInfo,
   type ClaudeVersionParams,
   type ClaudeVersionResult,
+  type MemoryReadParams,
+  type MemoryReadResult,
+  type MemoryWriteParams,
+  type MemoryWriteResult,
   type SpawnInstanceResult,
   type StopInstanceResult,
   type SendMessageResult,
@@ -111,6 +115,8 @@ export const PROTOCOL_METHODS = {
   MODELS_LIST: CommandMethod.MODELS_LIST,
   MODELS_SET: CommandMethod.MODELS_SET,
   CLAUDE_VERSION: CommandMethod.CLAUDE_VERSION,
+  MEMORY_READ: CommandMethod.MEMORY_READ,
+  MEMORY_WRITE: CommandMethod.MEMORY_WRITE,
 
   // Events (Agent -> Hub)
   INSTANCE_CREATED: EventMethod.INSTANCE_CREATED,

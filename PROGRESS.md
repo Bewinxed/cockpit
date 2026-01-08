@@ -4,7 +4,38 @@
 
 Make slash commands functional in the dashboard, matching CLI behavior. This includes fixing the command execution flow and implementing web-based OAuth authentication for `/login`.
 
-## Latest Progress (2026-01-07)
+## Latest Progress (2026-01-08)
+
+**/CLEAR COMMAND FIX & PERFORMANCE IMPROVEMENTS:**
+
+Fixed the `/clear` command and addressed performance issues:
+
+1. **`/clear` now works properly:**
+   - Added `/clear` to `CLIENT_COMMANDS` for client-side handling
+   - Handler clears local messages with `clearInstanceMessages(instanceId)`
+   - Sends `/clear` to SDK to clear server-side conversation
+   - Shows "Conversation cleared" confirmation message
+
+2. **Fixed redundant `commands.list` API calls:**
+   - The `$effect` watching instance was triggering `fetchCommands()` on every instance change
+   - Added `commandsFetched` state to ensure commands are only fetched once per running state
+   - Resets when instance stops, so commands refresh if it restarts
+
+3. **Fixed unreachable command handlers:**
+   - `/memory`, `/vim`, and `/terminal-setup` had handlers but weren't in `CLIENT_COMMANDS`
+   - These commands were being sent to server instead of handled locally
+   - Now properly added to `CLIENT_COMMANDS` array
+
+**Files Changed:**
+- `apps/dashboard/src/routes/instances/[id]/+page.svelte`
+  - Added `clearInstanceMessages` import
+  - Expanded `CLIENT_COMMANDS` to include `/clear`, `/memory`, `/vim`, `/terminal-setup`
+  - Added `/clear` handler in `handleClientCommand()`
+  - Added `commandsFetched` state to prevent redundant API calls
+
+---
+
+## Previous Progress (2026-01-07)
 
 **HELP MENU - 1:1 CLAUDE CLI MATCH:**
 
@@ -109,7 +140,7 @@ The `/model` command works as an inline UI form:
 | Command | Description | Implementation | Status |
 |---------|-------------|----------------|--------|
 | `/help` | Get help with using Claude Code | **Client-side** (tabbed TUI, synced version/commands) | ✅ Works |
-| `/clear` | Clear conversation history | Pass to SDK | ✅ Works |
+| `/clear` | Clear conversation history | **Client-side** (clears local + sends to SDK) | ✅ Works |
 | `/compact` | Clear history and compact context | Pass to SDK | ⏳ Untested |
 | `/config` | View or update configuration | Pass to SDK | ⏳ Untested |
 | `/cost` | Show token usage and cost | Pass to SDK | ⏳ Untested |
@@ -117,7 +148,7 @@ The `/model` command works as an inline UI form:
 | `/init` | Initialize project with CLAUDE.md | Pass to SDK | ⏳ Untested |
 | `/login` | Switch Claude accounts | **Client-side** (OAuth inline form) | ✅ Works |
 | `/logout` | Sign out of your account | **Client-side** (clear creds via API) | ✅ Works |
-| `/memory` | Edit CLAUDE.md memory file | Pass to SDK | ⏳ Untested |
+| `/memory` | Edit CLAUDE.md memory file | **Client-side** (info message) | ✅ Web N/A |
 | `/model` | Switch AI model | **Client-side** (inline picker, keyboard nav) | ✅ Works |
 | `/permissions` | View or update permissions | Pass to SDK | ⏳ Untested |
 | `/pr-comments` | View PR comments | Pass to SDK | ⏳ Untested |

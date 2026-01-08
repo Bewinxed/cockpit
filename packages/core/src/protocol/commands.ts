@@ -29,6 +29,10 @@ export const CommandMethod = {
   MODELS_SET: 'models.set',
   /** Get Claude CLI version */
   CLAUDE_VERSION: 'claude.version',
+  /** Read a memory file (CLAUDE.md) */
+  MEMORY_READ: 'memory.read',
+  /** Write a memory file (CLAUDE.md) */
+  MEMORY_WRITE: 'memory.write',
 } as const;
 
 export type CommandMethodValue = (typeof CommandMethod)[keyof typeof CommandMethod];
@@ -146,6 +150,28 @@ export interface ModelsSetParams {
  */
 export interface ClaudeVersionParams {
   // No parameters needed
+}
+
+/**
+ * Parameters for reading a memory file
+ */
+export interface MemoryReadParams {
+  /** Type of memory file to read */
+  type: 'project' | 'user';
+  /** Working directory (for project memory) */
+  cwd?: string;
+}
+
+/**
+ * Parameters for writing a memory file
+ */
+export interface MemoryWriteParams {
+  /** Type of memory file to write */
+  type: 'project' | 'user';
+  /** Content to write */
+  content: string;
+  /** Working directory (for project memory) */
+  cwd?: string;
 }
 
 /**
@@ -316,6 +342,28 @@ export interface ClaudeVersionResult {
   version: string;
 }
 
+/**
+ * Result of reading a memory file
+ */
+export interface MemoryReadResult {
+  /** The memory file content */
+  content: string;
+  /** The path to the memory file */
+  path: string;
+  /** Whether the file exists */
+  exists: boolean;
+}
+
+/**
+ * Result of writing a memory file
+ */
+export interface MemoryWriteResult {
+  /** Whether the write was successful */
+  success: boolean;
+  /** The path to the memory file */
+  path: string;
+}
+
 // ============================================================================
 // Command Type Mapping
 // ============================================================================
@@ -335,6 +383,8 @@ export interface CommandParamsMap {
   [CommandMethod.MODELS_LIST]: ModelsListParams;
   [CommandMethod.MODELS_SET]: ModelsSetParams;
   [CommandMethod.CLAUDE_VERSION]: ClaudeVersionParams;
+  [CommandMethod.MEMORY_READ]: MemoryReadParams;
+  [CommandMethod.MEMORY_WRITE]: MemoryWriteParams;
 }
 
 /**
@@ -352,6 +402,8 @@ export interface CommandResultMap {
   [CommandMethod.MODELS_LIST]: ModelsListResult;
   [CommandMethod.MODELS_SET]: ModelsSetResult;
   [CommandMethod.CLAUDE_VERSION]: ClaudeVersionResult;
+  [CommandMethod.MEMORY_READ]: MemoryReadResult;
+  [CommandMethod.MEMORY_WRITE]: MemoryWriteResult;
 }
 
 // ============================================================================

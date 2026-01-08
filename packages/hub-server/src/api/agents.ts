@@ -24,7 +24,8 @@ function getErrorMessage(error: JsonRpcError | unknown): string {
  * Agent management routes
  */
 export function createAgentRoutes(db: Db) {
-  const agentRegistry = getAgentRegistry();
+  // Note: Don't cache agentRegistry here - get fresh reference on each request
+  // to avoid stale references after hot reload
   const instanceTracker = createInstanceTracker(db);
 
   return new Elysia({ prefix: '/agents' })
@@ -33,7 +34,7 @@ export function createAgentRoutes(db: Db) {
       '/',
       async ({ query }) => {
         // Get agents from registry (connected agents with live status)
-        const connectedAgents = agentRegistry.getAll();
+        const connectedAgents = getAgentRegistry().getAll();
         const connectedAgentIds = new Set(connectedAgents.map((a) => a.id));
 
         // Get agents from database
@@ -94,7 +95,7 @@ export function createAgentRoutes(db: Db) {
       '/:id',
       async ({ params, set }) => {
         // First check registry for connected agent
-        const connected = agentRegistry.get(params.id);
+        const connected = getAgentRegistry().get(params.id);
 
         if (connected) {
           // Get instance count
@@ -147,7 +148,7 @@ export function createAgentRoutes(db: Db) {
       '/:id/instances',
       async ({ params, query, set }) => {
         // Check if agent exists
-        const connected = agentRegistry.get(params.id);
+        const connected = getAgentRegistry().get(params.id);
         const dbAgent = await db
           .select()
           .from(agents)
@@ -190,7 +191,7 @@ export function createAgentRoutes(db: Db) {
       '/:id/stats',
       async ({ params, set }) => {
         // Check if agent exists
-        const connected = agentRegistry.get(params.id);
+        const connected = getAgentRegistry().get(params.id);
         const dbAgent = await db
           .select()
           .from(agents)
@@ -231,7 +232,7 @@ export function createAgentRoutes(db: Db) {
     .get(
       '/:id/status',
       async ({ params, set }) => {
-        const connected = agentRegistry.get(params.id);
+        const connected = getAgentRegistry().get(params.id);
 
         if (!connected) {
           // Check database
@@ -279,7 +280,7 @@ export function createAgentRoutes(db: Db) {
     .get(
       '/:id/filesystem',
       async ({ params, query, set }) => {
-        const connected = agentRegistry.get(params.id);
+        const connected = getAgentRegistry().get(params.id);
 
         if (!connected || connected.status !== 'online') {
           set.status = 404;
@@ -290,7 +291,7 @@ export function createAgentRoutes(db: Db) {
         }
 
         // Forward request to agent
-        const response = await agentRegistry.sendToAgent(
+        const response = await getAgentRegistry().sendToAgent(
           params.id,
           CommandMethod.FILESYSTEM_LIST,
           { path: query.path }
@@ -323,7 +324,7 @@ export function createAgentRoutes(db: Db) {
     .get(
       '/:id/claude-version',
       async ({ params, set }) => {
-        const connected = agentRegistry.get(params.id);
+        const connected = getAgentRegistry().get(params.id);
 
         if (!connected || connected.status !== 'online') {
           set.status = 404;
@@ -334,7 +335,7 @@ export function createAgentRoutes(db: Db) {
         }
 
         // Forward request to agent
-        const response = await agentRegistry.sendToAgent(
+        const response = await getAgentRegistry().sendToAgent(
           params.id,
           CommandMethod.CLAUDE_VERSION,
           {}

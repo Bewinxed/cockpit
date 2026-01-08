@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { User, Bot, Wrench, FileText, AlertCircle, ChevronDown, ChevronRight, Copy, Check, Loader2, CheckCircle2, XCircle, Settings, Terminal, Scissors, ExternalLink, ArrowRight, KeyRound, Cpu, HelpCircle } from 'lucide-svelte';
+  import { User, Bot, Wrench, FileText, AlertCircle, ChevronDown, ChevronRight, Copy, Check, Loader2, CheckCircle2, XCircle, Settings, Terminal, Scissors, ExternalLink, ArrowRight, KeyRound, Cpu, HelpCircle, BookOpen, FolderOpen, Home } from 'lucide-svelte';
   import Markdown from '@humanspeak/svelte-markdown';
   import { formatTimestamp } from '$lib/utils/time';
   import type { Message } from '$lib/stores/realtime.svelte';
@@ -11,6 +11,12 @@
     description: string;
   }
 
+  interface MemoryOption {
+    type: 'project' | 'user';
+    label: string;
+    path: string;
+  }
+
   interface Props {
     message: Message;
     showTimestamp?: boolean;
@@ -18,14 +24,19 @@
     onLoginCancel?: () => void;
     onModelSelect?: (model: string) => Promise<void>;
     onModelCancel?: () => void;
+    onMemorySelect?: (memoryType: 'project' | 'user') => void;
+    onMemorySave?: (content: string) => Promise<void>;
+    onMemoryCancel?: () => void;
     onDismissMessage?: () => void;
     /** Whether this login prompt is currently active (pending) */
     isLoginActive?: boolean;
     /** Whether this model picker is currently active */
     isModelPickerActive?: boolean;
+    /** Whether this memory picker is currently active */
+    isMemoryPickerActive?: boolean;
   }
 
-  let { message, showTimestamp = false, onLoginSubmit, onLoginCancel, onModelSelect, onModelCancel, onDismissMessage, isLoginActive = false, isModelPickerActive = false }: Props = $props();
+  let { message, showTimestamp = false, onLoginSubmit, onLoginCancel, onModelSelect, onModelCancel, onMemorySelect, onMemorySave, onMemoryCancel, onDismissMessage, isLoginActive = false, isModelPickerActive = false, isMemoryPickerActive = false }: Props = $props();
 
   // Login prompt state
   let loginCode = $state('');
@@ -113,6 +124,11 @@
     message.type === 'system' && message.metadata?.subtype === 'model_picker'
   );
 
+  // Check if this is a memory_picker system message
+  const isMemoryPicker = $derived(
+    message.type === 'system' && message.metadata?.subtype === 'memory_picker'
+  );
+
 
   // Model picker state
   let models = $derived<ModelInfo[]>((message.metadata?.models as ModelInfo[]) || []);
@@ -120,6 +136,27 @@
   let selectedModel = $state<string | undefined>(undefined);
   let modelLoading = $state(false);
   let modelError = $state<string | null>(null);
+
+  // Memory picker state
+  let memoryContent = $state<string>(message.metadata?.memoryContent as string || '');
+  let memorySaving = $state(false);
+
+  // Initialize memory content when it changes in metadata
+  $effect(() => {
+    if (isMemoryPicker && message.metadata?.memoryContent) {
+      memoryContent = message.metadata.memoryContent as string;
+    }
+  });
+
+  async function handleMemorySave() {
+    if (!onMemorySave || memorySaving) return;
+    memorySaving = true;
+    try {
+      await onMemorySave(memoryContent);
+    } finally {
+      memorySaving = false;
+    }
+  }
 
   // Initialize selected model when models change
   $effect(() => {
@@ -230,7 +267,7 @@
 <svelte:window onkeydown={handleModelKeydown} />
 
 <div class="flex {config.align} gap-3 group animate-fade-in-up">
-  {#if message.type !== 'user' && message.type !== 'system' && message.type !== 'help_menu' && !isCompactBoundary && !isLoginPrompt && !isModelPicker}
+  {#if message.type !== 'user' && message.type !== 'system' && message.type !== 'help_menu' && !isCompactBoundary && !isLoginPrompt && !isModelPicker && !isMemoryPicker}
     <!-- Avatar -->
     <div class="flex-shrink-0 w-8 h-8 rounded-lg {config.iconBg} flex items-center justify-center">
       <config.icon class="w-4 h-4 {message.type === 'error' ? 'text-error' : 'text-text-secondary'}" />
@@ -238,7 +275,7 @@
   {/if}
 
   <!-- Message Content -->
-  <div class="flex flex-col gap-1 {message.type === 'user' ? 'items-end' : 'items-start'} {isCompactBoundary || isLoginPrompt || isModelPicker || message.type === 'help_menu' ? 'w-full' : 'max-w-[85%]'}">
+  <div class="flex flex-col gap-1 {message.type === 'user' ? 'items-end' : 'items-start'} {isCompactBoundary || isLoginPrompt || isModelPicker || isMemoryPicker || message.type === 'help_menu' ? 'w-full' : 'max-w-[85%]'}">
     {#if message.type === 'tool_use' || message.type === 'tool_result'}
       <!-- Tool message - collapsible -->
       <button
@@ -561,6 +598,168 @@
           <span class="text-text-muted">Model selection</span>
           {#if message.metadata?.selectedModel}
             <span class="text-text-secondary text-xs">{message.metadata.selectedModel}</span>
+          {/if}
+          {#if onDismissMessage}
+            <button
+              onclick={onDismissMessage}
+              class="ml-1 p-0.5 rounded hover:bg-surface-active transition-colors opacity-0 group-hover:opacity-100"
+              title="Dismiss"
+            >
+              <XCircle class="w-3.5 h-3.5 text-text-muted hover:text-text-secondary" />
+            </button>
+          {/if}
+        </div>
+      {/if}
+    {:else if message.type === 'system' && isMemoryPicker}
+      <!-- Memory Picker - selection then inline editor -->
+      {#if isMemoryPickerActive}
+        <!-- Active: Show memory picker or editor -->
+        <div class="w-full max-w-lg">
+          <div class="border border-dotted border-border rounded-lg p-5 bg-surface space-y-4">
+            <!-- Header -->
+            <div class="flex items-start gap-3">
+              <div class="w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center flex-shrink-0">
+                <BookOpen class="w-5 h-5 text-amber-600" />
+              </div>
+              <div class="flex-1">
+                <h3 class="font-serif font-semibold text-text text-lg leading-tight">Edit Memory</h3>
+                <p class="text-sm text-text-secondary mt-0.5">
+                  {#if message.metadata?.memoryPhase === 'editing'}
+                    Editing {message.metadata?.selectedMemoryType === 'project' ? 'project' : 'user'} memory
+                  {:else}
+                    Select memory to edit
+                  {/if}
+                </p>
+              </div>
+            </div>
+
+            {#if message.metadata?.loading}
+              <!-- Loading state -->
+              <div class="flex items-center justify-center py-6">
+                <Loader2 class="w-5 h-5 animate-spin text-text-muted" />
+                <span class="ml-2 text-sm text-text-muted">Loading memory...</span>
+              </div>
+            {:else if message.metadata?.error}
+              <!-- Error state -->
+              <div class="flex items-center gap-2 text-sm text-error bg-error/10 rounded-md px-3 py-2">
+                <AlertCircle class="w-4 h-4 flex-shrink-0" />
+                <span>{message.metadata.error}</span>
+              </div>
+            {:else if message.metadata?.memoryPhase === 'editing'}
+              <!-- Editor phase -->
+              <div class="space-y-3">
+                <div class="flex items-center gap-2 text-xs text-text-muted">
+                  {#if message.metadata?.selectedMemoryType === 'project'}
+                    <FolderOpen class="w-3.5 h-3.5" />
+                    <code class="font-mono bg-bg-subtle px-1.5 py-0.5 rounded">{message.metadata?.memoryPath || './CLAUDE.md'}</code>
+                  {:else}
+                    <Home class="w-3.5 h-3.5" />
+                    <code class="font-mono bg-bg-subtle px-1.5 py-0.5 rounded">~/.claude/CLAUDE.md</code>
+                  {/if}
+                </div>
+                <textarea
+                  class="w-full h-64 px-3 py-2 bg-bg border border-border rounded-lg font-mono text-sm
+                         placeholder:text-text-muted focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20
+                         resize-y transition-colors"
+                  placeholder="# Memory instructions for Claude..."
+                  value={message.metadata?.memoryContent || ''}
+                  oninput={(e) => {
+                    const target = e.target as HTMLTextAreaElement;
+                    if (target) memoryContent = target.value;
+                  }}
+                ></textarea>
+                <p class="text-xs text-text-muted">
+                  Markdown format. Changes will be saved to the file on the agent.
+                </p>
+              </div>
+
+              <!-- Editor Actions -->
+              <div class="flex items-center gap-3 pt-1">
+                <button
+                  onclick={handleMemorySave}
+                  disabled={memorySaving}
+                  class="flex items-center gap-2 px-4 py-2 bg-[#37352f] text-white rounded-md text-sm font-medium
+                         hover:bg-[#2f2d29] disabled:opacity-40 disabled:cursor-not-allowed transition-all group"
+                >
+                  {#if memorySaving}
+                    <Loader2 class="w-4 h-4 animate-spin" />
+                    <span>Saving...</span>
+                  {:else}
+                    <Check class="w-4 h-4" />
+                    <span>Save</span>
+                  {/if}
+                </button>
+                <button
+                  onclick={onMemoryCancel}
+                  disabled={memorySaving}
+                  class="px-4 py-2 text-sm text-text-secondary hover:text-text hover:underline underline-offset-2 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            {:else}
+              <!-- Selection phase -->
+              <div class="space-y-2">
+                <button
+                  type="button"
+                  class="w-full text-left px-4 py-3 rounded-lg border border-border hover:border-amber-500/50 hover:bg-amber-500/5 transition-colors flex items-start gap-3 group"
+                  onclick={() => onMemorySelect?.('project')}
+                >
+                  <div class="flex-shrink-0 w-6 h-6 rounded bg-amber-500/10 flex items-center justify-center mt-0.5">
+                    <FolderOpen class="w-3.5 h-3.5 text-amber-600" />
+                  </div>
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2">
+                      <span class="font-medium text-text text-sm">Project memory</span>
+                      <span class="text-[10px] px-1.5 py-0.5 rounded bg-surface-hover text-text-muted">1</span>
+                    </div>
+                    <p class="text-xs text-text-muted mt-0.5">
+                      Checked in at <code class="px-1 py-0.5 bg-bg-subtle rounded">./CLAUDE.md</code>
+                    </p>
+                  </div>
+                  <ArrowRight class="w-4 h-4 text-text-muted opacity-0 group-hover:opacity-100 transition-opacity mt-1" />
+                </button>
+
+                <button
+                  type="button"
+                  class="w-full text-left px-4 py-3 rounded-lg border border-border hover:border-amber-500/50 hover:bg-amber-500/5 transition-colors flex items-start gap-3 group"
+                  onclick={() => onMemorySelect?.('user')}
+                >
+                  <div class="flex-shrink-0 w-6 h-6 rounded bg-amber-500/10 flex items-center justify-center mt-0.5">
+                    <Home class="w-3.5 h-3.5 text-amber-600" />
+                  </div>
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2">
+                      <span class="font-medium text-text text-sm">User memory</span>
+                      <span class="text-[10px] px-1.5 py-0.5 rounded bg-surface-hover text-text-muted">2</span>
+                    </div>
+                    <p class="text-xs text-text-muted mt-0.5">
+                      Saved in <code class="px-1 py-0.5 bg-bg-subtle rounded">~/.claude/CLAUDE.md</code>
+                    </p>
+                  </div>
+                  <ArrowRight class="w-4 h-4 text-text-muted opacity-0 group-hover:opacity-100 transition-opacity mt-1" />
+                </button>
+              </div>
+
+              <!-- Cancel button for selection phase -->
+              <div class="flex justify-end pt-1">
+                <button
+                  onclick={onMemoryCancel}
+                  class="px-4 py-2 text-sm text-text-secondary hover:text-text hover:underline underline-offset-2 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            {/if}
+          </div>
+        </div>
+      {:else}
+        <!-- Inactive: Show compact version -->
+        <div class="inline-flex items-center gap-2 px-3 py-1.5 bg-surface-hover/50 border border-dotted border-border rounded-lg text-sm group">
+          <BookOpen class="w-3.5 h-3.5 text-text-muted" />
+          <span class="text-text-muted">Memory</span>
+          {#if message.metadata?.selectedMemoryType}
+            <span class="text-text-secondary text-xs capitalize">{message.metadata.selectedMemoryType}</span>
           {/if}
           {#if onDismissMessage}
             <button

@@ -350,16 +350,19 @@ export class AgentRegistry {
   }
 }
 
-// Singleton instance
-let registryInstance: AgentRegistry | null = null;
+// Use globalThis to persist singleton across hot reloads
+// Module-level variables reset on hot reload, globalThis persists
+declare global {
+  var __cockpitAgentRegistry: AgentRegistry | undefined;
+}
 
 export function getAgentRegistry(options?: { requestTimeout?: number }): AgentRegistry {
-  if (!registryInstance) {
-    registryInstance = new AgentRegistry(options);
+  if (!globalThis.__cockpitAgentRegistry) {
+    globalThis.__cockpitAgentRegistry = new AgentRegistry(options);
   }
-  return registryInstance;
+  return globalThis.__cockpitAgentRegistry;
 }
 
 export function resetAgentRegistry(): void {
-  registryInstance = null;
+  globalThis.__cockpitAgentRegistry = undefined;
 }
