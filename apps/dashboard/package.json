@@ -16,6 +16,7 @@
     "@elysiajs/eden": "^1.4.6",
     "@humanspeak/svelte-markdown": "^0.8.13",
     "@lucide/svelte": "^0.561.0",
+    "@pierre/diffs": "^1.0.4",
     "bits-ui": "^2.15.2",
     "clsx": "^2.1.1",
     "lucide-svelte": "^0.562.0",
@@ -37,8 +38,8 @@
     "tailwindcss": "^4.1.0",
     "typescript": "^5.9.3",
     "vite": "^6.3.0"
-  }, "overrides": {
+  },
+  "overrides": {
     "vite": "npm:rolldown-vite@latest"
   }
-  
 }

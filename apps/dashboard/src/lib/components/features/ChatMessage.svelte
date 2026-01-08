@@ -4,6 +4,7 @@
   import { formatTimestamp } from '$lib/utils/time';
   import type { Message } from '$lib/stores/realtime.svelte';
   import HelpMenu from './HelpMenu.svelte';
+  import DiffView from './DiffView.svelte';
 
   interface ModelInfo {
     value: string;
@@ -150,6 +151,27 @@
       stderr: message.metadata?.stderr,
     };
   });
+
+  // Check if a tool is a file edit tool that should show a diff
+  function isFileEditTool(toolName: string | undefined): boolean {
+    if (!toolName) return false;
+    const editTools = ['Edit', 'edit', 'str_replace_editor', 'str_replace', 'file_edit'];
+    return editTools.includes(toolName);
+  }
+
+  // Extract diff info from tool input for file edit tools
+  function getDiffInfo(input: Record<string, unknown> | undefined): { filePath: string; oldContent: string; newContent: string } | null {
+    if (!input) return null;
+
+    // Handle different tool input formats
+    const filePath = (input.file_path || input.path || input.filename) as string | undefined;
+    const oldContent = (input.old_string || input.old_str || '') as string;
+    const newContent = (input.new_string || input.new_str || input.content || '') as string;
+
+    if (!filePath) return null;
+
+    return { filePath, oldContent, newContent };
+  }
 
   // Check if this is a compact_boundary system message
   const isCompactBoundary = $derived(
@@ -410,12 +432,21 @@
 
       {#if isExpanded}
         {@const tool = toolInfo()}
+        {@const diffInfo = getDiffInfo(tool?.input as Record<string, unknown> | undefined)}
         <div class="w-full space-y-2 mt-1">
-          <!-- Input -->
-          <div class="bg-bg-subtle rounded-lg p-3 font-mono text-xs overflow-x-auto border border-border">
-            <div class="text-text-muted text-[10px] uppercase tracking-wide mb-1">Input</div>
-            <pre class="whitespace-pre-wrap break-all text-text-secondary">{JSON.stringify(tool?.input, null, 2)}</pre>
-          </div>
+          <!-- Input: Show diff for file edit tools, JSON for others -->
+          {#if isFileEditTool(tool?.name) && diffInfo}
+            <DiffView
+              filePath={diffInfo.filePath}
+              oldContent={diffInfo.oldContent}
+              newContent={diffInfo.newContent}
+            />
+          {:else}
+            <div class="bg-bg-subtle rounded-lg p-3 font-mono text-xs overflow-x-auto border border-border">
+              <div class="text-text-muted text-[10px] uppercase tracking-wide mb-1">Input</div>
+              <pre class="whitespace-pre-wrap break-all text-text-secondary">{JSON.stringify(tool?.input, null, 2)}</pre>
+            </div>
+          {/if}
 
           <!-- Result (if available) -->
           {#if tool?.result !== undefined && tool?.result !== null}
