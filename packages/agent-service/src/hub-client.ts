@@ -53,6 +53,7 @@ export class HubClient extends EventEmitter {
   private hubUrl: string = '';
   private reconnectAttempts: number = 0;
   private isConnecting: boolean = false;
+  private isReconnecting: boolean = false;
   private shouldReconnect: boolean = true;
   private messageQueue: (JsonRpcRequest | JsonRpcNotification)[] = [];
   private pendingRequests: Map<string | number, PendingRequest> = new Map();
@@ -291,32 +292,47 @@ export class HubClient extends EventEmitter {
    * Handle disconnect and potentially reconnect
    */
   private async handleDisconnect(): Promise<void> {
-    if (!this.shouldReconnect) {
+    if (!this.shouldReconnect || this.isReconnecting) {
       return;
     }
 
-    const maxAttempts = this.options.maxReconnectAttempts;
-    if (maxAttempts > 0 && this.reconnectAttempts >= maxAttempts) {
-      this.emit('error', new Error('Max reconnection attempts reached'));
-      return;
-    }
+    this.isReconnecting = true;
 
-    this.reconnectAttempts++;
-    this.emit('reconnecting', this.reconnectAttempts);
+    try {
+      const maxAttempts = this.options.maxReconnectAttempts;
+      if (maxAttempts > 0 && this.reconnectAttempts >= maxAttempts) {
+        this.emit('error', new Error('Max reconnection attempts reached'));
+        return;
+      }
 
-    const delay = exponentialBackoff(
-      this.reconnectAttempts - 1,
-      this.options.reconnectBaseDelay,
-      this.options.reconnectMaxDelay
-    );
+      this.reconnectAttempts++;
+      this.emit('reconnecting', this.reconnectAttempts);
 
-    await sleep(delay);
+      const delay = exponentialBackoff(
+        this.reconnectAttempts - 1,
+        this.options.reconnectBaseDelay,
+        this.options.reconnectMaxDelay
+      );
 
-    if (this.shouldReconnect) {
-      try {
+      await sleep(delay);
+
+      if (this.shouldReconnect) {
         await this.connect(this.hubUrl);
-      } catch (error) {
-        // Will trigger another reconnect via the close handler
+      }
+    } catch (error) {
+      // Ignore if connection is already being handled
+      if (error instanceof Error && error.message === 'Connection already in progress') {
+        return;
+      }
+      // Connection failed, isReconnecting will be reset in finally block,
+      // and we will check if we need to schedule another attempt.
+    } finally {
+      this.isReconnecting = false;
+      
+      // If still not connected and should be, try again
+      if (this.shouldReconnect && !this.isConnected) {
+        // Use async recursion (effectively a loop via promise chain)
+        this.handleDisconnect();
       }
     }
   }
