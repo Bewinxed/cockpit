@@ -473,22 +473,24 @@
         <div class="w-full space-y-2 mt-1">
           <!-- Input: Show diff for file modification tools, JSON for others -->
           {#if isFileDiffTool(tool?.name) && diffInfo}
-            <div class="diff-wrapper" class:abbreviated={!diffFullyExpanded}>
+            {@const totalLines = (diffInfo.oldContent.split('\n').length + diffInfo.newContent.split('\n').length)}
+            {@const needsExpansion = totalLines > 8}
+            <div class="diff-wrapper" class:abbreviated={needsExpansion && !diffFullyExpanded}>
               <DiffView
                 id={tool?.id || message.id}
                 filePath={diffInfo.filePath}
                 oldContent={diffInfo.oldContent}
                 newContent={diffInfo.newContent}
               />
-              {#if !diffFullyExpanded}
+              {#if needsExpansion && !diffFullyExpanded}
                 <!-- svelte-ignore a11y_click_events_have_key_events -->
                 <!-- svelte-ignore a11y_no_static_element_interactions -->
                 <div class="diff-fade-overlay" onclick={() => diffFullyExpanded = true}>
-                  <span class="expand-hint">Click to expand</span>
+                  <ChevronDown class="expand-icon" />
                 </div>
               {/if}
             </div>
-            {#if diffFullyExpanded}
+            {#if needsExpansion && diffFullyExpanded}
               <button
                 class="collapse-btn"
                 onclick={() => diffFullyExpanded = false}
@@ -1125,38 +1127,36 @@
     bottom: 0;
     left: 0;
     right: 0;
-    height: 80px;
+    height: 60px;
     background: linear-gradient(
       to bottom,
       transparent 0%,
-      var(--color-bg-subtle) 70%,
-      var(--color-bg-subtle) 100%
+      rgba(var(--color-bg-rgb, 0 0 0), 0.85) 50%,
+      rgba(var(--color-bg-rgb, 0 0 0), 0.95) 100%
     );
     display: flex;
-    align-items: flex-end;
+    align-items: center;
     justify-content: center;
-    padding-bottom: 0.75rem;
     cursor: pointer;
-    transition: opacity 0.15s ease;
+    z-index: 10;
   }
 
-  .diff-fade-overlay:hover {
-    opacity: 0.9;
-  }
-
-  .expand-hint {
-    font-size: 0.75rem;
+  .diff-fade-overlay :global(.expand-icon) {
+    width: 1.25rem;
+    height: 1.25rem;
     color: var(--color-text-muted);
+    padding: 0.375rem;
     background: var(--color-surface);
-    padding: 0.25rem 0.75rem;
-    border-radius: 9999px;
     border: 1px solid var(--color-border);
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    border-radius: 9999px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    transition: all 0.15s ease;
   }
 
-  .expand-hint:hover {
+  .diff-fade-overlay:hover :global(.expand-icon) {
     color: var(--color-text);
     border-color: var(--color-border-hover);
+    transform: translateY(2px);
   }
 
   .collapse-btn {
