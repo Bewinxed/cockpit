@@ -84,9 +84,61 @@
   // Cleanup function for auth event listener
   let authCleanup: (() => void) | null = null;
 
-  // Initialize messages from SSR data on mount
+  // Parse SSR messages into UI format
+  function parseDbMessages(dbMessages: DbMessage[]): Message[] {
+    const result: Message[] = [];
+    for (const dbMsg of dbMessages) {
+      const content = typeof dbMsg.content === 'string' ? JSON.parse(dbMsg.content) : dbMsg.content;
+      const sdkType = content?.type || dbMsg.messageType;
+
+      if (sdkType === 'user' && content?.content) {
+        result.push({
+          id: dbMsg.id,
+          type: 'user',
+          content: content.content,
+          timestamp: new Date(dbMsg.timestamp),
+        });
+      } else if (sdkType === 'assistant' && content?.message?.content) {
+        for (const block of content.message.content) {
+          if (block?.type === 'text' && block.text) {
+            result.push({
+              id: dbMsg.id,
+              type: 'assistant',
+              content: block.text,
+              timestamp: new Date(dbMsg.timestamp),
+            });
+          } else if (block?.type === 'tool_use') {
+            result.push({
+              id: dbMsg.id + '-' + block.id,
+              type: 'tool_use',
+              content: block.name || 'Tool',
+              timestamp: new Date(dbMsg.timestamp),
+              metadata: {
+                toolId: block.id,
+                toolName: block.name,
+                toolInput: block.input,
+                toolStatus: 'success',
+              },
+            });
+          }
+        }
+      } else if (sdkType === 'system' && content?.subtype === 'init') {
+        result.push({
+          id: dbMsg.id,
+          type: 'system',
+          content: `Session started with ${content.model || 'Claude'}`,
+          timestamp: new Date(dbMsg.timestamp),
+        });
+      }
+    }
+    return result;
+  }
+
+  // Derive parsed SSR messages
+  const parsedSsrMessages = $derived(ssrMessages ? parseDbMessages(ssrMessages) : []);
+
+  // Set up auth event listener
   onMount(() => {
-    // Listen for auth-required events - auto-trigger login flow
     const handleAuthRequired = (event: Event) => {
       const { instanceId: errorInstanceId } = (event as CustomEvent).detail;
       if (errorInstanceId === instanceId) {
@@ -94,59 +146,7 @@
       }
     };
     window.addEventListener('cockpit:auth-required', handleAuthRequired);
-
-    // Store cleanup function
     authCleanup = () => window.removeEventListener('cockpit:auth-required', handleAuthRequired);
-
-    if (ssrMessages && ssrMessages.length > 0 && !$instanceMessages.get(instanceId)?.length) {
-      // Convert DB messages to UI Message format
-      for (const dbMsg of ssrMessages as DbMessage[]) {
-        const content = typeof dbMsg.content === 'string' ? JSON.parse(dbMsg.content) : dbMsg.content;
-        const sdkType = content?.type || dbMsg.messageType;
-
-        // Only add displayable messages
-        if (sdkType === 'user' && content?.content) {
-          // User messages
-          addMessage(instanceId, {
-            id: dbMsg.id,
-            type: 'user',
-            content: content.content,
-            timestamp: new Date(dbMsg.timestamp),
-          });
-        } else if (sdkType === 'assistant' && content?.message?.content) {
-          for (const block of content.message.content) {
-            if (block?.type === 'text' && block.text) {
-              addMessage(instanceId, {
-                id: dbMsg.id,
-                type: 'assistant',
-                content: block.text,
-                timestamp: new Date(dbMsg.timestamp),
-              });
-            } else if (block?.type === 'tool_use') {
-              addMessage(instanceId, {
-                id: dbMsg.id + '-' + block.id,
-                type: 'tool_use',
-                content: block.name || 'Tool',
-                timestamp: new Date(dbMsg.timestamp),
-                metadata: {
-                  toolId: block.id,
-                  toolName: block.name,
-                  toolInput: block.input,
-                  toolStatus: 'success',
-                },
-              });
-            }
-          }
-        } else if (sdkType === 'system' && content?.subtype === 'init') {
-          addMessage(instanceId, {
-            id: dbMsg.id,
-            type: 'system',
-            content: `Session started with ${content.model || 'Claude'}`,
-            timestamp: new Date(dbMsg.timestamp),
-          });
-        }
-      }
-    }
   });
 
   onDestroy(() => {
@@ -190,8 +190,8 @@
     }
   }
 
-  // Get messages for this instance directly from the Map
-  const currentMessages = $derived($instanceMessages.get(instanceId) || []);
+  // Messages from remote function - SvelteKit handles hydration
+  const currentMessages = $derived(parsedSsrMessages);
 
   // UI State
   let sending = $state(false);
