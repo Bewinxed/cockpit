@@ -7,7 +7,7 @@
   import { instances, instanceMessages, agents, addMessage, removeMessage, updateMessageMetadata, clearInstanceMessages, getStreamingState, getInstanceStatus, getInstancePermissions, type Message } from '$lib/stores/realtime.svelte';
   import { sendMessage, stopInstance, resumeInstance, interruptInstance } from '$lib/actions';
   import { api } from '$lib/api';
-  import { Badge, LoadingButton, EmptyState } from '$lib/components/ui';
+  import { Badge, Button, LoadingButton, EmptyState } from '$lib/components/ui';
   import { ChatMessage, ChatInput, StreamingIndicator, PermissionRequest } from '$lib/components/features';
   import { formatDistanceToNow } from '$lib/utils/time';
   import { getInstance, getInstanceMessages } from '$lib/data.remote';
@@ -94,6 +94,7 @@
       if (sdkType === 'user' && content?.content) {
         result.push({
           id: dbMsg.id,
+          instanceId,
           type: 'user',
           content: content.content,
           timestamp: new Date(dbMsg.timestamp),
@@ -103,6 +104,7 @@
           if (block?.type === 'text' && block.text) {
             result.push({
               id: dbMsg.id,
+              instanceId,
               type: 'assistant',
               content: block.text,
               timestamp: new Date(dbMsg.timestamp),
@@ -110,6 +112,7 @@
           } else if (block?.type === 'tool_use') {
             result.push({
               id: dbMsg.id + '-' + block.id,
+              instanceId,
               type: 'tool_use',
               content: block.name || 'Tool',
               timestamp: new Date(dbMsg.timestamp),
@@ -125,6 +128,7 @@
       } else if (sdkType === 'system' && content?.subtype === 'init') {
         result.push({
           id: dbMsg.id,
+          instanceId,
           type: 'system',
           content: `Session started with ${content.model || 'Claude'}`,
           timestamp: new Date(dbMsg.timestamp),
@@ -306,7 +310,7 @@
       let version = 'unknown';
       if (instance?.machineId) {
         try {
-          const versionResponse = await api.api.agents({ id: instance.machineId })['claude-version'].get();
+          const versionResponse = await api.api.agents({ machineId: instance.machineId })['claude-version'].get();
           if (versionResponse.data?.success && versionResponse.data.data?.version) {
             version = versionResponse.data.data.version;
           }
@@ -910,24 +914,24 @@
   <title>{instance?.name || 'Instance'} | Cockpit</title>
 </svelte:head>
 
-<div class="h-screen flex flex-col bg-bg overflow-hidden relative">
+<div class="h-screen flex flex-col bg-background overflow-hidden relative">
   {#if instance}
     <!-- Header -->
-    <header class="flex-shrink-0 bg-paper/80 backdrop-blur-md border-b border-border px-6 py-3 z-10 shadow-sm">
+    <header class="flex-shrink-0 bg-card/80 backdrop-blur-md border-b border-border px-6 py-3 z-10 shadow-sm">
       <div class="flex items-center justify-between gap-4">
         <div class="flex items-center gap-3 min-w-0">
           <!-- Back button -->
           <a
             href="/instances"
-            class="p-2 rounded-lg hover:bg-surface-hover transition-colors shrink-0"
+            class="p-2 rounded-lg hover:bg-accent transition-colors shrink-0"
             title="Back to instances"
           >
-            <ArrowLeft class="w-5 h-5 text-text-secondary" />
+            <ArrowLeft class="w-5 h-5 text-muted-foreground" />
           </a>
 
           <div class="min-w-0">
             <div class="flex items-center gap-2.5 mb-0.5">
-              <h1 class="text-lg font-bold text-text truncate font-serif tracking-tight">
+              <h1 class="text-lg font-bold text-foreground truncate font-sans tracking-tight">
                 {instance.name || 'Untitled Session'}
               </h1>
               {#if status}
@@ -937,7 +941,7 @@
               {/if}
             </div>
 
-            <div class="flex items-center gap-3 text-xs text-text-muted overflow-hidden">
+            <div class="flex items-center gap-3 text-xs text-muted-foreground overflow-hidden">
               {#if agent}
                 <div class="flex items-center gap-1 shrink-0" title="Running on {agent.name}">
                   <Server class="w-3.5 h-3.5" />
@@ -987,8 +991,10 @@
         <div class="flex items-center gap-2 shrink-0">
           {#if isActive}
             {#if isStreaming}
-              <button
-                class="btn btn-secondary btn-sm h-9 px-3 gap-1.5 border-warning/30 text-warning hover:bg-warning-light"
+              <Button
+                variant="secondary"
+                size="sm"
+                class="border-warning/30 text-warning hover:bg-warning/10"
                 onclick={handleInterrupt}
                 disabled={interrupting}
               >
@@ -998,10 +1004,12 @@
                   <StopCircle class="size-3.5" />
                 {/if}
                 <span>Interrupt</span>
-              </button>
+              </Button>
             {/if}
-            <button
-              class="btn btn-ghost btn-sm h-9 w-9 p-0 text-error hover:bg-error-light"
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              class="text-error hover:bg-error/10"
               onclick={handleStop}
               disabled={stopping || interrupting}
               title="Stop instance"
@@ -1011,21 +1019,23 @@
               {:else}
                 <Square class="size-4" />
               {/if}
-            </button>
+            </Button>
           {/if}
         </div>
       </div>
 
       {#if error}
-        <div class="mt-2 flex items-center gap-2 text-xs text-error bg-error-light rounded-md px-3 py-1.5 animate-fade-in" in:fly={{ y: -5, duration: 200 }}>
+        <div class="mt-2 flex items-center gap-2 text-xs text-error bg-error/10 rounded-md px-3 py-1.5 animate-fade-in" in:fly={{ y: -5, duration: 200 }}>
           <AlertCircle class="w-3.5 h-3.5 flex-shrink-0" />
           <span class="flex-1 font-medium">{error}</span>
-          <button
-            class="text-error-dark hover:underline flex-shrink-0"
+          <Button
+            variant="ghost"
+            size="sm"
+            class="h-6 px-2 text-xs text-error hover:text-error"
             onclick={() => error = null}
           >
             Dismiss
-          </button>
+          </Button>
         </div>
       {/if}
     </header>
@@ -1035,7 +1045,7 @@
       <div
         bind:this={messagesContainer}
         onscroll={handleScroll}
-        class="flex-1 overflow-y-auto p-6 space-y-6 bg-bg scroll-smooth selection:bg-primary-light"
+        class="flex-1 overflow-y-auto p-6 space-y-6 bg-background scroll-smooth selection:bg-primary/10"
       >
         {#if currentMessages.length > 0}
           {#each currentMessages as message, i (message.id)}
@@ -1066,13 +1076,13 @@
 
           {#if sending || restarting}
             <div class="flex items-center gap-3 animate-fade-in py-2" in:fly={{ y: 10, duration: 200 }}>
-              <div class="flex-shrink-0 w-8 h-8 rounded-lg bg-primary-light flex items-center justify-center">
+              <div class="flex-shrink-0 w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
                 <Loader2 class="w-4 h-4 text-primary animate-spin" />
               </div>
               {#if restarting}
-                <span class="text-xs text-text-muted italic animate-pulse">Resuming session...</span>
+                <span class="text-xs text-muted-foreground italic animate-pulse">Resuming session...</span>
               {:else}
-                <div class="typing-indicator bg-surface border border-border rounded-2xl">
+                <div class="typing-indicator bg-card border border-border rounded-2xl">
                   <span></span>
                   <span></span>
                   <span></span>
@@ -1095,9 +1105,8 @@
 
       {#if userHasScrolledUp}
         <div class="absolute bottom-4 left-1/2 -translate-x-1/2 z-20">
-          <button
-            class="px-4 py-2 bg-primary text-white rounded-full shadow-lg border border-primary-hover
-                   flex items-center gap-2 text-sm font-medium animate-fade-in-up hover:bg-primary-hover transition-all"
+          <Button
+            class="rounded-full shadow-lg animate-fade-in-up"
             onclick={() => {
               userHasScrolledUp = false;
               messagesContainer?.scrollTo({
@@ -1108,14 +1117,14 @@
           >
             <span>Jump to present</span>
             <ArrowLeft class="w-4 h-4 -rotate-90" />
-          </button>
+          </Button>
         </div>
       {/if}
     </div>
 
     <!-- Pending Permission Requests -->
     {#if $permissionRequests.length > 0}
-      <div class="flex-shrink-0 px-4 py-2 border-t border-border bg-surface space-y-2">
+      <div class="flex-shrink-0 px-4 py-2 border-t border-border bg-card space-y-2">
         {#each $permissionRequests as request (request.requestId)}
           <PermissionRequest {request} />
         {/each}
@@ -1141,7 +1150,7 @@
 
   {:else}
     <!-- Instance not found -->
-    <div class="flex-1 flex items-center justify-center bg-bg" in:fly={{ y: 20, duration: 400 }}>
+    <div class="flex-1 flex items-center justify-center bg-background" in:fly={{ y: 20, duration: 400 }}>
       <EmptyState
         icon={AlertCircle}
         title="Session not found"

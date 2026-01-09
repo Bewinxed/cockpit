@@ -141,11 +141,11 @@
       <div class="flex items-center gap-4 mb-4">
         <a
           href="/projects"
-          class="p-2 rounded-lg hover:bg-surface-hover transition-colors"
+          class="p-2 rounded-lg hover:bg-accent transition-colors"
         >
-          <ArrowLeft class="w-5 h-5 text-text-secondary" />
+          <ArrowLeft class="w-5 h-5 text-muted-foreground" />
         </a>
-        <span class="text-text-muted">Projects</span>
+        <span class="text-muted-foreground">Projects</span>
       </div>
 
       {#if isEditing}
@@ -159,7 +159,7 @@
             />
 
             <div class="flex flex-col gap-1.5">
-              <label for="edit-description" class="text-sm font-medium text-text">Description</label>
+              <label for="edit-description" class="text-sm font-medium text-foreground">Description</label>
               <textarea
                 id="edit-description"
                 bind:value={editDescription}
@@ -184,7 +184,7 @@
             {/if}
 
             <div class="flex items-center gap-3 pt-2">
-              <LoadingButton variant="primary" onclick={saveChanges} loading={saving}>
+              <LoadingButton variant="default" onclick={saveChanges} loading={saving}>
                 <Save class="size-4" />
                 Save Changes
               </LoadingButton>
@@ -204,20 +204,20 @@
               {project.name.charAt(0).toUpperCase()}
             </div>
             <div>
-              <h1 class="text-2xl font-semibold text-text mb-1">{project.name}</h1>
+              <h1 class="text-2xl font-semibold text-foreground mb-1">{project.name}</h1>
               {#if project.description}
-                <p class="text-text-secondary mb-2">{project.description}</p>
+                <p class="text-muted-foreground mb-2">{project.description}</p>
               {/if}
-              <div class="flex items-center gap-4 text-sm text-text-secondary">
+              <div class="flex items-center gap-4 text-sm text-muted-foreground">
                 {#if project.rootPath}
                   <div class="flex items-center gap-1.5">
-                    <FolderOpen class="w-4 h-4 text-text-muted" />
+                    <FolderOpen class="w-4 h-4 text-muted-foreground" />
                     <span class="font-mono text-xs">{project.rootPath}</span>
                   </div>
                 {/if}
                 {#if createdAt}
                   <div class="flex items-center gap-1.5">
-                    <Calendar class="w-4 h-4 text-text-muted" />
+                    <Calendar class="w-4 h-4 text-muted-foreground" />
                     <span>Created {createdAt}</span>
                   </div>
                 {/if}
@@ -243,48 +243,48 @@
     <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
       <Card padding="md">
         <div class="flex items-center gap-3">
-          <div class="w-10 h-10 rounded-xl bg-success-light flex items-center justify-center">
+          <div class="w-10 h-10 rounded-xl bg-success/10 flex items-center justify-center">
             <Terminal class="w-5 h-5 text-success" />
           </div>
           <div>
-            <div class="text-2xl font-bold text-text">{runningInstances.length}</div>
-            <div class="text-sm text-text-secondary">Running</div>
+            <div class="text-2xl font-bold text-foreground">{runningInstances.length}</div>
+            <div class="text-sm text-muted-foreground">Running</div>
           </div>
         </div>
       </Card>
 
       <Card padding="md">
         <div class="flex items-center gap-3">
-          <div class="w-10 h-10 rounded-xl bg-primary-light flex items-center justify-center">
+          <div class="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
             <Terminal class="w-5 h-5 text-primary" />
           </div>
           <div>
-            <div class="text-2xl font-bold text-text">{projectInstances.length}</div>
-            <div class="text-sm text-text-secondary">Total Instances</div>
+            <div class="text-2xl font-bold text-foreground">{projectInstances.length}</div>
+            <div class="text-sm text-muted-foreground">Total Instances</div>
           </div>
         </div>
       </Card>
 
       <Card padding="md">
         <div class="flex items-center gap-3">
-          <div class="w-10 h-10 rounded-xl bg-warning-light flex items-center justify-center">
+          <div class="w-10 h-10 rounded-xl bg-warning/10 flex items-center justify-center">
             <DollarSign class="w-5 h-5 text-warning" />
           </div>
           <div>
-            <div class="text-xl font-bold text-text">{formattedCost}</div>
-            <div class="text-sm text-text-secondary">Total Cost</div>
+            <div class="text-xl font-bold text-foreground">{formattedCost}</div>
+            <div class="text-sm text-muted-foreground">Total Cost</div>
           </div>
         </div>
       </Card>
 
       <Card padding="md">
         <div class="flex items-center gap-3">
-          <div class="w-10 h-10 rounded-xl bg-info-light flex items-center justify-center">
+          <div class="w-10 h-10 rounded-xl bg-info/10 flex items-center justify-center">
             <FolderKanban class="w-5 h-5 text-info" />
           </div>
           <div>
-            <div class="text-lg font-bold text-text truncate">{agent?.name || 'Any Machine'}</div>
-            <div class="text-sm text-text-secondary">Default Machine</div>
+            <div class="text-lg font-bold text-foreground truncate">{agent?.name || 'Any Machine'}</div>
+            <div class="text-sm text-muted-foreground">Default Machine</div>
           </div>
         </div>
       </Card>
@@ -294,7 +294,7 @@
     <section>
       <div class="flex items-center justify-between mb-4">
         <h2 class="section-title mb-0">Instances in this Project</h2>
-        <Button variant="primary" size="sm" onclick={() => showNewInstanceModal = true}>
+        <Button variant="default" size="sm" onclick={() => showNewInstanceModal = true}>
           <Plus class="size-4" />
           New Instance
         </Button>

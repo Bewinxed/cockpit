@@ -50,13 +50,13 @@
   );
 
   const bgClasses = {
-    starting: 'bg-warning-light',
-    running: 'bg-success-light',
-    stopping: 'bg-warning-light',
-    stopped: 'bg-surface-hover',
-    sleeping: 'bg-info-light',
-    disconnected: 'bg-warning-light',
-    error: 'bg-error-light',
+    starting: 'bg-warning/10',
+    running: 'bg-success/10',
+    stopping: 'bg-warning/10',
+    stopped: 'bg-accent',
+    sleeping: 'bg-info/10',
+    disconnected: 'bg-warning/10',
+    error: 'bg-error/10',
   };
 
   const dotClasses = {
@@ -88,7 +88,7 @@
   <!-- Content -->
   <div class="flex-1 min-w-0">
     <div class="flex items-center gap-2 mb-1">
-      <h3 class="font-semibold text-text truncate group-hover:text-primary transition-colors">
+      <h3 class="font-semibold text-foreground truncate group-hover:text-primary transition-colors">
         {displayName}
       </h3>
       <Badge variant={config.variant}>
@@ -96,22 +96,22 @@
       </Badge>
     </div>
 
-    <div class="flex items-center gap-3 text-sm text-text-secondary">
+    <div class="flex items-center gap-3 text-sm text-muted-foreground">
       <div class="flex items-center gap-1.5">
-        <Server class="w-3.5 h-3.5 text-text-muted" />
+        <Server class="w-3.5 h-3.5 text-muted-foreground" />
         <span class="truncate">{agentName}</span>
       </div>
       {#if timeAgo}
-        <span class="text-text-muted">·</span>
+        <span class="text-muted-foreground">·</span>
         <div class="flex items-center gap-1.5">
-          <Clock class="w-3.5 h-3.5 text-text-muted" />
+          <Clock class="w-3.5 h-3.5 text-muted-foreground" />
           <span>{timeAgo}</span>
         </div>
       {/if}
     </div>
 
     {#if !compact && instance.cwd}
-      <div class="mt-1.5 text-xs text-text-muted font-mono truncate">
+      <div class="mt-1.5 text-xs text-muted-foreground font-mono truncate">
         {instance.cwd}
       </div>
     {/if}
@@ -119,6 +119,6 @@
 
   <!-- Arrow with slide effect -->
   <div class="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-    <ArrowRight class="w-4 h-4 text-text-muted arrow-slide" />
+    <ArrowRight class="w-4 h-4 text-muted-foreground arrow-slide" />
   </div>
 </a>

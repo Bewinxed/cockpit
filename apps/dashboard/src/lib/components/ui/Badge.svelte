@@ -27,7 +27,7 @@
     warning: 'badge-warning',
     error: 'badge-error',
     info: 'badge-info',
-    outline: 'bg-transparent border border-border text-text-secondary',
+    outline: 'bg-transparent border border-border text-muted-foreground',
     destructive: 'badge-error',
   };
 

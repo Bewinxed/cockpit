@@ -8,7 +8,9 @@ const config = {
     adapter: adapter(),
     alias: {
       '$lib': './src/lib',
-      '$lib/*': './src/lib/*'
+      '$lib/*': './src/lib/*',
+      "@/*": './src/lib/*',
+
     },
     experimental: {
       remoteFunctions: true

@@ -4,8 +4,8 @@
   import { Button } from './index';
 
   interface Props {
-    variant?: 'primary' | 'secondary' | 'ghost' | 'danger' | 'success' | 'outline' | 'destructive';
-    size?: 'sm' | 'md' | 'lg';
+    variant?: 'default' | 'secondary' | 'ghost' | 'destructive' | 'outline' | 'link';
+    size?: 'default' | 'sm' | 'lg' | 'icon' | 'icon-sm' | 'icon-lg';
     loading?: boolean;
     disabled?: boolean;
     children: Snippet;

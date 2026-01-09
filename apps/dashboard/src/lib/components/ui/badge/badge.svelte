@@ -2,17 +2,16 @@
 	import { type VariantProps, tv } from "tailwind-variants";
 
 	export const badgeVariants = tv({
-		base: "inline-flex w-fit shrink-0 items-center justify-center gap-1.5 overflow-hidden rounded-sm border-none px-2 py-0.5 text-xs font-medium whitespace-nowrap [&>svg]:pointer-events-none [&>svg]:size-3",
+		base: "focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive inline-flex w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-full border px-2 py-0.5 text-xs font-medium whitespace-nowrap transition-[color,box-shadow] focus-visible:ring-[3px] [&>svg]:pointer-events-none [&>svg]:size-3",
 		variants: {
 			variant: {
-				default: "bg-primary-light text-text",
-				secondary: "bg-surface-hover text-text-secondary",
-				success: "bg-success-light text-success",
-				warning: "bg-warning-light text-warning",
-				error: "bg-error-light text-error",
-				info: "bg-info-light text-info",
-				destructive: "bg-error-light text-error",
-				outline: "bg-transparent border border-border text-text-secondary",
+				default:
+					"bg-primary text-primary-foreground [a&]:hover:bg-primary/90 border-transparent",
+				secondary:
+					"bg-secondary text-secondary-foreground [a&]:hover:bg-secondary/90 border-transparent",
+				destructive:
+					"bg-destructive [a&]:hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/70 border-transparent text-white",
+				outline: "text-foreground [a&]:hover:bg-accent [a&]:hover:text-accent-foreground",
 			},
 		},
 		defaultVariants: {
@@ -27,10 +26,6 @@
 	import type { HTMLAnchorAttributes } from "svelte/elements";
 	import { cn, type WithElementRef } from "$lib/utils.js";
 
-	export type BadgeProps = WithElementRef<HTMLAnchorAttributes> & {
-		variant?: BadgeVariant;
-	};
-
 	let {
 		ref = $bindable(null),
 		href,
@@ -38,7 +33,9 @@
 		variant = "default",
 		children,
 		...restProps
-	}: BadgeProps = $props();
+	}: WithElementRef<HTMLAnchorAttributes> & {
+		variant?: BadgeVariant;
+	} = $props();
 </script>
 
 <svelte:element

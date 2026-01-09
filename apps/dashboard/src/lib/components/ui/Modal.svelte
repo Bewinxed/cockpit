@@ -1,6 +1,7 @@
 <script lang="ts">
   import { X } from 'lucide-svelte';
   import type { Snippet } from 'svelte';
+  import { Button } from '$lib/components/ui/button';
 
   interface Props {
     open: boolean;
@@ -54,23 +55,23 @@
   >
     <!-- Modal -->
     <div 
-      class="bg-paper rounded-xl shadow-xl w-full {sizeClasses[size]} animate-fade-in overflow-hidden"
+      class="bg-card rounded-xl shadow-xl w-full {sizeClasses[size]} animate-fade-in overflow-hidden"
       onclick={(e) => e.stopPropagation()}
       onkeydown={(e) => e.stopPropagation()}
       role="document"
     >
       <!-- Header -->
       {#if title}
-        <div class="flex items-center justify-between px-6 py-4 border-b border-border bg-surface/50">
-          <h2 class="text-lg font-semibold text-text font-serif tracking-tight">{title}</h2>
-          <button
-            type="button"
-            class="p-2 rounded-lg hover:bg-surface-hover transition-colors text-text-muted hover:text-text"
+        <div class="flex items-center justify-between px-6 py-4 border-b border-border bg-card/50">
+          <h2 class="text-lg font-semibold text-foreground font-sans tracking-tight">{title}</h2>
+          <Button
+            variant="ghost"
+            size="icon-sm"
             onclick={onClose}
             aria-label="Close modal"
           >
             <X class="w-5 h-5" />
-          </button>
+          </Button>
         </div>
       {/if}
 
@@ -81,7 +82,7 @@
 
       <!-- Footer -->
       {#if footer}
-        <div class="px-6 py-4 border-t border-border bg-surface/50">
+        <div class="px-6 py-4 border-t border-border bg-card/50">
           {@render footer()}
         </div>
       {/if}

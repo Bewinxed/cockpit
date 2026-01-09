@@ -34,7 +34,7 @@
     {/if}
 
     {#if $streamingState.sessionInputTokens > 0 || $streamingState.sessionOutputTokens > 0}
-      <div class="flex items-center gap-3 text-text-muted">
+      <div class="flex items-center gap-3 text-muted-foreground">
         <span class="flex items-center gap-1" title="Input tokens">
           <ArrowLeft class="w-3 h-3" />
           {formatTokens($streamingState.sessionInputTokens)}

@@ -30,7 +30,7 @@
 
 <div class="flex flex-col gap-1.5">
   {#if label}
-    <label for={inputId} class="text-sm font-medium text-text">
+    <label for={inputId} class="text-sm font-medium text-foreground">
       {label}
     </label>
   {/if}
@@ -38,7 +38,7 @@
   <div class="relative">
     {#if Icon}
       <div class="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
-        <Icon class="w-4 h-4 text-text-muted" />
+        <Icon class="w-4 h-4 text-muted-foreground" />
       </div>
     {/if}
 
@@ -51,7 +51,7 @@
 
     {#if IconRight}
       <div class="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
-        <IconRight class="w-4 h-4 text-text-muted" />
+        <IconRight class="w-4 h-4 text-muted-foreground" />
       </div>
     {/if}
   </div>
@@ -59,6 +59,6 @@
   {#if error}
     <p class="text-xs text-error">{error}</p>
   {:else if hint}
-    <p class="text-xs text-text-muted">{hint}</p>
+    <p class="text-xs text-muted-foreground">{hint}</p>
   {/if}
 </div>

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { theme, toggleTheme } from '$lib/stores/theme';
   import { Sun, Moon } from 'lucide-svelte';
+  import { Button } from '$lib/components/ui/button';
 
   const themeIcons = {
     light: Sun,
@@ -18,10 +19,11 @@
   const label = $derived(themeLabels[$theme] || 'Light mode');
 </script>
 
-<button
+<Button
+  variant="ghost"
+  size="icon-sm"
   onclick={toggleTheme}
-  class="p-2 rounded-md text-text-secondary hover:bg-surface-hover hover:text-text transition-all duration-100"
   title={label}
 >
   <Icon class="w-4 h-4" />
-</button>
+</Button>

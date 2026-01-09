@@ -3,7 +3,7 @@
   import type { PermissionRequest } from '$lib/stores/realtime.svelte';
   import { api } from '$lib/api';
   import { removePermissionRequest } from '$lib/stores/realtime.svelte';
-  import Button from '$lib/components/ui/Button.svelte';
+  import { Button } from '$lib/components/ui/button';
 
   // Permission update types from SDK
   interface PermissionUpdate {
@@ -125,7 +125,8 @@
       });
 
       if (response.error || !response.data?.success) {
-        throw new Error(response.error?.message || 'Failed to send permission response');
+        const errValue = response.error as { value?: { message?: string } } | undefined;
+        throw new Error(errValue?.value?.message || 'Failed to send permission response');
       }
 
       // Remove from pending list
@@ -148,7 +149,8 @@
       });
 
       if (response.error || !response.data?.success) {
-        throw new Error(response.error?.message || 'Failed to send permission response');
+        const errValue = response.error as { value?: { message?: string } } | undefined;
+        throw new Error(errValue?.value?.message || 'Failed to send permission response');
       }
 
       // Remove from pending list
@@ -161,22 +163,22 @@
   }
 </script>
 
-<div class="permission-request">
-  <div class="permission-header">
-    <div class="permission-icon">
+<div class="bg-warning/10 border border-warning rounded-lg p-3 my-2">
+  <div class="flex gap-2 items-start">
+    <div class="text-warning shrink-0 mt-0.5">
       <Shield size={18} />
     </div>
-    <div class="permission-info">
-      <div class="permission-title">Permission Required</div>
-      <div class="permission-summary">{getActionSummary()}</div>
+    <div class="flex-1 min-w-0">
+      <div class="font-semibold text-warning text-sm">Permission Required</div>
+      <div class="text-muted-foreground text-sm mt-0.5 break-words">{getActionSummary()}</div>
       {#if request.decisionReason}
-        <div class="permission-reason">{request.decisionReason}</div>
+        <div class="text-muted-foreground text-xs mt-1 italic">{request.decisionReason}</div>
       {/if}
     </div>
   </div>
 
   <button
-    class="expand-toggle"
+    class="flex items-center gap-1 bg-transparent border-none py-1 text-muted-foreground text-xs cursor-pointer mt-2 hover:text-foreground"
     onclick={() => isExpanded = !isExpanded}
     type="button"
   >
@@ -189,23 +191,23 @@
   </button>
 
   {#if isExpanded}
-    <div class="permission-details">
-      <div class="detail-row">
-        <span class="detail-label">Tool:</span>
-        <span class="detail-value">{request.toolName}</span>
+    <div class="bg-muted rounded p-2 mt-2 text-xs">
+      <div class="flex gap-2 mb-1">
+        <span class="font-medium text-muted-foreground shrink-0">Tool:</span>
+        <span class="text-foreground">{request.toolName}</span>
       </div>
-      <div class="detail-row">
-        <span class="detail-label">Input:</span>
-        <pre class="detail-code">{formatToolInput(request.toolInput)}</pre>
+      <div class="flex gap-2">
+        <span class="font-medium text-muted-foreground shrink-0">Input:</span>
+        <pre class="bg-background/50 px-2 py-1 rounded font-mono text-xs whitespace-pre-wrap break-all max-h-[200px] overflow-auto m-0 flex-1">{formatToolInput(request.toolInput)}</pre>
       </div>
     </div>
   {/if}
 
   {#if error}
-    <div class="permission-error">{error}</div>
+    <div class="text-error text-xs mt-2 px-2 py-1 bg-error/10 rounded">{error}</div>
   {/if}
 
-  <div class="permission-actions">
+  <div class="flex justify-end items-center gap-2 mt-3 pt-2 border-t border-warning/50 flex-wrap">
     <Button
       variant="ghost"
       size="sm"
@@ -222,10 +224,10 @@
 
     <!-- Show allow options based on SDK suggestions -->
     {#if allowOptions().length > 1}
-      <div class="allow-options">
+      <div class="flex gap-1 flex-wrap">
         {#each allowOptions() as option, i}
           <Button
-            variant={i === 0 ? 'secondary' : option.isPermanent ? 'ghost' : 'primary'}
+            variant={i === 0 ? 'secondary' : option.isPermanent ? 'ghost' : 'default'}
             size="sm"
             onclick={() => handleAllow(option.permissions)}
             disabled={isLoading}
@@ -246,7 +248,7 @@
       </div>
     {:else}
       <Button
-        variant="primary"
+        variant="default"
         size="sm"
         onclick={() => handleAllow()}
         disabled={isLoading}
@@ -261,148 +263,3 @@
     {/if}
   </div>
 </div>
-
-<style>
-  .permission-request {
-    background: var(--color-warning-bg, #fef3c7);
-    border: 1px solid var(--color-warning-border, #f59e0b);
-    border-radius: var(--radius-md, 8px);
-    padding: var(--spacing-3, 12px);
-    margin: var(--spacing-2, 8px) 0;
-  }
-
-  .permission-header {
-    display: flex;
-    gap: var(--spacing-2, 8px);
-    align-items: flex-start;
-  }
-
-  .permission-icon {
-    color: var(--color-warning, #f59e0b);
-    flex-shrink: 0;
-    margin-top: 2px;
-  }
-
-  .permission-info {
-    flex: 1;
-    min-width: 0;
-  }
-
-  .permission-title {
-    font-weight: 600;
-    color: var(--color-warning-text, #92400e);
-    font-size: var(--text-sm, 14px);
-  }
-
-  .permission-summary {
-    color: var(--color-text-secondary, #6b7280);
-    font-size: var(--text-sm, 14px);
-    margin-top: 2px;
-    word-break: break-word;
-  }
-
-  .permission-reason {
-    color: var(--color-text-tertiary, #9ca3af);
-    font-size: var(--text-xs, 12px);
-    margin-top: 4px;
-    font-style: italic;
-  }
-
-  .expand-toggle {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    background: none;
-    border: none;
-    padding: var(--spacing-1, 4px) 0;
-    color: var(--color-text-secondary, #6b7280);
-    font-size: var(--text-xs, 12px);
-    cursor: pointer;
-    margin-top: var(--spacing-2, 8px);
-  }
-
-  .expand-toggle:hover {
-    color: var(--color-text-primary, #374151);
-  }
-
-  .permission-details {
-    background: var(--color-bg-secondary, rgba(0, 0, 0, 0.05));
-    border-radius: var(--radius-sm, 4px);
-    padding: var(--spacing-2, 8px);
-    margin-top: var(--spacing-2, 8px);
-    font-size: var(--text-xs, 12px);
-  }
-
-  .detail-row {
-    display: flex;
-    gap: var(--spacing-2, 8px);
-    margin-bottom: var(--spacing-1, 4px);
-  }
-
-  .detail-row:last-child {
-    margin-bottom: 0;
-  }
-
-  .detail-label {
-    font-weight: 500;
-    color: var(--color-text-secondary, #6b7280);
-    flex-shrink: 0;
-  }
-
-  .detail-value {
-    color: var(--color-text-primary, #374151);
-  }
-
-  .detail-code {
-    background: var(--color-bg-tertiary, rgba(0, 0, 0, 0.1));
-    padding: var(--spacing-1, 4px) var(--spacing-2, 8px);
-    border-radius: var(--radius-sm, 4px);
-    font-family: var(--font-mono, monospace);
-    font-size: var(--text-xs, 12px);
-    white-space: pre-wrap;
-    word-break: break-all;
-    max-height: 200px;
-    overflow: auto;
-    margin: 0;
-    flex: 1;
-  }
-
-  .permission-error {
-    color: var(--color-error, #ef4444);
-    font-size: var(--text-xs, 12px);
-    margin-top: var(--spacing-2, 8px);
-    padding: var(--spacing-1, 4px) var(--spacing-2, 8px);
-    background: var(--color-error-bg, #fef2f2);
-    border-radius: var(--radius-sm, 4px);
-  }
-
-  .permission-actions {
-    display: flex;
-    justify-content: flex-end;
-    align-items: center;
-    gap: var(--spacing-2, 8px);
-    margin-top: var(--spacing-3, 12px);
-    padding-top: var(--spacing-2, 8px);
-    border-top: 1px solid var(--color-warning-border, #f59e0b);
-    flex-wrap: wrap;
-  }
-
-  .allow-options {
-    display: flex;
-    gap: var(--spacing-1, 4px);
-    flex-wrap: wrap;
-  }
-
-  :global(.animate-spin) {
-    animation: spin 1s linear infinite;
-  }
-
-  @keyframes spin {
-    from {
-      transform: rotate(0deg);
-    }
-    to {
-      transform: rotate(360deg);
-    }
-  }
-</style>

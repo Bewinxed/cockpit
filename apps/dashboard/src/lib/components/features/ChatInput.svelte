@@ -160,7 +160,7 @@
   }
 </script>
 
-<form class="flex gap-3 px-6 py-5 bg-paper border-t border-border shadow-[0_-4px_12px_rgba(0,0,0,0.02)]" onsubmit={handleSubmit}>
+<form class="flex gap-3 px-6 py-5 bg-card border-t border-border shadow-[0_-4px_12px_rgba(0,0,0,0.02)]" onsubmit={handleSubmit}>
   <div class="flex-1 relative group">
     <!-- Command Palette -->
     <CommandPalette
@@ -177,13 +177,13 @@
       {placeholder}
       disabled={disabled || loading}
       rows={1}
-      class="input resize-none min-h-[48px] max-h-[200px] py-3.5 px-4 pr-12 disabled:bg-surface-hover disabled:cursor-not-allowed text-[15px] leading-relaxed transition-all"
+      class="input resize-none min-h-[48px] max-h-[200px] py-3.5 px-4 pr-12 disabled:bg-accent disabled:cursor-not-allowed text-[15px] leading-relaxed transition-all"
       oninput={handleInput}
       onkeydown={handleKeydown}
     ></textarea>
 
     <!-- Character hint -->
-    <div class="absolute right-3 bottom-3 text-[10px] text-text-muted pointer-events-none opacity-0 group-focus-within:opacity-100 transition-opacity">
+    <div class="absolute right-3 bottom-3 text-[10px] text-muted-foreground pointer-events-none opacity-0 group-focus-within:opacity-100 transition-opacity">
       {#if streaming}
         <span class="text-warning font-medium">⌘↵ to interrupt</span>
       {:else if message.length > 0}
@@ -196,10 +196,11 @@
     </div>
   </div>
 
-  <button
+  <Button
     type="submit"
+    size="icon"
     disabled={disabled || loading || !message.trim()}
-    class="btn btn-primary h-[48px] w-[48px] self-end rounded-full p-0 flex items-center justify-center shrink-0"
+    class="h-[48px] w-[48px] self-end rounded-full shrink-0"
     title="Send message"
   >
     {#if loading}
@@ -207,5 +208,5 @@
     {:else}
       <Send class="size-5 translate-x-0.5" />
     {/if}
-  </button>
+  </Button>
 </form>

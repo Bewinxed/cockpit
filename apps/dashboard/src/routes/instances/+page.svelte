@@ -63,21 +63,21 @@
   <!-- Header -->
   <header class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-10">
     <div>
-      <span class="text-[10px] font-mono text-text-muted uppercase tracking-[0.2em] mb-2 block">Management</span>
-      <h1 class="text-4xl font-serif font-bold text-text tracking-tight">Instances</h1>
+      <span class="text-[10px] font-mono text-muted-foreground uppercase tracking-[0.2em] mb-2 block">Management</span>
+      <h1 class="text-4xl font-sans font-bold text-foreground tracking-tight">Instances</h1>
       <div class="flex items-center gap-4 mt-2">
         <div class="flex items-center gap-2">
           <span class="w-2 h-2 rounded-full bg-success animate-pulse"></span>
-          <span class="text-sm text-text-secondary">{runningCount} running</span>
+          <span class="text-sm text-muted-foreground">{runningCount} running</span>
         </div>
         <span class="text-border">|</span>
         <div class="flex items-center gap-2">
           <span class="w-2 h-2 rounded-full bg-text-muted"></span>
-          <span class="text-sm text-text-secondary">{stoppedCount} stopped</span>
+          <span class="text-sm text-muted-foreground">{stoppedCount} stopped</span>
         </div>
       </div>
     </div>
-    <Button variant="primary" onclick={() => showNewInstanceModal = true}>
+    <Button variant="default" onclick={() => showNewInstanceModal = true}>
       <Plus class="size-4" />
       New Instance
     </Button>
@@ -86,9 +86,9 @@
   <NewInstanceModal bind:open={showNewInstanceModal} onClose={() => showNewInstanceModal = false} />
 
   <!-- Filters Section -->
-  <div class="bg-surface border border-border mb-6">
+  <div class="bg-card border border-border mb-6">
     <div class="p-4 border-b border-border">
-      <span class="text-[10px] font-mono text-text-muted uppercase tracking-[0.15em]">Filters</span>
+      <span class="text-[10px] font-mono text-muted-foreground uppercase tracking-[0.15em]">Filters</span>
     </div>
 
     <div class="p-4 space-y-4">
@@ -103,53 +103,51 @@
 
       <!-- Status Filter -->
       <div class="flex flex-wrap gap-2">
-        <span class="text-[10px] font-mono text-text-muted uppercase tracking-wider self-center mr-2">Status:</span>
+        <span class="text-[10px] font-mono text-muted-foreground uppercase tracking-wider self-center mr-2">Status:</span>
         {#each filterButtons as filter}
-          <button
-            class="px-4 py-2 text-xs font-mono uppercase tracking-wider transition-all duration-150 flex items-center gap-2
-                   {statusFilter === filter.value
-                     ? 'bg-primary text-text-inverse'
-                     : 'bg-bg-subtle border border-border text-text-secondary hover:border-primary/50 hover:text-text'}"
+          <Button
+            variant={statusFilter === filter.value ? 'default' : 'outline'}
+            size="sm"
+            class="font-mono uppercase tracking-wider"
             onclick={() => statusFilter = filter.value}
           >
             {#if filter.value === 'running'}
               <span class="w-1.5 h-1.5 rounded-full bg-success {statusFilter === filter.value ? '' : 'animate-pulse'}"></span>
             {:else if filter.value === 'stopped'}
-              <span class="w-1.5 h-1.5 rounded-full {statusFilter === filter.value ? 'bg-text-inverse/60' : 'bg-text-muted'}"></span>
+              <span class="w-1.5 h-1.5 rounded-full {statusFilter === filter.value ? 'bg-primary-foreground/60' : 'bg-muted-foreground'}"></span>
             {/if}
             {filter.label}
             <span class="opacity-60">({filter.count})</span>
-          </button>
+          </Button>
         {/each}
       </div>
 
       <!-- Type Filter -->
       <div class="flex flex-wrap gap-2">
-        <span class="text-[10px] font-mono text-text-muted uppercase tracking-wider self-center mr-2">Type:</span>
+        <span class="text-[10px] font-mono text-muted-foreground uppercase tracking-wider self-center mr-2">Type:</span>
         {#each typeButtons as type}
           {@const Icon = type.icon}
-          <button
-            class="px-4 py-2 text-xs font-mono uppercase tracking-wider transition-all duration-150 flex items-center gap-2
-                   {typeFilter === type.value
-                     ? 'bg-secondary text-text-inverse'
-                     : 'bg-bg-subtle border border-border text-text-secondary hover:border-secondary/50 hover:text-text'}"
+          <Button
+            variant={typeFilter === type.value ? 'secondary' : 'outline'}
+            size="sm"
+            class="font-mono uppercase tracking-wider"
             onclick={() => typeFilter = type.value}
           >
             <Icon class="w-3.5 h-3.5" />
             {type.label}
             <span class="opacity-60">({type.count})</span>
-          </button>
+          </Button>
         {/each}
       </div>
     </div>
   </div>
 
   <!-- Instances List -->
-  <div class="bg-surface border border-border">
+  <div class="bg-card border border-border">
     <div class="p-4 border-b border-border flex items-center justify-between">
       <div class="flex items-center gap-3">
         <div class="w-1.5 h-1.5 rounded-full bg-primary"></div>
-        <span class="text-[10px] font-mono text-text-muted uppercase tracking-[0.15em]">
+        <span class="text-[10px] font-mono text-muted-foreground uppercase tracking-[0.15em]">
           {filteredInstances.length} {filteredInstances.length === 1 ? 'Instance' : 'Instances'}
         </span>
       </div>
@@ -157,7 +155,7 @@
 
     <div class="divide-y divide-border">
       {#each filteredInstances as instance (instance.id)}
-        <div class="p-4 hover:bg-surface-hover/50 transition-colors">
+        <div class="p-4 hover:bg-accent/50 transition-colors">
           <InstanceCard {instance} />
         </div>
       {:else}

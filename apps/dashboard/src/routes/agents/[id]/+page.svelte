@@ -62,35 +62,35 @@
       <div class="flex items-center gap-4 mb-4">
         <a
           href="/agents"
-          class="p-2 rounded-lg hover:bg-surface-hover transition-colors"
+          class="p-2 rounded-lg hover:bg-accent transition-colors"
         >
-          <ArrowLeft class="w-5 h-5 text-text-secondary" />
+          <ArrowLeft class="w-5 h-5 text-muted-foreground" />
         </a>
-        <span class="text-text-muted">Agents</span>
+        <span class="text-muted-foreground">Agents</span>
       </div>
 
       <div class="flex items-start justify-between">
         <div class="flex items-center gap-5">
-          <div class="w-16 h-16 rounded-2xl bg-surface-hover flex items-center justify-center">
+          <div class="w-16 h-16 rounded-2xl bg-accent flex items-center justify-center">
             {#if osInfo}
-              <osInfo.icon class="w-8 h-8 text-text" />
+              <osInfo.icon class="w-8 h-8 text-foreground" />
             {/if}
           </div>
           <div>
             <div class="flex items-center gap-3 mb-1">
-              <h1 class="text-2xl font-semibold text-text">{agent.name}</h1>
+              <h1 class="text-2xl font-semibold text-foreground">{agent.name}</h1>
               <Badge variant={agent.status === 'online' ? 'default' : 'secondary'}>
                 {agent.status === 'online' ? 'Online' : 'Offline'}
               </Badge>
             </div>
-            <div class="flex items-center gap-4 text-sm text-text-secondary">
+            <div class="flex items-center gap-4 text-sm text-muted-foreground">
               {#if osInfo}
                 <span>{osInfo.label}</span>
-                <span class="text-text-muted">·</span>
+                <span class="text-muted-foreground">·</span>
               {/if}
               <span class="font-mono">{agent.ip || 'No IP'}</span>
               {#if connectedTime && agent.status === 'online'}
-                <span class="text-text-muted">·</span>
+                <span class="text-muted-foreground">·</span>
                 <span>Connected {connectedTime}</span>
               {/if}
             </div>
@@ -98,7 +98,7 @@
         </div>
 
         {#if agent.status === 'online'}
-          <Button variant="primary" onclick={() => showNewInstanceModal = true}>
+          <Button variant="default" onclick={() => showNewInstanceModal = true}>
             <Plus class="size-4" />
             New Instance
           </Button>
@@ -110,24 +110,24 @@
     <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
       <Card padding="md">
         <div class="flex items-center gap-3">
-          <div class="w-10 h-10 rounded-xl bg-success-light flex items-center justify-center">
+          <div class="w-10 h-10 rounded-xl bg-success/10 flex items-center justify-center">
             <Activity class="w-5 h-5 text-success" />
           </div>
           <div>
-            <div class="text-2xl font-bold text-text">{runningInstances.length}</div>
-            <div class="text-sm text-text-secondary">Running</div>
+            <div class="text-2xl font-bold text-foreground">{runningInstances.length}</div>
+            <div class="text-sm text-muted-foreground">Running</div>
           </div>
         </div>
       </Card>
 
       <Card padding="md">
         <div class="flex items-center gap-3">
-          <div class="w-10 h-10 rounded-xl bg-primary-light flex items-center justify-center">
+          <div class="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
             <Terminal class="w-5 h-5 text-primary" />
           </div>
           <div>
-            <div class="text-2xl font-bold text-text">{agentInstances.length}</div>
-            <div class="text-sm text-text-secondary">Total Instances</div>
+            <div class="text-2xl font-bold text-foreground">{agentInstances.length}</div>
+            <div class="text-sm text-muted-foreground">Total Instances</div>
           </div>
         </div>
       </Card>
@@ -135,25 +135,25 @@
       <Card padding="md">
         <div class="flex items-center gap-3">
           <div class="w-10 h-10 rounded-xl bg-{agent.status === 'online' ? 'success' : 'surface'}-light flex items-center justify-center">
-            <Wifi class="w-5 h-5 {agent.status === 'online' ? 'text-success' : 'text-text-muted'}" />
+            <Wifi class="w-5 h-5 {agent.status === 'online' ? 'text-success' : 'text-muted-foreground'}" />
           </div>
           <div>
-            <div class="text-xl font-bold text-text">
+            <div class="text-xl font-bold text-foreground">
               {agent.status === 'online' ? 'Connected' : 'Disconnected'}
             </div>
-            <div class="text-sm text-text-secondary">Status</div>
+            <div class="text-sm text-muted-foreground">Status</div>
           </div>
         </div>
       </Card>
 
       <Card padding="md">
         <div class="flex items-center gap-3">
-          <div class="w-10 h-10 rounded-xl bg-info-light flex items-center justify-center">
+          <div class="w-10 h-10 rounded-xl bg-info/10 flex items-center justify-center">
             <Clock class="w-5 h-5 text-info" />
           </div>
           <div>
-            <div class="text-lg font-bold text-text">{connectedTime || 'N/A'}</div>
-            <div class="text-sm text-text-secondary">Uptime</div>
+            <div class="text-lg font-bold text-foreground">{connectedTime || 'N/A'}</div>
+            <div class="text-sm text-muted-foreground">Uptime</div>
           </div>
         </div>
       </Card>

@@ -54,21 +54,21 @@
 </script>
 
 <div class="flex flex-col items-center justify-center text-center {styles.container} {className}">
-  <div class="flex items-center justify-center {styles.iconBg} rounded-2xl bg-bg-subtle border border-border mb-4">
-    <Icon class="{styles.icon} text-text-muted" />
+  <div class="flex items-center justify-center {styles.iconBg} rounded-2xl bg-muted border border-border mb-4">
+    <Icon class="{styles.icon} text-muted-foreground" />
   </div>
 
-  <h3 class="text-text {styles.title} mb-1 font-serif tracking-tight">
+  <h3 class="text-foreground {styles.title} mb-1 font-sans tracking-tight">
     {title}
   </h3>
 
-  <p class="text-text-secondary {styles.description} max-w-sm">
+  <p class="text-muted-foreground {styles.description} max-w-sm">
     {description}
   </p>
 
   {#if action}
     <div class="mt-6">
-      <Button variant="primary" size="sm" onclick={action.onClick}>
+      <Button variant="default" size="sm" onclick={action.onClick}>
         {action.label}
       </Button>
     </div>

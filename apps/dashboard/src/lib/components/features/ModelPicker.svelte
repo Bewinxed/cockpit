@@ -1,6 +1,7 @@
 <script lang="ts">
   import Modal from '../ui/Modal.svelte';
   import { Check, Loader2 } from 'lucide-svelte';
+  import { Button } from '$lib/components/ui/button';
 
   interface ModelInfo {
     value: string;
@@ -116,15 +117,15 @@
   {#snippet children()}
     {#if loading}
       <div class="flex items-center justify-center py-8">
-        <Loader2 class="w-6 h-6 animate-spin text-text-muted" />
-        <span class="ml-2 text-text-muted">Loading models...</span>
+        <Loader2 class="w-6 h-6 animate-spin text-muted-foreground" />
+        <span class="ml-2 text-muted-foreground">Loading models...</span>
       </div>
     {:else if error}
       <div class="p-4 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400">
         {error}
       </div>
     {:else if models.length === 0}
-      <div class="text-center py-8 text-text-muted">
+      <div class="text-center py-8 text-muted-foreground">
         No models available
       </div>
     {:else}
@@ -135,7 +136,7 @@
             class="w-full text-left px-4 py-3 rounded-lg transition-colors flex items-start gap-3
               {selectedModel === model.value
                 ? 'bg-accent/10 border border-accent/30'
-                : 'hover:bg-surface-hover border border-transparent'}"
+                : 'hover:bg-accent border border-transparent'}"
             onclick={() => selectedModel = model.value}
           >
             <div class="flex-shrink-0 w-5 h-5 mt-0.5">
@@ -145,18 +146,18 @@
             </div>
             <div class="flex-1 min-w-0">
               <div class="flex items-center gap-2">
-                <span class="font-medium text-text">{model.displayName}</span>
+                <span class="font-medium text-foreground">{model.displayName}</span>
                 {#if currentModel === model.value}
                   <span class="text-xs px-1.5 py-0.5 rounded bg-accent/20 text-accent">current</span>
                 {/if}
               </div>
-              <p class="text-sm text-text-muted mt-0.5 line-clamp-2">{model.description}</p>
+              <p class="text-sm text-muted-foreground mt-0.5 line-clamp-2">{model.description}</p>
             </div>
           </button>
         {/each}
       </div>
 
-      <p class="mt-4 text-xs text-text-muted text-center">
+      <p class="mt-4 text-xs text-muted-foreground text-center">
         Use ↑↓ to navigate, Enter to select
       </p>
     {/if}
@@ -164,19 +165,14 @@
 
   {#snippet footer()}
     <div class="flex justify-end gap-3">
-      <button
-        type="button"
-        class="px-4 py-2 text-sm font-medium text-text-muted hover:text-text transition-colors"
+      <Button
+        variant="ghost"
         onclick={onClose}
         disabled={saving}
       >
         Cancel
-      </button>
-      <button
-        type="button"
-        class="px-4 py-2 text-sm font-medium bg-accent text-white rounded-lg
-          hover:bg-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed
-          flex items-center gap-2"
+      </Button>
+      <Button
         onclick={handleSave}
         disabled={loading || saving || !selectedModel || selectedModel === currentModel}
       >
@@ -184,7 +180,7 @@
           <Loader2 class="w-4 h-4 animate-spin" />
         {/if}
         Apply
-      </button>
+      </Button>
     </div>
   {/snippet}
 </Modal>

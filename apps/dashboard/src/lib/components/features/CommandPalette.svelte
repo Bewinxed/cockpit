@@ -83,17 +83,17 @@
       case 'mcp':
         return 'bg-secondary/20 text-secondary';
       default:
-        return 'bg-text-muted/20 text-text-muted';
+        return 'bg-text-muted/20 text-muted-foreground';
     }
   }
 </script>
 
 {#if visible && filteredCommands.length > 0}
   <div
-    class="absolute bottom-full left-0 right-0 mb-2 bg-surface border border-border rounded-lg shadow-lg max-h-64 overflow-y-auto z-50"
+    class="absolute bottom-full left-0 right-0 mb-2 bg-card border border-border rounded-lg shadow-lg max-h-64 overflow-y-auto z-50"
   >
     <div class="p-2 border-b border-border">
-      <span class="text-xs text-text-muted">
+      <span class="text-xs text-muted-foreground">
         Available commands ({filteredCommands.length})
       </span>
     </div>
@@ -103,20 +103,20 @@
         <button
           bind:this={itemRefs[index]}
           type="button"
-          class="w-full px-3 py-2 flex items-center gap-3 hover:bg-surface-hover transition-colors text-left
-                 {index === selectedIndex ? 'bg-surface-hover' : ''}"
+          class="w-full px-3 py-2 flex items-center gap-3 hover:bg-accent transition-colors text-left
+                 {index === selectedIndex ? 'bg-accent' : ''}"
           onclick={() => onSelect(command)}
         >
-          <Icon class="w-4 h-4 text-text-muted flex-shrink-0" />
+          <Icon class="w-4 h-4 text-muted-foreground flex-shrink-0" />
           <div class="flex-1 min-w-0">
             <div class="flex items-center gap-2">
-              <span class="font-medium text-text">{command.name}</span>
+              <span class="font-medium text-foreground">{command.name}</span>
               <span class="text-[10px] px-1.5 py-0.5 rounded {getTypeColor(command.type)}">
                 {getTypeLabel(command.type)}
               </span>
             </div>
             {#if command.description}
-              <p class="text-xs text-text-muted truncate">
+              <p class="text-xs text-muted-foreground truncate">
                 {command.description}
               </p>
             {/if}
@@ -124,10 +124,10 @@
         </button>
       {/each}
     </div>
-    <div class="p-2 border-t border-border text-xs text-text-muted flex gap-4">
-      <span><kbd class="px-1 bg-surface-hover rounded">↑↓</kbd> navigate</span>
-      <span><kbd class="px-1 bg-surface-hover rounded">↵</kbd> select</span>
-      <span><kbd class="px-1 bg-surface-hover rounded">esc</kbd> close</span>
+    <div class="p-2 border-t border-border text-xs text-muted-foreground flex gap-4">
+      <span><kbd class="px-1 bg-accent rounded">↑↓</kbd> navigate</span>
+      <span><kbd class="px-1 bg-accent rounded">↵</kbd> select</span>
+      <span><kbd class="px-1 bg-accent rounded">esc</kbd> close</span>
     </div>
   </div>
 {/if}

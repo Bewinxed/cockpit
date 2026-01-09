@@ -2,6 +2,7 @@
   import { onMount, onDestroy } from 'svelte';
   import { FileDiff, type FileContents } from '@pierre/diffs';
   import { X, Columns, AlignJustify, Copy, Check } from 'lucide-svelte';
+  import { Button } from '$lib/components/ui/button';
 
   interface Props {
     filePath: string;
@@ -179,24 +180,26 @@
   onclick={handleBackdropClick}
 >
   <div
-    class="relative w-[95vw] h-[90vh] max-w-7xl bg-bg rounded-xl shadow-2xl border border-border flex flex-col overflow-hidden animate-scale-in"
+    class="relative w-[95vw] h-[90vh] max-w-7xl bg-background rounded-xl shadow-2xl border border-border flex flex-col overflow-hidden animate-scale-in"
   >
     <!-- Header -->
-    <div class="flex items-center justify-between px-4 py-3 border-b border-border bg-surface">
+    <div class="flex items-center justify-between px-4 py-3 border-b border-border bg-card">
       <div class="flex items-center gap-3 min-w-0">
         <div class="flex items-center gap-2 min-w-0">
-          <span class="font-mono text-sm text-text truncate">{filePath}</span>
-          <button
+          <span class="font-mono text-sm text-foreground truncate">{filePath}</span>
+          <Button
+            variant="ghost"
+            size="icon-sm"
             onclick={copyPath}
-            class="p-1 rounded hover:bg-surface-hover transition-colors flex-shrink-0"
+            class="h-6 w-6"
             title="Copy path"
           >
             {#if copied}
               <Check class="w-3.5 h-3.5 text-success" />
             {:else}
-              <Copy class="w-3.5 h-3.5 text-text-muted" />
+              <Copy class="w-3.5 h-3.5" />
             {/if}
-          </button>
+          </Button>
         </div>
         <div class="flex items-center gap-2 text-xs">
           <span class="text-success">+{stats().additions}</span>
@@ -206,33 +209,38 @@
 
       <div class="flex items-center gap-2">
         <!-- Diff style toggle -->
-        <div class="flex items-center bg-bg-subtle rounded-lg p-0.5 border border-border">
-          <button
+        <div class="flex items-center bg-muted rounded-lg p-0.5 border border-border">
+          <Button
+            variant={diffStyle === 'unified' ? 'secondary' : 'ghost'}
+            size="sm"
             onclick={() => diffStyle = 'unified'}
-            class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors {diffStyle === 'unified' ? 'bg-surface text-text shadow-sm' : 'text-text-muted hover:text-text'}"
+            class="h-7 text-xs"
             title="Unified view"
           >
             <AlignJustify class="w-3.5 h-3.5" />
             <span>Unified</span>
-          </button>
-          <button
+          </Button>
+          <Button
+            variant={diffStyle === 'split' ? 'secondary' : 'ghost'}
+            size="sm"
             onclick={() => diffStyle = 'split'}
-            class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors {diffStyle === 'split' ? 'bg-surface text-text shadow-sm' : 'text-text-muted hover:text-text'}"
+            class="h-7 text-xs"
             title="Split view"
           >
             <Columns class="w-3.5 h-3.5" />
             <span>Split</span>
-          </button>
+          </Button>
         </div>
 
         <!-- Close button -->
-        <button
+        <Button
+          variant="ghost"
+          size="icon-sm"
           onclick={onClose}
-          class="p-2 rounded-lg hover:bg-surface-hover transition-colors text-text-muted hover:text-text"
           title="Close (Esc)"
         >
           <X class="w-5 h-5" />
-        </button>
+        </Button>
       </div>
     </div>
 

@@ -386,37 +386,37 @@
       align: 'justify-start',
       bubble: 'chat-bubble chat-bubble-tool',
       icon: Wrench,
-      iconBg: 'bg-warning-light',
+      iconBg: 'bg-warning/10',
     },
     tool_result: {
       align: 'justify-start',
       bubble: 'chat-bubble chat-bubble-tool',
       icon: FileText,
-      iconBg: 'bg-success-light',
+      iconBg: 'bg-success/10',
     },
     error: {
       align: 'justify-start',
       bubble: 'chat-bubble chat-bubble-error',
       icon: AlertCircle,
-      iconBg: 'bg-error-light',
+      iconBg: 'bg-error/10',
     },
     system: {
       align: 'justify-center',
-      bubble: 'text-xs text-text-muted py-2 px-4 bg-surface-hover/50 rounded-full inline-flex items-center gap-2',
+      bubble: 'text-xs text-muted-foreground py-2 px-4 bg-accent/50 rounded-full inline-flex items-center gap-2',
       icon: Settings,
-      iconBg: 'bg-surface-hover',
+      iconBg: 'bg-accent',
     },
     hook_response: {
       align: 'justify-start',
       bubble: 'chat-bubble chat-bubble-tool',
       icon: Terminal,
-      iconBg: 'bg-info-light',
+      iconBg: 'bg-info/10',
     },
     command_output: {
       align: 'justify-start',
       bubble: 'chat-bubble chat-bubble-assistant',
       icon: Terminal,
-      iconBg: 'bg-surface-hover',
+      iconBg: 'bg-accent',
     },
     help_menu: {
       align: 'justify-start',
@@ -435,7 +435,7 @@
   {#if message.type !== 'user' && message.type !== 'system' && message.type !== 'help_menu' && !isCompactBoundary && !isLoginPrompt && !isModelPicker && !isMemoryPicker}
     <!-- Avatar -->
     <div class="flex-shrink-0 w-8 h-8 rounded-lg {config.iconBg} flex items-center justify-center">
-      <config.icon class="w-4 h-4 {message.type === 'error' ? 'text-error' : 'text-text-secondary'}" />
+      <config.icon class="w-4 h-4 {message.type === 'error' ? 'text-error' : 'text-muted-foreground'}" />
     </div>
   {/if}
 
@@ -444,16 +444,16 @@
     {#if message.type === 'tool_use' || message.type === 'tool_result'}
       <!-- Tool message - collapsible -->
       <button
-        class="{config.bubble} w-full text-left cursor-pointer hover:bg-surface-active transition-colors"
+        class="{config.bubble} w-full text-left cursor-pointer hover:bg-accent transition-colors"
         onclick={() => isExpanded = !isExpanded}
       >
         <div class="flex items-center gap-2">
           {#if isExpanded}
-            <ChevronDown class="w-4 h-4 text-text-muted flex-shrink-0" />
+            <ChevronDown class="w-4 h-4 text-muted-foreground flex-shrink-0" />
           {:else}
-            <ChevronRight class="w-4 h-4 text-text-muted flex-shrink-0" />
+            <ChevronRight class="w-4 h-4 text-muted-foreground flex-shrink-0" />
           {/if}
-          <span class="font-medium text-text">
+          <span class="font-medium text-foreground">
             {toolInfo()?.name || 'Tool'}
           </span>
           <!-- Status indicator -->
@@ -475,7 +475,7 @@
           {#if isFileDiffTool(tool?.name) && diffInfo}
             {@const totalLines = (diffInfo.oldContent.split('\n').length + diffInfo.newContent.split('\n').length)}
             {@const needsExpansion = totalLines > 8}
-            <div class="diff-wrapper" class:abbreviated={needsExpansion && !diffFullyExpanded}>
+            <div class="relative overflow-hidden rounded-lg" class:max-h-[150px]={needsExpansion && !diffFullyExpanded}>
               <DiffView
                 id={tool?.id || message.id}
                 filePath={diffInfo.filePath}
@@ -485,14 +485,17 @@
               {#if needsExpansion && !diffFullyExpanded}
                 <!-- svelte-ignore a11y_click_events_have_key_events -->
                 <!-- svelte-ignore a11y_no_static_element_interactions -->
-                <div class="diff-fade-overlay" onclick={() => diffFullyExpanded = true}>
-                  <ChevronDown class="expand-icon" />
+                <div
+                  class="absolute bottom-0 left-0 right-0 h-[60px] flex items-center justify-center cursor-pointer z-10 bg-gradient-to-b from-transparent via-background/85 to-background/95"
+                  onclick={() => diffFullyExpanded = true}
+                >
+                  <ChevronDown class="w-5 h-5 p-1.5 text-muted-foreground bg-card border border-border rounded-full shadow-sm hover:text-foreground hover:translate-y-0.5 transition-all" />
                 </div>
               {/if}
             </div>
             {#if needsExpansion && diffFullyExpanded}
               <button
-                class="collapse-btn"
+                class="flex items-center justify-center gap-1.5 w-full p-1.5 text-xs text-muted-foreground bg-card border border-border rounded-md cursor-pointer hover:bg-accent hover:text-foreground transition-all"
                 onclick={() => diffFullyExpanded = false}
               >
                 <ChevronUp class="w-3.5 h-3.5" />
@@ -500,19 +503,19 @@
               </button>
             {/if}
           {:else}
-            <div class="bg-bg-subtle rounded-lg p-3 font-mono text-xs overflow-x-auto border border-border">
-              <div class="text-text-muted text-[10px] uppercase tracking-wide mb-1">Input</div>
-              <pre class="whitespace-pre-wrap break-all text-text-secondary">{JSON.stringify(tool?.input, null, 2)}</pre>
+            <div class="bg-muted rounded-lg p-3 font-mono text-xs overflow-x-auto border border-border">
+              <div class="text-muted-foreground text-[10px] uppercase tracking-wide mb-1">Input</div>
+              <pre class="whitespace-pre-wrap break-all text-muted-foreground">{JSON.stringify(tool?.input, null, 2)}</pre>
             </div>
           {/if}
 
           <!-- Result (if available) -->
           {#if tool?.result !== undefined && tool?.result !== null}
-            <div class="bg-bg-subtle rounded-lg p-3 font-mono text-xs overflow-x-auto border border-border {tool?.status === 'error' ? 'border-error/30 bg-error/5' : 'border-success/30 bg-success/5'}">
-              <div class="text-text-muted text-[10px] uppercase tracking-wide mb-1">
+            <div class="bg-muted rounded-lg p-3 font-mono text-xs overflow-x-auto border border-border {tool?.status === 'error' ? 'border-error/30 bg-error/5' : 'border-success/30 bg-success/5'}">
+              <div class="text-muted-foreground text-[10px] uppercase tracking-wide mb-1">
                 {tool?.status === 'error' ? 'Error' : 'Result'}
               </div>
-              <pre class="whitespace-pre-wrap break-all text-text-secondary">{typeof tool.result === 'string' ? tool.result : JSON.stringify(tool.result, null, 2)}</pre>
+              <pre class="whitespace-pre-wrap break-all text-muted-foreground">{typeof tool.result === 'string' ? tool.result : JSON.stringify(tool.result, null, 2)}</pre>
             </div>
           {/if}
         </div>
@@ -520,16 +523,16 @@
     {:else if message.type === 'hook_response'}
       <!-- Hook response - collapsible like tool results -->
       <button
-        class="{config.bubble} w-full text-left cursor-pointer hover:bg-surface-active transition-colors"
+        class="{config.bubble} w-full text-left cursor-pointer hover:bg-accent transition-colors"
         onclick={() => isExpanded = !isExpanded}
       >
         <div class="flex items-center gap-2">
           {#if isExpanded}
-            <ChevronDown class="w-4 h-4 text-text-muted flex-shrink-0" />
+            <ChevronDown class="w-4 h-4 text-muted-foreground flex-shrink-0" />
           {:else}
-            <ChevronRight class="w-4 h-4 text-text-muted flex-shrink-0" />
+            <ChevronRight class="w-4 h-4 text-muted-foreground flex-shrink-0" />
           {/if}
-          <span class="font-medium text-text">
+          <span class="font-medium text-foreground">
             {hookInfo()?.name || 'Hook'}
           </span>
           <!-- Exit code indicator -->
@@ -538,7 +541,7 @@
           {:else}
             <XCircle class="w-4 h-4 text-error" />
           {/if}
-          <span class="text-xs text-text-muted">
+          <span class="text-xs text-muted-foreground">
             exit {hookInfo()?.exitCode}
           </span>
         </div>
@@ -549,17 +552,17 @@
         <div class="w-full space-y-2 mt-1">
           <!-- stdout -->
           {#if hook?.stdout}
-            <div class="bg-bg-subtle rounded-lg p-3 font-mono text-xs overflow-x-auto border border-border border-success/30 bg-success/5">
-              <div class="text-text-muted text-[10px] uppercase tracking-wide mb-1">stdout</div>
-              <pre class="whitespace-pre-wrap break-all text-text-secondary">{hook.stdout}</pre>
+            <div class="bg-muted rounded-lg p-3 font-mono text-xs overflow-x-auto border border-border border-success/30 bg-success/5">
+              <div class="text-muted-foreground text-[10px] uppercase tracking-wide mb-1">stdout</div>
+              <pre class="whitespace-pre-wrap break-all text-muted-foreground">{hook.stdout}</pre>
             </div>
           {/if}
 
           <!-- stderr -->
           {#if hook?.stderr}
-            <div class="bg-bg-subtle rounded-lg p-3 font-mono text-xs overflow-x-auto border border-border border-error/30 bg-error/5">
-              <div class="text-text-muted text-[10px] uppercase tracking-wide mb-1">stderr</div>
-              <pre class="whitespace-pre-wrap break-all text-text-secondary">{hook.stderr}</pre>
+            <div class="bg-muted rounded-lg p-3 font-mono text-xs overflow-x-auto border border-border border-error/30 bg-error/5">
+              <div class="text-muted-foreground text-[10px] uppercase tracking-wide mb-1">stderr</div>
+              <pre class="whitespace-pre-wrap break-all text-muted-foreground">{hook.stderr}</pre>
             </div>
           {/if}
         </div>
@@ -568,11 +571,11 @@
       <!-- Compact boundary - horizontal divider -->
       <div class="w-full flex items-center gap-3 py-2">
         <div class="flex-1 h-px bg-border"></div>
-        <div class="flex items-center gap-2 text-xs text-text-muted">
+        <div class="flex items-center gap-2 text-xs text-muted-foreground">
           <Scissors class="w-3 h-3" />
           <span>Context compacted</span>
           {#if message.metadata?.preTokens}
-            <span class="text-text-secondary">({message.metadata.preTokens.toLocaleString()} tokens)</span>
+            <span class="text-muted-foreground">({message.metadata.preTokens.toLocaleString()} tokens)</span>
           {/if}
         </div>
         <div class="flex-1 h-px bg-border"></div>
@@ -582,22 +585,22 @@
       {#if isLoginActive}
         <!-- Active: Show full login form -->
         <div class="w-full max-w-md">
-          <div class="border border-dotted border-border rounded-lg p-5 bg-surface space-y-4">
+          <div class="border border-dotted border-border rounded-lg p-5 bg-card space-y-4">
             <!-- Header -->
             <div class="flex items-start gap-3">
               <div class="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
                 <KeyRound class="w-5 h-5 text-primary" />
               </div>
               <div>
-                <h3 class="font-serif font-semibold text-text text-lg leading-tight">Login to Claude</h3>
-                <p class="text-sm text-text-secondary mt-0.5">Authenticate with your Claude MAX subscription</p>
+                <h3 class="font-sans font-semibold text-foreground text-lg leading-tight">Login to Claude</h3>
+                <p class="text-sm text-muted-foreground mt-0.5">Authenticate with your Claude MAX subscription</p>
               </div>
             </div>
 
             <!-- Step 1: Open auth page -->
             {#if message.metadata?.authUrl}
               <div class="space-y-2">
-                <div class="flex items-center gap-2 text-xs text-text-muted uppercase tracking-wide">
+                <div class="flex items-center gap-2 text-xs text-muted-foreground uppercase tracking-wide">
                   <span class="w-5 h-5 rounded-full bg-text-muted/10 flex items-center justify-center text-[10px] font-medium">1</span>
                   <span>Open login page</span>
                 </div>
@@ -615,7 +618,7 @@
 
             <!-- Step 2: Paste code -->
             <div class="space-y-2">
-              <div class="flex items-center gap-2 text-xs text-text-muted uppercase tracking-wide">
+              <div class="flex items-center gap-2 text-xs text-muted-foreground uppercase tracking-wide">
                 <span class="w-5 h-5 rounded-full bg-text-muted/10 flex items-center justify-center text-[10px] font-medium">2</span>
                 <span>Paste the code</span>
               </div>
@@ -626,13 +629,13 @@
                   onkeydown={handleLoginKeydown}
                   placeholder="Paste code here..."
                   disabled={loginLoading}
-                  class="w-full px-4 py-2.5 bg-bg border border-border rounded-md text-sm font-mono
-                         placeholder:text-text-muted focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20
+                  class="w-full px-4 py-2.5 bg-background border border-border rounded-md text-sm font-mono
+                         placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20
                          disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 />
               </div>
-              <p class="text-xs text-text-muted">
-                After authorizing, you'll see a code like <code class="px-1 py-0.5 bg-bg-subtle rounded text-[11px]">abc123#xyz789</code>
+              <p class="text-xs text-muted-foreground">
+                After authorizing, you'll see a code like <code class="px-1 py-0.5 bg-muted rounded text-[11px]">abc123#xyz789</code>
               </p>
             </div>
 
@@ -663,7 +666,7 @@
               <button
                 onclick={onLoginCancel}
                 disabled={loginLoading}
-                class="px-4 py-2 text-sm text-text-secondary hover:text-text hover:underline underline-offset-2 transition-colors"
+                class="px-4 py-2 text-sm text-muted-foreground hover:text-foreground hover:underline underline-offset-2 transition-colors"
               >
                 Cancel
               </button>
@@ -672,17 +675,17 @@
         </div>
       {:else}
         <!-- Inactive: Show compact dismissible version -->
-        <div class="inline-flex items-center gap-2 px-3 py-1.5 bg-surface-hover/50 border border-dotted border-border rounded-lg text-sm group">
-          <KeyRound class="w-3.5 h-3.5 text-text-muted" />
-          <span class="text-text-muted">Login attempted</span>
-          <span class="text-text-secondary font-mono text-xs">•••••••#•••</span>
+        <div class="inline-flex items-center gap-2 px-3 py-1.5 bg-accent/50 border border-dotted border-border rounded-lg text-sm group">
+          <KeyRound class="w-3.5 h-3.5 text-muted-foreground" />
+          <span class="text-muted-foreground">Login attempted</span>
+          <span class="text-muted-foreground font-mono text-xs">•••••••#•••</span>
           {#if onDismissMessage}
             <button
               onclick={onDismissMessage}
-              class="ml-1 p-0.5 rounded hover:bg-surface-active transition-colors opacity-0 group-hover:opacity-100"
+              class="ml-1 p-0.5 rounded hover:bg-accent transition-colors opacity-0 group-hover:opacity-100"
               title="Dismiss"
             >
-              <XCircle class="w-3.5 h-3.5 text-text-muted hover:text-text-secondary" />
+              <XCircle class="w-3.5 h-3.5 text-muted-foreground hover:text-muted-foreground" />
             </button>
           {/if}
         </div>
@@ -692,23 +695,23 @@
       {#if isModelPickerActive}
         <!-- Active: Show model picker form -->
         <div class="w-full max-w-md">
-          <div class="border border-dotted border-border rounded-lg p-5 bg-surface space-y-4">
+          <div class="border border-dotted border-border rounded-lg p-5 bg-card space-y-4">
             <!-- Header -->
             <div class="flex items-start gap-3">
               <div class="w-10 h-10 rounded-lg bg-secondary/10 flex items-center justify-center flex-shrink-0">
                 <Cpu class="w-5 h-5 text-secondary" />
               </div>
               <div>
-                <h3 class="font-serif font-semibold text-text text-lg leading-tight">Switch Model</h3>
-                <p class="text-sm text-text-secondary mt-0.5">Select a model for this session</p>
+                <h3 class="font-sans font-semibold text-foreground text-lg leading-tight">Switch Model</h3>
+                <p class="text-sm text-muted-foreground mt-0.5">Select a model for this session</p>
               </div>
             </div>
 
             <!-- Model list -->
             {#if message.metadata?.loading}
               <div class="flex items-center justify-center py-6">
-                <Loader2 class="w-5 h-5 animate-spin text-text-muted" />
-                <span class="ml-2 text-sm text-text-muted">Loading models...</span>
+                <Loader2 class="w-5 h-5 animate-spin text-muted-foreground" />
+                <span class="ml-2 text-sm text-muted-foreground">Loading models...</span>
               </div>
             {:else if message.metadata?.error}
               <div class="flex items-center gap-2 text-sm text-error bg-error/10 rounded-md px-3 py-2">
@@ -716,7 +719,7 @@
                 <span>{message.metadata.error}</span>
               </div>
             {:else if models.length === 0}
-              <div class="text-center py-6 text-sm text-text-muted">
+              <div class="text-center py-6 text-sm text-muted-foreground">
                 No models available
               </div>
             {:else}
@@ -727,7 +730,7 @@
                     class="w-full text-left px-3 py-2.5 rounded-lg transition-colors flex items-start gap-3
                       {selectedModel === model.value
                         ? 'bg-secondary/10 border border-secondary/30'
-                        : 'hover:bg-surface-hover border border-transparent'}"
+                        : 'hover:bg-accent border border-transparent'}"
                     onclick={() => selectedModel = model.value}
                   >
                     <div class="flex-shrink-0 w-5 h-5 mt-0.5">
@@ -737,17 +740,17 @@
                     </div>
                     <div class="flex-1 min-w-0">
                       <div class="flex items-center gap-2">
-                        <span class="font-medium text-text text-sm">{model.displayName}</span>
+                        <span class="font-medium text-foreground text-sm">{model.displayName}</span>
                         {#if currentModel === model.value}
                           <span class="text-[10px] px-1.5 py-0.5 rounded bg-secondary/20 text-secondary uppercase tracking-wide">current</span>
                         {/if}
                       </div>
-                      <p class="text-xs text-text-muted mt-0.5 line-clamp-2">{model.description}</p>
+                      <p class="text-xs text-muted-foreground mt-0.5 line-clamp-2">{model.description}</p>
                     </div>
                   </button>
                 {/each}
               </div>
-              <p class="text-xs text-text-muted text-center">
+              <p class="text-xs text-muted-foreground text-center">
                 Use ↑↓ to navigate, Enter to select
               </p>
             {/if}
@@ -779,7 +782,7 @@
               <button
                 onclick={onModelCancel}
                 disabled={modelLoading}
-                class="px-4 py-2 text-sm text-text-secondary hover:text-text hover:underline underline-offset-2 transition-colors"
+                class="px-4 py-2 text-sm text-muted-foreground hover:text-foreground hover:underline underline-offset-2 transition-colors"
               >
                 Cancel
               </button>
@@ -788,19 +791,19 @@
         </div>
       {:else}
         <!-- Inactive: Show compact version -->
-        <div class="inline-flex items-center gap-2 px-3 py-1.5 bg-surface-hover/50 border border-dotted border-border rounded-lg text-sm group">
-          <Cpu class="w-3.5 h-3.5 text-text-muted" />
-          <span class="text-text-muted">Model selection</span>
+        <div class="inline-flex items-center gap-2 px-3 py-1.5 bg-accent/50 border border-dotted border-border rounded-lg text-sm group">
+          <Cpu class="w-3.5 h-3.5 text-muted-foreground" />
+          <span class="text-muted-foreground">Model selection</span>
           {#if message.metadata?.selectedModel}
-            <span class="text-text-secondary text-xs">{message.metadata.selectedModel}</span>
+            <span class="text-muted-foreground text-xs">{message.metadata.selectedModel}</span>
           {/if}
           {#if onDismissMessage}
             <button
               onclick={onDismissMessage}
-              class="ml-1 p-0.5 rounded hover:bg-surface-active transition-colors opacity-0 group-hover:opacity-100"
+              class="ml-1 p-0.5 rounded hover:bg-accent transition-colors opacity-0 group-hover:opacity-100"
               title="Dismiss"
             >
-              <XCircle class="w-3.5 h-3.5 text-text-muted hover:text-text-secondary" />
+              <XCircle class="w-3.5 h-3.5 text-muted-foreground hover:text-muted-foreground" />
             </button>
           {/if}
         </div>
@@ -810,15 +813,15 @@
       {#if isMemoryPickerActive}
         <!-- Active: Show memory picker or editor -->
         <div class="w-full max-w-lg">
-          <div class="border border-dotted border-border rounded-lg p-5 bg-surface space-y-4">
+          <div class="border border-dotted border-border rounded-lg p-5 bg-card space-y-4">
             <!-- Header -->
             <div class="flex items-start gap-3">
               <div class="w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center flex-shrink-0">
                 <BookOpen class="w-5 h-5 text-amber-600" />
               </div>
               <div class="flex-1">
-                <h3 class="font-serif font-semibold text-text text-lg leading-tight">Edit Memory</h3>
-                <p class="text-sm text-text-secondary mt-0.5">
+                <h3 class="font-sans font-semibold text-foreground text-lg leading-tight">Edit Memory</h3>
+                <p class="text-sm text-muted-foreground mt-0.5">
                   {#if message.metadata?.memoryPhase === 'editing'}
                     Editing {message.metadata?.selectedMemoryType === 'project' ? 'project' : 'user'} memory
                   {:else}
@@ -831,8 +834,8 @@
             {#if message.metadata?.loading}
               <!-- Loading state -->
               <div class="flex items-center justify-center py-6">
-                <Loader2 class="w-5 h-5 animate-spin text-text-muted" />
-                <span class="ml-2 text-sm text-text-muted">Loading memory...</span>
+                <Loader2 class="w-5 h-5 animate-spin text-muted-foreground" />
+                <span class="ml-2 text-sm text-muted-foreground">Loading memory...</span>
               </div>
             {:else if message.metadata?.error}
               <!-- Error state -->
@@ -847,19 +850,19 @@
                 role="group"
                 aria-label="Memory editor"
               >
-                <div class="flex items-center gap-2 text-xs text-text-muted">
+                <div class="flex items-center gap-2 text-xs text-muted-foreground">
                   {#if message.metadata?.selectedMemoryType === 'project'}
                     <FolderOpen class="w-3.5 h-3.5" />
-                    <code class="font-mono bg-bg-subtle px-1.5 py-0.5 rounded">{message.metadata?.memoryPath || './CLAUDE.md'}</code>
+                    <code class="font-mono bg-muted px-1.5 py-0.5 rounded">{message.metadata?.memoryPath || './CLAUDE.md'}</code>
                   {:else}
                     <Home class="w-3.5 h-3.5" />
-                    <code class="font-mono bg-bg-subtle px-1.5 py-0.5 rounded">~/.claude/CLAUDE.md</code>
+                    <code class="font-mono bg-muted px-1.5 py-0.5 rounded">~/.claude/CLAUDE.md</code>
                   {/if}
                 </div>
                 <textarea
                   use:autofocus
-                  class="w-full h-64 px-3 py-2 bg-bg border border-border rounded-lg font-mono text-sm
-                         placeholder:text-text-muted focus:outline-none focus:border-border-strong focus:ring-0
+                  class="w-full h-64 px-3 py-2 bg-background border border-border rounded-lg font-mono text-sm
+                         placeholder:text-muted-foreground focus:outline-none focus:border-border focus:ring-0
                          resize-y transition-colors"
                   placeholder="# Memory instructions for Claude..."
                   value={message.metadata?.memoryContent || ''}
@@ -869,7 +872,7 @@
                   }}
                   onkeydown={handleMemoryEditorKeydown}
                 ></textarea>
-                <p class="text-xs text-text-muted">
+                <p class="text-xs text-muted-foreground">
                   Markdown format. Changes will be saved to the file on the agent.
                 </p>
               </div>
@@ -893,7 +896,7 @@
                 <button
                   onclick={onMemoryCancel}
                   disabled={memorySaving}
-                  class="px-4 py-2 text-sm text-text-secondary hover:text-text hover:underline underline-offset-2 transition-colors"
+                  class="px-4 py-2 text-sm text-muted-foreground hover:text-foreground hover:underline underline-offset-2 transition-colors"
                 >
                   Cancel
                 </button>
@@ -922,14 +925,14 @@
                   </div>
                   <div class="flex-1 min-w-0">
                     <div class="flex items-center gap-2">
-                      <span class="font-medium text-text text-sm">Project memory</span>
-                      <span class="text-[10px] px-1.5 py-0.5 rounded bg-surface-hover text-text-muted">1</span>
+                      <span class="font-medium text-foreground text-sm">Project memory</span>
+                      <span class="text-[10px] px-1.5 py-0.5 rounded bg-accent text-muted-foreground">1</span>
                     </div>
-                    <p class="text-xs text-text-muted mt-0.5">
-                      Checked in at <code class="px-1 py-0.5 bg-bg-subtle rounded">./CLAUDE.md</code>
+                    <p class="text-xs text-muted-foreground mt-0.5">
+                      Checked in at <code class="px-1 py-0.5 bg-muted rounded">./CLAUDE.md</code>
                     </p>
                   </div>
-                  <ArrowRight class="w-4 h-4 text-text-muted opacity-0 group-hover:opacity-100 transition-opacity mt-1" />
+                  <ArrowRight class="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity mt-1" />
                 </button>
 
                 <button
@@ -946,14 +949,14 @@
                   </div>
                   <div class="flex-1 min-w-0">
                     <div class="flex items-center gap-2">
-                      <span class="font-medium text-text text-sm">User memory</span>
-                      <span class="text-[10px] px-1.5 py-0.5 rounded bg-surface-hover text-text-muted">2</span>
+                      <span class="font-medium text-foreground text-sm">User memory</span>
+                      <span class="text-[10px] px-1.5 py-0.5 rounded bg-accent text-muted-foreground">2</span>
                     </div>
-                    <p class="text-xs text-text-muted mt-0.5">
-                      Saved in <code class="px-1 py-0.5 bg-bg-subtle rounded">~/.claude/CLAUDE.md</code>
+                    <p class="text-xs text-muted-foreground mt-0.5">
+                      Saved in <code class="px-1 py-0.5 bg-muted rounded">~/.claude/CLAUDE.md</code>
                     </p>
                   </div>
-                  <ArrowRight class="w-4 h-4 text-text-muted opacity-0 group-hover:opacity-100 transition-opacity mt-1" />
+                  <ArrowRight class="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity mt-1" />
                 </button>
               </div>
 
@@ -961,7 +964,7 @@
               <div class="flex justify-end pt-1">
                 <button
                   onclick={onMemoryCancel}
-                  class="px-4 py-2 text-sm text-text-secondary hover:text-text hover:underline underline-offset-2 transition-colors"
+                  class="px-4 py-2 text-sm text-muted-foreground hover:text-foreground hover:underline underline-offset-2 transition-colors"
                 >
                   Cancel
                 </button>
@@ -971,33 +974,33 @@
         </div>
       {:else}
         <!-- Inactive: Show compact version -->
-        <div class="inline-flex items-center gap-2 px-3 py-1.5 bg-surface-hover/50 border border-dotted border-border rounded-lg text-sm group">
-          <BookOpen class="w-3.5 h-3.5 text-text-muted" />
-          <span class="text-text-muted">Memory</span>
+        <div class="inline-flex items-center gap-2 px-3 py-1.5 bg-accent/50 border border-dotted border-border rounded-lg text-sm group">
+          <BookOpen class="w-3.5 h-3.5 text-muted-foreground" />
+          <span class="text-muted-foreground">Memory</span>
           {#if message.metadata?.selectedMemoryType}
-            <span class="text-text-secondary text-xs capitalize">{message.metadata.selectedMemoryType}</span>
+            <span class="text-muted-foreground text-xs capitalize">{message.metadata.selectedMemoryType}</span>
           {/if}
           {#if onDismissMessage}
             <button
               onclick={onDismissMessage}
-              class="ml-1 p-0.5 rounded hover:bg-surface-active transition-colors opacity-0 group-hover:opacity-100"
+              class="ml-1 p-0.5 rounded hover:bg-accent transition-colors opacity-0 group-hover:opacity-100"
               title="Dismiss"
             >
-              <XCircle class="w-3.5 h-3.5 text-text-muted hover:text-text-secondary" />
+              <XCircle class="w-3.5 h-3.5 text-muted-foreground hover:text-muted-foreground" />
             </button>
           {/if}
         </div>
       {/if}
     {:else if message.type === 'command_output'}
       <!-- Command output (like /help) - rendered with markdown and terminal styling -->
-      <div class="chat-bubble chat-bubble-assistant relative bg-bg-subtle border border-border">
+      <div class="chat-bubble chat-bubble-assistant relative bg-muted border border-border">
         {#if message.metadata?.command}
-          <div class="flex items-center gap-1.5 text-xs text-text-muted mb-2 pb-2 border-b border-border">
+          <div class="flex items-center gap-1.5 text-xs text-muted-foreground mb-2 pb-2 border-b border-border">
             <Terminal class="w-3 h-3" />
             <code class="font-mono">{message.metadata.command}</code>
           </div>
         {/if}
-        <div class="prose prose-sm max-w-none [&_pre]:bg-bg-subtle [&_pre]:border [&_pre]:border-border [&_pre]:rounded-lg [&_code]:text-xs [&_code]:bg-bg-subtle [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded">
+        <div class="prose prose-sm max-w-none [&_pre]:bg-muted [&_pre]:border [&_pre]:border-border [&_pre]:rounded-lg [&_code]:text-xs [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded">
           <Markdown source={message.content} options={{ breaks: true }} />
         </div>
       </div>
@@ -1021,10 +1024,10 @@
       {#if message.type === 'user' && isEditing}
         <!-- User message in edit mode -->
         <div class="w-full max-w-[85%]">
-          <div class="bg-surface border border-primary/30 rounded-lg p-3 space-y-3">
+          <div class="bg-card border border-primary/30 rounded-lg p-3 space-y-3">
             <textarea
-              class="w-full min-h-[80px] px-3 py-2 bg-bg border border-border rounded-lg text-sm
-                     placeholder:text-text-muted focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20
+              class="w-full min-h-[80px] px-3 py-2 bg-background border border-border rounded-lg text-sm
+                     placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20
                      resize-y transition-colors"
               placeholder="Edit your message..."
               bind:value={editContent}
@@ -1032,14 +1035,14 @@
               disabled={editLoading}
             ></textarea>
             <div class="flex items-center justify-between">
-              <p class="text-xs text-text-muted">
+              <p class="text-xs text-muted-foreground">
                 This will restart the conversation from this point
               </p>
               <div class="flex items-center gap-2">
                 <button
                   onclick={cancelEditing}
                   disabled={editLoading}
-                  class="px-3 py-1.5 text-sm text-text-secondary hover:text-text transition-colors"
+                  class="px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
                 >
                   Cancel
                 </button>
@@ -1062,7 +1065,7 @@
         </div>
       {:else}
         <div class="{config.bubble} relative">
-          <div class="prose prose-sm max-w-none {message.type === 'user' ? 'prose-invert' : ''} [&_pre]:bg-bg-subtle [&_pre]:border [&_pre]:border-border [&_pre]:rounded-lg [&_code]:text-xs [&_code]:bg-bg-subtle [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded">
+          <div class="prose prose-sm max-w-none {message.type === 'user' ? 'prose-invert' : ''} [&_pre]:bg-muted [&_pre]:border [&_pre]:border-border [&_pre]:rounded-lg [&_code]:text-xs [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded">
             <Markdown source={message.content} />
           </div>
 
@@ -1071,23 +1074,23 @@
             {#if message.type === 'user' && canEdit && onEditMessage}
               <!-- Edit button for user messages -->
               <button
-                class="p-1.5 rounded-md bg-surface border border-border shadow-sm hover:bg-surface-hover"
+                class="p-1.5 rounded-md bg-card border border-border shadow-sm hover:bg-accent"
                 onclick={startEditing}
                 title="Edit message and restart from here"
               >
-                <Edit3 class="w-3.5 h-3.5 text-text-muted" />
+                <Edit3 class="w-3.5 h-3.5 text-muted-foreground" />
               </button>
             {/if}
             <!-- Copy button -->
             <button
-              class="p-1.5 rounded-md bg-surface border border-border shadow-sm hover:bg-surface-hover"
+              class="p-1.5 rounded-md bg-card border border-border shadow-sm hover:bg-accent"
               onclick={copyContent}
               title="Copy message"
             >
               {#if copied}
                 <Check class="w-3.5 h-3.5 text-success" />
               {:else}
-                <Copy class="w-3.5 h-3.5 text-text-muted" />
+                <Copy class="w-3.5 h-3.5 text-muted-foreground" />
               {/if}
             </button>
           </div>
@@ -1097,7 +1100,7 @@
 
     <!-- Timestamp -->
     {#if showTimestamp && message.timestamp}
-      <span class="text-[10px] text-text-muted mt-0.5">
+      <span class="text-[10px] text-muted-foreground mt-0.5">
         {formatTimestamp(new Date(message.timestamp))}
       </span>
     {/if}
@@ -1110,73 +1113,3 @@
     </div>
   {/if}
 </div>
-
-<style>
-  .diff-wrapper {
-    position: relative;
-    overflow: hidden;
-    border-radius: 0.5rem;
-  }
-
-  .diff-wrapper.abbreviated {
-    max-height: 150px;
-  }
-
-  .diff-fade-overlay {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    height: 60px;
-    background: linear-gradient(
-      to bottom,
-      transparent 0%,
-      rgba(var(--color-bg-rgb, 0 0 0), 0.85) 50%,
-      rgba(var(--color-bg-rgb, 0 0 0), 0.95) 100%
-    );
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    z-index: 10;
-  }
-
-  .diff-fade-overlay :global(.expand-icon) {
-    width: 1.25rem;
-    height: 1.25rem;
-    color: var(--color-text-muted);
-    padding: 0.375rem;
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: 9999px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    transition: all 0.15s ease;
-  }
-
-  .diff-fade-overlay:hover :global(.expand-icon) {
-    color: var(--color-text);
-    border-color: var(--color-border-hover);
-    transform: translateY(2px);
-  }
-
-  .collapse-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.375rem;
-    width: 100%;
-    padding: 0.375rem;
-    font-size: 0.75rem;
-    color: var(--color-text-muted);
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: 0.375rem;
-    cursor: pointer;
-    transition: all 0.15s ease;
-  }
-
-  .collapse-btn:hover {
-    background: var(--color-surface-hover);
-    color: var(--color-text);
-  }
-</style>

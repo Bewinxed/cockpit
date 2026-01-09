@@ -2,6 +2,7 @@
   import { onMount, onDestroy } from 'svelte';
   import { FileDiff, type FileContents } from '@pierre/diffs';
   import { Maximize2, AlertCircle, Loader2 } from 'lucide-svelte';
+  import { Button } from '$lib/components/ui/button';
   import DiffModal from './DiffModal.svelte';
 
   interface Props {
@@ -119,32 +120,34 @@
   }
 </script>
 
-<div class="diff-view-container">
-  <div class="diff-header">
-    <span class="diff-path">{filePath}</span>
-    <button
+<div class="rounded-lg overflow-hidden border border-border bg-muted">
+  <div class="flex items-center justify-between px-3 py-2 bg-card border-b border-border font-mono text-xs text-muted-foreground">
+    <span class="break-all flex-1 min-w-0">{filePath}</span>
+    <Button
+      variant="ghost"
+      size="icon-sm"
       onclick={openModal}
-      class="expand-btn"
+      class="h-6 w-6 ml-2 flex-shrink-0"
       title="Expand diff (full view)"
       disabled={loading || !!error}
     >
       <Maximize2 class="w-3.5 h-3.5" />
-    </button>
+    </Button>
   </div>
 
   {#if loading}
-    <div class="diff-loading">
-      <Loader2 class="w-5 h-5 animate-spin text-text-muted" />
+    <div class="flex items-center justify-center gap-2 p-8 text-sm text-muted-foreground">
+      <Loader2 class="w-5 h-5 animate-spin" />
       <span>Loading diff...</span>
     </div>
   {:else if error}
-    <div class="diff-error">
-      <AlertCircle class="w-5 h-5 text-error" />
+    <div class="flex items-center justify-center gap-2 p-8 text-sm text-error">
+      <AlertCircle class="w-5 h-5" />
       <span>{error}</span>
     </div>
   {/if}
 
-  <div bind:this={container} class="diff-content" class:hidden={loading || !!error}></div>
+  <div bind:this={container} class="diff-content overflow-x-auto max-h-[400px]" class:hidden={loading || !!error}></div>
 </div>
 
 {#if showModal}
@@ -157,92 +160,7 @@
 {/if}
 
 <style>
-  .diff-view-container {
-    border-radius: 0.5rem;
-    overflow: hidden;
-    border: 1px solid var(--color-border);
-    background: var(--color-bg-subtle);
-  }
-
-  .diff-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0.5rem 0.75rem;
-    background: var(--color-surface);
-    border-bottom: 1px solid var(--color-border);
-    font-family: var(--font-mono);
-    font-size: 0.75rem;
-    color: var(--color-text-secondary);
-  }
-
-  .diff-path {
-    word-break: break-all;
-    flex: 1;
-    min-width: 0;
-  }
-
-  .expand-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0.375rem;
-    margin-left: 0.5rem;
-    border-radius: 0.375rem;
-    color: var(--color-text-muted);
-    background: transparent;
-    border: none;
-    cursor: pointer;
-    transition: all 0.15s ease;
-    flex-shrink: 0;
-  }
-
-  .expand-btn:hover {
-    background: var(--color-surface-hover);
-    color: var(--color-text);
-  }
-
-  .diff-content {
-    overflow-x: auto;
-    max-height: 400px;
-  }
-
   .diff-content.hidden {
     display: none;
-  }
-
-  .diff-loading,
-  .diff-error {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-    padding: 2rem;
-    font-size: 0.875rem;
-    color: var(--color-text-muted);
-  }
-
-  .diff-error {
-    color: var(--color-error);
-  }
-
-  .expand-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  /* Override @pierre/diffs default styles to match our theme */
-  .diff-content :global(pre) {
-    margin: 0;
-    font-size: 0.75rem;
-    line-height: 1.5;
-  }
-
-  .diff-content :global(.diffs-line-added) {
-    background-color: rgba(var(--color-success-rgb), 0.15);
-  }
-
-  .diff-content :global(.diffs-line-removed) {
-    background-color: rgba(var(--color-error-rgb), 0.15);
   }
 </style>

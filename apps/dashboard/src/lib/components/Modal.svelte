@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { X } from 'lucide-svelte';
+  import { Button } from '$lib/components/ui/button';
 
   interface Props {
     open: boolean;
@@ -35,15 +36,16 @@
     aria-labelledby="modal-title"
     tabindex="-1"
   >
-    <div class="bg-bg-1 rounded-2xl shadow-xl border border-ui-1 w-full max-w-md mx-4 overflow-hidden">
-      <div class="flex items-center justify-between px-6 py-4 border-b border-ui-1">
-        <h2 id="modal-title" class="text-lg font-semibold text-tx-1">{title}</h2>
-        <button
+    <div class="bg-card rounded-2xl shadow-xl border border-border w-full max-w-md mx-4 overflow-hidden">
+      <div class="flex items-center justify-between px-6 py-4 border-b border-border">
+        <h2 id="modal-title" class="text-lg font-semibold text-foreground">{title}</h2>
+        <Button
+          variant="ghost"
+          size="icon-sm"
           onclick={onClose}
-          class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-bg-3 text-tx-2 hover:text-tx-1 transition-colors"
         >
-          <span class="text-xl">&times;</span>
-        </button>
+          <X class="w-5 h-5" />
+        </Button>
       </div>
       <div class="p-6">
         {@render children()}
