@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { User, Bot, Wrench, FileText, AlertCircle, ChevronDown, ChevronRight, Copy, Check, Loader2, CheckCircle2, XCircle, Settings, Terminal, Scissors, ExternalLink, ArrowRight, KeyRound, Cpu, HelpCircle, BookOpen, FolderOpen, Home, Edit3 } from 'lucide-svelte';
+  import { User, Bot, Wrench, FileText, AlertCircle, ChevronDown, ChevronRight, ChevronUp, Copy, Check, Loader2, CheckCircle2, XCircle, Settings, Terminal, Scissors, ExternalLink, ArrowRight, KeyRound, Cpu, HelpCircle, BookOpen, FolderOpen, Home, Edit3 } from 'lucide-svelte';
   import Markdown from '@humanspeak/svelte-markdown';
   import { formatTimestamp } from '$lib/utils/time';
   import type { Message } from '$lib/stores/realtime.svelte';
@@ -72,8 +72,25 @@
     }
   }
 
+  // Auto-expand for diff tools, collapsed for others
+  const hasDiff = $derived(() => {
+    if (message.type !== 'tool_use' && message.type !== 'tool_result') return false;
+    const toolName = message.metadata?.toolName;
+    if (!toolName) return false;
+    const diffTools = ['Edit', 'edit', 'str_replace_editor', 'str_replace', 'file_edit', 'Write', 'write', 'create_file', 'write_file'];
+    return diffTools.includes(toolName);
+  });
+
   let isExpanded = $state(false);
+  let diffFullyExpanded = $state(false);
   let copied = $state(false);
+
+  // Auto-expand diff tools on mount
+  $effect(() => {
+    if (hasDiff()) {
+      isExpanded = true;
+    }
+  });
 
   // Message editing state
   let isEditing = $state(false);
@@ -456,12 +473,30 @@
         <div class="w-full space-y-2 mt-1">
           <!-- Input: Show diff for file modification tools, JSON for others -->
           {#if isFileDiffTool(tool?.name) && diffInfo}
-            <DiffView
-              id={tool?.id || message.id}
-              filePath={diffInfo.filePath}
-              oldContent={diffInfo.oldContent}
-              newContent={diffInfo.newContent}
-            />
+            <div class="diff-wrapper" class:abbreviated={!diffFullyExpanded}>
+              <DiffView
+                id={tool?.id || message.id}
+                filePath={diffInfo.filePath}
+                oldContent={diffInfo.oldContent}
+                newContent={diffInfo.newContent}
+              />
+              {#if !diffFullyExpanded}
+                <!-- svelte-ignore a11y_click_events_have_key_events -->
+                <!-- svelte-ignore a11y_no_static_element_interactions -->
+                <div class="diff-fade-overlay" onclick={() => diffFullyExpanded = true}>
+                  <span class="expand-hint">Click to expand</span>
+                </div>
+              {/if}
+            </div>
+            {#if diffFullyExpanded}
+              <button
+                class="collapse-btn"
+                onclick={() => diffFullyExpanded = false}
+              >
+                <ChevronUp class="w-3.5 h-3.5" />
+                <span>Collapse</span>
+              </button>
+            {/if}
           {:else}
             <div class="bg-bg-subtle rounded-lg p-3 font-mono text-xs overflow-x-auto border border-border">
               <div class="text-text-muted text-[10px] uppercase tracking-wide mb-1">Input</div>
@@ -1073,3 +1108,75 @@
     </div>
   {/if}
 </div>
+
+<style>
+  .diff-wrapper {
+    position: relative;
+    overflow: hidden;
+    border-radius: 0.5rem;
+  }
+
+  .diff-wrapper.abbreviated {
+    max-height: 150px;
+  }
+
+  .diff-fade-overlay {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 80px;
+    background: linear-gradient(
+      to bottom,
+      transparent 0%,
+      var(--color-bg-subtle) 70%,
+      var(--color-bg-subtle) 100%
+    );
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    padding-bottom: 0.75rem;
+    cursor: pointer;
+    transition: opacity 0.15s ease;
+  }
+
+  .diff-fade-overlay:hover {
+    opacity: 0.9;
+  }
+
+  .expand-hint {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    background: var(--color-surface);
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    border: 1px solid var(--color-border);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  }
+
+  .expand-hint:hover {
+    color: var(--color-text);
+    border-color: var(--color-border-hover);
+  }
+
+  .collapse-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.375rem;
+    width: 100%;
+    padding: 0.375rem;
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 0.375rem;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .collapse-btn:hover {
+    background: var(--color-surface-hover);
+    color: var(--color-text);
+  }
+</style>
