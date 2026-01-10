@@ -4,3 +4,4 @@ export { default as ChatInput } from './ChatInput.svelte';
 export { default as StreamingIndicator } from './StreamingIndicator.svelte';
 export { default as CommandPalette } from './CommandPalette.svelte';
 export { default as PermissionRequest } from './PermissionRequest.svelte';
+export { default as ToolGroup } from './ToolGroup.svelte';

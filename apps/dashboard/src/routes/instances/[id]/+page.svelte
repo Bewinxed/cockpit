@@ -1,16 +1,18 @@
 <script lang="ts">
   import { page } from '$app/state';
   import { goto } from '$app/navigation';
-  import { onMount, onDestroy, tick } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { flip } from 'svelte/animate';
   import { fly } from 'svelte/transition';
-  import { instances, instanceMessages, agents, addMessage, removeMessage, updateMessageMetadata, clearInstanceMessages, getStreamingState, getInstanceStatus, getInstancePermissions, type Message } from '$lib/stores/realtime.svelte';
+  import { instances, instanceMessages, agents, addMessage, removeMessage, updateMessageMetadata, updateUserMessageUuid, clearInstanceMessages, getStreamingState, updateStreamingState, getInstanceStatus, getInstancePermissions, type Message } from '$lib/stores/realtime.svelte';
   import { sendMessage, stopInstance, resumeInstance, interruptInstance } from '$lib/actions';
   import { api } from '$lib/api';
   import { Badge, Button, LoadingButton, EmptyState } from '$lib/components/ui';
-  import { ChatMessage, ChatInput, StreamingIndicator, PermissionRequest } from '$lib/components/features';
+  import { ChatMessage, ChatInput, StreamingIndicator, PermissionRequest, ToolGroup } from '$lib/components/features';
   import { formatDistanceToNow } from '$lib/utils/time';
   import { getInstance, getInstanceMessages } from '$lib/data.remote';
+  import { UseAutoScroll } from '$lib/hooks/use-auto-scroll.svelte';
+  import { ActivityGrid } from '$lib/components/ui/activity-grid';
   import {
     ArrowLeft,
     Square,
@@ -22,7 +24,8 @@
     DollarSign,
     MessageSquare,
     Loader2,
-    AlertCircle
+    AlertCircle,
+    Bot
   } from 'lucide-svelte';
 
   interface AvailableCommand {
@@ -37,6 +40,8 @@
     content: string | Record<string, unknown>;
     messageType: string;
     timestamp: string | Date;
+    /** SDK's message UUID - required for resumeSessionAt when editing */
+    sdkUuid?: string;
   }
 
   // Default commands available in all instances
@@ -79,7 +84,9 @@
   const agent = $derived(instance?.machineId ? $agents.get(instance.machineId) : undefined);
 
   // Get pending permission requests for this instance
-  const permissionRequests = getInstancePermissions(instanceId);
+  // Note: instanceId comes from page params and won't change during component lifetime
+  const permissionRequestsStore = getInstancePermissions(instanceId);
+  const permissionRequests = $derived(permissionRequestsStore);
 
   // Cleanup function for auth event listener
   let authCleanup: (() => void) | null = null;
@@ -87,9 +94,32 @@
   // Parse SSR messages into UI format
   function parseDbMessages(dbMessages: DbMessage[]): Message[] {
     const result: Message[] = [];
+    // First pass: collect tool results from user messages (SDK sends tool_result as user messages)
+    const toolResults = new Map<string, { content: unknown; isError: boolean }>();
+
     for (const dbMsg of dbMessages) {
       const content = typeof dbMsg.content === 'string' ? JSON.parse(dbMsg.content) : dbMsg.content;
       const sdkType = content?.type || dbMsg.messageType;
+
+      // Look for tool_result blocks in user messages
+      if (sdkType === 'user' && content?.message?.content && Array.isArray(content.message.content)) {
+        for (const block of content.message.content) {
+          if (block?.type === 'tool_result' && block.tool_use_id) {
+            toolResults.set(block.tool_use_id, {
+              content: block.content,
+              isError: block.is_error || false,
+            });
+          }
+        }
+      }
+    }
+
+    // Second pass: build messages and match tool results
+    for (const dbMsg of dbMessages) {
+      const content = typeof dbMsg.content === 'string' ? JSON.parse(dbMsg.content) : dbMsg.content;
+      const sdkType = content?.type || dbMsg.messageType;
+      // SDK UUID is stored in database column, with fallback to content.uuid for migration
+      const sdkUuid = dbMsg.sdkUuid || (content?.uuid as string | undefined);
 
       if (sdkType === 'user' && content?.content) {
         result.push({
@@ -98,6 +128,7 @@
           type: 'user',
           content: content.content,
           timestamp: new Date(dbMsg.timestamp),
+          sdkUuid, // User messages may not have UUID, but include if present
         });
       } else if (sdkType === 'assistant' && content?.message?.content) {
         for (const block of content.message.content) {
@@ -108,19 +139,24 @@
               type: 'assistant',
               content: block.text,
               timestamp: new Date(dbMsg.timestamp),
+              sdkUuid, // Store SDK UUID for edit support (resumeSessionAt)
             });
           } else if (block?.type === 'tool_use') {
+            // Look up the tool result for this tool_use
+            const toolResult = toolResults.get(block.id);
             result.push({
               id: dbMsg.id + '-' + block.id,
               instanceId,
               type: 'tool_use',
               content: block.name || 'Tool',
               timestamp: new Date(dbMsg.timestamp),
+              sdkUuid, // Store SDK UUID
               metadata: {
                 toolId: block.id,
                 toolName: block.name,
                 toolInput: block.input,
-                toolStatus: 'success',
+                toolResult: toolResult?.content,
+                toolStatus: toolResult ? (toolResult.isError ? 'error' : 'success') : 'pending',
               },
             });
           }
@@ -132,6 +168,7 @@
           type: 'system',
           content: `Session started with ${content.model || 'Claude'}`,
           timestamp: new Date(dbMsg.timestamp),
+          sdkUuid,
         });
       }
     }
@@ -194,8 +231,57 @@
     }
   }
 
-  // Messages from remote function - SvelteKit handles hydration
-  const currentMessages = $derived(parsedSsrMessages);
+  // Messages: Merge SSR history + real-time SSE updates
+  // - SSR provides initial history (parsedSsrMessages)
+  // - SSE provides new messages only (replays are skipped in realtime store)
+  // - Always merge both, sorted by timestamp
+  const realtimeMessages = $derived($instanceMessages.get(instanceId) || []);
+
+  const currentMessages = $derived(
+    [...parsedSsrMessages, ...realtimeMessages].sort((a, b) =>
+      new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+    )
+  );
+
+  // Group consecutive tool messages for compact display
+  type MessageGroup = { type: 'single'; message: Message; index: number } | { type: 'tool_group'; messages: Message[]; startIndex: number };
+
+  const groupedMessages = $derived((): MessageGroup[] => {
+    const groups: MessageGroup[] = [];
+    let i = 0;
+
+    while (i < currentMessages.length) {
+      const msg = currentMessages[i];
+
+      // Check if this is a tool message (tool_use or tool_result)
+      if (msg.type === 'tool_use' || msg.type === 'tool_result') {
+        // Collect consecutive tool messages
+        const toolMessages: Message[] = [msg];
+        const startIndex = i;
+        i++;
+
+        while (i < currentMessages.length) {
+          const nextMsg = currentMessages[i];
+          if (nextMsg.type === 'tool_use' || nextMsg.type === 'tool_result') {
+            toolMessages.push(nextMsg);
+            i++;
+          } else {
+            break;
+          }
+        }
+
+        // If we have multiple tools OR just one, group them
+        // (Single tools also benefit from the compact view)
+        groups.push({ type: 'tool_group', messages: toolMessages, startIndex });
+      } else {
+        // Regular message
+        groups.push({ type: 'single', message: msg, index: i });
+        i++;
+      }
+    }
+
+    return groups;
+  });
 
   // UI State
   let sending = $state(false);
@@ -203,34 +289,13 @@
   let restarting = $state(false);
   let interrupting = $state(false);
   let error = $state<string | null>(null);
-  let messagesContainer = $state<HTMLDivElement | null>(null);
 
   // Get streaming state for interrupt functionality
   const streamingStateStore = $derived(getStreamingState(instanceId));
   const isStreaming = $derived($streamingStateStore?.isStreaming ?? false);
 
-  // Smart scroll logic
-  let userHasScrolledUp = $state(false);
-
-  function handleScroll() {
-    if (!messagesContainer) return;
-    const { scrollTop, scrollHeight, clientHeight } = messagesContainer;
-    // If we are more than 150px from the bottom, the user has scrolled up
-    const distanceToBottom = scrollHeight - scrollTop - clientHeight;
-    userHasScrolledUp = distanceToBottom > 150;
-  }
-
-  // Auto-scroll to bottom on new messages
-  $effect(() => {
-    if (currentMessages.length && messagesContainer && !userHasScrolledUp) {
-      tick().then(() => {
-        messagesContainer?.scrollTo({
-          top: messagesContainer.scrollHeight,
-          behavior: 'smooth'
-        });
-      });
-    }
-  });
+  // Auto-scroll to bottom on new messages (uses MutationObserver internally)
+  const autoScroll = new UseAutoScroll();
 
   // Status config
   const statusConfig = {
@@ -677,13 +742,7 @@
     if (!isActive && (needsInstance || !clientCmd)) {
       restarting = true;
 
-      // Add user's message to current view immediately
-      addMessage(instanceId, {
-        type: 'user',
-        content: message,
-        timestamp: new Date(),
-      });
-
+      // Don't add user message locally - SSE will add it with sdkUuid for edit support
       try {
         // Resume instance - for commands, don't send the message as prompt
         // For regular messages, send them as the initial prompt
@@ -732,7 +791,14 @@
     // Instance is running - send message normally
     sending = true;
 
-    // Add user's message to current view immediately
+    // Set streaming state immediately to prevent gap between sending and SSE events
+    // This ensures the loading indicator stays visible without flashing
+    updateStreamingState(instanceId, { isStreaming: true });
+
+    // Store the message content for UUID update after API response
+    const sentMessage = message;
+
+    // Add user message optimistically for immediate UI feedback
     addMessage(instanceId, {
       type: 'user',
       content: message,
@@ -741,6 +807,12 @@
 
     try {
       const result = await sendMessage(instanceId, message);
+
+      // If server returned a messageUuid, update the optimistic message for edit support
+      if (result.success && result.messageUuid) {
+        updateUserMessageUuid(instanceId, sentMessage, result.messageUuid);
+      }
+
       if (!result.success) {
         // If instance not found, try to resume it
         if (result.error?.toLowerCase().includes('not found')) {
@@ -770,10 +842,14 @@
           }
         } else {
           error = result.error || 'Failed to send message';
+          // Reset streaming state on error since we won't get SSE events
+          updateStreamingState(instanceId, { isStreaming: false });
         }
       }
     } catch (err) {
       error = err instanceof Error ? err.message : 'Unknown error';
+      // Reset streaming state on error since we won't get SSE events
+      updateStreamingState(instanceId, { isStreaming: false });
     } finally {
       sending = false;
     }
@@ -830,17 +906,13 @@
   async function handleEditMessage(messageId: string, newContent: string): Promise<void> {
     if (!instance) return;
 
-    // Find the message
-    const messages = $instanceMessages.get(instanceId) || [];
+    // Use currentMessages which includes both SSR and realtime messages
+    const messages = currentMessages;
     const msgIndex = messages.findIndex(m => m.id === messageId);
     if (msgIndex === -1) return;
 
-    const editedMessage = messages[msgIndex];
-
     // We need the SDK UUID to use resumeSessionAt properly
     // The SDK expects the UUID of the message BEFORE the one we want to edit
-    // So we need the previous assistant message's UUID, not the user message's
-    // Actually, resumeSessionAt takes the message to resume AT (inclusive)
     // For editing, we want to go back to BEFORE this user message
 
     // Find the previous message's SDK UUID (if it exists)
@@ -856,13 +928,9 @@
       }
     }
 
-    // Remove all messages from the edited message onwards in the UI
-    const messagesToRemove = messages.length - msgIndex;
-    for (let i = 0; i < messagesToRemove; i++) {
-      removeMessage(instanceId, msgIndex);
-    }
-
-    // Add the edited user message to UI
+    // Clear realtime messages and add the edited user message
+    // SSR messages will be refreshed on next load
+    clearInstanceMessages(instanceId);
     addMessage(instanceId, {
       type: 'user',
       content: newContent,
@@ -872,14 +940,23 @@
     // Resume the instance with the edited message
     restarting = true;
     try {
-      // Only pass resumeFromMessageId if we have a valid UUID
-      // If no UUID found (e.g., first message), don't use resumeSessionAt - just send the message
-      const resumeParams: { prompt: string; resumeFromMessageId?: string } = {
+      // Build resume params - only include resumeFromMessageId if we have a valid SDK UUID
+      const resumeParams: {
+        prompt: string;
+        resumeFromMessageId?: string;
+        forkSession?: boolean;
+      } = {
         prompt: newContent,
       };
+
+      // Only use resumeFromMessageId when we have a valid SDK UUID
+      // This properly rewinds the conversation to before the edited message
       if (resumeFromUuid) {
         resumeParams.resumeFromMessageId = resumeFromUuid;
+        // Fork to preserve original conversation history
+        resumeParams.forkSession = true;
       }
+      // If no resumeFromUuid and editing first message, we just resume with new prompt
 
       const result = await api.api.instances({ id: instanceId }).resume.post(resumeParams);
 
@@ -1043,51 +1120,72 @@
     <!-- Messages Area -->
     <div class="flex-1 relative overflow-hidden flex flex-col">
       <div
-        bind:this={messagesContainer}
-        onscroll={handleScroll}
+        bind:this={autoScroll.ref}
         class="flex-1 overflow-y-auto p-6 space-y-6 bg-background scroll-smooth selection:bg-primary/10"
       >
         {#if currentMessages.length > 0}
-          {#each currentMessages as message, i (message.id)}
+          {#each groupedMessages() as group, groupIdx (group.type === 'tool_group' ? `tools-${group.startIndex}` : group.message.id)}
             <div
               animate:flip={{ duration: 300 }}
               in:fly={{ y: 20, duration: 300 }}
               out:fly={{ y: -20, duration: 200 }}
             >
-              <ChatMessage
-                {message}
-                showTimestamp={i === 0 || currentMessages[i - 1]?.type !== message.type}
-                onLoginSubmit={handleLoginSubmit}
-                onLoginCancel={handleLoginCancel}
-                onModelSelect={handleModelSelect}
-                onModelCancel={handleModelCancel}
-                onMemorySelect={handleMemorySelect}
-                onMemorySave={handleMemorySave}
-                onMemoryCancel={handleMemoryCancel}
-                onDismissMessage={() => removeMessage(instanceId, i)}
-                onEditMessage={handleEditMessage}
-                canEdit={message.type === 'user' && !!message.sdkUuid}
-                isLoginActive={message.metadata?.subtype === 'login_prompt' && pendingOAuthState === message.metadata?.oauthState}
-                isModelPickerActive={message.metadata?.subtype === 'model_picker' && pendingModelPickerIndex === i}
-                isMemoryPickerActive={message.metadata?.subtype === 'memory_picker' && pendingMemoryPickerIndex === i}
-              />
+              {#if group.type === 'tool_group'}
+                <!-- Grouped tool messages -->
+                <div class="flex items-start gap-3">
+                  <!-- Tool icon avatar -->
+                  <div class="flex-shrink-0 w-9 h-9 rounded-xl bg-amber-500/10 flex items-center justify-center mt-0.5">
+                    <svg class="w-4.5 h-4.5 text-amber-600 dark:text-amber-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>
+                  </div>
+                  <!-- Tool group component -->
+                  <div class="flex-1 max-w-[85%]">
+                    <ToolGroup tools={group.messages} />
+                  </div>
+                </div>
+              {:else}
+                <!-- Single message -->
+                {@const message = group.message}
+                {@const i = group.index}
+                <ChatMessage
+                  {message}
+                  showTimestamp={i === 0 || currentMessages[i - 1]?.type !== message.type}
+                  onLoginSubmit={handleLoginSubmit}
+                  onLoginCancel={handleLoginCancel}
+                  onModelSelect={handleModelSelect}
+                  onModelCancel={handleModelCancel}
+                  onMemorySelect={handleMemorySelect}
+                  onMemorySave={handleMemorySave}
+                  onMemoryCancel={handleMemoryCancel}
+                  onDismissMessage={() => removeMessage(instanceId, i)}
+                  onEditMessage={handleEditMessage}
+                  canEdit={message.type === 'user'}
+                  isLoginActive={message.metadata?.subtype === 'login_prompt' && pendingOAuthState === message.metadata?.oauthState}
+                  isModelPickerActive={message.metadata?.subtype === 'model_picker' && pendingModelPickerIndex === i}
+                  isMemoryPickerActive={message.metadata?.subtype === 'memory_picker' && pendingMemoryPickerIndex === i}
+                />
+              {/if}
             </div>
           {/each}
 
-          {#if sending || restarting}
-            <div class="flex items-center gap-3 animate-fade-in py-2" in:fly={{ y: 10, duration: 200 }}>
-              <div class="flex-shrink-0 w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                <Loader2 class="w-4 h-4 text-primary animate-spin" />
+          {#if sending || restarting || isStreaming}
+            <div
+              class="flex items-start gap-3"
+              in:fly={{ y: 10, duration: 250, delay: 50 }}
+              out:fly={{ y: -5, duration: 150 }}
+            >
+              <!-- Bot Avatar (same as assistant messages) -->
+              <div class="flex-shrink-0 w-9 h-9 rounded-xl bg-secondary border border-border flex items-center justify-center mt-0.5">
+                <Bot class="w-4.5 h-4.5 text-muted-foreground" />
               </div>
-              {#if restarting}
-                <span class="text-xs text-muted-foreground italic animate-pulse">Resuming session...</span>
-              {:else}
-                <div class="typing-indicator bg-card border border-border rounded-2xl">
-                  <span></span>
-                  <span></span>
-                  <span></span>
-                </div>
-              {/if}
+              <!-- Activity indicator bubble -->
+              <div class="bg-card border border-border rounded-2xl rounded-bl-sm px-4 py-3 shadow-sm flex items-center gap-3">
+                <ActivityGrid {instanceId} size="sm" />
+                {#if restarting}
+                  <span class="text-sm text-muted-foreground">Resuming session...</span>
+                {:else}
+                  <span class="text-sm text-muted-foreground">Thinking...</span>
+                {/if}
+              </div>
             </div>
           {/if}
         {:else}
@@ -1103,17 +1201,11 @@
         {/if}
       </div>
 
-      {#if userHasScrolledUp}
+      {#if !autoScroll.isAtBottom}
         <div class="absolute bottom-4 left-1/2 -translate-x-1/2 z-20">
           <Button
             class="rounded-full shadow-lg animate-fade-in-up"
-            onclick={() => {
-              userHasScrolledUp = false;
-              messagesContainer?.scrollTo({
-                top: messagesContainer.scrollHeight,
-                behavior: 'smooth'
-              });
-            }}
+            onclick={() => autoScroll.scrollToBottom()}
           >
             <span>Jump to present</span>
             <ArrowLeft class="w-4 h-4 -rotate-90" />
@@ -1123,9 +1215,9 @@
     </div>
 
     <!-- Pending Permission Requests -->
-    {#if $permissionRequests.length > 0}
+    {#if permissionRequests.length > 0}
       <div class="flex-shrink-0 px-4 py-2 border-t border-border bg-card space-y-2">
-        {#each $permissionRequests as request (request.requestId)}
+        {#each permissionRequests as request (request.requestId)}
           <PermissionRequest {request} />
         {/each}
       </div>

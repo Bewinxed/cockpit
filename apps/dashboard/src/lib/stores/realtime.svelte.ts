@@ -231,6 +231,30 @@ export function updateMessageMetadata(instanceId: string, index: number, metadat
   });
 }
 
+// Update sdkUuid on a user message by matching content (for optimistic updates)
+// Returns true if a message was updated, false if no matching message found
+export function updateUserMessageUuid(instanceId: string, content: string, sdkUuid: string): boolean {
+  let found = false;
+  instanceMessages.update((map) => {
+    const messages = map.get(instanceId);
+    if (!messages) return map;
+
+    // Find the most recent user message with matching content that doesn't have a UUID yet
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const msg = messages[i];
+      if (msg.type === 'user' && msg.content === content && !msg.sdkUuid) {
+        const updatedMessages = [...messages];
+        updatedMessages[i] = { ...msg, sdkUuid };
+        map.set(instanceId, updatedMessages);
+        found = true;
+        break;
+      }
+    }
+    return map;
+  });
+  return found;
+}
+
 // Get streaming state for an instance
 export function getStreamingState(instanceId: string): Readable<StreamingState | null> {
   return derived(streamingStates, ($states) => $states.get(instanceId) || null);
@@ -610,6 +634,11 @@ export function connect(baseUrl: string = '') {
       tools?: string[];
     };
 
+    // Debug: Log all user messages
+    if (msg.type === 'user') {
+      console.log('[SSE] User message received:', { isReplay: msg.isReplay, uuid: msg.uuid, content: msg.message?.content });
+    }
+
     // Handle replay messages specially
     if (msg.isReplay && msg.type === 'user') {
       // Check if this is a local command output (wrapped in <local-command-stdout> tags)
@@ -624,8 +653,26 @@ export function connect(baseUrl: string = '') {
             timestamp: new Date(),
           });
         }
+      } else if (msg.uuid) {
+        // Try to update an optimistic user message with the UUID from replay
+        // This enables editing for messages that were just sent
+        let textContent = '';
+        if (typeof content === 'string') {
+          textContent = content;
+        } else if (Array.isArray(content)) {
+          for (const block of content) {
+            if (block && typeof block === 'object' && 'type' in block) {
+              if (block.type === 'text' && 'text' in block) {
+                textContent += (block.text as string);
+              }
+            }
+          }
+        }
+        if (textContent.trim()) {
+          updateUserMessageUuid(instanceId, textContent.trim(), msg.uuid);
+        }
       }
-      // Skip all other replay messages to avoid duplicates
+      // Skip adding replay messages to avoid duplicates (they come from SSR)
       return;
     }
 
@@ -650,60 +697,72 @@ export function connect(baseUrl: string = '') {
     if (msg.type === 'user' && msg.message?.content) {
       const content = msg.message.content;
 
-      // Synthetic messages are system-generated (local commands, tool results)
-      if (msg.isSynthetic) {
-        // Handle local command results (like /cost, /help)
-        if (msg.tool_use_result) {
-          const resultText = typeof msg.tool_use_result === 'string'
-            ? msg.tool_use_result
-            : JSON.stringify(msg.tool_use_result, null, 2);
-          if (resultText.trim()) {
-            addMessage(instanceId, {
-              type: 'assistant',
-              content: resultText.trim(),
-              timestamp: new Date(),
-            });
-          }
-        }
-
-        // Process tool_result blocks (from synthetic user messages)
-        // These update existing tool_use messages with their results
-        if (Array.isArray(content)) {
-          for (const block of content) {
-            if (block && typeof block === 'object' && 'type' in block && block.type === 'tool_result') {
-              const toolResult = block as {
-                tool_use_id?: string;
-                content?: unknown;
-                is_error?: boolean;
-              };
-              if (toolResult.tool_use_id) {
-                updateToolResult(
-                  instanceId,
-                  toolResult.tool_use_id,
-                  toolResult.content,
-                  toolResult.is_error || false
-                );
-              }
+      // First, always check for tool_result blocks and process them
+      // Tool results come as user messages with tool_result content blocks from the SDK
+      let hasToolResults = false;
+      if (Array.isArray(content)) {
+        for (const block of content) {
+          if (block && typeof block === 'object' && 'type' in block && block.type === 'tool_result') {
+            hasToolResults = true;
+            const toolResult = block as {
+              tool_use_id?: string;
+              content?: unknown;
+              is_error?: boolean;
+            };
+            if (toolResult.tool_use_id) {
+              updateToolResult(
+                instanceId,
+                toolResult.tool_use_id,
+                toolResult.content,
+                toolResult.is_error || false
+              );
             }
           }
         }
-      } else {
-        // Real user message - extract text content
-        let textContent = '';
+      }
 
-        if (typeof content === 'string') {
-          textContent = content;
-        } else if (Array.isArray(content)) {
-          for (const block of content) {
-            if (block && typeof block === 'object' && 'type' in block) {
-              if (block.type === 'text' && 'text' in block) {
-                textContent += (block.text as string);
-              }
+      // Handle synthetic messages with tool_use_result (local commands like /cost, /help)
+      if (msg.isSynthetic && msg.tool_use_result) {
+        const resultText = typeof msg.tool_use_result === 'string'
+          ? msg.tool_use_result
+          : JSON.stringify(msg.tool_use_result, null, 2);
+        if (resultText.trim()) {
+          addMessage(instanceId, {
+            type: 'assistant',
+            content: resultText.trim(),
+            timestamp: new Date(),
+          });
+        }
+      }
+
+      // If this is a tool result message, don't also add it as a user message
+      if (hasToolResults) {
+        // Tool result messages are internal SDK messages, not user-visible
+        return;
+      }
+
+      // Real user message - extract text content
+      let textContent = '';
+
+      if (typeof content === 'string') {
+        textContent = content;
+      } else if (Array.isArray(content)) {
+        for (const block of content) {
+          if (block && typeof block === 'object' && 'type' in block) {
+            if (block.type === 'text' && 'text' in block) {
+              textContent += (block.text as string);
             }
           }
         }
+      }
 
-        if (textContent.trim()) {
+      if (textContent.trim()) {
+        // Try to update an existing optimistic message with UUID first
+        // This prevents duplicates when we've added the message optimistically
+        const updated = msg.uuid && updateUserMessageUuid(instanceId, textContent.trim(), msg.uuid);
+
+        // Only add if no optimistic message was found to update
+        if (!updated) {
           addMessage(instanceId, {
             type: 'user',
             content: textContent.trim(),
