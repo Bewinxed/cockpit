@@ -1,10 +1,11 @@
 <script lang="ts">
-  import { User, Bot, Wrench, FileText, AlertCircle, ChevronDown, ChevronRight, ChevronUp, Copy, Check, Loader2, CheckCircle2, XCircle, Settings, Terminal, Scissors, ExternalLink, ArrowRight, KeyRound, Cpu, HelpCircle, BookOpen, FolderOpen, Home, Edit3 } from 'lucide-svelte';
+  import { User, Bot, Wrench, FileText, AlertCircle, ChevronDown, ChevronRight, ChevronUp, Loader2, CheckCircle2, XCircle, Settings, Terminal, Scissors, ExternalLink, ArrowRight, KeyRound, Cpu, HelpCircle, BookOpen, FolderOpen, Home, Edit3, Check } from 'lucide-svelte';
   import Markdown from '@humanspeak/svelte-markdown';
   import { formatTimestamp } from '$lib/utils/time';
   import type { Message } from '$lib/stores/realtime.svelte';
   import HelpMenu from './HelpMenu.svelte';
   import DiffView from './DiffView.svelte';
+  import { CopyButton } from '$lib/components/ui/copy-button';
 
   interface ModelInfo {
     value: string;
@@ -83,7 +84,6 @@
 
   let isExpanded = $state(false);
   let diffFullyExpanded = $state(false);
-  let copied = $state(false);
 
   // Auto-expand diff tools on mount
   $effect(() => {
@@ -109,10 +109,20 @@
 
   async function submitEdit() {
     if (!onEditMessage || !message.id || !editContent.trim()) return;
+
+    // Close edit mode immediately for better UX
+    const content = editContent.trim();
+    const id = message.id;
+    isEditing = false;
     editLoading = true;
+
     try {
-      await onEditMessage(message.id, editContent.trim());
-      isEditing = false;
+      await onEditMessage(id, content);
+    } catch (err) {
+      console.error('[Edit] onEditMessage error:', err);
+      // Re-open edit mode on error so user can retry
+      isEditing = true;
+      editContent = content;
     } finally {
       editLoading = false;
     }
@@ -121,9 +131,11 @@
   function handleEditKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') {
       e.preventDefault();
+      e.stopPropagation();
       cancelEditing();
     } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
+      e.stopPropagation();
       submitEdit();
     }
   }
@@ -363,66 +375,69 @@
     handleLoginKeydown(e);
   }
 
-  async function copyContent() {
-    await navigator.clipboard.writeText(message.content);
-    copied = true;
-    setTimeout(() => copied = false, 2000);
-  }
-
   const messageConfig = {
     user: {
       align: 'justify-end',
-      bubble: 'chat-bubble chat-bubble-user',
+      bubble: 'relative px-4 py-3 text-sm leading-relaxed rounded-2xl rounded-br-sm bg-primary text-primary-foreground shadow-sm',
       icon: User,
       iconBg: 'bg-primary',
+      iconColor: 'text-primary-foreground',
     },
     assistant: {
       align: 'justify-start',
-      bubble: 'chat-bubble chat-bubble-assistant',
+      bubble: 'relative px-4 py-3 text-sm leading-relaxed rounded-2xl rounded-bl-sm bg-card text-card-foreground border border-border shadow-sm',
       icon: Bot,
-      iconBg: 'bg-secondary',
+      iconBg: 'bg-secondary border border-border',
+      iconColor: 'text-muted-foreground',
     },
     tool_use: {
       align: 'justify-start',
-      bubble: 'chat-bubble chat-bubble-tool',
+      bubble: 'px-3 py-2.5 text-sm rounded-xl bg-card border border-border shadow-sm',
       icon: Wrench,
-      iconBg: 'bg-warning/10',
+      iconBg: 'bg-amber-500/10',
+      iconColor: 'text-amber-600 dark:text-amber-400',
     },
     tool_result: {
       align: 'justify-start',
-      bubble: 'chat-bubble chat-bubble-tool',
+      bubble: 'px-3 py-2.5 text-sm rounded-xl bg-card border border-border shadow-sm',
       icon: FileText,
-      iconBg: 'bg-success/10',
+      iconBg: 'bg-emerald-500/10',
+      iconColor: 'text-emerald-600 dark:text-emerald-400',
     },
     error: {
       align: 'justify-start',
-      bubble: 'chat-bubble chat-bubble-error',
+      bubble: 'relative px-4 py-3 text-sm leading-relaxed rounded-2xl rounded-bl-sm bg-destructive/10 text-destructive border border-destructive/30 shadow-sm',
       icon: AlertCircle,
-      iconBg: 'bg-error/10',
+      iconBg: 'bg-destructive/10',
+      iconColor: 'text-destructive',
     },
     system: {
       align: 'justify-center',
-      bubble: 'text-xs text-muted-foreground py-2 px-4 bg-accent/50 rounded-full inline-flex items-center gap-2',
+      bubble: 'inline-flex items-center gap-2 px-4 py-1.5 text-xs text-muted-foreground bg-muted/50 rounded-full border border-border',
       icon: Settings,
       iconBg: 'bg-accent',
+      iconColor: 'text-muted-foreground',
     },
     hook_response: {
       align: 'justify-start',
-      bubble: 'chat-bubble chat-bubble-tool',
+      bubble: 'px-3 py-2.5 text-sm rounded-xl bg-card border border-border shadow-sm',
       icon: Terminal,
-      iconBg: 'bg-info/10',
+      iconBg: 'bg-blue-500/10',
+      iconColor: 'text-blue-600 dark:text-blue-400',
     },
     command_output: {
       align: 'justify-start',
-      bubble: 'chat-bubble chat-bubble-assistant',
+      bubble: 'relative px-4 py-3 text-sm leading-relaxed rounded-2xl rounded-bl-sm bg-card text-card-foreground border border-border shadow-sm',
       icon: Terminal,
       iconBg: 'bg-accent',
+      iconColor: 'text-muted-foreground',
     },
     help_menu: {
       align: 'justify-start',
       bubble: '',
       icon: HelpCircle,
       iconBg: 'bg-primary/10',
+      iconColor: 'text-primary',
     },
   };
 
@@ -431,142 +446,142 @@
 
 <svelte:window onkeydown={handleWindowKeydown} />
 
-<div class="flex {config.align} gap-3 group animate-fade-in-up">
+<div class="flex {config.align} gap-3 group">
   {#if message.type !== 'user' && message.type !== 'system' && message.type !== 'help_menu' && !isCompactBoundary && !isLoginPrompt && !isModelPicker && !isMemoryPicker}
     <!-- Avatar -->
-    <div class="flex-shrink-0 w-8 h-8 rounded-lg {config.iconBg} flex items-center justify-center">
-      <config.icon class="w-4 h-4 {message.type === 'error' ? 'text-error' : 'text-muted-foreground'}" />
+    <div class="flex-shrink-0 w-9 h-9 rounded-xl {config.iconBg} flex items-center justify-center mt-0.5">
+      <config.icon class="w-4.5 h-4.5 {config.iconColor}" />
     </div>
   {/if}
 
   <!-- Message Content -->
   <div class="flex flex-col gap-1 {message.type === 'user' ? 'items-end' : 'items-start'} {isCompactBoundary || isLoginPrompt || isModelPicker || isMemoryPicker || message.type === 'help_menu' ? 'w-full' : 'max-w-[85%]'}">
     {#if message.type === 'tool_use' || message.type === 'tool_result'}
-      <!-- Tool message - collapsible -->
-      <button
-        class="{config.bubble} w-full text-left cursor-pointer hover:bg-accent transition-colors"
-        onclick={() => isExpanded = !isExpanded}
-      >
-        <div class="flex items-center gap-2">
+      <!-- Tool message - collapsible card -->
+      <div class="w-full bg-card border border-border rounded-xl overflow-hidden shadow-sm">
+        <button
+          class="w-full px-3 py-2.5 text-left cursor-pointer hover:bg-muted/50 transition-colors flex items-center gap-2"
+          onclick={() => isExpanded = !isExpanded}
+        >
           {#if isExpanded}
-            <ChevronDown class="w-4 h-4 text-muted-foreground flex-shrink-0" />
+            <ChevronDown class="w-4 h-4 text-muted-foreground flex-shrink-0 transition-transform" />
           {:else}
-            <ChevronRight class="w-4 h-4 text-muted-foreground flex-shrink-0" />
+            <ChevronRight class="w-4 h-4 text-muted-foreground flex-shrink-0 transition-transform" />
           {/if}
-          <span class="font-medium text-foreground">
+          <span class="font-medium text-foreground text-sm">
             {toolInfo()?.name || 'Tool'}
           </span>
           <!-- Status indicator -->
           {#if toolInfo()?.status === 'pending'}
-            <Loader2 class="w-4 h-4 text-warning animate-spin" />
+            <Loader2 class="w-4 h-4 text-amber-500 animate-spin ml-auto" />
           {:else if toolInfo()?.status === 'error'}
-            <XCircle class="w-4 h-4 text-error" />
+            <XCircle class="w-4 h-4 text-destructive ml-auto" />
           {:else}
-            <CheckCircle2 class="w-4 h-4 text-success" />
+            <CheckCircle2 class="w-4 h-4 text-emerald-500 ml-auto" />
           {/if}
-        </div>
-      </button>
+        </button>
 
-      {#if isExpanded}
-        {@const tool = toolInfo()}
-        {@const diffInfo = getDiffInfo(tool?.input as Record<string, unknown> | undefined, tool?.name)}
-        <div class="w-full space-y-2 mt-1">
-          <!-- Input: Show diff for file modification tools, JSON for others -->
-          {#if isFileDiffTool(tool?.name) && diffInfo}
-            {@const totalLines = (diffInfo.oldContent.split('\n').length + diffInfo.newContent.split('\n').length)}
-            {@const needsExpansion = totalLines > 8}
-            <div class="relative overflow-hidden rounded-lg" class:max-h-[150px]={needsExpansion && !diffFullyExpanded}>
-              <DiffView
-                id={tool?.id || message.id}
-                filePath={diffInfo.filePath}
-                oldContent={diffInfo.oldContent}
-                newContent={diffInfo.newContent}
-              />
-              {#if needsExpansion && !diffFullyExpanded}
-                <!-- svelte-ignore a11y_click_events_have_key_events -->
-                <!-- svelte-ignore a11y_no_static_element_interactions -->
-                <div
-                  class="absolute bottom-0 left-0 right-0 h-[60px] flex items-center justify-center cursor-pointer z-10 bg-gradient-to-b from-transparent via-background/85 to-background/95"
-                  onclick={() => diffFullyExpanded = true}
-                >
-                  <ChevronDown class="w-5 h-5 p-1.5 text-muted-foreground bg-card border border-border rounded-full shadow-sm hover:text-foreground hover:translate-y-0.5 transition-all" />
-                </div>
-              {/if}
-            </div>
-            {#if needsExpansion && diffFullyExpanded}
-              <button
-                class="flex items-center justify-center gap-1.5 w-full p-1.5 text-xs text-muted-foreground bg-card border border-border rounded-md cursor-pointer hover:bg-accent hover:text-foreground transition-all"
-                onclick={() => diffFullyExpanded = false}
-              >
-                <ChevronUp class="w-3.5 h-3.5" />
-                <span>Collapse</span>
-              </button>
-            {/if}
-          {:else}
-            <div class="bg-muted rounded-lg p-3 font-mono text-xs overflow-x-auto border border-border">
-              <div class="text-muted-foreground text-[10px] uppercase tracking-wide mb-1">Input</div>
-              <pre class="whitespace-pre-wrap break-all text-muted-foreground">{JSON.stringify(tool?.input, null, 2)}</pre>
-            </div>
-          {/if}
-
-          <!-- Result (if available) -->
-          {#if tool?.result !== undefined && tool?.result !== null}
-            <div class="bg-muted rounded-lg p-3 font-mono text-xs overflow-x-auto border border-border {tool?.status === 'error' ? 'border-error/30 bg-error/5' : 'border-success/30 bg-success/5'}">
-              <div class="text-muted-foreground text-[10px] uppercase tracking-wide mb-1">
-                {tool?.status === 'error' ? 'Error' : 'Result'}
+        {#if isExpanded}
+          {@const tool = toolInfo()}
+          {@const diffInfo = getDiffInfo(tool?.input as Record<string, unknown> | undefined, tool?.name)}
+          <div class="p-3 pt-0 space-y-3 border-t border-border">
+            <!-- Input: Show diff for file modification tools, JSON for others -->
+            {#if isFileDiffTool(tool?.name) && diffInfo}
+              {@const totalLines = (diffInfo.oldContent.split('\n').length + diffInfo.newContent.split('\n').length)}
+              {@const needsExpansion = totalLines > 8}
+              <div class="relative overflow-hidden rounded-lg mt-3" class:max-h-[150px]={needsExpansion && !diffFullyExpanded}>
+                <DiffView
+                  id={tool?.id || message.id}
+                  filePath={diffInfo.filePath}
+                  oldContent={diffInfo.oldContent}
+                  newContent={diffInfo.newContent}
+                />
+                {#if needsExpansion && !diffFullyExpanded}
+                  <!-- svelte-ignore a11y_click_events_have_key_events -->
+                  <!-- svelte-ignore a11y_no_static_element_interactions -->
+                  <div
+                    class="absolute bottom-0 left-0 right-0 h-[60px] flex items-center justify-center cursor-pointer z-10 bg-gradient-to-b from-transparent via-card/85 to-card/95"
+                    onclick={() => diffFullyExpanded = true}
+                  >
+                    <ChevronDown class="w-6 h-6 p-1 text-muted-foreground bg-muted border border-border rounded-full shadow-sm hover:text-foreground hover:translate-y-0.5 transition-all" />
+                  </div>
+                {/if}
               </div>
-              <pre class="whitespace-pre-wrap break-all text-muted-foreground">{typeof tool.result === 'string' ? tool.result : JSON.stringify(tool.result, null, 2)}</pre>
-            </div>
-          {/if}
-        </div>
-      {/if}
+              {#if needsExpansion && diffFullyExpanded}
+                <button
+                  class="flex items-center justify-center gap-1.5 w-full py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  onclick={() => diffFullyExpanded = false}
+                >
+                  <ChevronUp class="w-3.5 h-3.5" />
+                  <span>Collapse</span>
+                </button>
+              {/if}
+            {:else}
+              <div class="bg-muted/50 rounded-lg p-3 font-mono text-xs overflow-x-auto mt-3">
+                <div class="text-muted-foreground text-[10px] uppercase tracking-wide mb-1.5 font-medium">Input</div>
+                <pre class="whitespace-pre-wrap break-all text-muted-foreground">{JSON.stringify(tool?.input, null, 2)}</pre>
+              </div>
+            {/if}
+
+            <!-- Result (if available) -->
+            {#if tool?.result !== undefined && tool?.result !== null}
+              <div class="rounded-lg p-3 font-mono text-xs overflow-x-auto {tool?.status === 'error' ? 'bg-destructive/5 border border-destructive/20' : 'bg-emerald-500/5 border border-emerald-500/20'}">
+                <div class="text-[10px] uppercase tracking-wide mb-1.5 font-medium {tool?.status === 'error' ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-400'}">
+                  {tool?.status === 'error' ? 'Error' : 'Result'}
+                </div>
+                <pre class="whitespace-pre-wrap break-all text-muted-foreground">{typeof tool.result === 'string' ? tool.result : JSON.stringify(tool.result, null, 2)}</pre>
+              </div>
+            {/if}
+          </div>
+        {/if}
+      </div>
     {:else if message.type === 'hook_response'}
-      <!-- Hook response - collapsible like tool results -->
-      <button
-        class="{config.bubble} w-full text-left cursor-pointer hover:bg-accent transition-colors"
-        onclick={() => isExpanded = !isExpanded}
-      >
-        <div class="flex items-center gap-2">
+      <!-- Hook response - collapsible card -->
+      <div class="w-full bg-card border border-border rounded-xl overflow-hidden shadow-sm">
+        <button
+          class="w-full px-3 py-2.5 text-left cursor-pointer hover:bg-muted/50 transition-colors flex items-center gap-2"
+          onclick={() => isExpanded = !isExpanded}
+        >
           {#if isExpanded}
-            <ChevronDown class="w-4 h-4 text-muted-foreground flex-shrink-0" />
+            <ChevronDown class="w-4 h-4 text-muted-foreground flex-shrink-0 transition-transform" />
           {:else}
-            <ChevronRight class="w-4 h-4 text-muted-foreground flex-shrink-0" />
+            <ChevronRight class="w-4 h-4 text-muted-foreground flex-shrink-0 transition-transform" />
           {/if}
-          <span class="font-medium text-foreground">
+          <span class="font-medium text-foreground text-sm">
             {hookInfo()?.name || 'Hook'}
           </span>
           <!-- Exit code indicator -->
           {#if hookInfo()?.exitCode === 0}
-            <CheckCircle2 class="w-4 h-4 text-success" />
+            <CheckCircle2 class="w-4 h-4 text-emerald-500 ml-auto" />
           {:else}
-            <XCircle class="w-4 h-4 text-error" />
+            <XCircle class="w-4 h-4 text-destructive ml-auto" />
           {/if}
-          <span class="text-xs text-muted-foreground">
+          <span class="text-xs text-muted-foreground font-mono">
             exit {hookInfo()?.exitCode}
           </span>
-        </div>
-      </button>
+        </button>
 
-      {#if isExpanded}
-        {@const hook = hookInfo()}
-        <div class="w-full space-y-2 mt-1">
-          <!-- stdout -->
-          {#if hook?.stdout}
-            <div class="bg-muted rounded-lg p-3 font-mono text-xs overflow-x-auto border border-border border-success/30 bg-success/5">
-              <div class="text-muted-foreground text-[10px] uppercase tracking-wide mb-1">stdout</div>
-              <pre class="whitespace-pre-wrap break-all text-muted-foreground">{hook.stdout}</pre>
-            </div>
-          {/if}
+        {#if isExpanded}
+          {@const hook = hookInfo()}
+          <div class="p-3 pt-0 space-y-3 border-t border-border">
+            <!-- stdout -->
+            {#if hook?.stdout}
+              <div class="bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-3 font-mono text-xs overflow-x-auto mt-3">
+                <div class="text-emerald-600 dark:text-emerald-400 text-[10px] uppercase tracking-wide mb-1.5 font-medium">stdout</div>
+                <pre class="whitespace-pre-wrap break-all text-muted-foreground">{hook.stdout}</pre>
+              </div>
+            {/if}
 
-          <!-- stderr -->
-          {#if hook?.stderr}
-            <div class="bg-muted rounded-lg p-3 font-mono text-xs overflow-x-auto border border-border border-error/30 bg-error/5">
-              <div class="text-muted-foreground text-[10px] uppercase tracking-wide mb-1">stderr</div>
-              <pre class="whitespace-pre-wrap break-all text-muted-foreground">{hook.stderr}</pre>
-            </div>
-          {/if}
-        </div>
-      {/if}
+            <!-- stderr -->
+            {#if hook?.stderr}
+              <div class="bg-destructive/5 border border-destructive/20 rounded-lg p-3 font-mono text-xs overflow-x-auto">
+                <div class="text-destructive text-[10px] uppercase tracking-wide mb-1.5 font-medium">stderr</div>
+                <pre class="whitespace-pre-wrap break-all text-muted-foreground">{hook.stderr}</pre>
+              </div>
+            {/if}
+          </div>
+        {/if}
+      </div>
     {:else if message.type === 'system' && isCompactBoundary}
       <!-- Compact boundary - horizontal divider -->
       <div class="w-full flex items-center gap-3 py-2">
@@ -1082,25 +1097,20 @@
               </button>
             {/if}
             <!-- Copy button -->
-            <button
-              class="p-1.5 rounded-md bg-card border border-border shadow-sm hover:bg-accent"
-              onclick={copyContent}
-              title="Copy message"
-            >
-              {#if copied}
-                <Check class="w-3.5 h-3.5 text-success" />
-              {:else}
-                <Copy class="w-3.5 h-3.5 text-muted-foreground" />
-              {/if}
-            </button>
+            <CopyButton
+              text={message.content}
+              variant="ghost"
+              size="icon-sm"
+              class="p-1.5 h-auto w-auto rounded-md bg-card border border-border shadow-sm hover:bg-accent [&_svg]:w-3.5 [&_svg]:h-3.5 [&_svg]:text-muted-foreground"
+            />
           </div>
         </div>
       {/if}
     {/if}
 
-    <!-- Timestamp -->
-    {#if showTimestamp && message.timestamp}
-      <span class="text-[10px] text-muted-foreground mt-0.5">
+    <!-- Timestamp (shown on hover) -->
+    {#if message.timestamp}
+      <span class="text-[10px] text-muted-foreground mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
         {formatTimestamp(new Date(message.timestamp))}
       </span>
     {/if}
@@ -1108,8 +1118,8 @@
 
   {#if message.type === 'user'}
     <!-- User Avatar -->
-    <div class="flex-shrink-0 w-8 h-8 rounded-lg {config.iconBg} flex items-center justify-center">
-      <config.icon class="w-4 h-4 text-white" />
+    <div class="flex-shrink-0 w-9 h-9 rounded-xl {config.iconBg} flex items-center justify-center mt-0.5">
+      <config.icon class="w-4.5 h-4.5 {config.iconColor}" />
     </div>
   {/if}
 </div>

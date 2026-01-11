@@ -10,6 +10,8 @@ export interface SaveMessageData {
   messageType: string;
   content: unknown;
   timestamp?: Date;
+  /** SDK's message UUID - required for resumeSessionAt */
+  sdkUuid?: string;
 }
 
 /**
@@ -21,6 +23,8 @@ export interface StoredMessage {
   messageType: string;
   content: unknown;
   timestamp: Date;
+  /** SDK's message UUID - required for resumeSessionAt */
+  sdkUuid?: string;
 }
 
 /**
@@ -334,6 +338,7 @@ export class InstanceTracker {
       messageType: data.messageType,
       content: data.content,
       timestamp,
+      sdkUuid: data.sdkUuid ?? null,
     };
 
     await this.db.insert(messages).values(newMessage);
@@ -344,6 +349,7 @@ export class InstanceTracker {
       messageType: data.messageType,
       content: data.content,
       timestamp,
+      sdkUuid: data.sdkUuid,
     };
   }
 
@@ -365,6 +371,7 @@ export class InstanceTracker {
       messageType: row.messageType,
       content: row.content,
       timestamp: row.timestamp,
+      sdkUuid: row.sdkUuid ?? undefined,
     }));
   }
 
@@ -387,6 +394,7 @@ export class InstanceTracker {
       messageType: row.messageType,
       content: row.content,
       timestamp: row.timestamp,
+      sdkUuid: row.sdkUuid ?? undefined,
     }));
   }
 

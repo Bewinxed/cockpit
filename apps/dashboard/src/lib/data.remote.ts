@@ -44,6 +44,8 @@ interface InstanceMessage {
   content: string | Record<string, unknown>;
   messageType: string;
   timestamp: string;
+  /** SDK's message UUID - required for resumeSessionAt when editing */
+  sdkUuid?: string;
 }
 
 async function fetchFromHub<T>(path: string): Promise<T[]> {

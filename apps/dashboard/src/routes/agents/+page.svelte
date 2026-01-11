@@ -1,11 +1,11 @@
 <script lang="ts">
   import AgentCard from '$lib/components/AgentCard.svelte';
   import { EmptyState, Card, Button } from '$lib/components/ui';
+  import { CopyButton } from '$lib/components/ui/copy-button';
   import { agents } from '$lib/stores/realtime.svelte';
-  import { Server, Terminal, Copy, Check, ArrowUpRight } from 'lucide-svelte';
+  import { Server, Terminal, ArrowUpRight } from 'lucide-svelte';
 
   let statusFilter = $state<'all' | 'online' | 'offline'>('all');
-  let copied = $state(false);
 
   // Get agents as array from Map store
   let agentsList = $derived(Array.from($agents.values()));
@@ -29,12 +29,6 @@
     { value: 'online' as const, label: 'Online', count: onlineCount },
     { value: 'offline' as const, label: 'Offline', count: agentsList.length - onlineCount },
   ]);
-
-  async function copyCommand() {
-    await navigator.clipboard.writeText('cockpit agent');
-    copied = true;
-    setTimeout(() => copied = false, 2000);
-  }
 </script>
 
 <svelte:head>
@@ -139,19 +133,12 @@
               <div class="text-foreground">cockpit agent</div>
             </div>
 
-            <Button
+            <CopyButton
+              text="cockpit agent"
               variant="outline"
               size="icon-sm"
               class="absolute top-3 right-3"
-              onclick={copyCommand}
-              title="Copy command"
-            >
-              {#if copied}
-                <Check class="w-4 h-4 text-success" />
-              {:else}
-                <Copy class="w-4 h-4" />
-              {/if}
-            </Button>
+            />
           </div>
 
           <div class="flex items-start gap-4 text-sm">

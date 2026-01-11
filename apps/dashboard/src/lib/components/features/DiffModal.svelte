@@ -1,8 +1,9 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { FileDiff, type FileContents } from '@pierre/diffs';
-  import { X, Columns, AlignJustify, Copy, Check } from 'lucide-svelte';
+  import { X, Columns, AlignJustify } from 'lucide-svelte';
   import { Button } from '$lib/components/ui/button';
+  import { CopyButton } from '$lib/components/ui/copy-button';
 
   interface Props {
     filePath: string;
@@ -15,7 +16,6 @@
   let container: HTMLDivElement;
   let diffInstance: FileDiff | null = null;
   let diffStyle = $state<'unified' | 'split'>('unified');
-  let copied = $state(false);
 
   // Get file extension for syntax highlighting
   function getLanguageFromPath(path: string): string | undefined {
@@ -145,12 +145,6 @@
     }
   }
 
-  async function copyPath() {
-    await navigator.clipboard.writeText(filePath);
-    copied = true;
-    setTimeout(() => copied = false, 2000);
-  }
-
   // Calculate stats
   const stats = $derived(() => {
     const oldLines = oldContent.split('\n');
@@ -187,19 +181,12 @@
       <div class="flex items-center gap-3 min-w-0">
         <div class="flex items-center gap-2 min-w-0">
           <span class="font-mono text-sm text-foreground truncate">{filePath}</span>
-          <Button
+          <CopyButton
+            text={filePath}
             variant="ghost"
             size="icon-sm"
-            onclick={copyPath}
             class="h-6 w-6"
-            title="Copy path"
-          >
-            {#if copied}
-              <Check class="w-3.5 h-3.5 text-success" />
-            {:else}
-              <Copy class="w-3.5 h-3.5" />
-            {/if}
-          </Button>
+          />
         </div>
         <div class="flex items-center gap-2 text-xs">
           <span class="text-success">+{stats().additions}</span>

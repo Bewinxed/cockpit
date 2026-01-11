@@ -88,11 +88,15 @@ export const messages = sqliteTable('messages', {
   instanceId: text('instance_id').references(() => instances.id).notNull(),
   messageType: text('message_type').notNull(),
   content: text('content', { mode: 'json' }).notNull(),
+  // SDK's message UUID for resumeSessionAt - this is different from our local id
+  // Only available from SDK events, may be null for older messages
+  sdkUuid: text('sdk_uuid'),
   timestamp: integer('timestamp', { mode: 'timestamp' }).notNull(),
 }, (table) => [
   index('messages_instance_id_idx').on(table.instanceId),
   index('messages_timestamp_idx').on(table.timestamp),
   index('messages_message_type_idx').on(table.messageType),
+  index('messages_sdk_uuid_idx').on(table.sdkUuid),
 ]);
 
 // credentials - OAuth tokens and API keys for Claude authentication

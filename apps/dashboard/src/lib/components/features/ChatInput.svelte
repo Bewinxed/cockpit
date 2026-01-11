@@ -160,53 +160,68 @@
   }
 </script>
 
-<form class="flex gap-3 px-6 py-5 bg-card border-t border-border shadow-[0_-4px_12px_rgba(0,0,0,0.02)]" onsubmit={handleSubmit}>
-  <div class="flex-1 relative group">
-    <!-- Command Palette -->
-    <CommandPalette
-      {commands}
-      filter={message}
-      {selectedIndex}
-      onSelect={handleCommandSelect}
-      visible={showPalette}
-    />
+<form class="bg-card/80 backdrop-blur-lg border-t border-border px-4 py-4" onsubmit={handleSubmit}>
+  <div class="max-w-4xl mx-auto flex items-end gap-3">
+    <div class="flex-1 relative group">
+      <!-- Command Palette -->
+      <CommandPalette
+        {commands}
+        filter={message}
+        {selectedIndex}
+        onSelect={handleCommandSelect}
+        visible={showPalette}
+      />
 
-    <textarea
-      bind:this={textareaRef}
-      bind:value={message}
-      {placeholder}
-      disabled={disabled || loading}
-      rows={1}
-      class="input resize-none min-h-[48px] max-h-[200px] py-3.5 px-4 pr-12 disabled:bg-accent disabled:cursor-not-allowed text-[15px] leading-relaxed transition-all"
-      oninput={handleInput}
-      onkeydown={handleKeydown}
-    ></textarea>
+      <div class="relative">
+        <textarea
+          bind:this={textareaRef}
+          bind:value={message}
+          {placeholder}
+          disabled={disabled || loading}
+          rows={1}
+          class="w-full resize-none min-h-[52px] max-h-[200px] py-3.5 px-4 pr-24
+                 bg-background border border-input rounded-2xl
+                 text-sm leading-relaxed
+                 placeholder:text-muted-foreground
+                 focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-ring
+                 disabled:opacity-50 disabled:cursor-not-allowed
+                 transition-all duration-200"
+          oninput={handleInput}
+          onkeydown={handleKeydown}
+        ></textarea>
 
-    <!-- Character hint -->
-    <div class="absolute right-3 bottom-3 text-[10px] text-muted-foreground pointer-events-none opacity-0 group-focus-within:opacity-100 transition-opacity">
-      {#if streaming}
-        <span class="text-warning font-medium">⌘↵ to interrupt</span>
-      {:else if message.length > 0}
-        {#if showPalette}
-          ↵ select · ↵ again to send
-        {:else}
-          <span class="font-medium">⌘↵ to send</span>
-        {/if}
-      {/if}
+        <!-- Keyboard hints inside textarea -->
+        <div class="absolute right-3 bottom-3.5 flex items-center gap-2 text-[10px] text-muted-foreground pointer-events-none opacity-0 group-focus-within:opacity-100 transition-opacity">
+          {#if streaming}
+            <kbd class="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 font-medium border border-amber-500/20">⌘↵ interrupt</kbd>
+          {:else if message.length > 0}
+            {#if showPalette}
+              <span class="text-muted-foreground">↵ select</span>
+            {:else}
+              <kbd class="px-1.5 py-0.5 rounded bg-muted font-medium border border-border">↵ send</kbd>
+            {/if}
+          {/if}
+        </div>
+      </div>
     </div>
-  </div>
 
-  <Button
-    type="submit"
-    size="icon"
-    disabled={disabled || loading || !message.trim()}
-    class="h-[48px] w-[48px] self-end rounded-full shrink-0"
-    title="Send message"
-  >
-    {#if loading}
-      <Loader2 class="size-5 animate-spin" />
-    {:else}
-      <Send class="size-5 translate-x-0.5" />
-    {/if}
-  </Button>
+    <button
+      type="submit"
+      disabled={disabled || loading || !message.trim()}
+      class="flex-shrink-0 w-11 h-11 rounded-xl
+             bg-primary text-primary-foreground
+             flex items-center justify-center
+             hover:bg-primary/90 hover:scale-105
+             active:scale-95
+             disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:scale-100
+             transition-all duration-200 shadow-sm"
+      title="Send message"
+    >
+      {#if loading}
+        <Loader2 class="size-5 animate-spin" />
+      {:else}
+        <Send class="size-5 translate-x-0.5" />
+      {/if}
+    </button>
+  </div>
 </form>

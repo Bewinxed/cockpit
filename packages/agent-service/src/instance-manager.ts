@@ -314,6 +314,16 @@ export class InstanceManager extends EventEmitter {
       return instanceId;
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
+      // Capture full error details including stack for debugging
+      const errorDetails = err.stack || err.message;
+      console.error(`[InstanceManager] Session creation failed for ${instanceId}:`, errorDetails);
+
+      // Check if this is an SDK error with more context
+      const errorContext = (error as { cause?: Error })?.cause;
+      if (errorContext) {
+        console.error(`[InstanceManager] Caused by:`, errorContext.stack || errorContext.message);
+      }
+
       instance.state = 'error';
       instance.error = err.message;
       this.emit('instance.error', instanceId, err);

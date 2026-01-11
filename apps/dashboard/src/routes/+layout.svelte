@@ -119,7 +119,7 @@
         </div>
         {#if $connectionStatus === 'connected'}
           <div class="flex items-center gap-4 text-[11px] font-mono text-muted-foreground">
-            <span><span class="text-muted-foreground font-bold">{$stats.onlineAgents}</span> agents</span>
+            <span><span class="text-muted-foreground font-bold">{$stats.onlineAgents}</span> {$stats.onlineAgents === 1 ? 'agent' : 'agents'}</span>
             <span class="text-border">·</span>
             <span><span class="text-muted-foreground font-bold">{$stats.runningInstances}</span> active</span>
           </div>
@@ -166,11 +166,11 @@
           <div class="grid grid-cols-2 divide-x divide-border text-center">
             <div class="py-4">
               <div class="text-2xl font-bold text-foreground tracking-tight">{$stats.totalInstances}</div>
-              <div class="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">Instances</div>
+              <div class="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">{$stats.totalInstances === 1 ? 'Instance' : 'Instances'}</div>
             </div>
             <div class="py-4">
               <div class="text-2xl font-bold text-foreground tracking-tight">{$stats.totalProjects}</div>
-              <div class="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">Projects</div>
+              <div class="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">{$stats.totalProjects === 1 ? 'Project' : 'Projects'}</div>
             </div>
           </div>
         {/if}

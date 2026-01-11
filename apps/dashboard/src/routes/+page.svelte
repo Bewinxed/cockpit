@@ -16,7 +16,7 @@
     CheckCircle,
     DollarSign,
     Plus,
-    ArrowUpRight,
+    ArrowRight,
     Zap,
     MessageSquare,
   } from "lucide-svelte";
@@ -114,8 +114,8 @@
             class="group text-[11px] font-mono text-muted-foreground hover:text-primary transition-colors flex items-center gap-1 uppercase tracking-wider"
           >
             View all
-            <ArrowUpRight
-              class="w-3.5 h-3.5 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform"
+            <ArrowRight
+              class="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform"
             />
           </a>
         </div>
@@ -164,8 +164,8 @@
             class="group text-[11px] font-mono text-muted-foreground hover:text-primary transition-colors flex items-center gap-1 uppercase tracking-wider"
           >
             View all
-            <ArrowUpRight
-              class="w-3.5 h-3.5 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform"
+            <ArrowRight
+              class="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform"
             />
           </a>
         </div>

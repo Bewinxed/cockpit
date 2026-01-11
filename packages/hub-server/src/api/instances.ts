@@ -688,6 +688,16 @@ export function createInstanceRoutes(db: Db) {
         // Update instance status to starting
         await tracker.update(params.id, { status: 'starting' });
 
+        // Only pass resumeFromMessageId if we have a valid sdkSessionId
+        // Invalid UUIDs will crash the SDK
+        const resumeFromMessageId = instance.sdkSessionId && body?.resumeFromMessageId
+          ? body.resumeFromMessageId
+          : undefined;
+
+        if (body?.resumeFromMessageId && !resumeFromMessageId) {
+          console.warn(`[Resume] Cannot use resumeFromMessageId without sdkSessionId for instance ${params.id}`);
+        }
+
         // Send spawn request to machine with the same instanceId
         const response = await getAgentRegistry().sendToMachine(
           instance.machineId,
@@ -699,7 +709,7 @@ export function createInstanceRoutes(db: Db) {
             permissionMode: instance.permissionMode,
             projectId: instance.projectId,
             resumeSessionId: instance.sdkSessionId, // Use stored SDK session ID
-            resumeFromMessageId: body?.resumeFromMessageId, // Optional: resume from specific message
+            resumeFromMessageId, // Only pass if we have a valid session to resume from
             forkSession: body?.forkSession, // Optional: fork to new session
             enableFileCheckpointing: body?.enableFileCheckpointing, // Optional: enable file checkpointing
             envVars: oauthCreds ? {

@@ -352,7 +352,13 @@ async function handleNotification(
     // Handle SDK messages from machine
     case 'sdk.message': {
       const { instanceId, message } = params as { instanceId: string; message: unknown };
-      const msg = message as { type?: string; session_id?: string; usage?: { input_tokens?: number; output_tokens?: number }; total_cost_usd?: number };
+      const msg = message as {
+        type?: string;
+        uuid?: string;  // SDK's message UUID - required for resumeSessionAt
+        session_id?: string;
+        usage?: { input_tokens?: number; output_tokens?: number };
+        total_cost_usd?: number;
+      };
 
       // Capture and persist SDK session ID (used for resume)
       if (msg.session_id) {
@@ -365,12 +371,13 @@ async function handleNotification(
         }
       }
 
-      // Persist message to database
+      // Persist message to database with SDK UUID for resumeSessionAt
       try {
         await instanceTracker.saveMessage(instanceId, {
           messageType: msg.type || 'unknown',
           content: message,
           timestamp: new Date(),
+          sdkUuid: msg.uuid,  // Store SDK's UUID for edit/resume functionality
         });
       } catch (err) {
         console.error('[Hub] Failed to save SDK message:', err);

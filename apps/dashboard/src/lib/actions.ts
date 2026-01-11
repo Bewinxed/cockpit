@@ -89,12 +89,13 @@ export async function stopInstance(instanceId: string): Promise<{ success: boole
 
 /**
  * Send a message to an instance
+ * Returns messageUuid if available (for edit support)
  */
 export async function sendMessage(
   instanceId: string,
   content: string
-): Promise<{ success: boolean; error?: string }> {
-  const { error } = await api.api.instances({ id: instanceId }).send.post({ message: content });
+): Promise<{ success: boolean; error?: string; messageUuid?: string }> {
+  const { data, error } = await api.api.instances({ id: instanceId }).send.post({ message: content });
 
   if (error) {
     const errorMsg = extractErrorMessage(error);
@@ -102,7 +103,17 @@ export async function sendMessage(
     return { success: false, error: errorMsg };
   }
 
-  return { success: true };
+  // Debug: log the response to see what's available
+  console.log('[sendMessage] Response data:', JSON.stringify(data, null, 2));
+
+  // Try to extract messageUuid from response if available
+  // The server might return it in different locations
+  const responseData = data as { success?: boolean; data?: Record<string, unknown> };
+  const messageUuid = responseData?.data?.messageUuid as string | undefined
+    || responseData?.data?.uuid as string | undefined
+    || responseData?.data?.id as string | undefined;
+
+  return { success: true, messageUuid };
 }
 
 /**
@@ -227,4 +238,46 @@ export async function refreshAll(): Promise<void> {
     fetchInstances(),
     fetchProjects(),
   ]);
+}
+
+/**
+ * Fetch messages for an instance to get UUIDs for recently sent messages
+ * This is used to enable editing after sending when SSE doesn't provide UUIDs
+ */
+export async function fetchInstanceMessages(instanceId: string): Promise<{
+  success: boolean;
+  messages?: Array<{
+    id: string;
+    content: unknown;
+    messageType: string;
+    timestamp: string;
+    uuid?: string;
+  }>;
+  error?: string;
+}> {
+  const { data, error } = await api.api.instances({ id: instanceId }).messages.get();
+
+  if (error) {
+    const errorMsg = extractErrorMessage(error);
+    return { success: false, error: errorMsg };
+  }
+
+  // Debug: log what we get
+  console.log('[fetchInstanceMessages] Response:', JSON.stringify(data, null, 2).slice(0, 500));
+
+  const responseData = data as { success?: boolean; data?: unknown[] };
+  if (responseData?.success && responseData?.data) {
+    return {
+      success: true,
+      messages: responseData.data as Array<{
+        id: string;
+        content: unknown;
+        messageType: string;
+        timestamp: string;
+        uuid?: string;
+      }>,
+    };
+  }
+
+  return { success: true, messages: [] };
 }

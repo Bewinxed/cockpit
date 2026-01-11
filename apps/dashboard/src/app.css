@@ -184,3 +184,16 @@ button.text-destructive-foreground {
 button.text-foreground {
   color: var(--foreground);
 }
+
+/* Form input utility class */
+.input {
+  @apply w-full rounded-md border border-input bg-background px-3 py-2 text-sm;
+  @apply placeholder:text-muted-foreground;
+  @apply focus:outline-none focus:border-ring focus:ring-2 focus:ring-ring/20;
+  @apply disabled:cursor-not-allowed disabled:opacity-50;
+  @apply transition-colors;
+}
+
+.input-error {
+  @apply border-destructive focus:ring-destructive/20;
+}

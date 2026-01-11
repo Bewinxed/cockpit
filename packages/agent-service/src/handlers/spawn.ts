@@ -82,13 +82,23 @@ export async function handleSpawn(
   }
 
   try {
+    // Validate resumeFromMessageId format if provided
+    // SDK UUIDs are in standard UUID format (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    let validatedResumeFromMessageId = params.resumeFromMessageId;
+
+    if (params.resumeFromMessageId && !uuidRegex.test(params.resumeFromMessageId)) {
+      console.warn(`[Spawn] Invalid resumeFromMessageId format: ${params.resumeFromMessageId}, ignoring`);
+      validatedResumeFromMessageId = undefined;
+    }
+
     // Map params to SpawnInstanceParams
     const spawnParams: SpawnInstanceParams = {
       projectPath: workingDir,
       instanceId: params.instanceId, // Use hub's instanceId to keep in sync
       sessionId: params.sessionId,
       resumeSessionId: params.resumeSessionId, // Claude SDK session ID for resume
-      resumeFromMessageId: params.resumeFromMessageId, // Resume from specific message
+      resumeFromMessageId: validatedResumeFromMessageId, // Resume from specific message (validated)
       forkSession: params.forkSession, // Fork to new session
       enableFileCheckpointing: params.enableFileCheckpointing, // Enable file checkpointing
       systemPrompt: params.systemPrompt,
