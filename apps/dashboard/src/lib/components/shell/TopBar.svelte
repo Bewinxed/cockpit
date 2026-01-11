@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { Search, Bell, Command } from 'lucide-svelte';
+  import { Search, Bell } from 'lucide-svelte';
+  import { Button } from '$lib/components/ui/button';
   import {
     toggleCommandPalette,
     toggleNotificationCenter,
@@ -23,31 +24,34 @@
   </div>
 
   <!-- Center: Search -->
-  <button
-    class="flex items-center gap-2 px-3 py-1.5 bg-muted/50 hover:bg-muted rounded-lg text-muted-foreground hover:text-foreground transition-colors min-w-[240px]"
+  <Button
+    variant="outline"
     onclick={toggleCommandPalette}
+    class="flex items-center gap-2 px-3 py-1.5 bg-muted/50 hover:bg-muted min-w-[240px] justify-start"
   >
-    <Search class="w-4 h-4" />
-    <span class="text-sm flex-1 text-left">Search...</span>
+    <Search class="size-4" />
+    <span class="text-sm flex-1 text-left text-muted-foreground">Search...</span>
     <kbd class="px-1.5 py-0.5 text-xs bg-background rounded border border-border font-mono">
       {cmdKey}K
     </kbd>
-  </button>
+  </Button>
 
   <!-- Right: Actions -->
   <div class="flex items-center gap-2">
     <!-- Notifications -->
-    <button
-      class="relative p-2 rounded-lg hover:bg-muted transition-colors"
+    <Button
+      variant="ghost"
+      size="icon"
       onclick={toggleNotificationCenter}
+      class="relative"
     >
-      <Bell class="w-5 h-5 text-muted-foreground" />
+      <Bell class="size-5 text-muted-foreground" />
       {#if $pendingPermissionCount > 0}
         <span class="absolute top-1 right-1 size-4 bg-warning text-warning-foreground text-[10px] font-bold rounded-full flex items-center justify-center">
           {$pendingPermissionCount}
         </span>
       {/if}
-    </button>
+    </Button>
 
     <!-- Connection indicator -->
     <div class="flex items-center gap-1.5 px-2 py-1 rounded-lg">

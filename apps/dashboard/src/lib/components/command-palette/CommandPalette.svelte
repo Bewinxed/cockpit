@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { Search, Terminal, Plus, Square } from 'lucide-svelte';
+  import { Terminal, Plus, Square } from 'lucide-svelte';
+  import * as Command from '$lib/components/ui/command';
   import {
     populatedInstances,
     toggleCommandPalette,
@@ -7,9 +8,7 @@
   } from '$lib/stores/realtime.svelte';
   import { navigateToInstance } from '$lib/stores/url-sync.svelte';
 
-  let query = $state('');
-  let selectedIndex = $state(0);
-  let inputEl: HTMLInputElement | null = $state(null);
+  let value = $state('');
 
   interface CommandItem {
     id: string;
@@ -24,7 +23,7 @@
     const results: CommandItem[] = [];
 
     // Search instances
-    const q = query.toLowerCase();
+    const q = value.toLowerCase();
     for (const instance of $populatedInstances) {
       const name = instance.name || '';
       const cwd = instance.cwd || '';
@@ -80,87 +79,34 @@
 
     return results.slice(0, 10); // Limit results
   });
-
-  // Reset selection when query changes
-  $effect(() => {
-    query; // Dependency
-    selectedIndex = 0;
-  });
-
-  function handleKeydown(e: KeyboardEvent) {
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      selectedIndex = Math.min(selectedIndex + 1, items.length - 1);
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      selectedIndex = Math.max(selectedIndex - 1, 0);
-    } else if (e.key === 'Enter') {
-      e.preventDefault();
-      const item = items[selectedIndex];
-      if (item) item.action();
-    } else if (e.key === 'Escape') {
-      toggleCommandPalette();
-    }
-  }
-
-  // Focus input when palette opens
-  $effect(() => {
-    if ($commandPaletteOpen && inputEl) {
-      inputEl.focus();
-    }
-  });
 </script>
 
-<!-- Backdrop -->
-<div
-  class="fixed inset-0 bg-black/50 z-50"
-  onclick={toggleCommandPalette}
-  onkeydown={handleKeydown}
-  role="button"
-  tabindex="-1"
-></div>
-
-<!-- Palette -->
-<div class="fixed top-[20%] left-1/2 -translate-x-1/2 w-full max-w-lg bg-card border border-border rounded-xl shadow-2xl z-50 overflow-hidden">
-  <!-- Search Input -->
-  <div class="flex items-center gap-3 px-4 py-3 border-b border-border">
-    <Search class="w-5 h-5 text-muted-foreground" />
-    <input
-      bind:this={inputEl}
-      bind:value={query}
-      type="text"
-      placeholder="Search instances, actions..."
-      class="flex-1 bg-transparent text-foreground placeholder:text-muted-foreground focus:outline-none"
-      onkeydown={handleKeydown}
-    />
-    <kbd class="px-2 py-0.5 text-xs bg-muted text-muted-foreground rounded">ESC</kbd>
-  </div>
-
-  <!-- Results -->
-  <div class="max-h-80 overflow-y-auto">
-    {#each items as item, index (item.id)}
-      {@const Icon = item.icon}
-      <button
-        class="w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors"
-        class:bg-accent={index === selectedIndex}
-        onclick={item.action}
-        onmouseenter={() => selectedIndex = index}
-      >
-        <Icon class="w-4 h-4 text-muted-foreground" />
-        <div class="flex-1 min-w-0">
-          <div class="text-sm font-medium text-foreground truncate">{item.label}</div>
-          {#if item.description}
-            <div class="text-xs text-muted-foreground truncate">{item.description}</div>
-          {/if}
-        </div>
-        <span class="text-xs text-muted-foreground capitalize">{item.type}</span>
-      </button>
-    {/each}
-
-    {#if items.length === 0}
-      <div class="px-4 py-8 text-center text-muted-foreground">
-        No results for "{query}"
-      </div>
-    {/if}
-  </div>
-</div>
+<Command.Dialog
+  open={$commandPaletteOpen}
+  onOpenChange={(open) => !open && toggleCommandPalette()}
+  title="Command Palette"
+  description="Search instances, run actions..."
+>
+  <Command.Input placeholder="Search instances, actions..." bind:value />
+  <Command.List>
+    <Command.Empty>No results found.</Command.Empty>
+    <Command.Group heading="Results">
+      {#each items as item (item.id)}
+        {@const Icon = item.icon}
+        <Command.Item
+          value={item.label}
+          onSelect={item.action}
+        >
+          <Icon class="size-4 text-muted-foreground" />
+          <div class="flex-1 min-w-0">
+            <div class="text-sm font-medium truncate">{item.label}</div>
+            {#if item.description}
+              <div class="text-xs text-muted-foreground truncate">{item.description}</div>
+            {/if}
+          </div>
+          <Command.Shortcut class="capitalize">{item.type}</Command.Shortcut>
+        </Command.Item>
+      {/each}
+    </Command.Group>
+  </Command.List>
+</Command.Dialog>

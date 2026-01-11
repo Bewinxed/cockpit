@@ -1,5 +1,7 @@
 <script lang="ts">
   import { Plus, ChevronDown, ChevronRight } from 'lucide-svelte';
+  import * as SidebarUI from '$lib/components/ui/sidebar';
+  import { Button } from '$lib/components/ui/button';
   import SidebarInstanceItem from '../sidebar/SidebarInstanceItem.svelte';
   import SidebarAgentItem from '../sidebar/SidebarAgentItem.svelte';
   import {
@@ -19,102 +21,99 @@
   let { collapsed = false, onNewInstance }: Props = $props();
 </script>
 
-<aside
-  class="h-full flex flex-col border-r border-border bg-card transition-all duration-200"
-  class:w-64={!collapsed}
-  class:w-12={collapsed}
->
-  <!-- Scrollable Content -->
-  <div class="flex-1 overflow-y-auto py-2">
+<SidebarUI.Sidebar collapsible={collapsed ? 'icon' : 'none'} class="border-r border-border">
+  <SidebarUI.SidebarContent>
     <!-- Instances Section -->
-    <div class="px-2">
-      {#if !collapsed}
-        <div class="flex items-center justify-between px-2 py-1 mb-1">
-          <span class="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-            Instances
-          </span>
-          <span class="text-xs text-muted-foreground">
-            {$stats.runningInstances} running
-          </span>
-        </div>
-      {/if}
+    <SidebarUI.SidebarGroup>
+      <SidebarUI.SidebarGroupLabel class="flex items-center justify-between">
+        <span>Instances</span>
+        <span class="text-xs text-muted-foreground font-normal">
+          {$stats.runningInstances} running
+        </span>
+      </SidebarUI.SidebarGroupLabel>
 
-      {#each $instancesByProject as group (group.project?.id ?? '__unassigned__')}
-        <!-- Project Group Header -->
-        <button
-          class="w-full flex items-center gap-2 px-2 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:bg-accent/50 rounded-md transition-colors"
-          onclick={() => toggleProjectCollapse(group.project?.id || null)}
-        >
-          {#if group.isCollapsed}
-            <ChevronRight class="w-3.5 h-3.5 flex-shrink-0" />
+      <SidebarUI.SidebarGroupContent>
+        <SidebarUI.SidebarMenu>
+          {#each $instancesByProject as group (group.project?.id ?? '__unassigned__')}
+            <!-- Project Group -->
+            <SidebarUI.SidebarMenuItem>
+              <SidebarUI.SidebarMenuButton
+                onclick={() => toggleProjectCollapse(group.project?.id || null)}
+                tooltipContent={collapsed ? (group.project?.name || 'Unassigned') : undefined}
+              >
+                {#if group.isCollapsed}
+                  <ChevronRight class="size-4" />
+                {:else}
+                  <ChevronDown class="size-4" />
+                {/if}
+                <span class="flex-1 truncate">
+                  {group.project?.name || 'Unassigned'}
+                </span>
+                <SidebarUI.SidebarMenuBadge>
+                  {group.instances.length}
+                </SidebarUI.SidebarMenuBadge>
+              </SidebarUI.SidebarMenuButton>
+
+              <!-- Nested Instance Items -->
+              {#if !group.isCollapsed}
+                <SidebarUI.SidebarMenuSub>
+                  {#each group.instances as instance (instance.id)}
+                    <SidebarUI.SidebarMenuSubItem>
+                      <SidebarInstanceItem
+                        {instance}
+                        selected={$selectedInstanceId === instance.id}
+                        {collapsed}
+                        onSelect={() => navigateToInstance(instance.id, true)}
+                      />
+                    </SidebarUI.SidebarMenuSubItem>
+                  {/each}
+                </SidebarUI.SidebarMenuSub>
+              {/if}
+            </SidebarUI.SidebarMenuItem>
           {:else}
-            <ChevronDown class="w-3.5 h-3.5 flex-shrink-0" />
-          {/if}
-          {#if !collapsed}
-            <span class="flex-1 text-left truncate">
-              {group.project?.name || 'Unassigned'}
-            </span>
-            <span class="text-xs text-muted-foreground">
-              {group.instances.length}
-            </span>
-          {/if}
-        </button>
+            <div class="px-2 py-4 text-center text-sm text-muted-foreground">
+              No instances yet
+            </div>
+          {/each}
 
-        <!-- Instance Items -->
-        {#if !group.isCollapsed}
-          <div class="ml-2 space-y-0.5">
-            {#each group.instances as instance (instance.id)}
-              <SidebarInstanceItem
-                {instance}
-                selected={$selectedInstanceId === instance.id}
-                {collapsed}
-                onSelect={() => navigateToInstance(instance.id, true)}
-              />
-            {/each}
-          </div>
-        {/if}
-      {:else}
-        {#if !collapsed}
-          <div class="px-2 py-4 text-center text-sm text-muted-foreground">
-            No instances yet
-          </div>
-        {/if}
-      {/each}
+          <!-- New Instance Button -->
+          <SidebarUI.SidebarMenuItem>
+            <SidebarUI.SidebarMenuButton
+              onclick={() => onNewInstance?.()}
+              tooltipContent={collapsed ? 'New Instance' : undefined}
+            >
+              <Plus class="size-4" />
+              <span>New Instance</span>
+            </SidebarUI.SidebarMenuButton>
+          </SidebarUI.SidebarMenuItem>
+        </SidebarUI.SidebarMenu>
+      </SidebarUI.SidebarGroupContent>
+    </SidebarUI.SidebarGroup>
 
-      <!-- New Instance Button -->
-      <button
-        class="w-full flex items-center gap-2 px-2 py-1.5 mt-2 text-sm text-muted-foreground hover:text-foreground hover:bg-accent/50 rounded-md transition-colors"
-        onclick={() => onNewInstance?.()}
-      >
-        <Plus class="w-4 h-4 flex-shrink-0" />
-        {#if !collapsed}
-          <span>New Instance</span>
-        {/if}
-      </button>
-    </div>
+    <SidebarUI.SidebarSeparator />
 
     <!-- Agents Section -->
-    <div class="px-2 mt-4 pt-4 border-t border-border">
-      {#if !collapsed}
-        <div class="flex items-center justify-between px-2 py-1 mb-1">
-          <span class="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-            Agents
-          </span>
-          <span class="text-xs text-muted-foreground">
-            {$stats.onlineAgents} online
-          </span>
-        </div>
-      {/if}
+    <SidebarUI.SidebarGroup>
+      <SidebarUI.SidebarGroupLabel class="flex items-center justify-between">
+        <span>Agents</span>
+        <span class="text-xs text-muted-foreground font-normal">
+          {$stats.onlineAgents} online
+        </span>
+      </SidebarUI.SidebarGroupLabel>
 
-      {#each Array.from($agents.values()) as agent (agent.machineId)}
-        <SidebarAgentItem {agent} {collapsed} />
-      {:else}
-        {#if !collapsed}
-          <div class="px-2 py-4 text-center text-sm text-muted-foreground">
-            No agents connected
-          </div>
-        {/if}
-      {/each}
-    </div>
-  </div>
-</aside>
+      <SidebarUI.SidebarGroupContent>
+        <SidebarUI.SidebarMenu>
+          {#each Array.from($agents.values()) as agent (agent.machineId)}
+            <SidebarUI.SidebarMenuItem>
+              <SidebarAgentItem {agent} {collapsed} />
+            </SidebarUI.SidebarMenuItem>
+          {:else}
+            <div class="px-2 py-4 text-center text-sm text-muted-foreground">
+              No agents connected
+            </div>
+          {/each}
+        </SidebarUI.SidebarMenu>
+      </SidebarUI.SidebarGroupContent>
+    </SidebarUI.SidebarGroup>
+  </SidebarUI.SidebarContent>
+</SidebarUI.Sidebar>

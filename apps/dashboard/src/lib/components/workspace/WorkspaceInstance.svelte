@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { ArrowDown } from 'lucide-svelte';
+  import { Button } from '$lib/components/ui/button';
   import InstanceHeader from './InstanceHeader.svelte';
   import ChatMessage from '../features/ChatMessage.svelte';
   import ChatInput from '../features/ChatInput.svelte';
@@ -149,12 +151,15 @@
 
   <!-- Jump to Present Button -->
   {#if !shouldAutoScroll}
-    <button
-      class="absolute bottom-20 right-8 px-3 py-1.5 bg-primary text-primary-foreground text-sm rounded-full shadow-lg hover:bg-primary/90 transition-colors z-10"
+    <Button
+      variant="default"
+      size="sm"
+      class="absolute bottom-20 right-8 rounded-full shadow-lg z-10 gap-1.5"
       onclick={scrollToBottom}
     >
-      ↓ Jump to present
-    </button>
+      <ArrowDown class="size-4" />
+      Jump to present
+    </Button>
   {/if}
 
   <!-- Chat Input -->

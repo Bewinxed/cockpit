@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Monitor, Server } from 'lucide-svelte';
+  import * as SidebarUI from '$lib/components/ui/sidebar';
   import type { Agent } from '$lib/stores/realtime.svelte';
 
   interface Props {
@@ -9,7 +10,7 @@
 
   let { agent, collapsed = false }: Props = $props();
 
-  const statusColor = $derived(() => {
+  const statusColor = $derived.by(() => {
     switch (agent.status) {
       case 'online': return 'bg-success';
       case 'reconnecting': return 'bg-warning animate-pulse';
@@ -26,25 +27,18 @@
   });
 </script>
 
-<div
-  class="flex items-center gap-2 px-2 py-1.5 text-sm text-muted-foreground rounded-md"
-  title={collapsed ? agent.name : undefined}
+<SidebarUI.SidebarMenuButton
+  tooltipContent={collapsed ? agent.name : undefined}
+  class="cursor-default"
 >
   <!-- OS Icon -->
-  <div class="flex-shrink-0">
-    <OsIcon class="w-4 h-4" />
-  </div>
+  <OsIcon class="size-4 flex-shrink-0" />
 
-  {#if !collapsed}
-    <!-- Agent Name -->
-    <span class="flex-1 truncate">
-      {agent.name}
-    </span>
+  <!-- Agent Name -->
+  <span class="flex-1 truncate">
+    {agent.name}
+  </span>
 
-    <!-- Status Dot -->
-    <div class="w-2 h-2 rounded-full {statusColor()}"></div>
-  {:else}
-    <!-- Just status dot when collapsed -->
-    <div class="w-2 h-2 rounded-full {statusColor()}"></div>
-  {/if}
-</div>
+  <!-- Status Dot -->
+  <div class="size-2 rounded-full {statusColor}"></div>
+</SidebarUI.SidebarMenuButton>
