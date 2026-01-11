@@ -2,7 +2,6 @@
   import '../app.css';
   import { page } from '$app/state';
   import { onMount, onDestroy } from 'svelte';
-  import { browser } from '$app/environment';
   import { HUB_URL } from '$lib/config';
   import {
     connect,
@@ -13,19 +12,17 @@
     splitViewState
   } from '$lib/stores/realtime.svelte';
   import { syncUrlToStore } from '$lib/stores/url-sync.svelte';
-  import { getAgents, getInstances, getProjects } from '$lib/data.remote';
   import '$lib/stores/theme';
 
   // Shell components
   import AppShell from '$lib/components/shell/AppShell.svelte';
 
-  // Load data during SSR via remote functions
-  const agentsData = await getAgents();
-  const instancesData = await getInstances();
-  const projectsData = await getProjects();
+  // Get SSR data from load function
+  let { data } = $props();
 
-  // Initialize stores immediately (runs during SSR and hydration)
-  initializeFromSSR(agentsData, instancesData, projectsData);
+  // Initialize stores from SSR data synchronously
+  // This runs during component initialization on both server and client
+  initializeFromSSR(data.agentsData, data.instancesData, data.projectsData);
 
   // Connect to real-time updates (client-side only)
   onMount(() => {
