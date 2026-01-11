@@ -3,10 +3,11 @@
   import { X } from 'lucide-svelte';
   import * as Tabs from '$lib/components/ui/tabs';
   import { Button } from '$lib/components/ui/button';
-  import { instances } from '$lib/stores/realtime.svelte';
+  import { instances, splitViewState } from '$lib/stores/realtime.svelte';
   import { switchToTab, closeTab } from '$lib/stores/url-sync.svelte';
   import WorkspaceInstance from './WorkspaceInstance.svelte';
   import WorkspaceEmpty from './WorkspaceEmpty.svelte';
+  import WorkspaceSplit from './WorkspaceSplit.svelte';
 
   interface Props {
     onNewInstance?: () => void;
@@ -90,17 +91,25 @@
       </div>
 
       <!-- Tab Content - ALL tabs stay mounted for live updates -->
-      <!-- Using forceMount to keep inactive tabs in DOM, CSS hidden for switching -->
-      <div class="flex-1 overflow-hidden relative">
-        {#each tabIds as id (id)}
-          <div
-            class="absolute inset-0 overflow-hidden"
-            class:hidden={id !== activeId}
-          >
-            <WorkspaceInstance instanceId={id} />
-          </div>
-        {/each}
-      </div>
+      <!-- Split view or regular tabs -->
+      {#if $splitViewState.enabled && $splitViewState.secondInstanceId && activeId}
+        <WorkspaceSplit
+          primaryInstanceId={activeId}
+          secondaryInstanceId={$splitViewState.secondInstanceId}
+        />
+      {:else}
+        <!-- Using forceMount to keep inactive tabs in DOM, CSS hidden for switching -->
+        <div class="flex-1 overflow-hidden relative">
+          {#each tabIds as id (id)}
+            <div
+              class="absolute inset-0 overflow-hidden"
+              class:hidden={id !== activeId}
+            >
+              <WorkspaceInstance instanceId={id} />
+            </div>
+          {/each}
+        </div>
+      {/if}
     </Tabs.Root>
   </div>
 {/if}

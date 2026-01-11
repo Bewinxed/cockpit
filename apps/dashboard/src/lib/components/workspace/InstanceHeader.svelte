@@ -117,10 +117,15 @@
 
     <!-- Actions -->
     <div class="flex items-center gap-1">
-      <!-- Split View (future) -->
-      <!-- <Button variant="ghost" size="icon-sm" title="Split view">
+      <!-- Split View -->
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        title="Open in split view"
+        onclick={() => enableSplitView(instance.id)}
+      >
         <Columns2 class="w-4 h-4" />
-      </Button> -->
+      </Button>
 
       <!-- Stop -->
       {#if instance.status === 'running' || instance.status === 'starting'}
