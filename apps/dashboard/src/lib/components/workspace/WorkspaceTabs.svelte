@@ -1,10 +1,11 @@
 <script lang="ts">
   import { page } from '$app/state';
-  import { X } from 'lucide-svelte';
+  import { X, Columns2, XCircle, Copy } from 'lucide-svelte';
   import * as Tabs from '$lib/components/ui/tabs';
+  import * as ContextMenu from '$lib/components/ui/context-menu';
   import { Button } from '$lib/components/ui/button';
-  import { instances, splitViewState } from '$lib/stores/realtime.svelte';
-  import { switchToTab, closeTab } from '$lib/stores/url-sync.svelte';
+  import { instances, splitViewState, enableSplitView } from '$lib/stores/realtime.svelte';
+  import { switchToTab, closeTab, closeOtherTabs, closeAllTabs } from '$lib/stores/url-sync.svelte';
   import WorkspaceInstance from './WorkspaceInstance.svelte';
   import WorkspaceEmpty from './WorkspaceEmpty.svelte';
   import WorkspaceSplit from './WorkspaceSplit.svelte';
@@ -50,6 +51,13 @@
     e.preventDefault();
     closeTab(id);
   }
+
+  function copyInstancePath(id: string) {
+    const instance = $instances.get(id);
+    if (instance?.cwd) {
+      navigator.clipboard.writeText(instance.cwd);
+    }
+  }
 </script>
 
 {#if tabIds.length === 0}
@@ -61,31 +69,64 @@
       <div class="flex-shrink-0 border-b border-border bg-card/50">
         <Tabs.List class="h-10 bg-transparent p-0 gap-0">
           {#each tabIds as id (id)}
-            <Tabs.Trigger
-              value={id}
-              class="group relative h-10 px-3 rounded-none border-r border-border data-[state=active]:bg-background data-[state=active]:shadow-none gap-2"
-            >
-              <!-- Status dot -->
-              <div class="size-2 rounded-full {getStatusColor(id)}"></div>
+            <ContextMenu.Root>
+              <ContextMenu.Trigger asChild>
+                <Tabs.Trigger
+                  value={id}
+                  class="group relative h-10 px-3 rounded-none border-r border-border data-[state=active]:bg-background data-[state=active]:shadow-none gap-2"
+                >
+                  <!-- Status dot -->
+                  <div class="size-2 rounded-full {getStatusColor(id)}"></div>
 
-              <!-- Tab name -->
-              <span class="truncate max-w-32 text-sm">
-                {getTabName(id)}
-              </span>
+                  <!-- Tab name -->
+                  <span class="truncate max-w-32 text-sm">
+                    {getTabName(id)}
+                  </span>
 
-              <!-- Close button -->
-              <Button
-                variant="ghost"
-                size="icon"
-                class="size-5 p-0 opacity-0 group-hover:opacity-100 group-data-[state=active]:opacity-100 ml-1"
-                onclick={(e) => handleCloseTab(e, id)}
-              >
-                <X class="size-3" />
-              </Button>
+                  <!-- Close button -->
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    class="size-5 p-0 opacity-0 group-hover:opacity-100 group-data-[state=active]:opacity-100 ml-1"
+                    onclick={(e) => handleCloseTab(e, id)}
+                  >
+                    <X class="size-3" />
+                  </Button>
 
-              <!-- Active indicator -->
-              <div class="absolute bottom-0 left-0 right-0 h-0.5 bg-primary opacity-0 data-[state=active]:opacity-100 group-data-[state=active]:opacity-100"></div>
-            </Tabs.Trigger>
+                  <!-- Active indicator -->
+                  <div class="absolute bottom-0 left-0 right-0 h-0.5 bg-primary opacity-0 data-[state=active]:opacity-100 group-data-[state=active]:opacity-100"></div>
+                </Tabs.Trigger>
+              </ContextMenu.Trigger>
+
+              <ContextMenu.Content class="w-48">
+                <ContextMenu.Item onclick={() => enableSplitView(id)}>
+                  <Columns2 class="mr-2 h-4 w-4" />
+                  Open in Split View
+                </ContextMenu.Item>
+
+                <ContextMenu.Item onclick={() => copyInstancePath(id)}>
+                  <Copy class="mr-2 h-4 w-4" />
+                  Copy Path
+                </ContextMenu.Item>
+
+                <ContextMenu.Separator />
+
+                <ContextMenu.Item onclick={() => closeTab(id)}>
+                  <X class="mr-2 h-4 w-4" />
+                  Close Tab
+                </ContextMenu.Item>
+
+                <ContextMenu.Item onclick={() => closeOtherTabs(id)}>
+                  <XCircle class="mr-2 h-4 w-4" />
+                  Close Other Tabs
+                </ContextMenu.Item>
+
+                <ContextMenu.Item class="text-destructive focus:text-destructive" onclick={closeAllTabs}>
+                  <XCircle class="mr-2 h-4 w-4" />
+                  Close All Tabs
+                </ContextMenu.Item>
+              </ContextMenu.Content>
+            </ContextMenu.Root>
           {/each}
         </Tabs.List>
       </div>
