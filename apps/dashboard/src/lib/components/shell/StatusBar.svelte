@@ -6,8 +6,12 @@
     stats,
     pendingPermissionCount,
     connectionStatus,
-    toggleNotificationCenter
+    toggleNotificationCenter,
+    sidebarFilter,
+    toggleSidebarFilter
   } from '$lib/stores/realtime.svelte';
+
+  const isFilteringRunning = $derived($sidebarFilter.type === 'running');
 
   const statusText = $derived.by(() => {
     switch ($connectionStatus) {
@@ -37,10 +41,20 @@
       <span class="text-xs">{statusText}</span>
     </div>
 
-    <!-- Running Instances -->
-    <span class="text-muted-foreground">
-      <span class="font-medium text-foreground">{$stats.runningInstances}</span> running
-    </span>
+    <!-- Running Instances (clickable to filter) -->
+    <Button
+      variant="ghost"
+      size="sm"
+      onclick={() => toggleSidebarFilter('running')}
+      class="h-auto py-0.5 px-1.5 {isFilteringRunning ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:text-foreground'}"
+      title={isFilteringRunning ? 'Show all instances' : 'Filter to running only'}
+    >
+      <span class="font-medium {isFilteringRunning ? '' : 'text-foreground'}">{$stats.runningInstances}</span>
+      <span class="ml-1">running</span>
+      {#if isFilteringRunning}
+        <span class="ml-1 text-xs">(filtered)</span>
+      {/if}
+    </Button>
 
     <!-- Pending Permissions (clickable) -->
     {#if $pendingPermissionCount > 0}

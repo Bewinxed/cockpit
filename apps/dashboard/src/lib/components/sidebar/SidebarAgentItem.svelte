@@ -1,7 +1,8 @@
 <script lang="ts">
-  import { Monitor, Server } from 'lucide-svelte';
+  import { Monitor, Server, X } from 'lucide-svelte';
   import * as SidebarUI from '$lib/components/ui/sidebar';
   import type { Agent } from '$lib/stores/realtime.svelte';
+  import { sidebarFilter, filterByAgent, toggleSidebarFilter } from '$lib/stores/realtime.svelte';
 
   interface Props {
     agent: Agent;
@@ -25,11 +26,27 @@
       default: return Server; // Linux and others
     }
   });
+
+  // Check if this agent is currently being filtered
+  const isFiltered = $derived(
+    $sidebarFilter.type === 'agent' && $sidebarFilter.agentId === agent.machineId
+  );
+
+  function handleClick() {
+    if (isFiltered) {
+      // Clear filter
+      toggleSidebarFilter('all');
+    } else {
+      // Filter to this agent
+      filterByAgent(agent.machineId);
+    }
+  }
 </script>
 
 <SidebarUI.SidebarMenuButton
   tooltipContent={collapsed ? agent.name : undefined}
-  class="cursor-default"
+  onclick={handleClick}
+  class={isFiltered ? 'bg-primary/10 text-primary' : ''}
 >
   <!-- OS Icon -->
   <OsIcon class="size-4 flex-shrink-0" />
@@ -39,6 +56,10 @@
     {agent.name}
   </span>
 
-  <!-- Status Dot -->
-  <div class="size-2 rounded-full {statusColor}"></div>
+  <!-- Clear filter indicator or Status Dot -->
+  {#if isFiltered}
+    <X class="size-3 text-primary" />
+  {:else}
+    <div class="size-2 rounded-full {statusColor}"></div>
+  {/if}
 </SidebarUI.SidebarMenuButton>

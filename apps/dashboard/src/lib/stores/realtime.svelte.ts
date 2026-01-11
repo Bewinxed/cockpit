@@ -1115,6 +1115,21 @@ export interface SidebarFilterState {
 }
 export const sidebarFilter: Writable<SidebarFilterState> = writable({ type: 'all' });
 
+// Toggle sidebar filter (clicking again returns to 'all')
+export function toggleSidebarFilter(filter: SidebarFilter): void {
+  sidebarFilter.update(current => {
+    if (current.type === filter) {
+      return { type: 'all' };
+    }
+    return { type: filter };
+  });
+}
+
+// Set sidebar filter by agent
+export function filterByAgent(agentId: string): void {
+  sidebarFilter.set({ type: 'agent', agentId });
+}
+
 // Project collapse state (which projects are expanded in sidebar)
 export const collapsedProjects: Writable<Set<string>> = writable(new Set());
 

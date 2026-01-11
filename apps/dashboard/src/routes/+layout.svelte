@@ -1,19 +1,47 @@
 <script lang="ts">
   import '../app.css';
   import { onMount, onDestroy } from 'svelte';
+  import { toast } from 'svelte-sonner';
   import { HUB_URL } from '$lib/config';
   import {
     connect,
     disconnect,
     initializeFromSSR,
-    toggleCommandPalette
+    toggleCommandPalette,
+    allPendingPermissions,
+    instances
   } from '$lib/stores/realtime.svelte';
   import { getAgents, getInstances, getProjects } from '$lib/data.remote';
-  import { restoreTabsFromStorage, persistTabsToStorage } from '$lib/stores/url-sync.svelte';
+  import { restoreTabsFromStorage, persistTabsToStorage, openInstance } from '$lib/stores/url-sync.svelte';
   import '$lib/stores/theme';
 
   // Shell components
   import AppShell from '$lib/components/shell/AppShell.svelte';
+  import { Toaster } from '$lib/components/ui/sonner';
+
+  // Track seen permission IDs to show toasts only for new ones
+  let seenPermissionIds = new Set<string>();
+
+  // Watch for new permission requests and show toasts
+  $effect(() => {
+    const permissions = $allPendingPermissions;
+    for (const perm of permissions) {
+      if (!seenPermissionIds.has(perm.requestId)) {
+        seenPermissionIds.add(perm.requestId);
+        const instance = $instances.get(perm.instanceId);
+        const instanceName = instance?.name || instance?.cwd?.split('/').pop() || 'Instance';
+
+        toast.warning(`Permission Request`, {
+          description: `${instanceName} wants to use ${perm.toolName}`,
+          action: {
+            label: 'View',
+            onClick: () => openInstance(perm.instanceId)
+          },
+          duration: 10000
+        });
+      }
+    }
+  });
 
   // Use $derived with await for remote functions - this works during SSR
   const agentsData = $derived(await getAgents());
@@ -83,4 +111,5 @@
   });
 </script>
 
+<Toaster position="bottom-right" />
 <AppShell />
