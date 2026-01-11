@@ -1104,8 +1104,20 @@ export const notificationCenterOpen: Writable<boolean> = writable(false);
 // Command palette open state
 export const commandPaletteOpen: Writable<boolean> = writable(false);
 
-// Sidebar collapsed state (for mobile/responsive)
+// Sidebar collapsed state (for desktop - minimizes to icons)
 export const sidebarCollapsed: Writable<boolean> = writable(false);
+
+// Sidebar open state (for mobile - shows/hides overlay)
+export const sidebarOpen: Writable<boolean> = writable(false);
+
+// Toggle sidebar - on mobile toggles open/close, on desktop toggles collapsed
+export function toggleSidebar(): void {
+  if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+    sidebarOpen.update(v => !v);
+  } else {
+    sidebarCollapsed.update(v => !v);
+  }
+}
 
 // Sidebar filter state
 export type SidebarFilter = 'all' | 'running' | 'stopped' | 'agent';

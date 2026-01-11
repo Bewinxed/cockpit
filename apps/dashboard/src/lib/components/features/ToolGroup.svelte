@@ -242,7 +242,6 @@
 <!-- Diff Modal -->
 {#if diffModalOpen && diffModalData}
 	<DiffModal
-		id={diffModalData.id}
 		filePath={diffModalData.filePath}
 		oldContent={diffModalData.oldContent}
 		newContent={diffModalData.newContent}

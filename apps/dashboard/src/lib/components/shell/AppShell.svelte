@@ -10,10 +10,19 @@
     commandPaletteOpen,
     notificationCenterOpen,
     sidebarCollapsed,
-    toggleCommandPalette
+    sidebarOpen,
+    toggleCommandPalette,
+    toggleSidebar
   } from '$lib/stores/realtime.svelte';
 
   let showNewInstanceModal = $state(false);
+
+  // Close sidebar on mobile when clicking backdrop
+  function closeMobileSidebar() {
+    if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+      sidebarOpen.set(false);
+    }
+  }
 
   // Listen for new instance event from keyboard shortcuts
   $effect(() => {
@@ -57,12 +66,26 @@
   <!-- Top Bar -->
   <TopBar />
 
-  <div class="flex-1 flex overflow-hidden">
-    <!-- Sidebar -->
-    <Sidebar
-      collapsed={$sidebarCollapsed}
-      onNewInstance={() => showNewInstanceModal = true}
-    />
+  <div class="flex-1 flex overflow-hidden relative">
+    <!-- Mobile Sidebar Backdrop -->
+    {#if $sidebarOpen}
+      <button
+        type="button"
+        class="fixed inset-0 bg-black/50 z-40 lg:hidden"
+        onclick={closeMobileSidebar}
+        aria-label="Close sidebar"
+      ></button>
+    {/if}
+
+    <!-- Sidebar - fixed overlay on mobile, normal flow on desktop -->
+    <div
+      class="fixed inset-y-0 left-0 z-50 transition-transform duration-300 ease-in-out lg:relative lg:z-auto lg:translate-x-0 {$sidebarOpen ? 'translate-x-0' : '-translate-x-full'}"
+    >
+      <Sidebar
+        collapsed={$sidebarCollapsed}
+        onNewInstance={() => showNewInstanceModal = true}
+      />
+    </div>
 
     <!-- Main Workspace - Tabs with all open instances -->
     <main class="flex-1 flex flex-col overflow-hidden">

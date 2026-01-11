@@ -15,6 +15,9 @@
 		class: className
 	}: TerminalLoadingProps = $props();
 
+	// svelte-ignore state_referenced_locally
+	const _delay = delay;
+
 	let playAnimation = $state(false);
 	let animationSpeed = $state(1);
 	let frameIndex = $state(0);
@@ -44,7 +47,7 @@
 
 	const flyDuration = $derived(300 / animationSpeed);
 
-	const animation = useAnimation({ delay, play });
+	const animation = useAnimation({ delay: _delay, play });
 
 	onDestroy(() => {
 		animation.dispose();

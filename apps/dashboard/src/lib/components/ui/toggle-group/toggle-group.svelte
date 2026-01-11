@@ -32,10 +32,19 @@
 		...restProps
 	}: ToggleGroupPrimitive.RootProps & ToggleVariants & { spacing?: number } = $props();
 
+	// Capture initial values to avoid state_referenced_locally warnings
+	// Context is set once at initialization and doesn't need to be reactive
+	// svelte-ignore state_referenced_locally
+	const _variant = variant;
+	// svelte-ignore state_referenced_locally
+	const _size = size;
+	// svelte-ignore state_referenced_locally
+	const _spacing = spacing;
+
 	setToggleGroupCtx({
-		variant,
-		size,
-		spacing,
+		variant: _variant,
+		size: _size,
+		spacing: _spacing,
 	});
 </script>
 

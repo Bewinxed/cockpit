@@ -7,6 +7,9 @@
 
 	let { children, delay = 0, class: className }: TerminalAnimationProps = $props();
 
+	// svelte-ignore state_referenced_locally
+	const _delay = delay;
+
 	let playAnimation = $state(false);
 	let animationSpeed = $state(1);
 	let completeTimeout = $state<ReturnType<typeof setTimeout>>();
@@ -20,7 +23,7 @@
 
 	const duration = $derived(300 / animationSpeed);
 
-	const animation = useAnimation({ delay, play });
+	const animation = useAnimation({ delay: _delay, play });
 
 	onDestroy(() => {
 		animation.dispose();

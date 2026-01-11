@@ -19,7 +19,7 @@
 	}
 
 	// Use props object to avoid state_referenced_locally warning
-	const props = $props<Props>();
+	const props: Props = $props();
 	const size = $derived(props.size ?? 'md');
 	const activity = $derived(props.activity);
 	const instanceId = $derived(props.instanceId);
@@ -34,7 +34,7 @@
 	const instance = $derived(instanceId ? $instances.get(instanceId) : null);
 
 	// Get the last message to determine activity type
-	const lastMessage = $derived(messages.length > 0 ? messages[messages.length - 1] : null);
+	const lastMessage = $derived(messages && messages.length > 0 ? messages[messages.length - 1] : null);
 
 	// Compute grid state based on activity
 	function computeGridState(
@@ -91,13 +91,13 @@
 	];
 
 	// Size classes
-	const sizeClasses = {
+	const sizeClasses: Record<'sm' | 'md' | 'lg', string> = {
 		sm: 'w-[18px] h-[18px] gap-[2px]',
 		md: 'w-[24px] h-[24px] gap-[3px]',
 		lg: 'w-[32px] h-[32px] gap-[4px]',
 	};
 
-	const dotSizeClasses = {
+	const dotSizeClasses: Record<'sm' | 'md' | 'lg', string> = {
 		sm: 'w-[4px] h-[4px]',
 		md: 'w-[6px] h-[6px]',
 		lg: 'w-[8px] h-[8px]',

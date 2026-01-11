@@ -5,7 +5,7 @@
 
   interface Props {
     variant?: 'default' | 'secondary' | 'ghost' | 'destructive' | 'outline' | 'link';
-    size?: 'default' | 'sm' | 'lg' | 'icon' | 'icon-sm' | 'icon-lg';
+    size?: 'default' | 'sm' | 'lg' | 'icon' | 'icon-sm';
     loading?: boolean;
     disabled?: boolean;
     children: Snippet;

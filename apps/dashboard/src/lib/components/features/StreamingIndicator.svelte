@@ -5,7 +5,7 @@
 
   let { instanceId }: { instanceId: string } = $props();
 
-  const streamingState: Readable<StreamingState | null> = getStreamingState(instanceId);
+  const streamingState: Readable<StreamingState | null> = $derived(getStreamingState(instanceId));
 
   // Format token count
   function formatTokens(count: number): string {

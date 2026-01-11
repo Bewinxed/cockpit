@@ -1,11 +1,13 @@
 <script lang="ts">
-  import { Search, Bell } from 'lucide-svelte';
+  import { Search, Bell, PanelLeft } from 'lucide-svelte';
   import { Button } from '$lib/components/ui/button';
   import {
     toggleCommandPalette,
     toggleNotificationCenter,
+    toggleSidebar,
     pendingPermissionCount,
-    connectionStatus
+    connectionStatus,
+    sidebarCollapsed
   } from '$lib/stores/realtime.svelte';
 
   const isMac = typeof navigator !== 'undefined' && navigator.platform.includes('Mac');
@@ -13,13 +15,24 @@
 </script>
 
 <header class="h-12 flex items-center justify-between px-4 border-b border-border bg-card/50 backdrop-blur-sm">
-  <!-- Left: Logo -->
+  <!-- Left: Logo & Sidebar Toggle -->
   <div class="flex items-center gap-3">
+    <!-- Sidebar Toggle (visible on mobile or when sidebar is collapsed) -->
+    <Button
+      variant="ghost"
+      size="icon"
+      onclick={toggleSidebar}
+      class="lg:hidden"
+      title={$sidebarCollapsed ? 'Open sidebar' : 'Close sidebar'}
+    >
+      <PanelLeft class="size-5" />
+    </Button>
+
     <div class="flex items-center gap-2">
       <div class="size-7 bg-primary rounded-md flex items-center justify-center">
         <span class="text-primary-foreground font-bold text-sm">C</span>
       </div>
-      <span class="font-semibold text-foreground">Cockpit</span>
+      <span class="font-semibold text-foreground hidden sm:inline">Cockpit</span>
     </div>
   </div>
 

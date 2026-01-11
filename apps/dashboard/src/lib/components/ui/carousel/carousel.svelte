@@ -18,16 +18,25 @@
 		...restProps
 	}: WithElementRef<CarouselProps> = $props();
 
+	// Capture initial values to avoid state_referenced_locally warnings
+	// These are intentionally static - carousel config doesn't change after init
+	// svelte-ignore state_referenced_locally
+	const _orientation = orientation;
+	// svelte-ignore state_referenced_locally
+	const _opts = opts;
+	// svelte-ignore state_referenced_locally
+	const _plugins = plugins;
+
 	let carouselState = $state<EmblaContext>({
 		api: undefined,
 		scrollPrev,
 		scrollNext,
-		orientation,
+		orientation: _orientation,
 		canScrollNext: false,
 		canScrollPrev: false,
 		handleKeyDown,
-		options: opts,
-		plugins,
+		options: _opts,
+		plugins: _plugins,
 		onInit,
 		scrollSnaps: [],
 		selectedIndex: 0,
