@@ -225,8 +225,9 @@
           size="icon-sm"
           onclick={onClose}
           title="Close (Esc)"
+          aria-label="Close diff modal"
         >
-          <X class="w-5 h-5" />
+          <X class="size-5" />
         </Button>
       </div>
     </div>

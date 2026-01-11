@@ -70,7 +70,7 @@
             onclick={onClose}
             aria-label="Close modal"
           >
-            <X class="w-5 h-5" />
+            <X class="size-5" />
           </Button>
         </div>
       {/if}

@@ -24,6 +24,7 @@
   size="icon-sm"
   onclick={toggleTheme}
   title={label}
+  aria-label={label}
 >
-  <Icon class="w-4 h-4" />
+  <Icon class="size-4" />
 </Button>

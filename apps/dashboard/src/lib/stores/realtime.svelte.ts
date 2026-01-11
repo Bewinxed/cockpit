@@ -1,4 +1,4 @@
-import { writable, derived, type Writable, type Readable } from 'svelte/store';
+import { writable, derived, get, type Writable, type Readable } from 'svelte/store';
 import { api } from '$lib/api';
 
 // Types for real-time data
@@ -229,6 +229,34 @@ export function updateMessageMetadata(instanceId: string, index: number, metadat
     }
     return map;
   });
+}
+
+// Update metadata on a specific message by ID
+export function updateMessageMetadataById(instanceId: string, messageId: string, metadata: Record<string, unknown>): void {
+  instanceMessages.update((map) => {
+    const messages = map.get(instanceId);
+    if (messages) {
+      const index = messages.findIndex(m => m.id === messageId);
+      if (index !== -1) {
+        const updatedMessages = [...messages];
+        updatedMessages[index] = {
+          ...messages[index],
+          metadata: {
+            ...messages[index].metadata,
+            ...metadata,
+          },
+        };
+        map.set(instanceId, updatedMessages);
+      }
+    }
+    return map;
+  });
+}
+
+// Get a message by ID
+export function getMessageById(instanceId: string, messageId: string): Message | undefined {
+  const messages = get(instanceMessages).get(instanceId);
+  return messages?.find(m => m.id === messageId);
 }
 
 // Update sdkUuid on a user message by matching content (for optimistic updates)
@@ -1049,4 +1077,189 @@ export async function fetchProjects(): Promise<void> {
   } catch (error) {
     console.error('Failed to fetch projects:', error);
   }
+}
+
+// ============================================
+// UI STATE STORES
+// ============================================
+
+// Currently selected instance ID (null = no selection, show welcome)
+export const selectedInstanceId: Writable<string | null> = writable(null);
+
+// Split view state
+export interface SplitViewState {
+  enabled: boolean;
+  secondInstanceId: string | null;
+  splitRatio: number; // 0.5 = 50/50, 0.3 = 30/70, etc.
+}
+export const splitViewState: Writable<SplitViewState> = writable({
+  enabled: false,
+  secondInstanceId: null,
+  splitRatio: 0.5,
+});
+
+// Notification center open state
+export const notificationCenterOpen: Writable<boolean> = writable(false);
+
+// Command palette open state
+export const commandPaletteOpen: Writable<boolean> = writable(false);
+
+// Sidebar collapsed state (for mobile/responsive)
+export const sidebarCollapsed: Writable<boolean> = writable(false);
+
+// Sidebar filter state
+export type SidebarFilter = 'all' | 'running' | 'stopped' | 'agent';
+export interface SidebarFilterState {
+  type: SidebarFilter;
+  agentId?: string; // Only used when type === 'agent'
+}
+export const sidebarFilter: Writable<SidebarFilterState> = writable({ type: 'all' });
+
+// Project collapse state (which projects are expanded in sidebar)
+export const collapsedProjects: Writable<Set<string>> = writable(new Set());
+
+// ============================================
+// DERIVED STORES FOR SIDEBAR
+// ============================================
+
+// Instances grouped by project for sidebar display
+export interface ProjectGroup {
+  project: Project | null; // null = "Unassigned"
+  instances: Instance[];
+  isCollapsed: boolean;
+}
+
+export const instancesByProject: Readable<ProjectGroup[]> = derived(
+  [populatedInstances, projects, collapsedProjects, sidebarFilter],
+  ([$instances, $projects, $collapsed, $filter]) => {
+    // Apply filter first
+    let filtered = $instances;
+    if ($filter.type === 'running') {
+      filtered = $instances.filter(i => i.status === 'running' || i.status === 'starting');
+    } else if ($filter.type === 'stopped') {
+      filtered = $instances.filter(i => i.status === 'stopped' || i.status === 'sleeping');
+    } else if ($filter.type === 'agent' && $filter.agentId) {
+      filtered = $instances.filter(i => i.machineId === $filter.agentId);
+    }
+
+    // Group by project
+    const groups = new Map<string | null, Instance[]>();
+
+    for (const instance of filtered) {
+      const key = instance.projectId || null;
+      if (!groups.has(key)) {
+        groups.set(key, []);
+      }
+      groups.get(key)!.push(instance);
+    }
+
+    // Convert to array and sort
+    const result: ProjectGroup[] = [];
+
+    // Projects first (sorted by name)
+    const sortedProjects = Array.from($projects.values()).sort((a, b) =>
+      a.name.localeCompare(b.name)
+    );
+
+    for (const project of sortedProjects) {
+      const projectInstances = groups.get(project.id) || [];
+      if (projectInstances.length > 0) {
+        result.push({
+          project,
+          instances: projectInstances.sort((a, b) =>
+            new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime()
+          ),
+          isCollapsed: $collapsed.has(project.id),
+        });
+      }
+    }
+
+    // Unassigned last
+    const unassigned = groups.get(null) || [];
+    if (unassigned.length > 0) {
+      result.push({
+        project: null,
+        instances: unassigned.sort((a, b) =>
+          new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime()
+        ),
+        isCollapsed: $collapsed.has('__unassigned__'),
+      });
+    }
+
+    return result;
+  }
+);
+
+// Selected instance object (resolved from ID)
+export const selectedInstance: Readable<Instance | null> = derived(
+  [selectedInstanceId, instances],
+  ([$id, $instances]) => $id ? $instances.get($id) || null : null
+);
+
+// All pending permissions across all instances
+export const allPendingPermissions: Readable<PermissionRequest[]> = derived(
+  pendingPermissions,
+  ($permissions) => Array.from($permissions.values())
+    .sort((a, b) => b.createdAt - a.createdAt) // Newest first
+);
+
+// Count of pending permissions (for badge)
+export const pendingPermissionCount: Readable<number> = derived(
+  pendingPermissions,
+  ($permissions) => $permissions.size
+);
+
+// ============================================
+// UI STATE ACTIONS
+// ============================================
+
+// Select an instance (and optionally navigate)
+export function selectInstance(instanceId: string | null): void {
+  selectedInstanceId.set(instanceId);
+  // Close split view if selecting null
+  if (!instanceId) {
+    splitViewState.update(s => ({ ...s, enabled: false, secondInstanceId: null }));
+  }
+}
+
+// Toggle project collapse in sidebar
+export function toggleProjectCollapse(projectId: string | null): void {
+  const key = projectId || '__unassigned__';
+  collapsedProjects.update(set => {
+    const newSet = new Set(set);
+    if (newSet.has(key)) {
+      newSet.delete(key);
+    } else {
+      newSet.add(key);
+    }
+    return newSet;
+  });
+}
+
+// Enable split view with second instance
+export function enableSplitView(secondInstanceId: string): void {
+  splitViewState.set({
+    enabled: true,
+    secondInstanceId,
+    splitRatio: 0.5,
+  });
+}
+
+// Disable split view
+export function disableSplitView(): void {
+  splitViewState.set({
+    enabled: false,
+    secondInstanceId: null,
+    splitRatio: 0.5,
+  });
+}
+
+// Toggle notification center
+export function toggleNotificationCenter(): void {
+  notificationCenterOpen.update(v => !v);
+}
+
+// Toggle command palette
+export function toggleCommandPalette(): void {
+  commandPaletteOpen.update(v => !v);
 }

@@ -4,7 +4,7 @@
   import { onMount, onDestroy } from 'svelte';
   import { flip } from 'svelte/animate';
   import { fly } from 'svelte/transition';
-  import { instances, instanceMessages, agents, addMessage, removeMessage, updateMessageMetadata, updateUserMessageUuid, clearInstanceMessages, getStreamingState, updateStreamingState, getInstanceStatus, getInstancePermissions, type Message } from '$lib/stores/realtime.svelte';
+  import { instances, instanceMessages, agents, addMessage, removeMessage, updateMessageMetadata, updateMessageMetadataById, getMessageById, updateUserMessageUuid, clearInstanceMessages, getStreamingState, updateStreamingState, getInstanceStatus, getInstancePermissions, type Message } from '$lib/stores/realtime.svelte';
   import { sendMessage, stopInstance, resumeInstance, interruptInstance } from '$lib/actions';
   import { api } from '$lib/api';
   import { Badge, Button, LoadingButton, EmptyState } from '$lib/components/ui';
@@ -24,9 +24,9 @@
     DollarSign,
     MessageSquare,
     Loader2,
-    AlertCircle,
-    Bot
+    AlertCircle
   } from 'lucide-svelte';
+  import { Bot } from '@jis3r/icons';
 
   interface AvailableCommand {
     name: string;
@@ -426,8 +426,13 @@
         return;
       }
 
-      // Add loading message first
+      // Generate ID for tracking
+      const modelPickerId = crypto.randomUUID();
+      pendingModelPickerId = modelPickerId;
+
+      // Add loading message
       addMessage(instanceId, {
+        id: modelPickerId,
         type: 'system',
         content: 'Switch Model',
         timestamp: new Date(),
@@ -439,10 +444,6 @@
         },
       });
 
-      // Track this as active model picker - get index AFTER adding message
-      const messages = $instanceMessages.get(instanceId) || [];
-      pendingModelPickerIndex = messages.length - 1;
-
       // Fetch models
       try {
         const response = await fetch(`/api/instances/${instanceId}/models`);
@@ -453,7 +454,7 @@
         }
 
         // Update the message with models
-        updateMessageMetadata(instanceId, pendingModelPickerIndex!, {
+        updateMessageMetadataById(instanceId, pendingModelPickerId!, {
           loading: false,
           models: data.data.models || [],
           currentModel: data.data.currentModel,
@@ -461,15 +462,20 @@
         currentModel = data.data.currentModel;
       } catch (err) {
         // Update message with error
-        updateMessageMetadata(instanceId, pendingModelPickerIndex!, {
+        updateMessageMetadataById(instanceId, pendingModelPickerId!, {
           loading: false,
           error: err instanceof Error ? err.message : 'Failed to fetch models',
         });
       }
     } else if (command === '/memory') {
       // Auto-resume is handled by handleSendMessage before calling handleClientCommand
+      // Generate ID for tracking
+      const memoryPickerId = crypto.randomUUID();
+      pendingMemoryPickerId = memoryPickerId;
+
       // Show memory picker UI (selection phase)
       addMessage(instanceId, {
+        id: memoryPickerId,
         type: 'system',
         content: 'Edit Memory',
         timestamp: new Date(),
@@ -478,10 +484,6 @@
           memoryPhase: 'selection', // 'selection' or 'editing'
         },
       });
-
-      // Track this as active memory picker - get index AFTER adding message
-      const messages = $instanceMessages.get(instanceId) || [];
-      pendingMemoryPickerIndex = messages.length - 1;
     } else if (command === '/vim') {
       // Vim mode not available in web UI
       addMessage(instanceId, {
@@ -520,11 +522,11 @@
     }
   }
 
-  // Track pending model picker message index
-  let pendingModelPickerIndex = $state<number | null>(null);
+  // Track pending model picker message ID
+  let pendingModelPickerId = $state<string | null>(null);
 
-  // Track pending memory picker message index
-  let pendingMemoryPickerIndex = $state<number | null>(null);
+  // Track pending memory picker message ID
+  let pendingMemoryPickerId = $state<string | null>(null);
 
   async function handleModelSelect(model: string): Promise<void> {
     const response = await fetch(`/api/instances/${instanceId}/models`, {
@@ -543,12 +545,12 @@
     currentModel = model;
 
     // Mark model picker as complete
-    if (pendingModelPickerIndex !== null) {
-      updateMessageMetadata(instanceId, pendingModelPickerIndex, {
+    if (pendingModelPickerId !== null) {
+      updateMessageMetadataById(instanceId, pendingModelPickerId, {
         selectedModel: model,
       });
     }
-    pendingModelPickerIndex = null;
+    pendingModelPickerId = null;
 
     // Add success message
     addMessage(instanceId, {
@@ -559,18 +561,18 @@
   }
 
   function handleModelCancel() {
-    if (pendingModelPickerIndex !== null) {
+    if (pendingModelPickerId !== null) {
       // Just mark as inactive, don't delete
-      pendingModelPickerIndex = null;
+      pendingModelPickerId = null;
     }
   }
 
   // Memory picker handlers
   async function handleMemorySelect(memoryType: 'project' | 'user'): Promise<void> {
-    if (pendingMemoryPickerIndex === null) return;
+    if (pendingMemoryPickerId === null) return;
 
     // Update message to show loading state
-    updateMessageMetadata(instanceId, pendingMemoryPickerIndex, {
+    updateMessageMetadataById(instanceId, pendingMemoryPickerId, {
       loading: true,
       selectedMemoryType: memoryType,
       memoryPhase: 'editing',
@@ -586,13 +588,13 @@
       }
 
       // Update message with content for editing
-      updateMessageMetadata(instanceId, pendingMemoryPickerIndex, {
+      updateMessageMetadataById(instanceId, pendingMemoryPickerId, {
         loading: false,
         memoryContent: data.data?.content || '',
         memoryPath: data.data?.path || (memoryType === 'project' ? './CLAUDE.md' : '~/.claude/CLAUDE.md'),
       });
     } catch (err) {
-      updateMessageMetadata(instanceId, pendingMemoryPickerIndex, {
+      updateMessageMetadataById(instanceId, pendingMemoryPickerId, {
         loading: false,
         error: err instanceof Error ? err.message : 'Failed to fetch memory',
       });
@@ -600,10 +602,9 @@
   }
 
   async function handleMemorySave(content: string): Promise<void> {
-    if (pendingMemoryPickerIndex === null) return;
+    if (pendingMemoryPickerId === null) return;
 
-    const messages = $instanceMessages.get(instanceId) || [];
-    const message = messages[pendingMemoryPickerIndex];
+    const message = getMessageById(instanceId, pendingMemoryPickerId);
     const memoryType = message?.metadata?.selectedMemoryType as 'project' | 'user';
 
     if (!memoryType) {
@@ -624,7 +625,7 @@
     }
 
     // Mark picker as inactive
-    pendingMemoryPickerIndex = null;
+    pendingMemoryPickerId = null;
 
     // Add success message
     addMessage(instanceId, {
@@ -635,9 +636,9 @@
   }
 
   function handleMemoryCancel() {
-    if (pendingMemoryPickerIndex !== null) {
+    if (pendingMemoryPickerId !== null) {
       // Just mark as inactive, don't delete
-      pendingMemoryPickerIndex = null;
+      pendingMemoryPickerId = null;
     }
   }
 
@@ -718,6 +719,9 @@
     if (!instance || sending || restarting) return;
 
     error = null;
+
+    // Always scroll to bottom when user sends a message
+    autoScroll.scrollToBottom();
 
     // Check for OAuth code paste (code#state format)
     if (isOAuthCode(message)) {
@@ -991,7 +995,7 @@
   <title>{instance?.name || 'Instance'} | Cockpit</title>
 </svelte:head>
 
-<div class="h-screen flex flex-col bg-background overflow-hidden relative">
+<div class="h-dvh flex flex-col bg-background overflow-hidden relative">
   {#if instance}
     <!-- Header -->
     <header class="flex-shrink-0 bg-card/80 backdrop-blur-md border-b border-border px-6 py-3 z-10 shadow-sm">
@@ -1002,8 +1006,9 @@
             href="/instances"
             class="p-2 rounded-lg hover:bg-accent transition-colors shrink-0"
             title="Back to instances"
+            aria-label="Back to instances"
           >
-            <ArrowLeft class="w-5 h-5 text-muted-foreground" />
+            <ArrowLeft class="size-5 text-muted-foreground" />
           </a>
 
           <div class="min-w-0">
@@ -1090,6 +1095,7 @@
               onclick={handleStop}
               disabled={stopping || interrupting}
               title="Stop instance"
+              aria-label={stopping ? 'Stopping instance' : 'Stop instance'}
             >
               {#if stopping}
                 <Loader2 class="size-4 animate-spin" />
@@ -1121,8 +1127,9 @@
     <div class="flex-1 relative overflow-hidden flex flex-col">
       <div
         bind:this={autoScroll.ref}
-        class="flex-1 overflow-y-auto p-6 space-y-6 bg-background scroll-smooth selection:bg-primary/10"
+        class="flex-1 overflow-y-auto flex flex-col-reverse bg-background scroll-smooth selection:bg-primary/10"
       >
+        <div class="p-6 space-y-6">
         {#if currentMessages.length > 0}
           {#each groupedMessages() as group, groupIdx (group.type === 'tool_group' ? `tools-${group.startIndex}` : group.message.id)}
             <div
@@ -1134,7 +1141,7 @@
                 <!-- Grouped tool messages -->
                 <div class="flex items-start gap-3">
                   <!-- Tool icon avatar -->
-                  <div class="flex-shrink-0 w-9 h-9 rounded-xl bg-amber-500/10 flex items-center justify-center mt-0.5">
+                  <div class="flex-shrink-0 size-9 rounded-xl bg-amber-500/10 flex items-center justify-center mt-0.5">
                     <svg class="w-4.5 h-4.5 text-amber-600 dark:text-amber-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>
                   </div>
                   <!-- Tool group component -->
@@ -1160,8 +1167,8 @@
                   onEditMessage={handleEditMessage}
                   canEdit={message.type === 'user'}
                   isLoginActive={message.metadata?.subtype === 'login_prompt' && pendingOAuthState === message.metadata?.oauthState}
-                  isModelPickerActive={message.metadata?.subtype === 'model_picker' && pendingModelPickerIndex === i}
-                  isMemoryPickerActive={message.metadata?.subtype === 'memory_picker' && pendingMemoryPickerIndex === i}
+                  isModelPickerActive={message.metadata?.subtype === 'model_picker' && pendingModelPickerId === message.id}
+                  isMemoryPickerActive={message.metadata?.subtype === 'memory_picker' && pendingMemoryPickerId === message.id}
                 />
               {/if}
             </div>
@@ -1174,8 +1181,8 @@
               out:fly={{ y: -5, duration: 150 }}
             >
               <!-- Bot Avatar (same as assistant messages) -->
-              <div class="flex-shrink-0 w-9 h-9 rounded-xl bg-secondary border border-border flex items-center justify-center mt-0.5">
-                <Bot class="w-4.5 h-4.5 text-muted-foreground" />
+              <div class="flex-shrink-0 size-9 rounded-xl bg-secondary border border-border flex items-center justify-center mt-0.5">
+                <Bot size={18} color="var(--muted-foreground)" class="!flex !items-center !justify-center leading-[0]" />
               </div>
               <!-- Activity indicator bubble -->
               <div class="bg-card border border-border rounded-2xl rounded-bl-sm px-4 py-3 shadow-sm flex items-center gap-3">
@@ -1199,6 +1206,7 @@
             />
           </div>
         {/if}
+        </div>
       </div>
 
       {#if !autoScroll.isAtBottom}

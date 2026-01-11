@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { Send, Loader2 } from 'lucide-svelte';
-  import { Button } from '$lib/components/ui';
+  import { Loader2 } from 'lucide-svelte';
+  import { Send } from '@jis3r/icons';
   import CommandPalette from './CommandPalette.svelte';
 
   interface AvailableCommand {
@@ -160,8 +160,8 @@
   }
 </script>
 
-<form class="bg-card/80 backdrop-blur-lg border-t border-border px-4 py-4" onsubmit={handleSubmit}>
-  <div class="max-w-4xl mx-auto flex items-end gap-3">
+<form class="bg-card border-t border-border px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]" onsubmit={handleSubmit}>
+  <div class="flex items-center gap-3">
     <div class="flex-1 relative group">
       <!-- Command Palette -->
       <CommandPalette
@@ -172,55 +172,42 @@
         visible={showPalette}
       />
 
-      <div class="relative">
-        <textarea
-          bind:this={textareaRef}
-          bind:value={message}
-          {placeholder}
-          disabled={disabled || loading}
-          rows={1}
-          class="w-full resize-none min-h-[52px] max-h-[200px] py-3.5 px-4 pr-24
-                 bg-background border border-input rounded-2xl
-                 text-sm leading-relaxed
-                 placeholder:text-muted-foreground
-                 focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-ring
-                 disabled:opacity-50 disabled:cursor-not-allowed
-                 transition-all duration-200"
-          oninput={handleInput}
-          onkeydown={handleKeydown}
-        ></textarea>
-
-        <!-- Keyboard hints inside textarea -->
-        <div class="absolute right-3 bottom-3.5 flex items-center gap-2 text-[10px] text-muted-foreground pointer-events-none opacity-0 group-focus-within:opacity-100 transition-opacity">
-          {#if streaming}
-            <kbd class="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 font-medium border border-amber-500/20">⌘↵ interrupt</kbd>
-          {:else if message.length > 0}
-            {#if showPalette}
-              <span class="text-muted-foreground">↵ select</span>
-            {:else}
-              <kbd class="px-1.5 py-0.5 rounded bg-muted font-medium border border-border">↵ send</kbd>
-            {/if}
-          {/if}
-        </div>
-      </div>
+      <textarea
+        bind:this={textareaRef}
+        bind:value={message}
+        {placeholder}
+        disabled={disabled || loading}
+        rows={1}
+        class="w-full resize-none min-h-11 max-h-[200px] py-2.5 px-4
+               bg-background border border-input rounded-xl
+               text-sm leading-6 overflow-y-hidden
+               placeholder:text-muted-foreground
+               focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-ring
+               disabled:opacity-50 disabled:cursor-not-allowed
+               transition-colors"
+        oninput={handleInput}
+        onkeydown={handleKeydown}
+      ></textarea>
     </div>
 
     <button
       type="submit"
       disabled={disabled || loading || !message.trim()}
-      class="flex-shrink-0 w-11 h-11 rounded-xl
+      class="flex-shrink-0 size-11 rounded-xl
              bg-primary text-primary-foreground
              flex items-center justify-center
-             hover:bg-primary/90 hover:scale-105
+             hover:bg-primary/90
              active:scale-95
-             disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:scale-100
-             transition-all duration-200 shadow-sm"
+             disabled:opacity-40 disabled:cursor-not-allowed
+             transition-all shadow-sm
+             [&>div]:flex [&>div]:items-center [&>div]:justify-center"
       title="Send message"
+      aria-label={loading ? 'Sending message' : 'Send message'}
     >
       {#if loading}
         <Loader2 class="size-5 animate-spin" />
       {:else}
-        <Send class="size-5 translate-x-0.5" />
+        <Send size={20} />
       {/if}
     </button>
   </div>

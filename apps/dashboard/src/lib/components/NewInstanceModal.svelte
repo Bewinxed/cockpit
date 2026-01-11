@@ -104,7 +104,7 @@
           class="flex items-center gap-2 p-3 rounded-lg bg-error/10 border border-error/20 text-error text-sm"
         >
           <svg
-            class="w-4 h-4 flex-shrink-0"
+            class="size-4 flex-shrink-0"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -178,8 +178,9 @@
               title={machineId
                 ? "Browse files on machine"
                 : "Select a machine first"}
+              aria-label="Browse files"
             >
-              <Folder class="w-5 h-5" />
+              <Folder class="size-5" />
             </Button>
           </div>
         {/if}
@@ -229,7 +230,7 @@
           class="flex-1"
         >
           {#if loading}
-            <svg class="w-4 h-4 animate-spin" viewBox="0 0 24 24"
+            <svg class="size-4 animate-spin" viewBox="0 0 24 24"
               ><circle
                 class="opacity-25"
                 cx="12"

@@ -15,6 +15,7 @@
 		"@cockpit/hub-server": "workspace:*",
 		"@elysiajs/eden": "^1.4.6",
 		"@humanspeak/svelte-markdown": "^0.8.13",
+		"@jis3r/icons": "^1.25.2",
 		"@lucide/svelte": "^0.562.0",
 		"@pierre/diffs": "^1.0.4",
 		"@shikijs/langs": "^3.21.0",

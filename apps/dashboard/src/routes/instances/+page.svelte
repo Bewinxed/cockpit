@@ -1,177 +1,151 @@
 <script lang="ts">
   import InstanceCard from '$lib/components/InstanceCard.svelte';
   import NewInstanceModal from '$lib/components/NewInstanceModal.svelte';
-  import { Button, Input, EmptyState } from '$lib/components/ui';
-  import { populatedInstances, adhocInstances, projectInstances } from '$lib/stores/realtime.svelte';
-  import { Plus, Search, Terminal, Folder, Zap } from 'lucide-svelte';
+  import { Button, EmptyState } from '$lib/components/ui';
+  import { populatedInstances } from '$lib/stores/realtime.svelte';
+  import { getInstances } from '$lib/data.remote';
+  import { Plus, Terminal, Search } from 'lucide-svelte';
+  import { fly, fade } from 'svelte/transition';
 
-  let statusFilter = $state<'all' | 'running' | 'stopped' | 'error'>('all');
-  let typeFilter = $state<'all' | 'adhoc' | 'project'>('all');
+  // Fetch instances during SSR
+  const ssrInstances = await getInstances();
+
+  let statusFilter = $state<'all' | 'running' | 'stopped'>('all');
   let searchQuery = $state('');
   let showNewInstanceModal = $state(false);
 
-  // Get instances as array from Map store
-  let instancesList = $derived($populatedInstances);
+  // Merge SSR instances with realtime
+  let instancesList = $derived.by(() => {
+    const realtimeInstances = $populatedInstances;
+    if (realtimeInstances.length > 0) return realtimeInstances;
+
+    return ssrInstances.map((i) => ({
+      id: i.id,
+      name: i.lastPrompt?.slice(0, 40) || i.cwd?.split('/').pop() || 'Instance',
+      status: i.status as 'running' | 'stopped' | 'starting' | 'stopping' | 'error' | 'disconnected' | 'sleeping',
+      machineId: i.machineId,
+      projectId: i.projectId,
+      project: null,
+      agent: null,
+      cwd: i.cwd,
+      lastActivity: i.createdAt || new Date().toISOString(),
+      createdAt: i.createdAt,
+    }));
+  });
 
   let filteredInstances = $derived(
     instancesList
       .filter((i) => {
         const matchesSearch =
+          !searchQuery ||
           (i.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-          (i.agent || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
           (i.cwd || '').toLowerCase().includes(searchQuery.toLowerCase());
 
         const matchesStatus =
           statusFilter === 'all' ||
           (statusFilter === 'running' && (i.status === 'running' || i.status === 'starting')) ||
-          (statusFilter === 'stopped' && (i.status === 'stopped' || i.status === 'stopping')) ||
-          (statusFilter === 'error' && i.status === 'error');
+          (statusFilter === 'stopped' && (i.status === 'stopped' || i.status === 'stopping'));
 
-        const matchesType =
-          typeFilter === 'all' ||
-          (typeFilter === 'adhoc' && !i.projectId) ||
-          (typeFilter === 'project' && i.projectId);
-
-        return matchesSearch && matchesStatus && matchesType;
+        return matchesSearch && matchesStatus;
       })
       .sort((a, b) => new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime())
   );
 
   let runningCount = $derived(instancesList.filter((i) => i.status === 'running' || i.status === 'starting').length);
-  let stoppedCount = $derived(instancesList.filter((i) => i.status === 'stopped').length);
-  let adhocCount = $derived($adhocInstances.length);
-  let projectCount = $derived($projectInstances.length);
-
-  const filterButtons = $derived([
-    { value: 'all' as const, label: 'All', count: instancesList.length },
-    { value: 'running' as const, label: 'Running', count: runningCount },
-    { value: 'stopped' as const, label: 'Stopped', count: stoppedCount },
-  ]);
-
-  const typeButtons = $derived([
-    { value: 'all' as const, label: 'All', count: instancesList.length, icon: Terminal },
-    { value: 'adhoc' as const, label: 'Ad-hoc', count: adhocCount, icon: Zap },
-    { value: 'project' as const, label: 'Project', count: projectCount, icon: Folder },
-  ]);
+  let stoppedCount = $derived(instancesList.filter((i) => i.status === 'stopped' || i.status === 'stopping').length);
 </script>
 
 <svelte:head>
   <title>Instances | Cockpit</title>
 </svelte:head>
 
-<div class="p-8 max-w-[1400px] mx-auto animate-fade-in">
-  <!-- Header -->
-  <header class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-10">
-    <div>
-      <span class="text-[10px] font-mono text-muted-foreground uppercase tracking-[0.2em] mb-2 block">Management</span>
-      <h1 class="text-4xl font-sans font-bold text-foreground tracking-tight">Instances</h1>
-      <div class="flex items-center gap-4 mt-2">
-        <div class="flex items-center gap-2">
-          <span class="w-2 h-2 rounded-full bg-success animate-pulse"></span>
-          <span class="text-sm text-muted-foreground">{runningCount} running</span>
-        </div>
-        <span class="text-border">|</span>
-        <div class="flex items-center gap-2">
-          <span class="w-2 h-2 rounded-full bg-text-muted"></span>
-          <span class="text-sm text-muted-foreground">{stoppedCount} stopped</span>
-        </div>
+<div class="min-h-screen p-6 md:p-10">
+  <div class="max-w-4xl mx-auto space-y-8">
+
+    <!-- Header -->
+    <header class="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between" in:fly={{ y: -10, duration: 300 }}>
+      <div>
+        <h1 class="text-2xl font-semibold tracking-tight">Instances</h1>
+        <p class="text-muted-foreground mt-1">
+          {runningCount} running · {stoppedCount} stopped
+        </p>
       </div>
-    </div>
-    <Button variant="default" onclick={() => showNewInstanceModal = true}>
-      <Plus class="size-4" />
-      New Instance
-    </Button>
-  </header>
+      <Button onclick={() => showNewInstanceModal = true}>
+        <Plus class="size-4" />
+        New Instance
+      </Button>
+    </header>
 
-  <NewInstanceModal bind:open={showNewInstanceModal} onClose={() => showNewInstanceModal = false} />
+    <NewInstanceModal bind:open={showNewInstanceModal} onClose={() => showNewInstanceModal = false} />
 
-  <!-- Filters Section -->
-  <div class="bg-card border border-border mb-6">
-    <div class="p-4 border-b border-border">
-      <span class="text-[10px] font-mono text-muted-foreground uppercase tracking-[0.15em]">Filters</span>
-    </div>
-
-    <div class="p-4 space-y-4">
+    <!-- Search & Filters -->
+    <div class="flex flex-col gap-4 sm:flex-row sm:items-center" in:fly={{ y: -10, duration: 300, delay: 50 }}>
       <!-- Search -->
-      <div class="max-w-md">
-        <Input
+      <div class="relative flex-1 max-w-sm">
+        <Search class="absolute left-4 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+        <input
           type="text"
           placeholder="Search instances..."
           bind:value={searchQuery}
+          class="input pl-11"
         />
       </div>
 
-      <!-- Status Filter -->
-      <div class="flex flex-wrap gap-2">
-        <span class="text-[10px] font-mono text-muted-foreground uppercase tracking-wider self-center mr-2">Status:</span>
-        {#each filterButtons as filter}
-          <Button
-            variant={statusFilter === filter.value ? 'default' : 'outline'}
-            size="sm"
-            class="font-mono uppercase tracking-wider"
-            onclick={() => statusFilter = filter.value}
-          >
-            {#if filter.value === 'running'}
-              <span class="w-1.5 h-1.5 rounded-full bg-success {statusFilter === filter.value ? '' : 'animate-pulse'}"></span>
-            {:else if filter.value === 'stopped'}
-              <span class="w-1.5 h-1.5 rounded-full {statusFilter === filter.value ? 'bg-primary-foreground/60' : 'bg-muted-foreground'}"></span>
-            {/if}
-            {filter.label}
-            <span class="opacity-60">({filter.count})</span>
-          </Button>
+      <!-- Status Tabs -->
+      <div class="flex gap-1">
+        <button
+          onclick={() => statusFilter = 'all'}
+          class="px-4 py-2 text-sm font-medium rounded-xl transition-colors
+                 {statusFilter === 'all'
+                   ? 'bg-primary text-primary-foreground'
+                   : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'}"
+        >
+          All
+        </button>
+        <button
+          onclick={() => statusFilter = 'running'}
+          class="px-4 py-2 text-sm font-medium rounded-xl transition-colors flex items-center gap-2
+                 {statusFilter === 'running'
+                   ? 'bg-success/20 text-success'
+                   : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'}"
+        >
+          <span class="size-2 rounded-full bg-current"></span>
+          Running
+        </button>
+        <button
+          onclick={() => statusFilter = 'stopped'}
+          class="px-4 py-2 text-sm font-medium rounded-xl transition-colors
+                 {statusFilter === 'stopped'
+                   ? 'bg-secondary text-foreground'
+                   : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'}"
+        >
+          Stopped
+        </button>
+      </div>
+    </div>
+
+    <!-- Instances List -->
+    {#if filteredInstances.length > 0}
+      <div class="space-y-3" in:fade={{ duration: 200 }}>
+        {#each filteredInstances as instance, i (instance.id)}
+          <div in:fly={{ y: 10, duration: 200, delay: Math.min(i * 30, 150) }}>
+            <InstanceCard {instance} />
+          </div>
         {/each}
       </div>
-
-      <!-- Type Filter -->
-      <div class="flex flex-wrap gap-2">
-        <span class="text-[10px] font-mono text-muted-foreground uppercase tracking-wider self-center mr-2">Type:</span>
-        {#each typeButtons as type}
-          {@const Icon = type.icon}
-          <Button
-            variant={typeFilter === type.value ? 'secondary' : 'outline'}
-            size="sm"
-            class="font-mono uppercase tracking-wider"
-            onclick={() => typeFilter = type.value}
-          >
-            <Icon class="w-3.5 h-3.5" />
-            {type.label}
-            <span class="opacity-60">({type.count})</span>
-          </Button>
-        {/each}
+    {:else}
+      <div class="py-20" in:fade={{ duration: 200 }}>
+        <EmptyState
+          icon={Terminal}
+          title={searchQuery || statusFilter !== 'all' ? 'No matching instances' : 'No instances yet'}
+          description={searchQuery || statusFilter !== 'all'
+            ? 'Try adjusting your search or filter'
+            : 'Create your first Claude Code instance to get started'}
+          action={!searchQuery && statusFilter === 'all'
+            ? { label: 'New Instance', onClick: () => showNewInstanceModal = true }
+            : undefined}
+        />
       </div>
-    </div>
-  </div>
-
-  <!-- Instances List -->
-  <div class="bg-card border border-border">
-    <div class="p-4 border-b border-border flex items-center justify-between">
-      <div class="flex items-center gap-3">
-        <div class="w-1.5 h-1.5 rounded-full bg-primary"></div>
-        <span class="text-[10px] font-mono text-muted-foreground uppercase tracking-[0.15em]">
-          {filteredInstances.length} {filteredInstances.length === 1 ? 'Instance' : 'Instances'}
-        </span>
-      </div>
-    </div>
-
-    <div class="divide-y divide-border">
-      {#each filteredInstances as instance (instance.id)}
-        <div class="p-4 hover:bg-accent/50 transition-colors">
-          <InstanceCard {instance} />
-        </div>
-      {:else}
-        <div class="p-12">
-          <EmptyState
-            icon={Terminal}
-            title={searchQuery || statusFilter !== 'all' ? 'No instances found' : 'No instances yet'}
-            description={searchQuery || statusFilter !== 'all'
-              ? 'Try adjusting your filters or search query'
-              : 'Start a new Claude Code instance to begin working'}
-            action={!searchQuery && statusFilter === 'all'
-              ? { label: 'New Instance', onClick: () => showNewInstanceModal = true }
-              : undefined}
-          />
-        </div>
-      {/each}
-    </div>
+    {/if}
   </div>
 </div>

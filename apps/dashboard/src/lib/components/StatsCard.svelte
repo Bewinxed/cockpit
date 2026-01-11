@@ -49,8 +49,8 @@
   <div class="p-5 pl-6">
     <!-- Header with icon and trend -->
     <div class="flex items-start justify-between mb-4">
-      <div class="w-10 h-10 bg-muted flex items-center justify-center">
-        <Icon class="w-5 h-5 {colors.icon}" />
+      <div class="size-10 bg-muted flex items-center justify-center">
+        <Icon class="size-5 {colors.icon}" />
       </div>
       {#if trend}
         <span class="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">{trend}</span>

@@ -29,22 +29,22 @@
   const sizeClasses = {
     sm: {
       container: 'py-6',
-      icon: 'w-8 h-8',
-      iconBg: 'w-12 h-12',
+      icon: 'size-8',
+      iconBg: 'size-12',
       title: 'text-sm font-semibold',
       description: 'text-xs',
     },
     md: {
       container: 'py-10',
-      icon: 'w-10 h-10',
-      iconBg: 'w-16 h-16',
+      icon: 'size-10',
+      iconBg: 'size-16',
       title: 'text-base font-semibold',
       description: 'text-sm',
     },
     lg: {
       container: 'py-16',
-      icon: 'w-12 h-12',
-      iconBg: 'w-20 h-20',
+      icon: 'size-12',
+      iconBg: 'size-20',
       title: 'text-lg font-bold',
       description: 'text-base',
     },
@@ -58,11 +58,11 @@
     <Icon class="{styles.icon} text-muted-foreground" />
   </div>
 
-  <h3 class="text-foreground {styles.title} mb-1 font-sans tracking-tight">
+  <h3 class="text-foreground {styles.title} mb-1 font-sans tracking-tight text-balance">
     {title}
   </h3>
 
-  <p class="text-muted-foreground {styles.description} max-w-sm">
+  <p class="text-muted-foreground {styles.description} max-w-sm text-pretty">
     {description}
   </p>
 

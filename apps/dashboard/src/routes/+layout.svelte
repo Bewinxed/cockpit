@@ -93,7 +93,7 @@
       <div class="p-6 border-b border-border">
         <div class="flex items-center gap-3 group cursor-pointer">
           <div class="relative">
-            <div class="w-10 h-10 bg-primary flex items-center justify-center">
+            <div class="size-10 bg-primary flex items-center justify-center">
               <span class="text-primary-foreground font-sans font-bold text-xl italic">C</span>
             </div>
             <div class="absolute -top-1 -right-1 w-2 h-2 bg-info rounded-full animate-pulse"></div>

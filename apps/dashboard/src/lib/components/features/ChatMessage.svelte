@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { User, Bot, Wrench, FileText, AlertCircle, ChevronDown, ChevronRight, ChevronUp, Loader2, CheckCircle2, XCircle, Settings, Terminal, Scissors, ExternalLink, ArrowRight, KeyRound, Cpu, HelpCircle, BookOpen, FolderOpen, Home, Edit3, Check } from 'lucide-svelte';
+  import { User, Wrench, FileText, AlertCircle, ChevronDown, ChevronRight, ChevronUp, Loader2, CheckCircle2, XCircle, Settings, Terminal, Scissors, ExternalLink, ArrowRight, KeyRound, Cpu, HelpCircle, BookOpen, FolderOpen, Home, Edit3, Check } from 'lucide-svelte';
+  import { Bot } from '@jis3r/icons';
   import Markdown from '@humanspeak/svelte-markdown';
   import { formatTimestamp } from '$lib/utils/time';
   import type { Message } from '$lib/stores/realtime.svelte';
@@ -449,8 +450,12 @@
 <div class="flex {config.align} gap-3 group">
   {#if message.type !== 'user' && message.type !== 'system' && message.type !== 'help_menu' && !isCompactBoundary && !isLoginPrompt && !isModelPicker && !isMemoryPicker}
     <!-- Avatar -->
-    <div class="flex-shrink-0 w-9 h-9 rounded-xl {config.iconBg} flex items-center justify-center mt-0.5">
-      <config.icon class="w-4.5 h-4.5 {config.iconColor}" />
+    <div class="flex-shrink-0 size-9 rounded-xl {config.iconBg} flex items-center justify-center mt-0.5">
+      {#if message.type === 'assistant'}
+        <Bot size={18} color="var(--muted-foreground)" class="!flex leading-[0]" />
+      {:else}
+        <config.icon class="size-[18px] {config.iconColor}" />
+      {/if}
     </div>
   {/if}
 
@@ -1118,8 +1123,8 @@
 
   {#if message.type === 'user'}
     <!-- User Avatar -->
-    <div class="flex-shrink-0 w-9 h-9 rounded-xl {config.iconBg} flex items-center justify-center mt-0.5">
-      <config.icon class="w-4.5 h-4.5 {config.iconColor}" />
+    <div class="flex-shrink-0 size-9 rounded-xl {config.iconBg} flex items-center justify-center mt-0.5">
+      <User class="size-[18px] {config.iconColor}" />
     </div>
   {/if}
 </div>

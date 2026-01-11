@@ -1,8 +1,5 @@
 <script lang="ts">
-  import Badge from '$lib/components/ui/Badge.svelte';
-  import { Monitor, Terminal, ArrowRight } from 'lucide-svelte';
-
-  // OS-specific icons as simple SVG components
+  import { Terminal, ChevronRight } from 'lucide-svelte';
   import AppleIcon from '$lib/components/icons/AppleIcon.svelte';
   import LinuxIcon from '$lib/components/icons/LinuxIcon.svelte';
   import WindowsIcon from '$lib/components/icons/WindowsIcon.svelte';
@@ -18,60 +15,58 @@
 
   interface Props {
     agent: Agent;
-    compact?: boolean;
   }
 
-  let { agent, compact = false }: Props = $props();
+  let { agent }: Props = $props();
 
   const osConfig = {
-    darwin: { icon: AppleIcon, label: 'macOS', color: 'text-foreground' },
-    linux: { icon: LinuxIcon, label: 'Linux', color: 'text-warning' },
-    windows: { icon: WindowsIcon, label: 'Windows', color: 'text-info' },
+    darwin: { icon: AppleIcon, label: 'macOS' },
+    linux: { icon: LinuxIcon, label: 'Linux' },
+    windows: { icon: WindowsIcon, label: 'Windows' },
   };
 
   const config = $derived(osConfig[agent.os]);
+  const isOnline = $derived(agent.status === 'online');
 </script>
 
 <a
   href="/agents/{agent.machineId}"
-  class="card card-interactive p-4 group"
+  class="group block rounded-2xl bg-secondary/50 p-4
+         hover:bg-secondary transition-colors"
 >
   <div class="flex items-center gap-4">
     <!-- OS Icon -->
-    <div class="flex-shrink-0">
-      <div class="w-12 h-12 rounded-xl bg-accent flex items-center justify-center group-hover:scale-105 transition-transform">
-        <config.icon class="w-6 h-6 {config.color}" />
-      </div>
+    <div class="flex-shrink-0 size-10 rounded-xl bg-background flex items-center justify-center">
+      <svelte:component this={config.icon} class="size-5 text-muted-foreground" />
     </div>
 
     <!-- Content -->
     <div class="flex-1 min-w-0">
-      <div class="flex items-center gap-2 mb-1">
+      <div class="flex items-center gap-3">
         <h3 class="font-medium text-foreground truncate group-hover:text-primary transition-colors">
           {agent.name}
         </h3>
-        <Badge
-          variant={agent.status === 'online' ? 'default' : agent.status === 'reconnecting' ? 'warning' : 'secondary'}
-        >
-          {agent.status === 'online' ? 'Online' : agent.status === 'reconnecting' ? 'Reconnecting' : 'Offline'}
-        </Badge>
+        {#if isOnline}
+          <span class="size-2 rounded-full bg-success animate-pulse"></span>
+        {:else if agent.status === 'reconnecting'}
+          <span class="size-2 rounded-full bg-warning animate-pulse"></span>
+        {:else}
+          <span class="size-2 rounded-full bg-muted-foreground/30"></span>
+        {/if}
       </div>
 
-      <div class="flex items-center gap-3 text-sm text-muted-foreground">
+      <div class="flex items-center gap-3 mt-1.5 text-sm text-muted-foreground">
         <span>{config.label}</span>
-        <span class="text-muted-foreground">·</span>
         <span class="font-mono text-xs">{agent.ip}</span>
-        <span class="text-muted-foreground">·</span>
-        <div class="flex items-center gap-1">
-          <Terminal class="w-3.5 h-3.5" />
-          <span>{agent.instances} {agent.instances === 1 ? 'instance' : 'instances'}</span>
-        </div>
+        <span class="flex items-center gap-1">
+          <Terminal class="size-3.5" />
+          {agent.instances}
+        </span>
       </div>
     </div>
 
-    <!-- Arrow with slide effect -->
-    <div class="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-      <ArrowRight class="w-4 h-4 text-muted-foreground arrow-slide" />
-    </div>
+    <!-- Arrow -->
+    <ChevronRight class="size-4 text-muted-foreground/40 group-hover:text-primary
+                         group-hover:translate-x-0.5 transition-all flex-shrink-0" />
   </div>
 </a>

@@ -1,6 +1,5 @@
 <script lang="ts">
-  import Badge from '$lib/components/ui/Badge.svelte';
-  import { Server, Clock, ArrowRight } from 'lucide-svelte';
+  import { Clock, Server, ChevronRight } from 'lucide-svelte';
   import { formatDistanceToNow } from '$lib/utils/time';
   import { agents } from '$lib/stores/realtime.svelte';
 
@@ -17,108 +16,81 @@
 
   interface Props {
     instance: Instance;
-    compact?: boolean;
   }
 
-  let { instance, compact = false }: Props = $props();
+  let { instance }: Props = $props();
 
   const agent = $derived($agents.get(instance.machineId));
-  const agentName = $derived(agent?.name || 'Unknown Agent');
+  const agentName = $derived(agent?.name || agent?.hostname || 'Unknown');
 
-  const statusConfig = {
-    starting: { variant: 'warning' as const, label: 'Starting', pulse: true },
-    running: { variant: 'success' as const, label: 'Running', pulse: true },
-    stopping: { variant: 'warning' as const, label: 'Stopping', pulse: true },
-    stopped: { variant: 'default' as const, label: 'Stopped', pulse: false },
-    sleeping: { variant: 'info' as const, label: 'Sleeping', pulse: false },
-    disconnected: { variant: 'warning' as const, label: 'Disconnected', pulse: false },
-    error: { variant: 'error' as const, label: 'Error', pulse: false },
-  };
+  const isActive = $derived(instance.status === 'running' || instance.status === 'starting');
 
-  const config = $derived(statusConfig[instance.status]);
-
-  // Format the display name from prompt or cwd
   const displayName = $derived(
-    instance.name?.slice(0, 40) || instance.cwd?.split('/').pop() || 'Instance'
+    instance.name?.slice(0, 50) || instance.cwd?.split('/').pop() || 'Untitled'
   );
 
-  // Format the time
   const timeAgo = $derived(
     instance.lastActivity || instance.createdAt
       ? formatDistanceToNow(new Date(instance.lastActivity || instance.createdAt!))
       : null
   );
-
-  const bgClasses = {
-    starting: 'bg-warning/10',
-    running: 'bg-success/10',
-    stopping: 'bg-warning/10',
-    stopped: 'bg-accent',
-    sleeping: 'bg-info/10',
-    disconnected: 'bg-warning/10',
-    error: 'bg-error/10',
-  };
-
-  const dotClasses = {
-    starting: 'bg-warning',
-    running: 'bg-success',
-    stopping: 'bg-warning',
-    stopped: 'bg-text-muted',
-    sleeping: 'bg-info',
-    disconnected: 'bg-warning',
-    error: 'bg-error',
-  };
 </script>
 
 <a
   href="/instances/{instance.id}"
-  class="card card-interactive p-4 group flex items-center gap-4"
+  class="group block rounded-2xl bg-secondary/50 p-4
+         hover:bg-secondary transition-colors"
 >
-  <!-- Status indicator -->
-  <div class="flex-shrink-0">
-    <div class="w-10 h-10 rounded-xl {bgClasses[instance.status]} flex items-center justify-center group-hover:scale-105 transition-transform">
-      {#if config.pulse}
-        <span class="status-dot status-dot-pulse {dotClasses[instance.status]}"></span>
+  <div class="flex items-center gap-4">
+    <!-- Status Indicator -->
+    <div class="flex-shrink-0">
+      {#if isActive}
+        <span class="block size-2.5 rounded-full bg-success animate-pulse"></span>
+      {:else if instance.status === 'error'}
+        <span class="block size-2.5 rounded-full bg-error"></span>
       {:else}
-        <span class="status-dot {dotClasses[instance.status]}"></span>
-      {/if}
-    </div>
-  </div>
-
-  <!-- Content -->
-  <div class="flex-1 min-w-0">
-    <div class="flex items-center gap-2 mb-1">
-      <h3 class="font-semibold text-foreground truncate group-hover:text-primary transition-colors">
-        {displayName}
-      </h3>
-      <Badge variant={config.variant}>
-        {config.label}
-      </Badge>
-    </div>
-
-    <div class="flex items-center gap-3 text-sm text-muted-foreground">
-      <div class="flex items-center gap-1.5">
-        <Server class="w-3.5 h-3.5 text-muted-foreground" />
-        <span class="truncate">{agentName}</span>
-      </div>
-      {#if timeAgo}
-        <span class="text-muted-foreground">·</span>
-        <div class="flex items-center gap-1.5">
-          <Clock class="w-3.5 h-3.5 text-muted-foreground" />
-          <span>{timeAgo}</span>
-        </div>
+        <span class="block size-2.5 rounded-full bg-muted-foreground/30"></span>
       {/if}
     </div>
 
-    {#if !compact && instance.cwd}
-      <div class="mt-1.5 text-xs text-muted-foreground font-mono truncate">
-        {instance.cwd}
+    <!-- Content -->
+    <div class="flex-1 min-w-0">
+      <div class="flex items-center gap-3">
+        <h3 class="font-medium text-foreground truncate group-hover:text-primary transition-colors">
+          {displayName}
+        </h3>
+        <span class="flex-shrink-0 text-xs px-2 py-0.5 rounded-full font-mono
+                     {isActive
+                       ? 'bg-success/20 text-success'
+                       : instance.status === 'error'
+                         ? 'bg-error/20 text-error'
+                         : 'text-muted-foreground'}">
+          {instance.status}
+        </span>
       </div>
-    {/if}
-  </div>
 
-  <!-- Arrow with slide effect -->
-  <div class="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-    <ArrowRight class="w-4 h-4 text-muted-foreground arrow-slide" />
+      <div class="flex items-center gap-4 mt-1.5 text-sm text-muted-foreground">
+        <span class="flex items-center gap-1.5 truncate">
+          <Server class="size-3.5 flex-shrink-0" />
+          {agentName}
+        </span>
+        {#if timeAgo}
+          <span class="flex items-center gap-1.5">
+            <Clock class="size-3.5 flex-shrink-0" />
+            {timeAgo}
+          </span>
+        {/if}
+      </div>
+
+      {#if instance.cwd}
+        <p class="mt-1.5 text-xs text-muted-foreground/60 font-mono truncate">
+          {instance.cwd}
+        </p>
+      {/if}
+    </div>
+
+    <!-- Arrow -->
+    <ChevronRight class="size-4 text-muted-foreground/40 group-hover:text-primary
+                         group-hover:translate-x-0.5 transition-all flex-shrink-0" />
   </div>
 </a>

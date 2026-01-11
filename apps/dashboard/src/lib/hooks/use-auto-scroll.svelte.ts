@@ -1,82 +1,48 @@
-/** Use this on a vertically scrollable container to ensure that it automatically scrolls to the bottom of the content.
- *
- * ## Usage
- * ```svelte
- * <script lang="ts">
- *      import { UseAutoScroll } from '$lib/hooks/use-auto-scroll.svelte';
- *
- *      let { children } = $props();
- *
- *      const autoScroll = new UseAutoScroll();
- * </script>
- *
- * <div>
- *      <div bind:this={autoScroll.ref}>
- *          {@render children?.()}
- *      </div>
- *      {#if !autoScroll.isAtBottom}
- *          <button onclick={() => autoScroll.scrollToBottom()}>
- *              Scroll To Bottom
- *          </button>
- *      {/if}
- * </div>
- * ```
+/**
+ * Auto-scroll hook for flex-col-reverse containers.
+ * With flex-col-reverse, scrollTop=0 means we're at the bottom (newest content).
+ * Scrolling up to see older content increases scrollTop.
  */
 export class UseAutoScroll {
 	#ref = $state<HTMLElement>();
-	#scrollY: number = $state(0);
+	#scrollTop = $state(0);
 	#userHasScrolled = $state(false);
-	private lastScrollHeight = 0;
-	private lastChildCount = 0;
+	#isProgrammaticScroll = false;
 	private scrollTimeout: ReturnType<typeof setTimeout> | null = null;
+	private programmaticScrollTimeout: ReturnType<typeof setTimeout> | null = null;
 
-	// This sets everything up once #ref is bound
 	set ref(ref: HTMLElement | undefined) {
 		this.#ref = ref;
-
 		if (!this.#ref) return;
 
-		this.lastScrollHeight = this.#ref.scrollHeight;
-		this.lastChildCount = this.#ref.children.length;
-
-		// start from bottom or start position
-		this.#ref.scrollTo(0, this.#scrollY ? this.#scrollY : this.#ref.scrollHeight);
+		// With flex-col-reverse, we're already at bottom (scrollTop=0) on load!
+		// Just sync our state
+		this.#scrollTop = this.#ref.scrollTop;
 
 		this.#ref.addEventListener('scroll', () => {
 			if (!this.#ref) return;
+			this.#scrollTop = this.#ref.scrollTop;
 
-			this.#scrollY = this.#ref.scrollTop;
-
-			this.disableAutoScroll();
+			// Don't update userHasScrolled during programmatic scrolls
+			if (!this.#isProgrammaticScroll) {
+				this.#updateUserScrollState();
+			}
 		});
 
-		window.addEventListener('resize', () => {
-			this.scrollToBottom(true);
-		});
-
-		// Detect when new content is added (not just height changes from expandables)
+		// Auto-scroll on new content
 		const observer = new MutationObserver((mutations) => {
 			if (!this.#ref) return;
 
-			// Only auto-scroll if new direct children were added (new messages)
-			// Don't scroll for attribute changes or subtree changes (like collapsible expansion)
-			const hasNewChildren = this.#ref.children.length > this.lastChildCount;
-
-			// Also check if a childList mutation happened at the top level
-			const hasTopLevelAddition = mutations.some(
-				(m) => m.type === 'childList' && m.addedNodes.length > 0 && m.target === this.#ref
+			const hasNewContent = mutations.some(
+				(m) => m.type === 'childList' && m.addedNodes.length > 0
 			);
 
-			if (hasNewChildren || hasTopLevelAddition) {
-				// Debounce scroll to avoid rapid calls during animations
+			if (hasNewContent) {
 				if (this.scrollTimeout) clearTimeout(this.scrollTimeout);
 				this.scrollTimeout = setTimeout(() => {
 					this.scrollToBottom(true);
 				}, 50);
 			}
-
-			this.lastChildCount = this.#ref.children.length;
-			this.lastScrollHeight = this.#ref.scrollHeight;
 		});
 
 		observer.observe(this.#ref, { childList: true, subtree: true });
@@ -86,19 +52,17 @@ export class UseAutoScroll {
 		return this.#ref;
 	}
 
-	get scrollY() {
-		return this.#scrollY;
-	}
-
-	/** Checks if the container is scrolled to the bottom */
+	/** With flex-col-reverse, scrollTop=0 means at bottom */
 	get isAtBottom() {
 		if (!this.#ref) return true;
+		if (this.#isProgrammaticScroll) return true;
 
-		return this.#scrollY + this.#ref.offsetHeight >= this.#ref.scrollHeight;
+		// With flex-col-reverse, scrollTop near 0 means at bottom
+		const threshold = 10;
+		return this.#scrollTop <= threshold;
 	}
 
-	/** Disables auto scrolling until the container is scrolled back to the bottom */
-	disableAutoScroll() {
+	#updateUserScrollState() {
 		if (this.isAtBottom) {
 			this.#userHasScrolled = false;
 		} else {
@@ -106,13 +70,25 @@ export class UseAutoScroll {
 		}
 	}
 
-	/** Scrolls the container to the bottom */
+	/** Scrolls to bottom (scrollTop=0 with flex-col-reverse) */
 	scrollToBottom(auto = false) {
 		if (!this.#ref) return;
-
-		// don't auto scroll if user has scrolled
 		if (auto && this.#userHasScrolled) return;
 
-		this.#ref.scrollTo(0, this.#ref.scrollHeight);
+		if (!auto) {
+			this.#userHasScrolled = false;
+		}
+
+		this.#isProgrammaticScroll = true;
+		if (this.programmaticScrollTimeout) {
+			clearTimeout(this.programmaticScrollTimeout);
+		}
+
+		// With flex-col-reverse, scrolling to bottom means scrollTop=0
+		this.#ref.scrollTo({ top: 0, behavior: 'smooth' });
+
+		this.programmaticScrollTimeout = setTimeout(() => {
+			this.#isProgrammaticScroll = false;
+		}, 400);
 	}
 }
