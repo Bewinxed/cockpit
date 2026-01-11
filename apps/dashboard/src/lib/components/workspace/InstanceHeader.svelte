@@ -15,13 +15,23 @@
   const streamingState = $derived(getStreamingState(instance.id));
   let stopping = $state(false);
 
-  const statusBadgeVariant = $derived(() => {
+  // Map status to valid badge variant + custom class for colors
+  const statusBadgeVariant = $derived.by(() => {
     switch (instance.status) {
-      case 'running': return 'success';
-      case 'starting': return 'warning';
-      case 'error': return 'error';
-      case 'sleeping': return 'info';
+      case 'running': return 'default'; // Will use custom class for green
+      case 'starting': return 'secondary'; // Yellow
+      case 'error': return 'destructive'; // Red
+      case 'sleeping': return 'outline'; // Blue
       default: return 'secondary';
+    }
+  });
+
+  const statusBadgeClass = $derived.by(() => {
+    switch (instance.status) {
+      case 'running': return 'bg-success text-success-foreground border-success';
+      case 'starting': return 'bg-warning/20 text-warning-foreground border-warning';
+      case 'sleeping': return 'bg-info/20 text-info-foreground border-info';
+      default: return '';
     }
   });
 
@@ -36,7 +46,7 @@
   async function stopInstance() {
     stopping = true;
     try {
-      await api.api.instances({ id: instance.id }).stop.post();
+      await api.api.instances({ id: instance.id }).delete();
     } catch (error) {
       console.error('Failed to stop instance:', error);
     } finally {
@@ -65,7 +75,7 @@
     </h1>
 
     <!-- Status Badge -->
-    <Badge variant={statusBadgeVariant()}>
+    <Badge variant={statusBadgeVariant} class={statusBadgeClass}>
       {instance.status}
     </Badge>
 

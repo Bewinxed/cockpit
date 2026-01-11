@@ -35,11 +35,8 @@
 </script>
 
 <button
-  class="w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-all duration-150"
-  class:bg-primary={selected}
-  class:text-primary-foreground={selected}
-  class:text-foreground={!selected}
-  class:hover:bg-accent/50={!selected}
+  class="w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-all duration-150
+    {selected ? 'bg-primary text-primary-foreground' : 'text-foreground hover:bg-accent/50'}"
   onclick={onSelect}
   title={collapsed ? displayName() : undefined}
 >

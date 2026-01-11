@@ -3,7 +3,7 @@
   import ChatMessage from '../features/ChatMessage.svelte';
   import ChatInput from '../features/ChatInput.svelte';
   import PermissionRequest from '../features/PermissionRequest.svelte';
-  import { useAutoScroll } from '$lib/hooks/use-auto-scroll.svelte';
+  import { UseAutoScroll } from '$lib/hooks/use-auto-scroll.svelte';
   import {
     instances,
     getInstanceMessages,
@@ -20,25 +20,29 @@
 
   let { instanceId }: Props = $props();
 
-  // Reactive stores for this instance
+  // Reactive stores for this instance - note: these need to be recreated when instanceId changes
   const instance = $derived($instances.get(instanceId));
-  const messagesStore = getInstanceMessages(instanceId);
-  const permissionsStore = getInstancePermissions(instanceId);
-  const streamingStateStore = getStreamingState(instanceId);
+
+  // Create stores that react to instanceId changes
+  let messagesStore = $derived.by(() => getInstanceMessages(instanceId));
+  let permissionsStore = $derived.by(() => getInstancePermissions(instanceId));
+  let streamingStateStore = $derived.by(() => getStreamingState(instanceId));
 
   // Auto-scroll hook
+  const autoScroll = new UseAutoScroll();
+  let shouldAutoScroll = $state(true);
   let messagesContainer: HTMLDivElement | null = $state(null);
-  const { shouldAutoScroll, scrollToBottom, handleScroll } = useAutoScroll();
 
-  // Scroll to bottom when new messages arrive
+  // Bind the ref when container mounts
   $effect(() => {
-    const messages = $messagesStore;
-    if (shouldAutoScroll && messagesContainer && messages.length > 0) {
-      // Use requestAnimationFrame for smooth scroll after render
-      requestAnimationFrame(() => {
-        scrollToBottom(messagesContainer!);
-      });
+    if (messagesContainer) {
+      autoScroll.ref = messagesContainer;
     }
+  });
+
+  // Update shouldAutoScroll based on the hook's state
+  $effect(() => {
+    shouldAutoScroll = autoScroll.isAtBottom;
   });
 
   // Default commands available for the chat input
@@ -98,6 +102,10 @@
       console.error('Failed to interrupt:', error);
     }
   }
+
+  function scrollToBottom() {
+    autoScroll.scrollToBottom(false);
+  }
 </script>
 
 <div class="flex-1 flex flex-col overflow-hidden relative">
@@ -110,11 +118,10 @@
   <div
     class="flex-1 overflow-y-auto"
     bind:this={messagesContainer}
-    onscroll={() => handleScroll(messagesContainer!)}
   >
     <div class="max-w-3xl mx-auto px-4 py-6 space-y-4">
-      {#each $messagesStore as message, index (message.id || index)}
-        <ChatMessage {message} {instanceId} {index} />
+      {#each $messagesStore as message (message.id || message.timestamp)}
+        <ChatMessage {message} />
       {/each}
 
       <!-- Streaming Indicator -->
@@ -135,7 +142,7 @@
   {#if $permissionsStore.length > 0}
     <div class="border-t border-border bg-warning/5 px-4 py-3">
       {#each $permissionsStore as permission (permission.requestId)}
-        <PermissionRequest request={permission} {instanceId} />
+        <PermissionRequest request={permission} />
       {/each}
     </div>
   {/if}
@@ -144,9 +151,7 @@
   {#if !shouldAutoScroll}
     <button
       class="absolute bottom-20 right-8 px-3 py-1.5 bg-primary text-primary-foreground text-sm rounded-full shadow-lg hover:bg-primary/90 transition-colors z-10"
-      onclick={() => {
-        scrollToBottom(messagesContainer!);
-      }}
+      onclick={scrollToBottom}
     >
       ↓ Jump to present
     </button>

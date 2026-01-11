@@ -90,6 +90,6 @@
   {/if}
 
   {#if showNewInstanceModal}
-    <NewInstanceModal onClose={() => showNewInstanceModal = false} />
+    <NewInstanceModal open={showNewInstanceModal} onClose={() => showNewInstanceModal = false} />
   {/if}
 </div>

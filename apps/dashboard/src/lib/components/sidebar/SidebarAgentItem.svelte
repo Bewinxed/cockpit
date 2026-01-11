@@ -17,7 +17,7 @@
     }
   });
 
-  const OsIcon = $derived(() => {
+  const OsIcon = $derived.by(() => {
     switch (agent.os) {
       case 'darwin': return Monitor; // macOS
       case 'windows': return Monitor;
@@ -32,7 +32,7 @@
 >
   <!-- OS Icon -->
   <div class="flex-shrink-0">
-    <svelte:component this={OsIcon()} class="w-4 h-4" />
+    <OsIcon class="w-4 h-4" />
   </div>
 
   {#if !collapsed}
