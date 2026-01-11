@@ -1,18 +1,15 @@
 <script lang="ts">
   import '../app.css';
-  import { page } from '$app/state';
   import { onMount, onDestroy } from 'svelte';
   import { HUB_URL } from '$lib/config';
   import {
     connect,
     disconnect,
     initializeFromSSR,
-    toggleCommandPalette,
-    selectedInstanceId,
-    splitViewState
+    toggleCommandPalette
   } from '$lib/stores/realtime.svelte';
-  import { syncUrlToStore } from '$lib/stores/url-sync.svelte';
   import { getAgents, getInstances, getProjects } from '$lib/data.remote';
+  import { restoreTabsFromStorage, persistTabsToStorage } from '$lib/stores/url-sync.svelte';
   import '$lib/stores/theme';
 
   // Shell components
@@ -32,8 +29,8 @@
   onMount(() => {
     connect(HUB_URL);
 
-    // Sync URL to store on initial load
-    syncUrlToStore();
+    // Restore tabs from localStorage if URL has none
+    restoreTabsFromStorage();
 
     // Register global keyboard shortcuts
     function handleKeydown(e: KeyboardEvent) {
@@ -69,35 +66,20 @@
 
     window.addEventListener('keydown', handleKeydown);
 
+    // Persist tabs to storage when URL changes
+    function handlePopState() {
+      persistTabsToStorage();
+    }
+    window.addEventListener('popstate', handlePopState);
+
     return () => {
       window.removeEventListener('keydown', handleKeydown);
+      window.removeEventListener('popstate', handlePopState);
     };
   });
 
   onDestroy(() => {
     disconnect();
-  });
-
-  // React to URL changes (browser back/forward)
-  $effect(() => {
-    // This runs whenever page.url changes
-    const _ = page.url.searchParams.get('instance');
-    syncUrlToStore();
-  });
-
-  // Persist UI state to localStorage
-  $effect(() => {
-    const instanceId = $selectedInstanceId;
-    if (instanceId) {
-      localStorage.setItem('cockpit:selectedInstanceId', instanceId);
-    } else {
-      localStorage.removeItem('cockpit:selectedInstanceId');
-    }
-  });
-
-  $effect(() => {
-    const split = $splitViewState;
-    localStorage.setItem('cockpit:splitViewState', JSON.stringify(split));
   });
 </script>
 

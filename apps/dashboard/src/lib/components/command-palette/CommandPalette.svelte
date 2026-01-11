@@ -6,7 +6,7 @@
     toggleCommandPalette,
     commandPaletteOpen
   } from '$lib/stores/realtime.svelte';
-  import { navigateToInstance } from '$lib/stores/url-sync.svelte';
+  import { openInstance } from '$lib/stores/url-sync.svelte';
 
   let value = $state('');
 
@@ -41,7 +41,7 @@
           description: cwd,
           icon: Terminal,
           action: () => {
-            navigateToInstance(instance.id, true);
+            openInstance(instance.id, false); // Open in current tab
             toggleCommandPalette();
           },
         });

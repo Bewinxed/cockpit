@@ -1,17 +1,14 @@
 <script lang="ts">
   import { Plus, ChevronDown, ChevronRight } from 'lucide-svelte';
   import * as SidebarUI from '$lib/components/ui/sidebar';
-  import { Button } from '$lib/components/ui/button';
   import SidebarInstanceItem from '../sidebar/SidebarInstanceItem.svelte';
   import SidebarAgentItem from '../sidebar/SidebarAgentItem.svelte';
   import {
     instancesByProject,
     agents,
-    selectedInstanceId,
     toggleProjectCollapse,
     stats
   } from '$lib/stores/realtime.svelte';
-  import { navigateToInstance } from '$lib/stores/url-sync.svelte';
 
   interface Props {
     collapsed?: boolean;
@@ -61,9 +58,7 @@
                     <SidebarUI.SidebarMenuSubItem>
                       <SidebarInstanceItem
                         {instance}
-                        selected={$selectedInstanceId === instance.id}
                         {collapsed}
-                        onSelect={() => navigateToInstance(instance.id, true)}
                       />
                     </SidebarUI.SidebarMenuSubItem>
                   {/each}

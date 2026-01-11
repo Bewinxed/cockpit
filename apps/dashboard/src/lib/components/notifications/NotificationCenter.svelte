@@ -7,11 +7,11 @@
     toggleNotificationCenter,
     instances
   } from '$lib/stores/realtime.svelte';
-  import { navigateToInstance } from '$lib/stores/url-sync.svelte';
+  import { openInstance } from '$lib/stores/url-sync.svelte';
   import PermissionNotification from './PermissionNotification.svelte';
 
   function handlePermissionClick(instanceId: string) {
-    navigateToInstance(instanceId, true);
+    openInstance(instanceId);
     toggleNotificationCenter();
   }
 

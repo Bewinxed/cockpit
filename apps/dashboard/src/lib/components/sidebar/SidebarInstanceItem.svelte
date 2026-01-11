@@ -1,16 +1,22 @@
 <script lang="ts">
+  import { page } from '$app/state';
   import * as SidebarUI from '$lib/components/ui/sidebar';
   import type { Instance } from '$lib/stores/realtime.svelte';
   import { getStreamingState } from '$lib/stores/realtime.svelte';
+  import { openInstance, getTabsFromUrl } from '$lib/stores/url-sync.svelte';
 
   interface Props {
     instance: Instance;
-    selected: boolean;
     collapsed?: boolean;
-    onSelect: () => void;
   }
 
-  let { instance, selected, collapsed = false, onSelect }: Props = $props();
+  let { instance, collapsed = false }: Props = $props();
+
+  // Check if this instance is the active tab
+  const activeId = $derived(page.url.searchParams.get('active'));
+  const tabsParam = $derived(page.url.searchParams.get('tabs'));
+  const isActiveTab = $derived(activeId === instance.id);
+  const isOpenTab = $derived(tabsParam?.split(',').includes(instance.id) ?? false);
 
   const streamingState = $derived(getStreamingState(instance.id));
 
@@ -33,11 +39,19 @@
     const parts = instance.cwd.split('/');
     return parts[parts.length - 1] || 'Instance';
   });
+
+  function handleClick(e: MouseEvent) {
+    e.preventDefault();
+    // Cmd+Click (Mac) or Ctrl+Click (Windows/Linux) opens new tab
+    const newTab = e.metaKey || e.ctrlKey;
+    openInstance(instance.id, newTab);
+  }
 </script>
 
 <SidebarUI.SidebarMenuSubButton
-  onclick={onSelect}
-  isActive={selected}
+  href="/?tabs={instance.id}&active={instance.id}"
+  onclick={handleClick}
+  isActive={isActiveTab}
   title={collapsed ? displayName : undefined}
 >
   <!-- Status Dot -->
@@ -51,6 +65,11 @@
   <span class="flex-1 truncate">
     {displayName}
   </span>
+
+  <!-- Indicate if open but not active -->
+  {#if isOpenTab && !isActiveTab}
+    <div class="size-1.5 rounded-full bg-primary/50"></div>
+  {/if}
 
   <!-- Cost (if running) -->
   {#if instance.status === 'running' && instance.totalCostUsd}

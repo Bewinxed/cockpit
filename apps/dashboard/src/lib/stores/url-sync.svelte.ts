@@ -1,78 +1,127 @@
-import { goto } from '$app/navigation';
 import { page } from '$app/state';
-import { selectedInstanceId, splitViewState } from './realtime.svelte';
-import { get } from 'svelte/store';
+import { goto } from '$app/navigation';
 
-// Sync URL → Store (on page load or URL change)
-// Call this from $effect in +layout.svelte
-export function syncUrlToStore(): void {
+/**
+ * VSCode-style tabs URL management
+ * URL Schema: /?tabs=abc123,def456,ghi789&active=def456
+ */
+
+// Parse tabs from current URL
+export function getTabsFromUrl(): { tabs: string[]; activeId: string | null } {
   const url = page.url;
-  const instanceId = url.searchParams.get('instance');
-  const splitId = url.searchParams.get('split');
+  const tabsParam = url.searchParams.get('tabs');
+  const tabs = tabsParam ? tabsParam.split(',').filter(Boolean) : [];
+  const activeId = url.searchParams.get('active') ?? tabs[0] ?? null;
+  return { tabs, activeId };
+}
 
-  selectedInstanceId.set(instanceId);
+// Open instance - in current tab or new tab
+export function openInstance(instanceId: string, newTab = false): void {
+  const { tabs, activeId } = getTabsFromUrl();
 
-  if (splitId && instanceId) {
-    splitViewState.set({
-      enabled: true,
-      secondInstanceId: splitId,
-      splitRatio: 0.5,
-    });
+  let newTabs: string[];
+  let newActiveId: string;
+
+  if (newTab || tabs.length === 0) {
+    // Add new tab (or switch to it if already open)
+    if (tabs.includes(instanceId)) {
+      // Already open - just switch to it
+      newTabs = tabs;
+    } else {
+      newTabs = [...tabs, instanceId];
+    }
+    newActiveId = instanceId;
   } else {
-    splitViewState.update(s => ({ ...s, enabled: false, secondInstanceId: null }));
+    // Replace current active tab
+    const activeIndex = activeId ? tabs.indexOf(activeId) : -1;
+    if (activeIndex >= 0) {
+      newTabs = [...tabs];
+      newTabs[activeIndex] = instanceId;
+    } else {
+      newTabs = [...tabs, instanceId];
+    }
+    newActiveId = instanceId;
+  }
+
+  updateTabsUrl(newTabs, newActiveId);
+}
+
+// Switch to a specific tab
+export function switchToTab(instanceId: string): void {
+  const { tabs } = getTabsFromUrl();
+  if (tabs.includes(instanceId)) {
+    updateTabsUrl(tabs, instanceId);
   }
 }
 
-// Helper to select instance and update URL
-export function navigateToInstance(instanceId: string | null, pushHistory = false): void {
-  selectedInstanceId.set(instanceId);
+// Close a tab
+export function closeTab(instanceId: string): void {
+  const { tabs, activeId } = getTabsFromUrl();
+  const newTabs = tabs.filter(id => id !== instanceId);
 
-  const url = new URL(window.location.href);
-  if (instanceId) {
-    url.searchParams.set('instance', instanceId);
-  } else {
-    url.searchParams.delete('instance');
+  let newActiveId: string | null = activeId;
+  if (activeId === instanceId) {
+    // Closing active tab - activate adjacent
+    const closedIndex = tabs.indexOf(instanceId);
+    newActiveId = newTabs[Math.min(closedIndex, newTabs.length - 1)] ?? null;
   }
-  url.searchParams.delete('split'); // Clear split on new selection
 
-  goto(url.pathname + url.search, {
-    replaceState: !pushHistory,
-    noScroll: true
-  });
+  updateTabsUrl(newTabs, newActiveId);
 }
 
-// Helper to enable split view and update URL
-export function navigateToSplitView(primaryId: string, secondaryId: string): void {
-  selectedInstanceId.set(primaryId);
-  splitViewState.set({
-    enabled: true,
-    secondInstanceId: secondaryId,
-    splitRatio: 0.5,
-  });
-
-  const url = new URL(window.location.href);
-  url.searchParams.set('instance', primaryId);
-  url.searchParams.set('split', secondaryId);
-
-  goto(url.pathname + url.search, {
-    replaceState: false,
-    noScroll: true
-  });
+// Close all tabs except the given one
+export function closeOtherTabs(instanceId: string): void {
+  updateTabsUrl([instanceId], instanceId);
 }
 
-// Close split view and update URL
-export function closeSplitView(): void {
-  splitViewState.set({
-    enabled: false,
-    secondInstanceId: null,
-    splitRatio: 0.5,
-  });
+// Close all tabs
+export function closeAllTabs(): void {
+  updateTabsUrl([], null);
+}
 
+// Update URL with new tabs state
+function updateTabsUrl(tabs: string[], activeId: string | null): void {
   const url = new URL(window.location.href);
-  url.searchParams.delete('split');
 
-  goto(url.pathname + url.search, {
-    replaceState: true,
-    noScroll: true
-  });
+  if (tabs.length > 0) {
+    url.searchParams.set('tabs', tabs.join(','));
+    if (activeId) {
+      url.searchParams.set('active', activeId);
+    } else {
+      url.searchParams.delete('active');
+    }
+  } else {
+    url.searchParams.delete('tabs');
+    url.searchParams.delete('active');
+  }
+
+  goto(url.pathname + url.search, { replaceState: false, noScroll: true });
+}
+
+// Persist tabs to localStorage (for restoring on fresh load)
+export function persistTabsToStorage(): void {
+  const { tabs, activeId } = getTabsFromUrl();
+  if (tabs.length > 0) {
+    localStorage.setItem('cockpit:tabs', JSON.stringify({ tabs, activeId }));
+  } else {
+    localStorage.removeItem('cockpit:tabs');
+  }
+}
+
+// Restore tabs from localStorage (if URL has no tabs)
+export function restoreTabsFromStorage(): void {
+  const { tabs } = getTabsFromUrl();
+  if (tabs.length > 0) return; // URL already has tabs
+
+  const stored = localStorage.getItem('cockpit:tabs');
+  if (stored) {
+    try {
+      const { tabs: storedTabs, activeId } = JSON.parse(stored);
+      if (storedTabs?.length > 0) {
+        updateTabsUrl(storedTabs, activeId);
+      }
+    } catch {
+      // Ignore parse errors
+    }
+  }
 }

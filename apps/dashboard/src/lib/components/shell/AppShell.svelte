@@ -2,14 +2,11 @@
   import Sidebar from './Sidebar.svelte';
   import TopBar from './TopBar.svelte';
   import StatusBar from './StatusBar.svelte';
-  import WorkspaceEmpty from '../workspace/WorkspaceEmpty.svelte';
-  import WorkspaceInstance from '../workspace/WorkspaceInstance.svelte';
+  import WorkspaceTabs from '../workspace/WorkspaceTabs.svelte';
   import CommandPalette from '../command-palette/CommandPalette.svelte';
   import NotificationCenter from '../notifications/NotificationCenter.svelte';
   import NewInstanceModal from '../NewInstanceModal.svelte';
   import {
-    selectedInstanceId,
-    splitViewState,
     commandPaletteOpen,
     notificationCenterOpen,
     sidebarCollapsed,
@@ -67,13 +64,9 @@
       onNewInstance={() => showNewInstanceModal = true}
     />
 
-    <!-- Main Workspace -->
+    <!-- Main Workspace - Tabs with all open instances -->
     <main class="flex-1 flex flex-col overflow-hidden">
-      {#if $selectedInstanceId}
-        <WorkspaceInstance instanceId={$selectedInstanceId} />
-      {:else}
-        <WorkspaceEmpty onNewInstance={() => showNewInstanceModal = true} />
-      {/if}
+      <WorkspaceTabs onNewInstance={() => showNewInstanceModal = true} />
     </main>
   </div>
 
