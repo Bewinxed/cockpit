@@ -1,0 +1,14 @@
+{
+  "assignee": null,
+  "claim_note": "",
+  "claimed_at": null,
+  "created_at": "2026-01-11T14:00:36.952414Z",
+  "depends_on": [],
+  "epic": "fn-1",
+  "id": "fn-1.4",
+  "priority": null,
+  "spec_path": ".flow/tasks/fn-1.4.md",
+  "status": "todo",
+  "title": "12.5: Remove old navigation menu components",
+  "updated_at": "2026-01-11T14:00:36.952428Z"
+}

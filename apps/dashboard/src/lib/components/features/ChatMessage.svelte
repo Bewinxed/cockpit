@@ -1,6 +1,5 @@
 <script lang="ts">
-  import { User, Wrench, FileText, AlertCircle, ChevronDown, ChevronRight, ChevronUp, Loader2, CheckCircle2, XCircle, Settings, Terminal, Scissors, ExternalLink, ArrowRight, KeyRound, Cpu, HelpCircle, BookOpen, FolderOpen, Home, Edit3, Check } from 'lucide-svelte';
-  import { Bot } from '@jis3r/icons';
+  import { User, Wrench, FileText, AlertCircle, ChevronDown, ChevronRight, ChevronUp, Loader2, CheckCircle2, XCircle, Settings, Terminal, Scissors, ExternalLink, ArrowRight, KeyRound, Cpu, HelpCircle, BookOpen, FolderOpen, Home, Edit3, Check, Bot } from 'lucide-svelte';
   import Markdown from '@humanspeak/svelte-markdown';
   import { formatTimestamp } from '$lib/utils/time';
   import type { Message } from '$lib/stores/realtime.svelte';

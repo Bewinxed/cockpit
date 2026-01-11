@@ -1,6 +1,5 @@
 <script lang="ts">
-  import { Loader2 } from 'lucide-svelte';
-  import { Send } from '@jis3r/icons';
+  import { Loader2, Send } from 'lucide-svelte';
   import CommandPalette from './CommandPalette.svelte';
 
   interface AvailableCommand {
