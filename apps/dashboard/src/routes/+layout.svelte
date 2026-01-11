@@ -2,6 +2,7 @@
   import '../app.css';
   import { page } from '$app/state';
   import { onMount, onDestroy } from 'svelte';
+  import { browser } from '$app/environment';
   import { HUB_URL } from '$lib/config';
   import {
     connect,
@@ -23,9 +24,11 @@
   const instancesData = await getInstances();
   const projectsData = await getProjects();
 
-  // Initialize stores from SSR data and connect to real-time updates
+  // Initialize stores immediately (runs during SSR and hydration)
+  initializeFromSSR(agentsData, instancesData, projectsData);
+
+  // Connect to real-time updates (client-side only)
   onMount(() => {
-    initializeFromSSR(agentsData, instancesData, projectsData);
     connect(HUB_URL);
 
     // Sync URL to store on initial load
