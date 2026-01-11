@@ -33,12 +33,16 @@
 
   // Track which instances we've loaded messages for
   let loadedInstances = new Set<string>();
+  let isLoadingMessages = $state(false);
 
   // Load messages from API when instance changes
   $effect(() => {
     if (instanceId && !loadedInstances.has(instanceId)) {
       loadedInstances.add(instanceId);
-      loadMessages(instanceId);
+      isLoadingMessages = true;
+      loadMessages(instanceId).finally(() => {
+        isLoadingMessages = false;
+      });
     }
   });
 
@@ -163,9 +167,28 @@
     bind:this={messagesContainer}
   >
     <div class="max-w-3xl mx-auto px-4 py-6 space-y-4">
-      {#each $messagesStore as message (message.id || message.timestamp)}
-        <ChatMessage {message} />
-      {/each}
+      <!-- Loading state -->
+      {#if isLoadingMessages && $messagesStore.length === 0}
+        <div class="flex items-center justify-center py-8 text-muted-foreground">
+          <div class="flex gap-1 mr-2">
+            <div class="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style="animation-delay: 0ms"></div>
+            <div class="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style="animation-delay: 150ms"></div>
+            <div class="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style="animation-delay: 300ms"></div>
+          </div>
+          <span class="text-sm">Loading messages...</span>
+        </div>
+      {:else if $messagesStore.length === 0}
+        <!-- Empty state -->
+        <div class="flex flex-col items-center justify-center py-12 text-center">
+          <div class="text-muted-foreground text-sm">
+            No messages yet. Send a message to start the conversation.
+          </div>
+        </div>
+      {:else}
+        {#each $messagesStore as message (message.id || message.timestamp)}
+          <ChatMessage {message} />
+        {/each}
+      {/if}
 
       <!-- Streaming Indicator -->
       {#if $streamingStateStore?.isStreaming}

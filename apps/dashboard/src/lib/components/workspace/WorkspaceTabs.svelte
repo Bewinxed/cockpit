@@ -83,15 +83,16 @@
                     {getTabName(id)}
                   </span>
 
-                  <!-- Close button -->
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    class="size-5 p-0 opacity-0 group-hover:opacity-100 group-data-[state=active]:opacity-100 ml-1"
+                  <!-- Close button - using span to avoid nested buttons -->
+                  <span
+                    role="button"
+                    tabindex="-1"
+                    class="inline-flex items-center justify-center size-5 rounded-sm opacity-0 group-hover:opacity-100 group-data-[state=active]:opacity-100 ml-1 hover:bg-muted"
                     onclick={(e: MouseEvent) => handleCloseTab(e, id)}
+                    onkeydown={(e: KeyboardEvent) => e.key === 'Enter' && handleCloseTab(e as unknown as MouseEvent, id)}
                   >
                     <X class="size-3" />
-                  </Button>
+                  </span>
 
                   <!-- Active indicator -->
                   <div class="absolute bottom-0 left-0 right-0 h-0.5 bg-primary opacity-0 data-[state=active]:opacity-100 group-data-[state=active]:opacity-100"></div>
