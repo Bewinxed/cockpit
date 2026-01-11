@@ -12,17 +12,21 @@
     splitViewState
   } from '$lib/stores/realtime.svelte';
   import { syncUrlToStore } from '$lib/stores/url-sync.svelte';
+  import { getAgents, getInstances, getProjects } from '$lib/data.remote';
   import '$lib/stores/theme';
 
   // Shell components
   import AppShell from '$lib/components/shell/AppShell.svelte';
 
-  // Get SSR data from load function
-  let { data } = $props();
+  // Use $derived with await for remote functions - this works during SSR
+  const agentsData = $derived(await getAgents());
+  const instancesData = $derived(await getInstances());
+  const projectsData = $derived(await getProjects());
 
-  // Initialize stores from SSR data synchronously
-  // This runs during component initialization on both server and client
-  initializeFromSSR(data.agentsData, data.instancesData, data.projectsData);
+  // Initialize stores reactively when data changes
+  $effect(() => {
+    initializeFromSSR(agentsData, instancesData, projectsData);
+  });
 
   // Connect to real-time updates (client-side only)
   onMount(() => {
