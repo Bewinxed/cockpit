@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Terminal, Plus, Square } from 'lucide-svelte';
+  import { Terminal, Plus, Square, Table } from 'lucide-svelte';
   import * as Command from '$lib/components/ui/command';
   import {
     populatedInstances,
@@ -72,6 +72,20 @@
         icon: Square,
         action: () => {
           // TODO: Implement stop all
+          toggleCommandPalette();
+        },
+      });
+    }
+
+    if ('view all instances table'.includes(q) || q === '') {
+      results.push({
+        id: 'view-table',
+        type: 'action',
+        label: 'View All Instances',
+        description: 'Open table view of all instances',
+        icon: Table,
+        action: () => {
+          window.dispatchEvent(new CustomEvent('cockpit:show-table-view'));
           toggleCommandPalette();
         },
       });

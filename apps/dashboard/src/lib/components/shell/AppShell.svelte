@@ -3,6 +3,7 @@
   import TopBar from './TopBar.svelte';
   import StatusBar from './StatusBar.svelte';
   import WorkspaceTabs from '../workspace/WorkspaceTabs.svelte';
+  import InstancesTable from '../workspace/InstancesTable.svelte';
   import CommandPalette from '../command-palette/CommandPalette.svelte';
   import NotificationCenter from '../notifications/NotificationCenter.svelte';
   import NewInstanceModal from '../NewInstanceModal.svelte';
@@ -16,6 +17,7 @@
   } from '$lib/stores/realtime.svelte';
 
   let showNewInstanceModal = $state(false);
+  let showTableView = $state(false);
 
   // Close sidebar on mobile when clicking backdrop
   function closeMobileSidebar() {
@@ -31,6 +33,15 @@
     };
     window.addEventListener('cockpit:new-instance', handler);
     return () => window.removeEventListener('cockpit:new-instance', handler);
+  });
+
+  // Listen for table view toggle event
+  $effect(() => {
+    const handler = () => {
+      showTableView = true;
+    };
+    window.addEventListener('cockpit:show-table-view', handler);
+    return () => window.removeEventListener('cockpit:show-table-view', handler);
   });
 
   // Global keyboard shortcuts
@@ -89,7 +100,22 @@
 
     <!-- Main Workspace - Tabs with all open instances -->
     <main class="flex-1 flex flex-col overflow-hidden">
-      <WorkspaceTabs onNewInstance={() => showNewInstanceModal = true} />
+      {#if showTableView}
+        <div class="flex-1 flex flex-col overflow-hidden">
+          <div class="flex items-center justify-between px-4 py-2 border-b border-border bg-card/50">
+            <h1 class="text-lg font-semibold">All Instances</h1>
+            <button
+              class="text-sm text-muted-foreground hover:text-foreground"
+              onclick={() => showTableView = false}
+            >
+              Close Table View
+            </button>
+          </div>
+          <InstancesTable />
+        </div>
+      {:else}
+        <WorkspaceTabs onNewInstance={() => showNewInstanceModal = true} />
+      {/if}
     </main>
   </div>
 
