@@ -8,6 +8,7 @@
   import { UseAutoScroll } from '$lib/hooks/use-auto-scroll.svelte';
   import {
     instances,
+    instanceMessages,
     getInstanceMessages,
     getInstancePermissions,
     getStreamingState,
@@ -29,6 +30,46 @@
   let messagesStore = $derived.by(() => getInstanceMessages(instanceId));
   let permissionsStore = $derived.by(() => getInstancePermissions(instanceId));
   let streamingStateStore = $derived.by(() => getStreamingState(instanceId));
+
+  // Track which instances we've loaded messages for
+  let loadedInstances = new Set<string>();
+
+  // Load messages from API when instance changes
+  $effect(() => {
+    if (instanceId && !loadedInstances.has(instanceId)) {
+      loadedInstances.add(instanceId);
+      loadMessages(instanceId);
+    }
+  });
+
+  async function loadMessages(id: string) {
+    try {
+      const response = await api.api.instances({ id }).messages.get();
+      const result = response.data;
+      const messages = result?.data;
+      if (messages && Array.isArray(messages) && messages.length > 0) {
+        // Initialize the messages store with fetched messages
+        instanceMessages.update((map) => {
+          const existing = map.get(id) || [];
+          // Only set if we don't already have messages (to avoid overwriting SSE updates)
+          if (existing.length === 0) {
+            const formattedMessages = messages.map((msg) => ({
+              id: msg.id,
+              instanceId: id,
+              type: msg.messageType as 'user' | 'assistant' | 'system' | 'error',
+              content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
+              timestamp: msg.timestamp instanceof Date ? msg.timestamp : new Date(msg.timestamp as string),
+              sdkUuid: msg.sdkUuid ?? undefined
+            }));
+            map.set(id, formattedMessages);
+          }
+          return map;
+        });
+      }
+    } catch (error) {
+      console.error('Failed to load messages:', error);
+    }
+  }
 
   // Auto-scroll hook
   const autoScroll = new UseAutoScroll();
