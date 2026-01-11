@@ -70,7 +70,7 @@
         <Tabs.List class="h-10 bg-transparent p-0 gap-0">
           {#each tabIds as id (id)}
             <ContextMenu.Root>
-              <ContextMenu.Trigger asChild>
+              <ContextMenu.Trigger>
                 <Tabs.Trigger
                   value={id}
                   class="group relative h-10 px-3 rounded-none border-r border-border data-[state=active]:bg-background data-[state=active]:shadow-none gap-2"
@@ -88,7 +88,7 @@
                     variant="ghost"
                     size="icon"
                     class="size-5 p-0 opacity-0 group-hover:opacity-100 group-data-[state=active]:opacity-100 ml-1"
-                    onclick={(e) => handleCloseTab(e, id)}
+                    onclick={(e: MouseEvent) => handleCloseTab(e, id)}
                   >
                     <X class="size-3" />
                   </Button>

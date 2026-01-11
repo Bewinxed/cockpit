@@ -52,12 +52,12 @@
     <WorkspaceInstance instanceId={primaryInstanceId} />
   </div>
 
-  <!-- Divider -->
-  <div
-    class="w-1 bg-border hover:bg-primary/50 cursor-col-resize flex items-center justify-center group relative transition-colors"
+  <!-- Divider - separator is interactive element -->
+  <button
+    type="button"
+    class="w-1 bg-border hover:bg-primary/50 cursor-col-resize flex items-center justify-center group relative transition-colors border-none p-0"
     onmousedown={startDrag}
-    role="separator"
-    tabindex="0"
+    aria-label="Drag to resize split view"
   >
     <!-- Grip indicator -->
     <div class="absolute inset-y-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
@@ -70,11 +70,11 @@
       size="icon-sm"
       class="absolute top-2 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity z-10 bg-background border border-border shadow-sm"
       title="Close split view"
-      onclick={(e) => { e.stopPropagation(); disableSplitView(); }}
+      onclick={(e: MouseEvent) => { e.stopPropagation(); disableSplitView(); }}
     >
       <X class="w-3 h-3" />
     </Button>
-  </div>
+  </button>
 
   <!-- Secondary Pane -->
   <div class="flex flex-col overflow-hidden flex-1">

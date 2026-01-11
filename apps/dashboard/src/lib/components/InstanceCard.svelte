@@ -21,7 +21,7 @@
   let { instance }: Props = $props();
 
   const agent = $derived($agents.get(instance.machineId));
-  const agentName = $derived(agent?.name || agent?.hostname || 'Unknown');
+  const agentName = $derived(agent?.name || 'Unknown');
 
   const isActive = $derived(instance.status === 'running' || instance.status === 'starting');
 

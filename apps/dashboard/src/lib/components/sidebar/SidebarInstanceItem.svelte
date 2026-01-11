@@ -73,7 +73,7 @@
 </script>
 
 <ContextMenu.Root bind:open={isMenuOpen}>
-  <ContextMenu.Trigger asChild>
+  <ContextMenu.Trigger>
     <SidebarUI.SidebarMenuSubButton
       href="/?tabs={instance.id}&active={instance.id}"
       onclick={handleClick}

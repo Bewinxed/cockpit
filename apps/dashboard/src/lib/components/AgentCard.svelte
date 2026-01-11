@@ -37,7 +37,7 @@
   <div class="flex items-center gap-4">
     <!-- OS Icon -->
     <div class="flex-shrink-0 size-10 rounded-xl bg-background flex items-center justify-center">
-      <svelte:component this={config.icon} class="size-5 text-muted-foreground" />
+      <config.icon class="size-5 text-muted-foreground" />
     </div>
 
     <!-- Content -->
