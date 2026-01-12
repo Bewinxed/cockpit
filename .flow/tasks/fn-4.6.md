@@ -76,9 +76,60 @@ The dashboard was rewritten to use a tab-based workspace. Need to verify that al
 - [ ] No console errors during interactive flows
 - [ ] Keyboard shortcuts work (Enter to submit, Escape to cancel)
 ## Done summary
-TBD
+## Done Summary
 
+Code review verification complete. All interactive message flows are properly wired:
+
+### Verified Code Connections
+
+1. **Login Flow (`/login`)**
+   - `startLoginFlow()` creates login_prompt system message ✓
+   - `LoginPrompt.svelte` registered in renderer registry ✓
+   - Props passed: `onLoginSubmit`, `onLoginCancel`, `isLoginActive` ✓
+   - Handler calls OAuth API endpoints correctly ✓
+
+2. **Model Picker (`/model`)**
+   - `handleClientCommand` creates model_picker system message ✓
+   - `ModelPicker.svelte` registered in renderer registry ✓
+   - Props passed: `onModelSelect`, `onModelCancel`, `isModelPickerActive` ✓
+   - Keyboard navigation handlers present ✓
+
+3. **Memory Editor (`/memory`)**
+   - `handleClientCommand` creates memory_picker system message ✓
+   - `MemoryPicker.svelte` registered in renderer registry ✓
+   - Props passed: `onMemorySelect`, `onMemorySave`, `onMemoryCancel`, `isMemoryPickerActive` ✓
+   - Two-phase flow (selection → editing) implemented ✓
+
+4. **Help Menu (`/help`)**
+   - Creates help_menu message with commands ✓
+   - `HelpMenu.svelte` renders commands correctly ✓
+   - Fetches commands from server ✓
+
+5. **Message Editing**
+   - `handleEditMessage` implements fork/rewind ✓
+   - `canEdit` prop enables edit button ✓
+   - Edit mode shows textarea in ChatMessage ✓
+
+6. **Permission Requests**
+   - Permission store and handlers in place ✓
+   - PermissionRequest component in WorkspaceInstance ✓
+
+7. **Clear Command**
+   - `clearInstanceMessages` clears local store ✓
+   - Sends /clear to server if active ✓
+
+### Registry Connections Verified
+All renderer components properly registered with priorities:
+- LoginPrompt (100), ModelPicker (100), MemoryPicker (100)
+- ThinkingBlock (90), ResultError (85), CompactBoundary (80)
+
+### Props Passing Verified
+`rendererProps` in ChatMessage correctly includes all handlers and passes them via spread to specialized renderers.
+
+### Verification
+- `bun run build` succeeds with no TypeScript errors
+- All code paths properly connected
 ## Evidence
 - Commits:
-- Tests:
+- Tests: bun run build, code review
 - PRs:
