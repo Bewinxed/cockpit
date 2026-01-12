@@ -132,6 +132,13 @@
             });
           } else if (block?.type === 'tool_use') {
             const toolResult = toolResults.get(block.id);
+            const toolInput = block.input as Record<string, unknown> | undefined;
+
+            // Check if this is a Task tool (subagent spawn)
+            const isTaskTool = block.name === 'Task';
+            const subagentType = isTaskTool ? (toolInput?.subagent_type as string) : undefined;
+            const subagentDescription = isTaskTool ? (toolInput?.description as string) : undefined;
+
             result.push({
               id: dbMsg.id + '-' + block.id,
               instanceId,
@@ -145,6 +152,9 @@
                 toolInput: block.input,
                 toolResult: toolResult?.content,
                 toolStatus: toolResult ? (toolResult.isError ? 'error' : 'success') : 'pending',
+                // Add subagent metadata for Task tools
+                subagentType,
+                subagentDescription,
               },
             });
           }

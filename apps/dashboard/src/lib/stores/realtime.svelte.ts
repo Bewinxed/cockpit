@@ -616,6 +616,31 @@ export function clearInstanceSubagents(instanceId: string): void {
 }
 
 /**
+ * Extract readable text from tool result content.
+ * Handles string, array of content blocks, or falls back to JSON.stringify.
+ */
+function extractResultText(content: unknown): string {
+  if (typeof content === 'string') {
+    return content;
+  }
+  if (Array.isArray(content)) {
+    // Handle array of content blocks (common for tool results)
+    return content
+      .map((block: unknown) => {
+        if (typeof block === 'string') return block;
+        if (block && typeof block === 'object' && 'type' in block) {
+          const b = block as { type: string; text?: string };
+          if (b.type === 'text' && b.text) return b.text;
+        }
+        return '';
+      })
+      .filter(Boolean)
+      .join('\n');
+  }
+  return JSON.stringify(content);
+}
+
+/**
  * Reconstruct subagent state from message history.
  * Called when loading messages from database to restore the subagent tree visualization.
  * This scans for Task tool_use messages and rebuilds SubagentState from the stored data.
@@ -652,12 +677,8 @@ export function reconstructSubagentsFromHistory(instanceId: string, messages: Me
           // For historical data, we use the same timestamp (exact completion time not stored)
           completedAt: hasResult ? msg.timestamp : undefined,
           messages: [], // SDK doesn't stream intermediate subagent messages
-          result: hasResult && !isError
-            ? (typeof resultContent === 'string' ? resultContent : JSON.stringify(resultContent))
-            : undefined,
-          error: isError
-            ? (typeof resultContent === 'string' ? resultContent : JSON.stringify(resultContent))
-            : undefined,
+          result: hasResult && !isError ? extractResultText(resultContent) : undefined,
+          error: isError ? extractResultText(resultContent) : undefined,
         };
 
         map.set(toolId, subagentState);
@@ -1099,9 +1120,7 @@ export function connect(baseUrl: string = '') {
               );
 
               // Complete subagent if this was a Task tool result
-              const resultText = typeof toolResult.content === 'string'
-                ? toolResult.content
-                : JSON.stringify(toolResult.content);
+              const resultText = extractResultText(toolResult.content);
               if (toolResult.is_error) {
                 errorSubagent(toolResult.tool_use_id, resultText);
               } else {
