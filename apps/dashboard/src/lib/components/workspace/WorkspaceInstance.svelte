@@ -196,6 +196,21 @@
   // Get current messages (from store)
   const currentMessages = $derived($messagesStore || []);
 
+  // Helper to check if a message is a Task tool (subagent) - these are shown in SubagentTree instead
+  function isTaskToolMessage(msg: Message): boolean {
+    if (msg.type === 'tool_use' && msg.metadata?.subagentType) {
+      return true;
+    }
+    // Also filter out tool_result for Task tools
+    if (msg.type === 'tool_result' && msg.metadata?.toolName === 'Task') {
+      return true;
+    }
+    return false;
+  }
+
+  // Filter out Task tool messages - they're displayed in SubagentTree
+  const chatMessages = $derived(currentMessages.filter(msg => !isTaskToolMessage(msg)));
+
   // Group consecutive tool messages for compact display
   type MessageGroup = { type: 'single'; message: Message; index: number } | { type: 'tool_group'; messages: Message[]; startIndex: number };
 
@@ -203,16 +218,16 @@
     const groups: MessageGroup[] = [];
     let i = 0;
 
-    while (i < currentMessages.length) {
-      const msg = currentMessages[i];
+    while (i < chatMessages.length) {
+      const msg = chatMessages[i];
 
       if (msg.type === 'tool_use' || msg.type === 'tool_result') {
         const toolMessages: Message[] = [msg];
         const startIndex = i;
         i++;
 
-        while (i < currentMessages.length) {
-          const nextMsg = currentMessages[i];
+        while (i < chatMessages.length) {
+          const nextMsg = chatMessages[i];
           if (nextMsg.type === 'tool_use' || nextMsg.type === 'tool_result') {
             toolMessages.push(nextMsg);
             i++;
@@ -893,12 +908,12 @@
   >
     <div class="max-w-3xl mx-auto px-4 py-6 space-y-4">
       <!-- Loading state -->
-      {#if isLoadingMessages && currentMessages.length === 0}
+      {#if isLoadingMessages && chatMessages.length === 0}
         <div class="flex items-center justify-center py-8 text-muted-foreground">
           <Loader2 class="size-5 animate-spin mr-2" />
           <span class="text-sm">Loading messages...</span>
         </div>
-      {:else if currentMessages.length === 0}
+      {:else if chatMessages.length === 0}
         <!-- Empty state -->
         <div class="flex flex-col items-center justify-center py-12 text-center">
           <div class="text-muted-foreground text-sm">
@@ -932,7 +947,7 @@
               {@const i = group.index}
               <ChatMessage
                 {message}
-                showTimestamp={i === 0 || currentMessages[i - 1]?.type !== message.type}
+                showTimestamp={i === 0 || chatMessages[i - 1]?.type !== message.type}
                 onLoginSubmit={handleLoginSubmit}
                 onLoginCancel={handleLoginCancel}
                 onModelSelect={handleModelSelect}
@@ -985,12 +1000,10 @@
             {/if}
           </div>
         {/if}
-      {/if}
-    </div>
 
-    <!-- Subagent Tree (Mission Control) -->
-    <div class="px-4 pb-4">
-      <SubagentTree {instanceId} />
+        <!-- Subagent Tree (Mission Control) - shows active/completed subagents -->
+        <SubagentTree {instanceId} />
+      {/if}
     </div>
   </div>
 
