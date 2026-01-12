@@ -108,6 +108,8 @@ export interface Message {
     resultErrors?: string[];
     totalCost?: number;
     numTurns?: number;
+    // For system init messages - MCP server status
+    mcpServers?: Array<{ name: string; status: string }>;
   };
 }
 
@@ -1003,20 +1005,29 @@ export function connect(baseUrl: string = '') {
 
     if (msg.type === 'system') {
       switch (msg.subtype) {
-        case 'init':
+        case 'init': {
+          const initMsg = msg as {
+            model?: string;
+            session_id?: string;
+            cwd?: string;
+            tools?: string[];
+            mcp_servers?: Array<{ name: string; status: string }>;
+          };
           addMessage(instanceId, {
             type: 'system',
-            content: `Session started with ${msg.model || 'Claude'}`,
+            content: `Session started with ${initMsg.model || 'Claude'}`,
             timestamp: new Date(),
             metadata: {
               subtype: 'init',
-              sessionId: msg.session_id,
-              model: msg.model,
-              cwd: msg.cwd,
-              tools: msg.tools,
+              sessionId: initMsg.session_id,
+              model: initMsg.model,
+              cwd: initMsg.cwd,
+              tools: initMsg.tools,
+              mcpServers: initMsg.mcp_servers,
             },
           });
           break;
+        }
 
         case 'compact_boundary':
           addMessage(instanceId, {

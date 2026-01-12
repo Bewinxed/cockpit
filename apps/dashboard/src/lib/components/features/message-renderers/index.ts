@@ -14,3 +14,4 @@ export { default as MemoryPicker } from './MemoryPicker.svelte';
 export { default as CompactBoundary } from './CompactBoundary.svelte';
 export { default as ThinkingBlock } from './ThinkingBlock.svelte';
 export { default as ResultError } from './ResultError.svelte';
+export { default as MCPStatus } from './MCPStatus.svelte';

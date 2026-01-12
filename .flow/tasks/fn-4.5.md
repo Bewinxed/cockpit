@@ -66,9 +66,26 @@ Update the system init message rendering to include MCP status:
 - [ ] Graceful handling when no MCP servers present
 - [ ] Doesn't clutter UI when many servers (consider collapsible if >5)
 ## Done summary
-TBD
+## Done Summary
 
+- Created MCPStatus.svelte component with color-coded server badges
+- Status colors: green (connected), yellow (needs-auth), red (error)
+- Collapsible UI when more than 5 servers to avoid cluttering
+- Problem servers (non-connected) shown first for visibility
+- Added mcpServers metadata field to Message type
+- Updated init message handler to parse mcp_servers from SDK
+- Integrated MCPStatus into ChatMessage.svelte for system init messages
+- Exported MCPStatus from message-renderers index
+
+### Why
+- Users can see which MCP servers are available and their status
+- Problems (needs-auth, errors) are highlighted for attention
+- Clean UI that scales with multiple servers
+
+### Verification
+- `bun run build` succeeds with no TypeScript errors
+- MCP status appears in system init messages when servers are present
 ## Evidence
 - Commits:
-- Tests:
+- Tests: bun run build
 - PRs:

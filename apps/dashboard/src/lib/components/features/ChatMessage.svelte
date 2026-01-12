@@ -24,6 +24,7 @@
 	import DiffView from './DiffView.svelte';
 	import { CopyButton } from '$lib/components/ui/copy-button';
 	import { getRenderer, type MessageRendererProps } from './message-renderers';
+	import MCPStatus from './message-renderers/MCPStatus.svelte';
 
 	interface Props {
 		message: Message;
@@ -566,9 +567,14 @@
 				</div>
 			{:else if message.type === 'system'}
 				<!-- Simple system message - subtle banner -->
-				<div class="{config.bubble}">
-					<Settings class="w-3 h-3" />
-					<span>{message.content}</span>
+				<div class="flex flex-col max-w-md">
+					<div class="{config.bubble}">
+						<Settings class="w-3 h-3" />
+						<span>{message.content}</span>
+					</div>
+					{#if message.metadata?.subtype === 'init' && message.metadata?.mcpServers?.length}
+						<MCPStatus servers={message.metadata.mcpServers} />
+					{/if}
 				</div>
 			{:else}
 				<!-- Regular message with markdown support -->
