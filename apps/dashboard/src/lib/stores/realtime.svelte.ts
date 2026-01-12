@@ -615,6 +615,58 @@ export function clearInstanceSubagents(instanceId: string): void {
   });
 }
 
+/**
+ * Reconstruct subagent state from message history.
+ * Called when loading messages from database to restore the subagent tree visualization.
+ * This scans for Task tool_use messages and rebuilds SubagentState from the stored data.
+ */
+export function reconstructSubagentsFromHistory(instanceId: string, messages: Message[]): void {
+  // Clear existing subagents for this instance to avoid duplicates
+  clearInstanceSubagents(instanceId);
+
+  activeSubagents.update((map) => {
+    for (const msg of messages) {
+      // Only process Task tool_use messages
+      if (msg.type === 'tool_use' && msg.metadata?.toolName === 'Task') {
+        const toolId = msg.metadata.toolId as string;
+        if (!toolId) continue;
+
+        const toolInput = msg.metadata.toolInput as Record<string, unknown> | undefined;
+        const subagentType = (toolInput?.subagent_type as string) || 'unknown';
+        const description = toolInput?.description as string | undefined;
+
+        // Determine status from toolStatus metadata
+        const toolStatus = msg.metadata?.toolStatus as string | undefined;
+        const hasResult = toolStatus !== 'pending' && toolStatus !== undefined;
+        const isError = toolStatus === 'error';
+        const resultContent = msg.metadata?.toolResult;
+
+        // Create subagent state
+        const subagentState: SubagentState = {
+          toolUseId: toolId,
+          instanceId,
+          subagentType,
+          description,
+          status: hasResult ? (isError ? 'error' : 'complete') : 'running',
+          startedAt: msg.timestamp,
+          // For historical data, we use the same timestamp (exact completion time not stored)
+          completedAt: hasResult ? msg.timestamp : undefined,
+          messages: [], // SDK doesn't stream intermediate subagent messages
+          result: hasResult && !isError
+            ? (typeof resultContent === 'string' ? resultContent : JSON.stringify(resultContent))
+            : undefined,
+          error: isError
+            ? (typeof resultContent === 'string' ? resultContent : JSON.stringify(resultContent))
+            : undefined,
+        };
+
+        map.set(toolId, subagentState);
+      }
+    }
+    return map;
+  });
+}
+
 // Set/clear transient instance status (compacting, etc.)
 export function setInstanceStatus(instanceId: string, status: string | null): void {
   instanceStatuses.update((map) => {

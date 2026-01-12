@@ -24,6 +24,7 @@
     updateMessageMetadata,
     updateUserMessageUuid,
     streamingMessages,
+    reconstructSubagentsFromHistory,
     type Message
   } from '$lib/stores/realtime.svelte';
   import { api } from '$lib/api';
@@ -179,14 +180,21 @@
       const result = response.data;
       const messages = result?.data;
       if (messages && Array.isArray(messages) && messages.length > 0) {
+        let parsedMessages: Message[] = [];
         instanceMessages.update((map) => {
           const existing = map.get(id) || [];
           if (existing.length === 0) {
-            const parsedMessages = parseDbMessages(messages as DbMessage[]);
+            parsedMessages = parseDbMessages(messages as DbMessage[]);
             map.set(id, parsedMessages);
+          } else {
+            parsedMessages = existing;
           }
           return map;
         });
+        // Reconstruct subagent tree from loaded messages
+        if (parsedMessages.length > 0) {
+          reconstructSubagentsFromHistory(id, parsedMessages);
+        }
       }
     } catch (error) {
       console.error('Failed to load messages:', error);
