@@ -1,0 +1,19 @@
+{
+  "assignee": null,
+  "claim_note": "",
+  "claimed_at": null,
+  "created_at": "2026-01-12T07:24:43.400194Z",
+  "depends_on": [
+    "fn-4.2",
+    "fn-4.3",
+    "fn-4.4",
+    "fn-4.5"
+  ],
+  "epic": "fn-4",
+  "id": "fn-4.6",
+  "priority": null,
+  "spec_path": ".flow/tasks/fn-4.6.md",
+  "status": "todo",
+  "title": "Verify Interactive Messages Work in Tabs",
+  "updated_at": "2026-01-12T07:28:20.658906Z"
+}

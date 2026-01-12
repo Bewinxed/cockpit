@@ -1,0 +1,16 @@
+{
+  "assignee": null,
+  "claim_note": "",
+  "claimed_at": null,
+  "created_at": "2026-01-12T07:24:43.332431Z",
+  "depends_on": [
+    "fn-4.1"
+  ],
+  "epic": "fn-4",
+  "id": "fn-4.5",
+  "priority": null,
+  "spec_path": ".flow/tasks/fn-4.5.md",
+  "status": "todo",
+  "title": "Add MCP Server Status Display",
+  "updated_at": "2026-01-12T07:28:20.518721Z"
+}
