@@ -58,6 +58,8 @@ export interface Message {
   timestamp: Date;
   /** SDK message UUID - used for resumeSessionAt when editing */
   sdkUuid?: string;
+  /** Links to the Task tool_use that spawned this message (for subagent messages) */
+  parentToolUseId?: string;
   // Metadata for richer rendering
   metadata?: {
     // For tool_use messages
@@ -110,6 +112,9 @@ export interface Message {
     numTurns?: number;
     // For system init messages - MCP server status
     mcpServers?: Array<{ name: string; status: string }>;
+    // For Task tool_use messages (subagent spawning)
+    subagentType?: string;
+    subagentDescription?: string;
   };
 }
 
@@ -154,6 +159,35 @@ export interface PermissionRequest {
   createdAt: number;
 }
 
+/**
+ * State for tracking active subagents (spawned via Task tool).
+ * Used for the Mission Control tree visualization.
+ */
+export interface SubagentState {
+  /** The Task tool_use ID that spawned this subagent */
+  toolUseId: string;
+  /** Instance this subagent belongs to */
+  instanceId: string;
+  /** Type of subagent (Explore, Plan, Bash, etc.) */
+  subagentType: string;
+  /** Short description from Task tool input */
+  description?: string;
+  /** Current status */
+  status: 'starting' | 'running' | 'complete' | 'error';
+  /** When the subagent started */
+  startedAt: Date;
+  /** When the subagent completed */
+  completedAt?: Date;
+  /** Parent subagent's toolUseId (for nested subagents) */
+  parentSubagentId?: string;
+  /** Accumulated messages within this subagent */
+  messages: Message[];
+  /** Final result when complete */
+  result?: string;
+  /** Error message if status is 'error' */
+  error?: string;
+}
+
 // Stores
 export const agents: Writable<Map<string, Agent>> = writable(new Map());
 export const instances: Writable<Map<string, Instance>> = writable(new Map());
@@ -170,6 +204,9 @@ export const instanceMessages: Writable<Map<string, Message[]>> = writable(new M
 
 // Streaming messages - partial text being received per instance
 export const streamingMessages: Writable<Map<string, StreamingMessage>> = writable(new Map());
+
+// Active subagents - keyed by toolUseId
+export const activeSubagents: Writable<Map<string, SubagentState>> = writable(new Map());
 
 // Helper to get messages for a specific instance (for backwards compatibility)
 export const messages: Readable<Message[]> = derived(instanceMessages, ($instanceMessages) =>
@@ -439,6 +476,141 @@ export function finalizeStreamingMessage(instanceId: string): void {
 export function clearStreamingMessage(instanceId: string): void {
   streamingMessages.update((map) => {
     map.delete(instanceId);
+    return map;
+  });
+}
+
+// ============================================================================
+// Subagent Management (Mission Control)
+// ============================================================================
+
+/**
+ * Start tracking a new subagent (called when Task tool_use is detected).
+ */
+export function startSubagent(
+  toolUseId: string,
+  instanceId: string,
+  subagentType: string,
+  description?: string,
+  parentSubagentId?: string
+): void {
+  activeSubagents.update((map) => {
+    map.set(toolUseId, {
+      toolUseId,
+      instanceId,
+      subagentType,
+      description,
+      status: 'starting',
+      startedAt: new Date(),
+      parentSubagentId,
+      messages: [],
+    });
+    return map;
+  });
+}
+
+/**
+ * Update subagent status to running.
+ */
+export function setSubagentRunning(toolUseId: string): void {
+  activeSubagents.update((map) => {
+    const subagent = map.get(toolUseId);
+    if (subagent) {
+      subagent.status = 'running';
+    }
+    return map;
+  });
+}
+
+/**
+ * Complete a subagent with result.
+ */
+export function completeSubagent(toolUseId: string, result?: string): void {
+  activeSubagents.update((map) => {
+    const subagent = map.get(toolUseId);
+    if (subagent) {
+      subagent.status = 'complete';
+      subagent.completedAt = new Date();
+      subagent.result = result;
+    }
+    return map;
+  });
+}
+
+/**
+ * Mark subagent as errored.
+ */
+export function errorSubagent(toolUseId: string, error: string): void {
+  activeSubagents.update((map) => {
+    const subagent = map.get(toolUseId);
+    if (subagent) {
+      subagent.status = 'error';
+      subagent.completedAt = new Date();
+      subagent.error = error;
+    }
+    return map;
+  });
+}
+
+/**
+ * Add a message to a subagent's message list.
+ */
+export function addSubagentMessage(toolUseId: string, message: Message): void {
+  activeSubagents.update((map) => {
+    const subagent = map.get(toolUseId);
+    if (subagent) {
+      subagent.messages.push(message);
+    }
+    return map;
+  });
+}
+
+/**
+ * Get all subagents for a specific instance.
+ */
+export function getInstanceSubagents(instanceId: string): Readable<SubagentState[]> {
+  return derived(activeSubagents, ($subagents) =>
+    Array.from($subagents.values()).filter((s) => s.instanceId === instanceId)
+  );
+}
+
+/**
+ * Get active (non-complete) subagents for an instance.
+ */
+export function getActiveInstanceSubagents(instanceId: string): Readable<SubagentState[]> {
+  return derived(activeSubagents, ($subagents) =>
+    Array.from($subagents.values()).filter(
+      (s) => s.instanceId === instanceId && (s.status === 'starting' || s.status === 'running')
+    )
+  );
+}
+
+/**
+ * Get a specific subagent by toolUseId.
+ */
+export function getSubagent(toolUseId: string): Readable<SubagentState | null> {
+  return derived(activeSubagents, ($subagents) => $subagents.get(toolUseId) || null);
+}
+
+/**
+ * Get child subagents (nested subagents spawned by a parent subagent).
+ */
+export function getChildSubagents(parentToolUseId: string): Readable<SubagentState[]> {
+  return derived(activeSubagents, ($subagents) =>
+    Array.from($subagents.values()).filter((s) => s.parentSubagentId === parentToolUseId)
+  );
+}
+
+/**
+ * Clear all subagents for an instance (e.g., when conversation is cleared).
+ */
+export function clearInstanceSubagents(instanceId: string): void {
+  activeSubagents.update((map) => {
+    for (const [toolUseId, subagent] of map.entries()) {
+      if (subagent.instanceId === instanceId) {
+        map.delete(toolUseId);
+      }
+    }
     return map;
   });
 }
@@ -873,6 +1045,16 @@ export function connect(baseUrl: string = '') {
                 toolResult.content,
                 toolResult.is_error || false
               );
+
+              // Complete subagent if this was a Task tool result
+              const resultText = typeof toolResult.content === 'string'
+                ? toolResult.content
+                : JSON.stringify(toolResult.content);
+              if (toolResult.is_error) {
+                errorSubagent(toolResult.tool_use_id, resultText);
+              } else {
+                completeSubagent(toolResult.tool_use_id, resultText);
+              }
             }
           }
         }
@@ -957,6 +1139,13 @@ export function connect(baseUrl: string = '') {
             // Tool use blocks -> tool_use message with metadata
             else if (block.type === 'tool_use') {
               const toolBlock = block as { id?: string; name?: string; input?: unknown };
+              const toolInput = toolBlock.input as Record<string, unknown> | undefined;
+
+              // Check if this is a Task tool (subagent spawn)
+              const isTaskTool = toolBlock.name === 'Task';
+              const subagentType = isTaskTool ? (toolInput?.subagent_type as string) : undefined;
+              const subagentDescription = isTaskTool ? (toolInput?.description as string) : undefined;
+
               addMessage(instanceId, {
                 type: 'tool_use',
                 content: toolBlock.name || 'Tool',
@@ -966,8 +1155,16 @@ export function connect(baseUrl: string = '') {
                   toolName: toolBlock.name,
                   toolInput: toolBlock.input,
                   toolStatus: 'pending',
+                  // Add subagent metadata for Task tool
+                  subagentType,
+                  subagentDescription,
                 },
               });
+
+              // Start tracking subagent if this is a Task tool
+              if (isTaskTool && toolBlock.id && subagentType) {
+                startSubagent(toolBlock.id, instanceId, subagentType, subagentDescription);
+              }
             }
             // Thinking blocks -> thinking message with metadata
             else if (block.type === 'thinking') {

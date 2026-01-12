@@ -5,7 +5,7 @@
   import { ArrowDown, Bot, Loader2 } from 'lucide-svelte';
   import { Button } from '$lib/components/ui/button';
   import InstanceHeader from './InstanceHeader.svelte';
-  import { ChatMessage, ChatInput, StreamingIndicator, PermissionRequest, ToolGroup } from '$lib/components/features';
+  import { ChatMessage, ChatInput, StreamingIndicator, PermissionRequest, ToolGroup, SubagentTree } from '$lib/components/features';
   import { UseAutoScroll } from '$lib/hooks/use-auto-scroll.svelte';
   import { ActivityGrid } from '$lib/components/ui/activity-grid';
   import {
@@ -986,6 +986,11 @@
           </div>
         {/if}
       {/if}
+    </div>
+
+    <!-- Subagent Tree (Mission Control) -->
+    <div class="px-4 pb-4">
+      <SubagentTree {instanceId} />
     </div>
   </div>
 
