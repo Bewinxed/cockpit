@@ -1,11 +1,9 @@
 /**
- * Auto-scroll hook for flex-col-reverse containers.
- * With flex-col-reverse, scrollTop=0 means we're at the bottom (newest content).
- * Scrolling up to see older content increases scrollTop.
+ * Auto-scroll hook for chat containers.
+ * Keeps chat scrolled to bottom (newest content) unless user scrolls up.
  */
 export class UseAutoScroll {
 	#ref = $state<HTMLElement>();
-	#scrollTop = $state(0);
 	#userHasScrolled = $state(false);
 	#isProgrammaticScroll = false;
 	private scrollTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -15,13 +13,11 @@ export class UseAutoScroll {
 		this.#ref = ref;
 		if (!this.#ref) return;
 
-		// With flex-col-reverse, we're already at bottom (scrollTop=0) on load!
-		// Just sync our state
-		this.#scrollTop = this.#ref.scrollTop;
+		// Start scrolled to bottom
+		this.#ref.scrollTop = this.#ref.scrollHeight;
 
 		this.#ref.addEventListener('scroll', () => {
 			if (!this.#ref) return;
-			this.#scrollTop = this.#ref.scrollTop;
 
 			// Don't update userHasScrolled during programmatic scrolls
 			if (!this.#isProgrammaticScroll) {
@@ -52,14 +48,15 @@ export class UseAutoScroll {
 		return this.#ref;
 	}
 
-	/** With flex-col-reverse, scrollTop=0 means at bottom */
+	/** Check if we're at the bottom of the scroll container */
 	get isAtBottom() {
 		if (!this.#ref) return true;
 		if (this.#isProgrammaticScroll) return true;
 
-		// With flex-col-reverse, scrollTop near 0 means at bottom
-		const threshold = 10;
-		return this.#scrollTop <= threshold;
+		// At bottom when scrollTop + clientHeight >= scrollHeight (with threshold)
+		const threshold = 50;
+		const { scrollTop, scrollHeight, clientHeight } = this.#ref;
+		return scrollTop + clientHeight >= scrollHeight - threshold;
 	}
 
 	#updateUserScrollState() {
@@ -70,7 +67,7 @@ export class UseAutoScroll {
 		}
 	}
 
-	/** Scrolls to bottom (scrollTop=0 with flex-col-reverse) */
+	/** Scrolls to bottom (newest content) */
 	scrollToBottom(auto = false) {
 		if (!this.#ref) return;
 		if (auto && this.#userHasScrolled) return;
@@ -84,8 +81,8 @@ export class UseAutoScroll {
 			clearTimeout(this.programmaticScrollTimeout);
 		}
 
-		// With flex-col-reverse, scrolling to bottom means scrollTop=0
-		this.#ref.scrollTo({ top: 0, behavior: 'smooth' });
+		// Scroll to bottom (scrollHeight)
+		this.#ref.scrollTo({ top: this.#ref.scrollHeight, behavior: 'smooth' });
 
 		this.programmaticScrollTimeout = setTimeout(() => {
 			this.#isProgrammaticScroll = false;

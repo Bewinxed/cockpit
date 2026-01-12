@@ -144,7 +144,7 @@
         <div class="flex-1 overflow-hidden relative">
           {#each tabIds as id (id)}
             <div
-              class="absolute inset-0 overflow-hidden"
+              class="absolute inset-0 flex flex-col"
               class:hidden={id !== activeId}
             >
               <WorkspaceInstance instanceId={id} />
