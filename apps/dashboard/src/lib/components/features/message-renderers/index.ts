@@ -12,3 +12,4 @@ export { default as LoginPrompt } from './LoginPrompt.svelte';
 export { default as ModelPicker } from './ModelPicker.svelte';
 export { default as MemoryPicker } from './MemoryPicker.svelte';
 export { default as CompactBoundary } from './CompactBoundary.svelte';
+export { default as ThinkingBlock } from './ThinkingBlock.svelte';

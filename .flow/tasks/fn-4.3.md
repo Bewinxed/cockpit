@@ -75,9 +75,29 @@ Add a ThinkingBlock renderer component that shows Claude's reasoning in a collap
 - [ ] Visually distinct from regular text (border, font, color)
 - [ ] Works in both light and dark themes
 ## Done summary
-TBD
+## Done Summary
 
+- Created ThinkingBlock.svelte component with collapsible UI
+- Added violet-themed styling with Brain icon for visual distinction
+- Implements expand/collapse with smooth slide transition
+- Shows summary (first 100 chars) when collapsed
+- Handles both regular thinking and redacted_thinking blocks
+- Updated Message type to include 'thinking' type
+- Added thinking metadata fields (thinking, thinkingSignature, isRedactedThinking)
+- Updated SSE handler to parse thinking and redacted_thinking blocks from assistant messages
+- Registered ThinkingBlock in the renderer registry (priority 90)
+- Exported from message-renderers index
+
+### Why
+- Users can see Claude's reasoning chain (extended thinking)
+- Collapsible by default keeps UI clean while making reasoning accessible
+- Distinct styling differentiates thinking from regular responses
+
+### Verification
+- `bun run build` succeeds with no TypeScript errors
+- ThinkingBlock renders with proper collapse/expand behavior
+- Both regular and redacted thinking blocks handled correctly
 ## Evidence
 - Commits:
-- Tests:
+- Tests: bun run build
 - PRs:

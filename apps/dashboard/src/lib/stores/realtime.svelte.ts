@@ -53,7 +53,7 @@ export interface Task {
 export interface Message {
   id?: string;
   instanceId: string;
-  type: 'assistant' | 'user' | 'system' | 'tool_use' | 'tool_result' | 'error' | 'hook_response' | 'command_output' | 'help_menu';
+  type: 'assistant' | 'user' | 'system' | 'tool_use' | 'tool_result' | 'error' | 'hook_response' | 'command_output' | 'help_menu' | 'thinking';
   content: string;
   timestamp: Date;
   /** SDK message UUID - used for resumeSessionAt when editing */
@@ -99,6 +99,10 @@ export interface Message {
     // For help_menu
     version?: string;
     commands?: Array<{ name: string; description?: string; type: 'builtin' | 'custom' | 'skill' | 'mcp' }>;
+    // For thinking blocks
+    thinking?: string;
+    thinkingSignature?: string;
+    isRedactedThinking?: boolean;
   };
 }
 
@@ -955,6 +959,31 @@ export function connect(baseUrl: string = '') {
                   toolName: toolBlock.name,
                   toolInput: toolBlock.input,
                   toolStatus: 'pending',
+                },
+              });
+            }
+            // Thinking blocks -> thinking message with metadata
+            else if (block.type === 'thinking') {
+              const thinkingBlock = block as { thinking?: string; signature?: string };
+              addMessage(instanceId, {
+                type: 'thinking',
+                content: thinkingBlock.thinking || '',
+                timestamp: new Date(),
+                metadata: {
+                  thinking: thinkingBlock.thinking,
+                  thinkingSignature: thinkingBlock.signature,
+                  isRedactedThinking: false,
+                },
+              });
+            }
+            // Redacted thinking blocks
+            else if (block.type === 'redacted_thinking') {
+              addMessage(instanceId, {
+                type: 'thinking',
+                content: 'Reasoning redacted',
+                timestamp: new Date(),
+                metadata: {
+                  isRedactedThinking: true,
                 },
               });
             }

@@ -4,6 +4,7 @@ import LoginPrompt from './LoginPrompt.svelte';
 import ModelPicker from './ModelPicker.svelte';
 import MemoryPicker from './MemoryPicker.svelte';
 import CompactBoundary from './CompactBoundary.svelte';
+import ThinkingBlock from './ThinkingBlock.svelte';
 
 /**
  * Registry of message renderers.
@@ -37,10 +38,17 @@ const renderers: MessageRenderer[] = [
 		match: (m) => m.type === 'system' && m.metadata?.subtype === 'compact_boundary',
 		priority: 80,
 		name: 'CompactBoundary'
+	},
+
+	// Thinking blocks (priority 90 - show before regular messages)
+	{
+		component: ThinkingBlock,
+		match: (m) => m.type === 'thinking',
+		priority: 90,
+		name: 'ThinkingBlock'
 	}
 
 	// Future renderers will be added here:
-	// - ThinkingBlock (fn-4.3)
 	// - ResultError subtypes (fn-4.4)
 	// - MCPStatus (fn-4.5)
 	// - SubagentBranch (fn-5)
