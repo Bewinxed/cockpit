@@ -83,9 +83,28 @@ Each error subtype shows specific UI with:
 - [ ] Cost and turn count displayed when relevant
 - [ ] Works in both light and dark themes
 ## Done summary
-TBD
+## Done Summary
 
+- Created ResultError.svelte component with error-subtype-specific UI
+- Handles 4 error subtypes: error_max_turns, error_during_execution, error_max_budget_usd, error_max_structured_output_retries
+- Each subtype has custom icon, color scheme, title, description, and action suggestion
+- Shows cost and turn count when available
+- Expandable error details section for multiple errors
+- Added 'result_error' message type
+- Added result error metadata fields (resultSubtype, resultErrors, totalCost, numTurns)
+- Updated SSE handler to parse result messages with error subtypes
+- Registered ResultError in renderer registry (priority 85)
+- Exported from message-renderers index
+
+### Why
+- Users see clear, actionable error messages instead of generic errors
+- Specific recovery suggestions help users resolve issues
+- Consistent error UX improves user experience
+
+### Verification
+- `bun run build` succeeds with no TypeScript errors
+- ResultError renders with appropriate styling for each error subtype
 ## Evidence
 - Commits:
-- Tests:
+- Tests: bun run build
 - PRs:

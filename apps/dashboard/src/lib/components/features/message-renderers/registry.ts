@@ -5,6 +5,7 @@ import ModelPicker from './ModelPicker.svelte';
 import MemoryPicker from './MemoryPicker.svelte';
 import CompactBoundary from './CompactBoundary.svelte';
 import ThinkingBlock from './ThinkingBlock.svelte';
+import ResultError from './ResultError.svelte';
 
 /**
  * Registry of message renderers.
@@ -46,10 +47,17 @@ const renderers: MessageRenderer[] = [
 		match: (m) => m.type === 'thinking',
 		priority: 90,
 		name: 'ThinkingBlock'
+	},
+
+	// Result error messages (priority 85)
+	{
+		component: ResultError,
+		match: (m) => m.type === 'result_error',
+		priority: 85,
+		name: 'ResultError'
 	}
 
 	// Future renderers will be added here:
-	// - ResultError subtypes (fn-4.4)
 	// - MCPStatus (fn-4.5)
 	// - SubagentBranch (fn-5)
 ].sort((a, b) => b.priority - a.priority);

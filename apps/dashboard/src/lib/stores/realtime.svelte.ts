@@ -53,7 +53,7 @@ export interface Task {
 export interface Message {
   id?: string;
   instanceId: string;
-  type: 'assistant' | 'user' | 'system' | 'tool_use' | 'tool_result' | 'error' | 'hook_response' | 'command_output' | 'help_menu' | 'thinking';
+  type: 'assistant' | 'user' | 'system' | 'tool_use' | 'tool_result' | 'error' | 'hook_response' | 'command_output' | 'help_menu' | 'thinking' | 'result_error';
   content: string;
   timestamp: Date;
   /** SDK message UUID - used for resumeSessionAt when editing */
@@ -103,6 +103,11 @@ export interface Message {
     thinking?: string;
     thinkingSignature?: string;
     isRedactedThinking?: boolean;
+    // For result error messages
+    resultSubtype?: 'error_max_turns' | 'error_during_execution' | 'error_max_budget_usd' | 'error_max_structured_output_retries';
+    resultErrors?: string[];
+    totalCost?: number;
+    numTurns?: number;
   };
 }
 
@@ -1056,11 +1061,39 @@ export function connect(baseUrl: string = '') {
     }
 
     // ========================================
-    // RESULT MESSAGES (completion stats)
+    // RESULT MESSAGES (completion stats and errors)
     // ========================================
 
     // Result messages are handled by instance:token_usage event for cost/tokens
     // Local command outputs are handled via synthetic user messages with tool_use_result
+    // Error subtypes need special handling for user-friendly display
+    if (msg.type === 'result' && msg.subtype) {
+      const resultSubtype = msg.subtype as string;
+      const errorSubtypes = ['error_max_turns', 'error_during_execution', 'error_max_budget_usd', 'error_max_structured_output_retries'];
+
+      if (errorSubtypes.includes(resultSubtype)) {
+        const resultMsg = msg as {
+          subtype: string;
+          result?: string;
+          errors?: string[];
+          total_cost_usd?: number;
+          num_turns?: number;
+        };
+
+        addMessage(instanceId, {
+          type: 'result_error',
+          content: resultMsg.result || resultSubtype,
+          timestamp: new Date(),
+          metadata: {
+            resultSubtype: resultSubtype as 'error_max_turns' | 'error_during_execution' | 'error_max_budget_usd' | 'error_max_structured_output_retries',
+            resultErrors: resultMsg.errors,
+            totalCost: resultMsg.total_cost_usd,
+            numTurns: resultMsg.num_turns,
+          },
+        });
+        updateStreamingState(instanceId, { isStreaming: false });
+      }
+    }
 
     // ========================================
     // STREAM EVENTS (progressive text streaming)
