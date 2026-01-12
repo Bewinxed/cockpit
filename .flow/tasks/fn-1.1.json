@@ -5,10 +5,17 @@
   "created_at": "2026-01-11T14:00:36.745061Z",
   "depends_on": [],
   "epic": "fn-1",
+  "evidence": {
+    "commits": [],
+    "prs": [],
+    "tests": [
+      "code review"
+    ]
+  },
   "id": "fn-1.1",
   "priority": null,
   "spec_path": ".flow/tasks/fn-1.1.md",
-  "status": "in_progress",
+  "status": "done",
   "title": "12.4: Redirect /instances/[id] to root with instance in tabs",
-  "updated_at": "2026-01-11T14:00:59.609813Z"
+  "updated_at": "2026-01-12T10:49:25.212074Z"
 }
