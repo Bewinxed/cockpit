@@ -5,10 +5,17 @@
   "created_at": "2026-01-11T14:14:45.258956Z",
   "depends_on": [],
   "epic": "fn-2",
+  "evidence": {
+    "commits": [],
+    "prs": [],
+    "tests": [
+      "code review"
+    ]
+  },
   "id": "fn-2.1",
   "priority": null,
   "spec_path": ".flow/tasks/fn-2.1.md",
-  "status": "in_progress",
+  "status": "done",
   "title": "6.1: Add Split View button in instance header",
-  "updated_at": "2026-01-11T14:14:45.468751Z"
+  "updated_at": "2026-01-12T10:59:54.875259Z"
 }

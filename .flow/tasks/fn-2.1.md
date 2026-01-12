@@ -7,9 +7,18 @@ TBD
 - [ ] TBD
 
 ## Done summary
-TBD
+## Done Summary
 
+Split View button already implemented in InstanceHeader.svelte.
+
+### Implementation
+- Button at lines 121-128 with Columns2 icon
+- Calls `enableSplitView(instance.id)` on click
+- Title: "Open in split view"
+
+### Verified
+Button exists and calls the correct function.
 ## Evidence
 - Commits:
-- Tests:
+- Tests: code review
 - PRs:
