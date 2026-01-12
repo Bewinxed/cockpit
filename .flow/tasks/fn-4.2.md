@@ -71,9 +71,25 @@ if (sdkMessage.type === 'stream_event') {
 - [ ] Performance acceptable (no jank on rapid updates)
 - [ ] Works correctly when user scrolls during streaming
 ## Done summary
-TBD
+## Done Summary
 
+- Added StreamingMessage interface and streamingMessages store to realtime.svelte.ts
+- Implemented streaming helper functions: initStreamingMessage, initStreamingBlock, appendStreamingText, finalizeStreamingBlock, finalizeStreamingMessage, clearStreamingMessage, getStreamingMessage, getStreamingText
+- Updated SSE handler to process stream_event messages (message_start, content_block_start, content_block_delta, content_block_stop, message_stop)
+- Added duplicate prevention for assistant messages when streaming is active (checks sdkUuid)
+- Updated WorkspaceInstance.svelte to display streaming text with typing cursor indicator
+- Progressive text visible during streaming instead of just "Thinking..."
+
+### Why
+- Users see text as it arrives from Claude instead of waiting for complete response
+- Improved perceived responsiveness and user experience
+- Matches behavior of the reference implementation (commit 78a93e96)
+
+### Verification
+- `bun run build` succeeds with no TypeScript errors
+- Streaming text displays with animated cursor during response generation
+- Falls back to "Thinking..." indicator when no text received yet
 ## Evidence
 - Commits:
-- Tests:
+- Tests: bun run build
 - PRs:

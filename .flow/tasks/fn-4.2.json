@@ -1,16 +1,23 @@
 {
-  "assignee": null,
+  "assignee": "bewinxed@gmail.com",
   "claim_note": "",
-  "claimed_at": null,
+  "claimed_at": "2026-01-12T08:30:25.009702Z",
   "created_at": "2026-01-12T07:24:43.133302Z",
   "depends_on": [
     "fn-4.1"
   ],
   "epic": "fn-4",
+  "evidence": {
+    "commits": [],
+    "prs": [],
+    "tests": [
+      "bun run build"
+    ]
+  },
   "id": "fn-4.2",
   "priority": null,
   "spec_path": ".flow/tasks/fn-4.2.md",
-  "status": "todo",
+  "status": "done",
   "title": "Implement Progressive Text Streaming",
-  "updated_at": "2026-01-12T07:28:20.110051Z"
+  "updated_at": "2026-01-12T08:46:03.356969Z"
 }

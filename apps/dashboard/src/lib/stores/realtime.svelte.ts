@@ -113,6 +113,22 @@ export interface StreamingState {
   lastUpdate: Date;
 }
 
+/**
+ * Streaming message state for progressive text rendering.
+ * Accumulates content_block_delta events until message_stop.
+ */
+export interface StreamingMessage {
+  instanceId: string;
+  /** Map of content block index to accumulated text */
+  contentBlocks: Map<number, string>;
+  /** Whether the message is complete (message_stop received) */
+  isComplete: boolean;
+  /** Current SDK message UUID (for linking to final message) */
+  sdkUuid?: string;
+  /** Timestamp when streaming started */
+  startedAt: Date;
+}
+
 export interface PermissionRequest {
   requestId: string;
   instanceId: string;
@@ -140,6 +156,9 @@ export const instanceStatuses: Writable<Map<string, string | null>> = writable(n
 
 // Messages stored per-instance for better organization
 export const instanceMessages: Writable<Map<string, Message[]>> = writable(new Map());
+
+// Streaming messages - partial text being received per instance
+export const streamingMessages: Writable<Map<string, StreamingMessage>> = writable(new Map());
 
 // Helper to get messages for a specific instance (for backwards compatibility)
 export const messages: Readable<Message[]> = derived(instanceMessages, ($instanceMessages) =>
@@ -309,6 +328,105 @@ export function updateStreamingState(instanceId: string, update: Partial<Streami
 // Clear streaming state for an instance
 export function clearStreamingState(instanceId: string): void {
   streamingStates.update((map) => {
+    map.delete(instanceId);
+    return map;
+  });
+}
+
+// ========================================
+// STREAMING MESSAGE FUNCTIONS
+// ========================================
+
+// Get streaming message for an instance
+export function getStreamingMessage(instanceId: string): Readable<StreamingMessage | null> {
+  return derived(streamingMessages, ($msgs) => $msgs.get(instanceId) || null);
+}
+
+// Get the accumulated text from a streaming message
+export function getStreamingText(instanceId: string): string {
+  const msg = get(streamingMessages).get(instanceId);
+  if (!msg) return '';
+  // Combine all content blocks in order
+  const texts: string[] = [];
+  const sortedIndices = Array.from(msg.contentBlocks.keys()).sort((a, b) => a - b);
+  for (const idx of sortedIndices) {
+    texts.push(msg.contentBlocks.get(idx) || '');
+  }
+  return texts.join('');
+}
+
+// Initialize a streaming message when content_block_start is received
+export function initStreamingMessage(instanceId: string, sdkUuid?: string): void {
+  streamingMessages.update((map) => {
+    // Only create a new streaming message if one doesn't exist
+    if (!map.has(instanceId)) {
+      map.set(instanceId, {
+        instanceId,
+        contentBlocks: new Map(),
+        isComplete: false,
+        sdkUuid,
+        startedAt: new Date(),
+      });
+    } else if (sdkUuid) {
+      // Update UUID if provided
+      const existing = map.get(instanceId)!;
+      map.set(instanceId, { ...existing, sdkUuid });
+    }
+    return map;
+  });
+}
+
+// Initialize a content block within a streaming message
+export function initStreamingBlock(instanceId: string, index: number, contentBlock: { type: string }): void {
+  streamingMessages.update((map) => {
+    const msg = map.get(instanceId);
+    if (msg && contentBlock.type === 'text') {
+      msg.contentBlocks.set(index, '');
+    }
+    return map;
+  });
+}
+
+// Append text to a streaming content block
+export function appendStreamingText(instanceId: string, index: number, text: string): void {
+  streamingMessages.update((map) => {
+    const msg = map.get(instanceId);
+    if (msg) {
+      const existing = msg.contentBlocks.get(index) || '';
+      msg.contentBlocks.set(index, existing + text);
+    }
+    return map;
+  });
+}
+
+// Finalize a content block (content_block_stop)
+export function finalizeStreamingBlock(instanceId: string, index: number): void {
+  // Currently a no-op, but could be used for cleanup or marking blocks complete
+}
+
+// Finalize streaming message (message_stop) - converts to final message
+export function finalizeStreamingMessage(instanceId: string): void {
+  const msg = get(streamingMessages).get(instanceId);
+  if (msg && msg.contentBlocks.size > 0) {
+    // Get the accumulated text
+    const text = getStreamingText(instanceId);
+    if (text.trim()) {
+      // Add as a final assistant message
+      addMessage(instanceId, {
+        type: 'assistant',
+        content: text,
+        timestamp: msg.startedAt,
+        sdkUuid: msg.sdkUuid,
+      });
+    }
+  }
+  // Clear the streaming message
+  clearStreamingMessage(instanceId);
+}
+
+// Clear streaming message for an instance
+export function clearStreamingMessage(instanceId: string): void {
+  streamingMessages.update((map) => {
     map.delete(instanceId);
     return map;
   });
@@ -807,11 +925,17 @@ export function connect(baseUrl: string = '') {
 
     if (msg.type === 'assistant' && msg.message?.content) {
       const content = msg.message.content;
+
+      // Check if we already have a message with this UUID (from streaming)
+      // to avoid duplicates when streaming is enabled
+      const existingMessages = get(instanceMessages).get(instanceId) || [];
+      const hasExistingMessage = msg.uuid && existingMessages.some(m => m.sdkUuid === msg.uuid);
+
       if (Array.isArray(content)) {
         for (const block of content) {
           if (block && typeof block === 'object' && 'type' in block) {
-            // Text blocks -> assistant message
-            if (block.type === 'text' && 'text' in block) {
+            // Text blocks -> assistant message (skip if already added via streaming)
+            if (block.type === 'text' && 'text' in block && !hasExistingMessage) {
               addMessage(instanceId, {
                 type: 'assistant',
                 content: block.text as string,
@@ -910,13 +1034,52 @@ export function connect(baseUrl: string = '') {
     // Local command outputs are handled via synthetic user messages with tool_use_result
 
     // ========================================
-    // STREAM EVENTS (for real-time updates)
+    // STREAM EVENTS (progressive text streaming)
     // ========================================
 
-    // Stream events can be used for:
-    // 1. Typing indicator (already handled via isStreaming)
-    // 2. Partial text updates (future enhancement)
-    // Currently we just use them to set streaming state
+    if (msg.type === 'stream_event' && msg.event) {
+      const event = msg.event as {
+        type?: string;
+        index?: number;
+        content_block?: { type: string };
+        delta?: { type: string; text?: string };
+      };
+
+      switch (event.type) {
+        case 'message_start':
+          // Initialize streaming message
+          initStreamingMessage(instanceId, msg.uuid);
+          break;
+
+        case 'content_block_start':
+          // Initialize a content block
+          if (event.index !== undefined && event.content_block) {
+            initStreamingMessage(instanceId, msg.uuid);
+            initStreamingBlock(instanceId, event.index, event.content_block);
+          }
+          break;
+
+        case 'content_block_delta':
+          // Append text delta to streaming message
+          if (event.index !== undefined && event.delta?.type === 'text_delta' && event.delta.text) {
+            appendStreamingText(instanceId, event.index, event.delta.text);
+          }
+          break;
+
+        case 'content_block_stop':
+          // Finalize content block
+          if (event.index !== undefined) {
+            finalizeStreamingBlock(instanceId, event.index);
+          }
+          break;
+
+        case 'message_stop':
+          // Finalize the streaming message - convert to final message
+          finalizeStreamingMessage(instanceId);
+          updateStreamingState(instanceId, { isStreaming: false });
+          break;
+      }
+    }
   });
 }
 

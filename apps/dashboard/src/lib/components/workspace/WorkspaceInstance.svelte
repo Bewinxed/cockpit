@@ -16,12 +16,14 @@
     getInstancePermissions,
     getStreamingState,
     getInstanceStatus,
+    getStreamingMessage,
     addMessage,
     removeMessage,
     clearInstanceMessages,
     updateStreamingState,
     updateMessageMetadata,
     updateUserMessageUuid,
+    streamingMessages,
     type Message
   } from '$lib/stores/realtime.svelte';
   import { api } from '$lib/api';
@@ -71,6 +73,7 @@
   let messagesStore = $derived.by(() => getInstanceMessages(instanceId));
   let permissionsStore = $derived.by(() => getInstancePermissions(instanceId));
   let streamingStateStore = $derived.by(() => getStreamingState(instanceId));
+  let streamingMessageStore = $derived.by(() => getStreamingMessage(instanceId));
   let instanceStatusStore = $derived.by(() => getInstanceStatus(instanceId));
 
   // Track which instances we've loaded messages for
@@ -286,6 +289,19 @@
   // Get streaming state
   const isStreaming = $derived($streamingStateStore?.isStreaming ?? false);
   const transientStatus = $derived($instanceStatusStore);
+
+  // Streaming message for progressive text display
+  const streamingMessage = $derived($streamingMessageStore);
+  const streamingText = $derived.by(() => {
+    const msg = streamingMessage;
+    if (!msg || !msg.contentBlocks) return '';
+    const texts: string[] = [];
+    const sortedIndices = Array.from(msg.contentBlocks.keys()).sort((a, b) => a - b);
+    for (const idx of sortedIndices) {
+      texts.push(msg.contentBlocks.get(idx) || '');
+    }
+    return texts.join('');
+  });
 
   // OAuth state
   let pendingOAuthState = $state<string | null>(null);
@@ -946,15 +962,27 @@
             <div class="flex-shrink-0 w-9 h-9 rounded-xl bg-secondary border border-border flex items-center justify-center mt-0.5">
               <Bot class="w-4.5 h-4.5 text-muted-foreground" />
             </div>
-            <!-- Activity indicator bubble -->
-            <div class="bg-card border border-border rounded-2xl rounded-bl-sm px-4 py-3 shadow-sm flex items-center gap-3">
-              <ActivityGrid {instanceId} size="sm" />
-              {#if restarting}
-                <span class="text-sm text-muted-foreground">Resuming session...</span>
-              {:else}
-                <span class="text-sm text-muted-foreground">Thinking...</span>
-              {/if}
-            </div>
+            <!-- Streaming content or activity indicator -->
+            {#if streamingText}
+              <!-- Show streaming text with typing cursor -->
+              <div class="flex-1 max-w-[85%]">
+                <div class="bg-card border border-border rounded-2xl rounded-bl-sm px-4 py-3 shadow-sm">
+                  <div class="text-sm text-foreground whitespace-pre-wrap break-words">
+                    {streamingText}<span class="inline-block w-0.5 h-4 bg-foreground/70 ml-0.5 animate-pulse"></span>
+                  </div>
+                </div>
+              </div>
+            {:else}
+              <!-- Activity indicator bubble when no text yet -->
+              <div class="bg-card border border-border rounded-2xl rounded-bl-sm px-4 py-3 shadow-sm flex items-center gap-3">
+                <ActivityGrid {instanceId} size="sm" />
+                {#if restarting}
+                  <span class="text-sm text-muted-foreground">Resuming session...</span>
+                {:else}
+                  <span class="text-sm text-muted-foreground">Thinking...</span>
+                {/if}
+              </div>
+            {/if}
           </div>
         {/if}
       {/if}
