@@ -16,6 +16,11 @@ import { getAgentRegistry } from '../services/agent-registry';
 import { getBroadcastService } from '../services/broadcast';
 import { createInstanceTracker } from '../services/instance-tracker';
 import { safeJsonParse } from '@cockpit/core/utils';
+import {
+  extractMessageFields,
+  extractToolInvocations,
+  extractToolResults,
+} from '../services/message-extractor';
 
 // Map to store machineId by WebSocket connection ID
 // We use a module-level Map since Elysia ws wrappers don't preserve properties between calls
@@ -356,6 +361,7 @@ async function handleNotification(
         type?: string;
         uuid?: string;  // SDK's message UUID - required for resumeSessionAt
         session_id?: string;
+        parent_tool_use_id?: string | null;  // For subagent messages
         usage?: { input_tokens?: number; output_tokens?: number };
         total_cost_usd?: number;
       };
@@ -374,7 +380,6 @@ async function handleNotification(
       // Persist message to database with SDK UUID for resumeSessionAt
       try {
         await instanceTracker.saveMessage(instanceId, {
-          messageType: msg.type || 'unknown',
           content: message,
           timestamp: new Date(),
           sdkUuid: msg.uuid,  // Store SDK's UUID for edit/resume functionality
@@ -400,8 +405,28 @@ async function handleNotification(
         });
       }
 
-      // Forward SDK messages to dashboard
-      getBroadcastService().broadcast('sdk:message', { instanceId, message });
+      // Forward SDK messages to dashboard with normalized fields
+      // Extract fields so frontend doesn't need to parse JSON
+      const extracted = extractMessageFields(message);
+      const toolInvocations = extractToolInvocations(message);
+      const toolResults = extractToolResults(message);
+
+
+      getBroadcastService().broadcast('sdk:message', {
+        instanceId,
+        message,  // Keep raw for backwards compat / debugging
+        // Normalized fields for direct use
+        sdkUuid: msg.uuid,
+        sdkType: extracted.sdkType,
+        sdkSubtype: extracted.sdkSubtype,
+        parentToolUseId: extracted.parentToolUseId,
+        role: extracted.role,
+        textContent: extracted.textContent,
+        model: extracted.model,
+        // Tool data extracted from content blocks
+        toolInvocations,
+        toolResults,
+      });
       break;
     }
 

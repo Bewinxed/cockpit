@@ -41,11 +41,21 @@ interface ProjectData {
 
 interface InstanceMessage {
   id: string;
-  content: string | Record<string, unknown>;
-  messageType: string;
+  instanceId: string;
   timestamp: string;
   /** SDK's message UUID - required for resumeSessionAt when editing */
   sdkUuid?: string;
+  // Normalized fields from schema
+  sdkType: string;
+  sdkSubtype?: string | null;
+  parentToolUseId?: string | null;
+  role?: 'user' | 'assistant' | null;
+  textContent?: string | null;
+  rawContent: unknown;
+  model?: string | null;
+  inputTokens?: number | null;
+  outputTokens?: number | null;
+  costUsd?: number | null;
 }
 
 async function fetchFromHub<T>(path: string): Promise<T[]> {

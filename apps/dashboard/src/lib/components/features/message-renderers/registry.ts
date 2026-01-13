@@ -16,19 +16,19 @@ const renderers: MessageRenderer[] = [
 	// Interactive system message types (priority 100)
 	{
 		component: LoginPrompt,
-		match: (m) => m.type === 'system' && m.metadata?.subtype === 'login_prompt',
+		match: (m: Message) => m.type === 'system' && m.metadata?.subtype === 'login_prompt',
 		priority: 100,
 		name: 'LoginPrompt'
 	},
 	{
 		component: ModelPicker,
-		match: (m) => m.type === 'system' && m.metadata?.subtype === 'model_picker',
+		match: (m: Message) => m.type === 'system' && m.metadata?.subtype === 'model_picker',
 		priority: 100,
 		name: 'ModelPicker'
 	},
 	{
 		component: MemoryPicker,
-		match: (m) => m.type === 'system' && m.metadata?.subtype === 'memory_picker',
+		match: (m: Message) => m.type === 'system' && m.metadata?.subtype === 'memory_picker',
 		priority: 100,
 		name: 'MemoryPicker'
 	},
@@ -36,7 +36,7 @@ const renderers: MessageRenderer[] = [
 	// Visual system message types (priority 80)
 	{
 		component: CompactBoundary,
-		match: (m) => m.type === 'system' && m.metadata?.subtype === 'compact_boundary',
+		match: (m: Message) => m.type === 'system' && m.metadata?.subtype === 'compact_boundary',
 		priority: 80,
 		name: 'CompactBoundary'
 	},
@@ -44,7 +44,7 @@ const renderers: MessageRenderer[] = [
 	// Thinking blocks (priority 90 - show before regular messages)
 	{
 		component: ThinkingBlock,
-		match: (m) => m.type === 'thinking',
+		match: (m: Message) => m.type === 'thinking',
 		priority: 90,
 		name: 'ThinkingBlock'
 	},
@@ -52,7 +52,7 @@ const renderers: MessageRenderer[] = [
 	// Result error messages (priority 85)
 	{
 		component: ResultError,
-		match: (m) => m.type === 'result_error',
+		match: (m: Message) => m.type === 'result_error',
 		priority: 85,
 		name: 'ResultError'
 	}

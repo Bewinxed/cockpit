@@ -14,10 +14,14 @@
   import { getAgents, getInstances, getProjects } from '$lib/data.remote';
   import { restoreTabsFromStorage, persistTabsToStorage, openInstance } from '$lib/stores/url-sync.svelte';
   import '$lib/stores/theme';
+  import type { Snippet } from 'svelte';
 
   // Shell components
   import AppShell from '$lib/components/shell/AppShell.svelte';
   import { Toaster } from '$lib/components/ui/sonner';
+
+  // Svelte 5: children snippet for layout
+  let { children }: { children: Snippet } = $props();
 
   // Track seen permission IDs to show toasts only for new ones
   let seenPermissionIds = new Set<string>();
@@ -113,3 +117,4 @@
 
 <Toaster position="bottom-right" />
 <AppShell />
+{@render children()}

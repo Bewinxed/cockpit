@@ -82,21 +82,60 @@ export const tasks = sqliteTable('tasks', {
   index('tasks_type_idx').on(table.type),
 ]);
 
-// messages - conversation history (optional, for replay)
+// messages - conversation history with normalized fields for relational queries
 export const messages = sqliteTable('messages', {
   id: text('id').primaryKey(),
   instanceId: text('instance_id').references(() => instances.id).notNull(),
-  messageType: text('message_type').notNull(),
-  content: text('content', { mode: 'json' }).notNull(),
-  // SDK's message UUID for resumeSessionAt - this is different from our local id
-  // Only available from SDK events, may be null for older messages
-  sdkUuid: text('sdk_uuid'),
+  // SDK fields - extracted for relational queries
+  sdkUuid: text('sdk_uuid').unique(),  // SDK's message UUID for resumeSessionAt
+  sdkType: text('sdk_type').notNull(),  // 'user' | 'assistant' | 'system' | 'result'
+  sdkSubtype: text('sdk_subtype'),  // 'init' | 'compact_boundary' | etc.
+  parentToolUseId: text('parent_tool_use_id'),  // Links to parent Task tool for subagent messages
+  role: text('role'),  // 'user' | 'assistant' (quick filtering)
+  // Content
+  textContent: text('text_content'),  // Extracted text for display/search
+  rawContent: text('raw_content', { mode: 'json' }).notNull(),  // Full SDK message (for replay)
+  // Model & usage
+  model: text('model'),
+  inputTokens: integer('input_tokens'),
+  outputTokens: integer('output_tokens'),
+  costUsd: real('cost_usd'),
+  // Timestamps
   timestamp: integer('timestamp', { mode: 'timestamp' }).notNull(),
+  createdAt: integer('created_at', { mode: 'timestamp' }),
 }, (table) => [
   index('messages_instance_id_idx').on(table.instanceId),
   index('messages_timestamp_idx').on(table.timestamp),
-  index('messages_message_type_idx').on(table.messageType),
   index('messages_sdk_uuid_idx').on(table.sdkUuid),
+  index('messages_parent_tool_use_id_idx').on(table.parentToolUseId),
+  index('messages_sdk_type_idx').on(table.sdkType),
+  index('messages_role_idx').on(table.role),
+]);
+
+// tool_invocations - individual tool calls extracted from messages
+export const toolInvocations = sqliteTable('tool_invocations', {
+  id: text('id').primaryKey(),  // SDK's tool_use_id (e.g. toolu_015D36eARg...)
+  messageId: text('message_id').references(() => messages.id).notNull(),
+  instanceId: text('instance_id').references(() => instances.id).notNull(),
+  toolName: text('tool_name').notNull(),  // 'Task', 'Glob', 'Read', etc.
+  toolInput: text('tool_input', { mode: 'json' }),  // Input object passed to tool
+  toolResult: text('tool_result', { mode: 'json' }),  // SDK's tool_use_result metadata
+  toolResultContent: text('tool_result_content'),  // Raw result content (can be large)
+  status: text('status').notNull().default('pending'),  // 'pending' | 'success' | 'error'
+  isError: integer('is_error', { mode: 'boolean' }).default(false),
+  durationMs: integer('duration_ms'),  // From tool_use_result.durationMs
+  // For Task tools (subagents)
+  subagentType: text('subagent_type'),  // 'Explore', 'flow:repo-scout', etc.
+  subagentDescription: text('subagent_description'),  // Short description
+  // Timestamps
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+  completedAt: integer('completed_at', { mode: 'timestamp' }),
+}, (table) => [
+  index('tool_invocations_message_id_idx').on(table.messageId),
+  index('tool_invocations_instance_id_idx').on(table.instanceId),
+  index('tool_invocations_tool_name_idx').on(table.toolName),
+  index('tool_invocations_status_idx').on(table.status),
+  index('tool_invocations_subagent_type_idx').on(table.subagentType),
 ]);
 
 // credentials - OAuth tokens and API keys for Claude authentication
@@ -135,6 +174,9 @@ export type NewTask = typeof tasks.$inferInsert;
 export type Message = typeof messages.$inferSelect;
 export type NewMessage = typeof messages.$inferInsert;
 
+export type ToolInvocation = typeof toolInvocations.$inferSelect;
+export type NewToolInvocation = typeof toolInvocations.$inferInsert;
+
 export type Credential = typeof credentials.$inferSelect;
 export type NewCredential = typeof credentials.$inferInsert;
 
@@ -145,3 +187,5 @@ export type InstanceStatus = 'starting' | 'running' | 'stopping' | 'stopped' | '
 export type TaskType = 'major' | 'minor';
 export type TaskStatus = 'in_progress' | 'completed' | 'blocked' | 'cancelled';
 export type CredentialType = 'oauth' | 'api_key';
+export type SdkMessageType = 'user' | 'assistant' | 'system' | 'result';
+export type ToolInvocationStatus = 'pending' | 'success' | 'error';

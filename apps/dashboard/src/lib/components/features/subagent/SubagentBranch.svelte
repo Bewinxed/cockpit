@@ -5,6 +5,9 @@
   import Markdown from '@humanspeak/svelte-markdown';
   import type { SubagentState, Message } from '$lib/stores/realtime.svelte';
   import { getChildSubagents } from '$lib/stores/realtime.svelte';
+  import { getToolGlance, getResultGlimpse, formatToolResult, getToolStatus } from '$lib/utils/tool-display';
+  import { SvelteSet } from 'svelte/reactivity';
+  import SubagentBranch from './SubagentBranch.svelte';
 
   interface Props {
     subagent: SubagentState;
@@ -17,10 +20,11 @@
   let elapsedMs = $state(0);
   let intervalId: ReturnType<typeof setInterval> | null = null;
   // Track which tools are expanded (collapsed by default)
-  let expandedTools = $state<Set<string>>(new Set());
+  let expandedTools = new SvelteSet<string>();
 
-  // Get child subagents (nested)
-  const childSubagents = $derived(getChildSubagents(subagent.toolUseId));
+  // Get child subagents (nested) - getChildSubagents returns a store
+  const childSubagentsStore = $derived(getChildSubagents(subagent.toolUseId));
+  const childSubagents = $derived($childSubagentsStore);
 
   // Calculate elapsed time
   const elapsedText = $derived.by(() => {
@@ -58,50 +62,6 @@
     subagent.messages.filter(m => m.type === 'tool_use')
   );
 
-  // Get compact tool info for display
-  function getToolStatus(tool: Message): 'pending' | 'success' | 'error' {
-    return tool.metadata?.toolStatus || 'pending';
-  }
-
-  // Get a brief description/glance for a tool (same logic as ToolGroup)
-  function getToolGlance(tool: Message): string {
-    const input = tool.metadata?.toolInput as Record<string, unknown> | undefined;
-    if (!input) return '';
-
-    // File operations - show path
-    if (input.file_path) return String(input.file_path).split('/').slice(-2).join('/');
-    if (input.path) return String(input.path).split('/').slice(-2).join('/');
-
-    // Bash - show command preview
-    if (input.command) {
-      const cmd = String(input.command);
-      return cmd.length > 40 ? cmd.slice(0, 40) + '...' : cmd;
-    }
-
-    // Search - show pattern
-    if (input.pattern) return `/${input.pattern}/`;
-
-    // Glob
-    if (input.glob) return String(input.glob);
-
-    return '';
-  }
-
-  // Get tool result as string
-  function getToolResult(tool: Message): string | null {
-    const result = tool.metadata?.toolResult;
-    if (result === undefined || result === null) return null;
-    return typeof result === 'string' ? result : JSON.stringify(result, null, 2);
-  }
-
-  // Get first line or first N chars as glimpse
-  function getResultGlimpse(result: string | null): string {
-    if (!result) return '';
-    const firstLine = result.split('\n')[0];
-    if (firstLine.length > 60) return firstLine.slice(0, 60) + '...';
-    return firstLine;
-  }
-
   // Toggle tool expansion
   function toggleTool(toolId: string) {
     if (expandedTools.has(toolId)) {
@@ -109,7 +69,7 @@
     } else {
       expandedTools.add(toolId);
     }
-    expandedTools = new Set(expandedTools); // trigger reactivity
+    // SvelteSet is reactive, no need to reassign
   }
 
   function isToolExpanded(toolId: string): boolean {
@@ -209,10 +169,11 @@
         <div class="space-y-0.5">
           {#each toolMessages as tool, idx (tool.metadata?.toolId ?? tool.id ?? idx)}
             {@const toolId = (tool.metadata?.toolId ?? tool.id ?? `tool-${idx}`) as string}
-            {@const status = getToolStatus(tool)}
-            {@const glance = getToolGlance(tool)}
-            {@const result = getToolResult(tool)}
-            {@const resultGlimpse = getResultGlimpse(result)}
+            {@const input = tool.metadata?.toolInput as Record<string, unknown> | undefined}
+            {@const status = getToolStatus(tool.metadata)}
+            {@const glance = getToolGlance(input)}
+            {@const result = formatToolResult(tool.metadata?.toolResult)}
+            {@const resultGlimpse = getResultGlimpse(tool.metadata?.toolResult)}
             {@const isExpanded = isToolExpanded(toolId)}
             <div class="border-b border-border/30 last:border-b-0">
               <!-- Tool header (clickable to expand) -->
@@ -284,10 +245,10 @@
       {/if}
 
       <!-- Nested subagents -->
-      {#if $childSubagents.length > 0}
+      {#if childSubagents.length > 0}
         <div class="px-3 pb-3 space-y-2">
-          {#each $childSubagents as child (child.toolUseId)}
-            <svelte:self subagent={child} depth={depth + 1} />
+          {#each childSubagents as child (child.toolUseId)}
+            <SubagentBranch subagent={child} depth={depth + 1} />
           {/each}
         </div>
       {/if}

@@ -4,6 +4,8 @@
 	import type { Message } from '$lib/stores/realtime.svelte';
 	import DiffView from './DiffView.svelte';
 	import DiffModal from './DiffModal.svelte';
+	import { getToolGlance, getResultGlimpse } from '$lib/utils/tool-display';
+	import { SvelteSet } from 'svelte/reactivity';
 
 	interface Props {
 		tools: Message[];
@@ -12,7 +14,7 @@
 	let { tools }: Props = $props();
 
 	// Track which tools are expanded
-	let expandedTools = $state<Set<string>>(new Set());
+	let expandedTools = new SvelteSet<string>();
 
 	// Check if all tools are complete
 	const allComplete = $derived(tools.every(t => t.metadata?.toolStatus !== 'pending'));
@@ -32,42 +34,6 @@
 		if (name.includes('web') || name.includes('fetch')) return Globe;
 		if (name.includes('code')) return Code;
 		return Wrench;
-	}
-
-	// Get a brief description/glance for a tool (shows in collapsed state)
-	function getToolGlance(tool: Message): string {
-		const input = tool.metadata?.toolInput as Record<string, unknown> | undefined;
-		if (!input) return '';
-
-		// File operations - show path
-		if (input.file_path) return String(input.file_path).split('/').slice(-2).join('/');
-		if (input.path) return String(input.path).split('/').slice(-2).join('/');
-
-		// Bash - show command preview
-		if (input.command) {
-			const cmd = String(input.command);
-			return cmd.length > 40 ? cmd.slice(0, 40) + '...' : cmd;
-		}
-
-		// Search - show pattern
-		if (input.pattern) return `/${input.pattern}/`;
-
-		// Glob
-		if (input.glob) return String(input.glob);
-
-		return '';
-	}
-
-	// Get a preview of the result (for glance view)
-	function getResultGlance(tool: Message): string | null {
-		const result = tool.metadata?.toolResult;
-		if (result === undefined || result === null) return null;
-
-		const str = typeof result === 'string' ? result : JSON.stringify(result);
-		// Get first line or first 60 chars
-		const firstLine = str.split('\n')[0];
-		if (firstLine.length > 60) return firstLine.slice(0, 60) + '...';
-		return firstLine;
 	}
 
 	// Check if tool is a file diff tool
@@ -100,7 +66,6 @@
 		} else {
 			expandedTools.add(toolId);
 		}
-		expandedTools = new Set(expandedTools);
 	}
 
 	// Diff modal state
@@ -140,11 +105,11 @@
 			{@const toolId = tool.id || `tool-${i}`}
 			{@const isOpen = expandedTools.has(toolId)}
 			{@const toolName = tool.metadata?.toolName || 'Tool'}
-			{@const glance = getToolGlance(tool)}
-			{@const resultGlance = getResultGlance(tool)}
+			{@const input = tool.metadata?.toolInput as Record<string, unknown> | undefined}
+			{@const glance = getToolGlance(input)}
+			{@const resultGlance = getResultGlimpse(tool.metadata?.toolResult)}
 			{@const status = tool.metadata?.toolStatus}
 			{@const ToolIcon = getToolIcon(toolName)}
-			{@const input = tool.metadata?.toolInput as Record<string, unknown> | undefined}
 			{@const result = tool.metadata?.toolResult}
 			{@const diffInfo = getDiffInfo(input, toolName)}
 

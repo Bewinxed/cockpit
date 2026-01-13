@@ -73,7 +73,7 @@
 	const renderer = $derived(getRenderer(message));
 
 	// Determine if a specialized renderer is active
-	const rendererIsActive = $derived(() => {
+	const rendererIsActive = $derived.by(() => {
 		if (!renderer) return false;
 		if (renderer.name === 'LoginPrompt') return isLoginActive;
 		if (renderer.name === 'ModelPicker') return isModelPickerActive;
@@ -85,7 +85,7 @@
 	const rendererProps = $derived<MessageRendererProps>({
 		message,
 		instanceId,
-		isActive: rendererIsActive(),
+		isActive: rendererIsActive,
 		showTimestamp,
 		onLoginSubmit,
 		onLoginCancel,
@@ -98,7 +98,7 @@
 	});
 
 	// Auto-expand for diff tools, collapsed for others
-	const hasDiff = $derived(() => {
+	const hasDiff = $derived.by(() => {
 		if (message.type !== 'tool_use' && message.type !== 'tool_result') return false;
 		const toolName = message.metadata?.toolName;
 		if (!toolName) return false;
@@ -116,15 +116,16 @@
 		return diffTools.includes(toolName);
 	});
 
-	let isExpanded = $state(false);
 	let diffFullyExpanded = $state(false);
+	// Track manual override of expansion state. Null means "auto" (based on hasDiff), otherwise use the boolean value
+	let manualExpansion = $state<boolean | null>(null);
+	// isExpanded: use manual override if set, otherwise auto-expand for diff tools
+	const isExpanded = $derived(manualExpansion ?? hasDiff);
 
-	// Auto-expand diff tools on mount
-	$effect(() => {
-		if (hasDiff()) {
-			isExpanded = true;
-		}
-	});
+	function toggleExpanded() {
+		// When user manually toggles, override the auto-expansion
+		manualExpansion = !isExpanded;
+	}
 
 	// Message editing state
 	let isEditing = $state(false);
@@ -175,7 +176,7 @@
 	}
 
 	// Get tool info from metadata or parse from content (backwards compatibility)
-	const toolInfo = $derived(() => {
+	const toolInfo = $derived.by(() => {
 		if (message.type !== 'tool_use' && message.type !== 'tool_result') return null;
 
 		// Use metadata if available (new format)
@@ -206,7 +207,7 @@
 	});
 
 	// Get hook info from metadata
-	const hookInfo = $derived(() => {
+	const hookInfo = $derived.by(() => {
 		if (message.type !== 'hook_response') return null;
 		return {
 			name: message.metadata?.hookName || 'Hook',
@@ -335,6 +336,21 @@
 			icon: HelpCircle,
 			iconBg: 'bg-primary/10',
 			iconColor: 'text-primary'
+		},
+		thinking: {
+			align: 'justify-start',
+			bubble: 'px-3 py-2.5 text-sm rounded-xl bg-muted/50 border border-border shadow-sm',
+			icon: Bot,
+			iconBg: 'bg-accent',
+			iconColor: 'text-muted-foreground'
+		},
+		result_error: {
+			align: 'justify-start',
+			bubble:
+				'relative px-4 py-3 text-sm leading-relaxed rounded-2xl rounded-bl-sm bg-destructive/10 text-destructive border border-destructive/30 shadow-sm',
+			icon: AlertCircle,
+			iconBg: 'bg-destructive/10',
+			iconColor: 'text-destructive'
 		}
 	};
 
@@ -371,7 +387,7 @@
 				<div class="w-full bg-card border border-border rounded-xl overflow-hidden shadow-sm">
 					<button
 						class="w-full px-3 py-2.5 text-left cursor-pointer hover:bg-muted/50 transition-colors flex items-center gap-2"
-						onclick={() => (isExpanded = !isExpanded)}
+						onclick={toggleExpanded}
 					>
 						{#if isExpanded}
 							<ChevronDown
@@ -383,12 +399,12 @@
 							/>
 						{/if}
 						<span class="font-medium text-foreground text-sm">
-							{toolInfo()?.name || 'Tool'}
+							{toolInfo?.name || 'Tool'}
 						</span>
 						<!-- Status indicator -->
-						{#if toolInfo()?.status === 'pending'}
+						{#if toolInfo?.status === 'pending'}
 							<Loader2 class="w-4 h-4 text-amber-500 animate-spin ml-auto" />
-						{:else if toolInfo()?.status === 'error'}
+						{:else if toolInfo?.status === 'error'}
 							<XCircle class="w-4 h-4 text-destructive ml-auto" />
 						{:else}
 							<CheckCircle2 class="w-4 h-4 text-emerald-500 ml-auto" />
@@ -396,7 +412,7 @@
 					</button>
 
 					{#if isExpanded}
-						{@const tool = toolInfo()}
+						{@const tool = toolInfo}
 						{@const diffInfo = getDiffInfo(
 							tool?.input as Record<string, unknown> | undefined,
 							tool?.name
@@ -481,7 +497,7 @@
 				<div class="w-full bg-card border border-border rounded-xl overflow-hidden shadow-sm">
 					<button
 						class="w-full px-3 py-2.5 text-left cursor-pointer hover:bg-muted/50 transition-colors flex items-center gap-2"
-						onclick={() => (isExpanded = !isExpanded)}
+						onclick={toggleExpanded}
 					>
 						{#if isExpanded}
 							<ChevronDown
@@ -493,21 +509,21 @@
 							/>
 						{/if}
 						<span class="font-medium text-foreground text-sm">
-							{hookInfo()?.name || 'Hook'}
+							{hookInfo?.name || 'Hook'}
 						</span>
 						<!-- Exit code indicator -->
-						{#if hookInfo()?.exitCode === 0}
+						{#if hookInfo?.exitCode === 0}
 							<CheckCircle2 class="w-4 h-4 text-emerald-500 ml-auto" />
 						{:else}
 							<XCircle class="w-4 h-4 text-destructive ml-auto" />
 						{/if}
 						<span class="text-xs text-muted-foreground font-mono">
-							exit {hookInfo()?.exitCode}
+							exit {hookInfo?.exitCode}
 						</span>
 					</button>
 
 					{#if isExpanded}
-						{@const hook = hookInfo()}
+						{@const hook = hookInfo}
 						<div class="p-3 pt-0 space-y-3 border-t border-border">
 							<!-- stdout -->
 							{#if hook?.stdout}

@@ -244,15 +244,26 @@ export async function refreshAll(): Promise<void> {
  * Fetch messages for an instance to get UUIDs for recently sent messages
  * This is used to enable editing after sending when SSE doesn't provide UUIDs
  */
+export interface StoredMessage {
+  id: string;
+  instanceId: string;
+  timestamp: string;
+  sdkUuid?: string;
+  sdkType: string;
+  sdkSubtype?: string | null;
+  parentToolUseId?: string | null;
+  role?: 'user' | 'assistant' | null;
+  textContent?: string | null;
+  rawContent: unknown;
+  model?: string | null;
+  inputTokens?: number | null;
+  outputTokens?: number | null;
+  costUsd?: number | null;
+}
+
 export async function fetchInstanceMessages(instanceId: string): Promise<{
   success: boolean;
-  messages?: Array<{
-    id: string;
-    content: unknown;
-    messageType: string;
-    timestamp: string;
-    uuid?: string;
-  }>;
+  messages?: StoredMessage[];
   error?: string;
 }> {
   const { data, error } = await api.api.instances({ id: instanceId }).messages.get();
@@ -262,20 +273,11 @@ export async function fetchInstanceMessages(instanceId: string): Promise<{
     return { success: false, error: errorMsg };
   }
 
-  // Debug: log what we get
-  console.log('[fetchInstanceMessages] Response:', JSON.stringify(data, null, 2).slice(0, 500));
-
   const responseData = data as { success?: boolean; data?: unknown[] };
   if (responseData?.success && responseData?.data) {
     return {
       success: true,
-      messages: responseData.data as Array<{
-        id: string;
-        content: unknown;
-        messageType: string;
-        timestamp: string;
-        uuid?: string;
-      }>,
+      messages: responseData.data as StoredMessage[],
     };
   }
 
