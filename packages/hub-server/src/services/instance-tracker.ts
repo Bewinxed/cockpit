@@ -1,13 +1,19 @@
 import type { Db } from '@cockpit/db';
 import type { Instance, InstanceStatus, SpawnInstanceData, UpdateInstanceData } from '@cockpit/core';
-import { instances, messages, eq, and, asc, desc, sql, inArray } from '@cockpit/db';
+import { instances, messages, toolInvocations, eq, and, asc, desc, sql, inArray } from '@cockpit/db';
 import { generateId } from '@cockpit/core/utils';
+import {
+  extractMessageFields,
+  extractToolInvocations,
+  extractToolResults,
+  type ExtractedMessageFields,
+} from './message-extractor';
 
 /**
  * Data for saving a message
  */
 export interface SaveMessageData {
-  messageType: string;
+  /** Full SDK message object */
   content: unknown;
   timestamp?: Date;
   /** SDK's message UUID - required for resumeSessionAt */
@@ -15,16 +21,25 @@ export interface SaveMessageData {
 }
 
 /**
- * Message from database
+ * Message from database (relational model)
  */
 export interface StoredMessage {
   id: string;
   instanceId: string;
-  messageType: string;
-  content: unknown;
   timestamp: Date;
   /** SDK's message UUID - required for resumeSessionAt */
   sdkUuid?: string;
+  // Normalized fields
+  sdkType: string;
+  sdkSubtype?: string | null;
+  parentToolUseId?: string | null;
+  role?: 'user' | 'assistant' | null;
+  textContent?: string | null;
+  rawContent: unknown;
+  model?: string | null;
+  inputTokens?: number | null;
+  outputTokens?: number | null;
+  costUsd?: number | null;
 }
 
 /**
@@ -326,30 +341,97 @@ export class InstanceTracker {
   // ============================================
 
   /**
-   * Save a message for an instance
+   * Save a message for an instance with normalized field extraction.
+   * Also extracts tool_use blocks into tool_invocations table and
+   * updates tool_invocations when tool_result blocks are received.
    */
   async saveMessage(instanceId: string, data: SaveMessageData): Promise<StoredMessage> {
     const id = generateId();
     const timestamp = data.timestamp ?? new Date();
 
+    // Extract normalized fields from SDK message
+    const extracted = extractMessageFields(data.content);
+
+    // Build message record with normalized fields
     const newMessage = {
       id,
       instanceId,
-      messageType: data.messageType,
-      content: data.content,
+      sdkUuid: extracted.sdkUuid ?? data.sdkUuid ?? null,
+      sdkType: extracted.sdkType,
+      sdkSubtype: extracted.sdkSubtype,
+      parentToolUseId: extracted.parentToolUseId,
+      role: extracted.role,
+      textContent: extracted.textContent,
+      rawContent: extracted.rawContent,
+      model: extracted.model,
+      inputTokens: extracted.inputTokens,
+      outputTokens: extracted.outputTokens,
+      costUsd: extracted.costUsd,
       timestamp,
-      sdkUuid: data.sdkUuid ?? null,
+      createdAt: timestamp,
     };
 
     await this.db.insert(messages).values(newMessage);
 
+    // Extract and insert tool_use blocks from assistant messages
+    const toolInvocationsToInsert = extractToolInvocations(data.content);
+    if (toolInvocationsToInsert.length > 0) {
+      const toolRecords = toolInvocationsToInsert.map((tool) => ({
+        id: tool.id,
+        messageId: id,
+        instanceId,
+        toolName: tool.toolName,
+        toolInput: tool.toolInput,
+        status: 'pending' as const,
+        subagentType: tool.subagentType,
+        subagentDescription: tool.subagentDescription,
+        createdAt: timestamp,
+      }));
+
+      try {
+        await this.db.insert(toolInvocations).values(toolRecords);
+      } catch (err) {
+        // Tool invocation might already exist (duplicate message)
+        console.warn('[InstanceTracker] Failed to insert tool invocations:', err);
+      }
+    }
+
+    // Extract and update tool_result blocks (update existing tool_invocations)
+    const toolResultUpdates = extractToolResults(data.content);
+    for (const update of toolResultUpdates) {
+      try {
+        await this.db
+          .update(toolInvocations)
+          .set({
+            toolResult: update.toolResult,
+            toolResultContent: update.toolResultContent,
+            status: update.status,
+            isError: update.isError,
+            durationMs: update.durationMs,
+            completedAt: timestamp,
+          })
+          .where(eq(toolInvocations.id, update.toolUseId));
+      } catch (err) {
+        // Tool invocation might not exist yet (result before use, or from subagent)
+        console.warn(`[InstanceTracker] Failed to update tool invocation ${update.toolUseId}:`, err);
+      }
+    }
+
     return {
       id,
       instanceId,
-      messageType: data.messageType,
-      content: data.content,
       timestamp,
-      sdkUuid: data.sdkUuid,
+      sdkUuid: extracted.sdkUuid ?? data.sdkUuid,
+      sdkType: extracted.sdkType,
+      sdkSubtype: extracted.sdkSubtype,
+      parentToolUseId: extracted.parentToolUseId,
+      role: extracted.role,
+      textContent: extracted.textContent,
+      rawContent: extracted.rawContent,
+      model: extracted.model,
+      inputTokens: extracted.inputTokens,
+      outputTokens: extracted.outputTokens,
+      costUsd: extracted.costUsd,
     };
   }
 
@@ -368,10 +450,18 @@ export class InstanceTracker {
     return results.map((row) => ({
       id: row.id,
       instanceId: row.instanceId,
-      messageType: row.messageType,
-      content: row.content,
       timestamp: row.timestamp,
       sdkUuid: row.sdkUuid ?? undefined,
+      sdkType: row.sdkType,
+      sdkSubtype: row.sdkSubtype,
+      parentToolUseId: row.parentToolUseId,
+      role: row.role as 'user' | 'assistant' | null,
+      textContent: row.textContent,
+      rawContent: row.rawContent,
+      model: row.model,
+      inputTokens: row.inputTokens,
+      outputTokens: row.outputTokens,
+      costUsd: row.costUsd,
     }));
   }
 
@@ -391,10 +481,18 @@ export class InstanceTracker {
     return results.map((row) => ({
       id: row.id,
       instanceId: row.instanceId,
-      messageType: row.messageType,
-      content: row.content,
       timestamp: row.timestamp,
       sdkUuid: row.sdkUuid ?? undefined,
+      sdkType: row.sdkType,
+      sdkSubtype: row.sdkSubtype,
+      parentToolUseId: row.parentToolUseId,
+      role: row.role as 'user' | 'assistant' | null,
+      textContent: row.textContent,
+      rawContent: row.rawContent,
+      model: row.model,
+      inputTokens: row.inputTokens,
+      outputTokens: row.outputTokens,
+      costUsd: row.costUsd,
     }));
   }
 
@@ -409,6 +507,43 @@ export class InstanceTracker {
       .where(eq(messages.instanceId, instanceId));
 
     return count;
+  }
+
+  /**
+   * Get tool invocations for an instance
+   */
+  async getToolInvocations(instanceId: string): Promise<Array<{
+    id: string;
+    toolName: string;
+    toolInput: unknown;
+    toolResult: unknown;
+    toolResultContent: string | null;
+    status: string;
+    isError: boolean;
+    subagentType: string | null;
+    subagentDescription: string | null;
+    createdAt: Date;
+    completedAt: Date | null;
+  }>> {
+    const results = await this.db
+      .select()
+      .from(toolInvocations)
+      .where(eq(toolInvocations.instanceId, instanceId))
+      .orderBy(asc(toolInvocations.createdAt));
+
+    return results.map((row) => ({
+      id: row.id,
+      toolName: row.toolName,
+      toolInput: row.toolInput,
+      toolResult: row.toolResult,
+      toolResultContent: row.toolResultContent,
+      status: row.status,
+      isError: row.isError ?? false,
+      subagentType: row.subagentType,
+      subagentDescription: row.subagentDescription,
+      createdAt: row.createdAt,
+      completedAt: row.completedAt,
+    }));
   }
 
   /**

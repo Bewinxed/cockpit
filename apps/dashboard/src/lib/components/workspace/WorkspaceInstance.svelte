@@ -23,7 +23,6 @@
     clearInstanceSubagents,
     updateStreamingState,
     updateMessageMetadata,
-    updateUserMessageUuid,
     streamingMessages,
     reconstructSubagentsFromHistory,
     activeSubagents,
@@ -40,10 +39,20 @@
 
   interface DbMessage {
     id: string;
-    content: string | Record<string, unknown>;
-    messageType: string;
+    instanceId: string;
     timestamp: string | Date;
     sdkUuid?: string;
+    // Normalized fields
+    sdkType: string;
+    sdkSubtype?: string | null;
+    parentToolUseId?: string | null;
+    role?: 'user' | 'assistant' | null;
+    textContent?: string | null;
+    rawContent: unknown;
+    model?: string | null;
+    inputTokens?: number | null;
+    outputTokens?: number | null;
+    costUsd?: number | null;
   }
 
   // Default commands available in all instances
@@ -72,35 +81,53 @@
   const instance = $derived($instances.get(instanceId));
   const agent = $derived(instance?.machineId ? $agents.get(instance.machineId) : undefined);
 
-  // Create stores that react to instanceId changes
-  let messagesStore = $derived.by(() => getInstanceMessages(instanceId));
-  let permissionsStore = $derived.by(() => getInstancePermissions(instanceId));
-  let streamingStateStore = $derived.by(() => getStreamingState(instanceId));
-  let streamingMessageStore = $derived.by(() => getStreamingMessage(instanceId));
-  let instanceStatusStore = $derived.by(() => getInstanceStatus(instanceId));
+  // Create reactive derivations that access store values
+  // We need to get the store first, then access its value with $
+  const messagesStoreRef = $derived(getInstanceMessages(instanceId));
+  const currentMessages = $derived($messagesStoreRef);
+
+  const permissionsStoreRef = $derived(getInstancePermissions(instanceId));
+  const currentPermissions = $derived($permissionsStoreRef);
+
+  const streamingStateStoreRef = $derived(getStreamingState(instanceId));
+  const streamingState = $derived($streamingStateStoreRef);
+
+  const streamingMessageStoreRef = $derived(getStreamingMessage(instanceId));
+  const streamingMessage = $derived($streamingMessageStoreRef);
+
+  const instanceStatusStoreRef = $derived(getInstanceStatus(instanceId));
+  const transientStatus = $derived($instanceStatusStoreRef);
 
   // Track which instances we've loaded messages for
-  let loadedInstances = new Set<string>();
+  let loadedInstances = $state(new Set<string>());
   let isLoadingMessages = $state(false);
 
-  // Parse database messages into UI format
+  // Content block types from SDK messages
+  type ContentBlock =
+    | { type: 'text'; text: string }
+    | { type: 'tool_use'; id: string; name: string; input: Record<string, unknown> }
+    | { type: 'tool_result'; tool_use_id: string; content: unknown; is_error?: boolean }
+    | { type: string; [key: string]: unknown };
+
+  // Parse database messages into UI format using normalized fields
   function parseDbMessages(dbMessages: DbMessage[]): Message[] {
     const result: Message[] = [];
     // First pass: collect tool results from user messages (SDK sends tool_result as user messages)
     const toolResults = new Map<string, { content: unknown; isError: boolean }>();
 
     for (const dbMsg of dbMessages) {
-      const content = typeof dbMsg.content === 'string' ? JSON.parse(dbMsg.content) : dbMsg.content;
-      const sdkType = content?.type || dbMsg.messageType;
-
-      // Look for tool_result blocks in user messages
-      if (sdkType === 'user' && content?.message?.content && Array.isArray(content.message.content)) {
-        for (const block of content.message.content) {
-          if (block?.type === 'tool_result' && block.tool_use_id) {
-            toolResults.set(block.tool_use_id, {
-              content: block.content,
-              isError: block.is_error || false,
-            });
+      // Use normalized sdkType field
+      if (dbMsg.sdkType === 'user' && dbMsg.rawContent) {
+        const raw = dbMsg.rawContent as { message?: { content?: ContentBlock[] } };
+        if (raw.message?.content && Array.isArray(raw.message.content)) {
+          for (const block of raw.message.content) {
+            if (block?.type === 'tool_result') {
+              const toolResultBlock = block as { type: 'tool_result'; tool_use_id: string; content: unknown; is_error?: boolean };
+              toolResults.set(toolResultBlock.tool_use_id, {
+                content: toolResultBlock.content,
+                isError: toolResultBlock.is_error || false,
+              });
+            }
           }
         }
       }
@@ -108,96 +135,104 @@
 
     // Second pass: build messages and match tool results
     for (const dbMsg of dbMessages) {
-      const content = typeof dbMsg.content === 'string' ? JSON.parse(dbMsg.content) : dbMsg.content;
-      const sdkType = content?.type || dbMsg.messageType;
-      const sdkUuid = dbMsg.sdkUuid || (content?.uuid as string | undefined);
-      // Extract parent_tool_use_id for subagent message routing
-      const parentToolUseId = content?.parent_tool_use_id as string | undefined;
+      const sdkUuid = dbMsg.sdkUuid;
+      // Use normalized parentToolUseId field
+      const parentToolUseId = dbMsg.parentToolUseId ?? undefined;
 
       // Skip messages from subagents in main chat - they'll be shown in SubagentBranch
       if (parentToolUseId) {
         // Still parse tool_use blocks for subagent messages (they need to be in subagent.messages)
-        if (sdkType === 'assistant' && content?.message?.content) {
-          for (const block of content.message.content) {
-            if (block?.type === 'tool_use') {
-              const toolResult = toolResults.get(block.id);
-              result.push({
-                id: dbMsg.id + '-' + block.id,
-                instanceId,
-                type: 'tool_use',
-                content: block.name || 'Tool',
-                timestamp: new Date(dbMsg.timestamp),
-                sdkUuid,
-                parentToolUseId,
-                metadata: {
-                  toolId: block.id,
-                  toolName: block.name,
-                  toolInput: block.input,
-                  toolResult: toolResult?.content,
-                  toolStatus: toolResult ? (toolResult.isError ? 'error' : 'success') : 'pending',
-                },
-              });
+        if (dbMsg.sdkType === 'assistant' && dbMsg.rawContent) {
+          const raw = dbMsg.rawContent as { message?: { content?: ContentBlock[] } };
+          if (raw.message?.content && Array.isArray(raw.message.content)) {
+            for (const block of raw.message.content) {
+              if (block?.type === 'tool_use') {
+                const toolUseBlock = block as { type: 'tool_use'; id: string; name: string; input: Record<string, unknown> };
+                const toolResult = toolResults.get(toolUseBlock.id);
+                result.push({
+                  id: dbMsg.id + '-' + toolUseBlock.id,
+                  instanceId,
+                  type: 'tool_use',
+                  content: toolUseBlock.name || 'Tool',
+                  timestamp: new Date(dbMsg.timestamp),
+                  sdkUuid,
+                  parentToolUseId,
+                  metadata: {
+                    toolId: toolUseBlock.id,
+                    toolName: toolUseBlock.name,
+                    toolInput: toolUseBlock.input,
+                    toolResult: toolResult?.content,
+                    toolStatus: toolResult ? (toolResult.isError ? 'error' : 'success') : 'pending',
+                  },
+                });
+              }
             }
           }
         }
         continue;
       }
 
-      if (sdkType === 'user' && content?.content) {
+      // Use normalized textContent for user messages
+      if (dbMsg.sdkType === 'user' && dbMsg.textContent) {
         result.push({
           id: dbMsg.id,
           instanceId,
           type: 'user',
-          content: content.content,
+          content: dbMsg.textContent,
           timestamp: new Date(dbMsg.timestamp),
           sdkUuid,
         });
-      } else if (sdkType === 'assistant' && content?.message?.content) {
-        for (const block of content.message.content) {
-          if (block?.type === 'text' && block.text) {
-            result.push({
-              id: dbMsg.id,
-              instanceId,
-              type: 'assistant',
-              content: block.text,
-              timestamp: new Date(dbMsg.timestamp),
-              sdkUuid,
-            });
-          } else if (block?.type === 'tool_use') {
-            const toolResult = toolResults.get(block.id);
-            const toolInput = block.input as Record<string, unknown> | undefined;
+      } else if (dbMsg.sdkType === 'assistant' && dbMsg.rawContent) {
+        const raw = dbMsg.rawContent as { message?: { content?: ContentBlock[] } };
+        if (raw.message?.content && Array.isArray(raw.message.content)) {
+          for (const block of raw.message.content) {
+            if (block?.type === 'text') {
+              const textBlock = block as { type: 'text'; text: string };
+              result.push({
+                id: dbMsg.id,
+                instanceId,
+                type: 'assistant',
+                content: textBlock.text,
+                timestamp: new Date(dbMsg.timestamp),
+                sdkUuid,
+              });
+            } else if (block?.type === 'tool_use') {
+              const toolUseBlock = block as { type: 'tool_use'; id: string; name: string; input: Record<string, unknown> };
+              const toolResult = toolResults.get(toolUseBlock.id);
+              const toolInput = toolUseBlock.input;
 
-            // Check if this is a Task tool (subagent spawn)
-            const isTaskTool = block.name === 'Task';
-            const subagentType = isTaskTool ? (toolInput?.subagent_type as string) : undefined;
-            const subagentDescription = isTaskTool ? (toolInput?.description as string) : undefined;
+              // Check if this is a Task tool (subagent spawn)
+              const isTaskTool = toolUseBlock.name === 'Task';
+              const subagentType = isTaskTool ? (toolInput?.subagent_type as string) : undefined;
+              const subagentDescription = isTaskTool ? (toolInput?.description as string) : undefined;
 
-            result.push({
-              id: dbMsg.id + '-' + block.id,
-              instanceId,
-              type: 'tool_use',
-              content: block.name || 'Tool',
-              timestamp: new Date(dbMsg.timestamp),
-              sdkUuid,
-              metadata: {
-                toolId: block.id,
-                toolName: block.name,
-                toolInput: block.input,
-                toolResult: toolResult?.content,
-                toolStatus: toolResult ? (toolResult.isError ? 'error' : 'success') : 'pending',
-                // Add subagent metadata for Task tools
-                subagentType,
-                subagentDescription,
-              },
-            });
+              result.push({
+                id: dbMsg.id + '-' + toolUseBlock.id,
+                instanceId,
+                type: 'tool_use',
+                content: toolUseBlock.name || 'Tool',
+                timestamp: new Date(dbMsg.timestamp),
+                sdkUuid,
+                metadata: {
+                  toolId: toolUseBlock.id,
+                  toolName: toolUseBlock.name,
+                  toolInput: toolUseBlock.input,
+                  toolResult: toolResult?.content,
+                  toolStatus: toolResult ? (toolResult.isError ? 'error' : 'success') : 'pending',
+                  // Add subagent metadata for Task tools
+                  subagentType,
+                  subagentDescription,
+                },
+              });
+            }
           }
         }
-      } else if (sdkType === 'system' && content?.subtype === 'init') {
+      } else if (dbMsg.sdkType === 'system' && dbMsg.sdkSubtype === 'init') {
         result.push({
           id: dbMsg.id,
           instanceId,
           type: 'system',
-          content: `Session started with ${content.model || 'Claude'}`,
+          content: `Session started with ${dbMsg.model || 'Claude'}`,
           timestamp: new Date(dbMsg.timestamp),
           sdkUuid,
         });
@@ -219,9 +254,17 @@
 
   async function loadMessages(id: string) {
     try {
-      const response = await api.api.instances({ id }).messages.get();
-      const result = response.data;
-      const messages = result?.data;
+      // Fetch messages and tool invocations in parallel
+      const [messagesResponse, toolsResponse] = await Promise.all([
+        api.api.instances({ id }).messages.get(),
+        api.api.instances({ id }).tools.get(),
+      ]);
+
+      const messagesResult = messagesResponse.data;
+      const messages = messagesResult?.data;
+      const toolsResult = toolsResponse.data;
+      const toolInvocations = toolsResult?.data;
+
       if (messages && Array.isArray(messages) && messages.length > 0) {
         let parsedMessages: Message[] = [];
         instanceMessages.update((map) => {
@@ -234,9 +277,9 @@
           }
           return map;
         });
-        // Reconstruct subagent tree from loaded messages
+        // Reconstruct subagent tree from loaded messages and tool invocations
         if (parsedMessages.length > 0) {
-          reconstructSubagentsFromHistory(id, parsedMessages);
+          reconstructSubagentsFromHistory(id, parsedMessages, toolInvocations);
         }
       }
     } catch (error) {
@@ -244,8 +287,7 @@
     }
   }
 
-  // Get current messages (from store)
-  const currentMessages = $derived($messagesStore || []);
+  // Note: currentMessages is already derived above from messagesStoreRef
 
   // Helper to check if a message is a Task tool_use (subagent spawn)
   function isTaskToolUse(msg: Message): boolean {
@@ -278,7 +320,7 @@
     | { type: 'tool_group'; messages: Message[]; startIndex: number }
     | { type: 'subagent_group'; messages: Message[]; startIndex: number };
 
-  const groupedMessages = $derived((): MessageGroup[] => {
+  const groupedMessages = $derived.by((): MessageGroup[] => {
     const groups: MessageGroup[] = [];
     let i = 0;
 
@@ -328,7 +370,6 @@
 
   // Auto-scroll hook
   const autoScroll = new UseAutoScroll();
-  let shouldAutoScroll = $state(true);
   let messagesContainer: HTMLDivElement | null = $state(null);
 
   $effect(() => {
@@ -337,9 +378,7 @@
     }
   });
 
-  $effect(() => {
-    shouldAutoScroll = autoScroll.isAtBottom;
-  });
+  const shouldAutoScroll = $derived(autoScroll.isAtBottom);
 
   // Commands state
   let commands = $state<AvailableCommand[]>(DEFAULT_COMMANDS);
@@ -381,17 +420,15 @@
   let interrupting = $state(false);
   let error = $state<string | null>(null);
 
-  // Get streaming state
-  const isStreaming = $derived($streamingStateStore?.isStreaming ?? false);
-  const transientStatus = $derived($instanceStatusStore);
+  // Get streaming state (streamingState, transientStatus, streamingMessage derived above)
+  const isStreaming = $derived(streamingState?.isStreaming ?? false);
 
-  // Streaming message for progressive text display
-  const streamingMessage = $derived($streamingMessageStore);
+  // Streaming message text for progressive display
   const streamingText = $derived.by(() => {
     const msg = streamingMessage;
     if (!msg || !msg.contentBlocks) return '';
     const texts: string[] = [];
-    const sortedIndices = Array.from(msg.contentBlocks.keys()).sort((a, b) => a - b);
+    const sortedIndices = Array.from(msg.contentBlocks.keys()).sort((a: number, b: number) => a - b);
     for (const idx of sortedIndices) {
       texts.push(msg.contentBlocks.get(idx) || '');
     }
@@ -541,8 +578,7 @@
         },
       });
 
-      const messages = $messagesStore || [];
-      pendingModelPickerIndex = messages.length - 1;
+      pendingModelPickerIndex = currentMessages.length - 1;
 
       try {
         const response = await fetch(`/api/instances/${instanceId}/models`);
@@ -575,8 +611,7 @@
         },
       });
 
-      const messages = $messagesStore || [];
-      pendingMemoryPickerIndex = messages.length - 1;
+      pendingMemoryPickerIndex = currentMessages.length - 1;
     } else if (command === '/vim') {
       addMessage(instanceId, {
         type: 'system',
@@ -692,8 +727,7 @@
   async function handleMemorySave(content: string): Promise<void> {
     if (pendingMemoryPickerIndex === null) return;
 
-    const messages = $messagesStore || [];
-    const message = messages[pendingMemoryPickerIndex];
+    const message = currentMessages[pendingMemoryPickerIndex];
     const memoryType = message?.metadata?.selectedMemoryType as 'project' | 'user';
 
     if (!memoryType) {
@@ -901,8 +935,6 @@
     sending = true;
     updateStreamingState(instanceId, { isStreaming: true });
 
-    const sentMessage = message;
-
     addMessage(instanceId, {
       type: 'user',
       content: message,
@@ -913,10 +945,6 @@
       const result = await api.api.instances({ id: instanceId }).send.post({
         message,
       });
-
-      if (result.data?.success && result.data.messageUuid) {
-        updateUserMessageUuid(instanceId, sentMessage, result.data.messageUuid);
-      }
 
       if (result.error || !result.data?.success) {
         const errMsg = (result.error as { message?: string })?.message || 'Failed to send message';
@@ -1013,7 +1041,7 @@
           </div>
         </div>
       {:else}
-        {#each groupedMessages() as group, groupIdx (group.type === 'tool_group' ? `tools-${group.startIndex}` : group.type === 'subagent_group' ? `subagents-${group.startIndex}` : group.message.id)}
+        {#each groupedMessages as group, groupIdx (group.type === 'tool_group' ? `tools-${group.startIndex}` : group.type === 'subagent_group' ? `subagents-${group.startIndex}` : group.message.id)}
           <div
             animate:flip={{ duration: 300 }}
             in:fly={{ y: 20, duration: 300 }}
@@ -1138,9 +1166,9 @@
   </div>
 
   <!-- Permission Requests (above input) -->
-  {#if $permissionsStore.length > 0}
+  {#if currentPermissions.length > 0}
     <div class="border-t border-border bg-warning/5 px-4 py-3">
-      {#each $permissionsStore as permission (permission.requestId)}
+      {#each currentPermissions as permission (permission.requestId)}
         <PermissionRequest request={permission} />
       {/each}
     </div>

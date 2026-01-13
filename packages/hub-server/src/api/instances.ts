@@ -243,7 +243,6 @@ export function createInstanceRoutes(db: Db) {
         // Save initial user prompt as message
         if (body.prompt) {
           await tracker.saveMessage(instance.id, {
-            messageType: 'user',
             content: { type: 'user', content: body.prompt },
             timestamp: new Date(),
           });
@@ -332,7 +331,6 @@ export function createInstanceRoutes(db: Db) {
 
         // Save user message and update last prompt
         await tracker.saveMessage(params.id, {
-          messageType: 'user',
           content: { type: 'user', content: body.message },
           timestamp: new Date(),
         });
@@ -535,6 +533,34 @@ export function createInstanceRoutes(db: Db) {
       }
     )
 
+    // Get tool invocations for an instance
+    .get(
+      '/:id/tools',
+      async ({ params, set }) => {
+        const instance = await tracker.get(params.id);
+
+        if (!instance) {
+          set.status = 404;
+          return {
+            success: false,
+            error: 'Instance not found',
+          };
+        }
+
+        const tools = await tracker.getToolInvocations(params.id);
+
+        return {
+          success: true,
+          data: tools,
+        };
+      },
+      {
+        params: t.Object({
+          id: t.String(),
+        }),
+      }
+    )
+
     // Get available commands for an instance
     .get(
       '/:id/commands',
@@ -667,7 +693,6 @@ export function createInstanceRoutes(db: Db) {
           if (body?.prompt) {
             // Save user message
             await tracker.saveMessage(params.id, {
-              messageType: 'user',
               content: { type: 'user', content: body.prompt },
               timestamp: new Date(),
             });
@@ -764,7 +789,6 @@ export function createInstanceRoutes(db: Db) {
         // Save user message for resume prompt (only if not already saved above)
         if (body?.prompt && !messageSaved) {
           await tracker.saveMessage(params.id, {
-            messageType: 'user',
             content: { type: 'user', content: body.prompt },
             timestamp: new Date(),
           });

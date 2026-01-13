@@ -1,5 +1,6 @@
 import { writable, derived, get, type Writable, type Readable } from 'svelte/store';
 import { api } from '$lib/api';
+import { parseBackgroundAgentOutput, toolUsesToMessages } from '$lib/utils/background-agent-parser';
 
 // Types for real-time data
 export interface Agent {
@@ -186,6 +187,8 @@ export interface SubagentState {
   result?: string;
   /** Error message if status is 'error' */
   error?: string;
+  /** Whether this is a background agent (not streamed live) */
+  isBackground?: boolean;
 }
 
 // Stores
@@ -207,6 +210,10 @@ export const streamingMessages: Writable<Map<string, StreamingMessage>> = writab
 
 // Active subagents - keyed by toolUseId
 export const activeSubagents: Writable<Map<string, SubagentState>> = writable(new Map());
+
+// Background agent ID mapping - maps SDK internal agentId to toolUseId
+// Used to link TaskOutput results back to their parent Task tool
+const backgroundAgentIdMap: Map<string, string> = new Map();
 
 // Helper to get messages for a specific instance (for backwards compatibility)
 export const messages: Readable<Message[]> = derived(instanceMessages, ($instanceMessages) =>
@@ -542,8 +549,29 @@ export function setSubagentRunning(toolUseId: string): void {
 }
 
 /**
+ * Mark a subagent as a background agent.
+ * Called when tool_result indicates isAsync/isBackgroundAgent.
+ * Background agents don't stream their messages - they come all at once when TaskOutput retrieves them.
+ */
+export function markSubagentBackground(toolUseId: string): void {
+  activeSubagents.update((map) => {
+    const subagent = map.get(toolUseId);
+    if (subagent) {
+      const newMap = new Map(map);
+      newMap.set(toolUseId, {
+        ...subagent,
+        isBackground: true,
+      });
+      return newMap;
+    }
+    return map;
+  });
+}
+
+/**
  * Complete a subagent with result.
  * Creates new object reference to ensure Svelte reactivity.
+ * For background agents, parses the result to extract tool uses and result text.
  */
 export function completeSubagent(toolUseId: string, result?: string): void {
   activeSubagents.update((map) => {
@@ -551,11 +579,43 @@ export function completeSubagent(toolUseId: string, result?: string): void {
     if (subagent) {
       // Create new object to trigger Svelte reactivity
       const newMap = new Map(map);
+
+      // For background agents, parse the result to extract tool uses
+      let parsedMessages: Message[] = [];
+      let finalResult = result;
+
+      if (subagent.isBackground && result) {
+        const parsed = parseBackgroundAgentOutput(result);
+        finalResult = parsed.resultText;
+
+        // Convert parsed tool uses to Message objects
+        const toolMessages = toolUsesToMessages(parsed.toolUses, parsed.resultText);
+        parsedMessages = toolMessages.map((msg) => ({
+          instanceId: subagent.instanceId,
+          type: msg.type,
+          content: msg.content,
+          timestamp: msg.timestamp,
+          parentToolUseId: toolUseId,
+          metadata:
+            msg.type === 'tool_use'
+              ? {
+                  toolName: msg.toolName,
+                  toolInput: msg.toolInput,
+                  toolStatus: 'success' as const,
+                }
+              : undefined,
+        }));
+      }
+
       newMap.set(toolUseId, {
         ...subagent,
         status: 'complete',
         completedAt: new Date(),
-        result,
+        result: finalResult,
+        // Append parsed messages to any existing messages
+        messages: subagent.isBackground
+          ? [...subagent.messages, ...parsedMessages]
+          : subagent.messages,
       });
       return newMap;
     }
@@ -641,20 +701,6 @@ export function getChildSubagents(parentToolUseId: string): Readable<SubagentSta
 }
 
 /**
- * Clear all subagents for an instance (e.g., when conversation is cleared).
- */
-export function clearInstanceSubagents(instanceId: string): void {
-  activeSubagents.update((map) => {
-    for (const [toolUseId, subagent] of map.entries()) {
-      if (subagent.instanceId === instanceId) {
-        map.delete(toolUseId);
-      }
-    }
-    return map;
-  });
-}
-
-/**
  * Extract readable text from tool result content.
  * Handles string, array of content blocks, or falls back to JSON.stringify.
  */
@@ -679,19 +725,160 @@ function extractResultText(content: unknown): string {
   return JSON.stringify(content);
 }
 
+/** Tool invocation data from the API */
+export interface ToolInvocationData {
+  id: string;
+  toolName: string;
+  toolInput: unknown;
+  toolResult: unknown;
+  toolResultContent: string | null;
+  status: string;
+  isError: boolean;
+  subagentType: string | null;
+  subagentDescription: string | null;
+  createdAt: Date;
+  completedAt: Date | null;
+}
+
 /**
- * Reconstruct subagent state from message history.
- * Called when loading messages from database to restore the subagent tree visualization.
- * This scans for Task tool_use messages and rebuilds SubagentState from the stored data.
+ * Reconstruct subagent state from tool invocations data.
+ * Called when loading from database to restore the subagent tree visualization.
+ * Uses tool_invocations table which has all the data we need.
  */
-export function reconstructSubagentsFromHistory(instanceId: string, messages: Message[]): void {
+export function reconstructSubagentsFromHistory(
+  instanceId: string,
+  messages: Message[],
+  toolInvocations?: ToolInvocationData[]
+): void {
   // Clear existing subagents for this instance to avoid duplicates
   clearInstanceSubagents(instanceId);
 
+  // If we have tool invocations data, use it (preferred)
+  if (toolInvocations && toolInvocations.length > 0) {
+    reconstructFromToolInvocations(instanceId, messages, toolInvocations);
+  } else {
+    // Fallback to parsing from messages (legacy)
+    reconstructFromMessages(instanceId, messages);
+  }
+}
+
+/**
+ * Reconstruct subagents from tool_invocations table data.
+ * This is the preferred method as it has structured data.
+ */
+function reconstructFromToolInvocations(
+  instanceId: string,
+  messages: Message[],
+  toolInvocations: ToolInvocationData[]
+): void {
+  // Build a map of Task tool ID -> TaskOutput result
+  // TaskOutput's toolInput has task_id which maps to Task's toolResult.agentId
+  const taskOutputResults = new Map<string, string>();
+
+  for (const tool of toolInvocations) {
+    if (tool.toolName === 'TaskOutput' && tool.toolResultContent) {
+      // Extract task_id from the XML content
+      const taskIdMatch = tool.toolResultContent.match(/<task_id>([a-f0-9]+)<\/task_id>/i);
+      if (taskIdMatch) {
+        // Extract just the output section
+        const outputMatch = tool.toolResultContent.match(/<output>([\s\S]*?)<\/output>/i);
+        if (outputMatch) {
+          taskOutputResults.set(taskIdMatch[1], outputMatch[1].trim());
+        }
+      }
+    }
+  }
+
   activeSubagents.update((map) => {
-    // First pass: Create SubagentState for each Task tool
+    // Process Task tools
+    for (const tool of toolInvocations) {
+      if (tool.toolName !== 'Task') continue;
+
+      const toolInput = tool.toolInput as Record<string, unknown> | undefined;
+      const toolResult = tool.toolResult as Record<string, unknown> | undefined;
+
+      const subagentType = tool.subagentType || (toolInput?.subagent_type as string) || 'unknown';
+      const description = tool.subagentDescription || (toolInput?.description as string);
+      const isBackground = toolResult?.isAsync === true || toolInput?.run_in_background === true;
+      const agentId = toolResult?.agentId as string | undefined;
+
+      // For background agents, get the result from TaskOutput
+      let resultText: string | undefined;
+      let parsedMessages: Message[] = [];
+
+      if (isBackground && agentId) {
+        const taskOutputContent = taskOutputResults.get(agentId);
+        if (taskOutputContent) {
+          const parsed = parseBackgroundAgentOutput(taskOutputContent);
+          resultText = parsed.resultText;
+
+          // Convert parsed tool uses to Message objects
+          const toolMessages = toolUsesToMessages(parsed.toolUses, parsed.resultText);
+          parsedMessages = toolMessages.map((m) => ({
+            instanceId,
+            type: m.type,
+            content: m.content,
+            timestamp: m.timestamp,
+            parentToolUseId: tool.id,
+            metadata:
+              m.type === 'tool_use'
+                ? {
+                    toolName: m.toolName,
+                    toolInput: m.toolInput,
+                    toolStatus: 'success' as const,
+                  }
+                : undefined,
+          }));
+        }
+      } else if (!isBackground) {
+        // For blocking agents, result is in toolResultContent directly
+        resultText = tool.toolResultContent || undefined;
+      }
+
+      const hasResult = tool.status === 'success' || tool.status === 'error';
+
+      const subagentState: SubagentState = {
+        toolUseId: tool.id,
+        instanceId,
+        subagentType,
+        description,
+        status: hasResult ? (tool.isError ? 'error' : 'complete') : 'running',
+        startedAt: new Date(tool.createdAt),
+        completedAt: tool.completedAt ? new Date(tool.completedAt) : undefined,
+        messages: parsedMessages,
+        result: !tool.isError ? resultText : undefined,
+        error: tool.isError ? resultText : undefined,
+        isBackground,
+      };
+
+      map.set(tool.id, subagentState);
+    }
+
+    // Add streaming messages from blocking agents (messages with parentToolUseId)
     for (const msg of messages) {
-      // Only process Task tool_use messages
+      if (msg.parentToolUseId && map.has(msg.parentToolUseId)) {
+        const subagent = map.get(msg.parentToolUseId)!;
+        // Only add if not already populated (background agents have messages from parsing)
+        if (!subagent.isBackground) {
+          map.set(msg.parentToolUseId, {
+            ...subagent,
+            messages: [...subagent.messages, msg],
+          });
+        }
+      }
+    }
+
+    return map;
+  });
+}
+
+/**
+ * Fallback: Reconstruct subagents from message metadata.
+ * Used when tool_invocations data is not available.
+ */
+function reconstructFromMessages(instanceId: string, messages: Message[]): void {
+  activeSubagents.update((map) => {
+    for (const msg of messages) {
       if (msg.type === 'tool_use' && msg.metadata?.toolName === 'Task') {
         const toolId = msg.metadata.toolId as string;
         if (!toolId) continue;
@@ -699,14 +886,39 @@ export function reconstructSubagentsFromHistory(instanceId: string, messages: Me
         const toolInput = msg.metadata.toolInput as Record<string, unknown> | undefined;
         const subagentType = (toolInput?.subagent_type as string) || 'unknown';
         const description = toolInput?.description as string | undefined;
+        const isBackground = toolInput?.run_in_background === true;
 
-        // Determine status from toolStatus metadata
         const toolStatus = msg.metadata?.toolStatus as string | undefined;
         const hasResult = toolStatus !== 'pending' && toolStatus !== undefined;
         const isError = toolStatus === 'error';
         const resultContent = msg.metadata?.toolResult;
+        const rawResultText = hasResult && !isError ? extractResultText(resultContent) : undefined;
 
-        // Create subagent state
+        let parsedMessages: Message[] = [];
+        let finalResult = rawResultText;
+
+        if (isBackground && rawResultText) {
+          const parsed = parseBackgroundAgentOutput(rawResultText);
+          finalResult = parsed.resultText;
+
+          const toolMessages = toolUsesToMessages(parsed.toolUses, parsed.resultText);
+          parsedMessages = toolMessages.map((m) => ({
+            instanceId,
+            type: m.type,
+            content: m.content,
+            timestamp: m.timestamp,
+            parentToolUseId: toolId,
+            metadata:
+              m.type === 'tool_use'
+                ? {
+                    toolName: m.toolName,
+                    toolInput: m.toolInput,
+                    toolStatus: 'success' as const,
+                  }
+                : undefined,
+          }));
+        }
+
         const subagentState: SubagentState = {
           toolUseId: toolId,
           instanceId,
@@ -714,22 +926,20 @@ export function reconstructSubagentsFromHistory(instanceId: string, messages: Me
           description,
           status: hasResult ? (isError ? 'error' : 'complete') : 'running',
           startedAt: msg.timestamp,
-          // For historical data, we use the same timestamp (exact completion time not stored)
           completedAt: hasResult ? msg.timestamp : undefined,
-          messages: [], // Will be populated in second pass
-          result: hasResult && !isError ? extractResultText(resultContent) : undefined,
+          messages: parsedMessages,
+          result: finalResult,
           error: isError ? extractResultText(resultContent) : undefined,
+          isBackground,
         };
 
         map.set(toolId, subagentState);
       }
     }
 
-    // Second pass: Add messages with parentToolUseId to their subagent's messages array
     for (const msg of messages) {
       if (msg.parentToolUseId && map.has(msg.parentToolUseId)) {
         const subagent = map.get(msg.parentToolUseId)!;
-        // Add to messages array (create new array for proper reactivity)
         map.set(msg.parentToolUseId, {
           ...subagent,
           messages: [...subagent.messages, msg],
@@ -836,6 +1046,17 @@ function handleSubagentMessage(
           }
         }
       }
+    }
+  }
+
+  // Handle result messages (subagent completion)
+  // When a subagent finishes, Claude sends a 'result' type message with parent_tool_use_id
+  if (msg.type === 'result') {
+    const resultMsg = msg as { result?: string; is_error?: boolean };
+    if (resultMsg.is_error) {
+      errorSubagent(parentToolUseId, resultMsg.result || 'Unknown error');
+    } else {
+      completeSubagent(parentToolUseId, resultMsg.result || '');
     }
   }
 }
@@ -1170,33 +1391,67 @@ export function connect(baseUrl: string = '') {
   });
 
   // Handle SDK messages for streaming state and chat display
+  // Hub now sends pre-extracted normalized fields alongside raw message
   eventSource.addEventListener('sdk:message', (event: Event) => {
-    const { instanceId, message } = JSON.parse((event as MessageEvent).data);
+    const eventData = JSON.parse((event as MessageEvent).data) as {
+      instanceId: string;
+      message: unknown;
+      // Pre-extracted normalized fields from hub
+      sdkUuid?: string;
+      sdkType?: string;
+      sdkSubtype?: string | null;
+      parentToolUseId?: string | null;
+      role?: 'user' | 'assistant' | null;
+      textContent?: string | null;
+      model?: string | null;
+      // Pre-extracted tool data
+      toolInvocations?: Array<{
+        id: string;
+        toolName: string;
+        toolInput: Record<string, unknown> | null;
+        subagentType: string | null;
+        subagentDescription: string | null;
+      }>;
+      toolResults?: Array<{
+        toolUseId: string;
+        toolResult: Record<string, unknown> | null;
+        toolResultContent: string | null;
+        status: 'pending' | 'success' | 'error';
+        isError: boolean;
+        durationMs: number | null;
+      }>;
+    };
+
+    const { instanceId, message, sdkType, sdkUuid, parentToolUseId, textContent, toolInvocations, toolResults } = eventData;
+
+    // For backwards compat, also parse raw message for fields not yet extracted
     const msg = message as {
       type?: string;
       subtype?: string;
-      uuid?: string; // SDK message UUID for resumeSessionAt
+      uuid?: string;
       message?: { content?: unknown[] | string; role?: string };
       result?: string;
       isSynthetic?: boolean;
       isReplay?: boolean;
       tool_use_result?: unknown;
-      event?: { type?: string }; // For stream_event
+      event?: { type?: string };
       session_id?: string;
       cwd?: string;
       model?: string;
       tools?: string[];
-      parent_tool_use_id?: string | null; // Links message to parent subagent
+      parent_tool_use_id?: string | null;
     };
+
+    // Use pre-extracted parentToolUseId (falls back to msg.parent_tool_use_id)
+    const effectiveParentToolUseId = parentToolUseId ?? msg.parent_tool_use_id;
 
     // ========================================
     // SUBAGENT MESSAGE ROUTING
     // ========================================
     // Messages with parent_tool_use_id belong to a subagent, not main chat
-    const parentToolUseId = msg.parent_tool_use_id;
-    if (parentToolUseId) {
+    if (effectiveParentToolUseId) {
       // This message is from a subagent - route to SubagentBranch, not main chat
-      handleSubagentMessage(instanceId, parentToolUseId, msg);
+      handleSubagentMessage(instanceId, effectiveParentToolUseId, msg);
       return;
     }
 
@@ -1242,59 +1497,99 @@ export function connect(baseUrl: string = '') {
       return;
     }
 
+    // Use pre-extracted sdkType where available, fallback to msg.type
+    const effectiveSdkType = sdkType ?? msg.type;
+
     // ========================================
     // STREAMING STATE
     // ========================================
 
     // Mark as streaming when receiving assistant or stream_event messages
-    if (msg.type === 'assistant' || msg.type === 'stream_event') {
+    if (effectiveSdkType === 'assistant' || effectiveSdkType === 'stream_event') {
       updateStreamingState(instanceId, { isStreaming: true });
     }
 
     // Mark as not streaming when result received
-    if (msg.type === 'result') {
+    if (effectiveSdkType === 'result') {
       updateStreamingState(instanceId, { isStreaming: false });
+    }
+
+    // ========================================
+    // TOOL RESULTS (from pre-extracted data)
+    // ========================================
+
+    // Process pre-extracted tool results
+    // For Task tools, this is where the subagent completes - the tool_result contains the final output
+    if (toolResults && toolResults.length > 0) {
+      for (const result of toolResults) {
+        updateToolResult(
+          instanceId,
+          result.toolUseId,
+          result.toolResultContent,
+          result.isError
+        );
+
+        const resultContent = result.toolResultContent || '';
+
+        // Check if this is a background Task spawn (has isBackgroundAgent and backgroundAgentId)
+        // These fields come from the structured tool_use_result data
+        const typedResult = result as typeof result & {
+          isBackgroundAgent?: boolean;
+          backgroundAgentId?: string;
+        };
+
+        if (typedResult.isBackgroundAgent && typedResult.backgroundAgentId) {
+          const agentId = typedResult.backgroundAgentId;
+          backgroundAgentIdMap.set(agentId, result.toolUseId);
+          // Mark this subagent as background so completeSubagent knows to parse its output
+          markSubagentBackground(result.toolUseId);
+          // Don't complete the subagent yet - wait for TaskOutput result
+          continue;
+        }
+
+        // Check if this is a TaskOutput result (contains <task_id> and <output> XML tags)
+        // TaskOutput returns results in XML format
+        const taskIdMatch = resultContent.match(/<task_id>([a-f0-9]+)<\/task_id>/i);
+        const outputMatch = resultContent.match(/<output>([\s\S]*?)<\/output>/i);
+        if (taskIdMatch && outputMatch) {
+          const taskId = taskIdMatch[1];
+          const output = outputMatch[1].trim();
+          const originalToolUseId = backgroundAgentIdMap.get(taskId);
+          if (originalToolUseId) {
+            const subagent = get(activeSubagents).get(originalToolUseId);
+            if (subagent) {
+              const isError = resultContent.includes('<status>error</status>');
+              if (isError) {
+                errorSubagent(originalToolUseId, output);
+              } else {
+                completeSubagent(originalToolUseId, output);
+              }
+            }
+            backgroundAgentIdMap.delete(taskId);
+          }
+          continue;
+        }
+
+        // Complete subagent if this toolUseId has a registered subagent (blocking agent)
+        // The tool_result for a blocking Task tool is the subagent's final output
+        const subagent = get(activeSubagents).get(result.toolUseId);
+        if (subagent) {
+          if (result.isError) {
+            errorSubagent(result.toolUseId, resultContent);
+          } else {
+            completeSubagent(result.toolUseId, resultContent);
+          }
+        }
+      }
+      // Tool result messages are internal SDK messages, not user-visible
+      return;
     }
 
     // ========================================
     // USER MESSAGES
     // ========================================
 
-    if (msg.type === 'user' && msg.message?.content) {
-      const content = msg.message.content;
-
-      // First, always check for tool_result blocks and process them
-      // Tool results come as user messages with tool_result content blocks from the SDK
-      let hasToolResults = false;
-      if (Array.isArray(content)) {
-        for (const block of content) {
-          if (block && typeof block === 'object' && 'type' in block && block.type === 'tool_result') {
-            hasToolResults = true;
-            const toolResult = block as {
-              tool_use_id?: string;
-              content?: unknown;
-              is_error?: boolean;
-            };
-            if (toolResult.tool_use_id) {
-              updateToolResult(
-                instanceId,
-                toolResult.tool_use_id,
-                toolResult.content,
-                toolResult.is_error || false
-              );
-
-              // Complete subagent if this was a Task tool result
-              const resultText = extractResultText(toolResult.content);
-              if (toolResult.is_error) {
-                errorSubagent(toolResult.tool_use_id, resultText);
-              } else {
-                completeSubagent(toolResult.tool_use_id, resultText);
-              }
-            }
-          }
-        }
-      }
-
+    if (effectiveSdkType === 'user') {
       // Handle synthetic messages with tool_use_result (local commands like /cost, /help)
       if (msg.isSynthetic && msg.tool_use_result) {
         const resultText = typeof msg.tool_use_result === 'string'
@@ -1307,41 +1602,41 @@ export function connect(baseUrl: string = '') {
             timestamp: new Date(),
           });
         }
-      }
-
-      // If this is a tool result message, don't also add it as a user message
-      if (hasToolResults) {
-        // Tool result messages are internal SDK messages, not user-visible
         return;
       }
 
-      // Real user message - extract text content
-      let textContent = '';
-
-      if (typeof content === 'string') {
-        textContent = content;
-      } else if (Array.isArray(content)) {
-        for (const block of content) {
-          if (block && typeof block === 'object' && 'type' in block) {
-            if (block.type === 'text' && 'text' in block) {
-              textContent += (block.text as string);
+      // Use pre-extracted textContent, or fallback to parsing
+      let effectiveTextContent = textContent;
+      if (!effectiveTextContent && msg.message?.content) {
+        const content = msg.message.content;
+        if (typeof content === 'string') {
+          effectiveTextContent = content;
+        } else if (Array.isArray(content)) {
+          const parts: string[] = [];
+          for (const block of content) {
+            if (block && typeof block === 'object' && 'type' in block) {
+              if (block.type === 'text' && 'text' in block) {
+                parts.push(block.text as string);
+              }
             }
           }
+          effectiveTextContent = parts.join('');
         }
       }
 
-      if (textContent.trim()) {
+      if (effectiveTextContent?.trim()) {
         // Try to update an existing optimistic message with UUID first
         // This prevents duplicates when we've added the message optimistically
-        const updated = msg.uuid && updateUserMessageUuid(instanceId, textContent.trim(), msg.uuid);
+        const effectiveUuid = sdkUuid ?? msg.uuid;
+        const updated = effectiveUuid && updateUserMessageUuid(instanceId, effectiveTextContent.trim(), effectiveUuid);
 
         // Only add if no optimistic message was found to update
         if (!updated) {
           addMessage(instanceId, {
             type: 'user',
-            content: textContent.trim(),
+            content: effectiveTextContent.trim(),
             timestamp: new Date(),
-            sdkUuid: msg.uuid, // Store SDK UUID for resumeSessionAt
+            sdkUuid: effectiveUuid, // Store SDK UUID for resumeSessionAt
           });
         }
       }
@@ -1351,58 +1646,55 @@ export function connect(baseUrl: string = '') {
     // ASSISTANT MESSAGES
     // ========================================
 
-    if (msg.type === 'assistant' && msg.message?.content) {
-      const content = msg.message.content;
+    if (effectiveSdkType === 'assistant') {
+      const effectiveUuid = sdkUuid ?? msg.uuid;
 
       // Check if we already have a message with this UUID (from streaming)
       // to avoid duplicates when streaming is enabled
       const existingMessages = get(instanceMessages).get(instanceId) || [];
-      const hasExistingMessage = msg.uuid && existingMessages.some(m => m.sdkUuid === msg.uuid);
+      const hasExistingMessage = effectiveUuid && existingMessages.some(m => m.sdkUuid === effectiveUuid);
 
+      // Use pre-extracted textContent for assistant text
+      if (textContent && !hasExistingMessage) {
+        addMessage(instanceId, {
+          type: 'assistant',
+          content: textContent,
+          timestamp: new Date(),
+          sdkUuid: effectiveUuid,
+        });
+      }
+
+      // Use pre-extracted toolInvocations for tool_use blocks
+      if (toolInvocations && toolInvocations.length > 0) {
+        for (const tool of toolInvocations) {
+          addMessage(instanceId, {
+            type: 'tool_use',
+            content: tool.toolName || 'Tool',
+            timestamp: new Date(),
+            metadata: {
+              toolId: tool.id,
+              toolName: tool.toolName,
+              toolInput: tool.toolInput,
+              toolStatus: 'pending',
+              subagentType: tool.subagentType ?? undefined,
+              subagentDescription: tool.subagentDescription ?? undefined,
+            },
+          });
+
+          // Start tracking subagent if this is a Task tool
+          if (tool.toolName === 'Task' && tool.id && tool.subagentType) {
+            startSubagent(tool.id, instanceId, tool.subagentType, tool.subagentDescription ?? undefined);
+          }
+        }
+      }
+
+      // Fallback: parse thinking blocks from raw message (not yet pre-extracted)
+      const content = msg.message?.content;
       if (Array.isArray(content)) {
         for (const block of content) {
           if (block && typeof block === 'object' && 'type' in block) {
-            // Text blocks -> assistant message (skip if already added via streaming)
-            if (block.type === 'text' && 'text' in block && !hasExistingMessage) {
-              addMessage(instanceId, {
-                type: 'assistant',
-                content: block.text as string,
-                timestamp: new Date(),
-                sdkUuid: msg.uuid, // Store SDK UUID for resumeSessionAt
-              });
-            }
-            // Tool use blocks -> tool_use message with metadata
-            else if (block.type === 'tool_use') {
-              const toolBlock = block as { id?: string; name?: string; input?: unknown };
-              const toolInput = toolBlock.input as Record<string, unknown> | undefined;
-
-              // Check if this is a Task tool (subagent spawn)
-              const isTaskTool = toolBlock.name === 'Task';
-              const subagentType = isTaskTool ? (toolInput?.subagent_type as string) : undefined;
-              const subagentDescription = isTaskTool ? (toolInput?.description as string) : undefined;
-
-              addMessage(instanceId, {
-                type: 'tool_use',
-                content: toolBlock.name || 'Tool',
-                timestamp: new Date(),
-                metadata: {
-                  toolId: toolBlock.id,
-                  toolName: toolBlock.name,
-                  toolInput: toolBlock.input,
-                  toolStatus: 'pending',
-                  // Add subagent metadata for Task tool
-                  subagentType,
-                  subagentDescription,
-                },
-              });
-
-              // Start tracking subagent if this is a Task tool
-              if (isTaskTool && toolBlock.id && subagentType) {
-                startSubagent(toolBlock.id, instanceId, subagentType, subagentDescription);
-              }
-            }
             // Thinking blocks -> thinking message with metadata
-            else if (block.type === 'thinking') {
+            if (block.type === 'thinking') {
               const thinkingBlock = block as { thinking?: string; signature?: string };
               addMessage(instanceId, {
                 type: 'thinking',
@@ -1435,7 +1727,7 @@ export function connect(baseUrl: string = '') {
     // SYSTEM MESSAGES
     // ========================================
 
-    if (msg.type === 'system') {
+    if (effectiveSdkType === 'system') {
       switch (msg.subtype) {
         case 'init': {
           const initMsg = msg as {
@@ -1510,7 +1802,7 @@ export function connect(baseUrl: string = '') {
     // Result messages are handled by instance:token_usage event for cost/tokens
     // Local command outputs are handled via synthetic user messages with tool_use_result
     // Error subtypes need special handling for user-friendly display
-    if (msg.type === 'result' && msg.subtype) {
+    if (effectiveSdkType === 'result' && msg.subtype) {
       const resultSubtype = msg.subtype as string;
       const errorSubtypes = ['error_max_turns', 'error_during_execution', 'error_max_budget_usd', 'error_max_structured_output_retries'];
 
@@ -1542,7 +1834,7 @@ export function connect(baseUrl: string = '') {
     // STREAM EVENTS (progressive text streaming)
     // ========================================
 
-    if (msg.type === 'stream_event' && msg.event) {
+    if (effectiveSdkType === 'stream_event' && msg.event) {
       const event = msg.event as {
         type?: string;
         index?: number;
