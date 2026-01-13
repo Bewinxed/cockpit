@@ -5,7 +5,7 @@
   import { ArrowDown, Bot, Loader2 } from 'lucide-svelte';
   import { Button } from '$lib/components/ui/button';
   import InstanceHeader from './InstanceHeader.svelte';
-  import { ChatMessage, ChatInput, StreamingIndicator, PermissionRequest, ToolGroup, SubagentTree } from '$lib/components/features';
+  import { ChatMessage, ChatInput, StreamingIndicator, PermissionRequest, ToolGroup, SubagentBranch } from '$lib/components/features';
   import { UseAutoScroll } from '$lib/hooks/use-auto-scroll.svelte';
   import { ActivityGrid } from '$lib/components/ui/activity-grid';
   import {
@@ -20,11 +20,13 @@
     addMessage,
     removeMessage,
     clearInstanceMessages,
+    clearInstanceSubagents,
     updateStreamingState,
     updateMessageMetadata,
     updateUserMessageUuid,
     streamingMessages,
     reconstructSubagentsFromHistory,
+    activeSubagents,
     type Message
   } from '$lib/stores/realtime.svelte';
   import { api } from '$lib/api';
@@ -109,6 +111,37 @@
       const content = typeof dbMsg.content === 'string' ? JSON.parse(dbMsg.content) : dbMsg.content;
       const sdkType = content?.type || dbMsg.messageType;
       const sdkUuid = dbMsg.sdkUuid || (content?.uuid as string | undefined);
+      // Extract parent_tool_use_id for subagent message routing
+      const parentToolUseId = content?.parent_tool_use_id as string | undefined;
+
+      // Skip messages from subagents in main chat - they'll be shown in SubagentBranch
+      if (parentToolUseId) {
+        // Still parse tool_use blocks for subagent messages (they need to be in subagent.messages)
+        if (sdkType === 'assistant' && content?.message?.content) {
+          for (const block of content.message.content) {
+            if (block?.type === 'tool_use') {
+              const toolResult = toolResults.get(block.id);
+              result.push({
+                id: dbMsg.id + '-' + block.id,
+                instanceId,
+                type: 'tool_use',
+                content: block.name || 'Tool',
+                timestamp: new Date(dbMsg.timestamp),
+                sdkUuid,
+                parentToolUseId,
+                metadata: {
+                  toolId: block.id,
+                  toolName: block.name,
+                  toolInput: block.input,
+                  toolResult: toolResult?.content,
+                  toolStatus: toolResult ? (toolResult.isError ? 'error' : 'success') : 'pending',
+                },
+              });
+            }
+          }
+        }
+        continue;
+      }
 
       if (sdkType === 'user' && content?.content) {
         result.push({
@@ -214,23 +247,36 @@
   // Get current messages (from store)
   const currentMessages = $derived($messagesStore || []);
 
-  // Helper to check if a message is a Task tool (subagent) - these are shown in SubagentTree instead
-  function isTaskToolMessage(msg: Message): boolean {
-    if (msg.type === 'tool_use' && msg.metadata?.subagentType) {
-      return true;
-    }
-    // Also filter out tool_result for Task tools
-    if (msg.type === 'tool_result' && msg.metadata?.toolName === 'Task') {
-      return true;
-    }
-    return false;
+  // Helper to check if a message is a Task tool_use (subagent spawn)
+  function isTaskToolUse(msg: Message): boolean {
+    return msg.type === 'tool_use' && !!msg.metadata?.subagentType;
   }
 
-  // Filter out Task tool messages - they're displayed in SubagentTree
-  const chatMessages = $derived(currentMessages.filter(msg => !isTaskToolMessage(msg)));
+  // Helper to check if a message is a TaskOutput tool (retrieves subagent results)
+  // These are hidden from chat - the result is shown inside SubagentBranch
+  function isTaskOutputTool(msg: Message): boolean {
+    return msg.type === 'tool_use' && msg.metadata?.toolName === 'TaskOutput';
+  }
+
+  // Helper to check if a message belongs to a subagent (has parentToolUseId)
+  // These are shown inside SubagentBranch, not in main chat
+  function isSubagentMessage(msg: Message): boolean {
+    return !!msg.parentToolUseId;
+  }
+
+  // Filter out:
+  // - TaskOutput tools (retrieval wrappers)
+  // - Messages with parentToolUseId (belong to subagents, shown in SubagentBranch)
+  const chatMessages = $derived(
+    currentMessages.filter(msg => !isTaskOutputTool(msg) && !isSubagentMessage(msg))
+  );
 
   // Group consecutive tool messages for compact display
-  type MessageGroup = { type: 'single'; message: Message; index: number } | { type: 'tool_group'; messages: Message[]; startIndex: number };
+  // Task tools get grouped together for parallel display
+  type MessageGroup =
+    | { type: 'single'; message: Message; index: number }
+    | { type: 'tool_group'; messages: Message[]; startIndex: number }
+    | { type: 'subagent_group'; messages: Message[]; startIndex: number };
 
   const groupedMessages = $derived((): MessageGroup[] => {
     const groups: MessageGroup[] = [];
@@ -239,14 +285,30 @@
     while (i < chatMessages.length) {
       const msg = chatMessages[i];
 
-      if (msg.type === 'tool_use' || msg.type === 'tool_result') {
+      // Task tool_use messages - group consecutive ones for parallel display
+      if (isTaskToolUse(msg)) {
+        const subagentMessages: Message[] = [msg];
+        const startIndex = i;
+        i++;
+
+        // Collect consecutive Task tools (parallel agents)
+        while (i < chatMessages.length && isTaskToolUse(chatMessages[i])) {
+          subagentMessages.push(chatMessages[i]);
+          i++;
+        }
+
+        groups.push({ type: 'subagent_group', messages: subagentMessages, startIndex });
+      }
+      // Regular tool messages get grouped together
+      else if (msg.type === 'tool_use' || msg.type === 'tool_result') {
         const toolMessages: Message[] = [msg];
         const startIndex = i;
         i++;
 
         while (i < chatMessages.length) {
           const nextMsg = chatMessages[i];
-          if (nextMsg.type === 'tool_use' || nextMsg.type === 'tool_result') {
+          // Don't include Task or TaskOutput tools in regular tool groups
+          if ((nextMsg.type === 'tool_use' || nextMsg.type === 'tool_result') && !isTaskToolUse(nextMsg) && !isTaskOutputTool(nextMsg)) {
             toolMessages.push(nextMsg);
             i++;
           } else {
@@ -534,8 +596,18 @@
         },
       });
     } else if (command === '/clear') {
+      // Clear local state
       clearInstanceMessages(instanceId);
+      clearInstanceSubagents(instanceId);
 
+      // Delete messages from database
+      try {
+        await fetch(`/api/instances/${instanceId}/messages`, { method: 'DELETE' });
+      } catch {
+        // Ignore errors for clear command
+      }
+
+      // Notify agent if active
       if (isActive) {
         try {
           await api.api.instances({ id: instanceId }).send.post({ message: '/clear' });
@@ -941,13 +1013,55 @@
           </div>
         </div>
       {:else}
-        {#each groupedMessages() as group, groupIdx (group.type === 'tool_group' ? `tools-${group.startIndex}` : group.message.id)}
+        {#each groupedMessages() as group, groupIdx (group.type === 'tool_group' ? `tools-${group.startIndex}` : group.type === 'subagent_group' ? `subagents-${group.startIndex}` : group.message.id)}
           <div
             animate:flip={{ duration: 300 }}
             in:fly={{ y: 20, duration: 300 }}
             out:fly={{ y: -20, duration: 200 }}
           >
-            {#if group.type === 'tool_group'}
+            {#if group.type === 'subagent_group'}
+              <!-- Subagent group (Task tools) - render side by side if parallel -->
+              {@const isParallel = group.messages.length > 1}
+              <div class="flex items-start gap-3">
+                <!-- Subagent avatar (single icon for the group) -->
+                <div class="flex-shrink-0 w-9 h-9 rounded-xl bg-info/10 flex items-center justify-center mt-0.5">
+                  <svg class="w-4.5 h-4.5 text-info" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+                </div>
+                <!-- Subagent branches - grid if parallel, stack if single -->
+                <div class="flex-1">
+                  {#if isParallel}
+                    <!-- Parallel indicator -->
+                    <div class="flex items-center gap-2 mb-2 px-2 py-1 bg-info/10 rounded-lg border border-info/30 w-fit">
+                      <svg class="w-3.5 h-3.5 text-info" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                      <span class="text-xs font-medium text-info">Parallel Execution</span>
+                      <span class="text-xs text-muted-foreground">{group.messages.length} agents</span>
+                    </div>
+                  {/if}
+                  <div
+                    class="gap-3"
+                    class:grid={isParallel}
+                    class:grid-cols-1={isParallel}
+                    class:lg:grid-cols-2={isParallel}
+                    class:xl:grid-cols-3={isParallel && group.messages.length >= 3}
+                  >
+                    {#each group.messages as msg (msg.metadata?.toolId)}
+                      {@const toolId = msg.metadata?.toolId}
+                      {@const subagent = toolId ? $activeSubagents.get(toolId) : null}
+                      {#if subagent}
+                        <SubagentBranch {subagent} />
+                      {:else}
+                        <!-- Fallback if subagent state not found (loading state) -->
+                        <div class="rounded-lg border border-border bg-card/50 px-3 py-2 animate-pulse">
+                          <span class="text-sm text-muted-foreground">
+                            Starting {msg.metadata?.subagentType || 'agent'}...
+                          </span>
+                        </div>
+                      {/if}
+                    {/each}
+                  </div>
+                </div>
+              </div>
+            {:else if group.type === 'tool_group'}
               <!-- Grouped tool messages -->
               <div class="flex items-start gap-3">
                 <!-- Tool icon avatar -->
@@ -1019,8 +1133,6 @@
           </div>
         {/if}
 
-        <!-- Subagent Tree (Mission Control) - shows active/completed subagents -->
-        <SubagentTree {instanceId} />
       {/if}
     </div>
   </div>

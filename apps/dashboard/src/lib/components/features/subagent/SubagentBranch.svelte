@@ -1,10 +1,10 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { slide } from 'svelte/transition';
-  import { ChevronRight, Loader2, CheckCircle2, XCircle, Zap } from 'lucide-svelte';
-  import type { SubagentState } from '$lib/stores/realtime.svelte';
+  import { ChevronRight, Loader2, CheckCircle2, XCircle, Zap, Check, X, Clock, ChevronDown } from 'lucide-svelte';
+  import Markdown from '@humanspeak/svelte-markdown';
+  import type { SubagentState, Message } from '$lib/stores/realtime.svelte';
   import { getChildSubagents } from '$lib/stores/realtime.svelte';
-  import { ToolGroup } from '$lib/components/features';
 
   interface Props {
     subagent: SubagentState;
@@ -16,6 +16,8 @@
   let expanded = $state(true);
   let elapsedMs = $state(0);
   let intervalId: ReturnType<typeof setInterval> | null = null;
+  // Track which tools are expanded (collapsed by default)
+  let expandedTools = $state<Set<string>>(new Set());
 
   // Get child subagents (nested)
   const childSubagents = $derived(getChildSubagents(subagent.toolUseId));
@@ -51,10 +53,68 @@
     }
   });
 
-  // Filter tool messages from subagent messages
+  // Filter tool_use messages from subagent messages (not tool_result - those update the tool_use)
   const toolMessages = $derived(
-    subagent.messages.filter(m => m.type === 'tool_use' || m.type === 'tool_result')
+    subagent.messages.filter(m => m.type === 'tool_use')
   );
+
+  // Get compact tool info for display
+  function getToolStatus(tool: Message): 'pending' | 'success' | 'error' {
+    return tool.metadata?.toolStatus || 'pending';
+  }
+
+  // Get a brief description/glance for a tool (same logic as ToolGroup)
+  function getToolGlance(tool: Message): string {
+    const input = tool.metadata?.toolInput as Record<string, unknown> | undefined;
+    if (!input) return '';
+
+    // File operations - show path
+    if (input.file_path) return String(input.file_path).split('/').slice(-2).join('/');
+    if (input.path) return String(input.path).split('/').slice(-2).join('/');
+
+    // Bash - show command preview
+    if (input.command) {
+      const cmd = String(input.command);
+      return cmd.length > 40 ? cmd.slice(0, 40) + '...' : cmd;
+    }
+
+    // Search - show pattern
+    if (input.pattern) return `/${input.pattern}/`;
+
+    // Glob
+    if (input.glob) return String(input.glob);
+
+    return '';
+  }
+
+  // Get tool result as string
+  function getToolResult(tool: Message): string | null {
+    const result = tool.metadata?.toolResult;
+    if (result === undefined || result === null) return null;
+    return typeof result === 'string' ? result : JSON.stringify(result, null, 2);
+  }
+
+  // Get first line or first N chars as glimpse
+  function getResultGlimpse(result: string | null): string {
+    if (!result) return '';
+    const firstLine = result.split('\n')[0];
+    if (firstLine.length > 60) return firstLine.slice(0, 60) + '...';
+    return firstLine;
+  }
+
+  // Toggle tool expansion
+  function toggleTool(toolId: string) {
+    if (expandedTools.has(toolId)) {
+      expandedTools.delete(toolId);
+    } else {
+      expandedTools.add(toolId);
+    }
+    expandedTools = new Set(expandedTools); // trigger reactivity
+  }
+
+  function isToolExpanded(toolId: string): boolean {
+    return expandedTools.has(toolId);
+  }
 
   onMount(() => {
     // Update elapsed time every second
@@ -144,13 +204,61 @@
   <!-- Expanded content -->
   {#if expanded}
     <div class="border-t border-border" transition:slide={{ duration: 200 }}>
-      <!-- Tool messages -->
+      <!-- Compact tool list with collapsible results -->
       {#if toolMessages.length > 0}
-        <div class="p-3">
-          <ToolGroup tools={toolMessages} />
+        <div class="space-y-0.5">
+          {#each toolMessages as tool, idx (tool.metadata?.toolId ?? tool.id ?? idx)}
+            {@const toolId = (tool.metadata?.toolId ?? tool.id ?? `tool-${idx}`) as string}
+            {@const status = getToolStatus(tool)}
+            {@const glance = getToolGlance(tool)}
+            {@const result = getToolResult(tool)}
+            {@const resultGlimpse = getResultGlimpse(result)}
+            {@const isExpanded = isToolExpanded(toolId)}
+            <div class="border-b border-border/30 last:border-b-0">
+              <!-- Tool header (clickable to expand) -->
+              <button
+                type="button"
+                class="w-full px-2 py-1 flex items-center gap-1.5 text-xs hover:bg-muted/30 transition-colors"
+                onclick={() => toggleTool(toolId)}
+              >
+                <!-- Expand icon -->
+                <ChevronRight
+                  class="size-3 text-muted-foreground transition-transform flex-shrink-0 {isExpanded ? 'rotate-90' : ''}"
+                />
+                <!-- Status icon -->
+                {#if status === 'success'}
+                  <Check class="size-3 text-success flex-shrink-0" />
+                {:else if status === 'error'}
+                  <X class="size-3 text-destructive flex-shrink-0" />
+                {:else}
+                  <Clock class="size-3 text-muted-foreground animate-pulse flex-shrink-0" />
+                {/if}
+                <!-- Tool name -->
+                <span class="font-medium text-foreground">{tool.metadata?.toolName || tool.content}</span>
+                <!-- Input preview (smaller, mono) -->
+                {#if glance}
+                  <span class="text-muted-foreground truncate font-mono text-[10px]">{glance}</span>
+                {/if}
+                <!-- Result glimpse when collapsed -->
+                {#if !isExpanded && resultGlimpse}
+                  <span class="text-muted-foreground/60 truncate flex-1 font-mono text-[9px]">
+                    → {resultGlimpse}
+                  </span>
+                {/if}
+              </button>
+              <!-- Expanded result -->
+              {#if isExpanded && result}
+                <div class="px-2 py-1 bg-muted/10" transition:slide={{ duration: 150 }}>
+                  <div class="prose prose-xs max-w-none text-[11px] overflow-auto max-h-48 custom-scrollbar [&_pre]:bg-muted/50 [&_pre]:p-1.5 [&_pre]:rounded [&_pre]:text-[10px] [&_code]:text-[10px] [&_p]:my-0.5 [&_br]:block">
+                    <Markdown source={result} options={{ breaks: true }} />
+                  </div>
+                </div>
+              {/if}
+            </div>
+          {/each}
         </div>
       {:else if subagent.status === 'starting' || subagent.status === 'running'}
-        <div class="p-3 text-sm text-muted-foreground italic">
+        <div class="px-3 py-2 text-xs text-muted-foreground italic">
           Working...
         </div>
       {/if}
@@ -159,8 +267,8 @@
       {#if subagent.status === 'complete' && subagent.result}
         <div class="px-3 pb-3">
           <div class="text-xs text-muted-foreground mb-1">Result:</div>
-          <div class="text-sm bg-muted/50 rounded p-2 max-h-32 overflow-auto font-mono text-xs">
-            {subagent.result.slice(0, 500)}{subagent.result.length > 500 ? '...' : ''}
+          <div class="bg-muted/50 rounded p-2 max-h-40 overflow-auto custom-scrollbar prose prose-xs max-w-none [&_pre]:bg-background/50 [&_pre]:p-2 [&_pre]:rounded [&_pre]:text-[10px] [&_code]:text-[10px] [&_p]:my-1 [&_p]:text-xs [&_br]:block">
+            <Markdown source={subagent.result} options={{ breaks: true }} />
           </div>
         </div>
       {/if}

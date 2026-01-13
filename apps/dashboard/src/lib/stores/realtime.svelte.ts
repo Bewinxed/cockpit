@@ -279,6 +279,19 @@ export function clearInstanceMessages(instanceId: string): void {
   });
 }
 
+// Clear subagents for an instance
+export function clearInstanceSubagents(instanceId: string): void {
+  activeSubagents.update((map) => {
+    const newMap = new Map(map);
+    for (const [toolUseId, subagent] of newMap) {
+      if (subagent.instanceId === instanceId) {
+        newMap.delete(toolUseId);
+      }
+    }
+    return newMap;
+  });
+}
+
 // Update metadata on a specific message by index
 export function updateMessageMetadata(instanceId: string, index: number, metadata: Record<string, unknown>): void {
   instanceMessages.update((map) => {
@@ -511,12 +524,18 @@ export function startSubagent(
 
 /**
  * Update subagent status to running.
+ * Creates new object reference to ensure Svelte reactivity.
  */
 export function setSubagentRunning(toolUseId: string): void {
   activeSubagents.update((map) => {
     const subagent = map.get(toolUseId);
     if (subagent) {
-      subagent.status = 'running';
+      const newMap = new Map(map);
+      newMap.set(toolUseId, {
+        ...subagent,
+        status: 'running',
+      });
+      return newMap;
     }
     return map;
   });
@@ -524,14 +543,21 @@ export function setSubagentRunning(toolUseId: string): void {
 
 /**
  * Complete a subagent with result.
+ * Creates new object reference to ensure Svelte reactivity.
  */
 export function completeSubagent(toolUseId: string, result?: string): void {
   activeSubagents.update((map) => {
     const subagent = map.get(toolUseId);
     if (subagent) {
-      subagent.status = 'complete';
-      subagent.completedAt = new Date();
-      subagent.result = result;
+      // Create new object to trigger Svelte reactivity
+      const newMap = new Map(map);
+      newMap.set(toolUseId, {
+        ...subagent,
+        status: 'complete',
+        completedAt: new Date(),
+        result,
+      });
+      return newMap;
     }
     return map;
   });
@@ -539,14 +565,21 @@ export function completeSubagent(toolUseId: string, result?: string): void {
 
 /**
  * Mark subagent as errored.
+ * Creates new object reference to ensure Svelte reactivity.
  */
 export function errorSubagent(toolUseId: string, error: string): void {
   activeSubagents.update((map) => {
     const subagent = map.get(toolUseId);
     if (subagent) {
-      subagent.status = 'error';
-      subagent.completedAt = new Date();
-      subagent.error = error;
+      // Create new object to trigger Svelte reactivity
+      const newMap = new Map(map);
+      newMap.set(toolUseId, {
+        ...subagent,
+        status: 'error',
+        completedAt: new Date(),
+        error,
+      });
+      return newMap;
     }
     return map;
   });
@@ -554,12 +587,18 @@ export function errorSubagent(toolUseId: string, error: string): void {
 
 /**
  * Add a message to a subagent's message list.
+ * Creates new object references to ensure Svelte reactivity.
  */
 export function addSubagentMessage(toolUseId: string, message: Message): void {
   activeSubagents.update((map) => {
     const subagent = map.get(toolUseId);
     if (subagent) {
-      subagent.messages.push(message);
+      const newMap = new Map(map);
+      newMap.set(toolUseId, {
+        ...subagent,
+        messages: [...subagent.messages, message],
+      });
+      return newMap;
     }
     return map;
   });
@@ -650,6 +689,7 @@ export function reconstructSubagentsFromHistory(instanceId: string, messages: Me
   clearInstanceSubagents(instanceId);
 
   activeSubagents.update((map) => {
+    // First pass: Create SubagentState for each Task tool
     for (const msg of messages) {
       // Only process Task tool_use messages
       if (msg.type === 'tool_use' && msg.metadata?.toolName === 'Task') {
@@ -676,7 +716,7 @@ export function reconstructSubagentsFromHistory(instanceId: string, messages: Me
           startedAt: msg.timestamp,
           // For historical data, we use the same timestamp (exact completion time not stored)
           completedAt: hasResult ? msg.timestamp : undefined,
-          messages: [], // SDK doesn't stream intermediate subagent messages
+          messages: [], // Will be populated in second pass
           result: hasResult && !isError ? extractResultText(resultContent) : undefined,
           error: isError ? extractResultText(resultContent) : undefined,
         };
@@ -684,8 +724,120 @@ export function reconstructSubagentsFromHistory(instanceId: string, messages: Me
         map.set(toolId, subagentState);
       }
     }
+
+    // Second pass: Add messages with parentToolUseId to their subagent's messages array
+    for (const msg of messages) {
+      if (msg.parentToolUseId && map.has(msg.parentToolUseId)) {
+        const subagent = map.get(msg.parentToolUseId)!;
+        // Add to messages array (create new array for proper reactivity)
+        map.set(msg.parentToolUseId, {
+          ...subagent,
+          messages: [...subagent.messages, msg],
+        });
+      }
+    }
+
     return map;
   });
+}
+
+/**
+ * Handle a message that belongs to a subagent (has parent_tool_use_id).
+ * Routes the message to the appropriate SubagentState for display.
+ */
+function handleSubagentMessage(
+  instanceId: string,
+  parentToolUseId: string,
+  msg: {
+    type?: string;
+    message?: { content?: unknown[] | string };
+  }
+): void {
+  // Mark subagent as running if not already
+  setSubagentRunning(parentToolUseId);
+
+  // Create message to add to subagent
+  if (msg.type === 'assistant' && msg.message?.content) {
+    const content = msg.message.content;
+    if (Array.isArray(content)) {
+      for (const block of content) {
+        if (block && typeof block === 'object' && 'type' in block) {
+          // Tool use within subagent
+          if (block.type === 'tool_use') {
+            const toolBlock = block as { id?: string; name?: string; input?: unknown };
+            const subagentMessage: Message = {
+              id: `subagent-${parentToolUseId}-${toolBlock.id}`,
+              instanceId,
+              type: 'tool_use',
+              content: toolBlock.name || 'Tool',
+              timestamp: new Date(),
+              parentToolUseId,
+              metadata: {
+                toolId: toolBlock.id,
+                toolName: toolBlock.name,
+                toolInput: toolBlock.input,
+                toolStatus: 'pending',
+              },
+            };
+            addSubagentMessage(parentToolUseId, subagentMessage);
+          }
+          // Text response within subagent (less common, usually just tool use)
+          else if (block.type === 'text' && 'text' in block) {
+            const subagentMessage: Message = {
+              id: `subagent-${parentToolUseId}-text-${Date.now()}`,
+              instanceId,
+              type: 'assistant',
+              content: block.text as string,
+              timestamp: new Date(),
+              parentToolUseId,
+            };
+            addSubagentMessage(parentToolUseId, subagentMessage);
+          }
+        }
+      }
+    }
+  }
+
+  // Handle tool results within subagent (update the tool_use message status)
+  if (msg.type === 'user' && msg.message?.content) {
+    const content = msg.message.content;
+    if (Array.isArray(content)) {
+      for (const block of content) {
+        if (block && typeof block === 'object' && 'type' in block && block.type === 'tool_result') {
+          const toolResult = block as {
+            tool_use_id?: string;
+            content?: unknown;
+            is_error?: boolean;
+          };
+          if (toolResult.tool_use_id) {
+            // Update the tool_use message in the subagent with its result
+            activeSubagents.update((map) => {
+              const subagent = map.get(parentToolUseId);
+              if (subagent) {
+                const updatedMessages = subagent.messages.map((m) => {
+                  if (m.type === 'tool_use' && m.metadata?.toolId === toolResult.tool_use_id) {
+                    return {
+                      ...m,
+                      metadata: {
+                        ...m.metadata,
+                        toolResult: toolResult.content,
+                        toolStatus: toolResult.is_error ? 'error' as const : 'success' as const,
+                      },
+                    };
+                  }
+                  return m;
+                });
+                const newMap = new Map(map);
+                newMap.set(parentToolUseId, { ...subagent, messages: updatedMessages });
+                return newMap;
+              }
+              return map;
+            });
+          }
+        }
+      }
+    }
+  }
 }
 
 // Set/clear transient instance status (compacting, etc.)
@@ -1034,7 +1186,19 @@ export function connect(baseUrl: string = '') {
       cwd?: string;
       model?: string;
       tools?: string[];
+      parent_tool_use_id?: string | null; // Links message to parent subagent
     };
+
+    // ========================================
+    // SUBAGENT MESSAGE ROUTING
+    // ========================================
+    // Messages with parent_tool_use_id belong to a subagent, not main chat
+    const parentToolUseId = msg.parent_tool_use_id;
+    if (parentToolUseId) {
+      // This message is from a subagent - route to SubagentBranch, not main chat
+      handleSubagentMessage(instanceId, parentToolUseId, msg);
+      return;
+    }
 
     // Debug: Log all user messages
     if (msg.type === 'user') {

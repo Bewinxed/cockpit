@@ -505,6 +505,36 @@ export function createInstanceRoutes(db: Db) {
       }
     )
 
+    // Clear messages for an instance
+    .delete(
+      '/:id/messages',
+      async ({ params, set }) => {
+        const instance = await tracker.get(params.id);
+
+        if (!instance) {
+          set.status = 404;
+          return {
+            success: false,
+            error: 'Instance not found',
+          };
+        }
+
+        const deletedCount = await tracker.deleteMessages(params.id);
+
+        return {
+          success: true,
+          data: {
+            deletedCount,
+          },
+        };
+      },
+      {
+        params: t.Object({
+          id: t.String(),
+        }),
+      }
+    )
+
     // Get available commands for an instance
     .get(
       '/:id/commands',
