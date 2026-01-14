@@ -1,0 +1,73 @@
+{
+  // TypeScript settings
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "typescript.enablePromptUseWorkspaceTsdk": true,
+
+  // Use per-package tsconfigs
+  "typescript.preferences.includePackageJsonAutoImports": "on",
+
+  // Svelte settings
+  "svelte.enable-ts-plugin": true,
+  "svelte.plugin.svelte.compilerWarnings": {
+    "css-unused-selector": "ignore"
+  },
+
+  // Tell Svelte LSP where the dashboard tsconfig is
+  "[svelte]": {
+    "editor.defaultFormatter": "svelte.svelte-vscode"
+  },
+
+  // Tailwind CSS settings
+  "tailwindCSS.includeLanguages": {
+    "svelte": "html"
+  },
+  "tailwindCSS.experimental.classRegex": [
+    ["class\\s*[:=]\\s*['\"`]([^'\"`]*)['\"`]", ""],
+    ["cn\\(([^)]*)\\)", "(?:'|\"|`)([^']*)(?:'|\"|`)"],
+    ["cva\\(([^)]*)\\)", "[\"'`]([^\"'`]*).*?[\"'`]"]
+  ],
+  "tailwindCSS.rootFontSize": 16,
+
+  // ESLint settings (when/if you add eslint config)
+  "eslint.workingDirectories": [
+    { "directory": "apps/dashboard", "changeProcessCWD": true },
+    { "directory": "packages/core", "changeProcessCWD": true },
+    { "directory": "packages/hub-server", "changeProcessCWD": true },
+    { "directory": "packages/agent-service", "changeProcessCWD": true },
+    { "directory": "packages/db", "changeProcessCWD": true },
+    { "directory": "packages/auth", "changeProcessCWD": true },
+    { "directory": "packages/mcp-task-tracker", "changeProcessCWD": true }
+  ],
+  "eslint.validate": ["javascript", "typescript", "svelte"],
+
+  // File associations
+  "files.associations": {
+    "*.svelte": "svelte"
+  },
+
+  // Exclude from file watcher
+  "files.watcherExclude": {
+    "**/.git/objects/**": true,
+    "**/.git/subtree-cache/**": true,
+    "**/node_modules/**": true,
+    "**/.svelte-kit/**": true,
+    "**/dist/**": true,
+    "**/build/**": true
+  },
+
+  // Search exclusions
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/.svelte-kit": true,
+    "**/dist": true,
+    "**/build": true,
+    "**/.git": true,
+    "**/bun.lockb": true
+  },
+
+  // Format on save
+  "editor.formatOnSave": true,
+  "editor.codeActionsOnSave": {
+    "source.organizeImports": "explicit"
+  }
+}
