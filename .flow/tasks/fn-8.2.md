@@ -31,8 +31,22 @@ import { fetchAgents, fetchInstances, fetchProjects } from './stores/realtime.sv
 - [ ] LSP shows no errors
 
 ## Done summary
-TBD
+## fn-8.2: Replace legacy fetch imports in actions.ts
 
+### Changes Made
+- Removed import from `realtime.svelte.ts`
+- Removed all `fetchAgents()`, `fetchInstances()`, `fetchProjects()` calls
+- Removed `refreshAll()` function (was unused)
+- Added comments explaining SSE handles updates automatically
+
+### Rationale
+With the new SSE architecture:
+- `instance:created/stopped/resumed` events update instance store
+- `project:created/updated/deleted` events update project store
+- No need for manual refresh after mutations
+
+### File
+`apps/dashboard/src/lib/actions.ts` - 65 lines removed, cleaner code
 ## Evidence
 - Commits:
 - Tests:

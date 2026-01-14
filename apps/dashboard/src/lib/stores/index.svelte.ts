@@ -327,22 +327,6 @@ class CrossStoreDerivations {
   readonly selectedInstance = $derived(
     ui.selectedInstanceId ? instances.get(ui.selectedInstanceId) || null : null
   );
-
-  // ============================================
-  // LEGACY COMPATIBILITY (deprecated)
-  // ============================================
-
-  /** @deprecated Use agents.online directly */
-  readonly onlineAgents = $derived(agents.online);
-
-  /** @deprecated Use tasks.active directly */
-  readonly activeTasks = $derived(tasks.active);
-
-  /** @deprecated Use permissions.sorted directly */
-  readonly allPendingPermissions = $derived(permissions.sorted);
-
-  /** @deprecated Use permissions.count directly */
-  readonly pendingPermissionCount = $derived(permissions.count);
 }
 
 // Singleton with HMR persistence

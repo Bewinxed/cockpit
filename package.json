@@ -27,7 +27,12 @@
     "db:push": "bun run --filter @cockpit/db db:push"
   },
   "overrides": {
-    "vite": "npm:rolldown-vite@latest"
+    "vite": "npm:rolldown-vite@latest",
+    "elysia": "^1.4.22",
+    "@types/bun": "latest"
+  },
+  "dependencies": {
+    "elysia": "^1.4.22"
   },
   "devDependencies": {
     "@lucide/svelte": "^0.562.0",

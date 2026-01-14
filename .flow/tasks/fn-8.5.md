@@ -32,8 +32,22 @@ Fix remaining LSP warnings and errors in dashboard components.
 - [ ] No unused imports or variables
 
 ## Done summary
-TBD
+## fn-8.5: Fix LSP diagnostics in components
 
+### Changes Made to WorkspaceInstance.svelte
+1. Replaced deprecated `Loader2` with `LoaderCircle` from lucide-svelte
+2. Removed unused import `StreamingIndicator`
+3. Removed unused import `agents` from stores
+4. Removed unused variable `agent` derived from instance.machineId
+5. Removed unused variable `pendingAuthUrl` (auth URL now stored in message metadata)
+6. Removed unused index variable `groupIdx` from each loop
+
+### Files Changed
+- `apps/dashboard/src/lib/components/workspace/WorkspaceInstance.svelte`
+
+### Verification
+- No TypeScript errors in WorkspaceInstance.svelte
+- All unused variable warnings fixed
 ## Evidence
 - Commits:
 - Tests:

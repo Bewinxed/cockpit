@@ -1,10 +1,12 @@
 /**
  * API Actions for Dashboard
  * Handles all mutations (create, update, delete) using Eden Treaty through the proxy
+ *
+ * Note: Data refresh is handled automatically via SSE events.
+ * When mutations succeed, the hub broadcasts events that update stores.
  */
 
 import { api } from '$lib/api';
-import { fetchAgents, fetchInstances, fetchProjects } from './stores/realtime.svelte';
 import { extractErrorMessage } from '$lib/utils/error';
 
 /** Error codes that indicate authentication issues */
@@ -18,26 +20,14 @@ export interface ActionResult<T = unknown> {
   authRequired?: boolean;
 }
 
-
 /**
- * Check if an error indicates authentication is required
+ * Check if an error indicates authentication is required.
+ * Uses only error codes - auth is handled via SDK messages with subtype 'login_prompt'.
  */
 function isAuthError(error: unknown): boolean {
-  if (!error) return false;
-
-  const errorStr = extractErrorMessage(error).toLowerCase();
-  if (errorStr.includes('auth') || errorStr.includes('login') || errorStr.includes('credential')) {
-    return true;
-  }
-
-  if (typeof error === 'object' && error !== null) {
-    const errObj = error as Record<string, unknown>;
-    if (typeof errObj.code === 'number' && AUTH_ERROR_CODES.includes(errObj.code)) {
-      return true;
-    }
-  }
-
-  return false;
+  if (!error || typeof error !== 'object') return false;
+  const errObj = error as Record<string, unknown>;
+  return typeof errObj.code === 'number' && AUTH_ERROR_CODES.includes(errObj.code);
 }
 
 /**
@@ -63,9 +53,7 @@ export async function spawnInstance(params: {
     };
   }
 
-  // Refresh instances list
-  await fetchInstances();
-
+  // SSE will broadcast instance:created to update stores
   return { success: true, data: data?.data };
 }
 
@@ -81,9 +69,7 @@ export async function stopInstance(instanceId: string): Promise<{ success: boole
     return { success: false, error: errorMsg };
   }
 
-  // Refresh instances list
-  await fetchInstances();
-
+  // SSE will broadcast instance:stopped to update stores
   return { success: true };
 }
 
@@ -133,9 +119,7 @@ export async function createProject(params: {
     return { success: false, error: errorMsg };
   }
 
-  // Refresh projects list
-  await fetchProjects();
-
+  // SSE will broadcast project:created to update stores
   return { success: true, data: data?.data };
 }
 
@@ -159,9 +143,7 @@ export async function updateProject(
     return { success: false, error: errorMsg };
   }
 
-  // Refresh projects list
-  await fetchProjects();
-
+  // SSE will broadcast project:updated to update stores
   return { success: true };
 }
 
@@ -177,9 +159,7 @@ export async function deleteProject(projectId: string): Promise<{ success: boole
     return { success: false, error: errorMsg };
   }
 
-  // Refresh projects list
-  await fetchProjects();
-
+  // SSE will broadcast project:deleted to update stores
   return { success: true };
 }
 
@@ -196,9 +176,7 @@ export async function interruptInstance(instanceId: string): Promise<ActionResul
     return { success: false, error: errorMsg };
   }
 
-  // Refresh instances list
-  await fetchInstances();
-
+  // SSE will broadcast instance state change to update stores
   return { success: true, data: data?.data };
 }
 
@@ -223,21 +201,8 @@ export async function resumeInstance(
     };
   }
 
-  // Refresh instances list
-  await fetchInstances();
-
+  // SSE will broadcast instance:resumed to update stores
   return { success: true, data: data?.data };
-}
-
-/**
- * Refresh all data from the hub
- */
-export async function refreshAll(): Promise<void> {
-  await Promise.all([
-    fetchAgents(),
-    fetchInstances(),
-    fetchProjects(),
-  ]);
 }
 
 /**

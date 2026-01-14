@@ -22,7 +22,11 @@ function handleSubagentMessage(
     message?: { content?: unknown[] | string };
   }
 ): void {
-  // Mark subagent as running if not already
+  // Ensure subagent exists (may arrive before Task tool_use message due to race condition)
+  if (!instances.getSubagent(parentToolUseId)) {
+    instances.startSubagent(parentToolUseId, instanceId, 'unknown', 'Subagent');
+  }
+  // Mark subagent as running
   instances.setSubagentRunning(parentToolUseId);
 
   // Create message to add to subagent
@@ -214,9 +218,15 @@ function processAssistantMessage(
         },
       });
 
-      // Start tracking subagent if this is a Task tool
+      // Start or update subagent tracking for Task tools
       if (tool.toolName === 'Task' && tool.id && tool.subagentType) {
-        instances.startSubagent(tool.id, instanceId, tool.subagentType, tool.subagentDescription ?? undefined);
+        const existing = instances.getSubagent(tool.id);
+        if (existing) {
+          // Update existing subagent with proper type/description (may have been created early due to race)
+          instances.updateSubagentInfo(tool.id, tool.subagentType, tool.subagentDescription ?? undefined);
+        } else {
+          instances.startSubagent(tool.id, instanceId, tool.subagentType, tool.subagentDescription ?? undefined);
+        }
       }
     }
   }

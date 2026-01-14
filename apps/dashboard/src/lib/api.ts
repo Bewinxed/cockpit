@@ -16,7 +16,7 @@ export const api = new Proxy({} as ReturnType<typeof treaty<App>>, {
         : 'http://localhost:3000';
       _api = treaty<App>(baseUrl);
     }
-    return (_api as any)[prop];
+    return _api[prop as keyof typeof _api];
   }
 });
 

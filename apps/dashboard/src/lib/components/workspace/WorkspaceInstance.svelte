@@ -1,15 +1,14 @@
 <script lang="ts">
   import { flip } from 'svelte/animate';
   import { fly } from 'svelte/transition';
-  import { ArrowDown, Bot, Loader2 } from 'lucide-svelte';
+  import { ArrowDown, Bot, LoaderCircle } from 'lucide-svelte';
   import { Button } from '$lib/components/ui/button';
   import InstanceHeader from './InstanceHeader.svelte';
-  import { ChatMessage, ChatInput, StreamingIndicator, PermissionRequest, ToolGroup, SubagentBranch } from '$lib/components/features';
+  import { ChatMessage, ChatInput, PermissionRequest, ToolGroup, SubagentBranch } from '$lib/components/features';
   import { UseAutoScroll } from '$lib/hooks/use-auto-scroll.svelte';
   import { ActivityGrid } from '$lib/components/ui/activity-grid';
   import {
     instances,
-    agents,
     permissions as permissionsStore,
     type Message
   } from '$lib/stores';
@@ -64,7 +63,6 @@
 
   // Reactive stores for this instance - using new Svelte 5 entity stores
   const instance = $derived(instances.get(instanceId));
-  const agent = $derived(instance?.machineId ? agents.get(instance.machineId) : undefined);
 
   // Messages and permissions for this instance
   const currentMessages = $derived(instances.getMessages(instanceId));
@@ -419,7 +417,6 @@
 
   // OAuth state
   let pendingOAuthState = $state<string | null>(null);
-  let pendingAuthUrl = $state<string | null>(null);
 
   // Model picker state
   let pendingModelPickerIndex = $state<number | null>(null);
@@ -454,7 +451,6 @@
       }
 
       pendingOAuthState = data.data.state;
-      pendingAuthUrl = data.data.authUrl;
 
       instances.addMessage(instanceId, {
         type: 'system',
@@ -741,7 +737,6 @@
     }
 
     pendingOAuthState = null;
-    pendingAuthUrl = null;
 
     instances.addMessage(instanceId, {
       type: 'system',
@@ -752,7 +747,6 @@
 
   function handleLoginCancel() {
     pendingOAuthState = null;
-    pendingAuthUrl = null;
     instances.addMessage(instanceId, {
       type: 'system',
       content: 'Login cancelled.',
@@ -993,7 +987,7 @@
       <!-- Loading state -->
       {#if isLoadingMessages && chatMessages.length === 0}
         <div class="flex items-center justify-center py-8 text-muted-foreground">
-          <Loader2 class="size-5 animate-spin mr-2" />
+          <LoaderCircle class="size-5 animate-spin mr-2" />
           <span class="text-sm">Loading messages...</span>
         </div>
       {:else if chatMessages.length === 0}
@@ -1006,7 +1000,7 @@
           </div>
         </div>
       {:else}
-        {#each groupedMessages as group, groupIdx (group.type === 'tool_group' ? `tools-${group.startIndex}` : group.type === 'subagent_group' ? `subagents-${group.startIndex}` : group.message.id)}
+        {#each groupedMessages as group (group.type === 'tool_group' ? `tools-${group.startIndex}` : group.type === 'subagent_group' ? `subagents-${group.startIndex}` : group.message.id)}
           <div
             animate:flip={{ duration: 300 }}
             in:fly={{ y: 20, duration: 300 }}
@@ -1157,7 +1151,7 @@
   <!-- Transient Status (compacting, etc.) -->
   {#if transientStatus}
     <div class="border-t border-border bg-warning/10 px-4 py-2 flex items-center gap-2">
-      <Loader2 class="size-4 animate-spin text-warning" />
+      <LoaderCircle class="size-4 animate-spin text-warning" />
       <span class="text-sm text-warning capitalize">{transientStatus}...</span>
     </div>
   {/if}

@@ -7,7 +7,7 @@
   "plan_review_status": "unknown",
   "plan_reviewed_at": null,
   "spec_path": ".flow/specs/fn-8.md",
-  "status": "open",
+  "status": "done",
   "title": "Post-Migration Cleanup: Remove legacy code and fix anti-patterns",
-  "updated_at": "2026-01-14T10:27:48.084885Z"
+  "updated_at": "2026-01-14T11:24:15.028471Z"
 }

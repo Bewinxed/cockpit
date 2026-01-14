@@ -455,6 +455,14 @@ class InstanceStore {
     }
   }
 
+  /** Update subagent type/description (for race condition when messages arrive before Task tool_use) */
+  updateSubagentInfo(toolUseId: string, subagentType: string, description?: string): void {
+    const subagent = this.#subagents.get(toolUseId);
+    if (subagent) {
+      this.#subagents.set(toolUseId, { ...subagent, subagentType, description });
+    }
+  }
+
   /** Mark subagent as background agent */
   markSubagentBackground(toolUseId: string): void {
     const subagent = this.#subagents.get(toolUseId);

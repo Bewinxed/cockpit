@@ -34,8 +34,32 @@ function isAuthError(error: unknown): boolean {
 - [ ] LSP shows no errors
 
 ## Done summary
-TBD
+## fn-8.1: Remove string-matching from isAuthError
 
+### Changes Made
+Simplified `isAuthError()` function in `actions.ts` to use only error codes.
+
+**Before (bad):**
+```typescript
+function isAuthError(error: unknown): boolean {
+  const errorStr = extractErrorMessage(error).toLowerCase();
+  if (errorStr.includes('auth') || errorStr.includes('login') || errorStr.includes('credential')) {
+    return true;
+  }
+  // Also checked error codes...
+}
+```
+
+**After (good):**
+```typescript
+function isAuthError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const errObj = error as Record<string, unknown>;
+  return typeof errObj.code === 'number' && AUTH_ERROR_CODES.includes(errObj.code);
+}
+```
+
+Auth is properly handled via SDK messages with `subtype: 'login_prompt'`, not error string matching.
 ## Evidence
 - Commits:
 - Tests:

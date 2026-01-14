@@ -32,8 +32,25 @@ Delete the legacy `realtime.svelte.ts` file (74KB, 2200+ lines) after ensuring a
 - [ ] `bunx svelte-check` passes
 
 ## Done summary
-TBD
+## fn-8.4: Delete realtime.svelte.ts and resolve imports
 
+### Changes Made
+1. Deleted the 74KB legacy `realtime.svelte.ts` file
+2. Fixed Elysia type mismatch by:
+   - Adding `@types/bun: latest` to hub-server devDependencies
+   - Adding `@types/bun: latest` override in root package.json
+   - Clean reinstall to unify Elysia resolution
+3. Removed `any` cast in api.ts - now uses proper type-safe access
+
+### Files Changed
+- `packages/hub-server/package.json` - added @types/bun
+- `package.json` - added @types/bun override
+- `apps/dashboard/src/lib/api.ts` - removed `as any` cast
+
+### Verification
+- No TypeScript errors in api.ts
+- Only one Elysia version in lockfile
+- No remaining imports to realtime.svelte.ts (only comments)
 ## Evidence
 - Commits:
 - Tests:

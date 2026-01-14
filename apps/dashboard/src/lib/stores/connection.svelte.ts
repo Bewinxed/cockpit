@@ -114,78 +114,78 @@ class ConnectionStore {
     // Prepare and start the connection
     this.#client
       .prepare(url, { method: 'GET' })
-      // Agent events - river.ts passes { type, data } so we extract .data
-      .on('agent:connected', (event) => {
-        this.#handlers.get('agent:connected')?.(event.data);
+      // Agent events - river.ts passes parsed data directly to handlers
+      .on('agent:connected', (data) => {
+        this.#handlers.get('agent:connected')?.(data);
       })
-      .on('agent:disconnected', (event) => {
-        this.#handlers.get('agent:disconnected')?.(event.data);
+      .on('agent:disconnected', (data) => {
+        this.#handlers.get('agent:disconnected')?.(data);
       })
-      .on('agent:reconnecting', (event) => {
-        this.#handlers.get('agent:reconnecting')?.(event.data);
+      .on('agent:reconnecting', (data) => {
+        this.#handlers.get('agent:reconnecting')?.(data);
       })
-      .on('agent:updated', (event) => {
-        this.#handlers.get('agent:updated')?.(event.data);
+      .on('agent:updated', (data) => {
+        this.#handlers.get('agent:updated')?.(data);
       })
       // Instance events
-      .on('instance:created', (event) => {
-        this.#handlers.get('instance:created')?.(event.data);
+      .on('instance:created', (data) => {
+        this.#handlers.get('instance:created')?.(data);
       })
-      .on('instance:started', (event) => {
-        this.#handlers.get('instance:started')?.(event.data);
+      .on('instance:started', (data) => {
+        this.#handlers.get('instance:started')?.(data);
       })
-      .on('instance:stopped', (event) => {
-        this.#handlers.get('instance:stopped')?.(event.data);
+      .on('instance:stopped', (data) => {
+        this.#handlers.get('instance:stopped')?.(data);
       })
-      .on('instance:sleeping', (event) => {
-        this.#handlers.get('instance:sleeping')?.(event.data);
+      .on('instance:sleeping', (data) => {
+        this.#handlers.get('instance:sleeping')?.(data);
       })
-      .on('instance:error', (event) => {
-        this.#handlers.get('instance:error')?.(event.data);
+      .on('instance:error', (data) => {
+        this.#handlers.get('instance:error')?.(data);
       })
-      .on('instance:resumed', (event) => {
-        this.#handlers.get('instance:resumed')?.(event.data);
+      .on('instance:resumed', (data) => {
+        this.#handlers.get('instance:resumed')?.(data);
       })
-      .on('instance:token_usage', (event) => {
-        this.#handlers.get('instance:token_usage')?.(event.data);
+      .on('instance:token_usage', (data) => {
+        this.#handlers.get('instance:token_usage')?.(data);
       })
-      .on('instance:model-changed', (event) => {
-        this.#handlers.get('instance:model-changed')?.(event.data);
+      .on('instance:model-changed', (data) => {
+        this.#handlers.get('instance:model-changed')?.(data);
       })
       // SDK message
-      .on('sdk:message', (event) => {
-        this.#handlers.get('sdk:message')?.(event.data);
+      .on('sdk:message', (data) => {
+        this.#handlers.get('sdk:message')?.(data);
       })
       // Task events
-      .on('task:created', (event) => {
-        this.#handlers.get('task:created')?.(event.data);
+      .on('task:created', (data) => {
+        this.#handlers.get('task:created')?.(data);
       })
-      .on('task:updated', (event) => {
-        this.#handlers.get('task:updated')?.(event.data);
+      .on('task:updated', (data) => {
+        this.#handlers.get('task:updated')?.(data);
       })
-      .on('task:completed', (event) => {
-        this.#handlers.get('task:completed')?.(event.data);
+      .on('task:completed', (data) => {
+        this.#handlers.get('task:completed')?.(data);
       })
       // Permission events
-      .on('permission:request', (event) => {
-        this.#handlers.get('permission:request')?.(event.data);
+      .on('permission:request', (data) => {
+        this.#handlers.get('permission:request')?.(data);
       })
       // Project events
-      .on('project:created', (event) => {
-        this.#handlers.get('project:created')?.(event.data);
+      .on('project:created', (data) => {
+        this.#handlers.get('project:created')?.(data);
       })
-      .on('project:updated', (event) => {
-        this.#handlers.get('project:updated')?.(event.data);
+      .on('project:updated', (data) => {
+        this.#handlers.get('project:updated')?.(data);
       })
-      .on('project:deleted', (event) => {
-        this.#handlers.get('project:deleted')?.(event.data);
+      .on('project:deleted', (data) => {
+        this.#handlers.get('project:deleted')?.(data);
       })
       // Connection event
-      .on('connected', (event) => {
+      .on('connected', (data) => {
         this.status = 'connected';
         this.#reconnectAttempts = 0;
-        console.log('[SSE] Connected to hub, clientId:', event.data.clientId);
-        this.#handlers.get('connected')?.(event.data);
+        console.log('[SSE] Connected to hub, clientId:', data.clientId);
+        this.#handlers.get('connected')?.(data);
       })
       // Close event
       .on('close', () => {

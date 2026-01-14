@@ -1,16 +1,26 @@
 {
-  "assignee": null,
+  "assignee": "bewinxed@gmail.com",
   "claim_note": "",
-  "claimed_at": null,
+  "claimed_at": "2026-01-14T10:40:07.794836Z",
   "created_at": "2026-01-14T10:29:09.975156Z",
   "depends_on": [
     "fn-8.1"
   ],
   "epic": "fn-8",
+  "evidence": {
+    "fetch_calls_removed": [
+      "fetchAgents",
+      "fetchInstances",
+      "fetchProjects"
+    ],
+    "legacy_imports_removed": true,
+    "refreshAll_removed": true,
+    "sse_handles_updates": true
+  },
   "id": "fn-8.2",
   "priority": null,
   "spec_path": ".flow/tasks/fn-8.2.md",
-  "status": "todo",
+  "status": "done",
   "title": "Replace legacy fetch imports in actions.ts",
-  "updated_at": "2026-01-14T10:29:09.975186Z"
+  "updated_at": "2026-01-14T10:41:35.975419Z"
 }

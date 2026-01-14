@@ -794,10 +794,8 @@ export function createInstanceRoutes(db: Db) {
           });
         }
 
-        // Get updated instance
+        // Get updated instance and broadcast
         const updated = await tracker.get(params.id);
-
-        // Broadcast instance resumed
         getBroadcastService().broadcast('instance:resumed', updated);
 
         return {

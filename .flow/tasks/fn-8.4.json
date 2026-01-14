@@ -1,16 +1,24 @@
 {
-  "assignee": null,
+  "assignee": "bewinxed@gmail.com",
   "claim_note": "",
-  "claimed_at": null,
+  "claimed_at": "2026-01-14T10:42:32.725026Z",
   "created_at": "2026-01-14T10:29:10.580755Z",
   "depends_on": [
     "fn-8.2"
   ],
   "epic": "fn-8",
+  "evidence": {
+    "commands": [
+      "tsc --noEmit shows no api.ts errors",
+      "grep found no imports to realtime.svelte.ts"
+    ],
+    "notes": "Elysia type mismatch root cause was @types/bun version mismatch between packages",
+    "tests": []
+  },
   "id": "fn-8.4",
   "priority": null,
   "spec_path": ".flow/tasks/fn-8.4.md",
-  "status": "todo",
+  "status": "done",
   "title": "Delete realtime.svelte.ts and resolve imports",
-  "updated_at": "2026-01-14T10:29:10.580786Z"
+  "updated_at": "2026-01-14T11:19:56.009192Z"
 }
