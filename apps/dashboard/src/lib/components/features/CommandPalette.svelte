@@ -34,7 +34,7 @@
   });
 
   // Filter commands based on input
-  let filteredCommands = $derived(
+  let filteredCommands: AvailableCommand[] = $derived(
     commands.filter((cmd) => {
       const searchTerm = filter.toLowerCase().replace(/^\//, '');
       return cmd.name.toLowerCase().includes(searchTerm) ||
@@ -107,7 +107,7 @@
                  {index === selectedIndex ? 'bg-accent' : ''}"
           onclick={() => onSelect(command)}
         >
-          <Icon class="w-4 h-4 text-muted-foreground flex-shrink-0" />
+          <Icon class="w-4 h-4 text-muted-foreground shrink-0" />
           <div class="flex-1 min-w-0">
             <div class="flex items-center gap-2">
               <span class="font-medium text-foreground">{command.name}</span>

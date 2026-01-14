@@ -5,12 +5,12 @@
   import { Button } from '$lib/components/ui/button';
   import {
     ChevronUp,
-    Home,
+    House,
     RefreshCw,
     Folder,
     File,
     ChevronRight,
-    Loader2,
+    LoaderCircle,
     Link as LinkIcon,
     ArrowRight
   } from 'lucide-svelte';
@@ -53,7 +53,9 @@
       }
 
       if (!data?.success) {
-        error = (data as any)?.error || 'Failed to load directory';
+        error = (data && 'error' in data && typeof data.error === 'string')
+          ? data.error
+          : 'Failed to load directory';
         return;
       }
 
@@ -126,7 +128,7 @@
       disabled={loading}
       title="Go to home directory"
     >
-      <Home class="w-4 h-4" />
+      <House class="w-4 h-4" />
     </Button>
 
     <Button
@@ -175,7 +177,7 @@
   <div class="flex-1 overflow-y-auto min-h-0">
     {#if loading && entries.length === 0}
       <div class="flex flex-col items-center justify-center h-48 text-muted-foreground gap-3">
-        <Loader2 class="w-6 h-6 animate-spin" />
+        <LoaderCircle class="w-6 h-6 animate-spin" />
         <span class="text-sm">Fetching files...</span>
       </div>
     {:else if entries.length === 0}
@@ -193,7 +195,7 @@
                    {entry.isDirectory ? 'cursor-pointer' : 'cursor-default opacity-60'}"
           >
             <!-- Icon -->
-            <div class="flex-shrink-0">
+            <div class="shrink-0">
               {#if entry.isDirectory}
                 <Folder class="w-4 h-4 text-warning" fill="currentColor" fill-opacity="0.2" />
               {:else}

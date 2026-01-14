@@ -2,12 +2,12 @@
 	import {
 		BookOpen,
 		FolderOpen,
-		Home,
+		House,
 		ArrowRight,
-		AlertCircle,
-		Loader2,
+		CircleAlert,
+		LoaderCircle,
 		Check,
-		XCircle
+		CircleX
 	} from 'lucide-svelte';
 	import type { MessageRendererProps } from './types';
 
@@ -114,7 +114,7 @@
 					<!-- Header -->
 					<div class="flex items-start gap-3">
 						<div
-							class="w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center flex-shrink-0"
+							class="w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0"
 						>
 							<BookOpen class="w-5 h-5 text-amber-600" />
 						</div>
@@ -135,13 +135,13 @@
 					{#if message.metadata?.loading}
 						<!-- Loading state -->
 						<div class="flex items-center justify-center py-6">
-							<Loader2 class="w-5 h-5 animate-spin text-muted-foreground" />
+							<LoaderCircle class="w-5 h-5 animate-spin text-muted-foreground" />
 							<span class="ml-2 text-sm text-muted-foreground">Loading memory...</span>
 						</div>
 					{:else if message.metadata?.error}
 						<!-- Error state -->
 						<div class="flex items-center gap-2 text-sm text-error bg-error/10 rounded-md px-3 py-2">
-							<AlertCircle class="w-4 h-4 flex-shrink-0" />
+							<CircleAlert class="w-4 h-4 shrink-0" />
 							<span>{message.metadata.error}</span>
 						</div>
 					{:else if isMemoryEditing}
@@ -154,7 +154,7 @@
 										>{message.metadata?.memoryPath || './CLAUDE.md'}</code
 									>
 								{:else}
-									<Home class="w-3.5 h-3.5" />
+									<House class="w-3.5 h-3.5" />
 									<code class="font-mono bg-muted px-1.5 py-0.5 rounded">~/.claude/CLAUDE.md</code>
 								{/if}
 							</div>
@@ -165,9 +165,8 @@
                        resize-y transition-colors"
 								placeholder="# Memory instructions for Claude..."
 								value={message.metadata?.memoryContent || ''}
-								oninput={(e) => {
-									const target = e.target as HTMLTextAreaElement;
-									if (target) memoryContent = target.value;
+								oninput={(e: Event & { currentTarget: EventTarget & HTMLTextAreaElement }) => {
+									memoryContent = e.currentTarget.value;
 								}}
 								onkeydown={handleMemoryEditorKeydown}
 							></textarea>
@@ -185,7 +184,7 @@
                        hover:bg-[#2f2d29] disabled:opacity-40 disabled:cursor-not-allowed transition-all group"
 							>
 								{#if memorySaving}
-									<Loader2 class="w-4 h-4 animate-spin" />
+									<LoaderCircle class="w-4 h-4 animate-spin" />
 									<span>Saving...</span>
 								{:else}
 									<Check class="w-4 h-4" />
@@ -219,7 +218,7 @@
 								onmouseenter={() => (selectedMemoryOption = 'project')}
 							>
 								<div
-									class="flex-shrink-0 w-6 h-6 rounded bg-amber-500/10 flex items-center justify-center mt-0.5"
+									class="shrink-0 w-6 h-6 rounded bg-amber-500/10 flex items-center justify-center mt-0.5"
 								>
 									<FolderOpen class="w-3.5 h-3.5 text-amber-600" />
 								</div>
@@ -249,9 +248,9 @@
 								onmouseenter={() => (selectedMemoryOption = 'user')}
 							>
 								<div
-									class="flex-shrink-0 w-6 h-6 rounded bg-amber-500/10 flex items-center justify-center mt-0.5"
+									class="shrink-0 w-6 h-6 rounded bg-amber-500/10 flex items-center justify-center mt-0.5"
 								>
-									<Home class="w-3.5 h-3.5 text-amber-600" />
+									<House class="w-3.5 h-3.5 text-amber-600" />
 								</div>
 								<div class="flex-1 min-w-0">
 									<div class="flex items-center gap-2">
@@ -300,7 +299,7 @@
 						class="ml-1 p-0.5 rounded hover:bg-accent transition-colors opacity-0 group-hover:opacity-100"
 						title="Dismiss"
 					>
-						<XCircle class="w-3.5 h-3.5 text-muted-foreground hover:text-muted-foreground" />
+						<CircleX class="w-3.5 h-3.5 text-muted-foreground hover:text-muted-foreground" />
 					</button>
 				{/if}
 			</div>

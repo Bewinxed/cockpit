@@ -2,12 +2,12 @@
   import { Bell, Circle } from 'lucide-svelte';
   import { Button } from '$lib/components/ui/button';
   import { ThemeSwitcher } from '$lib/components/ui';
-  import { stores, permissions, connection, ui } from '$lib/stores';
+  import { stores, permissions, connectionStatus, ui } from '$lib/stores';
 
   const isFilteringRunning = $derived(ui.sidebarFilter.type === 'running');
 
   const statusText = $derived.by(() => {
-    switch (connection.status) {
+    switch (connectionStatus) {
       case 'connected': return 'Connected';
       case 'connecting': return 'Connecting...';
       case 'error': return 'Connection error';
@@ -16,7 +16,7 @@
   });
 
   const statusColor = $derived.by(() => {
-    switch (connection.status) {
+    switch (connectionStatus) {
       case 'connected': return 'text-success';
       case 'connecting': return 'text-warning';
       case 'error': return 'text-error';

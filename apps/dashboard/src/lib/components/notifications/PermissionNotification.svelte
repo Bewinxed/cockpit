@@ -62,7 +62,7 @@
   onclick={onClick}
 >
   <!-- Icon -->
-  <div class="flex-shrink-0 w-8 h-8 rounded-lg bg-warning/10 flex items-center justify-center mt-0.5">
+  <div class="shrink-0 w-8 h-8 rounded-lg bg-warning/10 flex items-center justify-center mt-0.5">
     <ToolIcon class="w-4 h-4 text-warning" />
   </div>
 
@@ -90,7 +90,7 @@
   </div>
 
   <!-- Action indicator -->
-  <div class="flex-shrink-0">
+  <div class="shrink-0">
     <span class="text-xs text-warning font-medium">Review</span>
   </div>
 </button>

@@ -48,7 +48,7 @@
   class={isFiltered ? 'bg-primary/10 text-primary' : ''}
 >
   <!-- OS Icon -->
-  <OsIcon class="size-4 flex-shrink-0" />
+  <OsIcon class="size-4 shrink-0" />
 
   <!-- Agent Name -->
   <span class="flex-1 truncate">

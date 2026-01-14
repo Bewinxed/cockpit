@@ -1,18 +1,17 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { FileDiff, type FileContents } from '@pierre/diffs';
-  import { Maximize2, AlertCircle, Loader2 } from 'lucide-svelte';
+  import { Maximize2, CircleAlert, LoaderCircle } from 'lucide-svelte';
   import { Button } from '$lib/components/ui/button';
   import DiffModal from './DiffModal.svelte';
 
   interface Props {
-    id: string;
     filePath: string;
     oldContent: string;
     newContent: string;
   }
 
-  let { id, filePath, oldContent, newContent }: Props = $props();
+  let { filePath, oldContent, newContent }: Props = $props();
   let container: HTMLDivElement;
   let diffInstance: FileDiff | null = null;
   let showModal = $state(false);
@@ -72,16 +71,17 @@
       const lang = getLanguageFromPath(filePath);
       const fileName = getFileName(filePath);
 
+      // The library accepts any string for lang (or undefined for auto-detect)
       const oldFile: FileContents = {
         name: fileName,
         contents: oldContent,
-        lang: lang as any,
+        lang: lang as FileContents['lang'],
       };
 
       const newFile: FileContents = {
         name: fileName,
         contents: newContent,
-        lang: lang as any,
+        lang: lang as FileContents['lang'],
       };
 
       diffInstance = new FileDiff({
@@ -127,7 +127,7 @@
       variant="ghost"
       size="icon-sm"
       onclick={openModal}
-      class="h-6 w-6 ml-2 flex-shrink-0"
+      class="h-6 w-6 ml-2 shrink-0"
       title="Expand diff (full view)"
       disabled={loading || !!error}
     >
@@ -137,12 +137,12 @@
 
   {#if loading}
     <div class="flex items-center justify-center gap-2 p-8 text-sm text-muted-foreground">
-      <Loader2 class="w-5 h-5 animate-spin" />
+      <LoaderCircle class="w-5 h-5 animate-spin" />
       <span>Loading diff...</span>
     </div>
   {:else if error}
     <div class="flex items-center justify-center gap-2 p-8 text-sm text-error">
-      <AlertCircle class="w-5 h-5" />
+      <CircleAlert class="w-5 h-5" />
       <span>{error}</span>
     </div>
   {/if}

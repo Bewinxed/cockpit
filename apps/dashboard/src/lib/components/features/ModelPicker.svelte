@@ -1,6 +1,6 @@
 <script lang="ts">
   import Modal from '../ui/Modal.svelte';
-  import { Check, Loader2 } from 'lucide-svelte';
+  import { Check, LoaderCircle } from 'lucide-svelte';
   import { Button } from '$lib/components/ui/button';
 
   interface ModelInfo {
@@ -114,10 +114,9 @@
 <svelte:window onkeydown={handleKeydown} />
 
 <Modal {open} {onClose} title="Switch Model" size="md">
-  {#snippet children()}
-    {#if loading}
+  {#if loading}
       <div class="flex items-center justify-center py-8">
-        <Loader2 class="w-6 h-6 animate-spin text-muted-foreground" />
+        <LoaderCircle class="w-6 h-6 animate-spin text-muted-foreground" />
         <span class="ml-2 text-muted-foreground">Loading models...</span>
       </div>
     {:else if error}
@@ -139,7 +138,7 @@
                 : 'hover:bg-accent border border-transparent'}"
             onclick={() => selectedModel = model.value}
           >
-            <div class="flex-shrink-0 w-5 h-5 mt-0.5">
+            <div class="shrink-0 w-5 h-5 mt-0.5">
               {#if selectedModel === model.value}
                 <Check class="w-5 h-5 text-accent" />
               {/if}
@@ -160,8 +159,7 @@
       <p class="mt-4 text-xs text-muted-foreground text-center">
         Use ↑↓ to navigate, Enter to select
       </p>
-    {/if}
-  {/snippet}
+  {/if}
 
   {#snippet footer()}
     <div class="flex justify-end gap-3">
@@ -177,7 +175,7 @@
         disabled={loading || saving || !selectedModel || selectedModel === currentModel}
       >
         {#if saving}
-          <Loader2 class="w-4 h-4 animate-spin" />
+          <LoaderCircle class="w-4 h-4 animate-spin" />
         {/if}
         Apply
       </Button>

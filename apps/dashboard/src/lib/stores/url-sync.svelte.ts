@@ -81,21 +81,23 @@ export function closeAllTabs(): void {
 
 // Update URL with new tabs state
 function updateTabsUrl(tabs: string[], activeId: string | null): void {
-  const url = new URL(window.location.href);
+  const searchParams = new URLSearchParams(page.url.search);
 
   if (tabs.length > 0) {
-    url.searchParams.set('tabs', tabs.join(','));
+    searchParams.set('tabs', tabs.join(','));
     if (activeId) {
-      url.searchParams.set('active', activeId);
+      searchParams.set('active', activeId);
     } else {
-      url.searchParams.delete('active');
+      searchParams.delete('active');
     }
   } else {
-    url.searchParams.delete('tabs');
-    url.searchParams.delete('active');
+    searchParams.delete('tabs');
+    searchParams.delete('active');
   }
 
-  goto(url.pathname + url.search, { replaceState: false, noScroll: true });
+  // Navigate with updated query string (rule disabled: resolve() doesn't support query params)
+  const search = searchParams.toString();
+  goto(search ? `?${search}` : '/', { replaceState: false, noScroll: true });
 }
 
 // Persist tabs to localStorage (for restoring on fresh load)

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Shield, Check, X, ChevronDown, ChevronRight, Loader2, Clock, Infinity } from 'lucide-svelte';
+  import { Shield, Check, X, ChevronDown, ChevronRight, LoaderCircle, Clock, Infinity as InfinityIcon } from 'lucide-svelte';
   import { permissions as permissionsStore, type PermissionRequest } from '$lib/stores';
   import { api } from '$lib/api';
   import { Button } from '$lib/components/ui/button';
@@ -100,9 +100,10 @@
         return `Write file: ${toolInput.file_path || 'unknown'}`;
       case 'Read':
         return `Read file: ${toolInput.file_path || 'unknown'}`;
-      case 'Bash':
+      case 'Bash': {
         const cmd = String(toolInput.command || '').slice(0, 50);
         return `Run command: ${cmd}${cmd.length >= 50 ? '...' : ''}`;
+      }
       case 'Glob':
         return `Search files: ${toolInput.pattern || 'unknown'}`;
       case 'Grep':
@@ -214,7 +215,7 @@
       disabled={isLoading}
     >
       {#if isLoading}
-        <Loader2 size={14} class="animate-spin" />
+        <LoaderCircle size={14} class="animate-spin" />
       {:else}
         <X size={14} />
       {/if}
@@ -224,7 +225,7 @@
     <!-- Show allow options based on SDK suggestions -->
     {#if allowOptions().length > 1}
       <div class="flex gap-1 flex-wrap">
-        {#each allowOptions() as option, i}
+        {#each allowOptions() as option, i (option.label)}
           <Button
             variant={i === 0 ? 'secondary' : option.isPermanent ? 'ghost' : 'default'}
             size="sm"
@@ -233,11 +234,11 @@
             title={option.description}
           >
             {#if isLoading}
-              <Loader2 size={14} class="animate-spin" />
+              <LoaderCircle size={14} class="animate-spin" />
             {:else if option.isSession}
               <Clock size={14} />
             {:else if option.isPermanent}
-              <Infinity size={14} />
+              <InfinityIcon size={14} />
             {:else}
               <Check size={14} />
             {/if}
@@ -253,7 +254,7 @@
         disabled={isLoading}
       >
         {#if isLoading}
-          <Loader2 size={14} class="animate-spin" />
+          <LoaderCircle size={14} class="animate-spin" />
         {:else}
           <Check size={14} />
         {/if}

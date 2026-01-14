@@ -80,7 +80,7 @@
       title={collapsed ? displayName : undefined}
     >
       <!-- Status Dot -->
-      <div class="relative flex-shrink-0">
+      <div class="relative shrink-0">
         <div class="size-2 rounded-full {statusColor}"></div>
         {#if streamingState?.isStreaming}
           <div class="absolute -top-0.5 -right-0.5 size-1.5 bg-info rounded-full animate-ping"></div>

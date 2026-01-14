@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
-  import { Loader2 } from 'lucide-svelte';
+  import { LoaderCircle } from 'lucide-svelte';
   import { Button } from './index';
 
   interface Props {
@@ -23,7 +23,7 @@
 
 <Button disabled={disabled || loading} {...rest}>
   {#if loading}
-    <Loader2 class="size-4 animate-spin" />
+    <LoaderCircle class="size-4 animate-spin" />
   {/if}
   {@render children()}
 </Button>

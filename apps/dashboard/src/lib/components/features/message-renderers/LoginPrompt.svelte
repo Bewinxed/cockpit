@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { KeyRound, ExternalLink, ArrowRight, AlertCircle, Loader2, XCircle } from 'lucide-svelte';
+	import { KeyRound, ExternalLink, ArrowRight, CircleAlert, LoaderCircle, CircleX } from 'lucide-svelte';
 	import type { MessageRendererProps } from './types';
 
 	let {
@@ -53,7 +53,7 @@
 					<!-- Header -->
 					<div class="flex items-start gap-3">
 						<div
-							class="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0"
+							class="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0"
 						>
 							<KeyRound class="w-5 h-5 text-primary" />
 						</div>
@@ -125,7 +125,7 @@
 					<!-- Error -->
 					{#if loginError}
 						<div class="flex items-center gap-2 text-sm text-error bg-error/10 rounded-md px-3 py-2">
-							<AlertCircle class="w-4 h-4 flex-shrink-0" />
+							<CircleAlert class="w-4 h-4 shrink-0" />
 							<span>{loginError}</span>
 						</div>
 					{/if}
@@ -139,7 +139,7 @@
                      hover:bg-[#2f2d29] disabled:opacity-40 disabled:cursor-not-allowed transition-all group"
 						>
 							{#if loginLoading}
-								<Loader2 class="w-4 h-4 animate-spin" />
+								<LoaderCircle class="w-4 h-4 animate-spin" />
 								<span>Logging in...</span>
 							{:else}
 								<span>Complete Login</span>
@@ -172,7 +172,7 @@
 						class="ml-1 p-0.5 rounded hover:bg-accent transition-colors opacity-0 group-hover:opacity-100"
 						title="Dismiss"
 					>
-						<XCircle class="w-3.5 h-3.5 text-muted-foreground hover:text-muted-foreground" />
+						<CircleX class="w-3.5 h-3.5 text-muted-foreground hover:text-muted-foreground" />
 					</button>
 				{/if}
 			</div>

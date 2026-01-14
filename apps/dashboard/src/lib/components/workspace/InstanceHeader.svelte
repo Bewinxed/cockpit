@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Square, Columns2, Loader2 } from 'lucide-svelte';
+  import { Square, Columns2, LoaderCircle } from 'lucide-svelte';
   import { Button } from '$lib/components/ui/button';
   import { Badge } from '$lib/components/ui/badge';
   import { instances, ui, type Instance } from '$lib/stores';
@@ -77,7 +77,7 @@
           disabled={stopping}
         >
           {#if stopping}
-            <Loader2 class="w-4 h-4 animate-spin" />
+            <LoaderCircle class="w-4 h-4 animate-spin" />
           {:else}
             <Square class="w-4 h-4" />
           {/if}

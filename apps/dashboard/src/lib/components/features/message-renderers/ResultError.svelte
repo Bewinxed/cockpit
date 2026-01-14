@@ -1,11 +1,11 @@
 <script lang="ts">
 	import {
-		AlertTriangle,
+		TriangleAlert,
 		DollarSign,
 		RotateCcw,
 		Settings,
 		ChevronRight,
-		AlertCircle
+		CircleAlert
 	} from 'lucide-svelte';
 	import { slide } from 'svelte/transition';
 	import type { MessageRendererProps } from './types';
@@ -24,7 +24,15 @@
 	const totalCost = $derived(message.metadata?.totalCost as number | undefined);
 	const numTurns = $derived(message.metadata?.numTurns as number | undefined);
 
-	const errorConfig = {
+	const errorConfig: Record<ErrorSubtype, {
+		icon: typeof TriangleAlert;
+		iconColor: string;
+		borderColor: string;
+		bgColor: string;
+		title: string;
+		description: string;
+		action: string;
+	}> = {
 		error_max_turns: {
 			icon: RotateCcw,
 			iconColor: 'text-amber-500',
@@ -44,7 +52,7 @@
 			action: 'Increase the budget in session settings'
 		},
 		error_during_execution: {
-			icon: AlertTriangle,
+			icon: TriangleAlert,
 			iconColor: 'text-red-500',
 			borderColor: 'border-red-500/40',
 			bgColor: 'bg-red-500/5',
@@ -64,6 +72,7 @@
 	};
 
 	const config = $derived(errorConfig[subtype] || errorConfig.error_during_execution);
+	const Icon = $derived(config.icon);
 </script>
 
 <div class="flex justify-start gap-3 group">
@@ -74,9 +83,9 @@
 			<!-- Header with icon and title -->
 			<div class="flex items-start gap-3">
 				<div
-					class="flex-shrink-0 w-8 h-8 rounded-lg bg-card border border-border flex items-center justify-center"
+					class="shrink-0 w-8 h-8 rounded-lg bg-card border border-border flex items-center justify-center"
 				>
-					<svelte:component this={config.icon} class="size-4 {config.iconColor}" />
+					<Icon class="size-4 {config.iconColor}" />
 				</div>
 				<div class="flex-1 min-w-0">
 					<h4 class="font-semibold text-foreground text-sm">{config.title}</h4>
@@ -104,7 +113,7 @@
 
 			<!-- Action suggestion -->
 			<div class="flex items-center gap-2 text-xs text-muted-foreground">
-				<AlertCircle class="size-3 flex-shrink-0" />
+				<CircleAlert class="size-3 shrink-0" />
 				<span>{config.action}</span>
 			</div>
 
@@ -117,7 +126,7 @@
 						onclick={() => (showDetails = !showDetails)}
 					>
 						<ChevronRight
-							class="size-3 flex-shrink-0 transition-transform duration-200 {showDetails
+							class="size-3 shrink-0 transition-transform duration-200 {showDetails
 								? 'rotate-90'
 								: ''}"
 						/>
@@ -129,7 +138,7 @@
 							class="mt-2 space-y-2"
 							transition:slide={{ duration: 200 }}
 						>
-							{#each errors as error}
+							{#each errors as error, i (i)}
 								<div class="text-xs font-mono text-muted-foreground bg-muted/50 rounded px-2 py-1.5 whitespace-pre-wrap">
 									{error}
 								</div>

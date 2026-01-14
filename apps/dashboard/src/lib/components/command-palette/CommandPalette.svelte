@@ -93,7 +93,7 @@
 
 <Command.Dialog
   open={ui.commandPaletteOpen}
-  onOpenChange={(open) => !open && ui.toggleCommandPalette()}
+  onOpenChange={(open: boolean) => !open && ui.toggleCommandPalette()}
   title="Command Palette"
   description="Search instances, run actions..."
 >

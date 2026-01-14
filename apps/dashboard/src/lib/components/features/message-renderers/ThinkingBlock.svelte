@@ -27,11 +27,11 @@
 				onclick={() => (expanded = !expanded)}
 			>
 				<ChevronRight
-					class="size-4 flex-shrink-0 transition-transform duration-200 {expanded
+					class="size-4 shrink-0 transition-transform duration-200 {expanded
 						? 'rotate-90'
 						: ''}"
 				/>
-				<Brain class="size-4 flex-shrink-0 text-violet-500/70" />
+				<Brain class="size-4 shrink-0 text-violet-500/70" />
 				<span class="font-medium text-violet-600 dark:text-violet-400">Thinking</span>
 				{#if !expanded}
 					<span class="text-xs opacity-60 truncate max-w-[300px]">{summary}</span>

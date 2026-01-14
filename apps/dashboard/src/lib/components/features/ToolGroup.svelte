@@ -1,6 +1,6 @@
 <script lang="ts">
 	import * as Collapsible from '$lib/components/ui/collapsible';
-	import { ChevronRight, Loader2, CheckCircle2, XCircle, FileText, Terminal, Code, Search, FolderOpen, Edit3, Globe, Wrench } from 'lucide-svelte';
+	import { ChevronRight, LoaderCircle, CircleCheck, CircleX, FileText, Terminal, Code, Search, FolderOpen, Pencil, Globe, Wrench } from 'lucide-svelte';
 	import type { Message } from '$lib/stores';
 	import DiffView from './DiffView.svelte';
 	import DiffModal from './DiffModal.svelte';
@@ -17,17 +17,15 @@
 	let expandedTools = new SvelteSet<string>();
 
 	// Check if all tools are complete
-	const allComplete = $derived(tools.every(t => t.metadata?.toolStatus !== 'pending'));
 	const hasErrors = $derived(tools.some(t => t.metadata?.toolStatus === 'error'));
 	const pendingCount = $derived(tools.filter(t => t.metadata?.toolStatus === 'pending').length);
-	const successCount = $derived(tools.filter(t => t.metadata?.toolStatus === 'success').length);
 
 	// Get icon for tool type
 	function getToolIcon(toolName: string | undefined) {
 		if (!toolName) return Wrench;
 		const name = toolName.toLowerCase();
 		if (name.includes('read') || name.includes('file')) return FileText;
-		if (name.includes('edit') || name.includes('write')) return Edit3;
+		if (name.includes('edit') || name.includes('write')) return Pencil;
 		if (name.includes('bash') || name.includes('terminal') || name.includes('shell')) return Terminal;
 		if (name.includes('glob') || name.includes('find')) return FolderOpen;
 		if (name.includes('grep') || name.includes('search')) return Search;
@@ -87,13 +85,13 @@
 		</span>
 		<div class="ml-auto flex items-center gap-1.5">
 			{#if pendingCount > 0}
-				<Loader2 class="w-4 h-4 text-amber-500 animate-spin" />
+				<LoaderCircle class="w-4 h-4 text-amber-500 animate-spin" />
 				<span class="text-xs text-muted-foreground">{pendingCount} running</span>
 			{:else if hasErrors}
-				<XCircle class="w-4 h-4 text-destructive" />
+				<CircleX class="w-4 h-4 text-destructive" />
 				<span class="text-xs text-destructive">Error</span>
 			{:else}
-				<CheckCircle2 class="w-4 h-4 text-emerald-500" />
+				<CircleCheck class="w-4 h-4 text-emerald-500" />
 				<span class="text-xs text-emerald-600 dark:text-emerald-400">Complete</span>
 			{/if}
 		</div>
@@ -117,10 +115,10 @@
 				<Collapsible.Trigger class="w-full text-left">
 					<div class="px-3 py-2.5 hover:bg-muted/30 transition-colors flex items-start gap-2 group cursor-pointer">
 						<!-- Expand chevron -->
-						<ChevronRight class="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0 transition-transform duration-200 {isOpen ? 'rotate-90' : ''}" />
+						<ChevronRight class="w-4 h-4 text-muted-foreground mt-0.5 shrink-0 transition-transform duration-200 {isOpen ? 'rotate-90' : ''}" />
 
 						<!-- Tool icon -->
-						<div class="flex-shrink-0 w-6 h-6 rounded-md flex items-center justify-center
+						<div class="shrink-0 w-6 h-6 rounded-md flex items-center justify-center
 							{status === 'pending' ? 'bg-amber-500/10' : status === 'error' ? 'bg-destructive/10' : 'bg-emerald-500/10'}">
 							<ToolIcon class="w-3.5 h-3.5 {status === 'pending' ? 'text-amber-600 dark:text-amber-400' : status === 'error' ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-400'}" />
 						</div>
@@ -143,13 +141,13 @@
 						</div>
 
 						<!-- Status badge -->
-						<div class="flex-shrink-0">
+						<div class="shrink-0">
 							{#if status === 'pending'}
-								<Loader2 class="w-4 h-4 text-amber-500 animate-spin" />
+								<LoaderCircle class="w-4 h-4 text-amber-500 animate-spin" />
 							{:else if status === 'error'}
-								<XCircle class="w-4 h-4 text-destructive" />
+								<CircleX class="w-4 h-4 text-destructive" />
 							{:else}
-								<CheckCircle2 class="w-4 h-4 text-emerald-500" />
+								<CircleCheck class="w-4 h-4 text-emerald-500" />
 							{/if}
 						</div>
 					</div>
@@ -163,7 +161,6 @@
 								<div class="rounded-lg overflow-hidden border border-border">
 									<div class="max-h-[300px] overflow-auto">
 										<DiffView
-											id={toolId}
 											filePath={diffInfo.filePath}
 											oldContent={diffInfo.oldContent}
 											newContent={diffInfo.newContent}
@@ -172,7 +169,7 @@
 									<div class="border-t border-border bg-muted/30 px-2 py-1.5 flex justify-end">
 										<button
 											class="px-3 py-1 text-xs bg-muted hover:bg-accent border border-border rounded-md text-muted-foreground hover:text-foreground transition-colors"
-											onclick={(e) => { e.stopPropagation(); openDiffModal(toolId, diffInfo.filePath, diffInfo.oldContent, diffInfo.newContent); }}
+											onclick={(e: MouseEvent) => { e.stopPropagation(); openDiffModal(toolId, diffInfo.filePath, diffInfo.oldContent, diffInfo.newContent); }}
 										>
 											Open in modal
 										</button>

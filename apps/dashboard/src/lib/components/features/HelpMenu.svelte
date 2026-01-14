@@ -189,7 +189,7 @@
           <div class="space-y-1">
             {#each customCommands as cmd (cmd.name)}
               <div class="flex items-start gap-2 group">
-                <ChevronRight class="w-3 h-3 text-muted-foreground mt-1 flex-shrink-0" />
+                <ChevronRight class="w-3 h-3 text-muted-foreground mt-1 shrink-0" />
                 <span class="text-success font-medium">{cmd.name}</span>
                 {#if cmd.description}
                   <span class="text-muted-foreground">-</span>

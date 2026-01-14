@@ -3,17 +3,17 @@
 		User,
 		Wrench,
 		FileText,
-		AlertCircle,
+		CircleAlert,
 		ChevronDown,
 		ChevronRight,
 		ChevronUp,
-		Loader2,
-		CheckCircle2,
-		XCircle,
+		LoaderCircle,
+		CircleCheck,
+		CircleX,
 		Settings,
 		Terminal,
-		HelpCircle,
-		Edit3,
+		CircleQuestionMark,
+		Pencil,
 		Check,
 		Bot
 	} from 'lucide-svelte';
@@ -303,7 +303,7 @@
 			align: 'justify-start',
 			bubble:
 				'relative px-4 py-3 text-sm leading-relaxed rounded-2xl rounded-bl-sm bg-destructive/10 text-destructive border border-destructive/30 shadow-sm',
-			icon: AlertCircle,
+			icon: CircleAlert,
 			iconBg: 'bg-destructive/10',
 			iconColor: 'text-destructive'
 		},
@@ -333,7 +333,7 @@
 		help_menu: {
 			align: 'justify-start',
 			bubble: '',
-			icon: HelpCircle,
+			icon: CircleQuestionMark,
 			iconBg: 'bg-primary/10',
 			iconColor: 'text-primary'
 		},
@@ -348,7 +348,7 @@
 			align: 'justify-start',
 			bubble:
 				'relative px-4 py-3 text-sm leading-relaxed rounded-2xl rounded-bl-sm bg-destructive/10 text-destructive border border-destructive/30 shadow-sm',
-			icon: AlertCircle,
+			icon: CircleAlert,
 			iconBg: 'bg-destructive/10',
 			iconColor: 'text-destructive'
 		}
@@ -366,7 +366,7 @@
 		{#if message.type !== 'user' && message.type !== 'system' && message.type !== 'help_menu'}
 			<!-- Avatar -->
 			<div
-				class="flex-shrink-0 size-9 rounded-xl {config.iconBg} flex items-center justify-center mt-0.5"
+				class="shrink-0 size-9 rounded-xl {config.iconBg} flex items-center justify-center mt-0.5"
 			>
 				{#if message.type === 'assistant'}
 					<Bot size={18} color="var(--muted-foreground)" class="!flex leading-[0]" />
@@ -391,11 +391,11 @@
 					>
 						{#if isExpanded}
 							<ChevronDown
-								class="w-4 h-4 text-muted-foreground flex-shrink-0 transition-transform"
+								class="w-4 h-4 text-muted-foreground shrink-0 transition-transform"
 							/>
 						{:else}
 							<ChevronRight
-								class="w-4 h-4 text-muted-foreground flex-shrink-0 transition-transform"
+								class="w-4 h-4 text-muted-foreground shrink-0 transition-transform"
 							/>
 						{/if}
 						<span class="font-medium text-foreground text-sm">
@@ -403,11 +403,11 @@
 						</span>
 						<!-- Status indicator -->
 						{#if toolInfo?.status === 'pending'}
-							<Loader2 class="w-4 h-4 text-amber-500 animate-spin ml-auto" />
+							<LoaderCircle class="w-4 h-4 text-amber-500 animate-spin ml-auto" />
 						{:else if toolInfo?.status === 'error'}
-							<XCircle class="w-4 h-4 text-destructive ml-auto" />
+							<CircleX class="w-4 h-4 text-destructive ml-auto" />
 						{:else}
-							<CheckCircle2 class="w-4 h-4 text-emerald-500 ml-auto" />
+							<CircleCheck class="w-4 h-4 text-emerald-500 ml-auto" />
 						{/if}
 					</button>
 
@@ -428,7 +428,6 @@
 									class:max-h-[150px]={needsExpansion && !diffFullyExpanded}
 								>
 									<DiffView
-										id={tool?.id || message.id}
 										filePath={diffInfo.filePath}
 										oldContent={diffInfo.oldContent}
 										newContent={diffInfo.newContent}
@@ -501,11 +500,11 @@
 					>
 						{#if isExpanded}
 							<ChevronDown
-								class="w-4 h-4 text-muted-foreground flex-shrink-0 transition-transform"
+								class="w-4 h-4 text-muted-foreground shrink-0 transition-transform"
 							/>
 						{:else}
 							<ChevronRight
-								class="w-4 h-4 text-muted-foreground flex-shrink-0 transition-transform"
+								class="w-4 h-4 text-muted-foreground shrink-0 transition-transform"
 							/>
 						{/if}
 						<span class="font-medium text-foreground text-sm">
@@ -513,9 +512,9 @@
 						</span>
 						<!-- Exit code indicator -->
 						{#if hookInfo?.exitCode === 0}
-							<CheckCircle2 class="w-4 h-4 text-emerald-500 ml-auto" />
+							<CircleCheck class="w-4 h-4 text-emerald-500 ml-auto" />
 						{:else}
-							<XCircle class="w-4 h-4 text-destructive ml-auto" />
+							<CircleX class="w-4 h-4 text-destructive ml-auto" />
 						{/if}
 						<span class="text-xs text-muted-foreground font-mono">
 							exit {hookInfo?.exitCode}
@@ -626,7 +625,7 @@
                            hover:bg-primary-dark disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
 									>
 										{#if editLoading}
-											<Loader2 class="w-3.5 h-3.5 animate-spin" />
+											<LoaderCircle class="w-3.5 h-3.5 animate-spin" />
 										{:else}
 											<Check class="w-3.5 h-3.5" />
 										{/if}
@@ -657,7 +656,7 @@
 									onclick={startEditing}
 									title="Edit message and restart from here"
 								>
-									<Edit3 class="w-3.5 h-3.5 text-muted-foreground" />
+									<Pencil class="w-3.5 h-3.5 text-muted-foreground" />
 								</button>
 							{/if}
 							<!-- Copy button -->
@@ -685,7 +684,7 @@
 		{#if message.type === 'user'}
 			<!-- User Avatar -->
 			<div
-				class="flex-shrink-0 size-9 rounded-xl {config.iconBg} flex items-center justify-center mt-0.5"
+				class="shrink-0 size-9 rounded-xl {config.iconBg} flex items-center justify-center mt-0.5"
 			>
 				<User class="size-[18px] {config.iconColor}" />
 			</div>

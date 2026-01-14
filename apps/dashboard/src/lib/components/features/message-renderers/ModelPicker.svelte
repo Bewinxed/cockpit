@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Cpu, Check, ArrowRight, AlertCircle, Loader2, XCircle } from 'lucide-svelte';
+	import { Cpu, Check, ArrowRight, CircleAlert, LoaderCircle, CircleX } from 'lucide-svelte';
 	import type { MessageRendererProps } from './types';
 
 	interface ModelInfo {
@@ -75,7 +75,7 @@
 					<!-- Header -->
 					<div class="flex items-start gap-3">
 						<div
-							class="w-10 h-10 rounded-lg bg-secondary/10 flex items-center justify-center flex-shrink-0"
+							class="w-10 h-10 rounded-lg bg-secondary/10 flex items-center justify-center shrink-0"
 						>
 							<Cpu class="w-5 h-5 text-secondary" />
 						</div>
@@ -90,12 +90,12 @@
 					<!-- Model list -->
 					{#if message.metadata?.loading}
 						<div class="flex items-center justify-center py-6">
-							<Loader2 class="w-5 h-5 animate-spin text-muted-foreground" />
+							<LoaderCircle class="w-5 h-5 animate-spin text-muted-foreground" />
 							<span class="ml-2 text-sm text-muted-foreground">Loading models...</span>
 						</div>
 					{:else if message.metadata?.error}
 						<div class="flex items-center gap-2 text-sm text-error bg-error/10 rounded-md px-3 py-2">
-							<AlertCircle class="w-4 h-4 flex-shrink-0" />
+							<CircleAlert class="w-4 h-4 shrink-0" />
 							<span>{message.metadata.error}</span>
 						</div>
 					{:else if models.length === 0}
@@ -111,7 +111,7 @@
 										: 'hover:bg-accent border border-transparent'}"
 									onclick={() => (selectedModel = model.value)}
 								>
-									<div class="flex-shrink-0 w-5 h-5 mt-0.5">
+									<div class="shrink-0 w-5 h-5 mt-0.5">
 										{#if selectedModel === model.value}
 											<Check class="w-5 h-5 text-secondary" />
 										{/if}
@@ -141,7 +141,7 @@
 					<!-- Error -->
 					{#if modelError}
 						<div class="flex items-center gap-2 text-sm text-error bg-error/10 rounded-md px-3 py-2">
-							<AlertCircle class="w-4 h-4 flex-shrink-0" />
+							<CircleAlert class="w-4 h-4 shrink-0" />
 							<span>{modelError}</span>
 						</div>
 					{/if}
@@ -155,7 +155,7 @@
                      hover:bg-[#2f2d29] disabled:opacity-40 disabled:cursor-not-allowed transition-all group"
 						>
 							{#if modelLoading}
-								<Loader2 class="w-4 h-4 animate-spin" />
+								<LoaderCircle class="w-4 h-4 animate-spin" />
 								<span>Applying...</span>
 							{:else}
 								<span>Apply</span>
@@ -190,7 +190,7 @@
 						class="ml-1 p-0.5 rounded hover:bg-accent transition-colors opacity-0 group-hover:opacity-100"
 						title="Dismiss"
 					>
-						<XCircle class="w-3.5 h-3.5 text-muted-foreground hover:text-muted-foreground" />
+						<CircleX class="w-3.5 h-3.5 text-muted-foreground hover:text-muted-foreground" />
 					</button>
 				{/if}
 			</div>

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ChevronUp, ChevronDown, Square, Trash2, Loader2 } from 'lucide-svelte';
+  import { ChevronUp, ChevronDown, Square, Trash2, LoaderCircle } from 'lucide-svelte';
   import { Button } from '$lib/components/ui/button';
   import { Checkbox } from '$lib/components/ui/checkbox';
   import { stores, agents, type Instance } from '$lib/stores';
@@ -226,7 +226,7 @@
           disabled={stoppingIds.size > 0}
         >
           {#if stoppingIds.size > 0}
-            <Loader2 class="size-4 animate-spin" />
+            <LoaderCircle class="size-4 animate-spin" />
           {:else}
             <Square class="size-4" />
           {/if}
@@ -242,7 +242,7 @@
         disabled={deletingIds.size > 0}
       >
         {#if deletingIds.size > 0}
-          <Loader2 class="size-4 animate-spin" />
+          <LoaderCircle class="size-4 animate-spin" />
         {:else}
           <Trash2 class="size-4" />
         {/if}
@@ -475,7 +475,7 @@
   </div>
 
   <!-- Footer with count -->
-  <div class="flex-shrink-0 px-4 py-2 border-t border-border bg-card/50 text-xs text-muted-foreground">
+  <div class="shrink-0 px-4 py-2 border-t border-border bg-card/50 text-xs text-muted-foreground">
     {sortedInstances.length} instance{sortedInstances.length !== 1 ? 's' : ''}
   </div>
 </div>

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { FileDiff, type FileContents } from '@pierre/diffs';
-  import { X, Columns, AlignJustify } from 'lucide-svelte';
+  import { X, Columns2, TextAlignStart } from 'lucide-svelte';
   import { Button } from '$lib/components/ui/button';
   import { CopyButton } from '$lib/components/ui/copy-button';
 
@@ -13,7 +13,7 @@
   }
 
   let { filePath, oldContent, newContent, onClose }: Props = $props();
-  let container: HTMLDivElement;
+  let container = $state<HTMLDivElement | null>(null);
   let diffInstance: FileDiff | null = null;
   let diffStyle = $state<'unified' | 'split'>('unified');
 
@@ -63,23 +63,14 @@
     return path.split('/').pop() || path;
   }
 
-  function clearContainer() {
-    // Safely clear container by removing all children
-    while (container.firstChild) {
-      container.removeChild(container.firstChild);
-    }
-  }
-
   function renderDiff() {
     if (!container) return;
 
-    // Clean up existing instance
+    // Clean up existing instance (though {#key} handles container recreation)
     if (diffInstance) {
       diffInstance.cleanUp();
+      diffInstance = null;
     }
-
-    // Clear container safely
-    clearContainer();
 
     const lang = getLanguageFromPath(filePath);
     const fileName = getFileName(filePath);
@@ -87,13 +78,13 @@
     const oldFile: FileContents = {
       name: fileName,
       contents: oldContent,
-      lang: lang as any,
+      lang: lang as FileContents['lang'],
     };
 
     const newFile: FileContents = {
       name: fileName,
       contents: newContent,
-      lang: lang as any,
+      lang: lang as FileContents['lang'],
     };
 
     diffInstance = new FileDiff({
@@ -204,7 +195,7 @@
             class="h-7 text-xs"
             title="Unified view"
           >
-            <AlignJustify class="w-3.5 h-3.5" />
+            <TextAlignStart class="w-3.5 h-3.5" />
             <span>Unified</span>
           </Button>
           <Button
@@ -214,7 +205,7 @@
             class="h-7 text-xs"
             title="Split view"
           >
-            <Columns class="w-3.5 h-3.5" />
+            <Columns2 class="w-3.5 h-3.5" />
             <span>Split</span>
           </Button>
         </div>
@@ -234,7 +225,9 @@
 
     <!-- Diff content -->
     <div class="flex-1 overflow-auto">
-      <div bind:this={container} class="diff-modal-content"></div>
+      {#key diffStyle}
+        <div bind:this={container} class="diff-modal-content"></div>
+      {/key}
     </div>
   </div>
 </div>

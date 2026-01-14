@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { Circle, Server, ChevronRight } from 'lucide-svelte';
-	import { slide } from 'svelte/transition';
 
 	interface MCPServer {
 		name: string;
@@ -14,8 +13,8 @@
 
 	let { servers, collapsedThreshold = 5 }: Props = $props();
 
-	// Collapse if more than threshold servers
-	let expanded = $state(servers.length <= collapsedThreshold);
+	// Collapse if more than threshold servers (start collapsed for many servers)
+	let expanded = $state(false);
 	const shouldCollapse = $derived(servers.length > collapsedThreshold);
 
 	// Separate servers by status for priority display

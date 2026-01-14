@@ -13,8 +13,7 @@
 </script>
 
 <Modal {open} title="Authentication Required" onClose={onClose}>
-  {#snippet children()}
-    <div class="space-y-5">
+  <div class="space-y-5">
       <div class="p-4 rounded-lg bg-warning/10 border border-warning/20">
         <div class="flex items-start gap-3">
           <span class="text-2xl mt-0.5">🔐</span>
@@ -61,6 +60,5 @@
           Close
         </Button>
       </div>
-    </div>
-  {/snippet}
+  </div>
 </Modal>

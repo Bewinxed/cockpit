@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Loader2, Send } from 'lucide-svelte';
+  import { LoaderCircle, Send } from 'lucide-svelte';
   import CommandPalette from './CommandPalette.svelte';
 
   interface AvailableCommand {
@@ -121,13 +121,14 @@
           e.preventDefault();
           showPalette = false;
           return;
-        case 'Tab':
+        case 'Tab': {
           e.preventDefault();
           const selected = filteredCommands[selectedIndex];
           if (selected) {
             handleCommandSelect(selected);
           }
           return;
+        }
       }
     }
 
@@ -192,7 +193,7 @@
     <button
       type="submit"
       disabled={disabled || loading || !message.trim()}
-      class="flex-shrink-0 size-11 rounded-xl
+      class="shrink-0 size-11 rounded-xl
              bg-primary text-primary-foreground
              flex items-center justify-center
              hover:bg-primary/90
@@ -204,7 +205,7 @@
       aria-label={loading ? 'Sending message' : 'Send message'}
     >
       {#if loading}
-        <Loader2 class="size-5 animate-spin" />
+        <LoaderCircle class="size-5 animate-spin" />
       {:else}
         <Send size={20} />
       {/if}

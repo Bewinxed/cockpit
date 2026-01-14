@@ -1,6 +1,6 @@
 <script lang="ts">
   import { page } from '$app/state';
-  import { X, Columns2, XCircle, Copy } from 'lucide-svelte';
+  import { X, Columns2, CircleX, Copy } from 'lucide-svelte';
   import * as Tabs from '$lib/components/ui/tabs';
   import * as ContextMenu from '$lib/components/ui/context-menu';
   import { Button } from '$lib/components/ui/button';
@@ -66,7 +66,7 @@
   <div class="flex-1 flex flex-col overflow-hidden">
     <!-- Tab Bar -->
     <Tabs.Root value={activeId} onValueChange={switchToTab} class="flex-1 flex flex-col overflow-hidden">
-      <div class="flex-shrink-0 border-b border-border bg-card/50">
+      <div class="shrink-0 border-b border-border bg-card/50">
         <Tabs.List class="h-10 bg-transparent p-0 gap-0">
           {#each tabIds as id (id)}
             <ContextMenu.Root>
@@ -118,12 +118,12 @@
                 </ContextMenu.Item>
 
                 <ContextMenu.Item onclick={() => closeOtherTabs(id)}>
-                  <XCircle class="mr-2 h-4 w-4" />
+                  <CircleX class="mr-2 h-4 w-4" />
                   Close Other Tabs
                 </ContextMenu.Item>
 
                 <ContextMenu.Item class="text-destructive focus:text-destructive" onclick={closeAllTabs}>
-                  <XCircle class="mr-2 h-4 w-4" />
+                  <CircleX class="mr-2 h-4 w-4" />
                   Close All Tabs
                 </ContextMenu.Item>
               </ContextMenu.Content>

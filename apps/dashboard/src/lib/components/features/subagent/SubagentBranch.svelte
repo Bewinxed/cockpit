@@ -1,6 +1,6 @@
 <script lang="ts">
   import { slide } from 'svelte/transition';
-  import { ChevronRight, Loader2, CheckCircle2, XCircle, Zap, Check, X, Clock, ChevronDown } from 'lucide-svelte';
+  import { ChevronRight, LoaderCircle, CircleCheck, CircleX, Zap, Check, X, Clock, ChevronDown } from 'lucide-svelte';
   import Markdown from '@humanspeak/svelte-markdown';
   import { instances, type SubagentState, type Message } from '$lib/stores';
   import { getToolGlance, getResultGlimpse, formatToolResult, getToolStatus } from '$lib/utils/tool-display';
@@ -114,12 +114,12 @@
     <!-- Status indicator -->
     <div class="relative">
       {#if subagent.status === 'starting' || subagent.status === 'running'}
-        <Loader2 class="size-4 animate-spin {statusColor}" />
+        <LoaderCircle class="size-4 animate-spin {statusColor}" />
         <div class="absolute -top-0.5 -right-0.5 size-1.5 bg-info rounded-full animate-ping"></div>
       {:else if subagent.status === 'complete'}
-        <CheckCircle2 class="size-4 {statusColor}" />
+        <CircleCheck class="size-4 {statusColor}" />
       {:else if subagent.status === 'error'}
-        <XCircle class="size-4 {statusColor}" />
+        <CircleX class="size-4 {statusColor}" />
       {:else}
         <Zap class="size-4 {statusColor}" />
       {/if}
@@ -179,15 +179,15 @@
               >
                 <!-- Expand icon -->
                 <ChevronRight
-                  class="size-3 text-muted-foreground transition-transform flex-shrink-0 {isExpanded ? 'rotate-90' : ''}"
+                  class="size-3 text-muted-foreground transition-transform shrink-0 {isExpanded ? 'rotate-90' : ''}"
                 />
                 <!-- Status icon -->
                 {#if status === 'success'}
-                  <Check class="size-3 text-success flex-shrink-0" />
+                  <Check class="size-3 text-success shrink-0" />
                 {:else if status === 'error'}
-                  <X class="size-3 text-destructive flex-shrink-0" />
+                  <X class="size-3 text-destructive shrink-0" />
                 {:else}
-                  <Clock class="size-3 text-muted-foreground animate-pulse flex-shrink-0" />
+                  <Clock class="size-3 text-muted-foreground animate-pulse shrink-0" />
                 {/if}
                 <!-- Tool name -->
                 <span class="font-medium text-foreground">{tool.metadata?.toolName || tool.content}</span>

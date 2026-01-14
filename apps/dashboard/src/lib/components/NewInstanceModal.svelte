@@ -95,14 +95,13 @@
 </script>
 
 <Modal {open} title="New Instance" onClose={handleClose}>
-  {#snippet children()}
-    <form onsubmit={handleSubmit} class="space-y-5">
+  <form onsubmit={handleSubmit} class="space-y-5">
       {#if error}
         <div
           class="flex items-center gap-2 p-3 rounded-lg bg-error/10 border border-error/20 text-error text-sm"
         >
           <svg
-            class="size-4 flex-shrink-0"
+            class="size-4 shrink-0"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -124,7 +123,7 @@
         </label>
         <select id="agent" bind:value={machineId} class="input">
           <option value="">Select a machine...</option>
-          {#each agents.online as agent}
+          {#each agents.online as agent (agent.machineId)}
             <option value={agent.machineId}>{agent.name} ({agent.os})</option>
           {/each}
         </select>
@@ -192,7 +191,7 @@
         </label>
         <select id="project" bind:value={projectId} class="input">
           <option value="">No project</option>
-          {#each projects.sorted as project}
+          {#each projects.sorted as project (project.id)}
             <option value={project.id}>{project.name}</option>
           {/each}
         </select>
@@ -248,8 +247,7 @@
           {/if}
         </Button>
       </div>
-    </form>
-  {/snippet}
+  </form>
 </Modal>
 
 <AuthRequiredModal

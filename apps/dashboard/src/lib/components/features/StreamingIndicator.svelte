@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { instances, type StreamingState } from '$lib/stores';
+  import { instances } from '$lib/stores';
   import { ArrowLeft, ArrowRight, DollarSign } from 'lucide-svelte';
 
   let { instanceId }: { instanceId: string } = $props();
@@ -11,12 +11,6 @@
     if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M`;
     if (count >= 1000) return `${(count / 1000).toFixed(1)}K`;
     return count.toString();
-  }
-
-  // Format cost
-  function formatCost(cost: number): string {
-    if (cost < 0.01) return `$${cost.toFixed(4)}`;
-    return `$${cost.toFixed(2)}`;
   }
 </script>
 

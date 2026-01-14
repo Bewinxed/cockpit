@@ -1011,7 +1011,7 @@
               {@const isParallel = group.messages.length > 1}
               <div class="flex items-start gap-3">
                 <!-- Subagent avatar (single icon for the group) -->
-                <div class="flex-shrink-0 w-9 h-9 rounded-xl bg-info/10 flex items-center justify-center mt-0.5">
+                <div class="shrink-0 w-9 h-9 rounded-xl bg-info/10 flex items-center justify-center mt-0.5">
                   <svg class="w-4.5 h-4.5 text-info" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
                 </div>
                 <!-- Subagent branches - grid if parallel, stack if single -->
@@ -1052,7 +1052,7 @@
               <!-- Grouped tool messages -->
               <div class="flex items-start gap-3">
                 <!-- Tool icon avatar -->
-                <div class="flex-shrink-0 w-9 h-9 rounded-xl bg-amber-500/10 flex items-center justify-center mt-0.5">
+                <div class="shrink-0 w-9 h-9 rounded-xl bg-amber-500/10 flex items-center justify-center mt-0.5">
                   <svg class="w-4.5 h-4.5 text-amber-600 dark:text-amber-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>
                 </div>
                 <!-- Tool group component -->
@@ -1093,7 +1093,7 @@
             out:fly={{ y: -5, duration: 150 }}
           >
             <!-- Bot Avatar -->
-            <div class="flex-shrink-0 w-9 h-9 rounded-xl bg-secondary border border-border flex items-center justify-center mt-0.5">
+            <div class="shrink-0 w-9 h-9 rounded-xl bg-secondary border border-border flex items-center justify-center mt-0.5">
               <Bot class="w-4.5 h-4.5 text-muted-foreground" />
             </div>
             <!-- Streaming content or activity indicator -->
