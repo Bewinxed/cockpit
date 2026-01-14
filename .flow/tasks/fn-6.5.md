@@ -128,9 +128,12 @@ export const populatedInstances = $derived.by(() => /* ... */);
 - [ ] TypeScript compiles without errors
 - [ ] File structure is readable and maintainable
 ## Done summary
-TBD
-
+- Created 8 new entity-based store files using SvelteMap from svelte/reactivity
+- All stores use class-based pattern with #private fields and $derived
+- Includes: agents, instances (with messages/streaming/subagents), projects, tasks, permissions, connection, ui
+- Uses globalThis pattern for HMR persistence
+- TypeScript compiles without errors (verified via IDE diagnostics)
 ## Evidence
-- Commits:
-- Tests:
+- Commits: 63ae7b4
+- Tests: IDE diagnostics - 0 errors across all new store files
 - PRs:
