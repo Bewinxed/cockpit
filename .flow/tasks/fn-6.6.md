@@ -101,9 +101,18 @@ export const stats = $derived.by(() => ({
 - [ ] TypeScript compiles without errors
 - [ ] Complex derivations use `$derived.by()` with proper return types
 ## Done summary
-TBD
+Created `index.svelte.ts` as the main store facade:
 
+- Re-exports all entity stores from fn-6.5
+- Cross-store derivations using `$derived.by()`:
+  - `populatedInstances`: instances with resolved agent/project names
+  - `runningInstances`, `recentInstances`, `adhocInstances`, `projectInstances`
+  - `instancesByProject`: grouped for sidebar with filter/collapse support
+  - `stats`: aggregated dashboard metrics
+  - `selectedInstance`: resolved from `ui.selectedInstanceId`
+- Legacy compatibility exports for gradual migration
+- All using native Svelte 5 reactivity (no svelte/store imports)
 ## Evidence
-- Commits:
+- Commits: 5df4de3
 - Tests:
 - PRs:
