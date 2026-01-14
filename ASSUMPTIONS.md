@@ -282,6 +282,37 @@ This document describes the expected behavior and assumptions about the Cockpit 
 
 ---
 
+---
+
+## Svelte 5 Store Patterns
+
+### SV1: SvelteMap Reactivity
+- **Assumption**: SvelteMap mutations trigger reactive updates without reassignment
+- **Expected**: UI updates when `map.set()` called on SvelteMap
+- **Verify**: Add agent via SSE → Agent appears in sidebar without page refresh
+
+### SV2: Class-based Store Methods
+- **Assumption**: Calling store methods updates UI reactively
+- **Expected**: `instances.addMessage()` → Chat updates immediately
+- **Verify**: Send message → See streaming response appear in chat
+
+### SV3: Derived Store Efficiency
+- **Assumption**: $derived only recalculates when dependencies change
+- **Expected**: Derived stores don't recalculate on unrelated state changes
+- **Verify**: Change agent status → Only agent-related deriveds update (check devtools)
+
+### SV4: river.ts SSE Connection (if implemented)
+- **Assumption**: river.ts RiverClient handles SSE with type safety and auto-reconnect
+- **Expected**: All events typed, auto-reconnect works within 30s
+- **Verify**: Disconnect network briefly → SSE reconnects automatically
+
+### SV5: Private State Encapsulation
+- **Assumption**: Using `#privateField` enforces method-only access
+- **Expected**: Cannot directly mutate store state from components
+- **Verify**: TypeScript error if trying to access `store.#agents` directly
+
+---
+
 ## Testing Checklist
 
 For Playwright testing, verify each assumption by:
@@ -295,3 +326,4 @@ Priority order for testing:
 1. **Critical**: I1, M1, M2, T1, S1, S3 (basic functionality)
 2. **Important**: S4, S7, P1, P2, D1, D2 (persistence & permissions)
 3. **Nice-to-have**: R1, R2, U1, U3 (UX polish)
+4. **Svelte 5**: SV1, SV2, SV3 (store migration verification)

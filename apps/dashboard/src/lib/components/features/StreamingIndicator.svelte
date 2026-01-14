@@ -1,6 +1,6 @@
 <script lang="ts">
   import { getStreamingState, type StreamingState } from '$lib/stores/realtime.svelte';
-  import { derived, type Readable } from 'svelte/store';
+  import type { Readable } from 'svelte/store';
   import { ArrowLeft, ArrowRight, DollarSign } from 'lucide-svelte';
 
   let { instanceId }: { instanceId: string } = $props();

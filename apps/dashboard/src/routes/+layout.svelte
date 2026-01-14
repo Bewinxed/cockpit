@@ -13,7 +13,7 @@
   } from '$lib/stores/realtime.svelte';
   import { getAgents, getInstances, getProjects } from '$lib/data.remote';
   import { restoreTabsFromStorage, persistTabsToStorage, openInstance } from '$lib/stores/url-sync.svelte';
-  import '$lib/stores/theme';
+  import '$lib/stores/theme.svelte';
   import type { Snippet } from 'svelte';
 
   // Shell components

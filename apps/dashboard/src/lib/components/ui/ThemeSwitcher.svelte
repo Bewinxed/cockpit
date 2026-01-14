@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { theme, toggleTheme } from '$lib/stores/theme';
+  import { theme, toggleTheme } from '$lib/stores/theme.svelte';
   import { Sun, Moon } from 'lucide-svelte';
   import { Button } from '$lib/components/ui/button';
 
@@ -15,8 +15,8 @@
     system: 'System',
   };
 
-  const Icon = $derived(themeIcons[$theme] || Sun);
-  const label = $derived(themeLabels[$theme] || 'Light mode');
+  const Icon = $derived(themeIcons[theme.current] || Sun);
+  const label = $derived(themeLabels[theme.current] || 'Light mode');
 </script>
 
 <Button

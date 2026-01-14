@@ -2,42 +2,97 @@
 
 ## Description
 
-Update all components that consume stores from `realtime.svelte.ts` to use the new class-based API, and verify reactivity works correctly.
+Update all components consuming stores to use the new entity-based class API and verify reactivity.
 
-## Consumer Updates
+**Migration Strategy from interview:** Use LSP rename (ensure correct tsconfig for monorepo).
 
-Components currently use `$storeName` syntax:
+## Migration Steps
+
+### 1. Configure LSP for Monorepo
+
+Ensure `apps/dashboard/tsconfig.json` is correctly configured:
+```json
+{
+  "extends": "./.svelte-kit/tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "$lib/*": ["./src/lib/*"]
+    }
+  }
+}
+```
+
+### 2. Update Import Statements
+
+```typescript
+// Before
+import { agents, instances, messages, addMessage } from '$lib/stores/realtime.svelte';
+
+// After - import from specific entity stores
+import { agents } from '$lib/stores/agents.svelte';
+import { instances } from '$lib/stores/instances.svelte';
+```
+
+### 3. Update Store Access Patterns
+
 ```svelte
+<!-- Before: $storeName syntax -->
 {#each $agents.values() as agent}
+{#each $instances.values() as instance}
+{$connectionStatus}
+
+<!-- After: class property access -->
+{#each agents.all.values() as agent}
+{#each agents.online as agent}  <!-- derived -->
+{#each instances.all.values() as instance}
+{connection.status}
 ```
 
-Will need to update to:
+### 4. Update Mutation Calls
+
+```typescript
+// Before: store.update() or function calls
+agents.update(map => { map.set(id, agent); return map; });
+addMessage(instanceId, message);
+
+// After: class methods
+agents.set(id, agent);
+instances.addMessage(instanceId, message);
+```
+
+### 5. Update Factory Consumers
+
 ```svelte
-{#each realtime.agents.values() as agent}
+<!-- Before: factory function returns Readable -->
+<script>
+  const messages = getInstanceMessages(instanceId);
+</script>
+{#each $messages as msg}
+
+<!-- After: $derived in component -->
+<script>
+  import { instances } from '$lib/stores/instances.svelte';
+  const messages = $derived(instances.getMessages(instanceId));
+</script>
+{#each messages as msg}
 ```
 
-Or if using getters:
-```svelte
-{#each realtime.onlineAgents as agent}
+## Files to Update (by search)
+
+```bash
+# Find all consumers
+grep -rn "from '\$lib/stores/realtime" apps/dashboard/src --include="*.svelte" --include="*.ts"
+grep -rn "\$agents\|\$instances\|\$projects\|\$tasks" apps/dashboard/src --include="*.svelte"
 ```
 
-## Files to Update
+## Verification with Playwright MCP
 
-Search for imports from `realtime.svelte.ts` and update usage:
-- All components importing `agents`, `instances`, `projects`, etc.
-- Layout components using connection status
-- Sidebar components using filtered data
-- Workspace components using instance data
+After migration, use Playwright MCP agent to verify (per ASSUMPTIONS.md):
 
-## Verification Checklist
-
-Test these scenarios:
-1. **Agent Connection:** Connect agent, verify it appears in UI
-2. **Instance Creation:** Create instance, verify it appears in tabs
-3. **Message Streaming:** Send message, verify streaming works
-4. **Real-time Updates:** SSE events update UI correctly
-5. **Derived Data:** `populatedInstances`, `onlineAgents` computed correctly
-6. **Tab State:** Instance tabs persist and update correctly
+1. **SV1**: Add agent → appears in sidebar (SvelteMap reactivity)
+2. **SV2**: `instances.addMessage()` → chat updates (class methods)
+3. **SV3**: Change agent status → only agent deriveds update (efficiency)
+4. **SV4**: Disconnect/reconnect network → SSE reconnects (river.ts)
 
 ## Testing Commands
 
@@ -52,7 +107,10 @@ bun run hub
 cd apps/dashboard && bunx svelte-check
 
 # Verify no old store patterns
-grep -r "\$agents\|\$instances\|\$projects" apps/dashboard/src --include="*.svelte"
+grep -rn "\$agents\|\$instances\|\$projects" apps/dashboard/src --include="*.svelte"
+
+# Verify no writable/derived imports
+grep -rn "from 'svelte/store'" apps/dashboard/src/lib/stores --include="*.svelte.ts"
 ```
 ## Acceptance
 - [ ] All store consumers updated to new API

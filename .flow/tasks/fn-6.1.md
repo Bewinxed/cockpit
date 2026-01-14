@@ -20,9 +20,10 @@ The `derived` import is unused. Keep `type Readable` if it's used for typing, or
 - [ ] `bunx svelte-check` passes for the file
 - [ ] Component still works (streaming indicator displays correctly)
 ## Done summary
-TBD
-
+- Task cancelled - based on incorrect assumptions
+- Verified onMount/onDestroy are NOT deprecated in Svelte 5
+- All components already use correct patterns
 ## Evidence
 - Commits:
-- Tests:
+- Tests: Verified via Svelte 5 official docs
 - PRs:

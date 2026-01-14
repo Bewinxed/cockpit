@@ -2,55 +2,119 @@
 
 ## Description
 
-Convert the base `writable()` stores in `realtime.svelte.ts` to a class-based pattern using `$state()`.
+**Divide & Conquer:** Break the 2252-line `realtime.svelte.ts` into entity-based store classes using `SvelteMap` from `svelte/reactivity`.
 
-**File:** `apps/dashboard/src/lib/stores/realtime.svelte.ts`
+**Target Architecture:** Entity-based split with class methods for mutations.
 
-**Stores to Convert (~20 writable stores):**
-- Lines 195-212: `agents`, `instances`, `projects`, `tasks`, `pendingPermissions`
-- Lines 2047-2106: `selectedInstanceId`, `splitViewState`, `instanceTabs`, etc.
-- Line 1105: `connectionStatus`
+## File Split Strategy
 
-## Target Architecture
+Create these new files under `apps/dashboard/src/lib/stores/`:
 
-Create a `RealtimeState` class:
-
+### 1. `agents.svelte.ts` - Agent state
 ```typescript
-class RealtimeState {
-  // Base state
-  agents = $state<Map<string, Agent>>(new Map());
-  instances = $state<Map<string, Instance>>(new Map());
-  projects = $state<Map<string, Project>>(new Map());
-  tasks = $state<Map<string, Task>>(new Map());
-  pendingPermissions = $state<Map<string, PermissionRequest>>(new Map());
+import { SvelteMap } from 'svelte/reactivity';
 
-  // UI state
-  selectedInstanceId = $state<string | null>(null);
-  connectionStatus = $state<'connected' | 'disconnected' | 'reconnecting'>('disconnected');
+class AgentStore {
+  #agents = $state(new SvelteMap<string, Agent>());
 
-  // Methods for updates (ensure reactivity with Map)
-  setAgent(id: string, agent: Agent) {
-    this.agents = new Map(this.agents).set(id, agent);
+  get all() { return this.#agents; }
+  online = $derived(Array.from(this.#agents.values()).filter(a => a.status === 'online'));
+
+  set(id: string, agent: Agent) { this.#agents.set(id, agent); }
+  updateStatus(id: string, status: Agent['status']) {
+    const agent = this.#agents.get(id);
+    if (agent) this.#agents.set(id, { ...agent, status });
   }
-
-  deleteAgent(id: string) {
-    const newMap = new Map(this.agents);
-    newMap.delete(id);
-    this.agents = newMap;
-  }
-
-  // etc.
+  delete(id: string) { this.#agents.delete(id); }
+  clear() { this.#agents.clear(); }
 }
 
-export const realtime = new RealtimeState();
+export const agents = new AgentStore();
+```
+
+### 2. `instances.svelte.ts` - Instance + messages + streaming + subagents
+```typescript
+import { SvelteMap } from 'svelte/reactivity';
+
+class InstanceStore {
+  #instances = $state(new SvelteMap<string, Instance>());
+  #messages = $state(new SvelteMap<string, Message[]>());
+  #streaming = $state(new SvelteMap<string, StreamingMessage>());
+  #subagents = $state(new SvelteMap<string, SubagentState>());
+
+  get all() { return this.#instances; }
+  running = $derived(Array.from(this.#instances.values()).filter(i => i.status === 'running'));
+
+  // Instance methods
+  set(id: string, instance: Instance) { this.#instances.set(id, instance); }
+  updateStatus(id: string, status: Instance['status']) { /* ... */ }
+
+  // Message methods
+  addMessage(instanceId: string, message: Message) { /* ... */ }
+  getMessages(instanceId: string) { return this.#messages.get(instanceId) || []; }
+  clearMessages(instanceId: string) { this.#messages.delete(instanceId); }
+
+  // Subagent methods
+  startSubagent(toolUseId: string, instanceId: string, type: string) { /* ... */ }
+  completeSubagent(toolUseId: string, result?: string) { /* ... */ }
+}
+
+export const instances = new InstanceStore();
+```
+
+### 3. `connection.svelte.ts` - SSE/river.ts client
+```typescript
+import { RiverClient } from 'river.ts';
+
+class ConnectionStore {
+  status = $state<'connecting' | 'connected' | 'disconnected' | 'error'>('disconnected');
+  #client: RiverClient | null = null;
+
+  connect(baseUrl: string) {
+    // river.ts integration - see epic spec for event definitions
+  }
+  disconnect() {
+    this.#client?.close();
+    this.status = 'disconnected';
+  }
+}
+
+export const connection = new ConnectionStore();
+```
+
+### 4. `ui.svelte.ts` - UI state (selection, sidebar, split view)
+```typescript
+class UIStore {
+  selectedInstanceId = $state<string | null>(null);
+  splitView = $state<SplitViewState>({ enabled: false });
+  sidebarOpen = $state(false);
+  sidebarCollapsed = $state(false);
+  sidebarFilter = $state<SidebarFilterState>({ type: 'all' });
+  // ...
+}
+
+export const ui = new UIStore();
+```
+
+### 5. `realtime.svelte.ts` - Unified facade (backwards compat)
+```typescript
+// Re-export for backwards compatibility during migration
+export { agents } from './agents.svelte';
+export { instances } from './instances.svelte';
+export { connection } from './connection.svelte';
+export { ui } from './ui.svelte';
+
+// Keep complex derived stores here initially
+export const populatedInstances = $derived.by(() => /* ... */);
 ```
 
 ## Key Considerations
 
-1. **Map Mutation Reactivity:** Must use `new Map(map).set()` pattern - direct `map.set()` won't trigger reactivity
-2. **Singleton Pattern:** Use `globalThis` for HMR persistence
-3. **Export Compatibility:** Components currently use `$agents` syntax - will need updates in fn-6.7
-4. **Split into logical groups:** Consider separate classes for different concerns (UI state vs data state)
+1. **Use SvelteMap:** `import { SvelteMap } from 'svelte/reactivity'` - mutations are reactive without reassignment!
+2. **Class Methods:** All mutations via methods (e.g., `instances.addMessage()`)
+3. **Private State:** Use `#privateField` to enforce method access
+4. **HMR Persistence:** Use `globalThis` pattern for dev mode
+5. **Incremental Migration:** Keep facade for backwards compat, migrate consumers in fn-6.7
 
 ## Reference Patterns
 - `apps/dashboard/src/lib/components/ui/sidebar/context.svelte.ts` - Class with `$state()`

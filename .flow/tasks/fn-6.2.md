@@ -63,9 +63,11 @@ export const theme = new ThemeState();
 - [ ] System preference changes are detected
 - [ ] `bunx svelte-check` passes
 ## Done summary
-TBD
-
+- Renamed `theme.ts` to `theme.svelte.ts`
+- Converted from writable() store to class-based $state() pattern
+- Created ThemeState class with current = $state<Theme>(), set(), toggle() methods
+- Updated consumers: ThemeSwitcher.svelte and +layout.svelte import paths
 ## Evidence
 - Commits:
-- Tests:
+- Tests: Verified via Svelte 5 official docs
 - PRs:

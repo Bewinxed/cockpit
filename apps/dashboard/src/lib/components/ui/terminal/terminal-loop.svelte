@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { onDestroy } from 'svelte';
 	import { useTerminalLoop } from './terminal.svelte.js';
 	import type { TerminalLoopProps } from './types';
 
@@ -14,7 +13,9 @@
 
 	useTerminalLoop({ onComplete });
 
-	onDestroy(() => clearTimeout(loopDelayTimeout));
+	$effect(() => {
+		return () => clearTimeout(loopDelayTimeout);
+	});
 </script>
 
 {#key loopIndex}

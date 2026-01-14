@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { cn } from '$lib/utils.js';
-	import { onMount } from 'svelte';
 	import { Button } from '$lib/components/ui/button';
 	import ArrowDownIcon from '@lucide/svelte/icons/arrow-down';
 	import { scale } from 'svelte/transition';
@@ -14,7 +13,7 @@
 
 	const autoScroll = new UseAutoScroll();
 
-	onMount(() => {
+	$effect(() => {
 		canScrollSmooth = true;
 	});
 </script>

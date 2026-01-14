@@ -162,12 +162,25 @@ def require_rp_cli() -> str:
     return rp
 
 
-def run_rp_cli(args: list[str]) -> subprocess.CompletedProcess:
-    """Run rp-cli with safe error handling."""
+def run_rp_cli(
+    args: list[str], timeout: Optional[int] = None
+) -> subprocess.CompletedProcess:
+    """Run rp-cli with safe error handling and timeout.
+
+    Args:
+        args: Command arguments to pass to rp-cli
+        timeout: Max seconds to wait. Default from FLOW_RP_TIMEOUT env or 1200s (20min).
+    """
+    if timeout is None:
+        timeout = int(os.environ.get("FLOW_RP_TIMEOUT", "1200"))
     rp = require_rp_cli()
     cmd = [rp] + args
     try:
-        return subprocess.run(cmd, capture_output=True, text=True, check=True)
+        return subprocess.run(
+            cmd, capture_output=True, text=True, check=True, timeout=timeout
+        )
+    except subprocess.TimeoutExpired:
+        error_exit(f"rp-cli timed out after {timeout}s", use_json=False, code=3)
     except subprocess.CalledProcessError as e:
         msg = (e.stderr or e.stdout or str(e)).strip()
         error_exit(f"rp-cli failed: {msg}", use_json=False, code=2)
@@ -376,6 +389,468 @@ def epic_id_from_task(task_id: str) -> str:
     if epic is None or task is None:
         raise ValueError(f"Invalid task ID: {task_id}")
     return f"fn-{epic}"
+
+
+# --- Context Hints (for codex reviews) ---
+
+
+def get_changed_files(base_branch: str) -> list[str]:
+    """Get files changed between base branch and HEAD."""
+    try:
+        result = subprocess.run(
+            ["git", "diff", "--name-only", base_branch],
+            capture_output=True,
+            text=True,
+            check=True,
+            cwd=get_repo_root(),
+        )
+        return [f.strip() for f in result.stdout.strip().split("\n") if f.strip()]
+    except subprocess.CalledProcessError:
+        return []
+
+
+def extract_symbols_from_file(file_path: Path) -> list[str]:
+    """Extract exported/defined symbols from a file (functions, classes, consts).
+
+    Returns empty list on any error - never crashes.
+    """
+    try:
+        if not file_path.exists():
+            return []
+        content = file_path.read_text(encoding="utf-8", errors="ignore")
+        if not content:
+            return []
+
+        symbols = []
+        ext = file_path.suffix.lower()
+
+        # Python: def/class definitions
+        if ext == ".py":
+            for match in re.finditer(r"^(?:def|class)\s+(\w+)", content, re.MULTILINE):
+                symbols.append(match.group(1))
+            # Also catch exported __all__
+            all_match = re.search(r"__all__\s*=\s*\[([^\]]+)\]", content)
+            if all_match:
+                for s in re.findall(r"['\"](\w+)['\"]", all_match.group(1)):
+                    symbols.append(s)
+
+        # JS/TS: export function/class/const
+        elif ext in (".js", ".ts", ".jsx", ".tsx", ".mjs"):
+            for match in re.finditer(
+                r"export\s+(?:default\s+)?(?:function|class|const|let|var)\s+(\w+)",
+                content,
+            ):
+                symbols.append(match.group(1))
+            # Named exports: export { foo, bar }
+            for match in re.finditer(r"export\s*\{([^}]+)\}", content):
+                for s in re.findall(r"(\w+)", match.group(1)):
+                    symbols.append(s)
+
+        # Go: func/type definitions
+        elif ext == ".go":
+            for match in re.finditer(r"^func\s+(\w+)", content, re.MULTILINE):
+                symbols.append(match.group(1))
+            for match in re.finditer(r"^type\s+(\w+)", content, re.MULTILINE):
+                symbols.append(match.group(1))
+
+        # Rust: pub fn/struct/enum/trait, also private fn for references
+        elif ext == ".rs":
+            for match in re.finditer(r"^(?:pub\s+)?fn\s+(\w+)", content, re.MULTILINE):
+                symbols.append(match.group(1))
+            for match in re.finditer(
+                r"^(?:pub\s+)?(?:struct|enum|trait|type)\s+(\w+)",
+                content,
+                re.MULTILINE,
+            ):
+                symbols.append(match.group(1))
+            # impl blocks: impl Name or impl Trait for Name
+            for match in re.finditer(
+                r"^impl(?:<[^>]+>)?\s+(\w+)", content, re.MULTILINE
+            ):
+                symbols.append(match.group(1))
+
+        # C/C++: function definitions, structs, typedefs, macros
+        elif ext in (".c", ".h", ".cpp", ".hpp", ".cc", ".cxx"):
+            # Function definitions: type name( at line start (simplified)
+            for match in re.finditer(
+                r"^[a-zA-Z_][\w\s\*]+\s+(\w+)\s*\([^;]*$", content, re.MULTILINE
+            ):
+                symbols.append(match.group(1))
+            # struct/enum/union definitions
+            for match in re.finditer(
+                r"^(?:typedef\s+)?(?:struct|enum|union)\s+(\w+)",
+                content,
+                re.MULTILINE,
+            ):
+                symbols.append(match.group(1))
+            # #define macros
+            for match in re.finditer(r"^#define\s+(\w+)", content, re.MULTILINE):
+                symbols.append(match.group(1))
+
+        # Java: class/interface/method definitions
+        elif ext == ".java":
+            for match in re.finditer(
+                r"^(?:public|private|protected)?\s*(?:static\s+)?"
+                r"(?:class|interface|enum)\s+(\w+)",
+                content,
+                re.MULTILINE,
+            ):
+                symbols.append(match.group(1))
+            # Method definitions
+            for match in re.finditer(
+                r"^\s*(?:public|private|protected)\s+(?:static\s+)?"
+                r"[\w<>\[\]]+\s+(\w+)\s*\(",
+                content,
+                re.MULTILINE,
+            ):
+                symbols.append(match.group(1))
+
+        return list(set(symbols))
+    except Exception:
+        # Never crash on parse errors - just return empty
+        return []
+
+
+def find_references(
+    symbol: str, exclude_files: list[str], max_results: int = 3
+) -> list[tuple[str, int]]:
+    """Find files referencing a symbol. Returns [(path, line_number), ...]."""
+    repo_root = get_repo_root()
+    try:
+        result = subprocess.run(
+            [
+                "git",
+                "grep",
+                "-n",
+                "-w",
+                symbol,
+                "--",
+                # Python
+                "*.py",
+                # JavaScript/TypeScript
+                "*.js",
+                "*.ts",
+                "*.tsx",
+                "*.jsx",
+                "*.mjs",
+                # Go
+                "*.go",
+                # Rust
+                "*.rs",
+                # C/C++
+                "*.c",
+                "*.h",
+                "*.cpp",
+                "*.hpp",
+                "*.cc",
+                "*.cxx",
+                # Java
+                "*.java",
+            ],
+            capture_output=True,
+            text=True,
+            cwd=repo_root,
+        )
+        refs = []
+        for line in result.stdout.strip().split("\n"):
+            if not line:
+                continue
+            # Format: file:line:content
+            parts = line.split(":", 2)
+            if len(parts) >= 2:
+                file_path = parts[0]
+                # Skip excluded files (the changed files themselves)
+                if file_path in exclude_files:
+                    continue
+                try:
+                    line_num = int(parts[1])
+                    refs.append((file_path, line_num))
+                except ValueError:
+                    continue
+            if len(refs) >= max_results:
+                break
+        return refs
+    except subprocess.CalledProcessError:
+        return []
+
+
+def gather_context_hints(base_branch: str, max_hints: int = 15) -> str:
+    """Gather context hints for code review.
+
+    Returns formatted hints like:
+    Consider these related files:
+    - src/auth.ts:15 - references validateToken
+    - src/types.ts:42 - references User
+    """
+    changed_files = get_changed_files(base_branch)
+    if not changed_files:
+        return ""
+
+    # Limit to avoid processing too many files
+    if len(changed_files) > 50:
+        changed_files = changed_files[:50]
+
+    repo_root = get_repo_root()
+    hints = []
+    seen_files = set(changed_files)
+
+    # Extract symbols from changed files and find references
+    for changed_file in changed_files:
+        file_path = repo_root / changed_file
+        symbols = extract_symbols_from_file(file_path)
+
+        # Limit symbols per file
+        for symbol in symbols[:10]:
+            refs = find_references(symbol, changed_files, max_results=2)
+            for ref_path, ref_line in refs:
+                if ref_path not in seen_files:
+                    hints.append(f"- {ref_path}:{ref_line} - references {symbol}")
+                    seen_files.add(ref_path)
+                    if len(hints) >= max_hints:
+                        break
+            if len(hints) >= max_hints:
+                break
+        if len(hints) >= max_hints:
+            break
+
+    if not hints:
+        return ""
+
+    return "Consider these related files:\n" + "\n".join(hints)
+
+
+# --- Codex Backend Helpers ---
+
+
+def require_codex() -> str:
+    """Ensure codex CLI is available. Returns path to codex."""
+    codex = shutil.which("codex")
+    if not codex:
+        error_exit("codex not found in PATH", use_json=False, code=2)
+    return codex
+
+
+def get_codex_version() -> Optional[str]:
+    """Get codex version, or None if not available."""
+    codex = shutil.which("codex")
+    if not codex:
+        return None
+    try:
+        result = subprocess.run(
+            [codex, "--version"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        # Parse version from output like "codex 0.1.2" or "0.1.2"
+        output = result.stdout.strip()
+        match = re.search(r"(\d+\.\d+\.\d+)", output)
+        return match.group(1) if match else output
+    except subprocess.CalledProcessError:
+        return None
+
+
+def run_codex_exec(
+    prompt: str,
+    session_id: Optional[str] = None,
+    sandbox: str = "read-only",
+    model: Optional[str] = None,
+) -> tuple[str, Optional[str]]:
+    """Run codex exec and return (output, thread_id).
+
+    If session_id provided, tries to resume. Falls back to new session if resume fails.
+    Model: FLOW_CODEX_MODEL env > parameter > default (gpt-5.2 + high reasoning).
+    """
+    codex = require_codex()
+    # Model priority: env > parameter > default (gpt-5.2 + high reasoning = GPT 5.2 High)
+    effective_model = os.environ.get("FLOW_CODEX_MODEL") or model or "gpt-5.2"
+
+    if session_id:
+        # Try resume first (model already set in original session)
+        cmd = [codex, "exec", "resume", session_id, prompt]
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=600,
+            )
+            output = result.stdout
+            # For resumed sessions, thread_id stays the same
+            return output, session_id
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            # Resume failed - fall through to new session
+            pass
+
+    # New session with model + high reasoning effort
+    cmd = [
+        codex,
+        "exec",
+        "--model",
+        effective_model,
+        "-c",
+        'model_reasoning_effort="high"',
+        "--sandbox",
+        sandbox,
+        "--json",
+        prompt,
+    ]
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=600,
+        )
+        output = result.stdout
+        thread_id = parse_codex_thread_id(output)
+        return output, thread_id
+    except subprocess.TimeoutExpired:
+        error_exit("codex exec timed out (600s)", use_json=False, code=2)
+    except subprocess.CalledProcessError as e:
+        msg = (e.stderr or e.stdout or str(e)).strip()
+        error_exit(f"codex exec failed: {msg}", use_json=False, code=2)
+
+
+def parse_codex_thread_id(output: str) -> Optional[str]:
+    """Extract thread_id from codex --json output.
+
+    Looks for: {"type":"thread.started","thread_id":"019baa19-..."}
+    """
+    for line in output.split("\n"):
+        if not line.strip():
+            continue
+        try:
+            data = json.loads(line)
+            if data.get("type") == "thread.started" and "thread_id" in data:
+                return data["thread_id"]
+        except json.JSONDecodeError:
+            continue
+    return None
+
+
+def parse_codex_verdict(output: str) -> Optional[str]:
+    """Extract verdict from codex output.
+
+    Looks for <verdict>SHIP</verdict> or <verdict>NEEDS_WORK</verdict>
+    """
+    match = re.search(r"<verdict>(SHIP|NEEDS_WORK|MAJOR_RETHINK)</verdict>", output)
+    return match.group(1) if match else None
+
+
+def build_review_prompt(
+    review_type: str,
+    spec_content: str,
+    context_hints: str,
+    diff_summary: str = "",
+) -> str:
+    """Build XML-structured review prompt for codex.
+
+    review_type: 'impl' or 'plan'
+
+    Uses same Carmack-level criteria as RepoPrompt workflow to ensure parity.
+    """
+    # Context gathering preamble - same for both review types
+    context_preamble = """## Context Gathering (do this first)
+
+Before reviewing, explore the codebase to understand the full impact:
+
+**Cross-boundary checks:**
+- Frontend change? Check the backend API it calls
+- Backend change? Check frontend consumers and other callers
+- Schema/type change? Find all usages across the codebase
+- Config change? Check what reads it
+
+**Related context:**
+- Similar features elsewhere (patterns to follow or break)
+- Tests covering this area (are they sufficient?)
+- Shared utilities/hooks this code should use
+- Error handling patterns in adjacent code
+
+The context_hints below are a starting point. Read additional files as needed -
+a thorough review requires understanding the system, not just the diff.
+
+"""
+
+    if review_type == "impl":
+        instruction = (
+            context_preamble
+            + """Conduct a John Carmack-level review of this implementation.
+
+## Review Criteria
+
+1. **Correctness** - Matches spec? Logic errors?
+2. **Simplicity** - Simplest solution? Over-engineering?
+3. **DRY** - Duplicated logic? Existing patterns?
+4. **Architecture** - Data flow? Clear boundaries?
+5. **Edge Cases** - Failure modes? Race conditions?
+6. **Tests** - Adequate coverage? Testing behavior?
+7. **Security** - Injection? Auth gaps?
+
+## Output Format
+
+For each issue found:
+- **Severity**: Critical / Major / Minor / Nitpick
+- **File:Line**: Exact location
+- **Problem**: What's wrong
+- **Suggestion**: How to fix
+
+Be critical. Find real issues.
+
+**REQUIRED**: End your response with exactly one verdict tag:
+<verdict>SHIP</verdict> - Ready to merge
+<verdict>NEEDS_WORK</verdict> - Has issues that must be fixed
+<verdict>MAJOR_RETHINK</verdict> - Fundamental approach problems
+
+Do NOT skip this tag. The automation depends on it."""
+        )
+    else:  # plan
+        instruction = (
+            context_preamble
+            + """Conduct a John Carmack-level review of this plan.
+
+## Review Criteria
+
+1. **Completeness** - All requirements covered? Missing edge cases?
+2. **Feasibility** - Technically sound? Dependencies clear?
+3. **Clarity** - Specs unambiguous? Acceptance criteria testable?
+4. **Architecture** - Right abstractions? Clean boundaries?
+5. **Risks** - Blockers identified? Security gaps? Mitigation?
+6. **Scope** - Right-sized? Over/under-engineering?
+7. **Testability** - How will we verify this works?
+
+## Output Format
+
+For each issue found:
+- **Severity**: Critical / Major / Minor / Nitpick
+- **Location**: Which task or section
+- **Problem**: What's wrong
+- **Suggestion**: How to fix
+
+Be critical. Find real issues.
+
+**REQUIRED**: End your response with exactly one verdict tag:
+<verdict>SHIP</verdict> - Plan is solid, ready to implement
+<verdict>NEEDS_WORK</verdict> - Plan has gaps that need addressing
+<verdict>MAJOR_RETHINK</verdict> - Fundamental approach problems
+
+Do NOT skip this tag. The automation depends on it."""
+        )
+
+    parts = []
+
+    if context_hints:
+        parts.append(f"<context_hints>\n{context_hints}\n</context_hints>")
+
+    if diff_summary:
+        parts.append(f"<diff_summary>\n{diff_summary}\n</diff_summary>")
+
+    parts.append(f"<spec>\n{spec_content}\n</spec>")
+    parts.append(f"<review_instructions>\n{instruction}\n</review_instructions>")
+
+    return "\n\n".join(parts)
 
 
 def get_actor() -> str:
@@ -1201,6 +1676,8 @@ def cmd_show(args: argparse.Namespace) -> None:
                         task_file, f"Task {task_file.stem}", use_json=args.json
                     )
                 )
+                if "id" not in task_data:
+                    continue  # Skip artifact files (GH-21)
                 tasks.append(
                     {
                         "id": task_data["id"],
@@ -1340,6 +1817,8 @@ def cmd_tasks(args: argparse.Namespace) -> None:
             task_data = normalize_task(
                 load_json_or_exit(task_file, f"Task {stem}", use_json=args.json)
             )
+            if "id" not in task_data:
+                continue  # Skip artifact files (GH-21)
             # Filter by status if requested
             if args.status and task_data["status"] != args.status:
                 continue
@@ -1421,6 +1900,8 @@ def cmd_list(args: argparse.Namespace) -> None:
             task_data = normalize_task(
                 load_json_or_exit(task_file, f"Task {stem}", use_json=args.json)
             )
+            if "id" not in task_data:
+                continue  # Skip artifact files (GH-21)
             epic_id = task_data["epic"]
             if epic_id not in tasks_by_epic:
                 tasks_by_epic[epic_id] = []
@@ -1728,6 +2209,8 @@ def cmd_ready(args: argparse.Namespace) -> None:
         task_data = normalize_task(
             load_json_or_exit(task_file, f"Task {task_file.stem}", use_json=args.json)
         )
+        if "id" not in task_data:
+            continue  # Skip artifact files (GH-21)
         tasks[task_data["id"]] = task_data
 
     # Find ready tasks (status=todo, all deps done)
@@ -1921,6 +2404,8 @@ def cmd_next(args: argparse.Namespace) -> None:
                     task_file, f"Task {task_file.stem}", use_json=args.json
                 )
             )
+            if "id" not in task_data:
+                continue  # Skip artifact files (GH-21)
             tasks[task_data["id"]] = task_data
 
         # Resume in_progress tasks owned by current actor
@@ -2386,6 +2871,8 @@ def validate_epic(
                     task_file, f"Task {task_file.stem}", use_json=use_json
                 )
             )
+            if "id" not in task_data:
+                continue  # Skip artifact files (GH-21)
             tasks[task_data["id"]] = task_data
 
     # Validate each task
@@ -2725,6 +3212,252 @@ def cmd_rp_setup_review(args: argparse.Namespace) -> None:
         print(json.dumps({"window": win_id, "tab": tab, "repo_root": repo_root}))
     else:
         print(f"W={win_id} T={tab}")
+
+
+# --- Codex Commands ---
+
+
+def cmd_codex_check(args: argparse.Namespace) -> None:
+    """Check if codex CLI is available and return version."""
+    codex = shutil.which("codex")
+    available = codex is not None
+    version = get_codex_version() if available else None
+
+    if args.json:
+        json_output({"available": available, "version": version})
+    else:
+        if available:
+            print(f"codex available: {version or 'unknown version'}")
+        else:
+            print("codex not available")
+
+
+def build_standalone_review_prompt(
+    base_branch: str, focus: Optional[str], diff_summary: str
+) -> str:
+    """Build review prompt for standalone branch review (no task context)."""
+    focus_section = ""
+    if focus:
+        focus_section = f"""
+## Focus Areas
+{focus}
+
+Pay special attention to these areas during review.
+"""
+
+    return f"""# Implementation Review: Branch Changes vs {base_branch}
+
+Review all changes on the current branch compared to {base_branch}.
+{focus_section}
+## Diff Summary
+```
+{diff_summary}
+```
+
+## Review Criteria (Carmack-level)
+
+1. **Correctness** - Does the code do what it claims?
+2. **Reliability** - Can this fail silently or cause flaky behavior?
+3. **Simplicity** - Is this the simplest solution?
+4. **Security** - Injection, auth gaps, resource exhaustion?
+5. **Edge Cases** - Failure modes, race conditions, malformed input?
+
+## Output Format
+
+For each issue found:
+- **Severity**: Critical / Major / Minor / Nitpick
+- **File:Line**: Exact location
+- **Problem**: What's wrong
+- **Suggestion**: How to fix
+
+Be critical. Find real issues.
+
+**REQUIRED**: End your response with exactly one verdict tag:
+- `<verdict>SHIP</verdict>` - Ready to merge
+- `<verdict>NEEDS_WORK</verdict>` - Issues must be fixed first
+- `<verdict>MAJOR_RETHINK</verdict>` - Fundamental problems, reconsider approach
+"""
+
+
+def cmd_codex_impl_review(args: argparse.Namespace) -> None:
+    """Run implementation review via codex exec."""
+    task_id = args.task
+    base_branch = args.base
+    focus = getattr(args, "focus", None)
+
+    # Standalone mode (no task ID) - review branch without task context
+    standalone = task_id is None
+
+    if not standalone:
+        # Task-specific review requires .flow/
+        if not ensure_flow_exists():
+            error_exit(".flow/ does not exist", use_json=args.json)
+
+        # Validate task ID
+        if not is_task_id(task_id):
+            error_exit(f"Invalid task ID: {task_id}", use_json=args.json)
+
+        # Load task spec
+        flow_dir = get_flow_dir()
+        task_spec_path = flow_dir / TASKS_DIR / f"{task_id}.md"
+
+        if not task_spec_path.exists():
+            error_exit(f"Task spec not found: {task_spec_path}", use_json=args.json)
+
+        task_spec = task_spec_path.read_text(encoding="utf-8")
+
+    # Get diff summary
+    try:
+        diff_result = subprocess.run(
+            ["git", "diff", "--stat", base_branch],
+            capture_output=True,
+            text=True,
+            cwd=get_repo_root(),
+        )
+        diff_summary = diff_result.stdout.strip()
+    except subprocess.CalledProcessError:
+        diff_summary = ""
+
+    # Build prompt
+    if standalone:
+        prompt = build_standalone_review_prompt(base_branch, focus, diff_summary)
+    else:
+        # Get context hints for task-specific review
+        context_hints = gather_context_hints(base_branch)
+        prompt = build_review_prompt("impl", task_spec, context_hints, diff_summary)
+
+    # Check for existing session in receipt
+    receipt_path = args.receipt if hasattr(args, "receipt") and args.receipt else None
+    session_id = None
+    if receipt_path:
+        receipt_file = Path(receipt_path)
+        if receipt_file.exists():
+            try:
+                receipt_data = json.loads(receipt_file.read_text(encoding="utf-8"))
+                session_id = receipt_data.get("session_id")
+            except (json.JSONDecodeError, Exception):
+                pass
+
+    # Run codex
+    output, thread_id = run_codex_exec(prompt, session_id=session_id)
+
+    # Parse verdict
+    verdict = parse_codex_verdict(output)
+
+    # Determine review id (task_id for task reviews, "branch" for standalone)
+    review_id = task_id if task_id else "branch"
+
+    # Write receipt if path provided (Ralph-compatible schema)
+    if receipt_path:
+        receipt_data = {
+            "type": "impl_review",  # Required by Ralph
+            "id": review_id,  # Required by Ralph
+            "mode": "codex",
+            "base": base_branch,
+            "verdict": verdict,
+            "session_id": thread_id,
+            "timestamp": now_iso(),
+            "review": output,  # Full review feedback for fix loop
+        }
+        if focus:
+            receipt_data["focus"] = focus
+        Path(receipt_path).write_text(
+            json.dumps(receipt_data, indent=2) + "\n", encoding="utf-8"
+        )
+
+    # Output
+    if args.json:
+        json_output(
+            {
+                "type": "impl_review",
+                "id": review_id,
+                "verdict": verdict,
+                "session_id": thread_id,
+                "mode": "codex",
+                "standalone": standalone,
+                "review": output,  # Full review feedback for fix loop
+            }
+        )
+    else:
+        print(output)
+        print(f"\nVERDICT={verdict or 'UNKNOWN'}")
+
+
+def cmd_codex_plan_review(args: argparse.Namespace) -> None:
+    """Run plan review via codex exec."""
+    if not ensure_flow_exists():
+        error_exit(".flow/ does not exist", use_json=args.json)
+
+    epic_id = args.epic
+
+    # Validate epic ID
+    if not is_epic_id(epic_id):
+        error_exit(f"Invalid epic ID: {epic_id}", use_json=args.json)
+
+    # Load epic spec
+    flow_dir = get_flow_dir()
+    epic_spec_path = flow_dir / SPECS_DIR / f"{epic_id}.md"
+
+    if not epic_spec_path.exists():
+        error_exit(f"Epic spec not found: {epic_spec_path}", use_json=args.json)
+
+    epic_spec = epic_spec_path.read_text(encoding="utf-8")
+
+    # Get context hints (from main branch for plans)
+    base_branch = args.base if hasattr(args, "base") and args.base else "main"
+    context_hints = gather_context_hints(base_branch)
+
+    # Build prompt
+    prompt = build_review_prompt("plan", epic_spec, context_hints)
+
+    # Check for existing session in receipt
+    receipt_path = args.receipt if hasattr(args, "receipt") and args.receipt else None
+    session_id = None
+    if receipt_path:
+        receipt_file = Path(receipt_path)
+        if receipt_file.exists():
+            try:
+                receipt_data = json.loads(receipt_file.read_text(encoding="utf-8"))
+                session_id = receipt_data.get("session_id")
+            except (json.JSONDecodeError, Exception):
+                pass
+
+    # Run codex
+    output, thread_id = run_codex_exec(prompt, session_id=session_id)
+
+    # Parse verdict
+    verdict = parse_codex_verdict(output)
+
+    # Write receipt if path provided (Ralph-compatible schema)
+    if receipt_path:
+        receipt_data = {
+            "type": "plan_review",  # Required by Ralph
+            "id": epic_id,  # Required by Ralph
+            "mode": "codex",
+            "verdict": verdict,
+            "session_id": thread_id,
+            "timestamp": now_iso(),
+            "review": output,  # Full review feedback for fix loop
+        }
+        Path(receipt_path).write_text(
+            json.dumps(receipt_data, indent=2) + "\n", encoding="utf-8"
+        )
+
+    # Output
+    if args.json:
+        json_output(
+            {
+                "type": "plan_review",
+                "id": epic_id,
+                "verdict": verdict,
+                "session_id": thread_id,
+                "mode": "codex",
+                "review": output,  # Full review feedback for fix loop
+            }
+        )
+    else:
+        print(output)
+        print(f"\nVERDICT={verdict or 'UNKNOWN'}")
 
 
 def cmd_validate(args: argparse.Namespace) -> None:
@@ -3184,6 +3917,40 @@ def main() -> None:
     p_rp_setup.add_argument("--summary", required=True, help="Builder summary")
     p_rp_setup.add_argument("--json", action="store_true", help="JSON output")
     p_rp_setup.set_defaults(func=cmd_rp_setup_review)
+
+    # codex (Codex CLI wrappers)
+    p_codex = subparsers.add_parser("codex", help="Codex CLI helpers")
+    codex_sub = p_codex.add_subparsers(dest="codex_cmd", required=True)
+
+    p_codex_check = codex_sub.add_parser("check", help="Check codex availability")
+    p_codex_check.add_argument("--json", action="store_true", help="JSON output")
+    p_codex_check.set_defaults(func=cmd_codex_check)
+
+    p_codex_impl = codex_sub.add_parser("impl-review", help="Implementation review")
+    p_codex_impl.add_argument(
+        "task",
+        nargs="?",
+        default=None,
+        help="Task ID (fn-N.M), optional for standalone",
+    )
+    p_codex_impl.add_argument("--base", required=True, help="Base branch for diff")
+    p_codex_impl.add_argument(
+        "--focus", help="Focus areas for standalone review (comma-separated)"
+    )
+    p_codex_impl.add_argument(
+        "--receipt", help="Receipt file path for session continuity"
+    )
+    p_codex_impl.add_argument("--json", action="store_true", help="JSON output")
+    p_codex_impl.set_defaults(func=cmd_codex_impl_review)
+
+    p_codex_plan = codex_sub.add_parser("plan-review", help="Plan review")
+    p_codex_plan.add_argument("epic", help="Epic ID (fn-N)")
+    p_codex_plan.add_argument("--base", default="main", help="Base branch for context")
+    p_codex_plan.add_argument(
+        "--receipt", help="Receipt file path for session continuity"
+    )
+    p_codex_plan.add_argument("--json", action="store_true", help="JSON output")
+    p_codex_plan.set_defaults(func=cmd_codex_plan_review)
 
     args = parser.parse_args()
     args.func(args)

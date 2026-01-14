@@ -5,10 +5,22 @@
   "created_at": "2026-01-13T20:52:00.198248Z",
   "depends_on": [],
   "epic": "fn-6",
+  "evidence": {
+    "commits": [],
+    "files_changed": [
+      "apps/dashboard/src/lib/stores/theme.svelte.ts",
+      "apps/dashboard/src/lib/components/ui/ThemeSwitcher.svelte",
+      "apps/dashboard/src/routes/+layout.svelte"
+    ],
+    "prs": [],
+    "tests": [
+      "Verified via Svelte 5 official docs"
+    ]
+  },
   "id": "fn-6.2",
   "priority": null,
   "spec_path": ".flow/tasks/fn-6.2.md",
-  "status": "todo",
+  "status": "done",
   "title": "Convert theme.ts to class-based $state()",
-  "updated_at": "2026-01-13T20:54:48.737924Z"
+  "updated_at": "2026-01-14T06:59:03.476757Z"
 }

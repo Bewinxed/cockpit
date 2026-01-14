@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
   import { slide } from 'svelte/transition';
   import { ChevronRight, Loader2, CheckCircle2, XCircle, Zap, Check, X, Clock, ChevronDown } from 'lucide-svelte';
   import Markdown from '@humanspeak/svelte-markdown';
@@ -18,7 +17,6 @@
 
   let expanded = $state(true);
   let elapsedMs = $state(0);
-  let intervalId: ReturnType<typeof setInterval> | null = null;
   // Track which tools are expanded (collapsed by default)
   let expandedTools = new SvelteSet<string>();
 
@@ -76,9 +74,17 @@
     return expandedTools.has(toolId);
   }
 
-  onMount(() => {
+  // Elapsed time tracker with cleanup
+  $effect(() => {
+    // Initial calculation
+    if (subagent.completedAt) {
+      elapsedMs = subagent.completedAt.getTime() - subagent.startedAt.getTime();
+    } else {
+      elapsedMs = Date.now() - subagent.startedAt.getTime();
+    }
+
     // Update elapsed time every second
-    intervalId = setInterval(() => {
+    const intervalId = setInterval(() => {
       if (subagent.status === 'starting' || subagent.status === 'running') {
         elapsedMs = Date.now() - subagent.startedAt.getTime();
       } else if (subagent.completedAt) {
@@ -86,16 +92,7 @@
       }
     }, 1000);
 
-    // Initial calculation
-    if (subagent.completedAt) {
-      elapsedMs = subagent.completedAt.getTime() - subagent.startedAt.getTime();
-    } else {
-      elapsedMs = Date.now() - subagent.startedAt.getTime();
-    }
-  });
-
-  onDestroy(() => {
-    if (intervalId) clearInterval(intervalId);
+    return () => clearInterval(intervalId);
   });
 </script>
 

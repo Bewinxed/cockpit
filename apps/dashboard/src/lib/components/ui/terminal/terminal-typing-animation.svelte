@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { cn } from '$lib/utils.js';
-	import { onDestroy } from 'svelte';
 	import { useAnimation } from './terminal.svelte.js';
 	import type { TerminalAnimationProps } from './types';
 	import { typewriter } from '$lib/actions/typewriter.svelte';
@@ -20,7 +19,9 @@
 
 	const animation = useAnimation({ delay: _delay, play });
 
-	onDestroy(() => animation.dispose());
+	$effect(() => {
+		return () => animation.dispose();
+	});
 </script>
 
 {#if playAnimation}
