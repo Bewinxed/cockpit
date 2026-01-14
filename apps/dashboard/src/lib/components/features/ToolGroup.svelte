@@ -1,7 +1,7 @@
 <script lang="ts">
 	import * as Collapsible from '$lib/components/ui/collapsible';
 	import { ChevronRight, Loader2, CheckCircle2, XCircle, FileText, Terminal, Code, Search, FolderOpen, Edit3, Globe, Wrench } from 'lucide-svelte';
-	import type { Message } from '$lib/stores/realtime.svelte';
+	import type { Message } from '$lib/stores';
 	import DiffView from './DiffView.svelte';
 	import DiffModal from './DiffModal.svelte';
 	import { getToolGlance, getResultGlimpse } from '$lib/utils/tool-display';

@@ -1,5 +1,6 @@
 import { SvelteMap } from 'svelte/reactivity';
 import type { PermissionRequest } from './types';
+import type { PermissionRequestEvent } from './sse-events';
 
 /**
  * Permission store - manages pending permission requests.
@@ -66,6 +67,27 @@ class PermissionStore {
       if (p.instanceId === instanceId) return true;
     }
     return false;
+  }
+
+  // ========================================
+  // SSE Event Handlers
+  // ========================================
+
+  /** Handle permission:request SSE event */
+  handleRequest(event: PermissionRequestEvent): void {
+    this.#permissions.set(event.requestId, {
+      requestId: event.requestId,
+      instanceId: event.instanceId,
+      machineId: event.machineId,
+      toolName: event.toolName,
+      toolInput: event.toolInput,
+      toolUseID: event.toolUseID,
+      decisionReason: event.decisionReason,
+      blockedPath: event.blockedPath,
+      subAgentID: event.subAgentID,
+      suggestions: event.suggestions,
+      createdAt: event.createdAt,
+    });
   }
 }
 

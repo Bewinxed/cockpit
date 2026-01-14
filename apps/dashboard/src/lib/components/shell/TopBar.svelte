@@ -1,14 +1,7 @@
 <script lang="ts">
   import { Search, Bell, PanelLeft } from 'lucide-svelte';
   import { Button } from '$lib/components/ui/button';
-  import {
-    toggleCommandPalette,
-    toggleNotificationCenter,
-    toggleSidebar,
-    pendingPermissionCount,
-    connectionStatus,
-    sidebarCollapsed
-  } from '$lib/stores/realtime.svelte';
+  import { ui, permissions, connection } from '$lib/stores';
 
   const isMac = typeof navigator !== 'undefined' && navigator.platform.includes('Mac');
   const cmdKey = isMac ? '⌘' : 'Ctrl';
@@ -21,9 +14,9 @@
     <Button
       variant="ghost"
       size="icon"
-      onclick={toggleSidebar}
+      onclick={ui.toggleSidebar}
       class="lg:hidden"
-      title={$sidebarCollapsed ? 'Open sidebar' : 'Close sidebar'}
+      title={ui.sidebarCollapsed ? 'Open sidebar' : 'Close sidebar'}
     >
       <PanelLeft class="size-5" />
     </Button>
@@ -39,7 +32,7 @@
   <!-- Center: Search -->
   <Button
     variant="outline"
-    onclick={toggleCommandPalette}
+    onclick={ui.toggleCommandPalette}
     class="flex items-center gap-2 px-3 py-1.5 bg-muted/50 hover:bg-muted min-w-[240px] justify-start"
   >
     <Search class="size-4" />
@@ -55,13 +48,13 @@
     <Button
       variant="ghost"
       size="icon"
-      onclick={toggleNotificationCenter}
+      onclick={ui.toggleNotificationCenter}
       class="relative"
     >
       <Bell class="size-5 text-muted-foreground" />
-      {#if $pendingPermissionCount > 0}
+      {#if permissions.count > 0}
         <span class="absolute top-1 right-1 size-4 bg-warning text-warning-foreground text-[10px] font-bold rounded-full flex items-center justify-center">
-          {$pendingPermissionCount}
+          {permissions.count}
         </span>
       {/if}
     </Button>
@@ -70,11 +63,11 @@
     <div class="flex items-center gap-1.5 px-2 py-1 rounded-lg">
       <div
         class="size-2 rounded-full"
-        class:bg-success={$connectionStatus === 'connected'}
-        class:bg-warning={$connectionStatus === 'connecting'}
-        class:bg-error={$connectionStatus === 'error'}
-        class:bg-muted-foreground={$connectionStatus === 'disconnected'}
-        class:animate-pulse={$connectionStatus === 'connecting'}
+        class:bg-success={connection.status === 'connected'}
+        class:bg-warning={connection.status === 'connecting'}
+        class:bg-error={connection.status === 'error'}
+        class:bg-muted-foreground={connection.status === 'disconnected'}
+        class:animate-pulse={connection.status === 'connecting'}
       ></div>
     </div>
   </div>

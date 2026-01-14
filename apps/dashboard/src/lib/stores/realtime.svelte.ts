@@ -1309,22 +1309,11 @@ export function connect(baseUrl: string = '') {
       }
       return map;
     });
-    // Check for auth-related errors
-    const isAuthError = error?.includes('auth') ||
-                        error?.includes('401') ||
-                        error?.includes('403') ||
-                        error?.includes('token') ||
-                        error?.includes('credentials') ||
-                        error?.includes('login');
-
-    if (isAuthError) {
-      // Dispatch custom event for auth errors - page component will handle login flow
-      window.dispatchEvent(new CustomEvent('cockpit:auth-required', { detail: { instanceId, error } }));
-    } else {
-      // Only add error message for non-auth errors
+    // Display error as message. Auth is handled separately via sdk:message with subtype 'login_prompt'.
+    if (error) {
       addMessage(instanceId, {
         type: 'error',
-        content: error || 'An error occurred',
+        content: error,
         timestamp: new Date(),
       });
     }

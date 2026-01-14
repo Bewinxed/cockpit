@@ -1,22 +1,17 @@
 <script lang="ts">
   import { Bell, X, Terminal, Shield } from 'lucide-svelte';
   import { Button } from '$lib/components/ui/button';
-  import {
-    allPendingPermissions,
-    pendingPermissionCount,
-    toggleNotificationCenter,
-    instances
-  } from '$lib/stores/realtime.svelte';
+  import { instances, permissions, ui } from '$lib/stores';
   import { openInstance } from '$lib/stores/url-sync.svelte';
   import PermissionNotification from './PermissionNotification.svelte';
 
   function handlePermissionClick(instanceId: string) {
     openInstance(instanceId);
-    toggleNotificationCenter();
+    ui.toggleNotificationCenter();
   }
 
   function getInstanceName(instanceId: string): string {
-    const instance = $instances.get(instanceId);
+    const instance = instances.get(instanceId);
     if (!instance) return 'Unknown Instance';
     if (instance.name && instance.name !== 'Instance') {
       return instance.name;
@@ -29,8 +24,8 @@
 <!-- Backdrop -->
 <div
   class="fixed inset-0 z-40"
-  onclick={toggleNotificationCenter}
-  onkeydown={(e) => e.key === 'Escape' && toggleNotificationCenter()}
+  onclick={() => ui.toggleNotificationCenter()}
+  onkeydown={(e) => e.key === 'Escape' && ui.toggleNotificationCenter()}
   role="button"
   tabindex="-1"
 ></div>
@@ -42,20 +37,20 @@
     <div class="flex items-center gap-2">
       <Bell class="w-4 h-4 text-muted-foreground" />
       <span class="font-medium text-foreground">Notifications</span>
-      {#if $pendingPermissionCount > 0}
+      {#if permissions.count > 0}
         <span class="px-1.5 py-0.5 text-xs bg-warning text-warning-foreground rounded-full">
-          {$pendingPermissionCount}
+          {permissions.count}
         </span>
       {/if}
     </div>
-    <Button variant="ghost" size="icon-sm" onclick={toggleNotificationCenter}>
+    <Button variant="ghost" size="icon-sm" onclick={() => ui.toggleNotificationCenter()}>
       <X class="w-4 h-4" />
     </Button>
   </div>
 
   <!-- Content -->
   <div class="flex-1 overflow-y-auto">
-    {#if $allPendingPermissions.length === 0}
+    {#if permissions.sorted.length === 0}
       <!-- Empty State -->
       <div class="flex flex-col items-center justify-center py-12 px-4 text-center">
         <div class="w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-3">
@@ -69,7 +64,7 @@
     {:else}
       <!-- Permission Requests -->
       <div class="divide-y divide-border">
-        {#each $allPendingPermissions as permission (permission.requestId)}
+        {#each permissions.sorted as permission (permission.requestId)}
           <PermissionNotification
             {permission}
             instanceName={getInstanceName(permission.instanceId)}
@@ -81,7 +76,7 @@
   </div>
 
   <!-- Footer -->
-  {#if $allPendingPermissions.length > 0}
+  {#if permissions.sorted.length > 0}
     <div class="px-4 py-2 border-t border-border bg-muted/30">
       <p class="text-xs text-muted-foreground text-center">
         Click a request to jump to that instance

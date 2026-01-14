@@ -1,8 +1,7 @@
 <script lang="ts">
   import { Monitor, Server, X } from 'lucide-svelte';
   import * as SidebarUI from '$lib/components/ui/sidebar';
-  import type { Agent } from '$lib/stores/realtime.svelte';
-  import { sidebarFilter, filterByAgent, toggleSidebarFilter } from '$lib/stores/realtime.svelte';
+  import { ui, type Agent } from '$lib/stores';
 
   interface Props {
     agent: Agent;
@@ -29,16 +28,16 @@
 
   // Check if this agent is currently being filtered
   const isFiltered = $derived(
-    $sidebarFilter.type === 'agent' && $sidebarFilter.agentId === agent.machineId
+    ui.sidebarFilter.type === 'agent' && ui.sidebarFilter.agentId === agent.machineId
   );
 
   function handleClick() {
     if (isFiltered) {
       // Clear filter
-      toggleSidebarFilter('all');
+      ui.toggleSidebarFilter('all');
     } else {
       // Filter to this agent
-      filterByAgent(agent.machineId);
+      ui.filterByAgent(agent.machineId);
     }
   }
 </script>

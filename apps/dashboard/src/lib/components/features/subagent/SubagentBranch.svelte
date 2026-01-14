@@ -2,8 +2,7 @@
   import { slide } from 'svelte/transition';
   import { ChevronRight, Loader2, CheckCircle2, XCircle, Zap, Check, X, Clock, ChevronDown } from 'lucide-svelte';
   import Markdown from '@humanspeak/svelte-markdown';
-  import type { SubagentState, Message } from '$lib/stores/realtime.svelte';
-  import { getChildSubagents } from '$lib/stores/realtime.svelte';
+  import { instances, type SubagentState, type Message } from '$lib/stores';
   import { getToolGlance, getResultGlimpse, formatToolResult, getToolStatus } from '$lib/utils/tool-display';
   import { SvelteSet } from 'svelte/reactivity';
   import SubagentBranch from './SubagentBranch.svelte';
@@ -20,9 +19,8 @@
   // Track which tools are expanded (collapsed by default)
   let expandedTools = new SvelteSet<string>();
 
-  // Get child subagents (nested) - getChildSubagents returns a store
-  const childSubagentsStore = $derived(getChildSubagents(subagent.toolUseId));
-  const childSubagents = $derived($childSubagentsStore);
+  // Get child subagents (nested)
+  const childSubagents = $derived(instances.getChildSubagents(subagent.toolUseId));
 
   // Calculate elapsed time
   const elapsedText = $derived.by(() => {

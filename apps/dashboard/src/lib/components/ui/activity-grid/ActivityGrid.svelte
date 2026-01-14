@@ -1,6 +1,5 @@
 <script lang="ts">
-	import { getStreamingState, getInstanceMessages, instances } from '$lib/stores/realtime.svelte';
-	import type { StreamingState, Message } from '$lib/stores/realtime.svelte';
+	import { instances, type StreamingState, type Message } from '$lib/stores';
 
 	type GridActivity =
 		| 'idle'
@@ -24,14 +23,10 @@
 	const activity = $derived(props.activity);
 	const instanceId = $derived(props.instanceId);
 
-	// Get streaming state reactively
-	const streamingStateStore = $derived(instanceId ? getStreamingState(instanceId) : null);
-	const messagesStore = $derived(instanceId ? getInstanceMessages(instanceId) : null);
-
-	// Derive current state from stores
-	const streamingState = $derived(streamingStateStore ? $streamingStateStore : null);
-	const messages = $derived(messagesStore ? $messagesStore : []);
-	const instance = $derived(instanceId ? $instances.get(instanceId) : null);
+	// Derive current state from store
+	const streamingState = $derived(instanceId ? instances.getStreamingState(instanceId) : null);
+	const messages = $derived(instanceId ? instances.getMessages(instanceId) : []);
+	const instance = $derived(instanceId ? instances.get(instanceId) : null);
 
 	// Get the last message to determine activity type
 	const lastMessage = $derived(messages && messages.length > 0 ? messages[messages.length - 1] : null);

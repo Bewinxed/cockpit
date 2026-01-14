@@ -1,0 +1,23 @@
+{
+  "assignee": "bewinxed@gmail.com",
+  "claim_note": "",
+  "claimed_at": "2026-01-14T10:01:56.298049Z",
+  "created_at": "2026-01-14T09:29:44.661016Z",
+  "depends_on": [
+    "fn-7.2",
+    "fn-7.3"
+  ],
+  "epic": "fn-7",
+  "evidence": {
+    "auto_reconnect": true,
+    "lsp_diagnostics": 0,
+    "river_client_used": true,
+    "river_events_defined": 22
+  },
+  "id": "fn-7.4",
+  "priority": null,
+  "spec_path": ".flow/tasks/fn-7.4.md",
+  "status": "done",
+  "title": "Update ConnectionStore to use RiverClient",
+  "updated_at": "2026-01-14T10:08:14.590201Z"
+}

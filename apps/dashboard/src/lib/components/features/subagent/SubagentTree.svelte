@@ -1,7 +1,6 @@
 <script lang="ts">
   import { Zap } from 'lucide-svelte';
-  import type { SubagentState } from '$lib/stores/realtime.svelte';
-  import { getInstanceSubagents } from '$lib/stores/realtime.svelte';
+  import { instances, type SubagentState } from '$lib/stores';
   import SubagentBranch from './SubagentBranch.svelte';
 
   interface Props {
@@ -11,11 +10,11 @@
   let { instanceId }: Props = $props();
 
   // Get all subagents for this instance
-  const allSubagents = $derived(getInstanceSubagents(instanceId));
+  const allSubagents = $derived(instances.getSubagentsForInstance(instanceId));
 
   // Filter to only top-level subagents (no parent)
   const topLevelSubagents = $derived(
-    $allSubagents.filter(s => !s.parentSubagentId)
+    allSubagents.filter(s => !s.parentSubagentId)
   );
 
   // Group by status for parallel execution display

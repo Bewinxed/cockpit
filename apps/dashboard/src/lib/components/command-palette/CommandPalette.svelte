@@ -1,11 +1,7 @@
 <script lang="ts">
   import { Terminal, Plus, Square, Table } from 'lucide-svelte';
   import * as Command from '$lib/components/ui/command';
-  import {
-    populatedInstances,
-    toggleCommandPalette,
-    commandPaletteOpen
-  } from '$lib/stores/realtime.svelte';
+  import { stores, ui } from '$lib/stores';
   import { openInstance } from '$lib/stores/url-sync.svelte';
 
   let value = $state('');
@@ -24,7 +20,7 @@
 
     // Search instances
     const q = value.toLowerCase();
-    for (const instance of $populatedInstances) {
+    for (const instance of stores.populatedInstances) {
       const name = instance.name || '';
       const cwd = instance.cwd || '';
       const project = instance.project || '';
@@ -42,7 +38,7 @@
           icon: Terminal,
           action: () => {
             openInstance(instance.id, false); // Open in current tab
-            toggleCommandPalette();
+            ui.toggleCommandPalette();
           },
         });
       }
@@ -58,7 +54,7 @@
         icon: Plus,
         action: () => {
           window.dispatchEvent(new CustomEvent('cockpit:new-instance'));
-          toggleCommandPalette();
+          ui.toggleCommandPalette();
         },
       });
     }
@@ -72,7 +68,7 @@
         icon: Square,
         action: () => {
           // TODO: Implement stop all
-          toggleCommandPalette();
+          ui.toggleCommandPalette();
         },
       });
     }
@@ -86,7 +82,7 @@
         icon: Table,
         action: () => {
           window.dispatchEvent(new CustomEvent('cockpit:show-table-view'));
-          toggleCommandPalette();
+          ui.toggleCommandPalette();
         },
       });
     }
@@ -96,8 +92,8 @@
 </script>
 
 <Command.Dialog
-  open={$commandPaletteOpen}
-  onOpenChange={(open) => !open && toggleCommandPalette()}
+  open={ui.commandPaletteOpen}
+  onOpenChange={(open) => !open && ui.toggleCommandPalette()}
   title="Command Palette"
   description="Search instances, run actions..."
 >

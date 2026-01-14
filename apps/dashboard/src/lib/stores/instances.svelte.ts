@@ -1,6 +1,16 @@
 import { SvelteMap } from 'svelte/reactivity';
 import { parseBackgroundAgentOutput, toolUsesToMessages } from '$lib/utils/background-agent-parser';
 import type { Instance, Message, StreamingState, StreamingMessage, SubagentState } from './types';
+import type {
+  InstanceCreatedEvent,
+  InstanceStartedEvent,
+  InstanceStoppedEvent,
+  InstanceSleepingEvent,
+  InstanceErrorEvent,
+  InstanceResumedEvent,
+  InstanceTokenUsageEvent,
+  InstanceModelChangedEvent,
+} from './sse-events';
 
 /** Tool invocation data from the API */
 export interface ToolInvocationData {
@@ -765,6 +775,162 @@ class InstanceStore {
         .join('\n');
     }
     return JSON.stringify(content);
+  }
+
+  // ========================================
+  // SSE Event Handlers
+  // ========================================
+
+  /** Handle instance:created SSE event */
+  handleCreated(event: InstanceCreatedEvent): void {
+    const createdAt = typeof event.createdAt === 'string' ? event.createdAt : event.createdAt.toISOString();
+    this.#instances.set(event.id, {
+      id: event.id,
+      name: event.lastPrompt?.slice(0, 50) || 'Instance',
+      status: event.status,
+      agent: '',
+      machineId: event.machineId,
+      project: null,
+      projectId: event.projectId || null,
+      lastActivity: createdAt,
+      cwd: event.cwd,
+      model: event.model || undefined,
+      totalCostUsd: 0,
+    });
+  }
+
+  /** Handle instance:started SSE event */
+  handleStarted(event: InstanceStartedEvent): void {
+    const instance = this.#instances.get(event.id);
+    if (instance) {
+      this.#instances.set(event.id, {
+        ...instance,
+        status: 'running',
+        model: event.model || instance.model,
+      });
+    } else {
+      // Create if not exists
+      const createdAt = typeof event.createdAt === 'string' ? event.createdAt : event.createdAt.toISOString();
+      this.#instances.set(event.id, {
+        id: event.id,
+        name: event.lastPrompt?.slice(0, 50) || 'Instance',
+        status: 'running',
+        agent: '',
+        machineId: event.machineId,
+        project: null,
+        projectId: event.projectId || null,
+        lastActivity: createdAt,
+        cwd: event.cwd,
+        model: event.model || undefined,
+        totalCostUsd: event.totalCostUsd || 0,
+      });
+    }
+  }
+
+  /** Handle instance:stopped SSE event */
+  handleStopped(event: InstanceStoppedEvent): void {
+    const instance = this.#instances.get(event.instanceId);
+    if (instance) {
+      this.#instances.set(event.instanceId, {
+        ...instance,
+        status: 'stopped',
+        totalCostUsd: event.instance?.totalCostUsd ?? instance.totalCostUsd,
+      });
+    }
+    // Clear streaming state
+    this.#streamingStates.delete(event.instanceId);
+    this.#streamingMessages.delete(event.instanceId);
+  }
+
+  /** Handle instance:sleeping SSE event */
+  handleSleeping(event: InstanceSleepingEvent): void {
+    const instance = this.#instances.get(event.instanceId);
+    if (instance) {
+      this.#instances.set(event.instanceId, {
+        ...instance,
+        status: 'sleeping',
+      });
+    }
+    // Clear streaming state
+    this.#streamingStates.delete(event.instanceId);
+    this.#streamingMessages.delete(event.instanceId);
+  }
+
+  /** Handle instance:error SSE event */
+  handleError(event: InstanceErrorEvent): void {
+    const instance = this.#instances.get(event.instanceId);
+    if (instance) {
+      this.#instances.set(event.instanceId, {
+        ...instance,
+        status: 'error',
+      });
+    }
+    // Clear streaming state
+    this.#streamingStates.delete(event.instanceId);
+    this.#streamingMessages.delete(event.instanceId);
+  }
+
+  /** Handle instance:resumed SSE event */
+  handleResumed(event: InstanceResumedEvent): void {
+    const instance = this.#instances.get(event.id);
+    if (instance) {
+      this.#instances.set(event.id, {
+        ...instance,
+        status: event.status,
+        model: event.model || instance.model,
+      });
+    } else {
+      // Create if not exists
+      const createdAt = typeof event.createdAt === 'string' ? event.createdAt : event.createdAt.toISOString();
+      this.#instances.set(event.id, {
+        id: event.id,
+        name: event.lastPrompt?.slice(0, 50) || 'Instance',
+        status: event.status,
+        agent: '',
+        machineId: event.machineId,
+        project: null,
+        projectId: event.projectId || null,
+        lastActivity: createdAt,
+        cwd: event.cwd,
+        model: event.model || undefined,
+        totalCostUsd: event.totalCostUsd || 0,
+      });
+    }
+  }
+
+  /** Handle instance:token_usage SSE event */
+  handleTokenUsage(event: InstanceTokenUsageEvent): void {
+    const instance = this.#instances.get(event.instanceId);
+    if (instance && event.costDelta) {
+      this.#instances.set(event.instanceId, {
+        ...instance,
+        totalCostUsd: (instance.totalCostUsd || 0) + event.costDelta,
+      });
+    }
+
+    // Update streaming state
+    const existing = this.#streamingStates.get(event.instanceId);
+    this.#streamingStates.set(event.instanceId, {
+      instanceId: event.instanceId,
+      isStreaming: existing?.isStreaming ?? false,
+      inputTokens: event.inputTokens,
+      outputTokens: event.outputTokens,
+      sessionInputTokens: (existing?.sessionInputTokens || 0) + event.inputTokens,
+      sessionOutputTokens: (existing?.sessionOutputTokens || 0) + event.outputTokens,
+      costUsd: (existing?.costUsd || 0) + (event.costDelta || 0),
+      lastUpdate: new Date(),
+    });
+  }
+
+  /** Handle instance:model-changed SSE event */
+  handleModelChanged(event: InstanceModelChangedEvent): void {
+    const instance = this.#instances.get(event.instanceId);
+    if (instance) {
+      this.#instances.set(event.instanceId, {
+        ...instance,
+        model: event.model,
+      });
+    }
   }
 }
 

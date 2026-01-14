@@ -2,7 +2,7 @@
   import { X, GripVertical } from 'lucide-svelte';
   import { Button } from '$lib/components/ui/button';
   import WorkspaceInstance from './WorkspaceInstance.svelte';
-  import { splitViewState, disableSplitView } from '$lib/stores/realtime.svelte';
+  import { ui } from '$lib/stores';
 
   interface Props {
     primaryInstanceId: string;
@@ -12,7 +12,7 @@
   let { primaryInstanceId, secondaryInstanceId }: Props = $props();
 
   // Split ratio (0.5 = 50/50)
-  let splitRatio = $state($splitViewState.splitRatio);
+  let splitRatio = $state(ui.splitView.splitRatio);
 
   // Dragging state
   let isDragging = $state(false);
@@ -28,7 +28,7 @@
       const x = e.clientX - rect.left;
       // Clamp between 20% and 80%
       splitRatio = Math.max(0.2, Math.min(0.8, x / rect.width));
-      splitViewState.update(s => ({ ...s, splitRatio }));
+      ui.setSplitRatio(splitRatio);
     }
 
     function onMouseUp() {
@@ -70,7 +70,7 @@
       size="icon-sm"
       class="absolute top-2 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity z-10 bg-background border border-border shadow-sm"
       title="Close split view"
-      onclick={(e: MouseEvent) => { e.stopPropagation(); disableSplitView(); }}
+      onclick={(e: MouseEvent) => { e.stopPropagation(); ui.disableSplitView(); }}
     >
       <X class="w-3 h-3" />
     </Button>

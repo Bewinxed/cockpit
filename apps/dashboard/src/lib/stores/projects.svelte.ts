@@ -1,5 +1,10 @@
 import { SvelteMap } from 'svelte/reactivity';
 import type { Project } from './types';
+import type {
+  ProjectCreatedEvent,
+  ProjectUpdatedEvent,
+  ProjectDeletedEvent,
+} from './sse-events';
 
 /**
  * Project store - manages project state.
@@ -91,6 +96,47 @@ class ProjectStore {
         updatedAt: new Date(p.updatedAt),
       });
     }
+  }
+
+  // ========================================
+  // SSE Event Handlers
+  // ========================================
+
+  /** Handle project:created SSE event */
+  handleCreated(event: ProjectCreatedEvent): void {
+    const createdAt = typeof event.createdAt === 'string' ? new Date(event.createdAt) : event.createdAt;
+    const updatedAt = typeof event.updatedAt === 'string' ? new Date(event.updatedAt) : event.updatedAt;
+    this.#projects.set(event.id, {
+      id: event.id,
+      name: event.name,
+      description: event.description || undefined,
+      rootPath: event.rootPath || undefined,
+      machineId: event.machineId || undefined,
+      instanceCount: 0,
+      createdAt,
+      updatedAt,
+    });
+  }
+
+  /** Handle project:updated SSE event */
+  handleUpdated(event: ProjectUpdatedEvent): void {
+    const project = this.#projects.get(event.id);
+    const updatedAt = typeof event.updatedAt === 'string' ? new Date(event.updatedAt) : event.updatedAt;
+    if (project) {
+      this.#projects.set(event.id, {
+        ...project,
+        name: event.name,
+        description: event.description || undefined,
+        rootPath: event.rootPath || undefined,
+        machineId: event.machineId || undefined,
+        updatedAt,
+      });
+    }
+  }
+
+  /** Handle project:deleted SSE event */
+  handleDeleted(event: ProjectDeletedEvent): void {
+    this.#projects.delete(event.id);
   }
 }
 

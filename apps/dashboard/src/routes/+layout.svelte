@@ -3,14 +3,8 @@
   import { onMount, onDestroy } from 'svelte';
   import { toast } from 'svelte-sonner';
   import { HUB_URL } from '$lib/config';
-  import {
-    connect,
-    disconnect,
-    initializeFromSSR,
-    toggleCommandPalette,
-    allPendingPermissions,
-    instances
-  } from '$lib/stores/realtime.svelte';
+  // New stores and SSE setup
+  import { instances, permissions, ui, initializeFromSSR, setupSSEAndConnect, disconnectSSE } from '$lib/stores';
   import { getAgents, getInstances, getProjects } from '$lib/data.remote';
   import { restoreTabsFromStorage, persistTabsToStorage, openInstance } from '$lib/stores/url-sync.svelte';
   import '$lib/stores/theme.svelte';
@@ -28,11 +22,11 @@
 
   // Watch for new permission requests and show toasts
   $effect(() => {
-    const permissions = $allPendingPermissions;
-    for (const perm of permissions) {
+    const pendingPerms = permissions.sorted;
+    for (const perm of pendingPerms) {
       if (!seenPermissionIds.has(perm.requestId)) {
         seenPermissionIds.add(perm.requestId);
-        const instance = $instances.get(perm.instanceId);
+        const instance = instances.get(perm.instanceId);
         const instanceName = instance?.name || instance?.cwd?.split('/').pop() || 'Instance';
 
         toast.warning(`Permission Request`, {
@@ -59,7 +53,7 @@
 
   // Connect to real-time updates (client-side only)
   onMount(() => {
-    connect(HUB_URL);
+    setupSSEAndConnect(HUB_URL);
 
     // Restore tabs from localStorage if URL has none
     restoreTabsFromStorage();
@@ -75,14 +69,14 @@
       const isMac = navigator.platform.includes('Mac');
       const cmdKey = isMac ? e.metaKey : e.ctrlKey;
 
-      // ⌘K - Command palette
+      // Cmd+K - Command palette
       if (cmdKey && e.key === 'k') {
         e.preventDefault();
-        toggleCommandPalette();
+        ui.toggleCommandPalette();
         return;
       }
 
-      // ⌘N - New instance
+      // Cmd+N - New instance
       if (cmdKey && e.key === 'n') {
         e.preventDefault();
         window.dispatchEvent(new CustomEvent('cockpit:new-instance'));
@@ -111,7 +105,7 @@
   });
 
   onDestroy(() => {
-    disconnect();
+    disconnectSSE();
   });
 </script>
 

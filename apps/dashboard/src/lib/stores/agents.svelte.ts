@@ -1,5 +1,11 @@
 import { SvelteMap } from 'svelte/reactivity';
 import type { Agent } from './types';
+import type {
+  AgentConnectedEvent,
+  AgentDisconnectedEvent,
+  AgentReconnectingEvent,
+  AgentUpdatedEvent,
+} from './sse-events';
 
 /**
  * Agent store - manages connected agent state.
@@ -100,6 +106,53 @@ class AgentStore {
         ip: a.tailscaleIp || '',
         connectedAt: a.connectedAt ? new Date(a.connectedAt) : undefined,
         lastPing: a.lastPing ? new Date(a.lastPing) : undefined,
+      });
+    }
+  }
+
+  // ========================================
+  // SSE Event Handlers
+  // ========================================
+
+  /** Handle agent:connected SSE event */
+  handleConnected(event: AgentConnectedEvent): void {
+    this.#agents.set(event.machineId, {
+      machineId: event.machineId,
+      name: event.hostname || event.machineId,
+      os: event.os || 'linux',
+      status: 'online',
+      instances: 0,
+      ip: event.tailscaleIp || '',
+      connectedAt: new Date(),
+    });
+  }
+
+  /** Handle agent:disconnected SSE event */
+  handleDisconnected(event: AgentDisconnectedEvent): void {
+    const agent = this.#agents.get(event.machineId);
+    if (agent) {
+      this.#agents.set(event.machineId, { ...agent, status: 'offline' });
+    }
+  }
+
+  /** Handle agent:reconnecting SSE event */
+  handleReconnecting(event: AgentReconnectingEvent): void {
+    const agent = this.#agents.get(event.machineId);
+    if (agent) {
+      this.#agents.set(event.machineId, { ...agent, status: 'reconnecting' });
+    }
+  }
+
+  /** Handle agent:updated SSE event */
+  handleUpdated(event: AgentUpdatedEvent): void {
+    const agent = this.#agents.get(event.machineId);
+    if (agent) {
+      this.#agents.set(event.machineId, {
+        ...agent,
+        name: event.hostname ?? agent.name,
+        ip: event.tailscaleIp ?? agent.ip,
+        os: event.os ?? agent.os,
+        status: event.status ?? agent.status,
       });
     }
   }

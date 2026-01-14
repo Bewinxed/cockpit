@@ -40,6 +40,8 @@ export interface Project {
 export interface Task {
   id: string;
   instanceId: string;
+  projectId?: string;
+  parentTaskId?: string;
   title: string;
   description: string;
   type: 'major' | 'minor';
@@ -47,6 +49,7 @@ export interface Task {
   progress: number;
   startedAt: Date;
   completedAt?: Date;
+  updatedAt?: Date;
 }
 
 export interface Message {

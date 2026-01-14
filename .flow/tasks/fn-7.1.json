@@ -1,0 +1,21 @@
+{
+  "assignee": "bewinxed@gmail.com",
+  "claim_note": "",
+  "claimed_at": "2026-01-14T09:37:17.357003Z",
+  "created_at": "2026-01-14T09:29:43.689758Z",
+  "depends_on": [],
+  "epic": "fn-7",
+  "evidence": {
+    "event_count": 21,
+    "lsp_diagnostics": 0,
+    "river_installed": true,
+    "river_version": "1.1.6",
+    "sse_events_file": "apps/dashboard/src/lib/stores/sse-events.ts"
+  },
+  "id": "fn-7.1",
+  "priority": null,
+  "spec_path": ".flow/tasks/fn-7.1.md",
+  "status": "done",
+  "title": "Install river.ts and create SSE event type definitions",
+  "updated_at": "2026-01-14T09:55:25.561425Z"
+}

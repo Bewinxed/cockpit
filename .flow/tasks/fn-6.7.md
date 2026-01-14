@@ -124,8 +124,43 @@ grep -rn "from 'svelte/store'" apps/dashboard/src/lib/stores --include="*.svelte
 - [ ] No console errors related to store access
 - [ ] Derived values (onlineAgents, populatedInstances, etc.) compute correctly
 ## Done summary
-TBD
+# fn-6.7 Complete
 
+## Summary
+Updated all store consumers to use new Svelte 5 entity-based stores. Key changes:
+
+1. **Migrated WorkspaceInstance.svelte** - Largest component, updated all imports and calls:
+   - `$instances.get()` → `instances.get()`
+   - `addMessage()` → `instances.addMessage()`
+   - `updateStreamingState()` → `instances.updateStreamingState()`
+   - `$activeSubagents.get()` → `instances.getSubagent()`
+   - Factory functions → direct store methods
+
+2. **Fixed cross-store derivations** - Svelte 5 doesn't allow exporting `$derived` directly from modules:
+   - Wrapped derivations in `CrossStoreDerivations` class
+   - Exported as `stores` singleton
+   - Components now use `stores.stats`, `stores.populatedInstances`, etc.
+
+3. **Updated all components** importing from `realtime.svelte.ts`:
+   - InstancesTable, Sidebar, CommandPalette → `stores.populatedInstances`
+   - WorkspaceEmpty, StatusBar → `stores.stats`
+   - WorkspaceInstance → full migration to entity stores
+
+4. **Remaining SSE functions** (`connect`, `disconnect`, `initializeFromSSR`) stay in `realtime.svelte.ts` - these are infrastructure, not store consumers.
+
+## Files Changed
+- `src/lib/stores/index.svelte.ts` - Added CrossStoreDerivations class
+- `src/lib/components/workspace/WorkspaceInstance.svelte` - Full migration
+- `src/lib/components/workspace/InstancesTable.svelte` - `stores.populatedInstances`
+- `src/lib/components/shell/Sidebar.svelte` - `stores.instancesByProject`, `stores.stats`
+- `src/lib/components/command-palette/CommandPalette.svelte` - `stores.populatedInstances`
+- `src/lib/components/workspace/WorkspaceEmpty.svelte` - `stores.stats`
+- `src/lib/components/shell/StatusBar.svelte` - `stores.stats`
+
+## Verification
+- `bunx svelte-check` passes with 0 errors
+- Dashboard starts successfully
+- No `$storeName` patterns remaining for migrated stores
 ## Evidence
 - Commits:
 - Tests:

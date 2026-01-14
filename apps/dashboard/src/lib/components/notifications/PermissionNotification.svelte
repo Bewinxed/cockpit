@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Terminal, FileText, FolderOpen, Code } from 'lucide-svelte';
-  import type { PermissionRequest } from '$lib/stores/realtime.svelte';
+  import type { PermissionRequest } from '$lib/stores';
 
   interface Props {
     permission: PermissionRequest;

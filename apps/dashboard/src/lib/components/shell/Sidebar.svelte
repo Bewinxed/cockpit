@@ -3,12 +3,7 @@
   import * as SidebarUI from '$lib/components/ui/sidebar';
   import SidebarInstanceItem from '../sidebar/SidebarInstanceItem.svelte';
   import SidebarAgentItem from '../sidebar/SidebarAgentItem.svelte';
-  import {
-    instancesByProject,
-    agents,
-    toggleProjectCollapse,
-    stats
-  } from '$lib/stores/realtime.svelte';
+  import { stores, agents, ui } from '$lib/stores';
 
   interface Props {
     collapsed?: boolean;
@@ -25,17 +20,17 @@
       <SidebarUI.SidebarGroupLabel class="flex items-center justify-between">
         <span>Instances</span>
         <span class="text-xs text-muted-foreground font-normal">
-          {$stats.runningInstances} running
+          {stores.stats.runningInstances} running
         </span>
       </SidebarUI.SidebarGroupLabel>
 
       <SidebarUI.SidebarGroupContent>
         <SidebarUI.SidebarMenu>
-          {#each $instancesByProject as group (group.project?.id ?? '__unassigned__')}
+          {#each stores.instancesByProject as group (group.project?.id ?? '__unassigned__')}
             <!-- Project Group -->
             <SidebarUI.SidebarMenuItem>
               <SidebarUI.SidebarMenuButton
-                onclick={() => toggleProjectCollapse(group.project?.id || null)}
+                onclick={() => ui.toggleProjectCollapse(group.project?.id || null)}
                 tooltipContent={collapsed ? (group.project?.name || 'Unassigned') : undefined}
               >
                 {#if group.isCollapsed}
@@ -92,13 +87,13 @@
       <SidebarUI.SidebarGroupLabel class="flex items-center justify-between">
         <span>Agents</span>
         <span class="text-xs text-muted-foreground font-normal">
-          {$stats.onlineAgents} online
+          {stores.stats.onlineAgents} online
         </span>
       </SidebarUI.SidebarGroupLabel>
 
       <SidebarUI.SidebarGroupContent>
         <SidebarUI.SidebarMenu>
-          {#each Array.from($agents.values()) as agent (agent.machineId)}
+          {#each Array.from(agents.all.values()) as agent (agent.machineId)}
             <SidebarUI.SidebarMenuItem>
               <SidebarAgentItem {agent} {collapsed} />
             </SidebarUI.SidebarMenuItem>

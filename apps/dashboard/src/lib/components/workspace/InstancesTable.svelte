@@ -2,7 +2,7 @@
   import { ChevronUp, ChevronDown, Square, Trash2, Loader2 } from 'lucide-svelte';
   import { Button } from '$lib/components/ui/button';
   import { Checkbox } from '$lib/components/ui/checkbox';
-  import { populatedInstances, agents, type Instance } from '$lib/stores/realtime.svelte';
+  import { stores, agents, type Instance } from '$lib/stores';
   import { openInstance } from '$lib/stores/url-sync.svelte';
   import { api } from '$lib/api';
 
@@ -17,7 +17,7 @@
 
   // Sort instances
   const sortedInstances = $derived.by(() => {
-    const items = [...$populatedInstances];
+    const items = [...stores.populatedInstances];
 
     items.sort((a, b) => {
       let comparison = 0;

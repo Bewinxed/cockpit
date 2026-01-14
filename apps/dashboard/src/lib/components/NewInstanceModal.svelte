@@ -4,7 +4,7 @@
   import FileBrowser from "./FileBrowser.svelte";
   import { Button } from '$lib/components/ui/button';
   import { Folder } from 'lucide-svelte';
-  import { agents, projects } from "$lib/stores/realtime.svelte";
+  import { agents, projects } from "$lib/stores";
   import { spawnInstance } from "$lib/actions";
 
   interface Props {
@@ -26,16 +26,14 @@
 
   // Get online agents
   $effect(() => {
-    const onlineAgents = Array.from($agents.values()).filter(
-      (a) => a.status === "online",
-    );
+    const onlineAgents = agents.online;
     if (onlineAgents.length > 0 && !machineId) {
       machineId = onlineAgents[0].machineId;
     }
   });
 
   // Get selected agent name for auth modal
-  let selectedAgentName = $derived($agents.get(machineId)?.name || "the agent");
+  let selectedAgentName = $derived(agents.get(machineId)?.name || "the agent");
 
   async function handleSubmit(e: SubmitEvent) {
     e.preventDefault();
@@ -126,11 +124,11 @@
         </label>
         <select id="agent" bind:value={machineId} class="input">
           <option value="">Select a machine...</option>
-          {#each Array.from($agents.values()).filter((a) => a.status === "online") as agent}
+          {#each agents.online as agent}
             <option value={agent.machineId}>{agent.name} ({agent.os})</option>
           {/each}
         </select>
-        {#if Array.from($agents.values()).filter((a) => a.status === "online").length === 0}
+        {#if agents.online.length === 0}
           <p class="text-xs text-muted-foreground italic">
             No machines online. Start an agent with <code
               class="px-1 bg-accent rounded text-[10px]">cockpit agent</code
@@ -194,7 +192,7 @@
         </label>
         <select id="project" bind:value={projectId} class="input">
           <option value="">No project</option>
-          {#each Array.from($projects.values()) as project}
+          {#each projects.sorted as project}
             <option value={project.id}>{project.name}</option>
           {/each}
         </select>

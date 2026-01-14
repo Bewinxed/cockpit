@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
   import { flip } from 'svelte/animate';
   import { fly } from 'svelte/transition';
   import { ArrowDown, Bot, Loader2 } from 'lucide-svelte';
@@ -11,23 +10,9 @@
   import {
     instances,
     agents,
-    instanceMessages,
-    getInstanceMessages,
-    getInstancePermissions,
-    getStreamingState,
-    getInstanceStatus,
-    getStreamingMessage,
-    addMessage,
-    removeMessage,
-    clearInstanceMessages,
-    clearInstanceSubagents,
-    updateStreamingState,
-    updateMessageMetadata,
-    streamingMessages,
-    reconstructSubagentsFromHistory,
-    activeSubagents,
+    permissions as permissionsStore,
     type Message
-  } from '$lib/stores/realtime.svelte';
+  } from '$lib/stores';
   import { api } from '$lib/api';
 
   interface AvailableCommand {
@@ -77,26 +62,20 @@
 
   let { instanceId }: Props = $props();
 
-  // Reactive stores for this instance
-  const instance = $derived($instances.get(instanceId));
-  const agent = $derived(instance?.machineId ? $agents.get(instance.machineId) : undefined);
+  // Reactive stores for this instance - using new Svelte 5 entity stores
+  const instance = $derived(instances.get(instanceId));
+  const agent = $derived(instance?.machineId ? agents.get(instance.machineId) : undefined);
 
-  // Create reactive derivations that access store values
-  // We need to get the store first, then access its value with $
-  const messagesStoreRef = $derived(getInstanceMessages(instanceId));
-  const currentMessages = $derived($messagesStoreRef);
+  // Messages and permissions for this instance
+  const currentMessages = $derived(instances.getMessages(instanceId));
+  const currentPermissions = $derived(permissionsStore.getByInstance(instanceId));
 
-  const permissionsStoreRef = $derived(getInstancePermissions(instanceId));
-  const currentPermissions = $derived($permissionsStoreRef);
+  // Streaming state
+  const streamingState = $derived(instances.getStreamingState(instanceId));
+  const streamingMessage = $derived(instances.getStreamingMessage(instanceId));
 
-  const streamingStateStoreRef = $derived(getStreamingState(instanceId));
-  const streamingState = $derived($streamingStateStoreRef);
-
-  const streamingMessageStoreRef = $derived(getStreamingMessage(instanceId));
-  const streamingMessage = $derived($streamingMessageStoreRef);
-
-  const instanceStatusStoreRef = $derived(getInstanceStatus(instanceId));
-  const transientStatus = $derived($instanceStatusStoreRef);
+  // Transient status (compacting, etc.)
+  const transientStatus = $derived(instances.getStatus(instanceId));
 
   // Track which instances we've loaded messages for
   let loadedInstances = $state(new Set<string>());
@@ -266,20 +245,23 @@
       const toolInvocations = toolsResult?.data;
 
       if (messages && Array.isArray(messages) && messages.length > 0) {
-        let parsedMessages: Message[] = [];
-        instanceMessages.update((map) => {
-          const existing = map.get(id) || [];
-          if (existing.length === 0) {
-            parsedMessages = parseDbMessages(messages as DbMessage[]);
-            map.set(id, parsedMessages);
-          } else {
-            parsedMessages = existing;
+        // Check if we already have messages loaded
+        const existingMessages = instances.getMessages(id);
+        let parsedMessages: Message[];
+
+        if (existingMessages.length === 0) {
+          parsedMessages = parseDbMessages(messages as DbMessage[]);
+          // Add each message to the store
+          for (const msg of parsedMessages) {
+            instances.addMessage(id, msg);
           }
-          return map;
-        });
+        } else {
+          parsedMessages = existingMessages;
+        }
+
         // Reconstruct subagent tree from loaded messages and tool invocations
         if (parsedMessages.length > 0) {
-          reconstructSubagentsFromHistory(id, parsedMessages, toolInvocations);
+          instances.reconstructSubagentsFromHistory(id, parsedMessages, toolInvocations);
         }
       }
     } catch (error) {
@@ -447,23 +429,6 @@
   // Memory picker state
   let pendingMemoryPickerIndex = $state<number | null>(null);
 
-  // Auth event listener cleanup
-  let authCleanup: (() => void) | null = null;
-
-  onMount(() => {
-    const handleAuthRequired = (event: Event) => {
-      const { instanceId: errorInstanceId } = (event as CustomEvent).detail;
-      if (errorInstanceId === instanceId) {
-        startLoginFlow();
-      }
-    };
-    window.addEventListener('cockpit:auth-required', handleAuthRequired);
-    authCleanup = () => window.removeEventListener('cockpit:auth-required', handleAuthRequired);
-  });
-
-  onDestroy(() => {
-    authCleanup?.();
-  });
 
   const isActive = $derived(
     instance?.status === 'running' || instance?.status === 'starting'
@@ -491,7 +456,7 @@
       pendingOAuthState = data.data.state;
       pendingAuthUrl = data.data.authUrl;
 
-      addMessage(instanceId, {
+      instances.addMessage(instanceId, {
         type: 'system',
         content: 'Login to Claude',
         timestamp: new Date(),
@@ -502,7 +467,7 @@
         },
       });
     } catch (err) {
-      addMessage(instanceId, {
+      instances.addMessage(instanceId, {
         type: 'system',
         content: `Login failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
         timestamp: new Date(),
@@ -526,7 +491,7 @@
         }
       }
 
-      addMessage(instanceId, {
+      instances.addMessage(instanceId, {
         type: 'help_menu',
         content: '',
         timestamp: new Date(),
@@ -544,13 +509,13 @@
     } else if (command === '/logout') {
       try {
         await api.api.auth.logout.delete();
-        addMessage(instanceId, {
+        instances.addMessage(instanceId, {
           type: 'system',
           content: 'Logged out successfully',
           timestamp: new Date(),
         });
       } catch (err) {
-        addMessage(instanceId, {
+        instances.addMessage(instanceId, {
           type: 'system',
           content: `Logout failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
           timestamp: new Date(),
@@ -558,7 +523,7 @@
       }
     } else if (command === '/model') {
       if (!isActive) {
-        addMessage(instanceId, {
+        instances.addMessage(instanceId, {
           type: 'system',
           content: 'Cannot change model: Instance is not running',
           timestamp: new Date(),
@@ -566,7 +531,7 @@
         return;
       }
 
-      addMessage(instanceId, {
+      instances.addMessage(instanceId, {
         type: 'system',
         content: 'Switch Model',
         timestamp: new Date(),
@@ -588,20 +553,20 @@
           throw new Error(data.error || 'Failed to fetch models');
         }
 
-        updateMessageMetadata(instanceId, pendingModelPickerIndex!, {
+        instances.updateMessageMetadata(instanceId, pendingModelPickerIndex!, {
           loading: false,
           models: data.data.models || [],
           currentModel: data.data.currentModel,
         });
         currentModel = data.data.currentModel;
       } catch (err) {
-        updateMessageMetadata(instanceId, pendingModelPickerIndex!, {
+        instances.updateMessageMetadata(instanceId, pendingModelPickerIndex!, {
           loading: false,
           error: err instanceof Error ? err.message : 'Failed to fetch models',
         });
       }
     } else if (command === '/memory') {
-      addMessage(instanceId, {
+      instances.addMessage(instanceId, {
         type: 'system',
         content: 'Edit Memory',
         timestamp: new Date(),
@@ -613,7 +578,7 @@
 
       pendingMemoryPickerIndex = currentMessages.length - 1;
     } else if (command === '/vim') {
-      addMessage(instanceId, {
+      instances.addMessage(instanceId, {
         type: 'system',
         content: 'Vim Mode',
         timestamp: new Date(),
@@ -622,7 +587,7 @@
         },
       });
     } else if (command === '/terminal-setup') {
-      addMessage(instanceId, {
+      instances.addMessage(instanceId, {
         type: 'system',
         content: 'Terminal Setup',
         timestamp: new Date(),
@@ -632,8 +597,8 @@
       });
     } else if (command === '/clear') {
       // Clear local state
-      clearInstanceMessages(instanceId);
-      clearInstanceSubagents(instanceId);
+      instances.clearMessages(instanceId);
+      instances.clearSubagentsForInstance(instanceId);
 
       // Delete messages from database
       try {
@@ -651,7 +616,7 @@
         }
       }
 
-      addMessage(instanceId, {
+      instances.addMessage(instanceId, {
         type: 'system',
         content: 'Conversation cleared',
         timestamp: new Date(),
@@ -676,13 +641,13 @@
     currentModel = model;
 
     if (pendingModelPickerIndex !== null) {
-      updateMessageMetadata(instanceId, pendingModelPickerIndex, {
+      instances.updateMessageMetadata(instanceId, pendingModelPickerIndex, {
         selectedModel: model,
       });
     }
     pendingModelPickerIndex = null;
 
-    addMessage(instanceId, {
+    instances.addMessage(instanceId, {
       type: 'system',
       content: `Model changed to ${model}`,
       timestamp: new Date(),
@@ -697,7 +662,7 @@
   async function handleMemorySelect(memoryType: 'project' | 'user'): Promise<void> {
     if (pendingMemoryPickerIndex === null) return;
 
-    updateMessageMetadata(instanceId, pendingMemoryPickerIndex, {
+    instances.updateMessageMetadata(instanceId, pendingMemoryPickerIndex, {
       loading: true,
       selectedMemoryType: memoryType,
       memoryPhase: 'editing',
@@ -711,13 +676,13 @@
         throw new Error(data.error || 'Failed to fetch memory');
       }
 
-      updateMessageMetadata(instanceId, pendingMemoryPickerIndex, {
+      instances.updateMessageMetadata(instanceId, pendingMemoryPickerIndex, {
         loading: false,
         memoryContent: data.data?.content || '',
         memoryPath: data.data?.path || (memoryType === 'project' ? './CLAUDE.md' : '~/.claude/CLAUDE.md'),
       });
     } catch (err) {
-      updateMessageMetadata(instanceId, pendingMemoryPickerIndex, {
+      instances.updateMessageMetadata(instanceId, pendingMemoryPickerIndex, {
         loading: false,
         error: err instanceof Error ? err.message : 'Failed to fetch memory',
       });
@@ -748,7 +713,7 @@
 
     pendingMemoryPickerIndex = null;
 
-    addMessage(instanceId, {
+    instances.addMessage(instanceId, {
       type: 'system',
       content: `Memory saved (${memoryType})`,
       timestamp: new Date(),
@@ -778,7 +743,7 @@
     pendingOAuthState = null;
     pendingAuthUrl = null;
 
-    addMessage(instanceId, {
+    instances.addMessage(instanceId, {
       type: 'system',
       content: 'Login successful! You are now authenticated.',
       timestamp: new Date(),
@@ -788,7 +753,7 @@
   function handleLoginCancel() {
     pendingOAuthState = null;
     pendingAuthUrl = null;
-    addMessage(instanceId, {
+    instances.addMessage(instanceId, {
       type: 'system',
       content: 'Login cancelled.',
       timestamp: new Date(),
@@ -813,8 +778,8 @@
       }
     }
 
-    clearInstanceMessages(instanceId);
-    addMessage(instanceId, {
+    instances.clearMessages(instanceId);
+    instances.addMessage(instanceId, {
       type: 'user',
       content: newContent,
       timestamp: new Date(),
@@ -861,7 +826,7 @@
 
     // Check for OAuth code paste
     if (isOAuthCode(message)) {
-      addMessage(instanceId, {
+      instances.addMessage(instanceId, {
         type: 'user',
         content: message,
         timestamp: new Date(),
@@ -870,7 +835,7 @@
         try {
           await handleLoginSubmit(message);
         } catch (err) {
-          addMessage(instanceId, {
+          instances.addMessage(instanceId, {
             type: 'system',
             content: `Login failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
             timestamp: new Date(),
@@ -901,7 +866,7 @@
           return;
         }
 
-        addMessage(instanceId, {
+        instances.addMessage(instanceId, {
           type: 'system',
           content: 'Session resumed',
           timestamp: new Date(),
@@ -921,7 +886,7 @@
     // Handle client-side commands
     if (clientCmd) {
       if (isActive) {
-        addMessage(instanceId, {
+        instances.addMessage(instanceId, {
           type: 'user',
           content: message,
           timestamp: new Date(),
@@ -933,9 +898,9 @@
 
     // Send message normally
     sending = true;
-    updateStreamingState(instanceId, { isStreaming: true });
+    instances.updateStreamingState(instanceId, { isStreaming: true });
 
-    addMessage(instanceId, {
+    instances.addMessage(instanceId, {
       type: 'user',
       content: message,
       timestamp: new Date(),
@@ -959,7 +924,7 @@
             if (resumeResult.error || !resumeResult.data?.success) {
               error = (resumeResult.error as { message?: string })?.message || 'Failed to resume';
             } else {
-              addMessage(instanceId, {
+              instances.addMessage(instanceId, {
                 type: 'system',
                 content: 'Session resumed',
                 timestamp: new Date(),
@@ -972,12 +937,12 @@
           }
         } else {
           error = errMsg;
-          updateStreamingState(instanceId, { isStreaming: false });
+          instances.updateStreamingState(instanceId, { isStreaming: false });
         }
       }
     } catch (err) {
       error = err instanceof Error ? err.message : 'Unknown error';
-      updateStreamingState(instanceId, { isStreaming: false });
+      instances.updateStreamingState(instanceId, { isStreaming: false });
     } finally {
       sending = false;
     }
@@ -995,7 +960,7 @@
       if (result.error || !result.data?.success) {
         error = (result.error as { message?: string })?.message || 'Failed to interrupt';
       } else {
-        addMessage(instanceId, {
+        instances.addMessage(instanceId, {
           type: 'system',
           content: 'Operation interrupted',
           timestamp: new Date(),
@@ -1074,7 +1039,7 @@
                   >
                     {#each group.messages as msg (msg.metadata?.toolId)}
                       {@const toolId = msg.metadata?.toolId}
-                      {@const subagent = toolId ? $activeSubagents.get(toolId) : null}
+                      {@const subagent = toolId ? instances.getSubagent(toolId) : null}
                       {#if subagent}
                         <SubagentBranch {subagent} />
                       {:else}
@@ -1115,7 +1080,7 @@
                 onMemorySelect={handleMemorySelect}
                 onMemorySave={handleMemorySave}
                 onMemoryCancel={handleMemoryCancel}
-                onDismissMessage={() => removeMessage(instanceId, i)}
+                onDismissMessage={() => instances.removeMessage(instanceId, i)}
                 onEditMessage={handleEditMessage}
                 canEdit={message.type === 'user'}
                 isLoginActive={message.metadata?.subtype === 'login_prompt' && pendingOAuthState === message.metadata?.oauthState}

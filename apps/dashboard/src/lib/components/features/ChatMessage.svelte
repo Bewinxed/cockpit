@@ -19,7 +19,7 @@
 	} from 'lucide-svelte';
 	import Markdown from '@humanspeak/svelte-markdown';
 	import { formatTimestamp } from '$lib/utils/time';
-	import type { Message } from '$lib/stores/realtime.svelte';
+	import type { Message } from '$lib/stores';
 	import HelpMenu from './HelpMenu.svelte';
 	import DiffView from './DiffView.svelte';
 	import { CopyButton } from '$lib/components/ui/copy-button';

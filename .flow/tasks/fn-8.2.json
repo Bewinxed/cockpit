@@ -1,0 +1,16 @@
+{
+  "assignee": null,
+  "claim_note": "",
+  "claimed_at": null,
+  "created_at": "2026-01-14T10:29:09.975156Z",
+  "depends_on": [
+    "fn-8.1"
+  ],
+  "epic": "fn-8",
+  "id": "fn-8.2",
+  "priority": null,
+  "spec_path": ".flow/tasks/fn-8.2.md",
+  "status": "todo",
+  "title": "Replace legacy fetch imports in actions.ts",
+  "updated_at": "2026-01-14T10:29:09.975186Z"
+}

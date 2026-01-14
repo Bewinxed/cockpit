@@ -1,11 +1,10 @@
 <script lang="ts">
-  import { getStreamingState, type StreamingState } from '$lib/stores/realtime.svelte';
-  import type { Readable } from 'svelte/store';
+  import { instances, type StreamingState } from '$lib/stores';
   import { ArrowLeft, ArrowRight, DollarSign } from 'lucide-svelte';
 
   let { instanceId }: { instanceId: string } = $props();
 
-  const streamingState: Readable<StreamingState | null> = $derived(getStreamingState(instanceId));
+  const streamingState = $derived(instances.getStreamingState(instanceId));
 
   // Format token count
   function formatTokens(count: number): string {
@@ -21,9 +20,9 @@
   }
 </script>
 
-{#if $streamingState}
+{#if streamingState}
   <div class="flex items-center gap-3 text-xs font-mono">
-    {#if $streamingState.isStreaming}
+    {#if streamingState.isStreaming}
       <div class="flex items-center gap-1.5 text-secondary">
         <span class="relative flex h-2 w-2">
           <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-secondary opacity-75"></span>
@@ -33,23 +32,23 @@
       </div>
     {/if}
 
-    {#if $streamingState.sessionInputTokens > 0 || $streamingState.sessionOutputTokens > 0}
+    {#if streamingState.sessionInputTokens > 0 || streamingState.sessionOutputTokens > 0}
       <div class="flex items-center gap-3 text-muted-foreground">
         <span class="flex items-center gap-1" title="Input tokens">
           <ArrowLeft class="w-3 h-3" />
-          {formatTokens($streamingState.sessionInputTokens)}
+          {formatTokens(streamingState.sessionInputTokens)}
         </span>
         <span class="flex items-center gap-1" title="Output tokens">
           <ArrowRight class="w-3 h-3" />
-          {formatTokens($streamingState.sessionOutputTokens)}
+          {formatTokens(streamingState.sessionOutputTokens)}
         </span>
       </div>
     {/if}
 
-    {#if $streamingState.costUsd > 0}
+    {#if streamingState.costUsd > 0}
       <div class="flex items-center gap-0.5 text-success font-medium" title="Session cost">
         <DollarSign class="w-3 h-3" />
-        <span>{$streamingState.costUsd.toFixed(4)}</span>
+        <span>{streamingState.costUsd.toFixed(4)}</span>
       </div>
     {/if}
   </div>

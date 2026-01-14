@@ -1,8 +1,7 @@
 <script lang="ts">
   import { Shield, Check, X, ChevronDown, ChevronRight, Loader2, Clock, Infinity } from 'lucide-svelte';
-  import type { PermissionRequest } from '$lib/stores/realtime.svelte';
+  import { permissions as permissionsStore, type PermissionRequest } from '$lib/stores';
   import { api } from '$lib/api';
-  import { removePermissionRequest } from '$lib/stores/realtime.svelte';
   import { Button } from '$lib/components/ui/button';
 
   // Permission update types from SDK
@@ -130,7 +129,7 @@
       }
 
       // Remove from pending list
-      removePermissionRequest(request.requestId);
+      permissionsStore.remove(request.requestId);
     } catch (err) {
       error = err instanceof Error ? err.message : 'Failed to allow operation';
     } finally {
@@ -154,7 +153,7 @@
       }
 
       // Remove from pending list
-      removePermissionRequest(request.requestId);
+      permissionsStore.remove(request.requestId);
     } catch (err) {
       error = err instanceof Error ? err.message : 'Failed to deny operation';
     } finally {

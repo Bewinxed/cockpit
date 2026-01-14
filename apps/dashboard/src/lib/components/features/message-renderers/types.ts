@@ -1,4 +1,4 @@
-import type { Message } from '$lib/stores/realtime.svelte';
+import type { Message } from '$lib/stores';
 import type { Component } from 'svelte';
 
 /**

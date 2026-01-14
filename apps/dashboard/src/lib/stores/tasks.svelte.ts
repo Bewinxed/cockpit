@@ -1,5 +1,10 @@
 import { SvelteMap } from 'svelte/reactivity';
 import type { Task } from './types';
+import type {
+  TaskCreatedEvent,
+  TaskUpdatedEvent,
+  TaskCompletedEvent,
+} from './sse-events';
 
 /**
  * Task store - manages task state.
@@ -86,6 +91,68 @@ class TaskStore {
   /** Get tasks for a specific instance */
   getByInstance(instanceId: string): Task[] {
     return Array.from(this.#tasks.values()).filter(t => t.instanceId === instanceId);
+  }
+
+  // ========================================
+  // SSE Event Handlers
+  // ========================================
+
+  /** Handle task:created SSE event */
+  handleCreated(event: TaskCreatedEvent): void {
+    const startedAt = typeof event.startedAt === 'string' ? new Date(event.startedAt) : event.startedAt;
+    const updatedAt = typeof event.updatedAt === 'string' ? new Date(event.updatedAt) : event.updatedAt;
+    const completedAt = event.completedAt
+      ? typeof event.completedAt === 'string' ? new Date(event.completedAt) : event.completedAt
+      : undefined;
+
+    this.#tasks.set(event.id, {
+      id: event.id,
+      instanceId: event.instanceId,
+      projectId: event.projectId || undefined,
+      parentTaskId: event.parentTaskId || undefined,
+      title: event.title,
+      description: event.description,
+      type: event.type,
+      status: event.status,
+      progress: event.progress || 0,
+      startedAt,
+      completedAt,
+      updatedAt,
+    });
+  }
+
+  /** Handle task:updated SSE event */
+  handleUpdated(event: TaskUpdatedEvent): void {
+    const updatedAt = typeof event.updatedAt === 'string' ? new Date(event.updatedAt) : event.updatedAt;
+    const completedAt = event.completedAt
+      ? typeof event.completedAt === 'string' ? new Date(event.completedAt) : event.completedAt
+      : undefined;
+
+    const task = this.#tasks.get(event.id);
+    if (task) {
+      this.#tasks.set(event.id, {
+        ...task,
+        title: event.title,
+        description: event.description,
+        status: event.status,
+        progress: event.progress || task.progress,
+        completedAt,
+        updatedAt,
+      });
+    }
+  }
+
+  /** Handle task:completed SSE event */
+  handleCompleted(event: TaskCompletedEvent): void {
+    const completedAt = typeof event.completedAt === 'string' ? new Date(event.completedAt) : event.completedAt;
+    const task = this.#tasks.get(event.id);
+    if (task) {
+      this.#tasks.set(event.id, {
+        ...task,
+        status: 'completed',
+        completedAt,
+      });
+    }
   }
 }
 

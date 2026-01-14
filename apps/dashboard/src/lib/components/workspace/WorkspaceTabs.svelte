@@ -4,7 +4,7 @@
   import * as Tabs from '$lib/components/ui/tabs';
   import * as ContextMenu from '$lib/components/ui/context-menu';
   import { Button } from '$lib/components/ui/button';
-  import { instances, splitViewState, enableSplitView } from '$lib/stores/realtime.svelte';
+  import { instances, ui } from '$lib/stores';
   import { switchToTab, closeTab, closeOtherTabs, closeAllTabs } from '$lib/stores/url-sync.svelte';
   import WorkspaceInstance from './WorkspaceInstance.svelte';
   import WorkspaceEmpty from './WorkspaceEmpty.svelte';
@@ -23,7 +23,7 @@
 
   // Get display name for tab
   function getTabName(instanceId: string): string {
-    const instance = $instances.get(instanceId);
+    const instance = instances.get(instanceId);
     if (instance?.name && instance.name !== 'Instance') {
       return instance.name.slice(0, 20);
     }
@@ -36,7 +36,7 @@
 
   // Get status color for tab indicator
   function getStatusColor(instanceId: string): string {
-    const instance = $instances.get(instanceId);
+    const instance = instances.get(instanceId);
     switch (instance?.status) {
       case 'running': return 'bg-success';
       case 'starting': return 'bg-warning animate-pulse';
@@ -53,7 +53,7 @@
   }
 
   function copyInstancePath(id: string) {
-    const instance = $instances.get(id);
+    const instance = instances.get(id);
     if (instance?.cwd) {
       navigator.clipboard.writeText(instance.cwd);
     }
@@ -100,7 +100,7 @@
               </ContextMenu.Trigger>
 
               <ContextMenu.Content class="w-48">
-                <ContextMenu.Item onclick={() => enableSplitView(id)}>
+                <ContextMenu.Item onclick={() => ui.enableSplitView(id)}>
                   <Columns2 class="mr-2 h-4 w-4" />
                   Open in Split View
                 </ContextMenu.Item>
@@ -134,10 +134,10 @@
 
       <!-- Tab Content - ALL tabs stay mounted for live updates -->
       <!-- Split view or regular tabs -->
-      {#if $splitViewState.enabled && $splitViewState.secondInstanceId && activeId}
+      {#if ui.splitView.enabled && ui.splitView.secondInstanceId && activeId}
         <WorkspaceSplit
           primaryInstanceId={activeId}
-          secondaryInstanceId={$splitViewState.secondInstanceId}
+          secondaryInstanceId={ui.splitView.secondInstanceId}
         />
       {:else}
         <!-- Using forceMount to keep inactive tabs in DOM, CSS hidden for switching -->

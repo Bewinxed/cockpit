@@ -1,0 +1,27 @@
+{
+  "assignee": "bewinxed@gmail.com",
+  "claim_note": "",
+  "claimed_at": "2026-01-14T09:55:46.753620Z",
+  "created_at": "2026-01-14T09:29:44.020404Z",
+  "depends_on": [
+    "fn-7.1"
+  ],
+  "epic": "fn-7",
+  "evidence": {
+    "handler_count": 17,
+    "lsp_diagnostics": 0,
+    "stores_updated": [
+      "agents",
+      "instances",
+      "projects",
+      "tasks",
+      "permissions"
+    ]
+  },
+  "id": "fn-7.2",
+  "priority": null,
+  "spec_path": ".flow/tasks/fn-7.2.md",
+  "status": "done",
+  "title": "Add SSE event handlers to entity stores",
+  "updated_at": "2026-01-14T09:58:58.385069Z"
+}

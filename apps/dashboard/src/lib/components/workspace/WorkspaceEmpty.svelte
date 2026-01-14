@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Plus, Terminal, Sparkles } from 'lucide-svelte';
   import { Button } from '$lib/components/ui/button';
-  import { stats, onlineAgents } from '$lib/stores/realtime.svelte';
+  import { stores, agents } from '$lib/stores';
 
   interface Props {
     onNewInstance?: () => void;
@@ -9,7 +9,7 @@
 
   let { onNewInstance }: Props = $props();
 
-  const hasAgents = $derived($onlineAgents.length > 0);
+  const hasAgents = $derived(agents.online.length > 0);
 </script>
 
 <div class="flex-1 flex items-center justify-center p-8">
@@ -34,18 +34,18 @@
     </div>
 
     <!-- Quick Stats -->
-    {#if $stats.totalInstances > 0 || $stats.onlineAgents > 0}
+    {#if stores.stats.totalInstances > 0 || stores.stats.onlineAgents > 0}
       <div class="flex items-center justify-center gap-6 text-sm text-muted-foreground">
         <span>
-          <span class="font-medium text-foreground">{$stats.runningInstances}</span> running
+          <span class="font-medium text-foreground">{stores.stats.runningInstances}</span> running
         </span>
         <span class="text-border">·</span>
         <span>
-          <span class="font-medium text-foreground">{$stats.onlineAgents}</span> agents online
+          <span class="font-medium text-foreground">{stores.stats.onlineAgents}</span> agents online
         </span>
         <span class="text-border">·</span>
         <span>
-          <span class="font-medium text-foreground">${$stats.totalCostUsd.toFixed(2)}</span> spent
+          <span class="font-medium text-foreground">${stores.stats.totalCostUsd.toFixed(2)}</span> spent
         </span>
       </div>
     {/if}

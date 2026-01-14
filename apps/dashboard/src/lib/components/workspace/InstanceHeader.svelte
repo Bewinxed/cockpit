@@ -2,8 +2,7 @@
   import { Square, Columns2, Loader2 } from 'lucide-svelte';
   import { Button } from '$lib/components/ui/button';
   import { Badge } from '$lib/components/ui/badge';
-  import type { Instance } from '$lib/stores/realtime.svelte';
-  import { getStreamingState, enableSplitView } from '$lib/stores/realtime.svelte';
+  import { instances, ui, type Instance } from '$lib/stores';
   import { api } from '$lib/api';
 
   interface Props {
@@ -12,7 +11,7 @@
 
   let { instance }: Props = $props();
 
-  const streamingState = $derived(getStreamingState(instance.id));
+  const streamingState = $derived(instances.getStreamingState(instance.id));
   let stopping = $state(false);
 
   async function stopInstance() {
@@ -31,13 +30,13 @@
   <!-- Stats & Actions -->
   <div class="flex items-center gap-4">
     <!-- Token counts -->
-    {#if $streamingState}
+    {#if streamingState}
       <div class="flex items-center gap-3 text-xs font-mono text-muted-foreground">
         <span title="Session input tokens">
-          {($streamingState.sessionInputTokens / 1000).toFixed(1)}K in
+          {(streamingState.sessionInputTokens / 1000).toFixed(1)}K in
         </span>
         <span title="Session output tokens">
-          {($streamingState.sessionOutputTokens / 1000).toFixed(1)}K out
+          {(streamingState.sessionOutputTokens / 1000).toFixed(1)}K out
         </span>
       </div>
     {/if}
@@ -63,7 +62,7 @@
         variant="ghost"
         size="icon-sm"
         title="Open in split view"
-        onclick={() => enableSplitView(instance.id)}
+        onclick={() => ui.enableSplitView(instance.id)}
       >
         <Columns2 class="w-4 h-4" />
       </Button>

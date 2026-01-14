@@ -3,8 +3,7 @@
   import { Square, Copy, Trash2, FolderOpen, Columns2 } from 'lucide-svelte';
   import * as SidebarUI from '$lib/components/ui/sidebar';
   import * as ContextMenu from '$lib/components/ui/context-menu';
-  import type { Instance } from '$lib/stores/realtime.svelte';
-  import { getStreamingState, enableSplitView } from '$lib/stores/realtime.svelte';
+  import { instances, ui, type Instance } from '$lib/stores';
   import { openInstance, getTabsFromUrl, closeTab } from '$lib/stores/url-sync.svelte';
   import { api } from '$lib/api';
 
@@ -33,7 +32,7 @@
   }
 
   function openInSplitView() {
-    enableSplitView(instance.id);
+    ui.enableSplitView(instance.id);
   }
 
   // Check if this instance is the active tab
@@ -42,7 +41,7 @@
   const isActiveTab = $derived(activeId === instance.id);
   const isOpenTab = $derived(tabsParam?.split(',').includes(instance.id) ?? false);
 
-  const streamingState = $derived(getStreamingState(instance.id));
+  const streamingState = $derived(instances.getStreamingState(instance.id));
 
   const statusColor = $derived.by(() => {
     switch (instance.status) {
@@ -83,7 +82,7 @@
       <!-- Status Dot -->
       <div class="relative flex-shrink-0">
         <div class="size-2 rounded-full {statusColor}"></div>
-        {#if $streamingState?.isStreaming}
+        {#if streamingState?.isStreaming}
           <div class="absolute -top-0.5 -right-0.5 size-1.5 bg-info rounded-full animate-ping"></div>
         {/if}
       </div>

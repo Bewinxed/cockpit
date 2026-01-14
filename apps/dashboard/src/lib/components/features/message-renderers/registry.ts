@@ -1,4 +1,4 @@
-import type { Message } from '$lib/stores/realtime.svelte';
+import type { Message } from '$lib/stores';
 import type { MessageRenderer, RendererMatch } from './types';
 import LoginPrompt from './LoginPrompt.svelte';
 import ModelPicker from './ModelPicker.svelte';

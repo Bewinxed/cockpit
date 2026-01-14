@@ -1,0 +1,16 @@
+{
+  "assignee": null,
+  "claim_note": "",
+  "claimed_at": null,
+  "created_at": "2026-01-14T10:29:10.864364Z",
+  "depends_on": [
+    "fn-8.4"
+  ],
+  "epic": "fn-8",
+  "id": "fn-8.5",
+  "priority": null,
+  "spec_path": ".flow/tasks/fn-8.5.md",
+  "status": "todo",
+  "title": "Fix LSP diagnostics in components",
+  "updated_at": "2026-01-14T10:29:10.864402Z"
+}

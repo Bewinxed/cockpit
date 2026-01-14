@@ -7,14 +7,7 @@
   import CommandPalette from '../command-palette/CommandPalette.svelte';
   import NotificationCenter from '../notifications/NotificationCenter.svelte';
   import NewInstanceModal from '../NewInstanceModal.svelte';
-  import {
-    commandPaletteOpen,
-    notificationCenterOpen,
-    sidebarCollapsed,
-    sidebarOpen,
-    toggleCommandPalette,
-    toggleSidebar
-  } from '$lib/stores/realtime.svelte';
+  import { ui } from '$lib/stores';
 
   let showNewInstanceModal = $state(false);
   let showTableView = $state(false);
@@ -22,7 +15,7 @@
   // Close sidebar on mobile when clicking backdrop
   function closeMobileSidebar() {
     if (typeof window !== 'undefined' && window.innerWidth < 1024) {
-      sidebarOpen.set(false);
+      ui.sidebarOpen = false;
     }
   }
 
@@ -58,7 +51,7 @@
       // ⌘K - Command palette
       if (cmdKey && e.key === 'k') {
         e.preventDefault();
-        toggleCommandPalette();
+        ui.toggleCommandPalette();
       }
 
       // ⌘N - New instance
@@ -79,7 +72,7 @@
 
   <div class="flex-1 flex overflow-hidden relative">
     <!-- Mobile Sidebar Backdrop -->
-    {#if $sidebarOpen}
+    {#if ui.sidebarOpen}
       <button
         type="button"
         class="fixed inset-0 bg-black/50 z-40 lg:hidden"
@@ -90,10 +83,10 @@
 
     <!-- Sidebar - fixed overlay on mobile, normal flow on desktop -->
     <div
-      class="fixed inset-y-0 left-0 z-50 transition-transform duration-300 ease-in-out lg:relative lg:z-auto lg:translate-x-0 {$sidebarOpen ? 'translate-x-0' : '-translate-x-full'}"
+      class="fixed inset-y-0 left-0 z-50 transition-transform duration-300 ease-in-out lg:relative lg:z-auto lg:translate-x-0 {ui.sidebarOpen ? 'translate-x-0' : '-translate-x-full'}"
     >
       <Sidebar
-        collapsed={$sidebarCollapsed}
+        collapsed={ui.sidebarCollapsed}
         onNewInstance={() => showNewInstanceModal = true}
       />
     </div>
@@ -123,11 +116,11 @@
   <StatusBar />
 
   <!-- Overlays -->
-  {#if $commandPaletteOpen}
+  {#if ui.commandPaletteOpen}
     <CommandPalette />
   {/if}
 
-  {#if $notificationCenterOpen}
+  {#if ui.notificationCenterOpen}
     <NotificationCenter />
   {/if}
 

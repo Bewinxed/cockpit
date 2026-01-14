@@ -1,0 +1,14 @@
+{
+  "assignee": null,
+  "claim_note": "",
+  "claimed_at": null,
+  "created_at": "2026-01-14T10:29:04.168265Z",
+  "depends_on": [],
+  "epic": "fn-8",
+  "id": "fn-8.1",
+  "priority": null,
+  "spec_path": ".flow/tasks/fn-8.1.md",
+  "status": "todo",
+  "title": "Remove string-matching from isAuthError in actions.ts",
+  "updated_at": "2026-01-14T10:29:04.168301Z"
+}
