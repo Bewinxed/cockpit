@@ -63,7 +63,6 @@ export { projects } from './projects.svelte';
 export { tasks } from './tasks.svelte';
 export { permissions } from './permissions.svelte';
 export { ui } from './ui.svelte';
-export { connection } from './connection.svelte';
 
 // Re-export SDK message handler
 export { handleSdkMessage } from './sdk-message-handler';
@@ -75,10 +74,78 @@ import { projects } from './projects.svelte';
 import { tasks } from './tasks.svelte';
 import { permissions } from './permissions.svelte';
 import { ui } from './ui.svelte';
-import { connection } from './connection.svelte';
 import { handleSdkMessage } from './sdk-message-handler';
 import type { Instance, ProjectGroup } from './types';
 import type { SdkMessageEvent } from './sse-events';
+
+// river.ts - direct usage, no wrapper
+import { RiverClient } from 'river.ts/client';
+import { RiverEvents } from 'river.ts';
+import type {
+  AgentConnectedEvent,
+  AgentDisconnectedEvent,
+  AgentReconnectingEvent,
+  AgentUpdatedEvent,
+  InstanceCreatedEvent,
+  InstanceStartedEvent,
+  InstanceStoppedEvent,
+  InstanceSleepingEvent,
+  InstanceErrorEvent,
+  InstanceResumedEvent,
+  InstanceTokenUsageEvent,
+  InstanceModelChangedEvent,
+  TaskCreatedEvent,
+  TaskUpdatedEvent,
+  TaskCompletedEvent,
+  PermissionRequestEvent,
+  ProjectCreatedEvent,
+  ProjectUpdatedEvent,
+  ProjectDeletedEvent,
+} from './sse-events';
+
+// ============================================
+// SSE CONNECTION (river.ts direct)
+// ============================================
+
+// Define typed events schema for river.ts
+const sseEvents = new RiverEvents()
+  .defineEvent('agent:connected', { data: {} as AgentConnectedEvent })
+  .defineEvent('agent:disconnected', { data: {} as AgentDisconnectedEvent })
+  .defineEvent('agent:reconnecting', { data: {} as AgentReconnectingEvent })
+  .defineEvent('agent:updated', { data: {} as AgentUpdatedEvent })
+  .defineEvent('instance:created', { data: {} as InstanceCreatedEvent })
+  .defineEvent('instance:started', { data: {} as InstanceStartedEvent })
+  .defineEvent('instance:stopped', { data: {} as InstanceStoppedEvent })
+  .defineEvent('instance:sleeping', { data: {} as InstanceSleepingEvent })
+  .defineEvent('instance:error', { data: {} as InstanceErrorEvent })
+  .defineEvent('instance:resumed', { data: {} as InstanceResumedEvent })
+  .defineEvent('instance:token_usage', { data: {} as InstanceTokenUsageEvent })
+  .defineEvent('instance:model-changed', { data: {} as InstanceModelChangedEvent })
+  .defineEvent('sdk:message', { data: {} as SdkMessageEvent })
+  .defineEvent('task:created', { data: {} as TaskCreatedEvent })
+  .defineEvent('task:updated', { data: {} as TaskUpdatedEvent })
+  .defineEvent('task:completed', { data: {} as TaskCompletedEvent })
+  .defineEvent('permission:request', { data: {} as PermissionRequestEvent })
+  .defineEvent('project:created', { data: {} as ProjectCreatedEvent })
+  .defineEvent('project:updated', { data: {} as ProjectUpdatedEvent })
+  .defineEvent('project:deleted', { data: {} as ProjectDeletedEvent })
+  .defineEvent('connected', { data: { clientId: '' } })
+  .build();
+
+// Connection state (reactive)
+export let connectionStatus = $state<'connecting' | 'connected' | 'disconnected' | 'error'>('disconnected');
+
+// HMR-persistent client reference
+declare global {
+  var __sseClient: RiverClient<typeof sseEvents> | null;
+  var __sseReconnectTimeout: ReturnType<typeof setTimeout> | null;
+  var __sseReconnectAttempts: number;
+  var __sseBaseUrl: string;
+}
+globalThis.__sseClient ??= null;
+globalThis.__sseReconnectTimeout ??= null;
+globalThis.__sseReconnectAttempts ??= 0;
+globalThis.__sseBaseUrl ??= '';
 
 // ============================================
 // SSR INITIALIZATION
@@ -125,65 +192,113 @@ export function initializeFromSSR(
 }
 
 // ============================================
-// SSE CONNECTION SETUP
+// SSE CONNECTION FUNCTIONS
 // ============================================
 
 /**
- * Set up SSE event handlers and connect to hub.
- * Wires all entity store handlers to the connection store.
+ * Connect to SSE and wire handlers directly to river.ts client.
  */
 export function setupSSEAndConnect(baseUrl: string = ''): void {
-  // Agent events
-  connection.on('agent:connected', (data) => agents.handleConnected(data));
-  connection.on('agent:disconnected', (data) => agents.handleDisconnected(data));
-  connection.on('agent:reconnecting', (data) => agents.handleReconnecting(data));
-  connection.on('agent:updated', (data) => agents.handleUpdated(data));
+  globalThis.__sseBaseUrl = baseUrl;
 
-  // Instance events
-  connection.on('instance:created', (data) => instances.handleCreated(data));
-  connection.on('instance:started', (data) => instances.handleStarted(data));
-  connection.on('instance:stopped', (data) => instances.handleStopped(data));
-  connection.on('instance:sleeping', (data) => instances.handleSleeping(data));
-  connection.on('instance:error', (data) => {
-    instances.handleError(data);
-    // Display error as message. Auth is handled separately via sdk:message with subtype 'login_prompt'.
-    if (data.error) {
-      instances.addMessage(data.instanceId, {
-        type: 'error',
-        content: data.error,
-        timestamp: new Date(),
-      });
-    }
-  });
-  connection.on('instance:resumed', (data) => instances.handleResumed(data));
-  connection.on('instance:token_usage', (data) => instances.handleTokenUsage(data));
-  connection.on('instance:model-changed', (data) => instances.handleModelChanged(data));
+  // Close existing connection
+  if (globalThis.__sseClient) {
+    globalThis.__sseClient.close();
+    globalThis.__sseClient = null;
+  }
 
-  // SDK message event - uses the extracted handler
-  connection.on('sdk:message', (data) => handleSdkMessage(data as SdkMessageEvent));
+  connectionStatus = 'connecting';
 
-  // Task events
-  connection.on('task:created', (data) => tasks.handleCreated(data));
-  connection.on('task:updated', (data) => tasks.handleUpdated(data));
-  connection.on('task:completed', (data) => tasks.handleCompleted(data));
+  // Create river.ts client and wire handlers directly
+  globalThis.__sseClient = RiverClient.init(sseEvents, { reconnect: true });
 
-  // Permission events
-  connection.on('permission:request', (data) => permissions.handleRequest(data));
+  globalThis.__sseClient
+    .prepare(`${baseUrl}/api/events`, { method: 'GET' })
+    // Agent events
+    .on('agent:connected', (e) => agents.handleConnected(e.data))
+    .on('agent:disconnected', (e) => agents.handleDisconnected(e.data))
+    .on('agent:reconnecting', (e) => agents.handleReconnecting(e.data))
+    .on('agent:updated', (e) => agents.handleUpdated(e.data))
+    // Instance events
+    .on('instance:created', (e) => instances.handleCreated(e.data))
+    .on('instance:started', (e) => instances.handleStarted(e.data))
+    .on('instance:stopped', (e) => instances.handleStopped(e.data))
+    .on('instance:sleeping', (e) => instances.handleSleeping(e.data))
+    .on('instance:error', (e) => {
+      instances.handleError(e.data);
+      if (e.data.error) {
+        instances.addMessage(e.data.instanceId, {
+          type: 'error',
+          content: e.data.error,
+          timestamp: new Date(), // plain Date for timestamp, not reactive
+        });
+      }
+    })
+    .on('instance:resumed', (e) => instances.handleResumed(e.data))
+    .on('instance:token_usage', (e) => instances.handleTokenUsage(e.data))
+    .on('instance:model-changed', (e) => instances.handleModelChanged(e.data))
+    // SDK message
+    .on('sdk:message', (e) => handleSdkMessage(e.data))
+    // Task events
+    .on('task:created', (e) => tasks.handleCreated(e.data))
+    .on('task:updated', (e) => tasks.handleUpdated(e.data))
+    .on('task:completed', (e) => tasks.handleCompleted(e.data))
+    // Permission events
+    .on('permission:request', (e) => permissions.handleRequest(e.data))
+    // Project events
+    .on('project:created', (e) => projects.handleCreated(e.data))
+    .on('project:updated', (e) => projects.handleUpdated(e.data))
+    .on('project:deleted', (e) => projects.handleDeleted(e.data))
+    // Connection events
+    .on('connected', (e) => {
+      connectionStatus = 'connected';
+      globalThis.__sseReconnectAttempts = 0;
+      console.log('[SSE] Connected to hub, clientId:', e.data.clientId);
+    })
+    .on('close', () => {
+      console.log('[SSE] Connection closed');
+      connectionStatus = 'disconnected';
+      attemptReconnect();
+    })
+    .stream();
+}
 
-  // Project events
-  connection.on('project:created', (data) => projects.handleCreated(data));
-  connection.on('project:updated', (data) => projects.handleUpdated(data));
-  connection.on('project:deleted', (data) => projects.handleDeleted(data));
-
-  // Connect to SSE
-  connection.connect(baseUrl);
+/** Attempt reconnect with exponential backoff */
+function attemptReconnect(): void {
+  const maxAttempts = 10;
+  if (globalThis.__sseReconnectAttempts < maxAttempts) {
+    const delay = Math.min(1000 * Math.pow(2, globalThis.__sseReconnectAttempts), 30000);
+    console.log(`[SSE] Reconnecting in ${delay}ms (attempt ${globalThis.__sseReconnectAttempts + 1}/${maxAttempts})`);
+    globalThis.__sseReconnectTimeout = setTimeout(() => {
+      globalThis.__sseReconnectAttempts++;
+      setupSSEAndConnect(globalThis.__sseBaseUrl);
+    }, delay);
+  } else {
+    console.error('[SSE] Max reconnect attempts reached');
+    connectionStatus = 'error';
+  }
 }
 
 /**
  * Disconnect from SSE.
  */
 export function disconnectSSE(): void {
-  connection.disconnect();
+  if (globalThis.__sseReconnectTimeout) {
+    clearTimeout(globalThis.__sseReconnectTimeout);
+    globalThis.__sseReconnectTimeout = null;
+  }
+  if (globalThis.__sseClient) {
+    globalThis.__sseClient.close();
+    globalThis.__sseClient = null;
+  }
+  connectionStatus = 'disconnected';
+}
+
+/** Force reconnect */
+export function reconnectSSE(): void {
+  disconnectSSE();
+  globalThis.__sseReconnectAttempts = 0;
+  setupSSEAndConnect(globalThis.__sseBaseUrl);
 }
 
 // ============================================
@@ -276,8 +391,8 @@ class CrossStoreDerivations {
       filtered = this.populatedInstances.filter((i) => i.machineId === filter.agentId);
     }
 
-    // Group by project
-    const groups = new Map<string | null, Instance[]>();
+    // Group by project (local computation, recreated each derivation)
+    const groups = new Map<string | null, Instance[]>(); // local Map for grouping
 
     for (const instance of filtered) {
       const key = instance.projectId || null;

@@ -4,9 +4,7 @@
     "target": "ESNext",
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "lib": [
-      "ESNext"
-    ],
+    "lib": ["ESNext"],
     "strict": true,
     "skipLibCheck": true,
     "noEmit": true,
@@ -14,18 +12,22 @@
     "allowSyntheticDefaultImports": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "isolatedModules": true,
-    "paths": {
-      "$lib": [
-        "./src/lib"
-      ],
-      "$lib/*": [
-        "./src/lib/*"
-      ]
-    }
+    "isolatedModules": true
   },
   "exclude": [
     "node_modules",
-    "**/dist/**"
+    "**/dist/**",
+    "**/build/**",
+    "**/.svelte-kit/**",
+    "apps/**",
+    "tests/**"
+  ],
+  "references": [
+    { "path": "./packages/core" },
+    { "path": "./packages/db" },
+    { "path": "./packages/hub-server" },
+    { "path": "./packages/agent-service" },
+    { "path": "./packages/auth" },
+    { "path": "./packages/mcp-task-tracker" }
   ]
 }

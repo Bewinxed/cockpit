@@ -2,7 +2,9 @@
   "$schema": "https://json.schemastore.org/tsconfig",
   "extends": "../../tsconfig.json",
   "compilerOptions": {
+    "composite": true,
     "outDir": "./dist",
+    "rootDir": "./src",
     "types": ["node", "bun"]
   },
   "include": ["src/**/*"],
