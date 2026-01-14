@@ -6,7 +6,6 @@
 
   # Use https://search.nixos.org/packages to find packages
   packages = [
-    pkgs.claude-code
     pkgs.python312
     pkgs.gh
     pkgs.nodejs
