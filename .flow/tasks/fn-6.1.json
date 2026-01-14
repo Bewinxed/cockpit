@@ -1,0 +1,14 @@
+{
+  "assignee": null,
+  "claim_note": "",
+  "claimed_at": null,
+  "created_at": "2026-01-13T20:52:00.135143Z",
+  "depends_on": [],
+  "epic": "fn-6",
+  "id": "fn-6.1",
+  "priority": null,
+  "spec_path": ".flow/tasks/fn-6.1.md",
+  "status": "todo",
+  "title": "Remove unused store imports from StreamingIndicator.svelte",
+  "updated_at": "2026-01-13T20:54:48.612742Z"
+}

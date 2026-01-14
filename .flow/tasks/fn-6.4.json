@@ -1,0 +1,14 @@
+{
+  "assignee": null,
+  "claim_note": "",
+  "claimed_at": null,
+  "created_at": "2026-01-13T20:52:00.323161Z",
+  "depends_on": [],
+  "epic": "fn-6",
+  "id": "fn-6.4",
+  "priority": null,
+  "spec_path": ".flow/tasks/fn-6.4.md",
+  "status": "todo",
+  "title": "Migrate lifecycle hooks to $effect() in chat and workspace components",
+  "updated_at": "2026-01-13T20:54:49.002347Z"
+}
