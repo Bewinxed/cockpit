@@ -481,6 +481,39 @@ async function handleNotification(
       break;
     }
 
+    // Handle question requests from machine (AskUserQuestion UI bridge)
+    case 'question.request': {
+      const {
+        requestId,
+        instanceId,
+        toolUseId,
+        questions,
+        createdAt,
+      } = params as {
+        requestId: string;
+        instanceId: string;
+        toolUseId: string;
+        questions: Array<{
+          question: string;
+          header: string;
+          options: Array<{ label: string; description: string }>;
+          multiSelect: boolean;
+        }>;
+        createdAt: number;
+      };
+
+      // Broadcast question request to dashboard clients
+      getBroadcastService().broadcast('question:request', {
+        requestId,
+        instanceId,
+        machineId,
+        toolUseId,
+        questions,
+        createdAt,
+      });
+      break;
+    }
+
     default:
       // Don't log unknown methods - they're handled elsewhere or expected
       break;

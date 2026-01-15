@@ -10,7 +10,7 @@ import {
   type PermissionResult,
 } from './persistent-session';
 
-import type { InstanceStatus, PermissionMode, PermissionRequest, PermissionResponse, PermissionUpdate } from '@cockpit/core';
+import type { InstanceStatus, PermissionMode, PermissionRequest, PermissionResponse, PermissionUpdate, QuestionRequest, QuestionResponse } from '@cockpit/core';
 
 /**
  * Internal representation of a managed Claude Code instance
@@ -92,12 +92,20 @@ export interface InstanceManagerEvents {
   'instance.error': (instanceId: string, error: Error) => void;
   'sdk.message': (instanceId: string, message: SDKMessage) => void;
   'permission.request': (request: PermissionRequest) => void;
+  'question.request': (request: QuestionRequest) => void;
 }
 
 /** Pending permission request with resolver */
 interface PendingPermissionRequest {
   request: PermissionRequest;
   resolve: (result: PermissionResult) => void;
+  reject: (error: Error) => void;
+}
+
+/** Pending question request with resolver */
+interface PendingQuestionRequest {
+  request: QuestionRequest;
+  resolve: (answers: Record<string, string>) => void;
   reject: (error: Error) => void;
 }
 
@@ -112,6 +120,8 @@ export class InstanceManager extends EventEmitter {
   private instances: Map<string, ManagedInstance> = new Map();
   /** Pending permission requests awaiting user response */
   private pendingPermissions: Map<string, PendingPermissionRequest> = new Map();
+  /** Pending question requests awaiting user response */
+  private pendingQuestions: Map<string, PendingQuestionRequest> = new Map();
 
   constructor() {
     super();
@@ -119,6 +129,7 @@ export class InstanceManager extends EventEmitter {
 
   /**
    * Create a canUseTool callback for an instance that emits permission requests
+   * and intercepts AskUserQuestion for UI bridge
    */
   private createCanUseTool(instanceId: string): CanUseTool {
     return async (
@@ -126,6 +137,11 @@ export class InstanceManager extends EventEmitter {
       input: Record<string, unknown>,
       options: CanUseToolOptions
     ): Promise<PermissionResult> => {
+      // Special handling for AskUserQuestion - intercept and bridge to UI
+      if (toolName === 'AskUserQuestion') {
+        return this.handleAskUserQuestion(instanceId, input, options);
+      }
+
       const requestId = generateId();
 
       const request: PermissionRequest = {
@@ -164,6 +180,72 @@ export class InstanceManager extends EventEmitter {
   }
 
   /**
+   * Handle AskUserQuestion tool by bridging to dashboard UI
+   */
+  private async handleAskUserQuestion(
+    instanceId: string,
+    input: Record<string, unknown>,
+    options: CanUseToolOptions
+  ): Promise<PermissionResult> {
+    const requestId = generateId();
+
+    // Extract questions from tool input
+    const questions = (input.questions as Array<{
+      question: string;
+      header: string;
+      options: Array<{ label: string; description: string }>;
+      multiSelect: boolean;
+    }>) || [];
+
+    const request: QuestionRequest = {
+      requestId,
+      instanceId,
+      toolUseId: options.toolUseID,
+      questions: questions.map(q => ({
+        question: q.question,
+        header: q.header,
+        options: q.options || [],
+        multiSelect: q.multiSelect ?? false,
+      })),
+      createdAt: Date.now(),
+    };
+
+    // Create promise that resolves when user answers
+    return new Promise<PermissionResult>((resolve, reject) => {
+      // Handle abort signal
+      if (options.signal.aborted) {
+        reject(new Error('Question request aborted'));
+        return;
+      }
+
+      options.signal.addEventListener('abort', () => {
+        this.pendingQuestions.delete(requestId);
+        reject(new Error('Question request aborted'));
+      });
+
+      // Store pending question with resolver that converts answers to PermissionResult
+      this.pendingQuestions.set(requestId, {
+        request,
+        resolve: (answers) => {
+          // Return 'allow' with the answers embedded in updatedInput
+          // The SDK's AskUserQuestion tool should receive these answers
+          resolve({
+            behavior: 'allow',
+            updatedInput: {
+              ...input,
+              answers, // Inject user's answers into the tool input
+            },
+          });
+        },
+        reject,
+      });
+
+      // Emit question request to be forwarded to hub/dashboard
+      this.emit('question.request', request);
+    });
+  }
+
+  /**
    * Resolve a pending permission request with user's response
    */
   resolvePermission(response: PermissionResponse): boolean {
@@ -198,6 +280,34 @@ export class InstanceManager extends EventEmitter {
   getPendingPermissions(instanceId?: string): PermissionRequest[] {
     const requests: PermissionRequest[] = [];
     for (const pending of this.pendingPermissions.values()) {
+      if (!instanceId || pending.request.instanceId === instanceId) {
+        requests.push(pending.request);
+      }
+    }
+    return requests;
+  }
+
+  /**
+   * Resolve a pending question request with user's answers
+   */
+  resolveQuestion(response: QuestionResponse): boolean {
+    const pending = this.pendingQuestions.get(response.requestId);
+    if (!pending) {
+      console.warn(`[InstanceManager] No pending question request found for ${response.requestId}`);
+      return false;
+    }
+
+    this.pendingQuestions.delete(response.requestId);
+    pending.resolve(response.answers);
+    return true;
+  }
+
+  /**
+   * Get pending question requests for an instance
+   */
+  getPendingQuestions(instanceId?: string): QuestionRequest[] {
+    const requests: QuestionRequest[] = [];
+    for (const pending of this.pendingQuestions.values()) {
       if (!instanceId || pending.request.instanceId === instanceId) {
         requests.push(pending.request);
       }

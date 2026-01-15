@@ -36,7 +36,8 @@ export type BroadcastEventType =
   | 'project:created'
   | 'project:updated'
   | 'project:deleted'
-  | 'permission:request';
+  | 'permission:request'
+  | 'question:request';
 
 /**
  * Service for broadcasting events to dashboard clients via SSE

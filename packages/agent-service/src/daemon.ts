@@ -342,6 +342,16 @@ export class AgentDaemon extends EventEmitter {
       });
     });
 
+    // Question request events (AskUserQuestion UI bridge)
+    this.instanceManager.on('question.request', (request) => {
+      // Forward question requests to hub for dashboard UI
+      this.hubClient.notify(PROTOCOL_METHODS.QUESTION_REQUEST, {
+        machineId: this.machineId,
+        ...request,
+        timestamp: new Date().toISOString(),
+      });
+    });
+
     // Discovery events
     this.discovery.on('hub.found', (service: HubService) => {
       console.log(`Hub discovered: ${service.name} at ${service.host}:${service.port}`);
@@ -451,6 +461,20 @@ export class AgentDaemon extends EventEmitter {
           updatedPermissions: params.updatedPermissions as any,
           message: params.message,
           interrupt: params.interrupt,
+        });
+        break;
+      }
+
+      case PROTOCOL_METHODS.QUESTION_RESPONSE: {
+        const params = notification.params as {
+          requestId: string;
+          instanceId: string;
+          answers: Record<string, string>;
+        };
+        this.instanceManager.resolveQuestion({
+          requestId: params.requestId,
+          instanceId: params.instanceId,
+          answers: params.answers,
         });
         break;
       }
