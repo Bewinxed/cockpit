@@ -1,36 +1,48 @@
-# fn-9.2 Run tsc --noEmit on packages
+# fn-9.2 Questions store and SSE event handling
 
 ## Description
-Run TypeScript compiler in check-only mode on all packages in the monorepo.
 
-## Commands
+Create the questions store for managing pending question requests and handle SSE events. Follow the permissions store pattern.
 
-```bash
-# From repo root
-bunx tsc --noEmit --pretty 2>&1 | tee /tmp/tsc-diagnostics.txt
+1. **Questions store** (`apps/dashboard/src/lib/stores/questions.svelte.ts`):
+   - Singleton with HMR persistence via `globalThis.__cockpitQuestionStore`
+   - `Map<string, QuestionRequest>` for pending questions by requestId
+   - `handleRequest(request: QuestionRequest)` - add to pending
+   - `handleResponse(requestId: string)` - remove from pending
+   - `getPendingForInstance(instanceId: string)` - get pending questions
+   - Derived `count` store for badge/indicator
 
-# Or per-package for more granular results
-bun run --filter '*' typecheck 2>&1 | tee /tmp/all-typecheck.txt
-```
+2. **SSE event type** (`apps/dashboard/src/lib/stores/sse-events.ts`):
+   ```typescript
+   interface QuestionRequestEvent {
+     requestId: string;
+     instanceId: string;
+     toolUseId: string;
+     questions: Array<{...}>;
+     createdAt: number;
+   }
+   ```
 
-## Packages to check
+3. **Event handler registration** in realtime store SSE setup
 
-- `packages/core/` - Shared types and protocols
-- `packages/db/` - Drizzle ORM schema
-- `packages/hub-server/` - Elysia backend
-- `packages/agent-service/` - Bun CLI agent
-- `packages/auth/` - Authentication module
-- `packages/mcp-task-tracker/` - MCP server
+## Files to Modify
 
-## Expected output
+- `apps/dashboard/src/lib/stores/questions.svelte.ts` (create)
+- `apps/dashboard/src/lib/stores/sse-events.ts` (add type)
+- `apps/dashboard/src/lib/stores/index.ts` (export)
+- SSE event handler registration (where `permission:request` is handled)
 
-- Type errors with file:line:column
-- Severity and error codes (e.g., TS2307, TS7006)
+## References
+
+- Permissions store: `apps/dashboard/src/lib/stores/permissions.svelte.ts`
+- SSE events: `apps/dashboard/src/lib/stores/sse-events.ts`
 ## Acceptance
-- [ ] `tsc --noEmit` executes on all packages
-- [ ] Output is captured to file
-- [ ] Error count per package is documented
-- [ ] Any new errors vs existing errors are noted
+- [ ] `questions` store exported from `$lib/stores`
+- [ ] Store survives HMR (uses globalThis singleton pattern)
+- [ ] `question:request` SSE events populate the store
+- [ ] `getPendingForInstance(instanceId)` returns correct pending questions
+- [ ] `count` derived store updates reactively
+- [ ] `bun run --filter=@cockpit/dashboard check` passes
 ## Done summary
 TBD
 

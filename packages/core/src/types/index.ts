@@ -38,3 +38,11 @@ export type {
   PermissionRequest,
   PermissionResponse,
 } from './permission.js';
+
+// Question types (AskUserQuestion UI bridge)
+export type {
+  QuestionOption,
+  Question,
+  QuestionRequest,
+  QuestionResponse,
+} from './question.js';

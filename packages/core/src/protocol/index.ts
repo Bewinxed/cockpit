@@ -137,4 +137,8 @@ export const PROTOCOL_METHODS = {
   // Permission handling
   PERMISSION_REQUEST: 'permission.request',
   PERMISSION_RESPONSE: 'permission.response',
+
+  // Question handling (AskUserQuestion UI bridge)
+  QUESTION_REQUEST: 'question.request',
+  QUESTION_RESPONSE: 'question.response',
 } as const;

@@ -1,41 +1,69 @@
-# fn-9.1 Run sv check on dashboard
+# fn-9.1 Core types and protocol definitions
 
 ## Description
-Run `sv check` (Svelte's official diagnostic CLI) on the `apps/dashboard/` SvelteKit project.
 
-## Commands
+Create the foundational type definitions for the AskUserQuestion feature. This includes:
 
-```bash
-cd apps/dashboard
-bunx sv check --output machine-verbose 2>&1 | tee /tmp/svelte-diagnostics.txt
-bunx sv check --output human 2>&1 | head -100  # For readable summary
-```
+1. **QuestionRequest interface** (`packages/core/src/types/question.ts`):
+   ```typescript
+   interface QuestionRequest {
+     requestId: string;
+     instanceId: string;
+     toolUseId: string;
+     questions: Array<{
+       question: string;
+       header: string;
+       options: Array<{ label: string; description: string }>;
+       multiSelect: boolean;
+     }>;
+     createdAt: number;
+   }
+   ```
 
-## What to capture
+2. **QuestionResponse interface**:
+   ```typescript
+   interface QuestionResponse {
+     requestId: string;
+     instanceId: string;
+     answers: Record<string, string>;  // questionIndex -> selected label or custom text
+   }
+   ```
 
-- All errors (exit code, count, file locations)
-- All warnings (Svelte-specific, TypeScript, a11y)
-- Diagnostic sources: `js`, `svelte`, `css`
+3. **Protocol methods** (`packages/core/src/protocol/index.ts`):
+   - Add `QUESTION_REQUEST = 'question.request'`
+   - Add `QUESTION_RESPONSE = 'question.response'`
 
-## Key files to check
+4. **Export from core package** (`packages/core/src/index.ts`)
 
-- `src/lib/stores/*.svelte.ts` - Svelte 5 rune-based stores
-- `src/lib/components/**/*.svelte` - Svelte 5 components
-- `src/routes/**/*.svelte` - Page components
+## Files to Modify
 
-## Known issues to expect
+- `packages/core/src/types/question.ts` (create)
+- `packages/core/src/types/index.ts` (export)
+- `packages/core/src/protocol/index.ts` (add methods)
+- `packages/core/src/index.ts` (re-export)
 
-- `connection.svelte.ts` has river.ts import errors
-- Experimental features (`async`, `remoteFunctions`) may trigger warnings
+## References
+
+- Permission types pattern: `packages/core/src/types/permission.ts`
+- Protocol definitions: `packages/core/src/protocol/index.ts`
 ## Acceptance
-- [ ] `sv check` command executes without crashing
-- [ ] Output is captured in both machine and human-readable formats
-- [ ] Error count and warning count are documented
-- [ ] File paths with issues are listed
+- [ ] `QuestionRequest` and `QuestionResponse` interfaces exported from `@cockpit/core`
+- [ ] `QUESTION_REQUEST` and `QUESTION_RESPONSE` protocol methods defined
+- [ ] Types match AskUserQuestion tool schema (questions array, header, options, multiSelect)
+- [ ] `bun run --filter=@cockpit/core check` passes with no type errors
 ## Done summary
-TBD
+- Created `packages/core/src/types/question.ts` with QuestionOption, Question, QuestionRequest, QuestionResponse interfaces
+- Added QUESTION_REQUEST and QUESTION_RESPONSE protocol methods to PROTOCOL_METHODS
+- Exported all question types from @cockpit/core package
 
+Why:
+- Foundation types needed for AskUserQuestion UI bridge
+- Follows existing PermissionRequest/Response pattern
+
+Verification:
+- `bun run typecheck` passes in packages/core
+- Types match Claude Code SDK's AskUserQuestion tool structure
 ## Evidence
-- Commits:
-- Tests:
+- Commits: 5cee1ed36f1789956d9f47a0ed41f5c820b239f4
+- Tests: bun run typecheck (packages/core)
 - PRs:

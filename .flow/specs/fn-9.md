@@ -1,75 +1,128 @@
-# Run LSP/Linting Diagnostics on Codebase
+# AskUserQuestion UI Bridge
 
 ## Overview
 
-Collect code quality diagnostics from available linting tools on the Cockpit SvelteKit + Svelte 5 monorepo. This is a **diagnostic/analysis task** - no code fixes, just collecting and presenting tool output.
+Implement a custom message renderer and response flow for Claude Code's `AskUserQuestion` tool. This enables the dashboard to display interactive question dialogs when Claude needs user input during plan mode or other decision points, instead of showing raw tool_use blocks.
 
 ## Scope
 
-**In scope:**
-- Run `sv check` (Svelte + TypeScript diagnostics) on `apps/dashboard/`
-- Run `tsc --noEmit` on pure TypeScript packages
-- Collect and organize diagnostic output
-- Document existing issues and their severity
+### In Scope
+- New `AskUserQuestion` message renderer component (following ModelPicker pattern)
+- Type definitions for question data (header, question, options, multiSelect)
+- SDK message handler extension to detect `AskUserQuestion` tool_use
+- Store layer for pending questions (similar to permissions store)
+- API endpoint for submitting question responses
+- Agent-side handler for receiving responses
+- Hub routing for question request/response flow
+- Active/inactive state handling for answered questions
+- Keyboard navigation (1-4 for options, Enter to submit, Escape to cancel)
 
-**Out of scope:**
-- Fixing discovered issues (separate task)
-- Setting up ESLint (no config exists - separate task)
-- Tailwind CSS diagnostics (no CLI tool available for v4)
-- conform.nvim (it's a Neovim plugin, not a CLI tool)
+### Out of Scope
+- Complex validation beyond option selection
+- Batch questions (multiple simultaneous questions)
+- Question persistence across instance restart
+- Subagent question routing (questions in subagents show in main chat)
 
 ## Approach
 
-### Tools to Run
+### Architecture Decision: Permission-like Flow
 
-| Tool | Target | Command |
+Use the proven Permission Request pattern rather than simple message-based response:
+
+```
+Agent detects AskUserQuestion tool_use
+  → Creates pending question with requestId
+  → Sends 'question.request' notification to hub
+  → Hub broadcasts 'question:request' SSE event
+  → Dashboard shows AskQuestionPicker component
+  → User selects option(s) or enters "Other" text
+  → Dashboard POSTs to /api/instances/:id/question
+  → Hub forwards 'question.response' notification to agent
+  → Agent resolves pending promise, continues execution
+```
+
+This matches how `canUseTool` blocks execution and waits for user response.
+
+### Key Files to Modify/Create
+
+| File | Action | Purpose |
 |------|--------|---------|
-| `sv check` | `apps/dashboard/` | `bunx sv check --output machine-verbose` |
-| `tsc --noEmit` | Root + packages | `bunx tsc --noEmit` |
+| `packages/core/src/types/question.ts` | Create | QuestionRequest/Response types |
+| `packages/core/src/protocol/index.ts` | Modify | Add QUESTION_REQUEST/RESPONSE methods |
+| `apps/dashboard/src/lib/stores/types.ts` | Modify | Add question metadata to MessageMetadata |
+| `apps/dashboard/src/lib/stores/questions.svelte.ts` | Create | Pending questions store (like permissions) |
+| `apps/dashboard/src/lib/stores/sse-events.ts` | Modify | Add QuestionRequestEvent type |
+| `apps/dashboard/src/lib/components/features/message-renderers/AskQuestionPicker.svelte` | Create | Interactive question UI component |
+| `apps/dashboard/src/lib/components/features/message-renderers/registry.ts` | Modify | Register AskQuestionPicker renderer |
+| `apps/dashboard/src/lib/components/features/message-renderers/types.ts` | Modify | Add question callbacks to props |
+| `packages/hub-server/src/api/instances.ts` | Modify | Add POST /:id/question endpoint |
+| `packages/hub-server/src/services/broadcast.ts` | Modify | Add question:request event emission |
+| `packages/agent-service/src/instance-manager.ts` | Modify | Add pendingQuestions Map, resolution |
+| `packages/agent-service/src/sdk-wrapper.ts` | Modify | Intercept AskUserQuestion tool, create request |
 
-### Why Not Other Tools?
+### AskUserQuestion Tool Structure (from Claude Code SDK)
 
-- **conform.nvim**: Neovim plugin, not a CLI - cannot be "run" on codebase
-- **tailwindcss-language-server**: No batch/CLI mode - IDE-only
-- **eslint**: No config exists in project; would require full setup first
-- **typescript-language-server**: Use `tsc` directly for batch diagnostics
+```typescript
+interface AskUserQuestionInput {
+  questions: Array<{
+    question: string;      // "Which library should we use?"
+    header: string;        // "Library" (short label)
+    options: Array<{
+      label: string;       // "React Query"
+      description: string; // "Handles caching, refetching..."
+    }>;
+    multiSelect: boolean;  // true = checkboxes, false = radio
+  }>;
+}
+```
 
-### Key Files
+### Response Format
 
-- `apps/dashboard/svelte.config.js:1-26` - Svelte config with experimental features
-- `apps/dashboard/tsconfig.json:1-14` - Dashboard TS config (strict mode)
-- `tsconfig.json:1-31` - Root TS config
-- `apps/dashboard/src/app.css:1-298` - Tailwind CSS 4 setup
-
-### Known Issues
-
-- `apps/dashboard/src/lib/stores/connection.svelte.ts` has ~7 type errors with river.ts imports
-- Monorepo uses `workspace:*` dependencies
-- Experimental Svelte features enabled: `async`, `remoteFunctions`
+```typescript
+interface QuestionResponse {
+  requestId: string;
+  instanceId: string;
+  answers: Record<string, string>;  // { "0": "option_label" } or { "0": "Custom text" }
+}
+```
 
 ## Quick Commands
 
 ```bash
-# Smoke test - run svelte-check on dashboard
-cd apps/dashboard && bunx sv check --output human 2>&1 | head -50
+# Run type check after changes
+bun run --filter=@cockpit/dashboard check
 
-# Full TypeScript check
-bunx tsc --noEmit --pretty
+# Test SSE event flow
+curl -N http://localhost:4000/api/events
 
-# Machine-readable output for parsing
-cd apps/dashboard && bunx sv check --output machine-verbose > /tmp/svelte-diagnostics.txt
+# Run integration tests
+bun test packages/hub-server
 ```
 
 ## Acceptance Criteria
 
-- [ ] `sv check` runs successfully and output is captured
-- [ ] `tsc --noEmit` runs successfully and output is captured
-- [ ] Diagnostics are categorized by severity (error/warning/hint)
-- [ ] Summary of findings is documented
-- [ ] No new errors introduced
+- [ ] AskUserQuestion tool_use messages display as interactive picker (not raw JSON)
+- [ ] Single-select questions show radio-style options with keyboard nav (Arrow keys, Enter)
+- [ ] Multi-select questions show checkbox-style options with toggle behavior
+- [ ] "Other" option allows free-text input when user needs custom answer
+- [ ] Answered questions collapse to compact inactive state (like ModelPicker)
+- [ ] Response is sent back to agent and execution continues
+- [ ] Works in both plan mode and regular conversation
+- [ ] No console errors or type errors
 
 ## References
 
-- [sv check docs](https://svelte.dev/docs/cli/sv-check)
-- [sveltejs/language-tools](https://github.com/sveltejs/language-tools)
-- [TypeScript noEmit](https://www.typescriptlang.org/tsconfig/noEmit.html)
+- ModelPicker pattern: `apps/dashboard/src/lib/components/features/message-renderers/ModelPicker.svelte`
+- Permission flow: `packages/core/src/types/permission.ts`, `apps/dashboard/src/lib/stores/permissions.svelte.ts`
+- Message types: `apps/dashboard/src/lib/stores/types.ts:54-113`
+- Renderer registry: `apps/dashboard/src/lib/components/features/message-renderers/registry.ts`
+- SDK message handler: `apps/dashboard/src/lib/stores/sdk-message-handler.ts`
+- Hub instance API: `packages/hub-server/src/api/instances.ts:1058-1110` (permission endpoint pattern)
+
+## Open Questions
+
+1. **Does AskUserQuestion arrive as tool_use or special message type?** - Need to verify actual SDK behavior with a test instance. Assuming tool_use based on other tools.
+
+2. **Timeout handling** - Should questions have a timeout? What happens if user doesn't respond for 60 minutes (instance sleep)?
+
+3. **Question cancellation** - Should users be able to cancel/skip a question? What response format indicates cancellation?
