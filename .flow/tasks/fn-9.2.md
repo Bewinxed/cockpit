@@ -44,9 +44,20 @@ Create the questions store for managing pending question requests and handle SSE
 - [ ] `count` derived store updates reactively
 - [ ] `bun run --filter=@cockpit/dashboard check` passes
 ## Done summary
-TBD
+- Created `questions.svelte.ts` store with SvelteMap for pending question requests
+- Added `QuestionRequestEvent` type and `question:request` to CockpitEventMap
+- Wired SSE handler for `question:request` events
+- Fixed river.ts event definitions to use `{ data: T }` structure per BaseEvent spec
+- Fixed all SSE handlers to destructure `{ data }` from event wrapper
 
+Why:
+- Store needed for tracking pending questions from AskUserQuestion tool
+- SSE event needed for real-time question delivery from hub to dashboard
+
+Verification:
+- IDE diagnostics show 0 errors
+- All river.ts event types now properly defined
 ## Evidence
-- Commits:
-- Tests:
+- Commits: b8e638a866cd1285066999dfacc5c852540bc9d2
+- Tests: IDE diagnostics clean
 - PRs:

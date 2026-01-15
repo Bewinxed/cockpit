@@ -279,6 +279,30 @@ export interface PermissionRequestEvent {
 }
 
 // ============================================================================
+// Question Events (AskUserQuestion UI bridge)
+// ============================================================================
+
+export interface QuestionOption {
+  label: string;
+  description: string;
+}
+
+export interface Question {
+  question: string;
+  header: string;
+  options: QuestionOption[];
+  multiSelect: boolean;
+}
+
+export interface QuestionRequestEvent {
+  requestId: string;
+  instanceId: string;
+  toolUseId: string;
+  questions: Question[];
+  createdAt: number;
+}
+
+// ============================================================================
 // Project Events
 // ============================================================================
 
@@ -343,6 +367,9 @@ export interface CockpitEventMap {
 
   // Permission events
   'permission:request': PermissionRequestEvent;
+
+  // Question events (AskUserQuestion UI bridge)
+  'question:request': QuestionRequestEvent;
 
   // Project events
   'project:created': ProjectCreatedEvent;

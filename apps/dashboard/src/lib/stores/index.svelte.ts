@@ -12,56 +12,29 @@
 // Re-export types
 export type {
   Agent,
-  Instance,
-  Project,
-  Task,
-  Message,
-  MessageMetadata,
-  StreamingState,
-  StreamingMessage,
-  PermissionRequest,
-  SubagentState,
-  SplitViewState,
-  SidebarFilter,
-  SidebarFilterState,
-  ProjectGroup,
+  Instance, Message,
+  MessageMetadata, PermissionRequest, Project, ProjectGroup, SidebarFilter,
+  SidebarFilterState, SplitViewState, StreamingMessage, StreamingState, SubagentState, Task
 } from './types';
 
 // Re-export SSE event types (for river.ts consumers)
 export type {
-  CockpitEventMap,
-  CockpitEventType,
-  CockpitEventPayload,
-  SdkMessageEvent,
-  ExtractedToolInvocation,
-  ExtractedToolResult,
   AgentConnectedEvent,
   AgentDisconnectedEvent,
   AgentReconnectingEvent,
-  AgentUpdatedEvent,
-  InstanceCreatedEvent,
-  InstanceStartedEvent,
-  InstanceStoppedEvent,
-  InstanceSleepingEvent,
-  InstanceErrorEvent,
-  InstanceResumedEvent,
-  InstanceTokenUsageEvent,
-  InstanceModelChangedEvent,
-  TaskCreatedEvent,
-  TaskUpdatedEvent,
-  TaskCompletedEvent,
-  PermissionRequestEvent,
-  ProjectCreatedEvent,
-  ProjectUpdatedEvent,
-  ProjectDeletedEvent,
+  AgentUpdatedEvent, CockpitEventMap, CockpitEventPayload, CockpitEventType, ExtractedToolInvocation,
+  ExtractedToolResult, InstanceCreatedEvent, InstanceErrorEvent, InstanceModelChangedEvent, InstanceResumedEvent, InstanceSleepingEvent, InstanceStartedEvent,
+  InstanceStoppedEvent, InstanceTokenUsageEvent, PermissionRequestEvent, ProjectCreatedEvent, ProjectDeletedEvent, ProjectUpdatedEvent, QuestionRequestEvent, SdkMessageEvent, TaskCompletedEvent, TaskCreatedEvent,
+  TaskUpdatedEvent
 } from './sse-events';
 
 // Re-export entity stores
 export { agents } from './agents.svelte';
 export { instances, type ToolInvocationData } from './instances.svelte';
-export { projects } from './projects.svelte';
-export { tasks } from './tasks.svelte';
 export { permissions } from './permissions.svelte';
+export { projects } from './projects.svelte';
+export { questions } from './questions.svelte';
+export { tasks } from './tasks.svelte';
 export { ui } from './ui.svelte';
 
 // Re-export SDK message handler
@@ -70,66 +43,70 @@ export { handleSdkMessage } from './sdk-message-handler';
 // Import stores for cross-store derivations and initialization
 import { agents } from './agents.svelte';
 import { instances } from './instances.svelte';
-import { projects } from './projects.svelte';
-import { tasks } from './tasks.svelte';
 import { permissions } from './permissions.svelte';
-import { ui } from './ui.svelte';
+import { projects } from './projects.svelte';
+import { questions } from './questions.svelte';
 import { handleSdkMessage } from './sdk-message-handler';
-import type { Instance, ProjectGroup } from './types';
 import type { SdkMessageEvent } from './sse-events';
+import { tasks } from './tasks.svelte';
+import type { Instance, ProjectGroup } from './types';
+import { ui } from './ui.svelte';
 
 // river.ts - direct usage, no wrapper
-import { RiverClient } from 'river.ts/client';
 import { RiverEvents } from 'river.ts';
+import { RiverClient } from 'river.ts/client';
 import type {
   AgentConnectedEvent,
   AgentDisconnectedEvent,
   AgentReconnectingEvent,
   AgentUpdatedEvent,
   InstanceCreatedEvent,
+  InstanceErrorEvent,
+  InstanceModelChangedEvent,
+  InstanceResumedEvent,
+  InstanceSleepingEvent,
   InstanceStartedEvent,
   InstanceStoppedEvent,
-  InstanceSleepingEvent,
-  InstanceErrorEvent,
-  InstanceResumedEvent,
   InstanceTokenUsageEvent,
-  InstanceModelChangedEvent,
-  TaskCreatedEvent,
-  TaskUpdatedEvent,
-  TaskCompletedEvent,
   PermissionRequestEvent,
   ProjectCreatedEvent,
-  ProjectUpdatedEvent,
   ProjectDeletedEvent,
+  ProjectUpdatedEvent,
+  QuestionRequestEvent,
+  TaskCompletedEvent,
+  TaskCreatedEvent,
+  TaskUpdatedEvent,
 } from './sse-events';
 
 // ============================================
 // SSE CONNECTION (river.ts direct)
 // ============================================
 
-// Define typed events schema for river.ts (data shape directly, no wrapper)
+// Define typed events schema for river.ts
+// BaseEvent expects { data: T } structure for event payloads
 const sseEvents = new RiverEvents()
-  .defineEvent('agent:connected', {} as AgentConnectedEvent)
-  .defineEvent('agent:disconnected', {} as AgentDisconnectedEvent)
-  .defineEvent('agent:reconnecting', {} as AgentReconnectingEvent)
-  .defineEvent('agent:updated', {} as AgentUpdatedEvent)
-  .defineEvent('instance:created', {} as InstanceCreatedEvent)
-  .defineEvent('instance:started', {} as InstanceStartedEvent)
-  .defineEvent('instance:stopped', {} as InstanceStoppedEvent)
-  .defineEvent('instance:sleeping', {} as InstanceSleepingEvent)
-  .defineEvent('instance:error', {} as InstanceErrorEvent)
-  .defineEvent('instance:resumed', {} as InstanceResumedEvent)
-  .defineEvent('instance:token_usage', {} as InstanceTokenUsageEvent)
-  .defineEvent('instance:model-changed', {} as InstanceModelChangedEvent)
-  .defineEvent('sdk:message', {} as SdkMessageEvent)
-  .defineEvent('task:created', {} as TaskCreatedEvent)
-  .defineEvent('task:updated', {} as TaskUpdatedEvent)
-  .defineEvent('task:completed', {} as TaskCompletedEvent)
-  .defineEvent('permission:request', {} as PermissionRequestEvent)
-  .defineEvent('project:created', {} as ProjectCreatedEvent)
-  .defineEvent('project:updated', {} as ProjectUpdatedEvent)
-  .defineEvent('project:deleted', {} as ProjectDeletedEvent)
-  .defineEvent('connected', { clientId: '' })
+  .defineEvent('agent:connected', { data: {} as AgentConnectedEvent })
+  .defineEvent('agent:disconnected', { data: {} as AgentDisconnectedEvent })
+  .defineEvent('agent:reconnecting', { data: {} as AgentReconnectingEvent })
+  .defineEvent('agent:updated', { data: {} as AgentUpdatedEvent })
+  .defineEvent('instance:created', { data: {} as InstanceCreatedEvent })
+  .defineEvent('instance:started', { data: {} as InstanceStartedEvent })
+  .defineEvent('instance:stopped', { data: {} as InstanceStoppedEvent })
+  .defineEvent('instance:sleeping', { data: {} as InstanceSleepingEvent })
+  .defineEvent('instance:error', { data: {} as InstanceErrorEvent })
+  .defineEvent('instance:resumed', { data: {} as InstanceResumedEvent })
+  .defineEvent('instance:token_usage', { data: {} as InstanceTokenUsageEvent })
+  .defineEvent('instance:model-changed', { data: {} as InstanceModelChangedEvent })
+  .defineEvent('sdk:message', { data: {} as SdkMessageEvent })
+  .defineEvent('task:created', { data: {} as TaskCreatedEvent })
+  .defineEvent('task:updated', { data: {} as TaskUpdatedEvent })
+  .defineEvent('task:completed', { data: {} as TaskCompletedEvent })
+  .defineEvent('permission:request', { data: {} as PermissionRequestEvent })
+  .defineEvent('question:request', { data: {} as QuestionRequestEvent })
+  .defineEvent('project:created', { data: {} as ProjectCreatedEvent })
+  .defineEvent('project:updated', { data: {} as ProjectUpdatedEvent })
+  .defineEvent('project:deleted', { data: {} as ProjectDeletedEvent })
+  .defineEvent('connected', { data: { clientId: '' } })
   .build();
 
 // Connection state (reactive) - wrapped in object to allow mutation without reassignment
@@ -216,17 +193,17 @@ export function setupSSEAndConnect(baseUrl: string = ''): void {
 
   globalThis.__sseClient
     .prepare(`${baseUrl}/api/events`, { method: 'GET' })
-    // Agent events - river.ts passes data directly to handler, not wrapped in e.data
-    .on('agent:connected', (data) => agents.handleConnected(data))
-    .on('agent:disconnected', (data) => agents.handleDisconnected(data))
-    .on('agent:reconnecting', (data) => agents.handleReconnecting(data))
-    .on('agent:updated', (data) => agents.handleUpdated(data))
+    // Agent events - destructure { data } from river.ts event wrapper
+    .on('agent:connected', ({ data }) => agents.handleConnected(data))
+    .on('agent:disconnected', ({ data }) => agents.handleDisconnected(data))
+    .on('agent:reconnecting', ({ data }) => agents.handleReconnecting(data))
+    .on('agent:updated', ({ data }) => agents.handleUpdated(data))
     // Instance events
-    .on('instance:created', (data) => instances.handleCreated(data))
-    .on('instance:started', (data) => instances.handleStarted(data))
-    .on('instance:stopped', (data) => instances.handleStopped(data))
-    .on('instance:sleeping', (data) => instances.handleSleeping(data))
-    .on('instance:error', (data) => {
+    .on('instance:created', ({ data }) => instances.handleCreated(data))
+    .on('instance:started', ({ data }) => instances.handleStarted(data))
+    .on('instance:stopped', ({ data }) => instances.handleStopped(data))
+    .on('instance:sleeping', ({ data }) => instances.handleSleeping(data))
+    .on('instance:error', ({ data }) => {
       instances.handleError(data);
       if (data.error) {
         instances.addMessage(data.instanceId, {
@@ -236,23 +213,25 @@ export function setupSSEAndConnect(baseUrl: string = ''): void {
         });
       }
     })
-    .on('instance:resumed', (data) => instances.handleResumed(data))
-    .on('instance:token_usage', (data) => instances.handleTokenUsage(data))
-    .on('instance:model-changed', (data) => instances.handleModelChanged(data))
+    .on('instance:resumed', ({ data }) => instances.handleResumed(data))
+    .on('instance:token_usage', ({ data }) => instances.handleTokenUsage(data))
+    .on('instance:model-changed', ({ data }) => instances.handleModelChanged(data))
     // SDK message
-    .on('sdk:message', (data) => handleSdkMessage(data))
+    .on('sdk:message', ({ data }) => handleSdkMessage(data))
     // Task events
-    .on('task:created', (data) => tasks.handleCreated(data))
-    .on('task:updated', (data) => tasks.handleUpdated(data))
-    .on('task:completed', (data) => tasks.handleCompleted(data))
+    .on('task:created', ({ data }) => tasks.handleCreated(data))
+    .on('task:updated', ({ data }) => tasks.handleUpdated(data))
+    .on('task:completed', ({ data }) => tasks.handleCompleted(data))
     // Permission events
-    .on('permission:request', (data) => permissions.handleRequest(data))
+    .on('permission:request', ({ data }) => permissions.handleRequest(data))
+    // Question events (AskUserQuestion UI bridge)
+    .on('question:request', ({ data }) => questions.handleRequest(data))
     // Project events
-    .on('project:created', (data) => projects.handleCreated(data))
-    .on('project:updated', (data) => projects.handleUpdated(data))
-    .on('project:deleted', (data) => projects.handleDeleted(data))
+    .on('project:created', ({ data }) => projects.handleCreated(data))
+    .on('project:updated', ({ data }) => projects.handleUpdated(data))
+    .on('project:deleted', ({ data }) => projects.handleDeleted(data))
     // Connection events
-    .on('connected', (data) => {
+    .on('connected', ({ data }) => {
       connection.status = 'connected';
       globalThis.__sseReconnectAttempts = 0;
       console.log('[SSE] Connected to hub, clientId:', data.clientId);

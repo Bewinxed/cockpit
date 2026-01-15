@@ -1,0 +1,112 @@
+import { SvelteMap } from 'svelte/reactivity';
+import type { QuestionRequest } from '@cockpit/core';
+import type { QuestionRequestEvent } from './sse-events';
+
+/**
+ * Questions store - manages pending question requests from AskUserQuestion tool.
+ * Uses SvelteMap for reactive mutations without reassignment.
+ * Follows the PermissionStore pattern.
+ */
+class QuestionStore {
+  #questions = $state(new SvelteMap<string, QuestionRequest>());
+
+  /** Get the underlying map (read-only access for iteration) */
+  get all() {
+    return this.#questions;
+  }
+
+  /** Get question count */
+  get size() {
+    return this.#questions.size;
+  }
+
+  /** Derived: all questions as array, sorted by newest first */
+  readonly sorted = $derived(
+    Array.from(this.#questions.values()).sort((a, b) => b.createdAt - a.createdAt)
+  );
+
+  /** Derived: count for badge display */
+  readonly count = $derived(this.#questions.size);
+
+  // ========================================
+  // Mutations
+  // ========================================
+
+  /** Add a question request */
+  add(request: QuestionRequest): void {
+    this.#questions.set(request.requestId, request);
+  }
+
+  /** Get a question request by ID */
+  get(requestId: string): QuestionRequest | undefined {
+    return this.#questions.get(requestId);
+  }
+
+  /** Check if a question request exists */
+  has(requestId: string): boolean {
+    return this.#questions.has(requestId);
+  }
+
+  /** Remove a question request (after user answers) */
+  remove(requestId: string): boolean {
+    return this.#questions.delete(requestId);
+  }
+
+  /** Clear all questions */
+  clear(): void {
+    this.#questions.clear();
+  }
+
+  /** Get questions for a specific instance */
+  getByInstance(instanceId: string): QuestionRequest[] {
+    return Array.from(this.#questions.values()).filter(q => q.instanceId === instanceId);
+  }
+
+  /** Check if an instance has pending questions */
+  hasPendingForInstance(instanceId: string): boolean {
+    for (const q of this.#questions.values()) {
+      if (q.instanceId === instanceId) return true;
+    }
+    return false;
+  }
+
+  /** Get pending questions for a specific instance (alias for getByInstance) */
+  getPendingForInstance(instanceId: string): QuestionRequest[] {
+    return this.getByInstance(instanceId);
+  }
+
+  // ========================================
+  // SSE Event Handlers
+  // ========================================
+
+  /** Handle question:request SSE event */
+  handleRequest(event: QuestionRequestEvent): void {
+    this.#questions.set(event.requestId, {
+      requestId: event.requestId,
+      instanceId: event.instanceId,
+      toolUseId: event.toolUseId,
+      questions: event.questions,
+      createdAt: event.createdAt,
+    });
+  }
+
+  /** Handle question response (remove from pending) */
+  handleResponse(requestId: string): void {
+    this.#questions.delete(requestId);
+  }
+}
+
+// Singleton with HMR persistence
+function createQuestionStore(): QuestionStore {
+  // @ts-expect-error - globalThis extension for HMR
+  if (globalThis.__cockpitQuestionStore) {
+    // @ts-expect-error - globalThis extension for HMR
+    return globalThis.__cockpitQuestionStore;
+  }
+  const store = new QuestionStore();
+  // @ts-expect-error - globalThis extension for HMR
+  globalThis.__cockpitQuestionStore = store;
+  return store;
+}
+
+export const questions = createQuestionStore();
