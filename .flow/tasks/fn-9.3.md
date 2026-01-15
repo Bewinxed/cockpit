@@ -58,9 +58,24 @@ Create the interactive AskQuestionPicker Svelte component following the ModelPic
 - [ ] Props interface extended with question callbacks
 - [ ] `bun run --filter=@cockpit/dashboard check` passes
 ## Done summary
-TBD
+- Created AskQuestionPicker.svelte with polished UX:
+  - Header chips showing question category
+  - Option cards with radio/checkbox selection indicators
+  - "Other" option that expands to text input
+  - Keyboard shortcuts (1-4, O, Enter, Esc)
+  - Compact answered state as category→answer pills
+- Added onQuestionSubmit(requestId, answers) and onQuestionCancel callbacks
+- Registered in renderer registry matching subtype='ask_question'
 
+Why:
+- Professional UI for AskUserQuestion tool interactions
+- Fast keyboard-driven workflow for power users
+- Clear visual hierarchy and selection states
+
+Verification:
+- IDE diagnostics clean
+- Component follows existing renderer patterns
 ## Evidence
-- Commits:
-- Tests:
+- Commits: d647d6e83a52825654bda0f8ec447d538020cc51
+- Tests: IDE diagnostics clean
 - PRs:

@@ -3,6 +3,7 @@ import type { MessageRenderer, RendererMatch } from './types';
 import LoginPrompt from './LoginPrompt.svelte';
 import ModelPicker from './ModelPicker.svelte';
 import MemoryPicker from './MemoryPicker.svelte';
+import AskQuestionPicker from './AskQuestionPicker.svelte';
 import CompactBoundary from './CompactBoundary.svelte';
 import ThinkingBlock from './ThinkingBlock.svelte';
 import ResultError from './ResultError.svelte';
@@ -31,6 +32,12 @@ const renderers: MessageRenderer[] = [
 		match: (m: Message) => m.type === 'system' && m.metadata?.subtype === 'memory_picker',
 		priority: 100,
 		name: 'MemoryPicker'
+	},
+	{
+		component: AskQuestionPicker,
+		match: (m: Message) => m.type === 'system' && m.metadata?.subtype === 'ask_question',
+		priority: 100,
+		name: 'AskQuestionPicker'
 	},
 
 	// Visual system message types (priority 80)

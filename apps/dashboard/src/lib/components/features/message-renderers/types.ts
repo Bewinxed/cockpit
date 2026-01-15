@@ -26,6 +26,10 @@ export interface MessageRendererProps {
 	onMemorySave?: (content: string) => Promise<void>;
 	onMemoryCancel?: () => void;
 
+	// Question picker callbacks (AskUserQuestion)
+	onQuestionSubmit?: (requestId: string, answers: Record<string, string>) => Promise<void>;
+	onQuestionCancel?: () => void;
+
 	// Generic dismiss callback
 	onDismissMessage?: () => void;
 }
