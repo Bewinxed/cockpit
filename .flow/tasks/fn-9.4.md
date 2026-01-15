@@ -48,9 +48,19 @@ Add the API endpoint for submitting question responses to the hub server.
 - [ ] Returns 200 on success, 404/400/502 on errors
 - [ ] `bun test packages/hub-server` passes
 ## Done summary
-TBD
+- Added POST /:id/question endpoint to hub instances API
+- Endpoint forwards question.response notification to agent via agentRegistry.notifyMachine
+- Body schema: { requestId: string, answers: Record<string, string> }
+- Response: { success: true, data: { requestId, answered: true } }
 
+Why:
+- Dashboard needs to send user's answers back to agent
+- Follows same pattern as permission.response endpoint
+
+Verification:
+- IDE diagnostics clean
+- Follows existing permission endpoint pattern
 ## Evidence
-- Commits:
-- Tests:
+- Commits: 1698de89aabf4a500c97770ced2361f8e318a88a
+- Tests: IDE diagnostics clean
 - PRs:

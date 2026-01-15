@@ -1056,6 +1056,58 @@ export function createInstanceRoutes(db: Db) {
       }
     )
 
+    // Respond to a question request (AskUserQuestion)
+    .post(
+      '/:id/question',
+      async ({ params, body, set }) => {
+        const instance = await tracker.get(params.id);
+
+        if (!instance) {
+          set.status = 404;
+          return {
+            success: false,
+            error: 'Instance not found',
+          };
+        }
+
+        // Forward question response to machine as notification
+        const agentRegistry = getAgentRegistry();
+        const machine = agentRegistry.get(instance.machineId);
+
+        if (!machine) {
+          set.status = 400;
+          return {
+            success: false,
+            error: 'Machine not connected',
+          };
+        }
+
+        // Send question response as notification to machine
+        agentRegistry.notifyMachine(instance.machineId, 'question.response', {
+          requestId: body.requestId,
+          instanceId: params.id,
+          answers: body.answers,
+        });
+
+        return {
+          success: true,
+          data: {
+            requestId: body.requestId,
+            answered: true,
+          },
+        };
+      },
+      {
+        params: t.Object({
+          id: t.String(),
+        }),
+        body: t.Object({
+          requestId: t.String(),
+          answers: t.Record(t.String(), t.String()),
+        }),
+      }
+    )
+
     // Respond to a permission request
     .post(
       '/:id/permission',
