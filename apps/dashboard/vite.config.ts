@@ -8,7 +8,15 @@ export default defineConfig({
   plugins: [tailwindcss(), sveltekit()],
   server: {
     port: 3000,
-    host: true
+    host: true,
+    proxy: {
+      // Proxy WebSocket connections to the hub server
+      '/ws': {
+        target: process.env.HUB_URL || 'http://localhost:3456',
+        ws: true,
+        changeOrigin: true,
+      },
+    },
   },
   resolve: {
     alias: {

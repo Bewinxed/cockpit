@@ -4,7 +4,7 @@ import type {
   TaskCreatedEvent,
   TaskUpdatedEvent,
   TaskCompletedEvent,
-} from './sse-events';
+} from '@cockpit/core/dashboard';
 
 /**
  * Task store - manages task state.

@@ -8,10 +8,19 @@
     "fn-9.4"
   ],
   "epic": "fn-9",
+  "evidence": {
+    "commits": [
+      "ee9cc04"
+    ],
+    "prs": [],
+    "tests": [
+      "IDE diagnostics clean"
+    ]
+  },
   "id": "fn-9.5",
   "priority": null,
   "spec_path": ".flow/tasks/fn-9.5.md",
-  "status": "in_progress",
+  "status": "done",
   "title": "Agent-side question interception and resolution",
-  "updated_at": "2026-01-15T07:00:01.372570Z"
+  "updated_at": "2026-01-15T07:05:17.843379Z"
 }

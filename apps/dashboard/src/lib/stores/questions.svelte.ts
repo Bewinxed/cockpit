@@ -1,6 +1,6 @@
 import { SvelteMap } from 'svelte/reactivity';
 import type { QuestionRequest } from '@cockpit/core';
-import type { QuestionRequestEvent } from './sse-events';
+import type { QuestionRequestEvent } from '@cockpit/core/dashboard';
 import { instances } from './instances.svelte';
 
 /**

@@ -1,11 +1,31 @@
 /**
- * SSE Event Type Definitions for Cockpit Dashboard
+ * Dashboard Event Type Definitions for Cockpit
  *
- * These types match the BroadcastService events from packages/hub-server/src/services/broadcast.ts
- * Used with river.ts for type-safe SSE handling.
+ * These types are shared between hub-server and dashboard for type-safe
+ * real-time communication via WebSocket (using river.ts).
+ *
+ * NOTE: Import from '@cockpit/core/events' to avoid naming conflicts with
+ * the protocol events in '@cockpit/core' (which are for agent↔hub JSON-RPC).
+ *
+ * Wire format: { type: string, data: T, id?: string }
+ * - Events (no response): { type, data }
+ * - Requests (expect response): { type, data, id }
+ * - Responses: { type, data, id }
  */
 
-import type { SdkMessageType, ToolInvocationStatus, InstanceStatus, AgentStatus, AgentOS } from '@cockpit/db';
+import type {
+  AgentOS,
+  AgentStatus,
+  InstanceStatus,
+  TaskStatus,
+  TaskType,
+  SdkMessageType,
+  ToolInvocationStatus,
+} from '@cockpit/db';
+import type { Question, QuestionOption } from '../types/question.js';
+
+// Re-export question types for convenience
+export type { Question, QuestionOption };
 
 // ============================================================================
 // Agent Events
@@ -125,14 +145,14 @@ export interface InstanceModelChangedEvent {
 }
 
 // ============================================================================
-// SDK Message Events (most complex)
+// SDK Message Events
 // ============================================================================
 
 /**
  * Tool invocation extracted from message content blocks
  */
 export interface ExtractedToolInvocation {
-  id: string;  // SDK's tool_use_id
+  id: string;
   toolName: string;
   toolInput: Record<string, unknown> | null;
   subagentType?: string | null;
@@ -189,29 +209,18 @@ export interface RawSdkMessage {
 
 /**
  * sdk:message event - the most complex event type
- * Contains both raw message and pre-extracted normalized fields
  */
 export interface SdkMessageEvent {
   instanceId: string;
-  /** Raw SDK message (for backwards compat / debugging) */
   message: RawSdkMessage;
-  /** SDK's message UUID for resumeSessionAt */
   sdkUuid?: string;
-  /** Normalized message type */
   sdkType: SdkMessageType;
-  /** Message subtype (init, compact_boundary, etc.) */
   sdkSubtype?: string | null;
-  /** Parent Task tool ID for subagent messages */
   parentToolUseId?: string | null;
-  /** Message role (user/assistant) */
   role?: 'user' | 'assistant' | null;
-  /** Extracted text content */
   textContent?: string | null;
-  /** Model used for this message */
   model?: string | null;
-  /** Tool invocations from content blocks */
   toolInvocations: ExtractedToolInvocation[];
-  /** Tool results from content blocks */
   toolResults: ExtractedToolResult[];
 }
 
@@ -219,15 +228,15 @@ export interface SdkMessageEvent {
 // Task Events
 // ============================================================================
 
-export interface TaskCreatedEvent {
+export interface TaskEvent {
   id: string;
   instanceId: string;
   projectId?: string | null;
   parentTaskId?: string | null;
   title: string;
   description: string;
-  type: 'major' | 'minor';
-  status: 'in_progress' | 'completed' | 'blocked' | 'cancelled';
+  type: TaskType;
+  status: TaskStatus;
   progress?: number;
   notes?: string | null;
   metadata?: Record<string, unknown> | null;
@@ -236,22 +245,8 @@ export interface TaskCreatedEvent {
   updatedAt: string | Date;
 }
 
-export interface TaskUpdatedEvent {
-  id: string;
-  instanceId: string;
-  projectId?: string | null;
-  parentTaskId?: string | null;
-  title: string;
-  description: string;
-  type: 'major' | 'minor';
-  status: 'in_progress' | 'completed' | 'blocked' | 'cancelled';
-  progress?: number;
-  notes?: string | null;
-  metadata?: Record<string, unknown> | null;
-  startedAt: string | Date;
-  completedAt?: string | Date | null;
-  updatedAt: string | Date;
-}
+export type TaskCreatedEvent = TaskEvent;
+export type TaskUpdatedEvent = TaskEvent;
 
 export interface TaskCompletedEvent {
   id: string;
@@ -281,18 +276,6 @@ export interface PermissionRequestEvent {
 // ============================================================================
 // Question Events (AskUserQuestion UI bridge)
 // ============================================================================
-
-export interface QuestionOption {
-  label: string;
-  description: string;
-}
-
-export interface Question {
-  question: string;
-  header: string;
-  options: QuestionOption[];
-  multiSelect: boolean;
-}
 
 export interface QuestionRequestEvent {
   requestId: string;
@@ -333,14 +316,25 @@ export interface ProjectDeletedEvent {
 }
 
 // ============================================================================
-// Event Map for river.ts
+// Connection Events
+// ============================================================================
+
+export interface ConnectedEvent {
+  clientId: string;
+}
+
+// ============================================================================
+// Event Map
 // ============================================================================
 
 /**
- * Complete map of all SSE event types for river.ts
+ * Complete map of all dashboard event types
  * Maps event name to its payload type
  */
-export interface CockpitEventMap {
+export interface DashboardEventMap {
+  // Connection
+  connected: ConnectedEvent;
+
   // Agent events
   'agent:connected': AgentConnectedEvent;
   'agent:disconnected': AgentDisconnectedEvent;
@@ -368,7 +362,7 @@ export interface CockpitEventMap {
   // Permission events
   'permission:request': PermissionRequestEvent;
 
-  // Question events (AskUserQuestion UI bridge)
+  // Question events
   'question:request': QuestionRequestEvent;
 
   // Project events
@@ -380,9 +374,15 @@ export interface CockpitEventMap {
 /**
  * Union type of all event names
  */
-export type CockpitEventType = keyof CockpitEventMap;
+export type DashboardEventType = keyof DashboardEventMap;
 
 /**
  * Helper type to get the payload type for a specific event
  */
-export type CockpitEventPayload<T extends CockpitEventType> = CockpitEventMap[T];
+export type DashboardEventPayload<T extends DashboardEventType> = DashboardEventMap[T];
+
+/**
+ * Broadcast event type (for hub-server)
+ * Same as DashboardEventType but excludes 'connected' which is connection-specific
+ */
+export type BroadcastEventType = Exclude<DashboardEventType, 'connected'>;

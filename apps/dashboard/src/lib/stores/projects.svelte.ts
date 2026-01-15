@@ -4,7 +4,7 @@ import type {
   ProjectCreatedEvent,
   ProjectUpdatedEvent,
   ProjectDeletedEvent,
-} from './sse-events';
+} from '@cockpit/core/dashboard';
 
 /**
  * Project store - manages project state.

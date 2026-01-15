@@ -1,12 +1,20 @@
 /**
  * API Actions for Dashboard
- * Handles all mutations (create, update, delete) using Eden Treaty through the proxy
  *
- * Note: Data refresh is handled automatically via SSE events.
+ * Commands (spawn, send, stop, permission, question) use WebSocket via river.ts.
+ * CRUD operations (projects) still use REST via Eden Treaty.
+ *
+ * Note: Data refresh is handled automatically via WebSocket events.
  * When mutations succeed, the hub broadcasts events that update stores.
  */
 
 import { api } from '$lib/api';
+import {
+  spawnInstance as wsSpawnInstance,
+  sendInstanceMessage as wsSendMessage,
+  stopInstance as wsStopInstance,
+  WebSocketNotConnectedError,
+} from '$lib/stores';
 import { extractErrorMessage } from '$lib/utils/error';
 
 /** Error codes that indicate authentication issues */
@@ -31,7 +39,7 @@ function isAuthError(error: unknown): boolean {
 }
 
 /**
- * Spawn a new instance on a machine
+ * Spawn a new instance on a machine (via WebSocket)
  */
 export async function spawnInstance(params: {
   machineId: string;
@@ -41,65 +49,82 @@ export async function spawnInstance(params: {
   permissionMode?: string;
   resumeSessionId?: string;
 }): Promise<ActionResult> {
-  const { data, error } = await api.api.instances.post(params);
+  try {
+    const response = await wsSpawnInstance({
+      machineId: params.machineId,
+      cwd: params.cwd,
+      projectId: params.projectId,
+      permissionMode: params.permissionMode,
+      resumeSessionId: params.resumeSessionId,
+    });
 
-  if (error) {
-    const errorMsg = extractErrorMessage(error);
+    if (response.status === 'error' || response.error) {
+      console.error('Failed to spawn instance:', response.error);
+      return {
+        success: false,
+        error: response.error || 'Failed to spawn instance',
+        authRequired: false, // WebSocket errors don't indicate auth issues this way
+      };
+    }
+
+    // WebSocket will broadcast instance:created to update stores
+    return { success: true, data: { instanceId: response.instanceId } };
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
     console.error('Failed to spawn instance:', errorMsg);
     return {
       success: false,
       error: errorMsg,
-      authRequired: isAuthError(error),
+      authRequired: err instanceof WebSocketNotConnectedError ? false : isAuthError(err),
     };
   }
-
-  // SSE will broadcast instance:created to update stores
-  return { success: true, data: data?.data };
 }
 
 /**
- * Stop an instance
+ * Stop an instance (via WebSocket)
  */
 export async function stopInstance(instanceId: string): Promise<{ success: boolean; error?: string }> {
-  const { error } = await api.api.instances({ id: instanceId }).delete();
+  try {
+    const response = await wsStopInstance({ instanceId });
 
-  if (error) {
-    const errorMsg = extractErrorMessage(error);
+    if (!response.success) {
+      console.error('Failed to stop instance:', response.error);
+      return { success: false, error: response.error || 'Failed to stop instance' };
+    }
+
+    // WebSocket will broadcast instance:stopped to update stores
+    return { success: true };
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
     console.error('Failed to stop instance:', errorMsg);
     return { success: false, error: errorMsg };
   }
-
-  // SSE will broadcast instance:stopped to update stores
-  return { success: true };
 }
 
 /**
- * Send a message to an instance
+ * Send a message to an instance (via WebSocket)
  * Returns messageUuid if available (for edit support)
  */
 export async function sendMessage(
   instanceId: string,
   content: string
 ): Promise<{ success: boolean; error?: string; messageUuid?: string }> {
-  const { data, error } = await api.api.instances({ id: instanceId }).send.post({ message: content });
+  try {
+    const response = await wsSendMessage({ instanceId, message: content });
 
-  if (error) {
-    const errorMsg = extractErrorMessage(error);
+    if (!response.success) {
+      console.error('Failed to send message:', response.error);
+      return { success: false, error: response.error || 'Failed to send message' };
+    }
+
+    // Note: messageUuid not available from WebSocket response currently
+    // Will be delivered via sdk:message event
+    return { success: true };
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
     console.error('Failed to send message:', errorMsg);
     return { success: false, error: errorMsg };
   }
-
-  // Debug: log the response to see what's available
-  console.log('[sendMessage] Response data:', JSON.stringify(data, null, 2));
-
-  // Try to extract messageUuid from response if available
-  // The server might return it in different locations
-  const responseData = data as { success?: boolean; data?: Record<string, unknown> };
-  const messageUuid = responseData?.data?.messageUuid as string | undefined
-    || responseData?.data?.uuid as string | undefined
-    || responseData?.data?.id as string | undefined;
-
-  return { success: true, messageUuid };
 }
 
 /**

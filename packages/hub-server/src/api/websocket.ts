@@ -12,7 +12,7 @@ import {
   EventMethod,
 } from '@cockpit/core/protocol';
 import type { JsonRpcRequest, JsonRpcResponse, JsonRpcNotification } from '@cockpit/core/protocol';
-import { getAgentRegistry, getBroadcastService, createInstanceTracker } from '../services';
+import { getAgentRegistry, getDashboardRegistry, createInstanceTracker } from '../services';
 import { safeJsonParse } from '@cockpit/core/utils';
 import {
   extractMessageFields,
@@ -134,7 +134,7 @@ export function createWebsocketRoutes(db: Db) {
 
           // Broadcast machine is reconnecting - UI shows "reconnecting" state
           // Don't mark instances as stopped yet - machine may reconnect quickly
-          getBroadcastService().broadcast('agent:reconnecting', { machineId });
+          getDashboardRegistry().broadcast('agent:reconnecting', { machineId });
         }
       },
     });
@@ -218,7 +218,7 @@ async function handleRequest(
           // Instance is in DB as running but machine doesn't have it
           // Mark as sleeping (can be resumed with sdkSessionId)
           await instanceTracker.markSleeping(dbInstance.id);
-          getBroadcastService().broadcast('instance:sleeping', {
+          getDashboardRegistry().broadcast('instance:sleeping', {
             instanceId: dbInstance.id,
             reason: 'agent_reconnect_reconciliation'
           });
@@ -245,7 +245,7 @@ async function handleRequest(
       console.log(`[Hub] Machine registered: ${machineId} (${hostname}), ${machineInstanceIds.size} running instances`);
 
       // Broadcast machine connection
-      getBroadcastService().broadcast('agent:connected', {
+      getDashboardRegistry().broadcast('agent:connected', {
         machineId,
         hostname,
         tailscaleIp,
@@ -301,7 +301,7 @@ async function handleNotification(
       const { instance } = params as { instance: { id: string; sessionId?: string } };
       const updated = await instanceTracker.markStarted(instance.id, instance.sessionId);
       if (updated) {
-        getBroadcastService().broadcast('instance:started', updated);
+        getDashboardRegistry().broadcast('instance:started', updated);
       }
       break;
     }
@@ -313,7 +313,7 @@ async function handleNotification(
       // The SDK's session_id (for resume) is stored separately as sdkSessionId
       const updated = await instanceTracker.markStarted(instanceId, sessionId);
       if (updated) {
-        getBroadcastService().broadcast('instance:started', updated);
+        getDashboardRegistry().broadcast('instance:started', updated);
       }
       break;
     }
@@ -322,7 +322,7 @@ async function handleNotification(
       const { instanceId } = params as { instanceId: string };
       const instance = await instanceTracker.markStopped(instanceId);
       if (instance) {
-        getBroadcastService().broadcast('instance:stopped', { instanceId, instance });
+        getDashboardRegistry().broadcast('instance:stopped', { instanceId, instance });
       }
       break;
     }
@@ -336,7 +336,7 @@ async function handleNotification(
         if (sdkSessionId) {
           await instanceTracker.update(instanceId, { sdkSessionId });
         }
-        getBroadcastService().broadcast('instance:sleeping', { instanceId, instance, sdkSessionId });
+        getDashboardRegistry().broadcast('instance:sleeping', { instanceId, instance, sdkSessionId });
       }
       break;
     }
@@ -346,7 +346,7 @@ async function handleNotification(
       if (newStatus === 'error') {
         const instance = await instanceTracker.markError(instanceId);
         if (instance) {
-          getBroadcastService().broadcast('instance:error', { instanceId, instance });
+          getDashboardRegistry().broadcast('instance:error', { instanceId, instance });
         }
       }
       break;
@@ -395,7 +395,7 @@ async function handleNotification(
         }
 
         // Broadcast token usage update
-        getBroadcastService().broadcast('instance:token_usage', {
+        getDashboardRegistry().broadcast('instance:token_usage', {
           instanceId,
           inputTokens: msg.usage.input_tokens || 0,
           outputTokens: msg.usage.output_tokens || 0,
@@ -410,7 +410,7 @@ async function handleNotification(
       const toolResults = extractToolResults(message);
 
 
-      getBroadcastService().broadcast('sdk:message', {
+      getDashboardRegistry().broadcast('sdk:message', {
         instanceId,
         message,  // Keep raw for backwards compat / debugging
         // Normalized fields for direct use
@@ -433,7 +433,7 @@ async function handleNotification(
       const { instanceId, error: errorMsg } = params as { instanceId: string; error: string };
       const instance = await instanceTracker.markError(instanceId);
       if (instance) {
-        getBroadcastService().broadcast('instance:error', { instanceId, instance, error: errorMsg });
+        getDashboardRegistry().broadcast('instance:error', { instanceId, instance, error: errorMsg });
       }
       break;
     }
@@ -465,7 +465,7 @@ async function handleNotification(
       };
 
       // Broadcast permission request to dashboard clients
-      getBroadcastService().broadcast('permission:request', {
+      getDashboardRegistry().broadcast('permission:request', {
         requestId,
         instanceId,
         machineId,
@@ -503,7 +503,7 @@ async function handleNotification(
       };
 
       // Broadcast question request to dashboard clients
-      getBroadcastService().broadcast('question:request', {
+      getDashboardRegistry().broadcast('question:request', {
         requestId,
         instanceId,
         machineId,

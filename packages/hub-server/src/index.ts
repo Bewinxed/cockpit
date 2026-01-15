@@ -8,14 +8,13 @@ import {
   createAgentRoutes,
   createAuthRoutes,
   createWebsocketRoutes,
-  createEventRoutes,
-  createInstanceEventRoutes,
+  createDashboardWsRoutes,
 } from './api';
 import {
   getAgentRegistry,
-  getBroadcastService,
+  getDashboardRegistry,
   resetAgentRegistry,
-  resetBroadcastService,
+  resetDashboardRegistry,
   createInstanceTracker,
 } from './services';
 import { HubDiscovery } from './discovery';
@@ -54,7 +53,7 @@ export function createHubServer(options: HubOptions) {
 
   // Initialize services
   getAgentRegistry({ requestTimeout });
-  getBroadcastService();
+  getDashboardRegistry();
 
   // Note: No startup cleanup needed - instance/agent status is derived from
   // live WebSocket connections, not DB. The API returns 'disconnected' for
@@ -97,8 +96,8 @@ export function createHubServer(options: HubOptions) {
         instances: '/api/instances',
         projects: '/api/projects',
         agents: '/api/agents',
-        events: '/api/events',
         websocket: '/ws/hub',
+        dashboardWs: '/ws/dashboard',
       },
     }))
 
@@ -108,12 +107,11 @@ export function createHubServer(options: HubOptions) {
       .use(createProjectRoutes(db))
       .use(createAgentRoutes(db))
       .use(createAuthRoutes(db))
-      .use(createEventRoutes())
-      .use(createInstanceEventRoutes())
     )
 
     // WebSocket routes at root level
     .use(createWebsocketRoutes(db))
+    .use(createDashboardWsRoutes(db))
 
     // Global error handler
     .onError(({ code, error, set }) => {
@@ -195,8 +193,8 @@ export async function startHub(options: HubOptions) {
 ----------------------------------------
   API:      http://localhost:${port}/api
   Health:   http://localhost:${port}/health
-  WebSocket: ws://localhost:${port}/ws/hub
-  Events:   http://localhost:${port}/api/events
+  WebSocket (agents): ws://localhost:${port}/ws/hub
+  WebSocket (dashboard): ws://localhost:${port}/ws/dashboard
 ========================================
 `);
 
@@ -212,7 +210,7 @@ export async function startHub(options: HubOptions) {
       }
 
       resetAgentRegistry();
-      resetBroadcastService();
+      resetDashboardRegistry();
 
       app.stop();
     },

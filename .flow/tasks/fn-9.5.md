@@ -46,9 +46,29 @@ Implement the agent-side logic to intercept AskUserQuestion tool calls and handl
 - [ ] Answers are returned to Claude as tool result
 - [ ] Pending questions cleaned up on instance stop
 ## Done summary
-TBD
+- Modified createCanUseTool to intercept AskUserQuestion tool
+- Added handleAskUserQuestion method that:
+  - Creates QuestionRequest from tool input
+  - Emits question.request event
+  - Waits for user answers via promise
+  - Returns PermissionResult with answers in updatedInput
+- Added pendingQuestions Map and resolveQuestion method
+- Wired daemon.ts to:
+  - Forward question.request notifications to hub
+  - Handle question.response notifications via resolveQuestion
+- Updated hub-server:
+  - Added question:request to BroadcastEventType
+  - Added question.request case in websocket handler to broadcast to dashboard
 
+Why:
+- Enables AskUserQuestion tool to display in dashboard UI
+- User answers are captured and returned to SDK via updatedInput
+- Complete roundtrip: Claude → Agent → Hub → Dashboard → Hub → Agent → Claude
+
+Verification:
+- IDE diagnostics clean
+- Follows existing permission request pattern
 ## Evidence
-- Commits:
-- Tests:
+- Commits: ee9cc04
+- Tests: IDE diagnostics clean
 - PRs:

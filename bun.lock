@@ -6,6 +6,7 @@
       "name": "cockpit",
       "dependencies": {
         "elysia": "^1.4.22",
+        "river.ts": "^1.1.7",
       },
       "devDependencies": {
         "@eslint/js": "^9.39.2",
@@ -128,10 +129,14 @@
       "version": "0.0.1",
       "dependencies": {
         "bonjour-service": "^1.3.0",
+        "river.ts": "^1.1.7",
       },
       "devDependencies": {
         "@types/node": "^22.10.5",
         "typescript": "^5.9.3",
+      },
+      "peerDependencies": {
+        "@cockpit/db": "workspace:*",
       },
     },
     "packages/db": {
@@ -1473,7 +1478,7 @@
 
     "resolve-pkg-maps": ["resolve-pkg-maps@1.0.0", "", {}, "sha512-seS2Tj26TBVOC2NIc2rOe2y2ZO7efxITtLZcGSOnHHNOQ7CkiUBfw0Iw2ck6xkIhPwLhKNLS8BO+hEpngQlqzw=="],
 
-    "river.ts": ["river.ts@1.1.6", "", {}, "sha512-muLZ/vGe28ZYdCYhB8A/FgTyEZ31+gstawuwls/3kr6BWiFaeXetdrV3Xs4SxVXjLytENOjdAVvv5Qkw5uA/cA=="],
+    "river.ts": ["river.ts@1.1.7", "", {}, "sha512-NsldmomX6FiNuxbQJf2Rf8N7jkSpELYdofVuFeYDZmovcamGoBpNwCHUXr+ij96FBTmoIWn0kp7ydvU0yJwx7w=="],
 
     "robust-predicates": ["robust-predicates@3.0.2", "", {}, "sha512-IXgzBWvWQwE6PrDI05OvmXUIruQTcoMDzRsOd5CDvHCVLcLHMTSYvOK5Cm46kWqlV3yAbuSpBZdJ5oP5OUoStg=="],
 

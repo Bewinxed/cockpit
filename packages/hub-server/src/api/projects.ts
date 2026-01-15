@@ -3,7 +3,7 @@ import type { Db } from '@cockpit/db';
 import type { CreateProjectData, UpdateProjectData } from '@cockpit/core';
 import { projects, eq, desc, like } from '@cockpit/db';
 import { generateId } from '@cockpit/core/utils';
-import { getBroadcastService } from '../services';
+import { getDashboardRegistry } from '../services';
 
 /**
  * Project CRUD routes
@@ -108,7 +108,7 @@ export function createProjectRoutes(db: Db) {
         const project = dbRowToProject(newProject);
 
         // Broadcast project creation
-        getBroadcastService().broadcast('project:created', project);
+        getDashboardRegistry().broadcast('project:created', project);
 
         return {
           success: true,
@@ -170,7 +170,7 @@ export function createProjectRoutes(db: Db) {
         const project = dbRowToProject(result[0]);
 
         // Broadcast project update
-        getBroadcastService().broadcast('project:updated', project);
+        getDashboardRegistry().broadcast('project:updated', project);
 
         return {
           success: true,
@@ -213,7 +213,7 @@ export function createProjectRoutes(db: Db) {
         await db.delete(projects).where(eq(projects.id, params.id));
 
         // Broadcast project deletion
-        getBroadcastService().broadcast('project:deleted', { id: params.id });
+        getDashboardRegistry().broadcast('project:deleted', { id: params.id });
 
         return {
           success: true,

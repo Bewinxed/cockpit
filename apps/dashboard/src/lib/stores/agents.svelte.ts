@@ -5,7 +5,7 @@ import type {
   AgentDisconnectedEvent,
   AgentReconnectingEvent,
   AgentUpdatedEvent,
-} from './sse-events';
+} from '@cockpit/core/dashboard';
 
 /**
  * Agent store - manages connected agent state.

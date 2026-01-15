@@ -5,7 +5,7 @@ import type { SpawnInstanceData } from '@cockpit/core';
 import type { JsonRpcError } from '@cockpit/core/protocol';
 import { CommandMethod } from '@cockpit/core/protocol';
 import { isTokenExpired, refreshAccessToken } from '@cockpit/auth';
-import { createInstanceTracker, getAgentRegistry, getBroadcastService } from '../services';
+import { createInstanceTracker, getAgentRegistry, getDashboardRegistry } from '../services';
 
 /**
  * Safely extract error message from JsonRpcError or any error object
@@ -247,7 +247,7 @@ export function createInstanceRoutes(db: Db) {
         }
 
         // Broadcast instance creation
-        getBroadcastService().broadcast('instance:created', instance);
+        getDashboardRegistry().broadcast('instance:created', instance);
 
         return {
           success: true,
@@ -399,7 +399,7 @@ export function createInstanceRoutes(db: Db) {
         const stoppedInstance = await tracker.markStopped(params.id);
 
         // Broadcast instance stopped
-        getBroadcastService().broadcast('instance:stopped', { instanceId: params.id });
+        getDashboardRegistry().broadcast('instance:stopped', { instanceId: params.id });
 
         return {
           success: true,
@@ -531,6 +531,37 @@ export function createInstanceRoutes(db: Db) {
       }
     )
 
+    // Delete messages after a specific message (for edit/rewind)
+    .delete(
+      '/:id/messages/after/:messageId',
+      async ({ params, set }) => {
+        const instance = await tracker.get(params.id);
+
+        if (!instance) {
+          set.status = 404;
+          return {
+            success: false,
+            error: 'Instance not found',
+          };
+        }
+
+        const deletedCount = await tracker.deleteMessagesAfter(params.id, params.messageId);
+
+        return {
+          success: true,
+          data: {
+            deletedCount,
+          },
+        };
+      },
+      {
+        params: t.Object({
+          id: t.String(),
+          messageId: t.String(),
+        }),
+      }
+    )
+
     // Get tool invocations for an instance
     .get(
       '/:id/tools',
@@ -649,7 +680,7 @@ export function createInstanceRoutes(db: Db) {
         });
 
         // Broadcast instance sleeping
-        getBroadcastService().broadcast('instance:sleeping', {
+        getDashboardRegistry().broadcast('instance:sleeping', {
           instanceId: params.id,
           instance: await tracker.get(params.id),
         });
@@ -794,7 +825,7 @@ export function createInstanceRoutes(db: Db) {
 
         // Get updated instance and broadcast
         const updated = await tracker.get(params.id);
-        getBroadcastService().broadcast('instance:resumed', updated);
+        getDashboardRegistry().broadcast('instance:resumed', updated);
 
         return {
           success: true,
@@ -893,7 +924,7 @@ export function createInstanceRoutes(db: Db) {
         }
 
         // Broadcast model changed event
-        getBroadcastService().broadcast('instance:model-changed', {
+        getDashboardRegistry().broadcast('instance:model-changed', {
           instanceId: params.id,
           model: body.model,
         });

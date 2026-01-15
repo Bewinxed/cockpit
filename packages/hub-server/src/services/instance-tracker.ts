@@ -1,6 +1,6 @@
 import type { Db } from '@cockpit/db';
 import type { Instance, InstanceStatus, SpawnInstanceData, UpdateInstanceData } from '@cockpit/core';
-import { instances, messages, toolInvocations, eq, and, asc, desc, sql, inArray } from '@cockpit/db';
+import { instances, messages, toolInvocations, eq, and, or, asc, desc, sql, inArray, gte } from '@cockpit/db';
 import { generateId } from '@cockpit/core/utils';
 import {
   extractMessageFields,
@@ -507,6 +507,48 @@ export class InstanceTracker {
       .where(eq(messages.instanceId, instanceId));
 
     return count;
+  }
+
+  /**
+   * Delete messages after a specific message (by ID or SDK UUID)
+   * Used for edit/rewind functionality - keeps messages up to and excluding the target
+   */
+  async deleteMessagesAfter(instanceId: string, messageIdOrUuid: string): Promise<number> {
+    // First, find the target message to get its timestamp
+    const targetMessage = await this.db
+      .select({ id: messages.id, timestamp: messages.timestamp })
+      .from(messages)
+      .where(
+        and(
+          eq(messages.instanceId, instanceId),
+          or(
+            eq(messages.id, messageIdOrUuid),
+            eq(messages.sdkUuid, messageIdOrUuid)
+          )
+        )
+      )
+      .limit(1);
+
+    if (targetMessage.length === 0) {
+      // Message not found - delete nothing
+      return 0;
+    }
+
+    const targetTimestamp = targetMessage[0].timestamp;
+
+    // Delete all messages at or after this timestamp (including the edited message itself)
+    const result = await this.db
+      .delete(messages)
+      .where(
+        and(
+          eq(messages.instanceId, instanceId),
+          gte(messages.timestamp, targetTimestamp)
+        )
+      );
+
+    // SQLite doesn't return deleted count directly, so we estimate
+    // In practice, we could count before/after, but this is simpler
+    return result.changes ?? 0;
   }
 
   /**

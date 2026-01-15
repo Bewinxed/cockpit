@@ -1,7 +1,6 @@
 <script lang="ts">
   import { Shield, Check, X, ChevronDown, ChevronRight, LoaderCircle, Clock, Infinity as InfinityIcon } from 'lucide-svelte';
-  import { permissions as permissionsStore, type PermissionRequest } from '$lib/stores';
-  import { api } from '$lib/api';
+  import { permissions as permissionsStore, sendPermissionResponse, type PermissionRequest } from '$lib/stores';
   import { Button } from '$lib/components/ui/button';
 
   // Permission update types from SDK
@@ -117,16 +116,16 @@
     isLoading = true;
     error = null;
     try {
-      const response = await api.api.instances({ id: request.instanceId }).permission.post({
+      const response = await sendPermissionResponse({
         requestId: request.requestId,
+        instanceId: request.instanceId,
         behavior: 'allow',
         updatedInput: request.toolInput,
         updatedPermissions: permissions,
       });
 
-      if (response.error || !response.data?.success) {
-        const errValue = response.error as { value?: { message?: string } } | undefined;
-        throw new Error(errValue?.value?.message || 'Failed to send permission response');
+      if (!response.success) {
+        throw new Error(response.error || 'Failed to send permission response');
       }
 
       // Remove from pending list
@@ -142,15 +141,15 @@
     isLoading = true;
     error = null;
     try {
-      const response = await api.api.instances({ id: request.instanceId }).permission.post({
+      const response = await sendPermissionResponse({
         requestId: request.requestId,
+        instanceId: request.instanceId,
         behavior: 'deny',
         message: message || 'User denied permission',
       });
 
-      if (response.error || !response.data?.success) {
-        const errValue = response.error as { value?: { message?: string } } | undefined;
-        throw new Error(errValue?.value?.message || 'Failed to send permission response');
+      if (!response.success) {
+        throw new Error(response.error || 'Failed to send permission response');
       }
 
       // Remove from pending list

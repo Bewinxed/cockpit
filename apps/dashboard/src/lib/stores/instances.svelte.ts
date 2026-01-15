@@ -10,7 +10,7 @@ import type {
   InstanceResumedEvent,
   InstanceTokenUsageEvent,
   InstanceModelChangedEvent,
-} from './sse-events';
+} from '@cockpit/core/dashboard';
 
 /** Tool invocation data from the API */
 export interface ToolInvocationData {

@@ -3,8 +3,8 @@
   import { onMount, onDestroy } from 'svelte';
   import { toast } from 'svelte-sonner';
   import { HUB_URL } from '$lib/config';
-  // New stores and SSE setup
-  import { instances, permissions, ui, initializeFromSSR, setupSSEAndConnect, disconnectSSE } from '$lib/stores';
+  // Stores and WebSocket setup
+  import { instances, permissions, ui, initializeFromSSR, setupWSAndConnect, disconnectWS } from '$lib/stores';
   import { getAgents, getInstances, getProjects } from '$lib/data.remote';
   import { restoreTabsFromStorage, persistTabsToStorage, openInstance } from '$lib/stores/url-sync.svelte';
   import '$lib/stores/theme.svelte';
@@ -53,7 +53,7 @@
 
   // Connect to real-time updates (client-side only)
   onMount(() => {
-    setupSSEAndConnect(HUB_URL);
+    setupWSAndConnect(HUB_URL);
 
     // Restore tabs from localStorage if URL has none
     restoreTabsFromStorage();
@@ -105,7 +105,7 @@
   });
 
   onDestroy(() => {
-    disconnectSSE();
+    disconnectWS();
   });
 </script>
 

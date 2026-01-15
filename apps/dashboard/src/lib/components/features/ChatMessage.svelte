@@ -37,6 +37,8 @@
 		onMemorySelect?: (memoryType: 'project' | 'user') => void;
 		onMemorySave?: (content: string) => Promise<void>;
 		onMemoryCancel?: () => void;
+		onQuestionSubmit?: (requestId: string, answers: Record<string, string>) => Promise<void>;
+		onQuestionCancel?: () => void;
 		onDismissMessage?: () => void;
 		/** Callback when user wants to edit this message and continue from here */
 		onEditMessage?: (messageId: string, newContent: string) => Promise<void>;
@@ -46,6 +48,8 @@
 		isModelPickerActive?: boolean;
 		/** Whether this memory picker is currently active */
 		isMemoryPickerActive?: boolean;
+		/** Whether the question picker is currently active */
+		isQuestionPickerActive?: boolean;
 		/** Whether editing is supported for this message */
 		canEdit?: boolean;
 	}
@@ -61,11 +65,14 @@
 		onMemorySelect,
 		onMemorySave,
 		onMemoryCancel,
+		onQuestionSubmit,
+		onQuestionCancel,
 		onDismissMessage,
 		onEditMessage,
 		isLoginActive = false,
 		isModelPickerActive = false,
 		isMemoryPickerActive = false,
+		isQuestionPickerActive = false,
 		canEdit = false
 	}: Props = $props();
 
@@ -78,6 +85,7 @@
 		if (renderer.name === 'LoginPrompt') return isLoginActive;
 		if (renderer.name === 'ModelPicker') return isModelPickerActive;
 		if (renderer.name === 'MemoryPicker') return isMemoryPickerActive;
+		if (renderer.name === 'AskQuestionPicker') return isQuestionPickerActive;
 		return false;
 	});
 
@@ -94,6 +102,8 @@
 		onMemorySelect,
 		onMemorySave,
 		onMemoryCancel,
+		onQuestionSubmit,
+		onQuestionCancel,
 		onDismissMessage
 	});
 

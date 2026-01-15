@@ -6,7 +6,7 @@
  * into a clean, testable service that works with entity stores.
  */
 
-import type { SdkMessageEvent, ExtractedToolInvocation, ExtractedToolResult } from './sse-events';
+import type { SdkMessageEvent, ExtractedToolInvocation, ExtractedToolResult } from '@cockpit/core/dashboard';
 import { instances } from './instances.svelte';
 import type { Message } from './types';
 

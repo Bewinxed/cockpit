@@ -1,6 +1,6 @@
 import { SvelteMap } from 'svelte/reactivity';
 import type { PermissionRequest } from './types';
-import type { PermissionRequestEvent } from './sse-events';
+import type { PermissionRequestEvent } from '@cockpit/core/dashboard';
 
 /**
  * Permission store - manages pending permission requests.

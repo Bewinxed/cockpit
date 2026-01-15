@@ -17,16 +17,35 @@ export type {
   SidebarFilterState, SplitViewState, StreamingMessage, StreamingState, SubagentState, Task
 } from './types';
 
-// Re-export SSE event types (for river.ts consumers)
+// Re-export dashboard event types from core
 export type {
   AgentConnectedEvent,
   AgentDisconnectedEvent,
   AgentReconnectingEvent,
-  AgentUpdatedEvent, CockpitEventMap, CockpitEventPayload, CockpitEventType, ExtractedToolInvocation,
-  ExtractedToolResult, InstanceCreatedEvent, InstanceErrorEvent, InstanceModelChangedEvent, InstanceResumedEvent, InstanceSleepingEvent, InstanceStartedEvent,
-  InstanceStoppedEvent, InstanceTokenUsageEvent, PermissionRequestEvent, ProjectCreatedEvent, ProjectDeletedEvent, ProjectUpdatedEvent, QuestionRequestEvent, SdkMessageEvent, TaskCompletedEvent, TaskCreatedEvent,
-  TaskUpdatedEvent
-} from './sse-events';
+  AgentUpdatedEvent,
+  DashboardEventMap,
+  DashboardEventPayload,
+  DashboardEventType,
+  ExtractedToolInvocation,
+  ExtractedToolResult,
+  InstanceCreatedEvent,
+  InstanceErrorEvent,
+  InstanceModelChangedEvent,
+  InstanceResumedEvent,
+  InstanceSleepingEvent,
+  InstanceStartedEvent,
+  InstanceStoppedEvent,
+  InstanceTokenUsageEvent,
+  PermissionRequestEvent,
+  ProjectCreatedEvent,
+  ProjectDeletedEvent,
+  ProjectUpdatedEvent,
+  QuestionRequestEvent,
+  SdkMessageEvent,
+  TaskCompletedEvent,
+  TaskCreatedEvent,
+  TaskUpdatedEvent,
+} from '@cockpit/core/dashboard';
 
 // Re-export entity stores
 export { agents } from './agents.svelte';
@@ -47,84 +66,36 @@ import { permissions } from './permissions.svelte';
 import { projects } from './projects.svelte';
 import { questions } from './questions.svelte';
 import { handleSdkMessage } from './sdk-message-handler';
-import type { SdkMessageEvent } from './sse-events';
 import { tasks } from './tasks.svelte';
 import type { Instance, ProjectGroup } from './types';
 import { ui } from './ui.svelte';
 
-// river.ts - direct usage, no wrapper
-import { RiverEvents } from 'river.ts';
-import { RiverClient } from 'river.ts/client';
-import type {
-  AgentConnectedEvent,
-  AgentDisconnectedEvent,
-  AgentReconnectingEvent,
-  AgentUpdatedEvent,
-  InstanceCreatedEvent,
-  InstanceErrorEvent,
-  InstanceModelChangedEvent,
-  InstanceResumedEvent,
-  InstanceSleepingEvent,
-  InstanceStartedEvent,
-  InstanceStoppedEvent,
-  InstanceTokenUsageEvent,
-  PermissionRequestEvent,
-  ProjectCreatedEvent,
-  ProjectDeletedEvent,
-  ProjectUpdatedEvent,
-  QuestionRequestEvent,
-  TaskCompletedEvent,
-  TaskCreatedEvent,
-  TaskUpdatedEvent,
-} from './sse-events';
+// river.ts - use pre-built schema and WebSocket adapter from core
+import { RiverSocketAdapter } from 'river.ts/websocket';
+import { dashboardEvents } from '@cockpit/core/dashboard';
 
 // ============================================
-// SSE CONNECTION (river.ts direct)
+// WEBSOCKET CONNECTION (river.ts with shared schema from core)
 // ============================================
-
-// Define typed events schema for river.ts
-// BaseEvent expects { data: T } structure for event payloads
-const sseEvents = new RiverEvents()
-  .defineEvent('agent:connected', { data: {} as AgentConnectedEvent })
-  .defineEvent('agent:disconnected', { data: {} as AgentDisconnectedEvent })
-  .defineEvent('agent:reconnecting', { data: {} as AgentReconnectingEvent })
-  .defineEvent('agent:updated', { data: {} as AgentUpdatedEvent })
-  .defineEvent('instance:created', { data: {} as InstanceCreatedEvent })
-  .defineEvent('instance:started', { data: {} as InstanceStartedEvent })
-  .defineEvent('instance:stopped', { data: {} as InstanceStoppedEvent })
-  .defineEvent('instance:sleeping', { data: {} as InstanceSleepingEvent })
-  .defineEvent('instance:error', { data: {} as InstanceErrorEvent })
-  .defineEvent('instance:resumed', { data: {} as InstanceResumedEvent })
-  .defineEvent('instance:token_usage', { data: {} as InstanceTokenUsageEvent })
-  .defineEvent('instance:model-changed', { data: {} as InstanceModelChangedEvent })
-  .defineEvent('sdk:message', { data: {} as SdkMessageEvent })
-  .defineEvent('task:created', { data: {} as TaskCreatedEvent })
-  .defineEvent('task:updated', { data: {} as TaskUpdatedEvent })
-  .defineEvent('task:completed', { data: {} as TaskCompletedEvent })
-  .defineEvent('permission:request', { data: {} as PermissionRequestEvent })
-  .defineEvent('question:request', { data: {} as QuestionRequestEvent })
-  .defineEvent('project:created', { data: {} as ProjectCreatedEvent })
-  .defineEvent('project:updated', { data: {} as ProjectUpdatedEvent })
-  .defineEvent('project:deleted', { data: {} as ProjectDeletedEvent })
-  .defineEvent('connected', { data: { clientId: '' } })
-  .build();
 
 // Connection state (reactive) - wrapped in object to allow mutation without reassignment
 export const connection = $state({
   status: 'disconnected' as 'connecting' | 'connected' | 'disconnected' | 'error'
 });
 
-// HMR-persistent client reference
+// HMR-persistent client references
 declare global {
-  var __sseClient: RiverClient<typeof sseEvents> | null;
-  var __sseReconnectTimeout: ReturnType<typeof setTimeout> | null;
-  var __sseReconnectAttempts: number;
-  var __sseBaseUrl: string;
+  var __wsSocket: WebSocket | null;
+  var __wsAdapter: RiverSocketAdapter<typeof dashboardEvents> | null;
+  var __wsReconnectTimeout: ReturnType<typeof setTimeout> | null;
+  var __wsReconnectAttempts: number;
+  var __wsBaseUrl: string;
 }
-globalThis.__sseClient ??= null;
-globalThis.__sseReconnectTimeout ??= null;
-globalThis.__sseReconnectAttempts ??= 0;
-globalThis.__sseBaseUrl ??= '';
+globalThis.__wsSocket ??= null;
+globalThis.__wsAdapter ??= null;
+globalThis.__wsReconnectTimeout ??= null;
+globalThis.__wsReconnectAttempts ??= 0;
+globalThis.__wsBaseUrl ??= '';
 
 // ============================================
 // SSR INITIALIZATION
@@ -171,115 +142,256 @@ export function initializeFromSSR(
 }
 
 // ============================================
-// SSE CONNECTION FUNCTIONS
+// WEBSOCKET CONNECTION FUNCTIONS
 // ============================================
 
 /**
- * Connect to SSE and wire handlers directly to river.ts client.
+ * Setup event handlers on the RiverSocketAdapter.
+ * Called once when adapter is created.
  */
-export function setupSSEAndConnect(baseUrl: string = ''): void {
-  globalThis.__sseBaseUrl = baseUrl;
+function setupEventHandlers(adapter: RiverSocketAdapter<typeof dashboardEvents>): void {
+  // Agent events - river.ts passes data directly to handlers
+  adapter.on('agent:connected', (data) => agents.handleConnected(data));
+  adapter.on('agent:disconnected', (data) => agents.handleDisconnected(data));
+  adapter.on('agent:reconnecting', (data) => agents.handleReconnecting(data));
+  adapter.on('agent:updated', (data) => agents.handleUpdated(data));
+
+  // Instance events
+  adapter.on('instance:created', (data) => instances.handleCreated(data));
+  adapter.on('instance:started', (data) => instances.handleStarted(data));
+  adapter.on('instance:stopped', (data) => instances.handleStopped(data));
+  adapter.on('instance:sleeping', (data) => instances.handleSleeping(data));
+  adapter.on('instance:error', (data) => {
+    instances.handleError(data);
+    if (data.error) {
+      instances.addMessage(data.instanceId, {
+        type: 'error',
+        content: data.error,
+        timestamp: new Date(),
+      });
+    }
+  });
+  adapter.on('instance:resumed', (data) => instances.handleResumed(data));
+  adapter.on('instance:token_usage', (data) => instances.handleTokenUsage(data));
+  adapter.on('instance:model-changed', (data) => instances.handleModelChanged(data));
+
+  // SDK message
+  adapter.on('sdk:message', (data) => handleSdkMessage(data));
+
+  // Task events
+  adapter.on('task:created', (data) => tasks.handleCreated(data));
+  adapter.on('task:updated', (data) => tasks.handleUpdated(data));
+  adapter.on('task:completed', (data) => tasks.handleCompleted(data));
+
+  // Permission events
+  adapter.on('permission:request', (data) => permissions.handleRequest(data));
+
+  // Question events (AskUserQuestion UI bridge)
+  adapter.on('question:request', (data) => questions.handleRequest(data));
+
+  // Project events
+  adapter.on('project:created', (data) => projects.handleCreated(data));
+  adapter.on('project:updated', (data) => projects.handleUpdated(data));
+  adapter.on('project:deleted', (data) => projects.handleDeleted(data));
+
+  // Connection confirmation from server
+  adapter.on('connected', (data) => {
+    connection.status = 'connected';
+    globalThis.__wsReconnectAttempts = 0;
+    console.log('[WS] Connected to hub, clientId:', data.clientId);
+  });
+}
+
+/**
+ * Connect to WebSocket and wire handlers via river.ts adapter.
+ */
+export function setupWSAndConnect(baseUrl: string = ''): void {
+  globalThis.__wsBaseUrl = baseUrl;
 
   // Close existing connection
-  if (globalThis.__sseClient) {
-    globalThis.__sseClient.close();
-    globalThis.__sseClient = null;
+  if (globalThis.__wsSocket) {
+    globalThis.__wsSocket.close();
+    globalThis.__wsSocket = null;
+  }
+  if (globalThis.__wsAdapter) {
+    globalThis.__wsAdapter.clearPendingRequests();
+    globalThis.__wsAdapter = null;
   }
 
   connection.status = 'connecting';
 
-  // Create river.ts client and wire handlers directly
-  globalThis.__sseClient = RiverClient.init(sseEvents, { reconnect: true });
+  // Build WebSocket URL from current origin (Vite/SvelteKit proxies /ws to hub)
+  const protocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const host = typeof window !== 'undefined' ? window.location.host : 'localhost:3000';
+  const wsUrl = `${protocol}//${host}/ws/dashboard`;
+  console.log('[WS] Connecting to:', wsUrl);
 
-  globalThis.__sseClient
-    .prepare(`${baseUrl}/api/events`, { method: 'GET' })
-    // Agent events - destructure { data } from river.ts event wrapper
-    .on('agent:connected', ({ data }) => agents.handleConnected(data))
-    .on('agent:disconnected', ({ data }) => agents.handleDisconnected(data))
-    .on('agent:reconnecting', ({ data }) => agents.handleReconnecting(data))
-    .on('agent:updated', ({ data }) => agents.handleUpdated(data))
-    // Instance events
-    .on('instance:created', ({ data }) => instances.handleCreated(data))
-    .on('instance:started', ({ data }) => instances.handleStarted(data))
-    .on('instance:stopped', ({ data }) => instances.handleStopped(data))
-    .on('instance:sleeping', ({ data }) => instances.handleSleeping(data))
-    .on('instance:error', ({ data }) => {
-      instances.handleError(data);
-      if (data.error) {
-        instances.addMessage(data.instanceId, {
-          type: 'error',
-          content: data.error,
-          timestamp: new Date(),
-        });
-      }
-    })
-    .on('instance:resumed', ({ data }) => instances.handleResumed(data))
-    .on('instance:token_usage', ({ data }) => instances.handleTokenUsage(data))
-    .on('instance:model-changed', ({ data }) => instances.handleModelChanged(data))
-    // SDK message
-    .on('sdk:message', ({ data }) => handleSdkMessage(data))
-    // Task events
-    .on('task:created', ({ data }) => tasks.handleCreated(data))
-    .on('task:updated', ({ data }) => tasks.handleUpdated(data))
-    .on('task:completed', ({ data }) => tasks.handleCompleted(data))
-    // Permission events
-    .on('permission:request', ({ data }) => permissions.handleRequest(data))
-    // Question events (AskUserQuestion UI bridge)
-    .on('question:request', ({ data }) => questions.handleRequest(data))
-    // Project events
-    .on('project:created', ({ data }) => projects.handleCreated(data))
-    .on('project:updated', ({ data }) => projects.handleUpdated(data))
-    .on('project:deleted', ({ data }) => projects.handleDeleted(data))
-    // Connection events
-    .on('connected', ({ data }) => {
-      connection.status = 'connected';
-      globalThis.__sseReconnectAttempts = 0;
-      console.log('[SSE] Connected to hub, clientId:', data.clientId);
-    })
-    .on('close', () => {
-      console.log('[SSE] Connection closed');
-      connection.status = 'disconnected';
-      attemptReconnect();
-    })
-    .stream();
+  // Create WebSocket and river.ts adapter
+  const ws = new WebSocket(wsUrl);
+  const adapter = new RiverSocketAdapter(dashboardEvents, { debug: false });
+
+  // Setup event handlers
+  setupEventHandlers(adapter);
+
+  // Wire WebSocket events
+  ws.onopen = () => {
+    console.log('[WS] WebSocket opened');
+    // Connection confirmation comes from server via 'connected' event
+  };
+
+  ws.onmessage = (event) => {
+    // Route all messages through river.ts adapter
+    adapter.handleMessage(event.data);
+  };
+
+  ws.onclose = (event) => {
+    console.log('[WS] WebSocket closed:', event.code, event.reason);
+    connection.status = 'disconnected';
+    adapter.clearPendingRequests();
+    attemptReconnect();
+  };
+
+  ws.onerror = (error) => {
+    console.error('[WS] WebSocket error:', error);
+    connection.status = 'error';
+  };
+
+  // Store references globally for HMR persistence
+  globalThis.__wsSocket = ws;
+  globalThis.__wsAdapter = adapter;
 }
 
 /** Attempt reconnect with exponential backoff */
 function attemptReconnect(): void {
   const maxAttempts = 10;
-  if (globalThis.__sseReconnectAttempts < maxAttempts) {
-    const delay = Math.min(1000 * Math.pow(2, globalThis.__sseReconnectAttempts), 30000);
-    console.log(`[SSE] Reconnecting in ${delay}ms (attempt ${globalThis.__sseReconnectAttempts + 1}/${maxAttempts})`);
-    globalThis.__sseReconnectTimeout = setTimeout(() => {
-      globalThis.__sseReconnectAttempts++;
-      setupSSEAndConnect(globalThis.__sseBaseUrl);
+  if (globalThis.__wsReconnectAttempts < maxAttempts) {
+    const delay = Math.min(1000 * Math.pow(2, globalThis.__wsReconnectAttempts), 30000);
+    console.log(`[WS] Reconnecting in ${delay}ms (attempt ${globalThis.__wsReconnectAttempts + 1}/${maxAttempts})`);
+    globalThis.__wsReconnectTimeout = setTimeout(() => {
+      globalThis.__wsReconnectAttempts++;
+      setupWSAndConnect(globalThis.__wsBaseUrl);
     }, delay);
   } else {
-    console.error('[SSE] Max reconnect attempts reached');
+    console.error('[WS] Max reconnect attempts reached');
     connection.status = 'error';
   }
 }
 
 /**
- * Disconnect from SSE.
+ * Disconnect from WebSocket.
  */
-export function disconnectSSE(): void {
-  if (globalThis.__sseReconnectTimeout) {
-    clearTimeout(globalThis.__sseReconnectTimeout);
-    globalThis.__sseReconnectTimeout = null;
+export function disconnectWS(): void {
+  if (globalThis.__wsReconnectTimeout) {
+    clearTimeout(globalThis.__wsReconnectTimeout);
+    globalThis.__wsReconnectTimeout = null;
   }
-  if (globalThis.__sseClient) {
-    globalThis.__sseClient.close();
-    globalThis.__sseClient = null;
+  if (globalThis.__wsAdapter) {
+    globalThis.__wsAdapter.clearPendingRequests();
+    globalThis.__wsAdapter = null;
+  }
+  if (globalThis.__wsSocket) {
+    globalThis.__wsSocket.close();
+    globalThis.__wsSocket = null;
   }
   connection.status = 'disconnected';
 }
 
 /** Force reconnect */
-export function reconnectSSE(): void {
-  disconnectSSE();
-  globalThis.__sseReconnectAttempts = 0;
-  setupSSEAndConnect(globalThis.__sseBaseUrl);
+export function reconnectWS(): void {
+  disconnectWS();
+  globalThis.__wsReconnectAttempts = 0;
+  setupWSAndConnect(globalThis.__wsBaseUrl);
+}
+
+
+// ============================================
+// WEBSOCKET COMMANDS (RPC-style via river.ts)
+// ============================================
+
+import type {
+  SpawnInstanceRequest,
+  SpawnInstanceResponse,
+  SendMessageRequest,
+  SendMessageResponse,
+  StopInstanceRequest,
+  StopInstanceResponse,
+  PermissionResponseRequest,
+  PermissionResponseResponse,
+  QuestionResponseRequest,
+  QuestionResponseResponse,
+} from '@cockpit/core/dashboard';
+
+/** Error thrown when WebSocket is not connected */
+export class WebSocketNotConnectedError extends Error {
+  constructor() {
+    super('WebSocket not connected');
+    this.name = 'WebSocketNotConnectedError';
+  }
+}
+
+/**
+ * Get WebSocket and adapter, throwing if not connected.
+ * @throws WebSocketNotConnectedError if not connected
+ */
+function getConnectedWs(): { ws: WebSocket; adapter: RiverSocketAdapter<typeof dashboardEvents> } {
+  const ws = globalThis.__wsSocket;
+  const adapter = globalThis.__wsAdapter;
+
+  if (!ws || ws.readyState !== WebSocket.OPEN || !adapter) {
+    throw new WebSocketNotConnectedError();
+  }
+
+  return { ws, adapter };
+}
+
+/**
+ * Spawn a new Claude instance on a machine.
+ * @throws WebSocketNotConnectedError if not connected
+ * @throws RequestTimeoutError if no response within timeout
+ */
+export async function spawnInstance(params: SpawnInstanceRequest): Promise<SpawnInstanceResponse> {
+  const { ws, adapter } = getConnectedWs();
+  return adapter.request('instance.spawn', params, (msg) => ws.send(msg), 30000);
+}
+
+/**
+ * Send a message to a running instance.
+ * @throws WebSocketNotConnectedError if not connected
+ * @throws RequestTimeoutError if no response within timeout
+ */
+export async function sendInstanceMessage(params: SendMessageRequest): Promise<SendMessageResponse> {
+  const { ws, adapter } = getConnectedWs();
+  return adapter.request('instance.send', params, (msg) => ws.send(msg), 30000);
+}
+
+/**
+ * Stop a running instance.
+ * @throws WebSocketNotConnectedError if not connected
+ * @throws RequestTimeoutError if no response within timeout
+ */
+export async function stopInstance(params: StopInstanceRequest): Promise<StopInstanceResponse> {
+  const { ws, adapter } = getConnectedWs();
+  return adapter.request('instance.stop', params, (msg) => ws.send(msg), 30000);
+}
+
+/**
+ * Send a permission response (allow/deny).
+ * @throws WebSocketNotConnectedError if not connected
+ * @throws RequestTimeoutError if no response within timeout
+ */
+export async function sendPermissionResponse(params: PermissionResponseRequest): Promise<PermissionResponseResponse> {
+  const { ws, adapter } = getConnectedWs();
+  return adapter.request('permission.response', params, (msg) => ws.send(msg), 30000);
+}
+
+/**
+ * Send a question response (user answers).
+ * @throws WebSocketNotConnectedError if not connected
+ * @throws RequestTimeoutError if no response within timeout
+ */
+export async function sendQuestionResponse(params: QuestionResponseRequest): Promise<QuestionResponseResponse> {
+  const { ws, adapter } = getConnectedWs();
+  return adapter.request('question.response', params, (msg) => ws.send(msg), 30000);
 }
 
 // ============================================

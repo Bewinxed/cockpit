@@ -5,11 +5,13 @@
   import { Button } from '$lib/components/ui/button';
   import InstanceHeader from './InstanceHeader.svelte';
   import { ChatMessage, ChatInput, PermissionRequest, ToolGroup, SubagentBranch } from '$lib/components/features';
-  import { UseAutoScroll } from '$lib/hooks/use-auto-scroll.svelte';
+  import { createAutoScroll } from '$lib/hooks/use-auto-scroll.svelte';
   import { ActivityGrid } from '$lib/components/ui/activity-grid';
   import {
     instances,
     permissions as permissionsStore,
+    questions as questionsStore,
+    sendQuestionResponse,
     type Message
   } from '$lib/stores';
   import { api } from '$lib/api';
@@ -349,16 +351,19 @@
   });
 
   // Auto-scroll hook
-  const autoScroll = new UseAutoScroll();
-  let messagesContainer: HTMLDivElement | null = $state(null);
+  const autoScroll = createAutoScroll();
 
+  // Scroll to bottom when messages change or streaming updates
   $effect(() => {
-    if (messagesContainer) {
-      autoScroll.ref = messagesContainer;
-    }
-  });
+    // Access reactive dependencies
+    const _msgCount = chatMessages.length;
+    const _streaming = streamingText;
 
-  const shouldAutoScroll = $derived(autoScroll.isAtBottom);
+    // Wait for DOM to update, then scroll
+    requestAnimationFrame(() => {
+      autoScroll.scrollToBottom();
+    });
+  });
 
   // Commands state
   let commands = $state<AvailableCommand[]>(DEFAULT_COMMANDS);
@@ -754,25 +759,75 @@
     });
   }
 
+  // Question handlers (AskUserQuestion)
+  async function handleQuestionSubmit(requestId: string, answers: Record<string, string>): Promise<void> {
+    try {
+      const response = await sendQuestionResponse({ requestId, instanceId, answers });
+      if (!response.success) {
+        throw new Error(response.error || 'Failed to submit answer');
+      }
+      // Remove from pending questions and update the message with answers
+      questionsStore.handleResponse(requestId, answers);
+    } catch (err) {
+      console.error('[Question] Failed to submit:', err);
+      throw err; // Let the component handle the error display
+    }
+  }
+
+  function handleQuestionCancel() {
+    // User skipped the question - just dismiss it from UI
+    const pending = questionsStore.getByInstance(instanceId);
+    if (pending.length > 0) {
+      questionsStore.remove(pending[0].requestId);
+    }
+  }
+
   // Edit message handler
   async function handleEditMessage(messageId: string, newContent: string): Promise<void> {
     if (!instance) return;
 
-    const messages = currentMessages;
-    const msgIndex = messages.findIndex(m => m.id === messageId);
+    const msgs = currentMessages;
+    const msgIndex = msgs.findIndex(m => m.id === messageId);
     if (msgIndex === -1) return;
 
+    // Get the edited message and find the SDK UUID to resume from
+    const editedMessage = msgs[msgIndex];
     let resumeFromUuid: string | undefined;
+
+    // Find the SDK UUID of the message BEFORE the edited one (to resume from there)
     if (msgIndex > 0) {
       for (let i = msgIndex - 1; i >= 0; i--) {
-        if (messages[i].sdkUuid) {
-          resumeFromUuid = messages[i].sdkUuid;
+        if (msgs[i].sdkUuid) {
+          resumeFromUuid = msgs[i].sdkUuid;
           break;
         }
       }
     }
 
+    // Delete messages from this point onwards in the database
+    // Use the edited message's SDK UUID or ID
+    const messageIdForDelete = editedMessage.sdkUuid ?? editedMessage.id;
+    if (messageIdForDelete) {
+      try {
+        await fetch(`/api/instances/${instanceId}/messages/after/${encodeURIComponent(messageIdForDelete)}`, {
+          method: 'DELETE'
+        });
+      } catch {
+        // Ignore errors - we'll still try to proceed
+      }
+    }
+
+    // Clear local messages from edit point onwards
+    const messagesToKeep = msgs.slice(0, msgIndex);
     instances.clearMessages(instanceId);
+    instances.clearSubagentsForInstance(instanceId);
+
+    // Re-add messages before the edit point
+    for (const msg of messagesToKeep) {
+      instances.addMessage(instanceId, msg);
+    }
+
+    // Add the edited message to local state
     instances.addMessage(instanceId, {
       type: 'user',
       content: newContent,
@@ -900,6 +955,9 @@
       timestamp: new Date(),
     });
 
+    // Force scroll to bottom after user sends a message
+    autoScroll.scrollToBottom(true);
+
     try {
       const result = await api.api.instances({ id: instanceId }).send.post({
         message,
@@ -966,10 +1024,6 @@
       interrupting = false;
     }
   }
-
-  function scrollToBottom() {
-    autoScroll.scrollToBottom(false);
-  }
 </script>
 
 <div class="flex-1 flex flex-col overflow-hidden relative">
@@ -981,7 +1035,8 @@
   <!-- Messages Area -->
   <div
     class="flex-1 overflow-y-auto scroll-smooth"
-    bind:this={messagesContainer}
+    bind:this={autoScroll.ref}
+    onscroll={autoScroll.onScroll}
   >
     <div class="max-w-3xl mx-auto px-4 py-6 space-y-4">
       <!-- Loading state -->
@@ -1066,6 +1121,7 @@
               {@const i = group.index}
               <ChatMessage
                 {message}
+                {instanceId}
                 showTimestamp={i === 0 || chatMessages[i - 1]?.type !== message.type}
                 onLoginSubmit={handleLoginSubmit}
                 onLoginCancel={handleLoginCancel}
@@ -1074,12 +1130,15 @@
                 onMemorySelect={handleMemorySelect}
                 onMemorySave={handleMemorySave}
                 onMemoryCancel={handleMemoryCancel}
+                onQuestionSubmit={handleQuestionSubmit}
+                onQuestionCancel={handleQuestionCancel}
                 onDismissMessage={() => instances.removeMessage(instanceId, i)}
                 onEditMessage={handleEditMessage}
                 canEdit={message.type === 'user'}
                 isLoginActive={message.metadata?.subtype === 'login_prompt' && pendingOAuthState === message.metadata?.oauthState}
                 isModelPickerActive={message.metadata?.subtype === 'model_picker' && pendingModelPickerIndex === i}
                 isMemoryPickerActive={message.metadata?.subtype === 'memory_picker' && pendingMemoryPickerIndex === i}
+                isQuestionPickerActive={message.metadata?.subtype === 'ask_question' && questionsStore.has(message.metadata?.questionRequestId as string)}
               />
             {/if}
           </div>
@@ -1157,12 +1216,12 @@
   {/if}
 
   <!-- Jump to Present Button -->
-  {#if !shouldAutoScroll}
+  {#if autoScroll.userHasScrolled}
     <Button
       variant="default"
       size="sm"
       class="absolute bottom-20 right-8 rounded-full shadow-lg z-10 gap-1.5"
-      onclick={scrollToBottom}
+      onclick={() => autoScroll.scrollToBottom(true)}
     >
       <ArrowDown class="size-4" />
       Jump to present
