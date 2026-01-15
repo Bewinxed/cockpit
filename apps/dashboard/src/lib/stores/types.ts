@@ -74,7 +74,7 @@ export interface MessageMetadata {
   toolResult?: unknown;
   toolStatus?: 'pending' | 'success' | 'error';
   // For system messages
-  subtype?: 'init' | 'compact_boundary' | 'status' | 'hook_response' | 'login_prompt' | 'auth_required' | 'model_picker' | 'memory_info' | 'vim_info' | 'terminal_setup_info' | 'memory_picker';
+  subtype?: 'init' | 'compact_boundary' | 'status' | 'hook_response' | 'login_prompt' | 'auth_required' | 'model_picker' | 'memory_info' | 'vim_info' | 'terminal_setup_info' | 'memory_picker' | 'ask_question';
   // For command_output messages
   command?: string;
   model?: string;
@@ -103,6 +103,15 @@ export interface MessageMetadata {
   selectedMemoryType?: 'project' | 'user';
   memoryContent?: string;
   memoryPath?: string;
+  // For ask_question (AskUserQuestion tool)
+  questionRequestId?: string;
+  questions?: Array<{
+    question: string;
+    header: string;
+    options: Array<{ label: string; description: string }>;
+    multiSelect: boolean;
+  }>;
+  questionAnswers?: Record<string, string>;
   // For help_menu
   version?: string;
   commands?: Array<{ name: string; description?: string; type: 'builtin' | 'custom' | 'skill' | 'mcp' }>;

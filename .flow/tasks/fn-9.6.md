@@ -49,9 +49,20 @@ Wire up the SDK message handler to create system messages with `ask_question` su
 - [ ] Full flow works: Claude asks question -> UI shows -> user answers -> Claude continues
 - [ ] `bun run --filter=@cockpit/dashboard check` passes
 ## Done summary
-TBD
+- Added 'ask_question' to MessageMetadata subtype union
+- Added question metadata fields: questionRequestId, questions, questionAnswers
+- Updated questions.handleRequest to create system message for UI rendering
+- Added instances.updateQuestionAnswers to update message when user answers
+- Complete flow: question:request SSE → questions store + system message → AskQuestionPicker renders
 
+Why:
+- Connects SSE events to the UI component
+- Enables inactive/answered state display with stored answers
+
+Verification:
+- IDE diagnostics clean
+- All types properly connected
 ## Evidence
-- Commits:
-- Tests:
+- Commits: 47b4ccc10f32a79f4eda0bd0300ccc76bfce19bd
+- Tests: IDE diagnostics clean
 - PRs:

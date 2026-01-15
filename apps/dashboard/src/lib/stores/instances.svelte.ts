@@ -239,6 +239,24 @@ class InstanceStore {
     this.#messages.delete(instanceId);
   }
 
+  /** Update question answers by requestId */
+  updateQuestionAnswers(instanceId: string, requestId: string, answers: Record<string, string>): void {
+    const msgs = this.#messages.get(instanceId) || [];
+    const updated = msgs.map(msg => {
+      if (msg.type === 'system' && msg.metadata?.subtype === 'ask_question' && msg.metadata?.questionRequestId === requestId) {
+        return {
+          ...msg,
+          metadata: {
+            ...msg.metadata,
+            questionAnswers: answers,
+          },
+        };
+      }
+      return msg;
+    });
+    this.#messages.set(instanceId, updated);
+  }
+
   /** Update metadata on a message by index */
   updateMessageMetadata(instanceId: string, index: number, metadata: Record<string, unknown>): void {
     const messages = this.#messages.get(instanceId);

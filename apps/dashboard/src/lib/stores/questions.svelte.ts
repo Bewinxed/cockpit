@@ -1,6 +1,7 @@
 import { SvelteMap } from 'svelte/reactivity';
 import type { QuestionRequest } from '@cockpit/core';
 import type { QuestionRequestEvent } from './sse-events';
+import { instances } from './instances.svelte';
 
 /**
  * Questions store - manages pending question requests from AskUserQuestion tool.
@@ -81,6 +82,7 @@ class QuestionStore {
 
   /** Handle question:request SSE event */
   handleRequest(event: QuestionRequestEvent): void {
+    // Store in pending questions map
     this.#questions.set(event.requestId, {
       requestId: event.requestId,
       instanceId: event.instanceId,
@@ -88,10 +90,27 @@ class QuestionStore {
       questions: event.questions,
       createdAt: event.createdAt,
     });
+
+    // Create a system message for the UI to render
+    instances.addMessage(event.instanceId, {
+      type: 'system',
+      content: event.questions[0]?.question || 'Question',
+      timestamp: new Date(event.createdAt),
+      metadata: {
+        subtype: 'ask_question',
+        questionRequestId: event.requestId,
+        questions: event.questions,
+      },
+    });
   }
 
-  /** Handle question response (remove from pending) */
-  handleResponse(requestId: string): void {
+  /** Handle question response (remove from pending and update message) */
+  handleResponse(requestId: string, answers?: Record<string, string>): void {
+    const question = this.#questions.get(requestId);
+    if (question && answers) {
+      // Update the message with the answers for inactive display
+      instances.updateQuestionAnswers(question.instanceId, requestId, answers);
+    }
     this.#questions.delete(requestId);
   }
 }
