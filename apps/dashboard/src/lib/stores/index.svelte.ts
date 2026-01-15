@@ -107,33 +107,35 @@ import type {
 // SSE CONNECTION (river.ts direct)
 // ============================================
 
-// Define typed events schema for river.ts
+// Define typed events schema for river.ts (data shape directly, no wrapper)
 const sseEvents = new RiverEvents()
-  .defineEvent('agent:connected', { data: {} as AgentConnectedEvent })
-  .defineEvent('agent:disconnected', { data: {} as AgentDisconnectedEvent })
-  .defineEvent('agent:reconnecting', { data: {} as AgentReconnectingEvent })
-  .defineEvent('agent:updated', { data: {} as AgentUpdatedEvent })
-  .defineEvent('instance:created', { data: {} as InstanceCreatedEvent })
-  .defineEvent('instance:started', { data: {} as InstanceStartedEvent })
-  .defineEvent('instance:stopped', { data: {} as InstanceStoppedEvent })
-  .defineEvent('instance:sleeping', { data: {} as InstanceSleepingEvent })
-  .defineEvent('instance:error', { data: {} as InstanceErrorEvent })
-  .defineEvent('instance:resumed', { data: {} as InstanceResumedEvent })
-  .defineEvent('instance:token_usage', { data: {} as InstanceTokenUsageEvent })
-  .defineEvent('instance:model-changed', { data: {} as InstanceModelChangedEvent })
-  .defineEvent('sdk:message', { data: {} as SdkMessageEvent })
-  .defineEvent('task:created', { data: {} as TaskCreatedEvent })
-  .defineEvent('task:updated', { data: {} as TaskUpdatedEvent })
-  .defineEvent('task:completed', { data: {} as TaskCompletedEvent })
-  .defineEvent('permission:request', { data: {} as PermissionRequestEvent })
-  .defineEvent('project:created', { data: {} as ProjectCreatedEvent })
-  .defineEvent('project:updated', { data: {} as ProjectUpdatedEvent })
-  .defineEvent('project:deleted', { data: {} as ProjectDeletedEvent })
-  .defineEvent('connected', { data: { clientId: '' } })
+  .defineEvent('agent:connected', {} as AgentConnectedEvent)
+  .defineEvent('agent:disconnected', {} as AgentDisconnectedEvent)
+  .defineEvent('agent:reconnecting', {} as AgentReconnectingEvent)
+  .defineEvent('agent:updated', {} as AgentUpdatedEvent)
+  .defineEvent('instance:created', {} as InstanceCreatedEvent)
+  .defineEvent('instance:started', {} as InstanceStartedEvent)
+  .defineEvent('instance:stopped', {} as InstanceStoppedEvent)
+  .defineEvent('instance:sleeping', {} as InstanceSleepingEvent)
+  .defineEvent('instance:error', {} as InstanceErrorEvent)
+  .defineEvent('instance:resumed', {} as InstanceResumedEvent)
+  .defineEvent('instance:token_usage', {} as InstanceTokenUsageEvent)
+  .defineEvent('instance:model-changed', {} as InstanceModelChangedEvent)
+  .defineEvent('sdk:message', {} as SdkMessageEvent)
+  .defineEvent('task:created', {} as TaskCreatedEvent)
+  .defineEvent('task:updated', {} as TaskUpdatedEvent)
+  .defineEvent('task:completed', {} as TaskCompletedEvent)
+  .defineEvent('permission:request', {} as PermissionRequestEvent)
+  .defineEvent('project:created', {} as ProjectCreatedEvent)
+  .defineEvent('project:updated', {} as ProjectUpdatedEvent)
+  .defineEvent('project:deleted', {} as ProjectDeletedEvent)
+  .defineEvent('connected', { clientId: '' })
   .build();
 
-// Connection state (reactive)
-export let connectionStatus = $state<'connecting' | 'connected' | 'disconnected' | 'error'>('disconnected');
+// Connection state (reactive) - wrapped in object to allow mutation without reassignment
+export const connection = $state({
+  status: 'disconnected' as 'connecting' | 'connected' | 'disconnected' | 'error'
+});
 
 // HMR-persistent client reference
 declare global {
@@ -207,57 +209,57 @@ export function setupSSEAndConnect(baseUrl: string = ''): void {
     globalThis.__sseClient = null;
   }
 
-  connectionStatus = 'connecting';
+  connection.status = 'connecting';
 
   // Create river.ts client and wire handlers directly
   globalThis.__sseClient = RiverClient.init(sseEvents, { reconnect: true });
 
   globalThis.__sseClient
     .prepare(`${baseUrl}/api/events`, { method: 'GET' })
-    // Agent events
-    .on('agent:connected', (e) => agents.handleConnected(e.data))
-    .on('agent:disconnected', (e) => agents.handleDisconnected(e.data))
-    .on('agent:reconnecting', (e) => agents.handleReconnecting(e.data))
-    .on('agent:updated', (e) => agents.handleUpdated(e.data))
+    // Agent events - river.ts passes data directly to handler, not wrapped in e.data
+    .on('agent:connected', (data) => agents.handleConnected(data))
+    .on('agent:disconnected', (data) => agents.handleDisconnected(data))
+    .on('agent:reconnecting', (data) => agents.handleReconnecting(data))
+    .on('agent:updated', (data) => agents.handleUpdated(data))
     // Instance events
-    .on('instance:created', (e) => instances.handleCreated(e.data))
-    .on('instance:started', (e) => instances.handleStarted(e.data))
-    .on('instance:stopped', (e) => instances.handleStopped(e.data))
-    .on('instance:sleeping', (e) => instances.handleSleeping(e.data))
-    .on('instance:error', (e) => {
-      instances.handleError(e.data);
-      if (e.data.error) {
-        instances.addMessage(e.data.instanceId, {
+    .on('instance:created', (data) => instances.handleCreated(data))
+    .on('instance:started', (data) => instances.handleStarted(data))
+    .on('instance:stopped', (data) => instances.handleStopped(data))
+    .on('instance:sleeping', (data) => instances.handleSleeping(data))
+    .on('instance:error', (data) => {
+      instances.handleError(data);
+      if (data.error) {
+        instances.addMessage(data.instanceId, {
           type: 'error',
-          content: e.data.error,
-          timestamp: new Date(), // plain Date for timestamp, not reactive
+          content: data.error,
+          timestamp: new Date(),
         });
       }
     })
-    .on('instance:resumed', (e) => instances.handleResumed(e.data))
-    .on('instance:token_usage', (e) => instances.handleTokenUsage(e.data))
-    .on('instance:model-changed', (e) => instances.handleModelChanged(e.data))
+    .on('instance:resumed', (data) => instances.handleResumed(data))
+    .on('instance:token_usage', (data) => instances.handleTokenUsage(data))
+    .on('instance:model-changed', (data) => instances.handleModelChanged(data))
     // SDK message
-    .on('sdk:message', (e) => handleSdkMessage(e.data))
+    .on('sdk:message', (data) => handleSdkMessage(data))
     // Task events
-    .on('task:created', (e) => tasks.handleCreated(e.data))
-    .on('task:updated', (e) => tasks.handleUpdated(e.data))
-    .on('task:completed', (e) => tasks.handleCompleted(e.data))
+    .on('task:created', (data) => tasks.handleCreated(data))
+    .on('task:updated', (data) => tasks.handleUpdated(data))
+    .on('task:completed', (data) => tasks.handleCompleted(data))
     // Permission events
-    .on('permission:request', (e) => permissions.handleRequest(e.data))
+    .on('permission:request', (data) => permissions.handleRequest(data))
     // Project events
-    .on('project:created', (e) => projects.handleCreated(e.data))
-    .on('project:updated', (e) => projects.handleUpdated(e.data))
-    .on('project:deleted', (e) => projects.handleDeleted(e.data))
+    .on('project:created', (data) => projects.handleCreated(data))
+    .on('project:updated', (data) => projects.handleUpdated(data))
+    .on('project:deleted', (data) => projects.handleDeleted(data))
     // Connection events
-    .on('connected', (e) => {
-      connectionStatus = 'connected';
+    .on('connected', (data) => {
+      connection.status = 'connected';
       globalThis.__sseReconnectAttempts = 0;
-      console.log('[SSE] Connected to hub, clientId:', e.data.clientId);
+      console.log('[SSE] Connected to hub, clientId:', data.clientId);
     })
     .on('close', () => {
       console.log('[SSE] Connection closed');
-      connectionStatus = 'disconnected';
+      connection.status = 'disconnected';
       attemptReconnect();
     })
     .stream();
@@ -275,7 +277,7 @@ function attemptReconnect(): void {
     }, delay);
   } else {
     console.error('[SSE] Max reconnect attempts reached');
-    connectionStatus = 'error';
+    connection.status = 'error';
   }
 }
 
@@ -291,7 +293,7 @@ export function disconnectSSE(): void {
     globalThis.__sseClient.close();
     globalThis.__sseClient = null;
   }
-  connectionStatus = 'disconnected';
+  connection.status = 'disconnected';
 }
 
 /** Force reconnect */

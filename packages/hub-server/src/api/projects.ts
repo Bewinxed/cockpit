@@ -3,7 +3,7 @@ import type { Db } from '@cockpit/db';
 import type { CreateProjectData, UpdateProjectData } from '@cockpit/core';
 import { projects, eq, desc, like } from '@cockpit/db';
 import { generateId } from '@cockpit/core/utils';
-import { getBroadcastService } from '../services/broadcast';
+import { getBroadcastService } from '../services';
 
 /**
  * Project CRUD routes

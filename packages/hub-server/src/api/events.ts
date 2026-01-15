@@ -1,5 +1,5 @@
 import { Elysia, t } from 'elysia';
-import { getBroadcastService } from '../services/broadcast';
+import { getBroadcastService } from '../services';
 
 /**
  * SSE routes for dashboard real-time updates

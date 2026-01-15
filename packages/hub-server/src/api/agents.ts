@@ -3,8 +3,7 @@ import type { Db } from '@cockpit/db';
 import type { Agent } from '@cockpit/core';
 import { CommandMethod, type FilesystemListResult, type ClaudeVersionResult, type JsonRpcError } from '@cockpit/core/protocol';
 import { agents, eq, desc } from '@cockpit/db';
-import { getAgentRegistry } from '../services/agent-registry';
-import { createInstanceTracker } from '../services/instance-tracker';
+import { getAgentRegistry, createInstanceTracker } from '../services';
 
 /**
  * Safely extract error message from JsonRpcError or any error object

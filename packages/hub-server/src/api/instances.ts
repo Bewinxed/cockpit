@@ -5,9 +5,7 @@ import type { SpawnInstanceData } from '@cockpit/core';
 import type { JsonRpcError } from '@cockpit/core/protocol';
 import { CommandMethod } from '@cockpit/core/protocol';
 import { isTokenExpired, refreshAccessToken } from '@cockpit/auth';
-import { createInstanceTracker } from '../services/instance-tracker';
-import { getAgentRegistry } from '../services/agent-registry';
-import { getBroadcastService } from '../services/broadcast';
+import { createInstanceTracker, getAgentRegistry, getBroadcastService } from '../services';
 
 /**
  * Safely extract error message from JsonRpcError or any error object

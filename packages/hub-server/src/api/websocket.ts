@@ -12,9 +12,7 @@ import {
   EventMethod,
 } from '@cockpit/core/protocol';
 import type { JsonRpcRequest, JsonRpcResponse, JsonRpcNotification } from '@cockpit/core/protocol';
-import { getAgentRegistry } from '../services/agent-registry';
-import { getBroadcastService } from '../services/broadcast';
-import { createInstanceTracker } from '../services/instance-tracker';
+import { getAgentRegistry, getBroadcastService, createInstanceTracker } from '../services';
 import { safeJsonParse } from '@cockpit/core/utils';
 import {
   extractMessageFields,

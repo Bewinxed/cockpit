@@ -70,12 +70,24 @@ export function createHubServer(options: HubOptions) {
       credentials: true,
     }))
 
-    // Health check endpoint
-    .get('/health', () => ({
-      status: 'ok',
-      timestamp: Date.now(),
-      version: '1.0.0',
-    }))
+    // Health check endpoint (with registry debug info)
+    .get('/health', () => {
+      const registry = getAgentRegistry();
+      return {
+        status: 'ok',
+        timestamp: Date.now(),
+        version: '1.0.0',
+        debug: {
+          registryTotal: registry.totalCount,
+          registryOnline: registry.onlineCount,
+          agents: registry.getAll().map(a => ({
+            machineId: a.machineId,
+            status: a.status,
+            hasWs: a.ws !== null,
+          })),
+        },
+      };
+    })
 
     // API info endpoint
     .get('/api', () => ({
