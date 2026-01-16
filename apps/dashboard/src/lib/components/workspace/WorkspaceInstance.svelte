@@ -405,6 +405,17 @@
   let interrupting = $state(false);
   let error = $state<string | null>(null);
 
+  // Track resuming state from store - when instance:started SSE arrives, this becomes false
+  const storeIsResuming = $derived(instances.isResuming(instanceId));
+
+  // Sync local restarting state with store's resuming state
+  // When instance:started arrives, the store clears isResuming, so we clear restarting too
+  $effect(() => {
+    if (!storeIsResuming && restarting) {
+      restarting = false;
+    }
+  });
+
   // Get streaming state (streamingState, transientStatus, streamingMessage derived above)
   const isStreaming = $derived(streamingState?.isStreaming ?? false);
 
@@ -903,6 +914,7 @@
     // Auto-resume if needed
     if (!isActive && (needsInstance || !clientCmd)) {
       restarting = true;
+      instances.setResuming(instanceId, true);
 
       try {
         const promptToSend = clientCmd ? '' : message;
@@ -912,24 +924,25 @@
 
         if (result.error || !result.data?.success) {
           error = (result.error as { message?: string })?.message || 'Failed to resume session';
+          instances.setResuming(instanceId, false);
+          restarting = false;
           return;
         }
 
-        instances.addMessage(instanceId, {
-          type: 'system',
-          content: 'Session resumed',
-          timestamp: new Date(),
-        });
+        // Note: "Session resumed" message is now added by instances.handleStarted()
+        // when the instance:started SSE event arrives
 
         if (!clientCmd) {
+          // Keep restarting=true until instance:started SSE arrives
           return;
         }
       } catch (err) {
         error = err instanceof Error ? err.message : 'Unknown error';
-        return;
-      } finally {
+        instances.setResuming(instanceId, false);
         restarting = false;
+        return;
       }
+      // Note: Don't clear restarting in finally - let it be cleared by $effect when instance starts
     }
 
     // Handle client-side commands
@@ -978,6 +991,7 @@
         if (needsResume) {
           sending = false;
           restarting = true;
+          instances.setResuming(instanceId, true);
 
           try {
             const resumeResult = await api.api.instances({ id: instanceId }).resume.post({
@@ -985,16 +999,14 @@
             });
             if (resumeResult.error || !resumeResult.data?.success) {
               error = (resumeResult.error as { message?: string })?.message || 'Failed to resume';
-            } else {
-              instances.addMessage(instanceId, {
-                type: 'system',
-                content: 'Session resumed',
-                timestamp: new Date(),
-              });
+              instances.setResuming(instanceId, false);
+              restarting = false;
             }
+            // Note: "Session resumed" message is now added by instances.handleStarted()
+            // Keep restarting=true until instance:started SSE arrives
           } catch (resumeErr) {
             error = resumeErr instanceof Error ? resumeErr.message : 'Failed to resume';
-          } finally {
+            instances.setResuming(instanceId, false);
             restarting = false;
           }
         } else {

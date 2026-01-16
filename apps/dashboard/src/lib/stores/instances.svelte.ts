@@ -53,6 +53,9 @@ class InstanceStore {
   // Background agent ID mapping - maps SDK internal agentId to toolUseId
   #backgroundAgentIdMap = new Map<string, string>();
 
+  // Track instances that are resuming (waiting for instance:started SSE)
+  #resumingInstances = $state(new Set<string>());
+
   // ========================================
   // Instance Getters
   // ========================================
@@ -134,8 +137,31 @@ class InstanceStore {
     this.#streamingStates.delete(id);
     this.#streamingMessages.delete(id);
     this.#statuses.delete(id);
+    this.#resumingInstances.delete(id);
     this.clearSubagentsForInstance(id);
     return this.#instances.delete(id);
+  }
+
+  // ========================================
+  // Resuming State (waiting for instance:started)
+  // ========================================
+
+  /**
+   * Mark an instance as resuming (waiting for instance:started SSE event)
+   */
+  setResuming(id: string, isResuming: boolean): void {
+    if (isResuming) {
+      this.#resumingInstances.add(id);
+    } else {
+      this.#resumingInstances.delete(id);
+    }
+  }
+
+  /**
+   * Check if an instance is currently resuming
+   */
+  isResuming(id: string): boolean {
+    return this.#resumingInstances.has(id);
   }
 
   clear(): void {
@@ -145,6 +171,7 @@ class InstanceStore {
     this.#streamingMessages.clear();
     this.#subagents.clear();
     this.#statuses.clear();
+    this.#resumingInstances.clear();
   }
 
   /** Initialize from SSR data */
@@ -827,6 +854,10 @@ class InstanceStore {
 
   /** Handle instance:started SSE event */
   handleStarted(event: InstanceStartedEvent): void {
+    // Clear resuming state - instance is now running
+    const wasResuming = this.#resumingInstances.has(event.id);
+    this.#resumingInstances.delete(event.id);
+
     const instance = this.#instances.get(event.id);
     if (instance) {
       this.#instances.set(event.id, {
@@ -849,6 +880,15 @@ class InstanceStore {
         cwd: event.cwd,
         model: event.model || undefined,
         totalCostUsd: event.totalCostUsd || 0,
+      });
+    }
+
+    // If this was a resume, add "Session resumed" message now that instance is actually ready
+    if (wasResuming) {
+      this.addMessage(event.id, {
+        type: 'system',
+        content: 'Session resumed',
+        timestamp: new Date(),
       });
     }
   }
