@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Square, Columns2, LoaderCircle } from 'lucide-svelte';
+  import { Square, Columns2, LoaderCircle, MessageSquare, GitBranch } from 'lucide-svelte';
   import { Button } from '$lib/components/ui/button';
   import { Badge } from '$lib/components/ui/badge';
   import { instances, ui, stopInstance as wsStopInstance, type Instance } from '$lib/stores';
@@ -9,6 +9,8 @@
   }
 
   let { instance }: Props = $props();
+
+  const viewMode = $derived(ui.getViewMode(instance.id));
 
   const streamingState = $derived(instances.getStreamingState(instance.id));
   let stopping = $state(false);
@@ -56,6 +58,26 @@
 
     <!-- Actions -->
     <div class="flex items-center gap-1">
+      <!-- View Mode Toggle -->
+      <div class="flex items-center border border-border rounded-md p-0.5">
+        <Button
+          variant={viewMode === 'chat' ? 'secondary' : 'ghost'}
+          size="icon-sm"
+          title="Chat view"
+          onclick={() => ui.setViewMode(instance.id, 'chat')}
+        >
+          <MessageSquare class="w-4 h-4" />
+        </Button>
+        <Button
+          variant={viewMode === 'flow' ? 'secondary' : 'ghost'}
+          size="icon-sm"
+          title="Flow view (Ctrl+G)"
+          onclick={() => ui.setViewMode(instance.id, 'flow')}
+        >
+          <GitBranch class="w-4 h-4" />
+        </Button>
+      </div>
+
       <!-- Split View -->
       <Button
         variant="ghost"

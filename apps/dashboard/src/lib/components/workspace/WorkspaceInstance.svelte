@@ -1,10 +1,11 @@
 <script lang="ts">
   import { flip } from 'svelte/animate';
-  import { fly } from 'svelte/transition';
+  import { fly, slide } from 'svelte/transition';
   import { ArrowDown, Bot, LoaderCircle } from 'lucide-svelte';
   import { Button } from '$lib/components/ui/button';
   import InstanceHeader from './InstanceHeader.svelte';
   import { ChatMessage, ChatInput, PermissionRequest, ToolGroup, SubagentBranch } from '$lib/components/features';
+  import { FlowView } from '$lib/components/features/flow';
   import { createAutoScroll } from '$lib/hooks/use-auto-scroll.svelte';
   import { ActivityGrid } from '$lib/components/ui/activity-grid';
   import {
@@ -13,6 +14,7 @@
     questions as questionsStore,
     sendQuestionResponse,
     sendInstanceMessage,
+    ui,
     type Message
   } from '$lib/stores';
   import { api } from '$lib/api';
@@ -81,6 +83,9 @@
 
   // Active subagents for this instance (for ActivityGrid progress)
   const activeSubagentCount = $derived(instances.getActiveSubagentsForInstance(instanceId).length);
+
+  // View mode (flow or chat) - persisted per instance
+  const viewMode = $derived(ui.getViewMode(instanceId));
 
   // Track which instances we've loaded messages for
   let loadedInstances = $state(new Set<string>());
@@ -1058,7 +1063,17 @@
       interrupting = false;
     }
   }
+
+  // Keyboard shortcut: Ctrl/Cmd+G to toggle view mode
+  function handleKeydown(e: KeyboardEvent) {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'g') {
+      e.preventDefault();
+      ui.toggleViewMode(instanceId);
+    }
+  }
 </script>
+
+<svelte:window onkeydown={handleKeydown} />
 
 <div class="flex-1 flex flex-col overflow-hidden relative">
   <!-- Instance Header -->
@@ -1066,15 +1081,23 @@
     <InstanceHeader {instance} />
   {/if}
 
-  <!-- Messages Area -->
-  <div
-    class="flex-1 overflow-y-auto scroll-smooth"
-    bind:this={autoScroll.ref}
-    onscroll={autoScroll.onScroll}
-  >
-    <div class="max-w-3xl mx-auto px-4 py-6 space-y-4">
-      <!-- Loading state -->
-      {#if isLoadingMessages && chatMessages.length === 0}
+  <!-- View Mode: Flow or Chat -->
+  {#if viewMode === 'flow'}
+    <!-- Flow View -->
+    <div class="flex-1 overflow-hidden" transition:slide={{ axis: 'x', duration: 200 }}>
+      <FlowView {instanceId} />
+    </div>
+  {:else}
+    <!-- Chat View (Messages Area) -->
+    <div
+      class="flex-1 overflow-y-auto scroll-smooth"
+      bind:this={autoScroll.ref}
+      onscroll={autoScroll.onScroll}
+      transition:slide={{ axis: 'x', duration: 200 }}
+    >
+      <div class="max-w-3xl mx-auto px-4 py-6 space-y-4">
+        <!-- Loading state -->
+        {#if isLoadingMessages && chatMessages.length === 0}
         <div class="flex items-center justify-center py-8 text-muted-foreground">
           <LoaderCircle class="size-5 animate-spin mr-2" />
           <span class="text-sm">Loading messages...</span>
@@ -1217,9 +1240,10 @@
           </div>
         {/if}
 
-      {/if}
+        {/if}
+      </div>
     </div>
-  </div>
+  {/if}
 
   <!-- Permission Requests (above input) -->
   {#if currentPermissions.length > 0}

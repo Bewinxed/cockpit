@@ -1,16 +1,23 @@
 {
-  "assignee": null,
+  "assignee": "bewinxed@gmail.com",
   "claim_note": "",
-  "claimed_at": null,
+  "claimed_at": "2026-01-16T23:37:22.250565Z",
   "created_at": "2026-01-16T21:22:48.167213Z",
   "depends_on": [
     "fn-12.5"
   ],
   "epic": "fn-12",
+  "evidence": {
+    "commits": [],
+    "prs": [],
+    "tests": [
+      "svelte-check"
+    ]
+  },
   "id": "fn-12.6",
   "priority": null,
   "spec_path": ".flow/tasks/fn-12.6.md",
-  "status": "todo",
+  "status": "done",
   "title": "Add flow/chat view toggle to WorkspaceInstance",
-  "updated_at": "2026-01-16T22:45:00.770316Z"
+  "updated_at": "2026-01-16T23:50:10.130992Z"
 }

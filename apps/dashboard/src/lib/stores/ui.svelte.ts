@@ -1,5 +1,7 @@
-import { SvelteSet } from 'svelte/reactivity';
+import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import type { SplitViewState, SidebarFilter, SidebarFilterState } from './types';
+
+export type ViewMode = 'chat' | 'flow';
 
 /**
  * UI store - manages UI state (selection, sidebar, split view, etc.)
@@ -37,6 +39,12 @@ class UIStore {
   get collapsedProjects() {
     return this.#collapsedProjects;
   }
+
+  // View mode per instance (flow vs chat)
+  #instanceViewMode = new SvelteMap<string, ViewMode>();
+
+  // Flow view state preservation (zoom, pan)
+  #instanceFlowState = new SvelteMap<string, { zoom: number; pan: { x: number; y: number } }>();
 
   // ========================================
   // Instance Selection
@@ -156,6 +164,36 @@ class UIStore {
   /** Close command palette */
   closeCommandPalette(): void {
     this.commandPaletteOpen = false;
+  }
+
+  // ========================================
+  // Instance View Mode
+  // ========================================
+
+  /** Get view mode for an instance (defaults to 'flow') */
+  getViewMode(instanceId: string): ViewMode {
+    return this.#instanceViewMode.get(instanceId) ?? 'flow';
+  }
+
+  /** Set view mode for an instance */
+  setViewMode(instanceId: string, mode: ViewMode): void {
+    this.#instanceViewMode.set(instanceId, mode);
+  }
+
+  /** Toggle view mode between flow and chat */
+  toggleViewMode(instanceId: string): void {
+    const current = this.getViewMode(instanceId);
+    this.setViewMode(instanceId, current === 'flow' ? 'chat' : 'flow');
+  }
+
+  /** Get saved flow state (zoom, pan) for restoration */
+  getFlowState(instanceId: string): { zoom: number; pan: { x: number; y: number } } | undefined {
+    return this.#instanceFlowState.get(instanceId);
+  }
+
+  /** Save flow state for later restoration */
+  setFlowState(instanceId: string, state: { zoom: number; pan: { x: number; y: number } }): void {
+    this.#instanceFlowState.set(instanceId, state);
   }
 }
 

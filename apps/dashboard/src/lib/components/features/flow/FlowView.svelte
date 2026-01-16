@@ -10,9 +10,11 @@
     type DefaultEdgeOptions,
     BackgroundVariant
   } from '@xyflow/svelte';
-  import { instances } from '$lib/stores';
+  import { instances, ui } from '$lib/stores';
   import FlowContextMenu from './FlowContextMenu.svelte';
   import { nodeTypes } from './nodes';
+  import { transformMessagesToFlow } from '$lib/utils/flow-transform';
+  import { applyLayout } from '$lib/utils/flow-layout';
 
   interface Props {
     instanceId: string;
@@ -20,9 +22,37 @@
 
   let { instanceId }: Props = $props();
 
+  // Get messages from store
+  const messages = $derived(instances.getMessages(instanceId));
+
+  // Get active subagents for subagent node data
+  const subagentsMap = $derived.by(() => {
+    const subagents = instances.getActiveSubagentsForInstance(instanceId);
+    return new Map(subagents.map(s => [s.toolUseId, s]));
+  });
+
+  // Check if any tool is currently streaming
+  const streamingMessage = $derived(instances.getStreamingMessage(instanceId));
+  const streamingToolId = $derived(streamingMessage?.sdkUuid);
+
+  // Transform messages to flow data with layout
+  const flowData = $derived.by(() => {
+    const rawFlow = transformMessagesToFlow(messages, instanceId, {
+      subagents: subagentsMap,
+      streamingToolId,
+    });
+    return applyLayout(rawFlow.nodes, rawFlow.edges);
+  });
+
   // Use $state.raw() for performance with svelte-flow
   let nodes = $state.raw<Node[]>([]);
   let edges = $state.raw<Edge[]>([]);
+
+  // Update nodes/edges when flowData changes
+  $effect(() => {
+    nodes = flowData.nodes;
+    edges = flowData.edges;
+  });
 
   // Context menu state
   let contextMenu = $state<{ x: number; y: number; nodeId: string } | null>(null);
@@ -33,9 +63,6 @@
     animated: false,
     style: 'stroke-width: 2px;'
   };
-
-  // Branch colors from theme
-  const branchColors = ['#3b82f6', '#22c55e', '#a855f7', '#f59e0b']; // blue, green, purple, amber
 
   // Get instance for cost display
   const instance = $derived(instances.get(instanceId));
@@ -76,8 +103,8 @@
         console.log('Branch from:', nodeId);
         break;
       case 'jump':
-        // TODO: Switch to chat view and scroll to this message
-        console.log('Jump to chat:', nodeId);
+        // Switch to chat view (scrolling to message is future enhancement)
+        ui.setViewMode(instanceId, 'chat');
         break;
     }
     closeContextMenu();
