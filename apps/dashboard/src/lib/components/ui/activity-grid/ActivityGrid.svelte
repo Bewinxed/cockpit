@@ -67,12 +67,17 @@
 			return { state: 'starting', activeDots: [0, 1, 2, 3, 4, 5, 6, 7, 8], pattern: 'sequential' };
 		}
 
+		// Initializing state - SDK init received, Claude is about to respond
+		if (streaming?.isInitializing) {
+			return { state: 'thinking', activeDots: [0, 1, 2, 3, 4, 5, 6, 7, 8], pattern: 'ripple' };
+		}
+
 		// Check for tool use in progress
 		if (last?.type === 'tool_use' && last?.metadata?.toolStatus === 'pending') {
 			return { state: 'tool_use', activeDots: [0, 2, 4, 6, 8], pattern: 'orbit' };
 		}
 
-		// Streaming/thinking state
+		// Streaming state - actively receiving response
 		if (streaming?.isStreaming) {
 			return { state: 'streaming', activeDots: [0, 1, 2, 3, 4, 5, 6, 7, 8], pattern: 'ripple' };
 		}
@@ -92,11 +97,14 @@
 		return { state: 'idle', activeDots: [4], pattern: 'pulse' };
 	}
 
-	const gridState = $derived(
-		activity
+	const gridState = $derived.by(() => {
+		const result = activity
 			? { state: activity, activeDots: [0, 1, 2, 3, 4, 5, 6, 7, 8], pattern: 'ripple' as const }
-			: computeGridState(streamingState, lastMessage, instance?.status || null, isResuming, isStarting, activeSubagentCount)
-	);
+			: computeGridState(streamingState, lastMessage, instance?.status || null, isResuming, isStarting, activeSubagentCount);
+
+		console.log(`[ActivityGrid ${new Date().toISOString()}] state=${result.state} instanceStatus=${instance?.status} isResuming=${isResuming} isStarting=${isStarting} isInitializing=${streamingState?.isInitializing} isStreaming=${streamingState?.isStreaming}`);
+		return result;
+	});
 
 	// Dot configuration for 3x3 grid with distance from center for ripple effect
 	// Grid layout:

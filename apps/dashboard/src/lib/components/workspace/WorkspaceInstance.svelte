@@ -209,16 +209,9 @@
             }
           }
         }
-      } else if (dbMsg.sdkType === 'system' && dbMsg.sdkSubtype === 'init') {
-        result.push({
-          id: dbMsg.id,
-          instanceId,
-          type: 'system',
-          content: `Session started with ${dbMsg.model || 'Claude'}`,
-          timestamp: new Date(dbMsg.timestamp),
-          sdkUuid,
-        });
       }
+      // Skip 'init' system messages - ActivityGrid provides visual feedback
+      // Model info is shown in instance header
     }
     return result;
   }
@@ -421,6 +414,7 @@
 
   // Get streaming state (streamingState, transientStatus, streamingMessage derived above)
   const isStreaming = $derived(streamingState?.isStreaming ?? false);
+  const isInitializing = $derived(streamingState?.isInitializing ?? false);
 
   // Streaming message text for progressive display
   const streamingText = $derived.by(() => {
@@ -919,6 +913,19 @@
       restarting = true;
       instances.setResuming(instanceId, true);
 
+      // Add user message IMMEDIATELY for visual feedback (before resume API call)
+      if (!clientCmd) {
+        instances.addMessage(instanceId, {
+          type: 'user',
+          content: message,
+          timestamp: new Date(),
+        });
+        // Force scroll to bottom after user sends a message
+        autoScroll.scrollToBottom(true);
+        // Set isInitializing so ActivityGrid shows "Thinking..." after instance:started arrives
+        instances.updateStreamingState(instanceId, { isInitializing: true });
+      }
+
       try {
         const promptToSend = clientCmd ? '' : message;
         const result = await api.api.instances({ id: instanceId }).resume.post({
@@ -928,6 +935,7 @@
         if (result.error || !result.data?.success) {
           error = (result.error as { message?: string })?.message || 'Failed to resume session';
           instances.setResuming(instanceId, false);
+          instances.updateStreamingState(instanceId, { isInitializing: false });
           restarting = false;
           return;
         }
@@ -942,6 +950,7 @@
       } catch (err) {
         error = err instanceof Error ? err.message : 'Unknown error';
         instances.setResuming(instanceId, false);
+        instances.updateStreamingState(instanceId, { isInitializing: false });
         restarting = false;
         return;
       }
@@ -961,9 +970,9 @@
       return;
     }
 
-    // Send message normally
+    // Send message normally - set isInitializing to show "Thinking..." while waiting for response
     sending = true;
-    instances.updateStreamingState(instanceId, { isStreaming: true });
+    instances.updateStreamingState(instanceId, { isInitializing: true });
 
     instances.addMessage(instanceId, {
       type: 'user',
@@ -1003,23 +1012,26 @@
             if (resumeResult.error || !resumeResult.data?.success) {
               error = (resumeResult.error as { message?: string })?.message || 'Failed to resume';
               instances.setResuming(instanceId, false);
+              instances.updateStreamingState(instanceId, { isInitializing: false });
               restarting = false;
             }
             // Note: "Session resumed" message is now added by instances.handleStarted()
             // Keep restarting=true until instance:started SSE arrives
+            // isInitializing stays true (was set when sending) so ActivityGrid shows "Thinking..." after instance:started
           } catch (resumeErr) {
             error = resumeErr instanceof Error ? resumeErr.message : 'Failed to resume';
             instances.setResuming(instanceId, false);
+            instances.updateStreamingState(instanceId, { isInitializing: false });
             restarting = false;
           }
         } else {
           error = errMsg;
-          instances.updateStreamingState(instanceId, { isStreaming: false });
+          instances.updateStreamingState(instanceId, { isStreaming: false, isInitializing: false });
         }
       }
     } catch (err) {
       error = err instanceof Error ? err.message : 'Unknown error';
-      instances.updateStreamingState(instanceId, { isStreaming: false });
+      instances.updateStreamingState(instanceId, { isStreaming: false, isInitializing: false });
     } finally {
       sending = false;
     }
@@ -1170,7 +1182,7 @@
         {/each}
 
         <!-- Streaming/Loading Indicator -->
-        {#if sending || restarting || isStreaming}
+        {#if sending || restarting || isStreaming || isInitializing || instance?.status === 'starting'}
           <div
             class="flex items-start gap-3"
             in:fly={{ y: 10, duration: 250, delay: 50 }}

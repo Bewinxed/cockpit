@@ -97,6 +97,22 @@ globalThis.__wsReconnectTimeout ??= null;
 globalThis.__wsReconnectAttempts ??= 0;
 globalThis.__wsBaseUrl ??= '';
 
+// HMR: Invalidate stale adapter on module reload to prevent method mismatch
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    // Close connection on HMR - will be re-established by the new module
+    if (globalThis.__wsSocket) {
+      globalThis.__wsSocket.close();
+      globalThis.__wsSocket = null;
+    }
+    globalThis.__wsAdapter = null;
+    if (globalThis.__wsReconnectTimeout) {
+      clearTimeout(globalThis.__wsReconnectTimeout);
+      globalThis.__wsReconnectTimeout = null;
+    }
+  });
+}
+
 // ============================================
 // SSR INITIALIZATION
 // ============================================

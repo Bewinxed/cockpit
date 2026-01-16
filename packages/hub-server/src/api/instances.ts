@@ -328,8 +328,15 @@ export function createInstanceRoutes(db: Db) {
         }
 
         // Save user message and update last prompt
+        // Format as SDK-like message for consistent extraction
         await tracker.saveMessage(params.id, {
-          content: { type: 'user', content: body.message },
+          content: {
+            type: 'user',
+            message: {
+              role: 'user',
+              content: [{ type: 'text', text: body.message }],
+            },
+          },
           timestamp: new Date(),
         });
 
@@ -816,16 +823,25 @@ export function createInstanceRoutes(db: Db) {
         }
 
         // Save user message for resume prompt (only if not already saved above)
+        // Format as SDK-like message for consistent extraction
         if (body?.prompt && !messageSaved) {
           await tracker.saveMessage(params.id, {
-            content: { type: 'user', content: body.prompt },
+            content: {
+              type: 'user',
+              message: {
+                role: 'user',
+                content: [{ type: 'text', text: body.prompt }],
+              },
+            },
             timestamp: new Date(),
           });
         }
 
         // Get updated instance and broadcast
         const updated = await tracker.get(params.id);
-        getDashboardRegistry().broadcast('instance:resumed', updated);
+        if (updated) {
+          getDashboardRegistry().broadcast('instance:resumed', updated);
+        }
 
         return {
           success: true,

@@ -335,6 +335,8 @@ function processSystemMessage(
 ): void {
   switch (subtype) {
     case 'init': {
+      // No chat message needed - ActivityGrid provides visual feedback
+      // Set initializing state for ActivityGrid 'thinking' animation
       const initMsg = rawMsg as {
         model?: string;
         session_id?: string;
@@ -342,19 +344,12 @@ function processSystemMessage(
         tools?: string[];
         mcp_servers?: Array<{ name: string; status: string }>;
       };
-      instances.addMessage(instanceId, {
-        type: 'system',
-        content: `Session started with ${initMsg.model || 'Claude'}`,
-        timestamp: new Date(),
-        metadata: {
-          subtype: 'init',
-          sessionId: initMsg.session_id,
-          model: initMsg.model,
-          cwd: initMsg.cwd,
-          tools: initMsg.tools,
-          mcpServers: initMsg.mcp_servers,
-        },
-      });
+      // Update instance model if provided
+      if (initMsg.model) {
+        instances.updateModel(instanceId, initMsg.model);
+      }
+      // Trigger 'thinking' state in ActivityGrid - Claude is ready, about to respond
+      instances.updateStreamingState(instanceId, { isInitializing: true });
       break;
     }
 

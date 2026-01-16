@@ -208,6 +208,17 @@ async function handleCommand(
         throw new Error(`Instance ${instanceId} not found`);
       }
 
+      // Store user message in database before sending
+      // Format as SDK-like message for consistent extraction
+      const userMessageContent = {
+        type: 'user',
+        message: {
+          role: 'user',
+          content: [{ type: 'text', text: message }],
+        },
+      };
+      await instanceTracker.saveMessage(instanceId, { content: userMessageContent });
+
       // Send message to agent
       const response = await getAgentRegistry().sendToMachine(instance.machineId, 'instance.send', {
         instanceId,

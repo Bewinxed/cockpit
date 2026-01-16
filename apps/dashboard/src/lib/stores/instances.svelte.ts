@@ -341,6 +341,8 @@ class InstanceStore {
 
   /** Get streaming state for an instance */
   getStreamingState(instanceId: string): StreamingState | null {
+    // Access the map size first to ensure reactive tracking on mutations
+    void this.#streamingStates.size;
     return this.#streamingStates.get(instanceId) || null;
   }
 
@@ -349,6 +351,7 @@ class InstanceStore {
     const existing = this.#streamingStates.get(instanceId) || {
       instanceId,
       isStreaming: false,
+      isInitializing: false,
       inputTokens: 0,
       outputTokens: 0,
       sessionInputTokens: 0,
@@ -356,7 +359,13 @@ class InstanceStore {
       costUsd: 0,
       lastUpdate: new Date(),
     };
-    this.#streamingStates.set(instanceId, { ...existing, ...update, lastUpdate: new Date() });
+    // When streaming starts, clear initializing state
+    const newState = { ...existing, ...update, lastUpdate: new Date() };
+    if (update.isStreaming) {
+      newState.isInitializing = false;
+    }
+    console.log('[StreamingState]', instanceId.slice(0, 8), update, '→', { isStreaming: newState.isStreaming, isInitializing: newState.isInitializing });
+    this.#streamingStates.set(instanceId, newState);
   }
 
   /** Clear streaming state */
@@ -855,7 +864,6 @@ class InstanceStore {
   /** Handle instance:started SSE event */
   handleStarted(event: InstanceStartedEvent): void {
     // Clear resuming state - instance is now running
-    const wasResuming = this.#resumingInstances.has(event.id);
     this.#resumingInstances.delete(event.id);
 
     const instance = this.#instances.get(event.id);
@@ -883,14 +891,9 @@ class InstanceStore {
       });
     }
 
-    // If this was a resume, add "Session resumed" message now that instance is actually ready
-    if (wasResuming) {
-      this.addMessage(event.id, {
-        type: 'system',
-        content: 'Session resumed',
-        timestamp: new Date(),
-      });
-    }
+    // Note: We don't add a separate "Session resumed" message here.
+    // The SDK init message ("Session started with {model}") provides sufficient feedback.
+    // This avoids the UX gap between two separate system messages.
   }
 
   /** Handle instance:stopped SSE event */
@@ -979,6 +982,7 @@ class InstanceStore {
     this.#streamingStates.set(event.instanceId, {
       instanceId: event.instanceId,
       isStreaming: existing?.isStreaming ?? false,
+      isInitializing: existing?.isInitializing ?? false,
       inputTokens: event.inputTokens,
       outputTokens: event.outputTokens,
       sessionInputTokens: (existing?.sessionInputTokens || 0) + event.inputTokens,
@@ -995,6 +999,17 @@ class InstanceStore {
       this.#instances.set(event.instanceId, {
         ...instance,
         model: event.model,
+      });
+    }
+  }
+
+  /** Update instance model directly (used by SDK init message) */
+  updateModel(instanceId: string, model: string): void {
+    const instance = this.#instances.get(instanceId);
+    if (instance) {
+      this.#instances.set(instanceId, {
+        ...instance,
+        model,
       });
     }
   }

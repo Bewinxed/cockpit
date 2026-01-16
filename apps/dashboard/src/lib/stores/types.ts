@@ -134,6 +134,8 @@ export interface MessageMetadata {
 export interface StreamingState {
   instanceId: string;
   isStreaming: boolean;
+  /** SDK init received, Claude is about to respond */
+  isInitializing: boolean;
   inputTokens: number;
   outputTokens: number;
   sessionInputTokens: number;

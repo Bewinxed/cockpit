@@ -128,12 +128,24 @@ function mapSdkType(type: string | undefined): SdkMessageType {
 
 /**
  * Extract text content from message content blocks
+ * Handles both array of content blocks and plain string content (for user messages)
  */
-function extractTextContent(content: unknown[] | undefined): string | null {
+function extractTextContent(content: unknown): string | null {
+  // Handle plain string content (common for user messages)
+  if (typeof content === 'string') {
+    return content || null;
+  }
+
+  // Handle array of content blocks
   if (!content || !Array.isArray(content)) return null;
 
   const textParts: string[] = [];
   for (const block of content) {
+    // Handle string blocks in array
+    if (typeof block === 'string') {
+      textParts.push(block);
+      continue;
+    }
     if (typeof block === 'object' && block !== null && 'type' in block) {
       const typedBlock = block as ContentBlock;
       if (typedBlock.type === 'text' && 'text' in typedBlock) {
