@@ -1,0 +1,23 @@
+{
+  "assignee": "bewinxed@gmail.com",
+  "claim_note": "",
+  "claimed_at": "2026-01-16T22:55:57.495989Z",
+  "created_at": "2026-01-16T21:22:12.702328Z",
+  "depends_on": [],
+  "epic": "fn-12",
+  "evidence": {
+    "commits": [
+      "3d1cc64dc23cb7970e035001aaa704d35d5356aa"
+    ],
+    "prs": [],
+    "tests": [
+      "bun run dev:dashboard"
+    ]
+  },
+  "id": "fn-12.1",
+  "priority": null,
+  "spec_path": ".flow/tasks/fn-12.1.md",
+  "status": "done",
+  "title": "Install @xyflow/svelte and dagre",
+  "updated_at": "2026-01-16T23:03:06.035804Z"
+}

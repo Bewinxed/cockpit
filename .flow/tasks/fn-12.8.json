@@ -1,0 +1,16 @@
+{
+  "assignee": null,
+  "claim_note": "",
+  "claimed_at": null,
+  "created_at": "2026-01-16T21:22:48.310110Z",
+  "depends_on": [
+    "fn-12.7"
+  ],
+  "epic": "fn-12",
+  "id": "fn-12.8",
+  "priority": null,
+  "spec_path": ".flow/tasks/fn-12.8.md",
+  "status": "todo",
+  "title": "Implement subagent branch nodes with expansion",
+  "updated_at": "2026-01-16T21:26:31.240970Z"
+}

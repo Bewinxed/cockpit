@@ -1,5 +1,6 @@
 <script lang="ts">
   import '../app.css';
+  import '@xyflow/svelte/dist/style.css';
   import { onMount, onDestroy } from 'svelte';
   import { toast } from 'svelte-sonner';
   import { HUB_URL } from '$lib/config';

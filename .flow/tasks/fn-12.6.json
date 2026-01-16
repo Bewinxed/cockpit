@@ -1,0 +1,16 @@
+{
+  "assignee": null,
+  "claim_note": "",
+  "claimed_at": null,
+  "created_at": "2026-01-16T21:22:48.167213Z",
+  "depends_on": [
+    "fn-12.5"
+  ],
+  "epic": "fn-12",
+  "id": "fn-12.6",
+  "priority": null,
+  "spec_path": ".flow/tasks/fn-12.6.md",
+  "status": "todo",
+  "title": "Add flow/chat view toggle to WorkspaceInstance",
+  "updated_at": "2026-01-16T22:45:00.770316Z"
+}

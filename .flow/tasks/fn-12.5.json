@@ -1,0 +1,17 @@
+{
+  "assignee": null,
+  "claim_note": "",
+  "claimed_at": null,
+  "created_at": "2026-01-16T21:22:12.982423Z",
+  "depends_on": [
+    "fn-12.2",
+    "fn-12.4"
+  ],
+  "epic": "fn-12",
+  "id": "fn-12.5",
+  "priority": null,
+  "spec_path": ".flow/tasks/fn-12.5.md",
+  "status": "todo",
+  "title": "Integrate dagre auto-layout",
+  "updated_at": "2026-01-16T21:25:00.726795Z"
+}
