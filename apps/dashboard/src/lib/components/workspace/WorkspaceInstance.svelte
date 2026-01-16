@@ -1178,9 +1178,11 @@
             {:else}
               <!-- Activity indicator bubble when no text yet -->
               <div class="bg-card border border-border rounded-2xl rounded-bl-sm px-4 py-3 shadow-sm flex items-center gap-3">
-                <ActivityGrid {instanceId} size="sm" />
+                <ActivityGrid {instanceId} size="sm" isResuming={restarting} isStarting={instance?.status === 'starting'} />
                 {#if restarting}
                   <span class="text-sm text-muted-foreground">Resuming session...</span>
+                {:else if instance?.status === 'starting'}
+                  <span class="text-sm text-muted-foreground">Starting session...</span>
                 {:else}
                   <span class="text-sm text-muted-foreground">Thinking...</span>
                 {/if}

@@ -8,13 +8,19 @@
 		| 'tool_use'
 		| 'permission'
 		| 'error'
-		| 'success';
+		| 'success'
+		| 'resuming'
+		| 'starting';
 
 	interface Props {
 		instanceId?: string;
 		size?: 'sm' | 'md' | 'lg';
 		/** Override the activity state manually */
 		activity?: GridActivity;
+		/** Session is being resumed */
+		isResuming?: boolean;
+		/** Instance is starting up */
+		isStarting?: boolean;
 	}
 
 	// Use props object to avoid state_referenced_locally warning
@@ -22,6 +28,8 @@
 	const size = $derived(props.size ?? 'md');
 	const activity = $derived(props.activity);
 	const instanceId = $derived(props.instanceId);
+	const isResuming = $derived(props.isResuming ?? false);
+	const isStarting = $derived(props.isStarting ?? false);
 
 	// Derive current state from store
 	const streamingState = $derived(instanceId ? instances.getStreamingState(instanceId) : null);
@@ -35,11 +43,23 @@
 	function computeGridState(
 		streaming: StreamingState | null,
 		last: Message | null,
-		instanceStatus: string | null
-	): { state: GridActivity; activeDots: number[]; pattern: 'ripple' | 'wave' | 'orbit' | 'pulse' | 'shake' } {
+		instanceStatus: string | null,
+		resuming: boolean,
+		starting: boolean
+	): { state: GridActivity; activeDots: number[]; pattern: 'ripple' | 'wave' | 'orbit' | 'pulse' | 'shake' | 'breathe' | 'sequential' } {
 		// Error state takes priority
 		if (instanceStatus === 'error') {
 			return { state: 'error', activeDots: [0, 1, 2, 3, 4, 5, 6, 7, 8], pattern: 'shake' };
+		}
+
+		// Resuming state - slower breathing pattern
+		if (resuming) {
+			return { state: 'resuming', activeDots: [0, 1, 2, 3, 4, 5, 6, 7, 8], pattern: 'breathe' };
+		}
+
+		// Starting state - sequential activation
+		if (starting || instanceStatus === 'starting') {
+			return { state: 'starting', activeDots: [0, 1, 2, 3, 4, 5, 6, 7, 8], pattern: 'sequential' };
 		}
 
 		// Check for tool use in progress
@@ -65,7 +85,7 @@
 	const gridState = $derived(
 		activity
 			? { state: activity, activeDots: [0, 1, 2, 3, 4, 5, 6, 7, 8], pattern: 'ripple' as const }
-			: computeGridState(streamingState, lastMessage, instance?.status || null)
+			: computeGridState(streamingState, lastMessage, instance?.status || null, isResuming, isStarting)
 	);
 
 	// Dot configuration for 3x3 grid with distance from center for ripple effect
@@ -140,6 +160,12 @@
 	.activity-grid[data-state='success'] {
 		--dot-color: var(--chart-2);
 	}
+	.activity-grid[data-state='resuming'] {
+		--dot-color: var(--chart-3);
+	}
+	.activity-grid[data-state='starting'] {
+		--dot-color: var(--primary);
+	}
 
 	/* Base dot styles */
 	.activity-dot {
@@ -195,6 +221,18 @@
 	.activity-grid[data-state='success'] .activity-dot {
 		animation: activity-success 0.6s ease-out forwards;
 		animation-delay: calc(var(--delay) * 0.5);
+	}
+
+	/* Resuming - slow breathing pattern */
+	.activity-grid[data-state='resuming'] .activity-dot {
+		animation: activity-breathe-slow 2.5s ease-in-out infinite;
+		animation-delay: calc(var(--delay) * 0.8);
+	}
+
+	/* Starting - sequential wave activation */
+	.activity-grid[data-state='starting'] .activity-dot {
+		animation: activity-sequential 1.5s ease-in-out infinite;
+		animation-delay: calc(var(--index) * 150ms);
 	}
 
 	/* Keyframe animations */
@@ -291,6 +329,37 @@
 		100% {
 			transform: scale(1);
 			opacity: 0.8;
+		}
+	}
+
+	@keyframes activity-breathe-slow {
+		0%,
+		100% {
+			transform: scale(0.6);
+			opacity: 0.3;
+		}
+		50% {
+			transform: scale(1);
+			opacity: 0.7;
+		}
+	}
+
+	@keyframes activity-sequential {
+		0% {
+			transform: scale(0.5);
+			opacity: 0.2;
+		}
+		30% {
+			transform: scale(1.2);
+			opacity: 1;
+		}
+		60% {
+			transform: scale(0.8);
+			opacity: 0.6;
+		}
+		100% {
+			transform: scale(0.5);
+			opacity: 0.2;
 		}
 	}
 </style>
