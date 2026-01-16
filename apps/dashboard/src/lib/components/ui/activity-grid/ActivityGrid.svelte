@@ -10,7 +10,8 @@
 		| 'error'
 		| 'success'
 		| 'resuming'
-		| 'starting';
+		| 'starting'
+		| 'subagent';
 
 	interface Props {
 		instanceId?: string;
@@ -21,6 +22,8 @@
 		isResuming?: boolean;
 		/** Instance is starting up */
 		isStarting?: boolean;
+		/** Number of active subagents running */
+		activeSubagentCount?: number;
 	}
 
 	// Use props object to avoid state_referenced_locally warning
@@ -30,6 +33,7 @@
 	const instanceId = $derived(props.instanceId);
 	const isResuming = $derived(props.isResuming ?? false);
 	const isStarting = $derived(props.isStarting ?? false);
+	const activeSubagentCount = $derived(props.activeSubagentCount ?? 0);
 
 	// Derive current state from store
 	const streamingState = $derived(instanceId ? instances.getStreamingState(instanceId) : null);
@@ -45,8 +49,9 @@
 		last: Message | null,
 		instanceStatus: string | null,
 		resuming: boolean,
-		starting: boolean
-	): { state: GridActivity; activeDots: number[]; pattern: 'ripple' | 'wave' | 'orbit' | 'pulse' | 'shake' | 'breathe' | 'sequential' } {
+		starting: boolean,
+		subagentCount: number
+	): { state: GridActivity; activeDots: number[]; pattern: 'ripple' | 'wave' | 'orbit' | 'pulse' | 'shake' | 'breathe' | 'sequential' | 'branch' } {
 		// Error state takes priority
 		if (instanceStatus === 'error') {
 			return { state: 'error', activeDots: [0, 1, 2, 3, 4, 5, 6, 7, 8], pattern: 'shake' };
@@ -72,6 +77,11 @@
 			return { state: 'streaming', activeDots: [0, 1, 2, 3, 4, 5, 6, 7, 8], pattern: 'ripple' };
 		}
 
+		// Subagent activity - show when subagents are running (lower priority than direct streaming)
+		if (subagentCount > 0) {
+			return { state: 'subagent', activeDots: [0, 2, 4, 6, 8], pattern: 'branch' };
+		}
+
 		// Success flash after result
 		if (last?.type === 'assistant' && !streaming?.isStreaming) {
 			// Brief success state - will transition to idle
@@ -85,7 +95,7 @@
 	const gridState = $derived(
 		activity
 			? { state: activity, activeDots: [0, 1, 2, 3, 4, 5, 6, 7, 8], pattern: 'ripple' as const }
-			: computeGridState(streamingState, lastMessage, instance?.status || null, isResuming, isStarting)
+			: computeGridState(streamingState, lastMessage, instance?.status || null, isResuming, isStarting, activeSubagentCount)
 	);
 
 	// Dot configuration for 3x3 grid with distance from center for ripple effect
@@ -166,6 +176,9 @@
 	.activity-grid[data-state='starting'] {
 		--dot-color: var(--primary);
 	}
+	.activity-grid[data-state='subagent'] {
+		--dot-color: var(--chart-5);
+	}
 
 	/* Base dot styles */
 	.activity-dot {
@@ -233,6 +246,12 @@
 	.activity-grid[data-state='starting'] .activity-dot {
 		animation: activity-sequential 1.5s ease-in-out infinite;
 		animation-delay: calc(var(--index) * 150ms);
+	}
+
+	/* Subagent - branching/forking pattern for parallel work */
+	.activity-grid[data-state='subagent'] .activity-dot.active {
+		animation: activity-branch 1.2s ease-in-out infinite;
+		animation-delay: calc(var(--index) * 120ms);
 	}
 
 	/* Keyframe animations */
@@ -360,6 +379,29 @@
 		100% {
 			transform: scale(0.5);
 			opacity: 0.2;
+		}
+	}
+
+	@keyframes activity-branch {
+		0% {
+			transform: scale(0.6) translateY(0);
+			opacity: 0.4;
+		}
+		25% {
+			transform: scale(1.1) translateY(-1px);
+			opacity: 1;
+		}
+		50% {
+			transform: scale(0.9) translateY(0);
+			opacity: 0.7;
+		}
+		75% {
+			transform: scale(1.05) translateY(1px);
+			opacity: 0.9;
+		}
+		100% {
+			transform: scale(0.6) translateY(0);
+			opacity: 0.4;
 		}
 	}
 </style>

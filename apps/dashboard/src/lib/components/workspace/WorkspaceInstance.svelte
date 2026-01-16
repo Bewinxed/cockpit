@@ -77,6 +77,9 @@
   // Transient status (compacting, etc.)
   const transientStatus = $derived(instances.getStatus(instanceId));
 
+  // Active subagents for this instance (for ActivityGrid progress)
+  const activeSubagentCount = $derived(instances.getActiveSubagentsForInstance(instanceId).length);
+
   // Track which instances we've loaded messages for
   let loadedInstances = $state(new Set<string>());
   let isLoadingMessages = $state(false);
@@ -1190,11 +1193,13 @@
             {:else}
               <!-- Activity indicator bubble when no text yet -->
               <div class="bg-card border border-border rounded-2xl rounded-bl-sm px-4 py-3 shadow-sm flex items-center gap-3">
-                <ActivityGrid {instanceId} size="sm" isResuming={restarting} isStarting={instance?.status === 'starting'} />
+                <ActivityGrid {instanceId} size="sm" isResuming={restarting} isStarting={instance?.status === 'starting'} {activeSubagentCount} />
                 {#if restarting}
                   <span class="text-sm text-muted-foreground">Resuming session...</span>
                 {:else if instance?.status === 'starting'}
                   <span class="text-sm text-muted-foreground">Starting session...</span>
+                {:else if activeSubagentCount > 0}
+                  <span class="text-sm text-muted-foreground">Running {activeSubagentCount} subagent{activeSubagentCount > 1 ? 's' : ''}...</span>
                 {:else}
                   <span class="text-sm text-muted-foreground">Thinking...</span>
                 {/if}
