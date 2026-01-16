@@ -3,9 +3,8 @@
   import { Square, Copy, Trash2, FolderOpen, Columns2 } from 'lucide-svelte';
   import * as SidebarUI from '$lib/components/ui/sidebar';
   import * as ContextMenu from '$lib/components/ui/context-menu';
-  import { instances, ui, type Instance } from '$lib/stores';
+  import { instances, ui, stopInstance as wsStopInstance, type Instance } from '$lib/stores';
   import { openInstance, getTabsFromUrl, closeTab } from '$lib/stores/url-sync.svelte';
-  import { api } from '$lib/api';
 
   interface Props {
     instance: Instance;
@@ -18,7 +17,7 @@
 
   async function stopInstance() {
     try {
-      await api.api.instances({ id: instance.id }).delete();
+      await wsStopInstance({ instanceId: instance.id });
     } catch (error) {
       console.error('Failed to stop instance:', error);
     }

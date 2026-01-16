@@ -2,8 +2,7 @@
   import { Square, Columns2, LoaderCircle } from 'lucide-svelte';
   import { Button } from '$lib/components/ui/button';
   import { Badge } from '$lib/components/ui/badge';
-  import { instances, ui, type Instance } from '$lib/stores';
-  import { api } from '$lib/api';
+  import { instances, ui, stopInstance as wsStopInstance, type Instance } from '$lib/stores';
 
   interface Props {
     instance: Instance;
@@ -17,7 +16,7 @@
   async function stopInstance() {
     stopping = true;
     try {
-      await api.api.instances({ id: instance.id }).delete();
+      await wsStopInstance({ instanceId: instance.id });
     } catch (error) {
       console.error('Failed to stop instance:', error);
     } finally {

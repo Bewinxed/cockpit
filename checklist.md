@@ -28,7 +28,7 @@ Cockpit - Feature Checklist
   | Sync instance state on agent reconnect | ❌ Missing  | Orphaned instances stay "running"           |
   | Instance cost tracking                 | ❓ Untested |                                             |
 
-  Real-time Updates (SSE)
+  Real-time Updates (WebSocket)
 
   | Feature                         | Status      | Issue                              |
   |---------------------------------|-------------|------------------------------------|

@@ -5,7 +5,7 @@
  * Wire format: { type: string, data: T, id?: string }
  *
  * This is separate from agent WebSocket (/ws/hub) which uses JSON-RPC 2.0.
- * Dashboard WebSocket will eventually replace SSE for real-time events.
+ * Dashboard WebSocket handles real-time events and RPC commands.
  */
 
 import { Elysia } from 'elysia';
@@ -206,6 +206,31 @@ async function handleCommand(
       const instance = await instanceTracker.get(instanceId);
       if (!instance) {
         throw new Error(`Instance ${instanceId} not found`);
+      }
+
+      // Query machine for live status before sending
+      const statusResponse = await getAgentRegistry().sendToMachine(
+        instance.machineId,
+        'instance.status',
+        { instanceId }
+      );
+
+      // If machine doesn't have the instance or it's not running, return error with code
+      if ('error' in statusResponse && statusResponse.error) {
+        return {
+          success: false,
+          error: 'Instance not running on machine',
+          code: 'INSTANCE_NOT_RUNNING',
+        };
+      }
+
+      const liveStatus = (statusResponse.result as { state?: string })?.state;
+      if (liveStatus !== 'running') {
+        return {
+          success: false,
+          error: `Instance is not running (status: ${liveStatus || 'unknown'})`,
+          code: 'INSTANCE_NOT_RUNNING',
+        };
       }
 
       // Store user message in database before sending

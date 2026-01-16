@@ -77,10 +77,10 @@ class QuestionStore {
   }
 
   // ========================================
-  // SSE Event Handlers
+  // WebSocket Event Handlers
   // ========================================
 
-  /** Handle question:request SSE event */
+  /** Handle question:request WebSocket event */
   handleRequest(event: QuestionRequestEvent): void {
     // Store in pending questions map
     this.#questions.set(event.requestId, {

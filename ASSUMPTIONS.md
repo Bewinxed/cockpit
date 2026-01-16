@@ -201,20 +201,20 @@ This document describes the expected behavior and assumptions about the Cockpit 
 
 ---
 
-## Real-time Updates (SSE)
+## Real-time Updates (WebSocket)
 
-### R1: SSE Connection
-- **Assumption**: Dashboard maintains SSE connection for real-time updates
-- **Expected**: Events from hub appear instantly without polling
-- **Verify**: Use browser devtools → Observe SSE stream active
+### R1: WebSocket Connection
+- **Assumption**: Dashboard maintains WebSocket connection to `/ws/dashboard` for real-time updates
+- **Expected**: Events from hub appear instantly without polling, bidirectional communication
+- **Verify**: Use browser devtools Network tab → Observe WebSocket connection active
 
 ### R2: Multi-tab Sync
-- **Assumption**: Multiple browser tabs stay in sync via SSE
+- **Assumption**: Multiple browser tabs stay in sync via WebSocket
 - **Expected**: Action in one tab reflects in other tabs
 - **Verify**: Open 2 tabs → Send message in one → Appears in both
 
 ### R3: Reconnection on Disconnect
-- **Assumption**: If SSE disconnects, dashboard reconnects automatically
+- **Assumption**: If WebSocket disconnects, dashboard reconnects automatically with exponential backoff
 - **Expected**: Brief disconnect doesn't lose state, auto-reconnects
 - **Verify**: Temporarily block network → Restore → Dashboard recovers
 
@@ -289,7 +289,7 @@ This document describes the expected behavior and assumptions about the Cockpit 
 ### SV1: SvelteMap Reactivity
 - **Assumption**: SvelteMap mutations trigger reactive updates without reassignment
 - **Expected**: UI updates when `map.set()` called on SvelteMap
-- **Verify**: Add agent via SSE → Agent appears in sidebar without page refresh
+- **Verify**: Add agent via WebSocket → Agent appears in sidebar without page refresh
 
 ### SV2: Class-based Store Methods
 - **Assumption**: Calling store methods updates UI reactively
@@ -301,10 +301,10 @@ This document describes the expected behavior and assumptions about the Cockpit 
 - **Expected**: Derived stores don't recalculate on unrelated state changes
 - **Verify**: Change agent status → Only agent-related deriveds update (check devtools)
 
-### SV4: river.ts SSE Connection (if implemented)
-- **Assumption**: river.ts RiverClient handles SSE with type safety and auto-reconnect
-- **Expected**: All events typed, auto-reconnect works within 30s
-- **Verify**: Disconnect network briefly → SSE reconnects automatically
+### SV4: river.ts WebSocket Connection
+- **Assumption**: river.ts RiverSocketAdapter handles WebSocket with type safety and auto-reconnect
+- **Expected**: All events typed, auto-reconnect works with exponential backoff
+- **Verify**: Disconnect network briefly → WebSocket reconnects automatically
 
 ### SV5: Private State Encapsulation
 - **Assumption**: Using `#privateField` enforces method-only access

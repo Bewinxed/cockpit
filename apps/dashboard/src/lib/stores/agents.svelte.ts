@@ -111,10 +111,10 @@ class AgentStore {
   }
 
   // ========================================
-  // SSE Event Handlers
+  // WebSocket Event Handlers
   // ========================================
 
-  /** Handle agent:connected SSE event */
+  /** Handle agent:connected WebSocket event */
   handleConnected(event: AgentConnectedEvent): void {
     this.#agents.set(event.machineId, {
       machineId: event.machineId,
@@ -127,7 +127,7 @@ class AgentStore {
     });
   }
 
-  /** Handle agent:disconnected SSE event */
+  /** Handle agent:disconnected WebSocket event */
   handleDisconnected(event: AgentDisconnectedEvent): void {
     const agent = this.#agents.get(event.machineId);
     if (agent) {
@@ -135,7 +135,7 @@ class AgentStore {
     }
   }
 
-  /** Handle agent:reconnecting SSE event */
+  /** Handle agent:reconnecting WebSocket event */
   handleReconnecting(event: AgentReconnectingEvent): void {
     const agent = this.#agents.get(event.machineId);
     if (agent) {
@@ -143,7 +143,7 @@ class AgentStore {
     }
   }
 
-  /** Handle agent:updated SSE event */
+  /** Handle agent:updated WebSocket event */
   handleUpdated(event: AgentUpdatedEvent): void {
     const agent = this.#agents.get(event.machineId);
     if (agent) {

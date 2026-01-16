@@ -70,10 +70,10 @@ class PermissionStore {
   }
 
   // ========================================
-  // SSE Event Handlers
+  // WebSocket Event Handlers
   // ========================================
 
-  /** Handle permission:request SSE event */
+  /** Handle permission:request WebSocket event */
   handleRequest(event: PermissionRequestEvent): void {
     this.#permissions.set(event.requestId, {
       requestId: event.requestId,

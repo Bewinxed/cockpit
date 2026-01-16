@@ -2,9 +2,8 @@
   import { ChevronUp, ChevronDown, Square, Trash2, LoaderCircle } from 'lucide-svelte';
   import { Button } from '$lib/components/ui/button';
   import { Checkbox } from '$lib/components/ui/checkbox';
-  import { stores, agents, type Instance } from '$lib/stores';
+  import { stores, agents, stopInstance as wsStopInstance, type Instance } from '$lib/stores';
   import { openInstance } from '$lib/stores/url-sync.svelte';
-  import { api } from '$lib/api';
 
   type SortKey = 'status' | 'name' | 'project' | 'agent' | 'model' | 'cost' | 'lastActivity';
   type SortDirection = 'asc' | 'desc';
@@ -166,7 +165,7 @@
     try {
       await Promise.all(
         toStop.map(instance =>
-          api.api.instances({ id: instance.id }).delete()
+          wsStopInstance({ instanceId: instance.id })
         )
       );
     } catch (error) {
@@ -194,7 +193,7 @@
     try {
       await Promise.all(
         toDelete.map(id =>
-          api.api.instances({ id }).delete()
+          wsStopInstance({ instanceId: id })
         )
       );
       selectedIds = new Set();

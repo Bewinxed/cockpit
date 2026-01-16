@@ -12,9 +12,11 @@
     permissions as permissionsStore,
     questions as questionsStore,
     sendQuestionResponse,
+    sendInstanceMessage,
     type Message
   } from '$lib/stores';
   import { api } from '$lib/api';
+  import { resumeInstance } from '$lib/actions';
 
   interface AvailableCommand {
     name: string;
@@ -401,7 +403,7 @@
   let interrupting = $state(false);
   let error = $state<string | null>(null);
 
-  // Track resuming state from store - when instance:started SSE arrives, this becomes false
+  // Track resuming state from store - when instance:started WebSocket arrives, this becomes false
   const storeIsResuming = $derived(instances.isResuming(instanceId));
 
   // Sync local restarting state with store's resuming state
@@ -616,10 +618,10 @@
         // Ignore errors for clear command
       }
 
-      // Notify agent if active
+      // Notify agent if active (via WebSocket)
       if (isActive) {
         try {
-          await api.api.instances({ id: instanceId }).send.post({ message: '/clear' });
+          await sendInstanceMessage({ instanceId, message: '/clear' });
         } catch {
           // Ignore errors for clear command
         }
@@ -941,10 +943,10 @@
         }
 
         // Note: "Session resumed" message is now added by instances.handleStarted()
-        // when the instance:started SSE event arrives
+        // when the instance:started WebSocket event arrives
 
         if (!clientCmd) {
-          // Keep restarting=true until instance:started SSE arrives
+          // Keep restarting=true until instance:started WebSocket arrives
           return;
         }
       } catch (err) {
@@ -984,20 +986,17 @@
     autoScroll.scrollToBottom(true);
 
     try {
-      const result = await api.api.instances({ id: instanceId }).send.post({
-        message,
-      });
+      // Use WebSocket to send message
+      const result = await sendInstanceMessage({ instanceId, message });
 
-      if (result.error || !result.data?.success) {
-        const errMsg = (result.error as { message?: string })?.message || 'Failed to send message';
-        const responseError = (result.data as { error?: string; code?: string })?.error || '';
-        const responseCode = (result.data as { error?: string; code?: string })?.code;
+      if (!result.success) {
+        const errMsg = result.error || 'Failed to send message';
+        const responseCode = (result as { code?: string }).code;
 
-        // Check if instance needs to be resumed - handle both "not found" (404) and "not running" errors
+        // Check if instance needs to be resumed
         const needsResume =
           errMsg.toLowerCase().includes('not found') ||
           errMsg.toLowerCase().includes('not running') ||
-          responseError.toLowerCase().includes('not running') ||
           responseCode === 'INSTANCE_NOT_RUNNING';
 
         if (needsResume) {
@@ -1006,17 +1005,15 @@
           instances.setResuming(instanceId, true);
 
           try {
-            const resumeResult = await api.api.instances({ id: instanceId }).resume.post({
-              prompt: message,
-            });
-            if (resumeResult.error || !resumeResult.data?.success) {
-              error = (resumeResult.error as { message?: string })?.message || 'Failed to resume';
+            const resumeResult = await resumeInstance(instanceId, message);
+            if (!resumeResult.success) {
+              error = resumeResult.error || 'Failed to resume';
               instances.setResuming(instanceId, false);
               instances.updateStreamingState(instanceId, { isInitializing: false });
               restarting = false;
             }
             // Note: "Session resumed" message is now added by instances.handleStarted()
-            // Keep restarting=true until instance:started SSE arrives
+            // Keep restarting=true until instance:started WebSocket arrives
             // isInitializing stays true (was set when sending) so ActivityGrid shows "Thinking..." after instance:started
           } catch (resumeErr) {
             error = resumeErr instanceof Error ? resumeErr.message : 'Failed to resume';

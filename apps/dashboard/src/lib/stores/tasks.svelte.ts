@@ -94,10 +94,10 @@ class TaskStore {
   }
 
   // ========================================
-  // SSE Event Handlers
+  // WebSocket Event Handlers
   // ========================================
 
-  /** Handle task:created SSE event */
+  /** Handle task:created WebSocket event */
   handleCreated(event: TaskCreatedEvent): void {
     const startedAt = typeof event.startedAt === 'string' ? new Date(event.startedAt) : event.startedAt;
     const updatedAt = typeof event.updatedAt === 'string' ? new Date(event.updatedAt) : event.updatedAt;
@@ -121,7 +121,7 @@ class TaskStore {
     });
   }
 
-  /** Handle task:updated SSE event */
+  /** Handle task:updated WebSocket event */
   handleUpdated(event: TaskUpdatedEvent): void {
     const updatedAt = typeof event.updatedAt === 'string' ? new Date(event.updatedAt) : event.updatedAt;
     const completedAt = event.completedAt
@@ -142,7 +142,7 @@ class TaskStore {
     }
   }
 
-  /** Handle task:completed SSE event */
+  /** Handle task:completed WebSocket event */
   handleCompleted(event: TaskCompletedEvent): void {
     const completedAt = typeof event.completedAt === 'string' ? new Date(event.completedAt) : event.completedAt;
     const task = this.#tasks.get(event.id);

@@ -1,7 +1,7 @@
 /**
  * SDK Message Handler Service
  *
- * Modular service for processing sdk:message SSE events.
+ * Modular service for processing sdk:message WebSocket events.
  * Extracts the 296-line monolithic handler from realtime.svelte.ts
  * into a clean, testable service that works with entity stores.
  */
@@ -475,9 +475,9 @@ function processStreamEvent(
 
 /**
  * Main SDK message handler.
- * Processes sdk:message SSE events and routes to appropriate entity stores.
+ * Processes sdk:message WebSocket events and routes to appropriate entity stores.
  *
- * @param event - The typed SdkMessageEvent from SSE
+ * @param event - The typed SdkMessageEvent from WebSocket
  */
 export function handleSdkMessage(event: SdkMessageEvent): void {
   const {

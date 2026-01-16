@@ -1,18 +1,17 @@
 /**
  * API Actions for Dashboard
  *
- * Commands (spawn, send, stop, permission, question) use WebSocket via river.ts.
+ * Real-time commands (spawn, send, stop, permission, question) use WebSocket via stores.
+ * These wrappers provide error handling and auth detection for spawn/resume.
  * CRUD operations (projects) still use REST via Eden Treaty.
  *
- * Note: Data refresh is handled automatically via WebSocket events.
- * When mutations succeed, the hub broadcasts events that update stores.
+ * For send/stop, use the WebSocket functions directly from stores:
+ *   import { sendInstanceMessage, stopInstance } from '$lib/stores';
  */
 
 import { api } from '$lib/api';
 import {
   spawnInstance as wsSpawnInstance,
-  sendInstanceMessage as wsSendMessage,
-  stopInstance as wsStopInstance,
   WebSocketNotConnectedError,
 } from '$lib/stores';
 import { extractErrorMessage } from '$lib/utils/error';
@@ -81,53 +80,6 @@ export async function spawnInstance(params: {
 }
 
 /**
- * Stop an instance (via WebSocket)
- */
-export async function stopInstance(instanceId: string): Promise<{ success: boolean; error?: string }> {
-  try {
-    const response = await wsStopInstance({ instanceId });
-
-    if (!response.success) {
-      console.error('Failed to stop instance:', response.error);
-      return { success: false, error: response.error || 'Failed to stop instance' };
-    }
-
-    // WebSocket will broadcast instance:stopped to update stores
-    return { success: true };
-  } catch (err) {
-    const errorMsg = err instanceof Error ? err.message : String(err);
-    console.error('Failed to stop instance:', errorMsg);
-    return { success: false, error: errorMsg };
-  }
-}
-
-/**
- * Send a message to an instance (via WebSocket)
- * Returns messageUuid if available (for edit support)
- */
-export async function sendMessage(
-  instanceId: string,
-  content: string
-): Promise<{ success: boolean; error?: string; messageUuid?: string }> {
-  try {
-    const response = await wsSendMessage({ instanceId, message: content });
-
-    if (!response.success) {
-      console.error('Failed to send message:', response.error);
-      return { success: false, error: response.error || 'Failed to send message' };
-    }
-
-    // Note: messageUuid not available from WebSocket response currently
-    // Will be delivered via sdk:message event
-    return { success: true };
-  } catch (err) {
-    const errorMsg = err instanceof Error ? err.message : String(err);
-    console.error('Failed to send message:', errorMsg);
-    return { success: false, error: errorMsg };
-  }
-}
-
-/**
  * Create a new project
  */
 export async function createProject(params: {
@@ -144,7 +96,7 @@ export async function createProject(params: {
     return { success: false, error: errorMsg };
   }
 
-  // SSE will broadcast project:created to update stores
+  // WebSocket will broadcast project:created to update stores
   return { success: true, data: data?.data };
 }
 
@@ -168,7 +120,7 @@ export async function updateProject(
     return { success: false, error: errorMsg };
   }
 
-  // SSE will broadcast project:updated to update stores
+  // WebSocket will broadcast project:updated to update stores
   return { success: true };
 }
 
@@ -184,7 +136,7 @@ export async function deleteProject(projectId: string): Promise<{ success: boole
     return { success: false, error: errorMsg };
   }
 
-  // SSE will broadcast project:deleted to update stores
+  // WebSocket will broadcast project:deleted to update stores
   return { success: true };
 }
 
@@ -201,7 +153,7 @@ export async function interruptInstance(instanceId: string): Promise<ActionResul
     return { success: false, error: errorMsg };
   }
 
-  // SSE will broadcast instance state change to update stores
+  // WebSocket will broadcast instance state change to update stores
   return { success: true, data: data?.data };
 }
 
@@ -226,13 +178,13 @@ export async function resumeInstance(
     };
   }
 
-  // SSE will broadcast instance:resumed to update stores
+  // WebSocket will broadcast instance:resumed to update stores
   return { success: true, data: data?.data };
 }
 
 /**
  * Fetch messages for an instance to get UUIDs for recently sent messages
- * This is used to enable editing after sending when SSE doesn't provide UUIDs
+ * This is used to enable editing after sending when WebSocket doesn't provide UUIDs
  */
 export interface StoredMessage {
   id: string;

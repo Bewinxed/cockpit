@@ -53,7 +53,7 @@ class InstanceStore {
   // Background agent ID mapping - maps SDK internal agentId to toolUseId
   #backgroundAgentIdMap = new Map<string, string>();
 
-  // Track instances that are resuming (waiting for instance:started SSE)
+  // Track instances that are resuming (waiting for instance:started WebSocket)
   #resumingInstances = $state(new Set<string>());
 
   // ========================================
@@ -147,7 +147,7 @@ class InstanceStore {
   // ========================================
 
   /**
-   * Mark an instance as resuming (waiting for instance:started SSE event)
+   * Mark an instance as resuming (waiting for instance:started WebSocket event)
    */
   setResuming(id: string, isResuming: boolean): void {
     if (isResuming) {
@@ -840,10 +840,10 @@ class InstanceStore {
   }
 
   // ========================================
-  // SSE Event Handlers
+  // WebSocket Event Handlers
   // ========================================
 
-  /** Handle instance:created SSE event */
+  /** Handle instance:created WebSocket event */
   handleCreated(event: InstanceCreatedEvent): void {
     const createdAt = typeof event.createdAt === 'string' ? event.createdAt : event.createdAt.toISOString();
     this.#instances.set(event.id, {
@@ -861,7 +861,7 @@ class InstanceStore {
     });
   }
 
-  /** Handle instance:started SSE event */
+  /** Handle instance:started WebSocket event */
   handleStarted(event: InstanceStartedEvent): void {
     // Clear resuming state - instance is now running
     this.#resumingInstances.delete(event.id);
@@ -896,7 +896,7 @@ class InstanceStore {
     // This avoids the UX gap between two separate system messages.
   }
 
-  /** Handle instance:stopped SSE event */
+  /** Handle instance:stopped WebSocket event */
   handleStopped(event: InstanceStoppedEvent): void {
     const instance = this.#instances.get(event.instanceId);
     if (instance) {
@@ -911,7 +911,7 @@ class InstanceStore {
     this.#streamingMessages.delete(event.instanceId);
   }
 
-  /** Handle instance:sleeping SSE event */
+  /** Handle instance:sleeping WebSocket event */
   handleSleeping(event: InstanceSleepingEvent): void {
     const instance = this.#instances.get(event.instanceId);
     if (instance) {
@@ -925,7 +925,7 @@ class InstanceStore {
     this.#streamingMessages.delete(event.instanceId);
   }
 
-  /** Handle instance:error SSE event */
+  /** Handle instance:error WebSocket event */
   handleError(event: InstanceErrorEvent): void {
     const instance = this.#instances.get(event.instanceId);
     if (instance) {
@@ -939,7 +939,7 @@ class InstanceStore {
     this.#streamingMessages.delete(event.instanceId);
   }
 
-  /** Handle instance:resumed SSE event */
+  /** Handle instance:resumed WebSocket event */
   handleResumed(event: InstanceResumedEvent): void {
     const instance = this.#instances.get(event.id);
     if (instance) {
@@ -967,7 +967,7 @@ class InstanceStore {
     }
   }
 
-  /** Handle instance:token_usage SSE event */
+  /** Handle instance:token_usage WebSocket event */
   handleTokenUsage(event: InstanceTokenUsageEvent): void {
     const instance = this.#instances.get(event.instanceId);
     if (instance && event.costDelta) {
@@ -992,7 +992,7 @@ class InstanceStore {
     });
   }
 
-  /** Handle instance:model-changed SSE event */
+  /** Handle instance:model-changed WebSocket event */
   handleModelChanged(event: InstanceModelChangedEvent): void {
     const instance = this.#instances.get(event.instanceId);
     if (instance) {

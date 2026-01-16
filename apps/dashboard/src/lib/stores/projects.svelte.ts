@@ -99,10 +99,10 @@ class ProjectStore {
   }
 
   // ========================================
-  // SSE Event Handlers
+  // WebSocket Event Handlers
   // ========================================
 
-  /** Handle project:created SSE event */
+  /** Handle project:created WebSocket event */
   handleCreated(event: ProjectCreatedEvent): void {
     const createdAt = typeof event.createdAt === 'string' ? new Date(event.createdAt) : event.createdAt;
     const updatedAt = typeof event.updatedAt === 'string' ? new Date(event.updatedAt) : event.updatedAt;
@@ -118,7 +118,7 @@ class ProjectStore {
     });
   }
 
-  /** Handle project:updated SSE event */
+  /** Handle project:updated WebSocket event */
   handleUpdated(event: ProjectUpdatedEvent): void {
     const project = this.#projects.get(event.id);
     const updatedAt = typeof event.updatedAt === 'string' ? new Date(event.updatedAt) : event.updatedAt;
@@ -134,7 +134,7 @@ class ProjectStore {
     }
   }
 
-  /** Handle project:deleted SSE event */
+  /** Handle project:deleted WebSocket event */
   handleDeleted(event: ProjectDeletedEvent): void {
     this.#projects.delete(event.id);
   }

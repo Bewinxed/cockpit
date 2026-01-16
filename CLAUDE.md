@@ -28,14 +28,15 @@ Three-tier monorepo architecture:
 ┌─────────────────────────────────────────────────────────────────┐
 │                    Dashboard (SvelteKit)                         │
 │                    apps/dashboard/                               │
-│                    Port 3000, SSE client                         │
+│                    Port 3000, WebSocket client (river.ts)        │
 └───────────────────────────┬─────────────────────────────────────┘
-                            │ SSE (events), REST (queries)
+                            │ WebSocket (river.ts events + RPC)
+                            │ REST (queries, resume, interrupt)
                             ↓
 ┌─────────────────────────────────────────────────────────────────┐
 │                    Hub Server (Elysia)                           │
 │                    packages/hub-server/                          │
-│                    Port 4000, WebSocket + REST + SSE             │
+│                    Port 4000, WebSocket + REST                   │
 └───────────────────────────┬─────────────────────────────────────┘
                             │ WebSocket (JSON-RPC 2.0)
                             ↓
@@ -52,9 +53,9 @@ Three-tier monorepo architecture:
 - `packages/auth/` - Authentication module
 - `packages/mcp-task-tracker/` - MCP server for task management
 
-## SSE Message Types Reference
+## WebSocket Event Types Reference
 
-Dashboard connects to `/api/events` for real-time updates. All events broadcast from hub via `BroadcastService`.
+Dashboard connects to `/ws/dashboard` for real-time updates via river.ts. All events broadcast from hub via `DashboardRegistry`.
 
 ### Agent Events
 ```
@@ -108,8 +109,8 @@ Connecting → Online ──→ Reconnecting ──→ Online (success)
 
 ### Permission Request Flow
 ```
-Agent calls canUseTool → Hub stores pending → SSE broadcast →
-  Dashboard shows dialog → User Allow/Deny → Agent resumes
+Agent calls canUseTool → Hub stores pending → WebSocket broadcast →
+  Dashboard shows dialog → User Allow/Deny → WebSocket response → Agent resumes
 ```
 
 ## JSON-RPC Protocol
@@ -140,13 +141,13 @@ All agent-hub communication uses JSON-RPC 2.0 over WebSocket.
 
 **Stack:** Svelte 5 + SvelteKit 2 + Vite + Tailwind CSS 4 + bits-ui
 
-**State Management (realtime.svelte.ts):**
+**State Management (stores/*.svelte.ts):**
 ```typescript
-// Core stores (Map-based)
-agents, instances, projects, tasks, instanceMessages, streamingStates, pendingPermissions
+// Entity stores (SvelteMap-based, Svelte 5 runes)
+agents, instances, projects, tasks, permissions, questions, ui
 
-// Derived stores
-onlineAgents, runningInstances, populatedInstances, stats
+// Cross-store derivations (via stores singleton)
+stores.populatedInstances, stores.runningInstances, stores.stats, stores.instancesByProject
 ```
 
 **Key Components:**
@@ -155,7 +156,11 @@ onlineAgents, runningInstances, populatedInstances, stats
 - `PermissionRequest` - Permission dialog
 - `ChatInput` - User input with command detection
 
-**Real-time flow:** WebSocket (agent) → Hub → BroadcastService → SSE → EventSource → Svelte store → Component
+**Real-time flow:** WebSocket (agent) → Hub → DashboardRegistry → WebSocket (river.ts) → Svelte store → Component
+
+**Dashboard-Hub Communication:**
+- **WebSocket (river.ts):** spawn, send, stop, permission/question responses - bidirectional RPC + events
+- **REST (Eden Treaty):** resume, interrupt, messages, projects CRUD - request/response only
 
 ## Database Schema (packages/db/)
 
@@ -189,14 +194,18 @@ export function getAgentRegistry() {
 
 **Hub (port 4000):**
 ```
+# REST endpoints
 GET  /api/agents, /api/agents/:machineId
 GET  /api/instances, /api/instances/:id, /api/instances/:id/messages
-POST /api/instances (spawn), /api/instances/:id/send, /api/instances/:id/stop
-GET  /api/events (SSE)
-WS   /ws/hub (agent connection)
+POST /api/instances/:id/resume, /api/instances/:id/interrupt
+GET  /api/projects, POST /api/projects, PATCH/DELETE /api/projects/:id
+
+# WebSocket endpoints
+WS   /ws/hub       (agent connection - JSON-RPC 2.0)
+WS   /ws/dashboard (dashboard connection - river.ts format)
 ```
 
-**Dashboard proxies to hub via SvelteKit `/api/[...path]`**
+**Dashboard proxies to hub via SvelteKit `/api/[...path]` and `/ws/[...path]`**
 
 <!-- BEGIN FLOW-NEXT -->
 ## Flow-Next

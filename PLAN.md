@@ -602,7 +602,7 @@ onMount(() => {
 
 **Design Goals:**
 1. Multiple instances open simultaneously (like VSCode tabs)
-2. All open tabs receive live SSE updates (all stay mounted)
+2. All open tabs receive live WebSocket updates (all stay mounted)
 3. SSR loads data for all open tabs via remote functions
 4. Shareable URLs that preserve tab state
 5. No state loss when switching tabs
@@ -1499,14 +1499,14 @@ export const load: PageServerLoad = async () => {
 
 1. **Start with Phase 1** - The layout foundation must be solid before building features on top
 2. **Test incrementally** - Each phase should result in a working (if incomplete) app
-3. **Preserve realtime functionality** - The SSE/WebSocket integration in realtime.svelte.ts is critical
+3. **Preserve realtime functionality** - The WebSocket integration in dashboard-ws.ts and stores is critical
 4. **Use existing UI primitives** - bits-ui and shadcn-svelte components are already available
 5. **Check LSP after each batch of edits** - Catch TypeScript errors early
 6. **The chat components work well** - ChatMessage, ChatInput, ToolGroup are solid; wrap don't rewrite
 7. **URL sync is crucial** - The query parameter approach enables browser back/forward without full page loads
 8. **State persistence** - Use localStorage for UI state like selected instance, collapsed projects, split view
 9. **Keyboard shortcuts** - Implement early; they're essential for power user experience
-10. **Test on real data** - The stores expect specific shapes; ensure SSE events still populate correctly after changes
+10. **Test on real data** - The stores expect specific shapes; ensure WebSocket events still populate correctly after changes
 
 ---
 
