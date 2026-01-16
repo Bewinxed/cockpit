@@ -965,7 +965,17 @@
 
       if (result.error || !result.data?.success) {
         const errMsg = (result.error as { message?: string })?.message || 'Failed to send message';
-        if (errMsg.toLowerCase().includes('not found')) {
+        const responseError = (result.data as { error?: string; code?: string })?.error || '';
+        const responseCode = (result.data as { error?: string; code?: string })?.code;
+
+        // Check if instance needs to be resumed - handle both "not found" (404) and "not running" errors
+        const needsResume =
+          errMsg.toLowerCase().includes('not found') ||
+          errMsg.toLowerCase().includes('not running') ||
+          responseError.toLowerCase().includes('not running') ||
+          responseCode === 'INSTANCE_NOT_RUNNING';
+
+        if (needsResume) {
           sending = false;
           restarting = true;
 
