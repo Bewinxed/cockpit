@@ -5,6 +5,7 @@
     Controls,
     MiniMap,
     Panel,
+    Position,
     type Node,
     type Edge,
     type DefaultEdgeOptions,
@@ -35,23 +36,47 @@
   const streamingMessage = $derived(instances.getStreamingMessage(instanceId));
   const streamingToolId = $derived(streamingMessage?.sdkUuid);
 
-  // Transform messages to flow data with layout
-  const flowData = $derived.by(() => {
-    const rawFlow = transformMessagesToFlow(messages, instanceId, {
+  // Transform messages to raw flow data (nodes/edges without positions)
+  const rawFlowData = $derived.by(() => {
+    return transformMessagesToFlow(messages, instanceId, {
       subagents: subagentsMap,
       streamingToolId,
     });
-    return applyLayout(rawFlow.nodes, rawFlow.edges);
   });
 
   // Use $state.raw() for performance with svelte-flow
   let nodes = $state.raw<Node[]>([]);
   let edges = $state.raw<Edge[]>([]);
 
-  // Update nodes/edges when flowData changes
+  // Track node count to only relayout when structure changes
+  let lastNodeCount = $state(0);
+
+  // Update nodes/edges when flow data changes
+  // Only recalculate layout when node count changes (new messages)
+  // Content updates use same positions to avoid layout thrashing
   $effect(() => {
-    nodes = flowData.nodes;
-    edges = flowData.edges;
+    const { nodes: rawNodes, edges: rawEdges } = rawFlowData;
+
+    // Only relayout when node count changes
+    if (rawNodes.length !== lastNodeCount) {
+      lastNodeCount = rawNodes.length;
+      const layouted = applyLayout(rawNodes, rawEdges);
+      nodes = layouted.nodes;
+      edges = layouted.edges;
+    } else {
+      // Content update only - preserve positions from current nodes
+      const positionMap = new Map(nodes.map(n => [n.id, n.position]));
+      nodes = rawNodes.map(n => ({
+        ...n,
+        position: positionMap.get(n.id) || n.position,
+        targetPosition: Position.Top,
+        sourcePosition: Position.Bottom,
+      }));
+      edges = rawEdges.map(e => ({
+        ...e,
+        type: e.type || 'smoothstep',
+      }));
+    }
   });
 
   // Context menu state

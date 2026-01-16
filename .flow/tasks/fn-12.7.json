@@ -1,16 +1,23 @@
 {
-  "assignee": null,
+  "assignee": "bewinxed@gmail.com",
   "claim_note": "",
-  "claimed_at": null,
+  "claimed_at": "2026-01-16T23:51:00.958456Z",
   "created_at": "2026-01-16T21:22:48.239484Z",
   "depends_on": [
     "fn-12.6"
   ],
   "epic": "fn-12",
+  "evidence": {
+    "commits": [],
+    "prs": [],
+    "tests": [
+      "svelte-check"
+    ]
+  },
   "id": "fn-12.7",
   "priority": null,
   "spec_path": ".flow/tasks/fn-12.7.md",
-  "status": "todo",
+  "status": "done",
   "title": "Handle real-time streaming in flow nodes",
-  "updated_at": "2026-01-16T21:25:48.774447Z"
+  "updated_at": "2026-01-16T23:56:25.867182Z"
 }
