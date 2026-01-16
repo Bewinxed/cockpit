@@ -7,12 +7,12 @@
     Panel,
     type Node,
     type Edge,
-    type NodeTypes,
     type DefaultEdgeOptions,
     BackgroundVariant
   } from '@xyflow/svelte';
   import { instances } from '$lib/stores';
   import FlowContextMenu from './FlowContextMenu.svelte';
+  import { nodeTypes } from './nodes';
 
   interface Props {
     instanceId: string;
@@ -26,9 +26,6 @@
 
   // Context menu state
   let contextMenu = $state<{ x: number; y: number; nodeId: string } | null>(null);
-
-  // Node types will be registered in fn-12.3
-  const nodeTypes: NodeTypes = {};
 
   // Default edge styling - smooth bezier curves
   const defaultEdgeOptions: DefaultEdgeOptions = {
