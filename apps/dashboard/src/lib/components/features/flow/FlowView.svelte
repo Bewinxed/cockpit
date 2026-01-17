@@ -44,40 +44,15 @@
     });
   });
 
-  // Use $state.raw() for performance with svelte-flow
-  let nodes = $state.raw<Node[]>([]);
-  let edges = $state.raw<Edge[]>([]);
-
-  // Track node count to only relayout when structure changes
-  let lastNodeCount = $state(0);
-
-  // Update nodes/edges when flow data changes
-  // Only recalculate layout when node count changes (new messages)
-  // Content updates use same positions to avoid layout thrashing
-  $effect(() => {
+  // Derive layout once, then extract nodes/edges
+  const layoutData = $derived.by(() => {
     const { nodes: rawNodes, edges: rawEdges } = rawFlowData;
-
-    // Only relayout when node count changes
-    if (rawNodes.length !== lastNodeCount) {
-      lastNodeCount = rawNodes.length;
-      const layouted = applyLayout(rawNodes, rawEdges);
-      nodes = layouted.nodes;
-      edges = layouted.edges;
-    } else {
-      // Content update only - preserve positions from current nodes
-      const positionMap = new Map(nodes.map(n => [n.id, n.position]));
-      nodes = rawNodes.map(n => ({
-        ...n,
-        position: positionMap.get(n.id) || n.position,
-        targetPosition: Position.Top,
-        sourcePosition: Position.Bottom,
-      }));
-      edges = rawEdges.map(e => ({
-        ...e,
-        type: e.type || 'smoothstep',
-      }));
-    }
+    if (rawNodes.length === 0) return { nodes: [] as Node[], edges: [] as Edge[] };
+    return applyLayout(rawNodes, rawEdges);
   });
+
+  const nodes = $derived(layoutData.nodes);
+  const edges = $derived(layoutData.edges);
 
   // Context menu state
   let contextMenu = $state<{ x: number; y: number; nodeId: string } | null>(null);
