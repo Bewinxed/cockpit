@@ -1,15 +1,20 @@
 <script lang="ts">
   import { Handle, Position, useStore, useSvelteFlow } from '@xyflow/svelte';
-  import { Zap, LoaderCircle, CircleCheck, CircleX, ChevronRight, Layers } from 'lucide-svelte';
-  import type { SubagentState } from '$lib/stores/types';
+  import { Zap, LoaderCircle, CircleCheck, CircleX, ChevronRight, ChevronDown, Layers, Wrench } from 'lucide-svelte';
+  import { slide } from 'svelte/transition';
+  import type { SubagentState, Message } from '$lib/stores/types';
+  import { instances } from '$lib/stores';
+  import { getToolGlance, getToolStatus } from '$lib/utils/tool-display';
 
   // Props passed by SvelteFlow
   let { id, data } = $props<{
     id: string;
     data: {
       subagent?: SubagentState;
+      subagents?: SubagentState[];
       depth?: number;
       branchColor?: string;
+      instanceId?: string;
     };
   }>();
 
@@ -17,6 +22,9 @@
   const { viewport } = $derived(useStore());
   const { fitView } = useSvelteFlow();
   const zoom = $derived(viewport.zoom);
+
+  // Expansion state
+  let expanded = $state(false);
 
   // Semantic zoom levels
   const zoomLevel = $derived(
@@ -33,6 +41,16 @@
   const status = $derived(subagent?.status || 'starting');
   const subagentType = $derived(subagent?.subagentType || 'Task');
   const toolCount = $derived(subagent?.messages?.length || 0);
+
+  // Get tool messages for expanded view
+  const toolMessages = $derived(
+    subagent?.messages?.filter((m: Message) => m.type === 'tool_use') || []
+  );
+
+  // Get child subagents (nested)
+  const childSubagents = $derived(
+    subagent?.toolUseId ? instances.getChildSubagents(subagent.toolUseId) : []
+  );
 
   // Elapsed time
   let elapsedMs = $state(0);
@@ -95,9 +113,31 @@
     return 'Working...';
   });
 
-  // Click to zoom into branch
+  // Toggle expansion
+  function toggleExpanded(e: MouseEvent) {
+    e.stopPropagation();
+    expanded = !expanded;
+  }
+
+  // Click to zoom into branch (when in detail view)
   function handleClick() {
-    fitView({ nodes: [{ id }], duration: 300 });
+    if (zoomLevel === 'detail') {
+      // In detail view, click toggles expansion
+      expanded = !expanded;
+    } else {
+      // In overview/summary, click zooms to node
+      fitView({ nodes: [{ id }], duration: 300 });
+    }
+  }
+
+  // Get tool icon color based on status
+  function getToolStatusColor(msg: Message): string {
+    const status = getToolStatus(msg.metadata);
+    switch (status) {
+      case 'success': return 'text-green-500';
+      case 'error': return 'text-red-500';
+      default: return 'text-amber-500';
+    }
   }
 </script>
 
@@ -154,12 +194,57 @@
         </div>
       {/if}
 
-      {#if depth < 3}
-        <div class="flex items-center gap-1 text-xs text-muted-foreground">
+      <!-- Expand/collapse button -->
+      <button
+        class="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors w-full"
+        onclick={toggleExpanded}
+      >
+        {#if expanded}
+          <ChevronDown class="h-3 w-3" />
+          <span>Hide details</span>
+        {:else}
           <ChevronRight class="h-3 w-3" />
-          <span>Click to expand branch</span>
+          <span>Show {toolMessages.length} tools{childSubagents.length > 0 ? `, ${childSubagents.length} subagents` : ''}</span>
+        {/if}
+      </button>
+
+      <!-- Expanded content -->
+      {#if expanded}
+        <div class="border-t border-border pt-2 mt-2 space-y-1" transition:slide={{ duration: 150 }}>
+          <!-- Tool list -->
+          {#each toolMessages as tool (tool.metadata?.toolId)}
+            <div class="flex items-center gap-2 text-xs py-1 px-2 rounded bg-muted/50">
+              <Wrench class="h-3 w-3 {getToolStatusColor(tool)} shrink-0" />
+              <span class="font-medium">{tool.metadata?.toolName || 'Tool'}</span>
+              <span class="text-muted-foreground truncate">
+                {getToolGlance(tool.metadata?.toolInput as Record<string, unknown>) || ''}
+              </span>
+            </div>
+          {/each}
+
+          <!-- Child subagents -->
+          {#each childSubagents as child (child.toolUseId)}
+            <div class="flex items-center gap-2 text-xs py-1 px-2 rounded bg-cyan-500/10 border-l-2 border-cyan-500">
+              <Zap class="h-3 w-3 text-cyan-500 shrink-0" />
+              <span class="font-medium">{child.subagentType}</span>
+              <span class="text-muted-foreground capitalize">{child.status}</span>
+              {#if child.messages.length > 0}
+                <span class="text-xs bg-muted px-1 rounded">{child.messages.length} tools</span>
+              {/if}
+            </div>
+          {/each}
+
+          <!-- Result preview if complete -->
+          {#if status === 'complete' && subagent?.result}
+            <div class="text-xs text-muted-foreground bg-muted/30 p-2 rounded max-h-20 overflow-y-auto">
+              <span class="font-medium">Result: </span>
+              {subagent.result.slice(0, 200)}{subagent.result.length > 200 ? '...' : ''}
+            </div>
+          {/if}
         </div>
-      {:else}
+      {/if}
+
+      {#if depth >= 3 && !expanded}
         <div class="flex items-center gap-1 text-xs text-muted-foreground">
           <Layers class="h-3 w-3" />
           <span>+{depth - 2} nested levels</span>
