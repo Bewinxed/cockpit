@@ -34,7 +34,7 @@
 
 <Handle type="target" position={Position.Top} class="!bg-blue-500" />
 
-<div class="user-message-node rounded-lg border-l-4 border-blue-500 bg-card p-3 min-w-[200px] max-w-[400px]">
+<div class="user-message-node rounded-lg border-l-4 border-blue-500 bg-card p-3 w-[320px]">
   {#if zoomLevel === 'overview'}
     <div class="flex items-center justify-center">
       <div class="rounded-full bg-blue-500/20 p-2">

@@ -23,8 +23,8 @@
   const { fitView } = useSvelteFlow();
   const zoom = $derived(viewport.zoom);
 
-  // Expansion state
-  let expanded = $state(false);
+  // Expansion state - track which subagents are expanded by toolUseId
+  let expandedSet = $state(new Set<string>());
 
   // Semantic zoom levels
   const zoomLevel = $derived(
@@ -33,98 +33,115 @@
     'detail'
   );
 
-  const subagent = $derived(data?.subagent);
+  // Use subagents array if available, otherwise wrap single subagent
+  const allSubagents = $derived.by(() => {
+    if (data?.subagents && data.subagents.length > 0) {
+      return data.subagents;
+    }
+    if (data?.subagent) {
+      return [data.subagent];
+    }
+    return [];
+  });
+
+  const isParallel = $derived(allSubagents.length > 1);
   const depth = $derived(data?.depth || 0);
   const branchColor = $derived(data?.branchColor || '#22c55e');
 
-  // Status
-  const status = $derived(subagent?.status || 'starting');
-  const subagentType = $derived(subagent?.subagentType || 'Task');
-  const toolCount = $derived(subagent?.messages?.length || 0);
-
-  // Get tool messages for expanded view
-  const toolMessages = $derived(
-    subagent?.messages?.filter((m: Message) => m.type === 'tool_use') || []
-  );
-
-  // Get child subagents (nested)
-  const childSubagents = $derived(
-    subagent?.toolUseId ? instances.getChildSubagents(subagent.toolUseId) : []
-  );
-
-  // Elapsed time
-  let elapsedMs = $state(0);
-  const elapsedText = $derived.by(() => {
-    const seconds = Math.floor(elapsedMs / 1000);
-    if (seconds < 60) return `${seconds}s`;
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-    return `${minutes}m ${remainingSeconds}s`;
+  // Aggregate status for the whole group
+  const groupStatus = $derived.by(() => {
+    if (allSubagents.length === 0) return 'starting';
+    const statuses = allSubagents.map(s => s.status);
+    if (statuses.some(s => s === 'error')) return 'error';
+    if (statuses.some(s => s === 'running')) return 'running';
+    if (statuses.some(s => s === 'starting')) return 'starting';
+    if (statuses.every(s => s === 'complete')) return 'complete';
+    return 'running';
   });
 
-  // Timer for elapsed time
-  $effect(() => {
-    if (status === 'running' || status === 'starting') {
-      const startTime = subagent?.startedAt ? new Date(subagent.startedAt).getTime() : Date.now();
-      const interval = setInterval(() => {
-        elapsedMs = Date.now() - startTime;
-      }, 1000);
-      return () => clearInterval(interval);
-    } else if (subagent?.completedAt && subagent?.startedAt) {
-      elapsedMs = new Date(subagent.completedAt).getTime() - new Date(subagent.startedAt).getTime();
-    }
-    return undefined;
-  });
+  // Total tool count across all subagents
+  const totalToolCount = $derived(
+    allSubagents.reduce((sum, s) => sum + (s.messages?.length || 0), 0)
+  );
 
-  // Status styling
-  const StatusIcon = $derived.by(() => {
+  // Status styling helpers
+  function getStatusIcon(status: string) {
     switch (status) {
       case 'complete': return CircleCheck;
       case 'error': return CircleX;
       default: return LoaderCircle;
     }
-  });
+  }
 
-  const statusColor = $derived.by(() => {
+  function getStatusColor(status: string): string {
     switch (status) {
       case 'complete': return 'text-green-500';
       case 'error': return 'text-red-500';
       case 'running': return 'text-cyan-500';
       default: return 'text-muted-foreground';
     }
-  });
+  }
 
-  const borderClass = $derived.by(() => {
+  function getBorderClass(status: string): string {
     switch (status) {
       case 'complete': return 'border-green-500';
       case 'error': return 'border-red-500';
       case 'running': return 'border-cyan-500 animate-pulse';
       default: return 'border-cyan-500';
     }
-  });
+  }
 
-  // Current action (for summary level)
-  const currentAction = $derived.by(() => {
-    if (status !== 'running') return '';
-    const lastMsg = subagent?.messages?.[subagent.messages.length - 1];
+  // Get tool messages for a subagent
+  function getToolMessages(subagent: SubagentState): Message[] {
+    return subagent.messages?.filter((m: Message) => m.type === 'tool_use') || [];
+  }
+
+  // Get child subagents (nested)
+  function getChildSubagents(subagent: SubagentState): SubagentState[] {
+    return subagent.toolUseId ? instances.getChildSubagents(subagent.toolUseId) : [];
+  }
+
+  // Format elapsed time
+  function formatElapsed(subagent: SubagentState): string {
+    let ms = 0;
+    if (subagent.status === 'running' || subagent.status === 'starting') {
+      const startTime = subagent.startedAt ? new Date(subagent.startedAt).getTime() : Date.now();
+      ms = Date.now() - startTime;
+    } else if (subagent.completedAt && subagent.startedAt) {
+      ms = new Date(subagent.completedAt).getTime() - new Date(subagent.startedAt).getTime();
+    }
+    const seconds = Math.floor(ms / 1000);
+    if (seconds < 60) return `${seconds}s`;
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes}m ${remainingSeconds}s`;
+  }
+
+  // Current action for a subagent
+  function getCurrentAction(subagent: SubagentState): string {
+    if (subagent.status !== 'running') return '';
+    const lastMsg = subagent.messages?.[subagent.messages.length - 1];
     if (lastMsg?.type === 'tool_use') {
       return lastMsg.metadata?.toolName || 'Working...';
     }
     return 'Working...';
-  });
+  }
 
-  // Toggle expansion
-  function toggleExpanded(e: MouseEvent) {
+  // Toggle expansion for a specific subagent
+  function toggleExpanded(toolUseId: string, e: MouseEvent) {
     e.stopPropagation();
-    expanded = !expanded;
+    const newSet = new Set(expandedSet);
+    if (newSet.has(toolUseId)) {
+      newSet.delete(toolUseId);
+    } else {
+      newSet.add(toolUseId);
+    }
+    expandedSet = newSet;
   }
 
   // Click to zoom into branch (when in detail view)
   function handleClick() {
-    if (zoomLevel === 'detail') {
-      // In detail view, click toggles expansion
-      expanded = !expanded;
-    } else {
+    if (zoomLevel !== 'detail') {
       // In overview/summary, click zooms to node
       fitView({ nodes: [{ id }], duration: 300 });
     }
@@ -139,12 +156,27 @@
       default: return 'text-amber-500';
     }
   }
+
+  // Force re-render every second for elapsed time
+  let tick = $state(0);
+  $effect(() => {
+    const hasRunning = allSubagents.some(s => s.status === 'running' || s.status === 'starting');
+    if (hasRunning) {
+      const interval = setInterval(() => {
+        tick = tick + 1;
+      }, 1000);
+      return () => clearInterval(interval);
+    }
+    return undefined;
+  });
 </script>
 
 <Handle type="target" position={Position.Top} style="background: {branchColor}" />
 
+<!-- Use tick to force elapsed time updates -->
+{#key tick}
 <div
-  class="subagent-node rounded-lg border-l-4 {borderClass} bg-card p-3 min-w-[200px] max-w-[400px] cursor-pointer hover:bg-accent/50 transition-colors"
+  class="subagent-node rounded-lg border-l-4 {getBorderClass(groupStatus)} bg-card p-3 w-[320px] cursor-pointer hover:bg-accent/50 transition-colors"
   style="border-left-color: {branchColor}"
   onclick={handleClick}
   role="button"
@@ -152,100 +184,140 @@
   onkeydown={(e) => e.key === 'Enter' && handleClick()}
 >
   {#if zoomLevel === 'overview'}
+    <!-- Overview: just icons -->
     <div class="flex items-center justify-center gap-2">
+      {#if isParallel}
+        <span class="text-xs font-medium text-muted-foreground">{allSubagents.length}×</span>
+      {/if}
       <div class="rounded-full p-2" style="background: {branchColor}20">
         <Zap class="h-4 w-4" style="color: {branchColor}" />
       </div>
-      <div class="w-2 h-2 rounded-full {statusColor === 'text-green-500' ? 'bg-green-500' : statusColor === 'text-red-500' ? 'bg-red-500' : 'bg-cyan-500'}"></div>
+      <div class="w-2 h-2 rounded-full {getStatusColor(groupStatus) === 'text-green-500' ? 'bg-green-500' : getStatusColor(groupStatus) === 'text-red-500' ? 'bg-red-500' : 'bg-cyan-500'}"></div>
     </div>
   {:else if zoomLevel === 'summary'}
-    <div class="flex items-center gap-2">
-      <Zap class="h-4 w-4 shrink-0" style="color: {branchColor}" />
-      <span class="text-sm font-medium">{subagentType}</span>
-      {#if toolCount > 0}
-        <span class="text-xs bg-muted px-1.5 py-0.5 rounded">{toolCount} tools</span>
+    <!-- Summary: one line per subagent -->
+    <div class="space-y-1">
+      {#if isParallel}
+        <div class="flex items-center gap-1 text-xs text-muted-foreground mb-1">
+          <Layers class="h-3 w-3" />
+          <span>{allSubagents.length} parallel agents</span>
+        </div>
       {/if}
-      {#if currentAction}
-        <span class="text-xs text-muted-foreground truncate ml-auto">{currentAction}</span>
-      {/if}
-      <StatusIcon class="h-4 w-4 {statusColor} {status === 'running' ? 'animate-spin' : ''}" />
+      {#each allSubagents as subagent (subagent.toolUseId)}
+        {@const SubIcon = getStatusIcon(subagent.status)}
+        <div class="flex items-center gap-2">
+          <Zap class="h-3 w-3 shrink-0" style="color: {branchColor}" />
+          <span class="text-sm font-medium truncate">{subagent.subagentType}</span>
+          {#if subagent.messages?.length}
+            <span class="text-xs bg-muted px-1 py-0.5 rounded">{subagent.messages.length}</span>
+          {/if}
+          <SubIcon class="h-3 w-3 ml-auto {getStatusColor(subagent.status)} {subagent.status === 'running' ? 'animate-spin' : ''}" />
+        </div>
+      {/each}
     </div>
   {:else}
-    <div class="space-y-2">
-      <div class="flex items-center gap-2">
-        <Zap class="h-4 w-4 shrink-0" style="color: {branchColor}" />
-        <span class="text-sm font-medium">{subagentType}</span>
-        <StatusIcon class="h-4 w-4 ml-auto {statusColor} {status === 'running' ? 'animate-spin' : ''}" />
-      </div>
-
-      <div class="flex items-center gap-2 text-xs text-muted-foreground">
-        <span class="capitalize">{status}</span>
-        <span>|</span>
-        <span>{elapsedText}</span>
-        {#if toolCount > 0}
-          <span>|</span>
-          <span>{toolCount} tools</span>
-        {/if}
-      </div>
-
-      {#if subagent?.description}
-        <div class="text-xs text-muted-foreground truncate">
-          {subagent.description}
+    <!-- Detail: full info for each subagent -->
+    <div class="space-y-3">
+      {#if isParallel}
+        <div class="flex items-center gap-2 pb-2 border-b border-border">
+          <Layers class="h-4 w-4 text-muted-foreground" />
+          <span class="text-sm font-medium">{allSubagents.length} Parallel Agents</span>
+          <span class="text-xs text-muted-foreground ml-auto">{totalToolCount} tools total</span>
         </div>
       {/if}
 
-      <!-- Expand/collapse button -->
-      <button
-        class="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors w-full"
-        onclick={toggleExpanded}
-      >
-        {#if expanded}
-          <ChevronDown class="h-3 w-3" />
-          <span>Hide details</span>
-        {:else}
-          <ChevronRight class="h-3 w-3" />
-          <span>Show {toolMessages.length} tools{childSubagents.length > 0 ? `, ${childSubagents.length} subagents` : ''}</span>
-        {/if}
-      </button>
+      {#each allSubagents as subagent, i (subagent.toolUseId)}
+        {@const SubIcon = getStatusIcon(subagent.status)}
+        {@const toolMessages = getToolMessages(subagent)}
+        {@const childSubagents = getChildSubagents(subagent)}
+        {@const isExpanded = expandedSet.has(subagent.toolUseId)}
 
-      <!-- Expanded content -->
-      {#if expanded}
-        <div class="border-t border-border pt-2 mt-2 space-y-1" transition:slide={{ duration: 150 }}>
-          <!-- Tool list -->
-          {#each toolMessages as tool (tool.metadata?.toolId)}
-            <div class="flex items-center gap-2 text-xs py-1 px-2 rounded bg-muted/50">
-              <Wrench class="h-3 w-3 {getToolStatusColor(tool)} shrink-0" />
-              <span class="font-medium">{tool.metadata?.toolName || 'Tool'}</span>
-              <span class="text-muted-foreground truncate">
-                {getToolGlance(tool.metadata?.toolInput as Record<string, unknown>) || ''}
-              </span>
+        <div class="space-y-2 {i > 0 ? 'pt-2 border-t border-border/50' : ''}">
+          <!-- Header -->
+          <div class="flex items-center gap-2">
+            <Zap class="h-4 w-4 shrink-0" style="color: {branchColor}" />
+            <span class="text-sm font-medium">{subagent.subagentType}</span>
+            <SubIcon class="h-4 w-4 ml-auto {getStatusColor(subagent.status)} {subagent.status === 'running' ? 'animate-spin' : ''}" />
+          </div>
+
+          <!-- Status line -->
+          <div class="flex items-center gap-2 text-xs text-muted-foreground">
+            <span class="capitalize">{subagent.status}</span>
+            <span>|</span>
+            <span>{formatElapsed(subagent)}</span>
+            {#if subagent.messages?.length}
+              <span>|</span>
+              <span>{subagent.messages.length} tools</span>
+            {/if}
+          </div>
+
+          <!-- Description -->
+          {#if subagent.description}
+            <div class="text-xs text-muted-foreground truncate">
+              {subagent.description}
             </div>
-          {/each}
+          {/if}
 
-          <!-- Child subagents -->
-          {#each childSubagents as child (child.toolUseId)}
-            <div class="flex items-center gap-2 text-xs py-1 px-2 rounded bg-cyan-500/10 border-l-2 border-cyan-500">
-              <Zap class="h-3 w-3 text-cyan-500 shrink-0" />
-              <span class="font-medium">{child.subagentType}</span>
-              <span class="text-muted-foreground capitalize">{child.status}</span>
-              {#if child.messages.length > 0}
-                <span class="text-xs bg-muted px-1 rounded">{child.messages.length} tools</span>
+          <!-- Current action -->
+          {#if getCurrentAction(subagent)}
+            <div class="text-xs text-cyan-500">
+              → {getCurrentAction(subagent)}
+            </div>
+          {/if}
+
+          <!-- Expand/collapse -->
+          {#if toolMessages.length > 0 || childSubagents.length > 0}
+            <button
+              class="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors w-full"
+              onclick={(e) => toggleExpanded(subagent.toolUseId, e)}
+            >
+              {#if isExpanded}
+                <ChevronDown class="h-3 w-3" />
+                <span>Hide details</span>
+              {:else}
+                <ChevronRight class="h-3 w-3" />
+                <span>Show {toolMessages.length} tools{childSubagents.length > 0 ? `, ${childSubagents.length} nested` : ''}</span>
               {/if}
-            </div>
-          {/each}
+            </button>
+          {/if}
 
-          <!-- Result preview if complete -->
-          {#if status === 'complete' && subagent?.result}
-            <div class="text-xs text-muted-foreground bg-muted/30 p-2 rounded max-h-20 overflow-y-auto">
-              <span class="font-medium">Result: </span>
-              {subagent.result.slice(0, 200)}{subagent.result.length > 200 ? '...' : ''}
+          <!-- Expanded content -->
+          {#if isExpanded}
+            <div class="border-t border-border/50 pt-2 space-y-1" transition:slide={{ duration: 150 }}>
+              {#each toolMessages as tool (tool.metadata?.toolId)}
+                <div class="flex items-center gap-2 text-xs py-1 px-2 rounded bg-muted/50">
+                  <Wrench class="h-3 w-3 {getToolStatusColor(tool)} shrink-0" />
+                  <span class="font-medium">{tool.metadata?.toolName || 'Tool'}</span>
+                  <span class="text-muted-foreground truncate">
+                    {getToolGlance(tool.metadata?.toolInput as Record<string, unknown>) || ''}
+                  </span>
+                </div>
+              {/each}
+
+              {#each childSubagents as child (child.toolUseId)}
+                <div class="flex items-center gap-2 text-xs py-1 px-2 rounded bg-cyan-500/10 border-l-2 border-cyan-500">
+                  <Zap class="h-3 w-3 text-cyan-500 shrink-0" />
+                  <span class="font-medium">{child.subagentType}</span>
+                  <span class="text-muted-foreground capitalize">{child.status}</span>
+                  {#if child.messages.length > 0}
+                    <span class="text-xs bg-muted px-1 rounded">{child.messages.length}</span>
+                  {/if}
+                </div>
+              {/each}
+
+              {#if subagent.status === 'complete' && subagent.result}
+                <div class="text-xs text-muted-foreground bg-muted/30 p-2 rounded max-h-20 overflow-y-auto">
+                  <span class="font-medium">Result: </span>
+                  {subagent.result.slice(0, 200)}{subagent.result.length > 200 ? '...' : ''}
+                </div>
+              {/if}
             </div>
           {/if}
         </div>
-      {/if}
+      {/each}
 
-      {#if depth >= 3 && !expanded}
-        <div class="flex items-center gap-1 text-xs text-muted-foreground">
+      {#if depth >= 3}
+        <div class="flex items-center gap-1 text-xs text-muted-foreground pt-2 border-t border-border">
           <Layers class="h-3 w-3" />
           <span>+{depth - 2} nested levels</span>
         </div>
@@ -253,5 +325,6 @@
     </div>
   {/if}
 </div>
+{/key}
 
 <Handle type="source" position={Position.Bottom} style="background: {branchColor}" />

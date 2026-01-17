@@ -13,9 +13,10 @@
   import { instances, ui } from '$lib/stores';
   import FlowContextMenu from './FlowContextMenu.svelte';
   import FlowAutoFit from './FlowAutoFit.svelte';
+  import FlowZoomTracker from './FlowZoomTracker.svelte';
   import { nodeTypes } from './nodes';
   import { transformMessagesToFlow } from '$lib/utils/flow-transform';
-  import { applyLayout } from '$lib/utils/flow-layout';
+  import { applyLayout, type ZoomMode } from '$lib/utils/flow-layout';
 
   interface Props {
     instanceId: string;
@@ -26,9 +27,9 @@
   // Get messages from store
   const messages = $derived(instances.getMessages(instanceId));
 
-  // Get active subagents for subagent node data
+  // Get all subagents for this instance (including completed ones for history)
   const subagentsMap = $derived.by(() => {
-    const subagents = instances.getActiveSubagentsForInstance(instanceId);
+    const subagents = instances.getSubagentsForInstance(instanceId);
     return new Map(subagents.map(s => [s.toolUseId, s]));
   });
 
@@ -45,14 +46,22 @@
   });
 
   // Derive layout with dagre hierarchical positioning
+  // Re-computes when zoomMode changes for dynamic spacing
   const layoutData = $derived.by(() => {
     const { nodes: rawNodes, edges: rawEdges } = rawFlowData;
     if (rawNodes.length === 0) return { nodes: [] as Node[], edges: [] as Edge[] };
-    return applyLayout(rawNodes, rawEdges);
+    return applyLayout(rawNodes, rawEdges, { zoomMode });
   });
 
   const nodes = $derived(layoutData.nodes);
   const edges = $derived(layoutData.edges);
+
+  // Viewport zoom tracking for dynamic layout
+  let currentZoom = $state(1);
+
+  // Derive zoom mode from current zoom level
+  // compact: zoomed out (overview/summary), expanded: zoomed in (detail)
+  const zoomMode = $derived<ZoomMode>(currentZoom >= 1.0 ? 'expanded' : 'compact');
 
   // Context menu state
   let contextMenu = $state<{ x: number; y: number; nodeId: string } | null>(null);
@@ -114,6 +123,11 @@
   function handlePaneClick() {
     closeContextMenu();
   }
+
+  // Callback from FlowZoomTracker when zoom changes
+  function handleZoomChange(zoom: number) {
+    currentZoom = zoom;
+  }
 </script>
 
 <div class="relative h-full w-full">
@@ -132,6 +146,9 @@
   >
     <!-- Background grid -->
     <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
+
+    <!-- Track zoom level for dynamic layout spacing, handles re-centering on threshold cross -->
+    <FlowZoomTracker onZoomChange={handleZoomChange} {nodes} />
 
     <!-- Auto-pan to new nodes (must be inside SvelteFlow context) -->
     <FlowAutoFit nodeCount={nodes.length} {nodes} />
@@ -191,6 +208,15 @@
   /* Smooth edge path transitions */
   :global(.flow-animated .svelte-flow__edge path) {
     transition: d 0.3s ease-out;
+  }
+
+  /* Disable transitions during layout threshold changes */
+  :global(.flow-animated.transitions-disabled .svelte-flow__node) {
+    transition: none !important;
+  }
+
+  :global(.flow-animated.transitions-disabled .svelte-flow__edge path) {
+    transition: none !important;
   }
 
   :global(.svelte-flow__controls) {

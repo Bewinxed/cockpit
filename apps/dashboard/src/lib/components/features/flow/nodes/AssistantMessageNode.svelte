@@ -63,7 +63,7 @@
 
 <Handle type="target" position={Position.Top} class="!bg-purple-500" />
 
-<div class="assistant-message-node rounded-lg border-l-4 {isStreaming ? 'border-purple-500 animate-pulse' : 'border-purple-500'} bg-card p-3 min-w-[200px] max-w-[400px]">
+<div class="assistant-message-node rounded-lg border-l-4 {isStreaming ? 'border-purple-500 animate-pulse' : 'border-purple-500'} bg-card p-3 w-[320px]">
   {#if zoomLevel === 'overview'}
     <div class="flex items-center justify-center gap-2">
       <div class="rounded-full bg-purple-500/20 p-2">

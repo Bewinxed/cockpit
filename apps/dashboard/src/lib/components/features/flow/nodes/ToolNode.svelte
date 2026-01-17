@@ -95,7 +95,7 @@
 
 <Handle type="target" position={Position.Top} class="!bg-amber-500" />
 
-<div class="tool-node rounded-lg border-l-4 {statusClass} bg-card p-3 min-w-[200px] max-w-[400px]">
+<div class="tool-node rounded-lg border-l-4 {statusClass} bg-card p-3 w-[320px]">
   {#if zoomLevel === 'overview'}
     <div class="flex items-center justify-center gap-2">
       <div class="rounded-full bg-amber-500/20 p-2">

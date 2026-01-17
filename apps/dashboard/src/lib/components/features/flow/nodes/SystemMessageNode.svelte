@@ -50,7 +50,7 @@
 
 <Handle type="target" position={Position.Top} class="!bg-gray-400" />
 
-<div class="system-message-node rounded-lg border border-border bg-muted/50 p-2 min-w-[160px] max-w-[300px]">
+<div class="system-message-node rounded-lg border border-border bg-muted/50 p-2 w-[320px]">
   {#if zoomLevel === 'overview'}
     <div class="flex items-center justify-center">
       <IconComponent class="h-4 w-4 {iconColor}" />
