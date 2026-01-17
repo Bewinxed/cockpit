@@ -8,11 +8,11 @@ import { Position, type Node, type Edge } from '@xyflow/svelte';
 
 // Default node dimensions for layout calculations
 const NODE_WIDTH = 320;
-const NODE_HEIGHT_MIN = 140;
+const NODE_HEIGHT_MIN = 100;
 
 // Spacing between nodes
-const NODE_SEP = 80;   // Horizontal spacing
-const RANK_SEP = 180;  // Vertical spacing (between rows)
+const NODE_SEP = 40;   // Horizontal spacing
+const RANK_SEP = 60;   // Vertical spacing (between rows)
 
 export interface LayoutOptions {
   /** Layout direction: TB (top-bottom) or LR (left-right) */
@@ -55,6 +55,8 @@ export function layoutNodes(
     rankdir: direction,
     nodesep: nodeSep,
     ranksep: rankSep,
+    align: 'UL', // Align nodes to upper-left within ranks for consistent centering
+    ranker: 'tight-tree', // Use tight-tree for more compact layout
   });
 
   // Add nodes to dagre
