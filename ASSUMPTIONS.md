@@ -313,6 +313,90 @@ This document describes the expected behavior and assumptions about the Cockpit 
 
 ---
 
+## Flow View (Svelte-Flow)
+
+### F1: Flow View Toggle
+- **Assumption**: User can switch between Chat view and Flow view with Ctrl+G or view buttons
+- **Expected**: View toggle buttons visible in header, clicking switches view instantly
+- **Verify**: Click flow view button → See node-based visualization
+
+### F2: Message Nodes Display
+- **Assumption**: Each message appears as a distinct node in the flow graph
+- **Expected**: User messages (cyan border), Assistant messages (purple border), System messages (gray border)
+- **Verify**: Send messages → See nodes appear with correct styling
+
+### F3: Node Content Visibility
+- **Assumption**: Node content is readable and appropriately truncated
+- **Expected**: Long messages show preview with "..." truncation, full content in tooltip or expansion
+- **Verify**: Send long message → Node shows readable preview
+
+### F4: Edge Connections
+- **Assumption**: Messages are connected by edges showing conversation flow
+- **Expected**: Smooth bezier/step edges connect sequential messages
+- **Verify**: Multiple messages → See connected edge path
+
+### F5: Hierarchical Layout
+- **Assumption**: Nodes are automatically laid out in a top-to-bottom hierarchy
+- **Expected**: dagre layout positions nodes without overlap, proper spacing
+- **Verify**: Add multiple messages → Nodes auto-arrange vertically
+
+### F6: Auto-Pan on New Messages
+- **Assumption**: When a new message arrives, view pans to show it without changing zoom
+- **Expected**: New node becomes visible, zoom level preserved, smooth animation
+- **Verify**: At any zoom level → Send message → View smoothly pans to new node
+
+### F7: Zoom and Pan Controls
+- **Assumption**: User can zoom in/out and pan around the flow graph
+- **Expected**: Mouse wheel zooms, drag pans, control buttons work
+- **Verify**: Scroll to zoom → Drag to pan → Use control buttons
+
+### F8: MiniMap Navigation
+- **Assumption**: MiniMap shows overview and allows quick navigation
+- **Expected**: MiniMap in corner shows all nodes, clicking jumps to location
+- **Verify**: Large conversation → Click minimap area → View jumps there
+
+### F9: Tool Use Nodes
+- **Assumption**: Tool uses appear as distinct nodes connected to assistant message
+- **Expected**: Tool nodes show tool name, have different styling, connect to parent
+- **Verify**: Trigger tool use → See tool node appear
+
+### F10: Subagent Branch Visualization
+- **Assumption**: Subagent spawns create visual branches in the flow
+- **Expected**: Subagent branch shows as parallel path that merges back
+- **Verify**: Spawn subagent → See branching node structure
+
+### F11: Node Interaction
+- **Assumption**: Nodes are interactive - can be selected, have context menu
+- **Expected**: Click selects, right-click shows context menu with actions
+- **Verify**: Right-click node → See Copy/Jump/Rewind options
+
+### F12: Cost Display
+- **Assumption**: Total session cost visible in Flow view header
+- **Expected**: Cost badge shows current accumulated cost
+- **Verify**: Use instance → See cost update in flow view
+
+### F13: Streaming Node Updates
+- **Assumption**: As assistant responds, node content updates in real-time
+- **Expected**: Partial text visible during streaming, node may resize
+- **Verify**: Ask question → See node content stream in
+
+### F14: Empty State
+- **Assumption**: Flow view shows helpful empty state when no messages
+- **Expected**: Panel indicates "Flow view ready. Messages will appear as nodes."
+- **Verify**: New instance → Flow view shows empty state message
+
+### F15: Node Spacing at Different Zoom Levels
+- **Assumption**: Node spacing is comfortable at any zoom level
+- **Expected**: Not too cramped when zoomed out, not too sparse when zoomed in
+- **Verify**: Zoom out to see all → Zoom in to read → Spacing feels natural
+
+### F16: Smooth Animations
+- **Assumption**: Node position changes animate smoothly
+- **Expected**: When layout recalculates, nodes transition smoothly (0.3s ease-out)
+- **Verify**: Add message → Watch nodes animate to new positions
+
+---
+
 ## Testing Checklist
 
 For Playwright testing, verify each assumption by:

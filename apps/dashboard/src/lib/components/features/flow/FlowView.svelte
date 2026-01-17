@@ -44,7 +44,7 @@
     });
   });
 
-  // Derive layout once, then extract nodes/edges
+  // Derive layout with dagre hierarchical positioning
   const layoutData = $derived.by(() => {
     const { nodes: rawNodes, edges: rawEdges } = rawFlowData;
     if (rawNodes.length === 0) return { nodes: [] as Node[], edges: [] as Edge[] };

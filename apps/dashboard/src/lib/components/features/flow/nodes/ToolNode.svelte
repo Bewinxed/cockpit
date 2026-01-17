@@ -76,8 +76,14 @@
     }
   });
 
-  // Expanded state for detail view
-  let expanded = $state(data?.expanded ?? false);
+  // Expanded state for detail view - use derived to react to data changes
+  const initialExpanded = $derived(data?.expanded ?? false);
+  let expanded = $state(false);
+
+  // Sync expanded state when data.expanded changes externally
+  $effect(() => {
+    if (initialExpanded) expanded = true;
+  });
 
   // Result preview
   const resultPreview = $derived(

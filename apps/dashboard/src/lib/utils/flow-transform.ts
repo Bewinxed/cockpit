@@ -149,6 +149,35 @@ function getGroupMessages(group: MessageGroup): Message[] {
 }
 
 /**
+ * Estimate node height based on content for layout purposes
+ * This helps dagre allocate proper spacing to avoid overlaps
+ */
+function estimateNodeHeight(group: MessageGroup): number {
+  const BASE_HEIGHT = 60;  // Minimum padding + borders
+  const LINE_HEIGHT = 20;  // Approximate pixels per line
+  const MAX_HEIGHT = 400;  // Cap to prevent huge nodes
+  const CHARS_PER_LINE = 45; // Average chars per line at default width
+
+  if (group.type === 'tool_group') {
+    // Tool nodes are more compact
+    return BASE_HEIGHT + (group.messages.length * 30);
+  }
+
+  if (group.type === 'subagent_group') {
+    // Subagent nodes have fixed structure
+    return BASE_HEIGHT + 60;
+  }
+
+  // Single messages - estimate based on content length
+  const content = group.message.content || '';
+  const contentLength = typeof content === 'string' ? content.length : 0;
+  const estimatedLines = Math.ceil(contentLength / CHARS_PER_LINE);
+  const contentHeight = estimatedLines * LINE_HEIGHT;
+
+  return Math.min(BASE_HEIGHT + contentHeight, MAX_HEIGHT);
+}
+
+/**
  * Transform MessageGroup[] into svelte-flow nodes and edges
  *
  * @param groups - Grouped messages from groupMessages()
@@ -175,12 +204,17 @@ export function messagesToFlow(
     const messages = getGroupMessages(group);
     const firstMsg = messages[0];
 
+    // Estimate height for layout
+    const estimatedHeight = estimateNodeHeight(group);
+
     // Build node data based on type
     const data: Record<string, unknown> = {
       instanceId,
       messages,
       // Include first message content for easy access
       content: firstMsg.content,
+      // Height hint for dagre layout
+      height: estimatedHeight,
     };
 
     // Add type-specific data
