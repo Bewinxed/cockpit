@@ -7,12 +7,12 @@ import dagre from '@dagrejs/dagre';
 import { Position, type Node, type Edge } from '@xyflow/svelte';
 
 // Default node dimensions for layout calculations
-const NODE_WIDTH = 280;
-const NODE_HEIGHT_MIN = 60;
+const NODE_WIDTH = 320;
+const NODE_HEIGHT_MIN = 140;
 
 // Spacing between nodes
-const NODE_SEP = 50;  // Horizontal spacing
-const RANK_SEP = 80;  // Vertical spacing (between rows)
+const NODE_SEP = 80;   // Horizontal spacing
+const RANK_SEP = 180;  // Vertical spacing (between rows)
 
 export interface LayoutOptions {
   /** Layout direction: TB (top-bottom) or LR (left-right) */
