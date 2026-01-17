@@ -210,6 +210,8 @@ class InstanceStore {
 
   /** Get messages for an instance */
   getMessages(instanceId: string): Message[] {
+    // Access map size first to ensure reactive tracking on mutations
+    void this.#messages.size;
     return this.#messages.get(instanceId) || [];
   }
 

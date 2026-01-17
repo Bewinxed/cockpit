@@ -5,7 +5,6 @@
     Controls,
     MiniMap,
     Panel,
-    Position,
     type Node,
     type Edge,
     type DefaultEdgeOptions,
@@ -13,6 +12,7 @@
   } from '@xyflow/svelte';
   import { instances, ui } from '$lib/stores';
   import FlowContextMenu from './FlowContextMenu.svelte';
+  import FlowAutoFit from './FlowAutoFit.svelte';
   import { nodeTypes } from './nodes';
   import { transformMessagesToFlow } from '$lib/utils/flow-transform';
   import { applyLayout } from '$lib/utils/flow-layout';
@@ -128,9 +128,13 @@
     maxZoom={2}
     onpaneclick={handlePaneClick}
     onnodecontextmenu={handleNodeContextMenu}
+    class="flow-animated"
   >
     <!-- Background grid -->
     <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
+
+    <!-- Auto-pan to new nodes (must be inside SvelteFlow context) -->
+    <FlowAutoFit nodeCount={nodes.length} {nodes} />
 
     <!-- Controls - zoom, fit, lock -->
     <Controls position="bottom-left" showZoom showFitView showLock />
@@ -177,6 +181,16 @@
   :global(.svelte-flow) {
     --xy-background-color: transparent;
     --xy-minimap-background-color: hsl(var(--background) / 0.8);
+  }
+
+  /* Smooth transitions for node positions */
+  :global(.flow-animated .svelte-flow__node) {
+    transition: transform 0.3s ease-out;
+  }
+
+  /* Smooth edge path transitions */
+  :global(.flow-animated .svelte-flow__edge path) {
+    transition: d 0.3s ease-out;
   }
 
   :global(.svelte-flow__controls) {
