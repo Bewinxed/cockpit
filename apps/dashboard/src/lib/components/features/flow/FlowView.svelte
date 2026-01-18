@@ -10,6 +10,7 @@
     type DefaultEdgeOptions,
     BackgroundVariant
   } from '@xyflow/svelte';
+  import { onMount } from 'svelte';
   import { instances, ui } from '$lib/stores';
   import FlowContextMenu from './FlowContextMenu.svelte';
   import FlowAutoFit from './FlowAutoFit.svelte';
@@ -17,6 +18,8 @@
   import { nodeTypes } from './nodes';
   import { transformMessagesToFlow } from '$lib/utils/flow-transform';
   import { applyLayout, type ZoomMode } from '$lib/utils/flow-layout';
+  import { ZOOM_MIN, ZOOM_MAX, ZOOM_THRESHOLD_LAYOUT } from '$lib/utils/flow-constants';
+  import type { ContextMenuAction } from '$lib/utils/flow-types';
 
   interface Props {
     instanceId: string;
@@ -61,10 +64,19 @@
 
   // Derive zoom mode from current zoom level
   // compact: zoomed out (overview/summary), expanded: zoomed in (detail)
-  const zoomMode = $derived<ZoomMode>(currentZoom >= 1.0 ? 'expanded' : 'compact');
+  const zoomMode = $derived<ZoomMode>(currentZoom >= ZOOM_THRESHOLD_LAYOUT ? 'expanded' : 'compact');
 
   // Context menu state
   let contextMenu = $state<{ x: number; y: number; nodeId: string } | null>(null);
+
+  // Transitions disabled state (controlled by FlowZoomTracker)
+  let transitionsDisabled = $state(false);
+
+  // Track if component has mounted (delays initial SvelteFlow render to avoid NaN errors)
+  let mounted = $state(false);
+
+  // Track if SvelteFlow has initialized (viewport is valid)
+  let flowReady = $state(false);
 
   // Default edge styling - smooth bezier curves
   const defaultEdgeOptions: DefaultEdgeOptions = {
@@ -72,6 +84,15 @@
     animated: false,
     style: 'stroke-width: 2px;'
   };
+
+
+  // Delay SvelteFlow render until after mount to avoid initial NaN viewport errors
+  onMount(() => {
+    // Use requestAnimationFrame to ensure DOM is ready
+    requestAnimationFrame(() => {
+      mounted = true;
+    });
+  });
 
   // Get instance for cost display
   const instance = $derived(instances.get(instanceId));
@@ -93,10 +114,9 @@
   }
 
   // Handle context menu actions
-  function handleContextAction(action: string, nodeId: string) {
+  function handleContextAction(action: ContextMenuAction, nodeId: string) {
     switch (action) {
       case 'copy': {
-        // Copy node content to clipboard
         const node = nodes.find(n => n.id === nodeId);
         if (node?.data?.content) {
           navigator.clipboard.writeText(String(node.data.content));
@@ -104,15 +124,12 @@
         break;
       }
       case 'rewind':
-        // TODO: Implement rewind to this message
-        console.log('Rewind to:', nodeId);
+        // TODO: Implement rewind - will need to call instance API
         break;
       case 'branch':
-        // TODO: Implement branch from this message
-        console.log('Branch from:', nodeId);
+        // TODO: Implement branch - will need to call instance API
         break;
       case 'jump':
-        // Switch to chat view (scrolling to message is future enhancement)
         ui.setViewMode(instanceId, 'chat');
         break;
     }
@@ -128,41 +145,63 @@
   function handleZoomChange(zoom: number) {
     currentZoom = zoom;
   }
+
+  // Callback from FlowZoomTracker when transitions should be disabled
+  function handleTransitionsDisabled(disabled: boolean) {
+    transitionsDisabled = disabled;
+  }
+
+  // Callback when SvelteFlow initializes
+  function handleInit() {
+    // Small delay to ensure viewport is fully initialized
+    setTimeout(() => {
+      flowReady = true;
+    }, 50);
+  }
 </script>
 
 <div class="relative h-full w-full">
-  <SvelteFlow
-    {nodes}
-    {edges}
-    {nodeTypes}
-    {defaultEdgeOptions}
-    fitView
-    onlyRenderVisibleElements={true}
-    minZoom={0.1}
-    maxZoom={2}
-    onpaneclick={handlePaneClick}
-    onnodecontextmenu={handleNodeContextMenu}
-    class="flow-animated"
-  >
-    <!-- Background grid -->
-    <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
+  {#if mounted}
+    <SvelteFlow
+      {nodes}
+      {edges}
+      {nodeTypes}
+      {defaultEdgeOptions}
+      onlyRenderVisibleElements={true}
+      minZoom={ZOOM_MIN}
+      maxZoom={ZOOM_MAX}
+      onpaneclick={handlePaneClick}
+      onnodecontextmenu={handleNodeContextMenu}
+      oninit={handleInit}
+      class="flow-animated {transitionsDisabled ? 'transitions-disabled' : ''}"
+    >
+    <!-- Background grid - only render after viewport is ready to avoid NaN errors -->
+    {#if flowReady}
+      <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
+    {/if}
 
     <!-- Track zoom level for dynamic layout spacing, handles re-centering on threshold cross -->
-    <FlowZoomTracker onZoomChange={handleZoomChange} {nodes} />
+    {#if flowReady}
+      <FlowZoomTracker onZoomChange={handleZoomChange} onTransitionsDisabled={handleTransitionsDisabled} {nodes} />
+    {/if}
 
     <!-- Auto-pan to new nodes (must be inside SvelteFlow context) -->
-    <FlowAutoFit nodeCount={nodes.length} {nodes} />
+    {#if flowReady}
+      <FlowAutoFit nodeCount={nodes.length} {nodes} />
+    {/if}
 
     <!-- Controls - zoom, fit, lock -->
     <Controls position="bottom-left" showZoom showFitView showLock />
 
-    <!-- MiniMap - always visible -->
-    <MiniMap
-      position="bottom-right"
-      pannable
-      zoomable
-      class="!bg-background/80 !border-border"
-    />
+    <!-- MiniMap - only render after viewport is ready to avoid NaN errors -->
+    {#if flowReady}
+      <MiniMap
+        position="bottom-right"
+        pannable
+        zoomable
+        class="!bg-background/80 !border-border"
+      />
+    {/if}
 
     <!-- Header panel with cost display -->
     <Panel position="top-right" class="!bg-transparent">
@@ -180,14 +219,20 @@
         </div>
       </Panel>
     {/if}
-  </SvelteFlow>
+    </SvelteFlow>
+  {:else}
+    <!-- Loading placeholder while SvelteFlow initializes -->
+    <div class="h-full w-full flex items-center justify-center bg-background">
+      <span class="text-muted-foreground">Loading flow view...</span>
+    </div>
+  {/if}
 
   <!-- Context menu -->
   {#if contextMenu}
     <FlowContextMenu
       x={contextMenu.x}
       y={contextMenu.y}
-      onAction={(action) => handleContextAction(action, contextMenu!.nodeId)}
+      onAction={(action) => handleContextAction(action as ContextMenuAction, contextMenu!.nodeId)}
       onClose={closeContextMenu}
     />
   {/if}

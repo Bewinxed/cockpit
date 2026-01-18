@@ -5,73 +5,15 @@
 
 import dagre from '@dagrejs/dagre';
 import { Position, type Node, type Edge } from '@xyflow/svelte';
+import {
+  NODE_WIDTH,
+  getLayoutConfig,
+  estimateContentHeight,
+} from './flow-constants';
+import type { LayoutOptions } from './flow-types';
 
-// Default node dimensions for layout calculations
-const NODE_WIDTH = 320;
-
-// Spacing configurations for different zoom modes
-const COMPACT_CONFIG = {
-  nodeHeightMin: 40,    // Minimum node height
-  nodeHeightMax: 60,    // Max height in compact (abbreviated anyway)
-  nodeSep: 30,          // Horizontal spacing
-  rankSep: 20,          // Vertical spacing - tight for compact view
-  charsPerLine: 50,     // Approximate chars per line
-  lineHeight: 16,       // Line height in px
-};
-
-const EXPANDED_CONFIG = {
-  nodeHeightMin: 120,   // Minimum node height (header + some content)
-  nodeHeightMax: 500,   // Max height for very long messages
-  nodeSep: 40,          // Horizontal spacing
-  rankSep: 60,          // Vertical spacing - room for expanded content
-  charsPerLine: 40,     // Chars per line (more conservative)
-  lineHeight: 24,       // Line height in px (accounts for padding)
-};
-
-/**
- * Estimate node height based on content
- */
-function estimateContentHeight(
-  node: Node,
-  config: typeof COMPACT_CONFIG | typeof EXPANDED_CONFIG
-): number {
-  const content = node.data?.content as string | undefined;
-  if (!content || typeof content !== 'string') {
-    return config.nodeHeightMin;
-  }
-
-  // Count actual newlines in content for better line estimation
-  const newlineCount = (content.match(/\n/g) || []).length;
-  // Estimate wrapped lines based on content length
-  const wrappedLines = Math.ceil(content.length / config.charsPerLine);
-  // Total lines is the max of newlines or wrapped estimate
-  const totalLines = Math.max(newlineCount + 1, wrappedLines);
-
-  // Base height includes: header (40px), padding (24px top+bottom), borders
-  const baseHeight = 80;
-  const contentHeight = totalLines * config.lineHeight;
-  const estimatedHeight = baseHeight + contentHeight;
-
-  // Clamp between min and max
-  return Math.max(config.nodeHeightMin, Math.min(config.nodeHeightMax, estimatedHeight));
-}
-
-export type ZoomMode = 'compact' | 'expanded';
-
-export interface LayoutOptions {
-  /** Layout direction: TB (top-bottom) or LR (left-right) */
-  direction?: 'TB' | 'LR';
-  /** Horizontal spacing between nodes */
-  nodeSep?: number;
-  /** Vertical spacing between ranks (rows) */
-  rankSep?: number;
-  /** Default node width */
-  nodeWidth?: number;
-  /** Default node height */
-  nodeHeightMin?: number;
-  /** Zoom mode affects spacing - 'compact' for zoomed out, 'expanded' for zoomed in */
-  zoomMode?: ZoomMode;
-}
+// Re-export types for convenience
+export type { ZoomMode, LayoutOptions } from './flow-types';
 
 /**
  * Apply dagre layout to position nodes hierarchically
@@ -87,7 +29,7 @@ export function layoutNodes(
   options: LayoutOptions = {}
 ): Node[] {
   // Select config based on zoom mode
-  const config = options.zoomMode === 'expanded' ? EXPANDED_CONFIG : COMPACT_CONFIG;
+  const config = getLayoutConfig(options.zoomMode ?? 'compact');
 
   const {
     direction = 'TB',
@@ -107,13 +49,12 @@ export function layoutNodes(
     nodesep: nodeSep,
     ranksep: rankSep,
     ranker: 'tight-tree', // Use tight-tree for more compact layout
-    // Default alignment (undefined) centers nodes within their rank
   });
 
   // Add nodes to dagre with content-based heights
   for (const node of nodes) {
-    // Estimate height based on content, clamped to min/max for zoom mode
-    const height = estimateContentHeight(node, config);
+    const content = node.data?.content as string | undefined;
+    const height = estimateContentHeight(content, config);
     nodeHeights.set(node.id, height);
 
     g.setNode(node.id, {
@@ -153,27 +94,21 @@ export function layoutNodes(
 }
 
 /**
- * Align fork points (nodes that share the same source) and merge points (nodes that share the same target)
+ * Align fork points (nodes that share the same source) and merge points
  * This ensures parallel branches line up at both the start and end of forks
  *
  * IMPORTANT: When moving a node, we must also move all its descendants to maintain branch integrity
  */
 function alignForkAndMergePoints(nodes: Node[], edges: Edge[]): Node[] {
   // Build maps for fork/merge detection and parent-child relationships
-  const sourceToTargets = new Map<string, string[]>(); // fork: one source -> multiple targets
-  const targetToSources = new Map<string, string[]>(); // merge: multiple sources -> one target
-  const nodeToChildren = new Map<string, string[]>(); // parent -> children (for moving descendants)
+  const sourceToTargets = new Map<string, string[]>();
+  const nodeToChildren = new Map<string, string[]>();
 
   for (const edge of edges) {
     // Track fork points (source -> targets)
     const targets = sourceToTargets.get(edge.source) || [];
     targets.push(edge.target);
     sourceToTargets.set(edge.source, targets);
-
-    // Track merge points (target <- sources)
-    const sources = targetToSources.get(edge.target) || [];
-    sources.push(edge.source);
-    targetToSources.set(edge.target, sources);
 
     // Track parent-child for descendant movement
     const children = nodeToChildren.get(edge.source) || [];
@@ -199,8 +134,7 @@ function alignForkAndMergePoints(nodes: Node[], edges: Edge[]): Node[] {
   }
 
   // Align FORK points (first nodes of parallel branches should be at same Y)
-  // When moving a branch head, move all its descendants too
-  for (const [_sourceId, targetIds] of sourceToTargets) {
+  for (const [, targetIds] of sourceToTargets) {
     if (targetIds.length > 1) {
       // This is a fork point - align all target nodes to the same Y (top edge)
       let maxY = 0;
@@ -237,14 +171,6 @@ function alignForkAndMergePoints(nodes: Node[], edges: Edge[]): Node[] {
     }
   }
 
-  // Note: We only align FORK points (branch starts), not MERGE points (branch ends)
-  // Aligning merge points would require either:
-  // 1. Moving fork heads (breaks fork alignment)
-  // 2. Adding spacer nodes (complex)
-  // Instead, branches of different lengths naturally end at different Y positions,
-  // and edges connect from wherever each branch ends to the merge node.
-  // This is acceptable visually - the fork alignment is the important part.
-
   return nodes;
 }
 
@@ -259,13 +185,12 @@ export function applyLayout(
 ): { nodes: Node[]; edges: Edge[] } {
   let layoutedNodes = layoutNodes(nodes, edges, options);
 
-  // Align fork and merge points so parallel branches line up at both ends
+  // Align fork and merge points so parallel branches line up
   layoutedNodes = alignForkAndMergePoints(layoutedNodes, edges);
 
   // Return edges with consistent animation/style
   const styledEdges = edges.map(edge => ({
     ...edge,
-    // Use smoothstep for cleaner routing
     type: edge.type || 'smoothstep',
   }));
 

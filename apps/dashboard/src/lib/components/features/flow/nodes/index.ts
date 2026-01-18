@@ -4,6 +4,7 @@ import AssistantMessageNode from './AssistantMessageNode.svelte';
 import ToolNode from './ToolNode.svelte';
 import SubagentNode from './SubagentNode.svelte';
 import SystemMessageNode from './SystemMessageNode.svelte';
+import { BRANCH_COLORS_FALLBACK } from '$lib/utils/flow-constants';
 
 // Node type identifiers
 export const NODE_TYPES = {
@@ -16,13 +17,8 @@ export const NODE_TYPES = {
 
 export type FlowNodeType = typeof NODE_TYPES[keyof typeof NODE_TYPES];
 
-// Branch colors for subagents (3-4 from theme)
-export const BRANCH_COLORS = [
-  '#3b82f6', // blue
-  '#22c55e', // green
-  '#a855f7', // purple
-  '#f59e0b', // amber
-] as const;
+// Re-export branch colors from constants
+export const BRANCH_COLORS = BRANCH_COLORS_FALLBACK;
 
 // NodeTypes map for SvelteFlow
 export const nodeTypes: NodeTypes = {

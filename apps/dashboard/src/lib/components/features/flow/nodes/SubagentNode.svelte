@@ -5,6 +5,14 @@
   import type { SubagentState, Message } from '$lib/stores/types';
   import { instances } from '$lib/stores';
   import { getToolGlance, getToolStatus } from '$lib/utils/tool-display';
+  import {
+    ELAPSED_TIME_UPDATE_INTERVAL,
+    SLIDE_DURATION,
+    ZOOM_THRESHOLD_OVERVIEW,
+    ZOOM_THRESHOLD_SUMMARY,
+    SUBAGENT_RESULT_MAX_CHARS,
+    BRANCH_COLORS_FALLBACK,
+  } from '$lib/utils/flow-constants';
 
   // Props passed by SvelteFlow
   let { id, data } = $props<{
@@ -28,8 +36,8 @@
 
   // Semantic zoom levels
   const zoomLevel = $derived(
-    zoom < 0.5 ? 'overview' :
-    zoom < 1.0 ? 'summary' :
+    zoom < ZOOM_THRESHOLD_OVERVIEW ? 'overview' :
+    zoom < ZOOM_THRESHOLD_SUMMARY ? 'summary' :
     'detail'
   );
 
@@ -46,7 +54,7 @@
 
   const isParallel = $derived(allSubagents.length > 1);
   const depth = $derived(data?.depth || 0);
-  const branchColor = $derived(data?.branchColor || '#22c55e');
+  const branchColor = $derived(data?.branchColor || BRANCH_COLORS_FALLBACK[1]);
 
   // Aggregate status for the whole group
   const groupStatus = $derived.by(() => {
@@ -158,16 +166,31 @@
   }
 
   // Force re-render every second for elapsed time
+  // Uses a stable interval that's only created/destroyed based on running status
   let tick = $state(0);
+  let intervalId = $state<ReturnType<typeof setInterval> | null>(null);
+
   $effect(() => {
     const hasRunning = allSubagents.some(s => s.status === 'running' || s.status === 'starting');
-    if (hasRunning) {
-      const interval = setInterval(() => {
+
+    if (hasRunning && !intervalId) {
+      // Start interval if running and not already started
+      intervalId = setInterval(() => {
         tick = tick + 1;
-      }, 1000);
-      return () => clearInterval(interval);
+      }, ELAPSED_TIME_UPDATE_INTERVAL);
+    } else if (!hasRunning && intervalId) {
+      // Clear interval if no longer running
+      clearInterval(intervalId);
+      intervalId = null;
     }
-    return undefined;
+
+    // Cleanup on unmount
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
+    };
   });
 </script>
 
@@ -283,7 +306,7 @@
 
           <!-- Expanded content -->
           {#if isExpanded}
-            <div class="border-t border-border/50 pt-2 space-y-1" transition:slide={{ duration: 150 }}>
+            <div class="border-t border-border/50 pt-2 space-y-1" transition:slide={{ duration: SLIDE_DURATION }}>
               {#each toolMessages as tool (tool.metadata?.toolId)}
                 <div class="flex items-center gap-2 text-xs py-1 px-2 rounded bg-muted/50">
                   <Wrench class="h-3 w-3 {getToolStatusColor(tool)} shrink-0" />
@@ -308,7 +331,7 @@
               {#if subagent.status === 'complete' && subagent.result}
                 <div class="text-xs text-muted-foreground bg-muted/30 p-2 rounded max-h-20 overflow-y-auto">
                   <span class="font-medium">Result: </span>
-                  {subagent.result.slice(0, 200)}{subagent.result.length > 200 ? '...' : ''}
+                  {subagent.result.slice(0, SUBAGENT_RESULT_MAX_CHARS)}{subagent.result.length > SUBAGENT_RESULT_MAX_CHARS ? '...' : ''}
                 </div>
               {/if}
             </div>
