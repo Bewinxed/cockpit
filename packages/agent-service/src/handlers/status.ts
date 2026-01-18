@@ -1,15 +1,7 @@
-import type { JsonRpcRequest } from '@cockpit/core';
-import { createResponse, createErrorResponse, JSON_RPC_ERROR_CODES } from '@cockpit/core';
+import type { JsonRpcRequest, AgentStatusParams, InstanceStatusParams } from '@cockpit/core';
+import { createResponse, createErrorResponse, JsonRpcErrorCode } from '@cockpit/core';
 import type { InstanceManager, InstanceStatusInfo } from '../instance-manager.js';
 import type { HubClient } from '../hub-client.js';
-
-export interface AgentStatusParams {
-  machineId?: string;
-}
-
-export interface InstanceStatusParams {
-  instanceId: string;
-}
 
 export interface AgentStatusResponse {
   machineId: string;
@@ -49,7 +41,7 @@ export async function handleAgentStatus(
     hubClient.sendResponse(
       createErrorResponse(
         request.id,
-        JSON_RPC_ERROR_CODES.INTERNAL_ERROR,
+        JsonRpcErrorCode.INTERNAL_ERROR,
         `Failed to get agent status: ${message}`
       )
     );
@@ -71,7 +63,7 @@ export async function handleInstanceStatus(
     hubClient.sendResponse(
       createErrorResponse(
         request.id,
-        JSON_RPC_ERROR_CODES.INVALID_PARAMS,
+        JsonRpcErrorCode.INVALID_PARAMS,
         'Missing required parameter: instanceId'
       )
     );
@@ -85,7 +77,7 @@ export async function handleInstanceStatus(
       hubClient.sendResponse(
         createErrorResponse(
           request.id,
-          JSON_RPC_ERROR_CODES.INSTANCE_NOT_FOUND,
+          JsonRpcErrorCode.INSTANCE_NOT_FOUND,
           `Instance ${params.instanceId} not found`
         )
       );
@@ -98,7 +90,7 @@ export async function handleInstanceStatus(
     hubClient.sendResponse(
       createErrorResponse(
         request.id,
-        JSON_RPC_ERROR_CODES.INTERNAL_ERROR,
+        JsonRpcErrorCode.INTERNAL_ERROR,
         `Failed to get instance status: ${message}`
       )
     );

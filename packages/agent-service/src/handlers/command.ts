@@ -1,12 +1,7 @@
-import type { JsonRpcRequest } from '@cockpit/core';
-import { createResponse, createErrorResponse, JSON_RPC_ERROR_CODES } from '@cockpit/core';
+import type { JsonRpcRequest, SendMessageParams, StopInstanceParams } from '@cockpit/core';
+import { createResponse, createErrorResponse, JsonRpcErrorCode } from '@cockpit/core';
 import type { InstanceManager } from '../instance-manager.js';
 import type { HubClient } from '../hub-client.js';
-
-export interface SendCommandParams {
-  instanceId: string;
-  content: string;
-}
 
 /**
  * Handle instance.send requests from the hub
@@ -16,14 +11,14 @@ export async function handleCommand(
   instanceManager: InstanceManager,
   hubClient: HubClient
 ): Promise<void> {
-  const params = request.params as SendCommandParams | undefined;
+  const params = request.params as SendMessageParams | undefined;
 
-  if (!params || !params.instanceId || !params.content) {
+  if (!params || !params.instanceId || !params.message) {
     hubClient.sendResponse(
       createErrorResponse(
         request.id,
-        JSON_RPC_ERROR_CODES.INVALID_PARAMS,
-        'Missing required parameters: instanceId and content'
+        JsonRpcErrorCode.INVALID_PARAMS,
+        'Missing required parameters: instanceId and message'
       )
     );
     return;
@@ -35,7 +30,7 @@ export async function handleCommand(
     hubClient.sendResponse(
       createErrorResponse(
         request.id,
-        JSON_RPC_ERROR_CODES.INSTANCE_NOT_FOUND,
+        JsonRpcErrorCode.INSTANCE_NOT_FOUND,
         `Instance ${params.instanceId} not found`
       )
     );
@@ -53,13 +48,9 @@ export async function handleCommand(
 
   // Start message processing asynchronously (don't await)
   // Errors will be emitted as sdk.message events with type='error'
-  instanceManager.sendMessage(params.instanceId, params.content).catch((error) => {
+  instanceManager.sendMessage(params.instanceId, params.message).catch((error) => {
     console.error(`[Command] Message processing failed for ${params.instanceId}:`, error);
   });
-}
-
-export interface StopInstanceParams {
-  instanceId: string;
 }
 
 /**
@@ -76,7 +67,7 @@ export async function handleStop(
     hubClient.sendResponse(
       createErrorResponse(
         request.id,
-        JSON_RPC_ERROR_CODES.INVALID_PARAMS,
+        JsonRpcErrorCode.INVALID_PARAMS,
         'Missing required parameter: instanceId'
       )
     );
@@ -90,7 +81,7 @@ export async function handleStop(
       hubClient.sendResponse(
         createErrorResponse(
           request.id,
-          JSON_RPC_ERROR_CODES.INSTANCE_NOT_FOUND,
+          JsonRpcErrorCode.INSTANCE_NOT_FOUND,
           `Instance ${params.instanceId} not found`
         )
       );
@@ -110,7 +101,7 @@ export async function handleStop(
     hubClient.sendResponse(
       createErrorResponse(
         request.id,
-        JSON_RPC_ERROR_CODES.INTERNAL_ERROR,
+        JsonRpcErrorCode.INTERNAL_ERROR,
         `Failed to stop instance: ${message}`
       )
     );

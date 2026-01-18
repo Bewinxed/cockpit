@@ -2,7 +2,7 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import type { JsonRpcRequest } from '@cockpit/core';
-import { createResponse, createErrorResponse, JSON_RPC_ERROR_CODES } from '@cockpit/core';
+import { createResponse, createErrorResponse, JsonRpcErrorCode } from '@cockpit/core';
 import type {
   MemoryReadParams,
   MemoryReadResult,
@@ -37,7 +37,7 @@ export async function handleMemoryRead(
     hubClient.sendResponse(
       createErrorResponse(
         request.id,
-        JSON_RPC_ERROR_CODES.INVALID_PARAMS,
+        JsonRpcErrorCode.INVALID_PARAMS,
         'Missing required parameter: type'
       )
     );
@@ -72,7 +72,7 @@ export async function handleMemoryRead(
     hubClient.sendResponse(
       createErrorResponse(
         request.id,
-        JSON_RPC_ERROR_CODES.INTERNAL_ERROR,
+        JsonRpcErrorCode.INTERNAL_ERROR,
         `Failed to read memory file: ${message}`
       )
     );
@@ -92,7 +92,7 @@ export async function handleMemoryWrite(
     hubClient.sendResponse(
       createErrorResponse(
         request.id,
-        JSON_RPC_ERROR_CODES.INVALID_PARAMS,
+        JsonRpcErrorCode.INVALID_PARAMS,
         'Missing required parameters: type and content'
       )
     );
@@ -119,7 +119,7 @@ export async function handleMemoryWrite(
     hubClient.sendResponse(
       createErrorResponse(
         request.id,
-        JSON_RPC_ERROR_CODES.INTERNAL_ERROR,
+        JsonRpcErrorCode.INTERNAL_ERROR,
         `Failed to write memory file: ${message}`
       )
     );

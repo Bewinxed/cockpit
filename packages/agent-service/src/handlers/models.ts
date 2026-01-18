@@ -6,7 +6,7 @@ import type { JsonRpcRequest } from '@cockpit/core';
 import {
   createResponse,
   createErrorResponse,
-  JSON_RPC_ERROR_CODES,
+  JsonRpcErrorCode,
   type ModelsListParams,
   type ModelsListResult,
   type ModelsSetParams,
@@ -29,7 +29,7 @@ export async function handleModelsList(
     hubClient.sendResponse(
       createErrorResponse(
         request.id,
-        JSON_RPC_ERROR_CODES.INVALID_PARAMS,
+        JsonRpcErrorCode.INVALID_PARAMS,
         'Missing required param: instanceId'
       )
     );
@@ -41,7 +41,7 @@ export async function handleModelsList(
     hubClient.sendResponse(
       createErrorResponse(
         request.id,
-        JSON_RPC_ERROR_CODES.INVALID_PARAMS,
+        JsonRpcErrorCode.INVALID_PARAMS,
         `Instance not found: ${params.instanceId}`
       )
     );
@@ -54,7 +54,7 @@ export async function handleModelsList(
       hubClient.sendResponse(
         createErrorResponse(
           request.id,
-          JSON_RPC_ERROR_CODES.INTERNAL_ERROR,
+          JsonRpcErrorCode.INTERNAL_ERROR,
           'Instance has no active session'
         )
       );
@@ -78,7 +78,7 @@ export async function handleModelsList(
     hubClient.sendResponse(
       createErrorResponse(
         request.id,
-        JSON_RPC_ERROR_CODES.INTERNAL_ERROR,
+        JsonRpcErrorCode.INTERNAL_ERROR,
         `Failed to get models: ${message}`
       )
     );
@@ -99,7 +99,7 @@ export async function handleModelsSet(
     hubClient.sendResponse(
       createErrorResponse(
         request.id,
-        JSON_RPC_ERROR_CODES.INVALID_PARAMS,
+        JsonRpcErrorCode.INVALID_PARAMS,
         'Missing required params: instanceId, model'
       )
     );
@@ -111,7 +111,7 @@ export async function handleModelsSet(
     hubClient.sendResponse(
       createErrorResponse(
         request.id,
-        JSON_RPC_ERROR_CODES.INVALID_PARAMS,
+        JsonRpcErrorCode.INVALID_PARAMS,
         `Instance not found: ${params.instanceId}`
       )
     );
@@ -124,7 +124,7 @@ export async function handleModelsSet(
       hubClient.sendResponse(
         createErrorResponse(
           request.id,
-          JSON_RPC_ERROR_CODES.INTERNAL_ERROR,
+          JsonRpcErrorCode.INTERNAL_ERROR,
           'Instance has no active session'
         )
       );
@@ -147,7 +147,7 @@ export async function handleModelsSet(
     hubClient.sendResponse(
       createErrorResponse(
         request.id,
-        JSON_RPC_ERROR_CODES.INTERNAL_ERROR,
+        JsonRpcErrorCode.INTERNAL_ERROR,
         `Failed to set model: ${message}`
       )
     );

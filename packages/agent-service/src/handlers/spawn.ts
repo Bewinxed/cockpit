@@ -1,39 +1,8 @@
-import type { JsonRpcRequest } from '@cockpit/core';
-import { createResponse, createErrorResponse, JSON_RPC_ERROR_CODES } from '@cockpit/core';
+import type { JsonRpcRequest, SpawnInstanceParams as SpawnParams } from '@cockpit/core';
+import { createResponse, createErrorResponse, JsonRpcErrorCode } from '@cockpit/core';
 import { saveCredentials } from '@cockpit/auth';
-import type { InstanceManager, SpawnInstanceParams } from '../instance-manager.js';
+import type { InstanceManager, SpawnInstanceParams as LocalSpawnParams } from '../instance-manager.js';
 import type { HubClient } from '../hub-client.js';
-
-export interface SpawnHandlerParams {
-  /** Working directory (from hub) */
-  cwd?: string;
-  /** @deprecated Use cwd instead */
-  projectPath?: string;
-  instanceId?: string;
-  sessionId?: string;
-  /** Claude SDK session ID to resume a previous conversation */
-  resumeSessionId?: string;
-  /** Message UUID to resume from (discards subsequent messages) */
-  resumeFromMessageId?: string;
-  /** Fork to a new session ID when resuming */
-  forkSession?: boolean;
-  /** Enable file checkpointing for rewind functionality */
-  enableFileCheckpointing?: boolean;
-  systemPrompt?: string;
-  prompt?: string;
-  permissionMode?: 'default' | 'acceptEdits' | 'bypassPermissions';
-  mcpServers?: Array<{
-    name: string;
-    command: string;
-    args?: string[];
-    env?: Record<string, string>;
-  }>;
-  model?: string;
-  maxTokens?: number;
-  initialPrompt?: string;
-  envVars?: Record<string, string>;
-  projectId?: string;
-}
 
 /**
  * Handle instance.spawn requests from the hub
@@ -43,16 +12,13 @@ export async function handleSpawn(
   instanceManager: InstanceManager,
   hubClient: HubClient
 ): Promise<void> {
-  const params = request.params as SpawnHandlerParams | undefined;
+  const params = request.params as SpawnParams | undefined;
 
-  // Accept either cwd (from hub) or projectPath (legacy)
-  const workingDir = params?.cwd || params?.projectPath;
-
-  if (!params || !workingDir) {
+  if (!params || !params.cwd) {
     hubClient.sendResponse(
       createErrorResponse(
         request.id,
-        JSON_RPC_ERROR_CODES.INVALID_PARAMS,
+        JsonRpcErrorCode.INVALID_PARAMS,
         'Missing required parameter: cwd (working directory)'
       )
     );
@@ -92,9 +58,9 @@ export async function handleSpawn(
       validatedResumeFromMessageId = undefined;
     }
 
-    // Map params to SpawnInstanceParams
-    const spawnParams: SpawnInstanceParams = {
-      projectPath: workingDir,
+    // Map params to local SpawnInstanceParams for instance-manager
+    const spawnParams: LocalSpawnParams = {
+      projectPath: params.cwd,
       instanceId: params.instanceId, // Use hub's instanceId to keep in sync
       sessionId: params.sessionId,
       resumeSessionId: params.resumeSessionId, // Claude SDK session ID for resume
@@ -106,7 +72,7 @@ export async function handleSpawn(
       mcpServers: params.mcpServers,
       model: params.model,
       maxTokens: params.maxTokens,
-      initialPrompt: params.initialPrompt || params.prompt,
+      initialPrompt: params.initialPrompt,
       envVars: params.envVars,
     };
 
@@ -123,7 +89,7 @@ export async function handleSpawn(
     hubClient.sendResponse(
       createErrorResponse(
         request.id,
-        JSON_RPC_ERROR_CODES.INTERNAL_ERROR,
+        JsonRpcErrorCode.INTERNAL_ERROR,
         `Failed to spawn instance: ${message}`
       )
     );

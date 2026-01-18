@@ -194,6 +194,3 @@ export function createNotification<T>(method: string, params: T): JsonRpcNotific
 export const isRequest = isJsonRpcRequest;
 export const isResponse = isJsonRpcResponse;
 export const isNotification = isJsonRpcNotification;
-
-/** @deprecated Use JsonRpcErrorCode instead */
-export const JSON_RPC_ERROR_CODES = JsonRpcErrorCode;

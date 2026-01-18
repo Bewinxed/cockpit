@@ -214,7 +214,7 @@ export function createInstanceRoutes(db: Db) {
           {
             instanceId: instance.id,
             cwd: body.cwd,
-            prompt: body.prompt,
+            initialPrompt: body.prompt,
             permissionMode: body.permissionMode,
             projectId: body.projectId,
             resumeSessionId: body.resumeSessionId,
@@ -533,9 +533,14 @@ export function createInstanceRoutes(db: Db) {
         });
 
         // Broadcast instance sleeping
+        const sleepingInstance = await tracker.get(params.id);
         getDashboardRegistry().broadcast('instance:sleeping', {
           instanceId: params.id,
-          instance: await tracker.get(params.id),
+          instance: sleepingInstance ? {
+            id: sleepingInstance.id,
+            status: sleepingInstance.status,
+            sdkSessionId: sleepingInstance.sdkSessionId,
+          } : undefined,
         });
 
         return {
@@ -642,7 +647,7 @@ export function createInstanceRoutes(db: Db) {
           {
             instanceId: params.id, // Reuse same ID!
             cwd: instance.cwd,
-            prompt: body?.prompt,
+            initialPrompt: body?.prompt,
             permissionMode: instance.permissionMode,
             projectId: instance.projectId,
             resumeSessionId: instance.sdkSessionId, // Use stored SDK session ID

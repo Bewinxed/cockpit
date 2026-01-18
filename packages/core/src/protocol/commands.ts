@@ -49,6 +49,10 @@ export type CommandMethodValue = (typeof CommandMethod)[keyof typeof CommandMeth
 export interface SpawnInstanceParams {
   /** Working directory for the instance */
   cwd: string;
+  /** Instance ID (assigned by hub for coordination) */
+  instanceId?: string;
+  /** Session ID for tracking */
+  sessionId?: string;
   /** Project to associate with (optional) */
   projectId?: string;
   /** Model to use (e.g., 'claude-sonnet-4-20250514') */
@@ -63,6 +67,21 @@ export interface SpawnInstanceParams {
   envVars?: Record<string, string>;
   /** Resume a previous session by ID */
   resumeSessionId?: string;
+  /** Message UUID to resume from (discards subsequent messages) */
+  resumeFromMessageId?: string;
+  /** Fork to a new session ID when resuming */
+  forkSession?: boolean;
+  /** Enable file checkpointing for rewind functionality */
+  enableFileCheckpointing?: boolean;
+  /** MCP servers to connect */
+  mcpServers?: Array<{
+    name: string;
+    command: string;
+    args?: string[];
+    env?: Record<string, string>;
+  }>;
+  /** Maximum tokens for response */
+  maxTokens?: number;
 }
 
 /**
@@ -92,6 +111,14 @@ export interface SendMessageParams {
  */
 export interface InterruptInstanceParams {
   /** ID of the instance to interrupt */
+  instanceId: string;
+}
+
+/**
+ * Parameters for getting instance status
+ */
+export interface InstanceStatusParams {
+  /** ID of the instance to get status for */
   instanceId: string;
 }
 
@@ -158,11 +185,9 @@ export interface ModelsSetParams {
 }
 
 /**
- * Parameters for getting Claude CLI version (empty)
+ * Parameters for getting Claude CLI version
  */
-export interface ClaudeVersionParams {
-  // No parameters needed
-}
+export type ClaudeVersionParams = Record<string, never>;
 
 /**
  * Parameters for reading a memory file

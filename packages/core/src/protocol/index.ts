@@ -2,7 +2,6 @@
 export {
   JSONRPC_VERSION,
   JsonRpcErrorCode,
-  JSON_RPC_ERROR_CODES,
   type JsonRpcErrorCodeValue,
   type JsonRpcError,
   type JsonRpcRequest,
@@ -30,6 +29,7 @@ export {
   type StopInstanceParams,
   type SendMessageParams,
   type InterruptInstanceParams,
+  type InstanceStatusParams,
   type RewindFilesParams,
   type RewindFilesResult,
   type AgentStatusParams,

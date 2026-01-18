@@ -1,7 +1,7 @@
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import type { JsonRpcRequest } from '@cockpit/core';
-import { createResponse, createErrorResponse, JSON_RPC_ERROR_CODES } from '@cockpit/core';
+import { createResponse, createErrorResponse, JsonRpcErrorCode } from '@cockpit/core';
 import type { ClaudeVersionResult } from '@cockpit/core/protocol';
 import type { HubClient } from '../hub-client.js';
 
@@ -49,7 +49,7 @@ export async function handleClaudeVersion(
     hubClient.sendResponse(
       createErrorResponse(
         request.id,
-        JSON_RPC_ERROR_CODES.INTERNAL_ERROR,
+        JsonRpcErrorCode.INTERNAL_ERROR,
         `Failed to get Claude version: ${message}`
       )
     );

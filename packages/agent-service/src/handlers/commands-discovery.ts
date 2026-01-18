@@ -1,7 +1,7 @@
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { join, basename } from 'node:path';
 import type { JsonRpcRequest } from '@cockpit/core';
-import { createResponse, createErrorResponse, JSON_RPC_ERROR_CODES } from '@cockpit/core';
+import { createResponse, createErrorResponse, JsonRpcErrorCode } from '@cockpit/core';
 import type {
   CommandsListParams,
   CommandsListResult,
@@ -99,7 +99,7 @@ async function discoverCustomCommands(cwd: string): Promise<AvailableCommand[]> 
  */
 export async function handleCommandsList(
   request: JsonRpcRequest,
-  instanceManager: InstanceManager,
+  _instanceManager: InstanceManager,
   hubClient: HubClient
 ): Promise<void> {
   const params = request.params as CommandsListParams | undefined;
@@ -108,7 +108,7 @@ export async function handleCommandsList(
     hubClient.sendResponse(
       createErrorResponse(
         request.id,
-        JSON_RPC_ERROR_CODES.INVALID_PARAMS,
+        JsonRpcErrorCode.INVALID_PARAMS,
         'Missing required params: instanceId and cwd'
       )
     );
@@ -138,7 +138,7 @@ export async function handleCommandsList(
     hubClient.sendResponse(
       createErrorResponse(
         request.id,
-        JSON_RPC_ERROR_CODES.INTERNAL_ERROR,
+        JsonRpcErrorCode.INTERNAL_ERROR,
         `Failed to list commands: ${message}`
       )
     );
