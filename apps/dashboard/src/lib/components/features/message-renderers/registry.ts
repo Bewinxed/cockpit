@@ -35,7 +35,17 @@ const renderers: MessageRenderer[] = [
 	},
 	{
 		component: AskQuestionPicker,
-		match: (m: Message) => m.type === 'system' && m.metadata?.subtype === 'ask_question',
+		match: (m: Message) => {
+			// Match system messages created during live conversation
+			if (m.type === 'system' && m.metadata?.subtype === 'ask_question') {
+				return true;
+			}
+			// Match tool_use/tool_result messages for AskUserQuestion (from DB after refresh)
+			if ((m.type === 'tool_use' || m.type === 'tool_result') && m.metadata?.toolName === 'AskUserQuestion') {
+				return true;
+			}
+			return false;
+		},
 		priority: 100,
 		name: 'AskQuestionPicker'
 	},
