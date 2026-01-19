@@ -8,10 +8,12 @@
     type Node,
     type Edge,
     type DefaultEdgeOptions,
+    type ColorMode,
     BackgroundVariant
   } from '@xyflow/svelte';
   import { onMount } from 'svelte';
   import { instances, ui } from '$lib/stores';
+  import { theme } from '$lib/stores/theme.svelte';
   import FlowContextMenu from './FlowContextMenu.svelte';
   import FlowAutoFit from './FlowAutoFit.svelte';
   import FlowZoomTracker from './FlowZoomTracker.svelte';
@@ -65,6 +67,9 @@
   // Derive zoom mode from current zoom level
   // compact: zoomed out (overview/summary), expanded: zoomed in (detail)
   const zoomMode = $derived<ZoomMode>(currentZoom >= ZOOM_THRESHOLD_LAYOUT ? 'expanded' : 'compact');
+
+  // Derive colorMode from app theme for svelte-flow dark mode support
+  const colorMode = $derived<ColorMode>(theme.current);
 
   // Context menu state
   let contextMenu = $state<{ x: number; y: number; nodeId: string } | null>(null);
@@ -167,6 +172,7 @@
       {edges}
       {nodeTypes}
       {defaultEdgeOptions}
+      {colorMode}
       onlyRenderVisibleElements={true}
       minZoom={ZOOM_MIN}
       maxZoom={ZOOM_MAX}
@@ -242,7 +248,16 @@
   /* Override svelte-flow default styles to match dashboard theme */
   :global(.svelte-flow) {
     --xy-background-color: transparent;
-    --xy-minimap-background-color: hsl(var(--background) / 0.8);
+    --xy-minimap-background-color: color-mix(in srgb, var(--background) 80%, transparent);
+    --xy-edge-stroke-default: var(--border);
+    --xy-edge-stroke-width-default: 2;
+    --xy-background-pattern-dot-color-default: var(--border);
+  }
+
+  /* Dark mode specific overrides */
+  :global(.svelte-flow.dark) {
+    --xy-edge-stroke-default: var(--muted-foreground);
+    --xy-background-pattern-dot-color-default: var(--muted-foreground);
   }
 
   /* Smooth transitions for node positions */
@@ -265,8 +280,8 @@
   }
 
   :global(.svelte-flow__controls) {
-    background: hsl(var(--background) / 0.8);
-    border: 1px solid hsl(var(--border));
+    background: color-mix(in srgb, var(--background) 80%, transparent);
+    border: 1px solid var(--border);
     border-radius: 0.375rem;
     backdrop-filter: blur(4px);
   }
@@ -274,16 +289,16 @@
   :global(.svelte-flow__controls button) {
     background: transparent;
     border: none;
-    color: hsl(var(--foreground));
+    color: var(--foreground);
   }
 
   :global(.svelte-flow__controls button:hover) {
-    background: hsl(var(--muted));
+    background: var(--muted);
   }
 
   :global(.svelte-flow__minimap) {
-    background: hsl(var(--background) / 0.8) !important;
-    border: 1px solid hsl(var(--border)) !important;
+    background: color-mix(in srgb, var(--background) 80%, transparent) !important;
+    border: 1px solid var(--border) !important;
     border-radius: 0.375rem;
   }
 </style>

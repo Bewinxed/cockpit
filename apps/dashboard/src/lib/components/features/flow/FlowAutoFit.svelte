@@ -4,10 +4,6 @@
   import {
     NODE_WIDTH,
     NODE_HEIGHT_ESTIMATE,
-    NODE_CENTER_X,
-    NODE_CENTER_Y,
-    VISIBILITY_MARGIN,
-    ANIMATION_DURATION,
     INITIAL_PAN_DELAY,
     ZOOM_DEFAULT,
   } from '$lib/utils/flow-constants';
@@ -19,168 +15,128 @@
 
   let { nodeCount, nodes }: Props = $props();
 
-  const { setCenter, getZoom, getViewport } = useSvelteFlow();
+  const { setViewport, getViewport, screenToFlowPosition } = useSvelteFlow();
 
   // Track previous count to detect new nodes
   let prevCount = $state(0);
-  // Reset on every mount to ensure we pan to latest when switching views
   let hasInitialized = $state(false);
 
-  /**
-   * Check if a number is valid (not NaN, not Infinity)
-   */
   function isValidNumber(n: unknown): n is number {
     return typeof n === 'number' && !isNaN(n) && isFinite(n);
   }
 
-  /**
-   * Check if a node is approximately visible in the viewport
-   */
   function isNodeVisible(node: Node): boolean {
     try {
       const viewport = getViewport();
+      if (!isValidNumber(viewport.zoom) || viewport.zoom <= 0) return false;
+      if (!isValidNumber(node.position.x) || !isValidNumber(node.position.y)) return false;
 
-      // Validate viewport values
-      if (!isValidNumber(viewport.x) || !isValidNumber(viewport.y) || !isValidNumber(viewport.zoom) || viewport.zoom <= 0) {
-        return false;
-      }
+      const topLeft = screenToFlowPosition({ x: 0, y: 0 });
+      const bottomRight = screenToFlowPosition({ x: window.innerWidth, y: window.innerHeight });
 
-      // Validate node position
-      if (!isValidNumber(node.position.x) || !isValidNumber(node.position.y)) {
-        return false;
-      }
+      const margin = 50;
+      const nodeCenterX = node.position.x + NODE_WIDTH / 2;
+      const nodeCenterY = node.position.y + NODE_HEIGHT_ESTIMATE / 2;
 
-      // Get viewport bounds in flow coordinates
-      const viewLeft = -viewport.x / viewport.zoom;
-      const viewTop = -viewport.y / viewport.zoom;
-      // Use actual window dimensions
-      const viewRight = viewLeft + (window.innerWidth / viewport.zoom);
-      const viewBottom = viewTop + (window.innerHeight / viewport.zoom);
-
-      const nodeRight = node.position.x + NODE_WIDTH;
-      const nodeBottom = node.position.y + NODE_HEIGHT_ESTIMATE;
-
-      // Check if node overlaps with viewport (with margin)
-      return !(
-        node.position.x > viewRight + VISIBILITY_MARGIN ||
-        nodeRight < viewLeft - VISIBILITY_MARGIN ||
-        node.position.y > viewBottom + VISIBILITY_MARGIN ||
-        nodeBottom < viewTop - VISIBILITY_MARGIN
+      return (
+        nodeCenterX >= topLeft.x - margin &&
+        nodeCenterX <= bottomRight.x + margin &&
+        nodeCenterY >= topLeft.y - margin &&
+        nodeCenterY <= bottomRight.y + margin
       );
     } catch {
-      // If we can't determine visibility, assume not visible (pan to it)
       return false;
     }
   }
 
   /**
-   * Pan to a node's center
-   * @param node - The node to pan to
-   * @param duration - Animation duration in ms
-   * @param zoom - Optional zoom level (if not provided, preserves current zoom)
+   * Center viewport on a node using direct setViewport (most reliable method)
+   * Calculates viewport position to center the node in the screen
    */
-  function panToNode(node: Node, duration: number = ANIMATION_DURATION, zoom?: number) {
+  function centerOnNode(node: Node, animated: boolean = false) {
     try {
-      // Use provided zoom or fall back to current zoom
-      const targetZoom = zoom ?? getZoom();
+      if (!isValidNumber(node.position.x) || !isValidNumber(node.position.y)) return;
 
-      // Validate zoom
-      if (!isValidNumber(targetZoom) || targetZoom <= 0) {
-        return;
-      }
+      // Node center in flow coordinates
+      const nodeCenterX = node.position.x + NODE_WIDTH / 2;
+      const nodeCenterY = node.position.y + NODE_HEIGHT_ESTIMATE / 2;
 
-      // Validate node position
-      if (!isValidNumber(node.position.x) || !isValidNumber(node.position.y)) {
-        return;
-      }
+      // Get current zoom or use default
+      const viewport = getViewport();
+      const zoom = isValidNumber(viewport.zoom) && viewport.zoom > 0 ? viewport.zoom : ZOOM_DEFAULT;
 
-      const targetX = node.position.x + NODE_CENTER_X;
-      const targetY = node.position.y + NODE_CENTER_Y;
+      // Calculate viewport position to center the node
+      // Viewport x/y is the offset from origin, so we need to calculate
+      // where the viewport should be to put node center at screen center
+      const screenCenterX = window.innerWidth / 2;
+      const screenCenterY = window.innerHeight / 2;
 
-      // Final validation before calling setCenter
-      if (isValidNumber(targetX) && isValidNumber(targetY)) {
-        setCenter(targetX, targetY, { zoom: targetZoom, duration });
-      }
+      // viewport.x = screenCenterX - nodeCenterX * zoom
+      // viewport.y = screenCenterY - nodeCenterY * zoom
+      const newX = screenCenterX - nodeCenterX * zoom;
+      const newY = screenCenterY - nodeCenterY * zoom;
+
+      if (!isValidNumber(newX) || !isValidNumber(newY)) return;
+
+      setViewport(
+        { x: newX, y: newY, zoom },
+        { duration: animated ? 300 : 0 }
+      );
     } catch {
-      // setCenter may throw if viewport not ready
+      // setViewport may throw if not ready
     }
   }
 
-  /**
-   * Check if nodes have valid (non-zero, non-NaN) positions
-   */
   function hasValidPositions(): boolean {
     if (nodes.length === 0) return false;
     const lastNode = nodes[nodes.length - 1];
     if (!lastNode) return false;
-    // Check for NaN or Infinity
     if (!isValidNumber(lastNode.position.x) || !isValidNumber(lastNode.position.y)) return false;
-    // Check for zero positions (dagre hasn't run yet)
-    // Allow (0,0) only if there's just one node
     if (nodes.length > 1 && lastNode.position.x === 0 && lastNode.position.y === 0) return false;
     return true;
   }
 
-  // Pan to latest node on mount (when switching to flow view)
   onMount(() => {
-    // Reset state on mount
     hasInitialized = false;
     prevCount = 0;
 
-    // Retry panning until positions are valid or max attempts reached
     let attempts = 0;
-    const maxAttempts = 10;
+    const maxAttempts = 20;
     const retryDelay = 50;
 
-    function tryPan() {
+    function tryCenter() {
       attempts++;
 
       if (hasValidPositions()) {
         const lastNode = nodes[nodes.length - 1];
-        // Use ZOOM_DEFAULT for initial pan instead of preserving fitView's zoom
-        panToNode(lastNode, ANIMATION_DURATION, ZOOM_DEFAULT);
+        // INSTANT - no animation for initial view
+        centerOnNode(lastNode, false);
         hasInitialized = true;
         prevCount = nodes.length;
       } else if (attempts < maxAttempts) {
-        // Retry after a short delay
-        setTimeout(tryPan, retryDelay);
+        setTimeout(tryCenter, retryDelay);
       } else {
-        // Give up after max attempts, just mark as initialized
         hasInitialized = true;
         prevCount = nodes.length;
       }
     }
 
-    // Start trying after initial delay
-    const timer = setTimeout(tryPan, INITIAL_PAN_DELAY);
-
+    const timer = setTimeout(tryCenter, INITIAL_PAN_DELAY);
     return () => clearTimeout(timer);
   });
 
-  // Watch for new nodes being added after initialization
   $effect(() => {
-    // Skip if not initialized yet (onMount handles initial pan)
-    if (!hasInitialized) {
-      return;
-    }
+    if (!hasInitialized) return;
 
     if (nodeCount > prevCount && nodeCount > 0) {
       const lastNode = nodes[nodes.length - 1];
-
       if (lastNode && isValidNumber(lastNode.position.x) && isValidNumber(lastNode.position.y)) {
-        // Only pan if new node is outside viewport
         if (!isNodeVisible(lastNode)) {
-          panToNode(lastNode, ANIMATION_DURATION);
+          // Animate when following new nodes
+          centerOnNode(lastNode, true);
         }
       }
     }
     prevCount = nodeCount;
   });
 </script>
-
-<!--
-  Smart auto-pan behavior:
-  - On initial mount (switching to flow view): pans to the latest node
-  - On new nodes: only pans if the new node is outside the visible viewport
-  Preserves user's current zoom level and doesn't disrupt if already viewing the area.
--->
