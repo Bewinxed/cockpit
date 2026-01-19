@@ -12,8 +12,101 @@
 	}: MessageRendererProps = $props();
 
 	// Extract questions from message metadata
-	let questions = $derived<Question[]>((message.metadata?.questions as Question[]) || []);
-	let requestId = $derived<string>((message.metadata?.questionRequestId as string) || '');
+	// Supports both system messages (live) and tool_use/tool_result messages (from DB)
+	let questions = $derived.by<Question[]>(() => {
+		let rawQuestions: unknown[] = [];
+
+		// System message format (live conversation)
+		if (message.metadata?.questions && Array.isArray(message.metadata.questions)) {
+			rawQuestions = message.metadata.questions;
+		}
+		// Tool use/result format (from DB after refresh)
+		else {
+			const toolInput = message.metadata?.toolInput as { questions?: unknown[] } | undefined;
+			if (toolInput?.questions && Array.isArray(toolInput.questions)) {
+				rawQuestions = toolInput.questions;
+			}
+		}
+
+		// Normalize and filter valid questions
+		return rawQuestions
+			.filter((q): q is Record<string, unknown> => q != null && typeof q === 'object')
+			.map(q => ({
+				question: String(q.question || ''),
+				header: String(q.header || 'Question'),
+				options: Array.isArray(q.options)
+					? q.options.filter((o): o is { label: string; description: string } =>
+							o != null && typeof o === 'object' && 'label' in o
+						).map(o => ({
+							label: String(o.label || ''),
+							description: String(o.description || ''),
+						}))
+					: [],
+				multiSelect: Boolean(q.multiSelect),
+			}));
+	});
+
+	let requestId = $derived.by<string>(() => {
+		// System message format
+		if (message.metadata?.questionRequestId) {
+			return message.metadata.questionRequestId as string;
+		}
+		// Tool use format - use toolId or sdkUuid
+		return (message.metadata?.toolId as string) || message.sdkUuid || '';
+	});
+
+	// For tool messages, extract the answers that were provided
+	// Note: DB-loaded messages are type 'tool_use' but have toolResult in metadata
+	let storedAnswers = $derived.by((): Record<string, string> | null => {
+		// System message format (answers stored after submission in-memory)
+		const questionAnswers = message.metadata?.questionAnswers;
+		if (questionAnswers && typeof questionAnswers === 'object' && !Array.isArray(questionAnswers)) {
+			return questionAnswers;
+		}
+		// PRIMARY: Check toolInput.answers (persisted to DB when question is answered)
+		// This is the most robust source - answers are stored directly in toolInput
+		const toolInput = message.metadata?.toolInput as { answers?: Record<string, string> } | undefined;
+		if (toolInput?.answers && typeof toolInput.answers === 'object') {
+			const keys = Object.keys(toolInput.answers);
+			if (keys.length > 0 && keys.every(k => /^\d+$/.test(k))) {
+				return toolInput.answers;
+			}
+		}
+		// FALLBACK: Tool use/result format - check for toolResult in metadata
+		// The SDK returns a human-readable string, parse it as last resort
+		if (message.metadata?.toolResult) {
+			const result = message.metadata.toolResult;
+			// Skip if it's a string (SDK's human-readable format)
+			if (typeof result === 'string') {
+				// Try to parse answers from the string format: "0"="answer"
+				// Note: This is fragile - if SDK format changes, this will break
+				const parsed: Record<string, string> = {};
+				const regex = /"(\d+)"="([^"]*)"/g;
+				let match;
+				while ((match = regex.exec(result)) !== null) {
+					parsed[match[1]] = match[2];
+				}
+				if (Object.keys(parsed).length > 0) {
+					return parsed;
+				}
+				return null;
+			}
+			// If it's an object, try to extract answers
+			if (typeof result === 'object' && result !== null) {
+				const obj = result as { answers?: Record<string, string> } | Record<string, string>;
+				// Could be { answers: {...} } or directly {...}
+				if ('answers' in obj && obj.answers) {
+					return obj.answers;
+				}
+				// If it's a record with numeric keys, it's the answers directly
+				const keys = Object.keys(obj);
+				if (keys.length > 0 && keys.every(k => /^\d+$/.test(k))) {
+					return obj as Record<string, string>;
+				}
+			}
+		}
+		return null;
+	});
 
 	// Selection state: Map<questionIndex, selectedLabels[]>
 	let selections = $state<Map<number, string[]>>(new Map());
@@ -31,7 +124,7 @@
 	// Expandable state for answered questions
 	let isExpanded = $state(false);
 
-	// Initialize selections when questions change
+	// Initialize selections when questions change (for active state)
 	$effect(() => {
 		if (isActive && questions.length > 0 && selections.size === 0) {
 			const newSelections = new Map<number, string[]>();
@@ -40,10 +133,54 @@
 		}
 	});
 
+	// Initialize selections from storedAnswers for expanded view (answered questions)
+	$effect(() => {
+		if (!isActive && storedAnswers && questions.length > 0 && selections.size === 0) {
+			const newSelections = new Map<number, string[]>();
+			const newOtherTexts = new Map<number, string>();
+			const newOtherSelected = new Map<number, boolean>();
+
+			questions.forEach((question, idx) => {
+				const answer = storedAnswers[String(idx)];
+				if (!answer) {
+					newSelections.set(idx, []);
+					return;
+				}
+
+				// Check if answer matches any option label
+				const matchingOption = question.options.find(opt => opt.label === answer);
+				if (matchingOption) {
+					newSelections.set(idx, [matchingOption.label]);
+				} else if (question.multiSelect) {
+					// For multiselect, try to match comma-separated values
+					const parts = answer.split(', ').map(s => s.trim());
+					const matched = parts.filter(p => question.options.some(opt => opt.label === p));
+					if (matched.length > 0) {
+						newSelections.set(idx, matched);
+					} else {
+						// Custom answer
+						newSelections.set(idx, []);
+						newOtherTexts.set(idx, answer);
+						newOtherSelected.set(idx, true);
+					}
+				} else {
+					// Custom "Other" answer
+					newSelections.set(idx, []);
+					newOtherTexts.set(idx, answer);
+					newOtherSelected.set(idx, true);
+				}
+			});
+
+			selections = newSelections;
+			otherTexts = newOtherTexts;
+			otherSelected = newOtherSelected;
+		}
+	});
+
 	// Check if a specific question has been answered
 	function isQuestionAnswered(qIdx: number): boolean {
 		const hasSelection = (selections.get(qIdx)?.length || 0) > 0;
-		const hasOther = otherSelected.get(qIdx) && (otherTexts.get(qIdx)?.trim().length || 0) > 0;
+		const hasOther = !!otherSelected.get(qIdx) && (otherTexts.get(qIdx)?.trim().length || 0) > 0;
 		return hasSelection || hasOther;
 	}
 
@@ -193,9 +330,10 @@
 	}
 
 	// Get display info for answered questions (inactive state)
-	let answeredSummary = $derived(() => {
-		if (!message.metadata?.questionAnswers) return null;
-		const answers = message.metadata.questionAnswers as Record<string, string>;
+	// Uses storedAnswers which handles both system message and tool_result formats
+	let answeredSummary = $derived.by(() => {
+		const answers = storedAnswers;
+		if (!answers) return null;
 		return questions.map((q, idx) => ({
 			header: q.header,
 			answer: answers[String(idx)] || 'No answer'
@@ -206,7 +344,7 @@
 <svelte:window onkeydown={handleKeydown} />
 
 <!-- Single question content (reusable snippet) -->
-{#snippet questionContent(question: Question, qIdx: number, showShortcuts: boolean)}
+{#snippet questionContent(question: Question, qIdx: number, showShortcuts: boolean, readOnly: boolean = false)}
 	<!-- Question header -->
 	<div class="flex items-start gap-3 mb-3">
 		<div
@@ -238,13 +376,17 @@
 	<!-- Options grid -->
 	<div class="space-y-2 ml-11">
 		{#each question.options as option, optIdx (option.label)}
-			<button
-				type="button"
+			<div
 				class="w-full text-left px-3 py-2.5 rounded-lg transition-all flex items-start gap-3 border
 					{isOptionSelected(qIdx, option.label)
 					? 'bg-secondary/10 border-secondary/40 shadow-sm'
-					: 'bg-background/50 border-transparent hover:border-border hover:bg-accent/50'}"
-				onclick={() => toggleOption(qIdx, option.label)}
+					: 'bg-background/50 border-transparent'}
+					{!readOnly ? 'cursor-pointer' : ''}
+					{!readOnly && !isOptionSelected(qIdx, option.label) ? 'hover:border-border hover:bg-accent/50' : ''}"
+				role={readOnly ? undefined : "button"}
+				tabindex={readOnly ? undefined : 0}
+				onclick={readOnly ? undefined : () => toggleOption(qIdx, option.label)}
+				onkeydown={readOnly ? undefined : (e) => { if (e.key === 'Enter' || e.key === ' ') toggleOption(qIdx, option.label); }}
 			>
 				<!-- Selection indicator -->
 				<div
@@ -276,7 +418,7 @@
 						</p>
 					{/if}
 				</div>
-			</button>
+			</div>
 		{/each}
 
 		<!-- Other option -->
@@ -284,7 +426,8 @@
 			class="w-full text-left px-3 py-2.5 rounded-lg transition-all border
 			{otherSelected.get(qIdx)
 				? 'bg-secondary/10 border-secondary/40'
-				: 'bg-background/50 border-transparent hover:border-border hover:bg-accent/50'}"
+				: 'bg-background/50 border-transparent'}
+			{!readOnly && !otherSelected.get(qIdx) ? 'hover:border-border hover:bg-accent/50' : ''}"
 		>
 			{#if otherSelected.get(qIdx)}
 				<div class="flex items-start gap-3">
@@ -299,40 +442,48 @@
 						<div class="flex items-center gap-2 mb-2">
 							<PenLine class="w-3.5 h-3.5 text-muted-foreground" />
 							<span class="text-xs text-muted-foreground">Custom answer</span>
-							<button
-								type="button"
-								class="ml-auto p-0.5 rounded hover:bg-accent"
-								onclick={() => {
-									otherSelected.set(qIdx, false);
-									otherSelected = new Map(otherSelected);
-								}}
-							>
-								<X class="w-3.5 h-3.5 text-muted-foreground" />
-							</button>
+							{#if !readOnly}
+								<button
+									type="button"
+									class="ml-auto p-0.5 rounded hover:bg-accent"
+									onclick={() => {
+										otherSelected.set(qIdx, false);
+										otherSelected = new Map(otherSelected);
+									}}
+								>
+									<X class="w-3.5 h-3.5 text-muted-foreground" />
+								</button>
+							{/if}
 						</div>
-						<input
-							type="text"
-							class="w-full px-2 py-1.5 text-sm bg-background border border-border rounded-md
-								focus:outline-none focus:ring-2 focus:ring-secondary/50 focus:border-secondary"
-							placeholder="Type your answer..."
-							value={otherTexts.get(qIdx) || ''}
-							oninput={(e) => {
-								otherTexts.set(qIdx, e.currentTarget.value);
-								otherTexts = new Map(otherTexts);
-							}}
-							onkeydown={(e) => {
-								if (e.key === 'Enter' && canSubmit()) {
-									e.preventDefault();
-									handleSubmit();
-								}
-							}}
-						/>
+						{#if readOnly}
+							<div class="w-full px-2 py-1.5 text-sm text-foreground">
+								{otherTexts.get(qIdx) || ''}
+							</div>
+						{:else}
+							<input
+								type="text"
+								class="w-full px-2 py-1.5 text-sm bg-background border border-border rounded-md
+									focus:outline-none focus:ring-2 focus:ring-secondary/50 focus:border-secondary"
+								placeholder="Type your answer..."
+								value={otherTexts.get(qIdx) || ''}
+								oninput={(e) => {
+									otherTexts.set(qIdx, e.currentTarget.value);
+									otherTexts = new Map(otherTexts);
+								}}
+								onkeydown={(e) => {
+									if (e.key === 'Enter' && canSubmit()) {
+										e.preventDefault();
+										handleSubmit();
+									}
+								}}
+							/>
+						{/if}
 					</div>
 				</div>
-			{:else}
+			{:else if !readOnly}
 				<button
 					type="button"
-					class="flex items-center gap-3 w-full"
+					class="flex items-center gap-3 w-full cursor-pointer"
 					onclick={() => selectOther(qIdx)}
 				>
 					<div
@@ -350,6 +501,16 @@
 						{/if}
 					</div>
 				</button>
+			{:else}
+				<!-- Read-only "Other" not selected - show nothing or empty state -->
+				<div class="flex items-center gap-3">
+					<div
+						class="shrink-0 w-5 h-5 rounded-{question.multiSelect
+							? 'sm'
+							: 'full'} border-2 border-dashed border-muted-foreground/30"
+					></div>
+					<span class="text-sm text-muted-foreground">Other...</span>
+				</div>
 			{/if}
 		</div>
 	</div>
@@ -388,12 +549,12 @@
 
 						<!-- Tab content -->
 						<div class="p-4">
-							{@render questionContent(questions[activeTab], activeTab, true)}
+							{@render questionContent(questions[activeTab], activeTab, true, false)}
 						</div>
 					{:else}
 						<!-- Single question: Simple view -->
 						<div class="p-4">
-							{@render questionContent(questions[0], 0, true)}
+							{@render questionContent(questions[0], 0, true, false)}
 						</div>
 					{/if}
 
@@ -454,41 +615,43 @@
 		{:else}
 			<!-- Inactive: Expandable answered state -->
 			<div class="w-full">
-				{#if answeredSummary()}
+				{#if answeredSummary}
 					<!-- Compact summary (clickable to expand) -->
-					<button
-						type="button"
-						class="flex items-center gap-2 w-full text-left"
-						onclick={() => isExpanded = !isExpanded}
-					>
-						<div class="flex items-center gap-1 text-muted-foreground">
-							{#if isExpanded}
-								<ChevronDown class="w-4 h-4" />
-							{:else}
-								<ChevronRight class="w-4 h-4" />
-							{/if}
-						</div>
-						<div class="flex flex-wrap gap-2 flex-1">
-							{#each answeredSummary() || [] as { header, answer }}
-								<div
-									class="inline-flex items-center gap-2 px-3 py-1.5 bg-accent/50 border border-border/50 rounded-full text-sm"
-								>
-									<span class="text-[10px] font-semibold text-secondary uppercase">{header}</span>
-									<span class="text-muted-foreground">→</span>
-									<span class="text-foreground font-medium truncate max-w-[200px]">{answer}</span>
-								</div>
-							{/each}
-						</div>
+					<div class="flex items-center gap-2 w-full">
+						<button
+							type="button"
+							class="flex items-center gap-2 flex-1 text-left"
+							onclick={() => isExpanded = !isExpanded}
+						>
+							<div class="flex items-center gap-1 text-muted-foreground">
+								{#if isExpanded}
+									<ChevronDown class="w-4 h-4" />
+								{:else}
+									<ChevronRight class="w-4 h-4" />
+								{/if}
+							</div>
+							<div class="flex flex-wrap gap-2 flex-1">
+								{#each answeredSummary || [] as { header, answer }, idx (idx)}
+									<div
+										class="inline-flex items-center gap-2 px-3 py-1.5 bg-accent/50 border border-border/50 rounded-full text-sm"
+									>
+										<span class="text-[10px] font-semibold text-secondary uppercase">{header}</span>
+										<span class="text-muted-foreground">→</span>
+										<span class="text-foreground font-medium truncate max-w-[200px]">{answer}</span>
+									</div>
+								{/each}
+							</div>
+						</button>
 						{#if onDismissMessage}
 							<button
-								onclick={(e) => { e.stopPropagation(); onDismissMessage?.(); }}
+								onclick={() => onDismissMessage?.()}
 								class="p-1 rounded-full hover:bg-accent transition-colors opacity-0 group-hover:opacity-100"
 								title="Dismiss"
 							>
 								<X class="w-3.5 h-3.5 text-muted-foreground" />
 							</button>
 						{/if}
-					</button>
+					</div>
 
 					<!-- Expanded view: Show full question UI (read-only) -->
 					{#if isExpanded}
@@ -516,11 +679,11 @@
 									{/each}
 								</div>
 								<div class="p-3 opacity-75">
-									{@render questionContent(questions[activeTab], activeTab, false)}
+									{@render questionContent(questions[activeTab], activeTab, false, true)}
 								</div>
 							{:else}
 								<div class="p-3 opacity-75">
-									{@render questionContent(questions[0], 0, false)}
+									{@render questionContent(questions[0], 0, false, true)}
 								</div>
 							{/if}
 						</div>

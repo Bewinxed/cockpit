@@ -601,6 +601,39 @@ export class InstanceTracker {
   }
 
   /**
+   * Update tool invocation with question answers (for AskUserQuestion persistence)
+   * Merges answers into toolInput so they're available after page refresh
+   */
+  async updateToolInvocationAnswers(toolUseId: string, answers: Record<string, string>): Promise<void> {
+    try {
+      // Get current tool invocation
+      const result = await this.db
+        .select({ toolInput: toolInvocations.toolInput })
+        .from(toolInvocations)
+        .where(eq(toolInvocations.id, toolUseId))
+        .limit(1);
+
+      if (result.length === 0) {
+        console.warn(`[InstanceTracker] Tool invocation ${toolUseId} not found for answer update`);
+        return;
+      }
+
+      // Merge answers into existing toolInput
+      const existingInput = (result[0].toolInput as Record<string, unknown>) || {};
+      const updatedInput = { ...existingInput, answers };
+
+      await this.db
+        .update(toolInvocations)
+        .set({ toolInput: updatedInput })
+        .where(eq(toolInvocations.id, toolUseId));
+
+      console.log(`[InstanceTracker] Updated tool invocation ${toolUseId} with question answers`);
+    } catch (err) {
+      console.error(`[InstanceTracker] Failed to update tool invocation ${toolUseId} with answers:`, err);
+    }
+  }
+
+  /**
    * Convert database row to Instance type
    */
   private dbRowToInstance(row: typeof instances.$inferSelect): Instance {

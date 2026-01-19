@@ -53,6 +53,8 @@ export interface QuestionResponse {
   requestId: string;
   /** Instance ID */
   instanceId: string;
+  /** SDK's tool use ID (for persisting answers to DB) */
+  toolUseId?: string;
   /**
    * User's answers indexed by question number.
    * Value is either the selected option label or custom "Other" text.

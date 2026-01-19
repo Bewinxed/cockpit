@@ -310,12 +310,17 @@ async function handleCommand(
 
     case 'question.response': {
       const req = data as QuestionResponseRequest;
-      const { requestId, instanceId, answers } = req;
+      const { requestId, instanceId, toolUseId, answers } = req;
 
       // Get instance to find machine
       const instance = await instanceTracker.get(instanceId);
       if (!instance) {
         throw new Error(`Instance ${instanceId} not found`);
+      }
+
+      // Persist answers to tool invocation for retrieval after refresh
+      if (toolUseId) {
+        await instanceTracker.updateToolInvocationAnswers(toolUseId, answers);
       }
 
       // Send question response to agent as notification (fire-and-forget)

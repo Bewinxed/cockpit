@@ -285,6 +285,12 @@
     return msg.type === 'tool_use' && msg.metadata?.toolName === 'TaskOutput';
   }
 
+  // Helper to check if a message is AskUserQuestion (has its own specialized renderer)
+  // These should NOT be grouped with other tools - they render via ChatMessage -> AskQuestionPicker
+  function isAskUserQuestion(msg: Message): boolean {
+    return (msg.type === 'tool_use' || msg.type === 'tool_result') && msg.metadata?.toolName === 'AskUserQuestion';
+  }
+
   // Helper to check if a message belongs to a subagent (has parentToolUseId)
   // These are shown inside SubagentBranch, not in main chat
   function isSubagentMessage(msg: Message): boolean {
@@ -326,6 +332,11 @@
 
         groups.push({ type: 'subagent_group', messages: subagentMessages, startIndex });
       }
+      // AskUserQuestion tools render as single messages (via ChatMessage -> AskQuestionPicker)
+      else if (isAskUserQuestion(msg)) {
+        groups.push({ type: 'single', message: msg, index: i });
+        i++;
+      }
       // Regular tool messages get grouped together
       else if (msg.type === 'tool_use' || msg.type === 'tool_result') {
         const toolMessages: Message[] = [msg];
@@ -334,8 +345,8 @@
 
         while (i < chatMessages.length) {
           const nextMsg = chatMessages[i];
-          // Don't include Task or TaskOutput tools in regular tool groups
-          if ((nextMsg.type === 'tool_use' || nextMsg.type === 'tool_result') && !isTaskToolUse(nextMsg) && !isTaskOutputTool(nextMsg)) {
+          // Don't include Task, TaskOutput, or AskUserQuestion tools in regular tool groups
+          if ((nextMsg.type === 'tool_use' || nextMsg.type === 'tool_result') && !isTaskToolUse(nextMsg) && !isTaskOutputTool(nextMsg) && !isAskUserQuestion(nextMsg)) {
             toolMessages.push(nextMsg);
             i++;
           } else {
@@ -777,7 +788,11 @@
   // Question handlers (AskUserQuestion)
   async function handleQuestionSubmit(requestId: string, answers: Record<string, string>): Promise<void> {
     try {
-      const response = await sendQuestionResponse({ requestId, instanceId, answers });
+      // Get toolUseId from the question store for DB persistence
+      const question = questionsStore.get(requestId);
+      const toolUseId = question?.toolUseId;
+
+      const response = await sendQuestionResponse({ requestId, instanceId, toolUseId, answers });
       if (!response.success) {
         throw new Error(response.error || 'Failed to submit answer');
       }
