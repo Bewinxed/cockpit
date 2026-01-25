@@ -1,5 +1,5 @@
-import type { JsonRpcRequest, SendMessageParams, StopInstanceParams } from '@cockpit/core';
-import { createResponse, createErrorResponse, JsonRpcErrorCode } from '@cockpit/core';
+import type { JsonRpcRequest, SendMessageParams, StopInstanceParams } from '@agentdeck/core';
+import { createResponse, createErrorResponse, JsonRpcErrorCode } from '@agentdeck/core';
 import type { InstanceManager } from '../instance-manager.js';
 import type { HubClient } from '../hub-client.js';
 

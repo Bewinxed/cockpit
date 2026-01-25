@@ -82,6 +82,16 @@ export interface SpawnInstanceParams {
   }>;
   /** Maximum tokens for response */
   maxTokens?: number;
+  /** Whether to allow extended thinking (default: true) */
+  allowThinking?: boolean;
+  /** Max agentic turns before stopping */
+  maxTurns?: number;
+  /** Max budget in USD */
+  maxBudgetUsd?: number;
+  /** Whitelist of allowed tools */
+  allowedTools?: string[];
+  /** Blacklist of disallowed tools */
+  disallowedTools?: string[];
 }
 
 /**

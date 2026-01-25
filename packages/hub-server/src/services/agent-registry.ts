@@ -1,11 +1,11 @@
-import type { Agent, CreateAgentData } from '@cockpit/core';
-import type { JsonRpcResponse } from '@cockpit/core/protocol';
+import type { Agent, CreateAgentData } from '@agentdeck/core';
+import type { JsonRpcResponse } from '@agentdeck/core/protocol';
 import {
   createRequest,
   createErrorResponse,
   JsonRpcErrorCode,
-} from '@cockpit/core/protocol';
-import { generateId, deferred } from '@cockpit/core/utils';
+} from '@agentdeck/core/protocol';
+import { generateId, deferred } from '@agentdeck/core/utils';
 
 /**
  * Represents a machine currently connected via WebSocket.
@@ -315,16 +315,16 @@ export class AgentRegistry {
 // Use globalThis to persist singleton across hot reloads
 // Module-level variables reset on hot reload, globalThis persists
 declare global {
-  var __cockpitAgentRegistry: AgentRegistry | undefined;
+  var __agentdeckAgentRegistry: AgentRegistry | undefined;
 }
 
 export function getAgentRegistry(options?: { requestTimeout?: number }): AgentRegistry {
-  if (!globalThis.__cockpitAgentRegistry) {
-    globalThis.__cockpitAgentRegistry = new AgentRegistry(options);
+  if (!globalThis.__agentdeckAgentRegistry) {
+    globalThis.__agentdeckAgentRegistry = new AgentRegistry(options);
   }
-  return globalThis.__cockpitAgentRegistry;
+  return globalThis.__agentdeckAgentRegistry;
 }
 
 export function resetAgentRegistry(): void {
-  globalThis.__cockpitAgentRegistry = undefined;
+  globalThis.__agentdeckAgentRegistry = undefined;
 }

@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * CLI entry point for the Cockpit Agent Service
+ * CLI entry point for the AgentDeck Agent Service
  */
 
 import { AgentDaemon, type AgentDaemonOptions } from './daemon.js';
@@ -48,6 +48,16 @@ async function main() {
     }
   }
 
+  // Environment variable fallback (CLI flag takes precedence)
+  if (!options.hubUrl) {
+    options.hubUrl = process.env.AGENTDECK_HUB_URL;
+  }
+
+  // Auto-disable discovery when explicit URL is provided
+  if (options.hubUrl && options.useDiscovery === undefined) {
+    options.useDiscovery = false;
+  }
+
   // Create and start daemon
   const daemon = new AgentDaemon(options);
 
@@ -82,9 +92,9 @@ async function main() {
 
 function printHelp() {
   console.log(`
-Cockpit Agent Service
+AgentDeck Agent Service
 
-Usage: bun run src/cli.ts [options]
+Usage: bunx @agentdeck/agent [options]
 
 Options:
   -h, --hub-url <url>         Hub WebSocket URL to connect to
@@ -94,11 +104,16 @@ Options:
   --heartbeat-interval <ms>   Heartbeat interval in milliseconds
   --help                      Show this help message
 
+Environment Variables:
+  AGENTDECK_HUB_URL           Hub WebSocket URL (overridden by --hub-url)
+
 Note: Machine ID is automatically derived from hardware identifiers.
+      When --hub-url or AGENTDECK_HUB_URL is set, mDNS discovery is disabled by default.
 
 Examples:
-  bun run src/cli.ts --hub-url ws://localhost:3001
-  bun run src/cli.ts --no-discovery --hub-url ws://hub.local:3001
+  bunx @agentdeck/agent --hub-url ws://localhost:3456/ws/hub
+  bunx @agentdeck/agent --no-discovery --hub-url ws://hub.local:3456/ws/hub
+  AGENTDECK_HUB_URL=wss://hub.example.com/ws/hub bunx @agentdeck/agent
 `);
 }
 

@@ -1,4 +1,4 @@
-import { logout as performLogout, isAuthenticated } from '@cockpit/auth';
+import { logout as performLogout, isAuthenticated } from '@agentdeck/auth';
 
 export async function logout() {
   console.log('🔓 Logging out...\n');

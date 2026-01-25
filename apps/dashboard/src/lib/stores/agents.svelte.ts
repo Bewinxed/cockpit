@@ -5,7 +5,7 @@ import type {
   AgentDisconnectedEvent,
   AgentReconnectingEvent,
   AgentUpdatedEvent,
-} from '@cockpit/core/dashboard';
+} from '@agentdeck/core/dashboard';
 
 /**
  * Agent store - manages connected agent state.
@@ -94,6 +94,7 @@ class AgentStore {
     tailscaleIp?: string;
     connectedAt?: string;
     lastPing?: string;
+    defaultCwd?: string | null;
   }>): void {
     this.#agents.clear();
     for (const a of agentsData) {
@@ -106,6 +107,7 @@ class AgentStore {
         ip: a.tailscaleIp || '',
         connectedAt: a.connectedAt ? new Date(a.connectedAt) : undefined,
         lastPing: a.lastPing ? new Date(a.lastPing) : undefined,
+        defaultCwd: a.defaultCwd,
       });
     }
   }
@@ -161,13 +163,13 @@ class AgentStore {
 // Singleton with HMR persistence
 function createAgentStore(): AgentStore {
   // @ts-expect-error - globalThis extension for HMR
-  if (globalThis.__cockpitAgentStore) {
+  if (globalThis.__agentdeckAgentStore) {
     // @ts-expect-error - globalThis extension for HMR
-    return globalThis.__cockpitAgentStore;
+    return globalThis.__agentdeckAgentStore;
   }
   const store = new AgentStore();
   // @ts-expect-error - globalThis extension for HMR
-  globalThis.__cockpitAgentStore = store;
+  globalThis.__agentdeckAgentStore = store;
   return store;
 }
 

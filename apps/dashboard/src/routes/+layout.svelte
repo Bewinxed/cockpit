@@ -80,7 +80,7 @@
       // Cmd+N - New instance
       if (cmdKey && e.key === 'n') {
         e.preventDefault();
-        window.dispatchEvent(new CustomEvent('cockpit:new-instance'));
+        window.dispatchEvent(new CustomEvent('agentdeck:new-instance'));
         return;
       }
 

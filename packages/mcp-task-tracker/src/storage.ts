@@ -1,5 +1,5 @@
-import type { Db } from '@cockpit/db';
-import { tasks, projects, eq, and, desc, asc, sql, isNull, isNotNull } from '@cockpit/db';
+import type { Db } from '@agentdeck/db';
+import { tasks, projects, eq, and, desc, asc, sql, isNull, isNotNull } from '@agentdeck/db';
 import type {
   Task,
   TaskType,
@@ -7,7 +7,7 @@ import type {
   CreateTaskData,
   UpdateTaskData,
   TaskSummary,
-} from '@cockpit/core/types';
+} from '@agentdeck/core/types';
 
 /**
  * Filter options for listing tasks

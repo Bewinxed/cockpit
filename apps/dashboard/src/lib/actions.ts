@@ -47,6 +47,14 @@ export async function spawnInstance(params: {
   prompt?: string;
   permissionMode?: string;
   resumeSessionId?: string;
+  enableThinking?: boolean;
+  // New spawn options
+  maxTurns?: number;
+  maxBudgetUsd?: number;
+  systemPrompt?: string;
+  envVars?: Record<string, string>;
+  allowedTools?: string[];
+  disallowedTools?: string[];
 }): Promise<ActionResult> {
   try {
     const response = await wsSpawnInstance({
@@ -55,6 +63,14 @@ export async function spawnInstance(params: {
       projectId: params.projectId,
       permissionMode: params.permissionMode,
       resumeSessionId: params.resumeSessionId,
+      allowThinking: params.enableThinking,
+      // New spawn options
+      maxTurns: params.maxTurns,
+      maxBudgetUsd: params.maxBudgetUsd,
+      systemPrompt: params.systemPrompt,
+      envVars: params.envVars,
+      allowedTools: params.allowedTools,
+      disallowedTools: params.disallowedTools,
     });
 
     if (response.status === 'error' || response.error) {

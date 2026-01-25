@@ -1,4 +1,4 @@
-import { AgentDaemon } from '@cockpit/agent-service';
+import { AgentDaemon } from '@agentdeck/agent';
 
 interface AgentOptions {
   hub?: string;
@@ -7,15 +7,21 @@ interface AgentOptions {
 }
 
 export async function agent(options: AgentOptions) {
+  // Environment variable fallback (CLI flag takes precedence)
+  const hubUrl = options.hub || process.env.COCKPIT_HUB_URL;
+
+  // Auto-disable discovery when explicit URL is provided
+  const useDiscovery = hubUrl ? false : options.discovery;
+
   console.log('🤖 Starting Cockpit Agent...');
-  console.log(`   Hub: ${options.hub || 'auto-discover'}`);
-  console.log(`   Discovery: ${options.discovery ? 'enabled' : 'disabled'}`);
+  console.log(`   Hub: ${hubUrl || 'auto-discover (mDNS)'}`);
+  console.log(`   Discovery: ${useDiscovery ? 'enabled' : 'disabled'}`);
   console.log('');
 
   try {
     const daemon = new AgentDaemon({
-      hubUrl: options.hub,
-      useDiscovery: options.discovery,
+      hubUrl,
+      useDiscovery,
     });
 
     await daemon.start();

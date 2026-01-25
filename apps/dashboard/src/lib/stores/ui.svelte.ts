@@ -1,7 +1,6 @@
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
-import type { SplitViewState, SidebarFilter, SidebarFilterState } from './types';
-
-export type ViewMode = 'chat' | 'flow';
+import type { SplitViewState, SidebarFilter, SidebarFilterState, ViewMode } from './types';
+import { instances } from './instances.svelte';
 
 /**
  * UI store - manages UI state (selection, sidebar, split view, etc.)
@@ -39,9 +38,6 @@ class UIStore {
   get collapsedProjects() {
     return this.#collapsedProjects;
   }
-
-  // View mode per instance (flow vs chat)
-  #instanceViewMode = new SvelteMap<string, ViewMode>();
 
   // Flow view state preservation (zoom, pan)
   #instanceFlowState = new SvelteMap<string, { zoom: number; pan: { x: number; y: number } }>();
@@ -167,23 +163,13 @@ class UIStore {
   }
 
   // ========================================
-  // Instance View Mode
+  // Instance View Mode (read from persisted DB state)
   // ========================================
 
-  /** Get view mode for an instance (defaults to 'flow') */
+  /** Get view mode for an instance (from persisted DB state, defaults to 'flow') */
   getViewMode(instanceId: string): ViewMode {
-    return this.#instanceViewMode.get(instanceId) ?? 'flow';
-  }
-
-  /** Set view mode for an instance */
-  setViewMode(instanceId: string, mode: ViewMode): void {
-    this.#instanceViewMode.set(instanceId, mode);
-  }
-
-  /** Toggle view mode between flow and chat */
-  toggleViewMode(instanceId: string): void {
-    const current = this.getViewMode(instanceId);
-    this.setViewMode(instanceId, current === 'flow' ? 'chat' : 'flow');
+    const instance = instances.get(instanceId);
+    return instance?.viewMode ?? 'flow';
   }
 
   /** Get saved flow state (zoom, pan) for restoration */
@@ -200,13 +186,13 @@ class UIStore {
 // Singleton with HMR persistence
 function createUIStore(): UIStore {
   // @ts-expect-error - globalThis extension for HMR
-  if (globalThis.__cockpitUIStore) {
+  if (globalThis.__agentdeckUIStore) {
     // @ts-expect-error - globalThis extension for HMR
-    return globalThis.__cockpitUIStore;
+    return globalThis.__agentdeckUIStore;
   }
   const store = new UIStore();
   // @ts-expect-error - globalThis extension for HMR
-  globalThis.__cockpitUIStore = store;
+  globalThis.__agentdeckUIStore = store;
   return store;
 }
 

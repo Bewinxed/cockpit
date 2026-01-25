@@ -104,9 +104,9 @@ function updateTabsUrl(tabs: string[], activeId: string | null): void {
 export function persistTabsToStorage(): void {
   const { tabs, activeId } = getTabsFromUrl();
   if (tabs.length > 0) {
-    localStorage.setItem('cockpit:tabs', JSON.stringify({ tabs, activeId }));
+    localStorage.setItem('agentdeck:tabs', JSON.stringify({ tabs, activeId }));
   } else {
-    localStorage.removeItem('cockpit:tabs');
+    localStorage.removeItem('agentdeck:tabs');
   }
 }
 
@@ -115,7 +115,7 @@ export function restoreTabsFromStorage(): void {
   const { tabs } = getTabsFromUrl();
   if (tabs.length > 0) return; // URL already has tabs
 
-  const stored = localStorage.getItem('cockpit:tabs');
+  const stored = localStorage.getItem('agentdeck:tabs');
   if (stored) {
     try {
       const { tabs: storedTabs, activeId } = JSON.parse(stored);

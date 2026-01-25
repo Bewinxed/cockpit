@@ -1,5 +1,5 @@
 {
-  "name": "@cockpit/mcp-task-tracker",
+  "name": "@agentdeck/mcp-task-tracker",
   "version": "0.0.1",
   "type": "module",
   "main": "./src/index.ts",
@@ -9,8 +9,8 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
-    "@cockpit/core": "workspace:*",
-    "@cockpit/db": "workspace:*",
+    "@agentdeck/core": "workspace:*",
+    "@agentdeck/db": "workspace:*",
     "zod": "^3.25.0"
   },
   "devDependencies": {

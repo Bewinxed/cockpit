@@ -1,6 +1,6 @@
 import { SvelteMap } from 'svelte/reactivity';
 import type { PermissionRequest } from './types';
-import type { PermissionRequestEvent } from '@cockpit/core/dashboard';
+import type { PermissionRequestEvent } from '@agentdeck/core/dashboard';
 
 /**
  * Permission store - manages pending permission requests.
@@ -94,13 +94,13 @@ class PermissionStore {
 // Singleton with HMR persistence
 function createPermissionStore(): PermissionStore {
   // @ts-expect-error - globalThis extension for HMR
-  if (globalThis.__cockpitPermissionStore) {
+  if (globalThis.__agentdeckPermissionStore) {
     // @ts-expect-error - globalThis extension for HMR
-    return globalThis.__cockpitPermissionStore;
+    return globalThis.__agentdeckPermissionStore;
   }
   const store = new PermissionStore();
   // @ts-expect-error - globalThis extension for HMR
-  globalThis.__cockpitPermissionStore = store;
+  globalThis.__agentdeckPermissionStore = store;
   return store;
 }
 

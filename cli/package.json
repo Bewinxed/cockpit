@@ -1,19 +1,19 @@
 {
-  "name": "@cockpit/cli",
+  "name": "@agentdeck/cli",
   "version": "0.0.1",
   "type": "module",
   "bin": {
-    "cockpit": "./src/index.ts"
+    "agentdeck": "./src/index.ts"
   },
   "scripts": {
-    "build": "bun build src/index.ts --compile --outfile dist/cockpit",
+    "build": "bun build src/index.ts --compile --outfile dist/agentdeck",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@cockpit/agent-service": "workspace:*",
-    "@cockpit/auth": "workspace:*",
-    "@cockpit/hub-server": "workspace:*",
-    "@cockpit/core": "workspace:*",
+    "@agentdeck/agent": "workspace:*",
+    "@agentdeck/auth": "workspace:*",
+    "@agentdeck/hub-server": "workspace:*",
+    "@agentdeck/core": "workspace:*",
     "commander": "^14.0.0"
   },
   "devDependencies": {

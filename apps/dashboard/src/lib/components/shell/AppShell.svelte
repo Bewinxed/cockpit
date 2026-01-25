@@ -24,8 +24,8 @@
     const handler = () => {
       showNewInstanceModal = true;
     };
-    window.addEventListener('cockpit:new-instance', handler);
-    return () => window.removeEventListener('cockpit:new-instance', handler);
+    window.addEventListener('agentdeck:new-instance', handler);
+    return () => window.removeEventListener('agentdeck:new-instance', handler);
   });
 
   // Listen for table view toggle event
@@ -33,8 +33,8 @@
     const handler = () => {
       showTableView = true;
     };
-    window.addEventListener('cockpit:show-table-view', handler);
-    return () => window.removeEventListener('cockpit:show-table-view', handler);
+    window.addEventListener('agentdeck:show-table-view', handler);
+    return () => window.removeEventListener('agentdeck:show-table-view', handler);
   });
 
   // Global keyboard shortcuts

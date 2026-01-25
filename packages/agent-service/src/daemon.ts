@@ -9,7 +9,34 @@ import {
   normalizeOS,
   getMachineFingerprint,
   getTailscaleIp,
-} from '@cockpit/core';
+} from '@agentdeck/core';
+
+/**
+ * Validate hub WebSocket URL format and protocol
+ * @throws Error if URL is malformed or uses wrong protocol
+ */
+function validateHubUrl(url: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error(
+      `Invalid URL format: "${url}". Expected format: ws://host:port/ws/hub or wss://host:port/ws/hub`
+    );
+  }
+
+  if (!['ws:', 'wss:'].includes(parsed.protocol)) {
+    throw new Error(
+      `Invalid protocol "${parsed.protocol}". Use ws:// or wss://`
+    );
+  }
+
+  if (!parsed.pathname.endsWith('/ws/hub')) {
+    console.warn(
+      `Warning: Hub URL path "${parsed.pathname}" doesn't end with /ws/hub`
+    );
+  }
+}
 import { InstanceManager, type SpawnInstanceParams, type InstanceStatusInfo } from './instance-manager.js';
 import { HubClient, type HubClientOptions } from './hub-client.js';
 import { AgentDiscovery, type HubService, type AgentDiscoveryOptions } from './discovery.js';
@@ -128,16 +155,21 @@ export class AgentDaemon extends EventEmitter {
     this.startTime = new Date();
 
     try {
-      // Find hub if URL not provided
-      if (!this.hubUrl && this.options.useDiscovery) {
+      // Validate and use provided URL, or discover via mDNS
+      if (this.hubUrl) {
+        validateHubUrl(this.hubUrl);
+        console.log(`Using configured hub URL: ${this.hubUrl}`);
+      } else if (this.options.useDiscovery) {
         console.log('Discovering hub via mDNS...');
         const hub = await this.discovery.browseForHub();
         this.hubUrl = `ws://${hub.host}:${hub.port}/ws/hub`;
-        console.log(`Found hub at ${this.hubUrl}`);
+        console.log(`Found hub via mDNS at ${this.hubUrl}`);
       }
 
       if (!this.hubUrl) {
-        throw new Error('No hub URL configured and discovery failed');
+        throw new Error(
+          'No hub URL configured and discovery failed. Set --hub-url or COCKPIT_HUB_URL, or enable discovery.'
+        );
       }
 
       // Connect to hub

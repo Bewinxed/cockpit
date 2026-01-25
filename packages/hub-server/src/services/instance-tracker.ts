@@ -1,7 +1,7 @@
-import type { Db } from '@cockpit/db';
-import type { Instance, InstanceStatus, SpawnInstanceData, UpdateInstanceData } from '@cockpit/core';
-import { instances, messages, toolInvocations, eq, and, or, asc, desc, sql, inArray, gte } from '@cockpit/db';
-import { generateId } from '@cockpit/core/utils';
+import type { Db } from '@agentdeck/db';
+import type { Instance, InstanceStatus, SpawnInstanceData, UpdateInstanceData, ViewMode } from '@agentdeck/core';
+import { instances, messages, toolInvocations, eq, and, or, asc, desc, sql, inArray, gte } from '@agentdeck/db';
+import { generateId } from '@agentdeck/core/utils';
 import {
   extractMessageFields,
   extractToolInvocations,
@@ -84,6 +84,7 @@ export class InstanceTracker {
       totalCostUsd: 0,
       createdAt: now,
       stoppedAt: null,
+      viewMode: 'flow', // Default to flow view
     };
 
     await this.db.insert(instances).values(newInstance);
@@ -131,6 +132,7 @@ export class InstanceTracker {
     if (data.lastPrompt !== undefined) updateData.lastPrompt = data.lastPrompt;
     if (data.totalCostUsd !== undefined) updateData.totalCostUsd = data.totalCostUsd;
     if (data.stoppedAt !== undefined) updateData.stoppedAt = data.stoppedAt;
+    if (data.viewMode !== undefined) updateData.viewMode = data.viewMode;
 
     if (Object.keys(updateData).length === 0) {
       return this.get(id);
@@ -651,6 +653,7 @@ export class InstanceTracker {
       totalCostUsd: row.totalCostUsd ?? 0,
       createdAt: row.createdAt,
       stoppedAt: row.stoppedAt ?? undefined,
+      viewMode: (row.viewMode as ViewMode) ?? 'flow',
     };
   }
 

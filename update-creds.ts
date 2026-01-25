@@ -8,7 +8,7 @@ import { homedir } from 'os';
 import { join } from 'path';
 
 const CREDENTIALS_FILE = join(homedir(), '.claude', '.credentials.json');
-const DB_FILE = 'cockpit.db';
+const DB_FILE = 'agentdeck.db';
 
 async function main() {
   // Read current credentials

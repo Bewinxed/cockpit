@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { FilesystemEntry, FilesystemListResult } from '@cockpit/core/protocol';
+  import type { FilesystemEntry, FilesystemListResult } from '@agentdeck/core/protocol';
   import { api } from '$lib/api';
   import { extractErrorMessage } from '$lib/utils/error';
   import { Button } from '$lib/components/ui/button';

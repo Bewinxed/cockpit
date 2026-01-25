@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { CircleHelp, Check, ListChecks, Send, X, PenLine, ChevronDown, ChevronRight } from 'lucide-svelte';
 	import type { MessageRendererProps } from './types';
-	import type { Question } from '@cockpit/core/dashboard';
+	import type { Question } from '@agentdeck/core/dashboard';
 
 	let {
 		message,

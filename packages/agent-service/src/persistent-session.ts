@@ -14,7 +14,7 @@ import {
   type PermissionBehavior,
   type PermissionRuleValue,
 } from '@anthropic-ai/claude-agent-sdk';
-import type { PermissionMode } from '@cockpit/core';
+import type { PermissionMode } from '@agentdeck/core';
 
 /** Message type from Claude Code SDK */
 type SDKMessage = Awaited<ReturnType<typeof query>> extends AsyncIterable<infer T> ? T : never;

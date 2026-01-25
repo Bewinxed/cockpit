@@ -1,8 +1,8 @@
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
-import type { JsonRpcRequest } from '@cockpit/core';
-import { createResponse, createErrorResponse, JsonRpcErrorCode } from '@cockpit/core';
-import type { ClaudeVersionResult } from '@cockpit/core/protocol';
+import type { JsonRpcRequest } from '@agentdeck/core';
+import { createResponse, createErrorResponse, JsonRpcErrorCode } from '@agentdeck/core';
+import type { ClaudeVersionResult } from '@agentdeck/core/protocol';
 import type { HubClient } from '../hub-client.js';
 
 const execAsync = promisify(exec);

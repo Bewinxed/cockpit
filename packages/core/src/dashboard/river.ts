@@ -19,6 +19,7 @@ import type {
   InstanceResumedEvent,
   InstanceTokenUsageEvent,
   InstanceModelChangedEvent,
+  InstanceViewModeChangedEvent,
   SdkMessageEvent,
   TaskCreatedEvent,
   TaskUpdatedEvent,
@@ -44,6 +45,30 @@ export interface SpawnInstanceRequest {
   projectId?: string;
   permissionMode?: string;
   resumeSessionId?: string;
+  allowThinking?: boolean;
+  /** Max agentic turns before stopping */
+  maxTurns?: number;
+  /** Max budget in USD */
+  maxBudgetUsd?: number;
+  /** Custom system prompt additions */
+  systemPrompt?: string;
+  /** Environment variables */
+  envVars?: Record<string, string>;
+  /** Whitelist of allowed tools */
+  allowedTools?: string[];
+  /** Blacklist of disallowed tools */
+  disallowedTools?: string[];
+}
+
+/** Update instance preferences (view mode, etc.) */
+export interface UpdateInstancePreferencesRequest {
+  instanceId: string;
+  viewMode: 'flow' | 'chat';
+}
+
+export interface UpdateInstancePreferencesResponse {
+  success: boolean;
+  error?: string;
 }
 
 export interface SpawnInstanceResponse {
@@ -149,6 +174,9 @@ export function buildDashboardEvents() {
     .defineEvent('instance:model-changed', {
       data: {} as InstanceModelChangedEvent,
     })
+    .defineEvent('instance:viewMode-changed', {
+      data: {} as InstanceViewModeChangedEvent,
+    })
 
     // SDK message event
     .defineEvent('sdk:message', {
@@ -210,6 +238,10 @@ export function buildDashboardEvents() {
     .defineEvent('question.response', {
       data: {} as QuestionResponseRequest,
       response: {} as QuestionResponseResponse,
+    })
+    .defineEvent('instance.updatePreferences', {
+      data: {} as UpdateInstancePreferencesRequest,
+      response: {} as UpdateInstancePreferencesResponse,
     })
 
     .build();

@@ -1,5 +1,5 @@
 {
-  "name": "@cockpit/hub-server",
+  "name": "@agentdeck/hub-server",
   "version": "0.0.1",
   "type": "module",
   "main": "./src/index.ts",
@@ -9,9 +9,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@cockpit/auth": "workspace:*",
-    "@cockpit/core": "workspace:*",
-    "@cockpit/db": "workspace:*",
+    "@agentdeck/auth": "workspace:*",
+    "@agentdeck/core": "workspace:*",
+    "@agentdeck/db": "workspace:*",
     "@elysiajs/cors": "^1.4.1",
     "bonjour-service": "^1.3.0",
     "elysia": "^1.4.22"

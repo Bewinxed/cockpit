@@ -1,6 +1,6 @@
 import { Elysia } from 'elysia';
-import type { Db } from '@cockpit/db';
-import { agents, eq } from '@cockpit/db';
+import type { Db } from '@agentdeck/db';
+import { agents, eq } from '@agentdeck/db';
 import {
   isJsonRpcRequest,
   isJsonRpcResponse,
@@ -10,10 +10,10 @@ import {
   JsonRpcErrorCode,
   CommandMethod,
   EventMethod,
-} from '@cockpit/core/protocol';
-import type { JsonRpcRequest, JsonRpcResponse, JsonRpcNotification } from '@cockpit/core/protocol';
+} from '@agentdeck/core/protocol';
+import type { JsonRpcRequest, JsonRpcResponse, JsonRpcNotification } from '@agentdeck/core/protocol';
 import { getAgentRegistry, getDashboardRegistry, createInstanceTracker } from '../services';
-import { safeJsonParse } from '@cockpit/core/utils';
+import { safeJsonParse } from '@agentdeck/core/utils';
 import {
   extractMessageFields,
   extractToolInvocations,

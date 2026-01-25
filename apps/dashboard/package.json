@@ -1,5 +1,5 @@
 {
-	"name": "@cockpit/dashboard",
+	"name": "@agentdeck/dashboard",
 	"version": "0.0.1",
 	"private": true,
 	"type": "module",
@@ -10,9 +10,9 @@
 		"typecheck": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json"
 	},
 	"dependencies": {
-		"@cockpit/core": "workspace:*",
-		"@cockpit/db": "workspace:*",
-		"@cockpit/hub-server": "workspace:*",
+		"@agentdeck/core": "workspace:*",
+		"@agentdeck/db": "workspace:*",
+		"@agentdeck/hub-server": "workspace:*",
 		"@dagrejs/dagre": "^1.1.8",
 		"@elysiajs/eden": "^1.4.6",
 		"@humanspeak/svelte-markdown": "^0.8.13",

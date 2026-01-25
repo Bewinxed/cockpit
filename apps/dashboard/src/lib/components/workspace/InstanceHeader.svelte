@@ -2,7 +2,7 @@
   import { Square, Columns2, LoaderCircle, MessageSquare, GitBranch } from 'lucide-svelte';
   import { Button } from '$lib/components/ui/button';
   import { Badge } from '$lib/components/ui/badge';
-  import { instances, ui, stopInstance as wsStopInstance, type Instance } from '$lib/stores';
+  import { instances, ui, stopInstance as wsStopInstance, updateInstancePreferences, type Instance } from '$lib/stores';
 
   interface Props {
     instance: Instance;
@@ -64,7 +64,7 @@
           variant={viewMode === 'chat' ? 'secondary' : 'ghost'}
           size="icon-sm"
           title="Chat view"
-          onclick={() => ui.setViewMode(instance.id, 'chat')}
+          onclick={() => updateInstancePreferences({ instanceId: instance.id, viewMode: 'chat' })}
         >
           <MessageSquare class="w-4 h-4" />
         </Button>
@@ -72,7 +72,7 @@
           variant={viewMode === 'flow' ? 'secondary' : 'ghost'}
           size="icon-sm"
           title="Flow view (Ctrl+G)"
-          onclick={() => ui.setViewMode(instance.id, 'flow')}
+          onclick={() => updateInstancePreferences({ instanceId: instance.id, viewMode: 'flow' })}
         >
           <GitBranch class="w-4 h-4" />
         </Button>

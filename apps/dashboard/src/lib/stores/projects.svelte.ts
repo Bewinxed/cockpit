@@ -4,7 +4,7 @@ import type {
   ProjectCreatedEvent,
   ProjectUpdatedEvent,
   ProjectDeletedEvent,
-} from '@cockpit/core/dashboard';
+} from '@agentdeck/core/dashboard';
 
 /**
  * Project store - manages project state.
@@ -143,13 +143,13 @@ class ProjectStore {
 // Singleton with HMR persistence
 function createProjectStore(): ProjectStore {
   // @ts-expect-error - globalThis extension for HMR
-  if (globalThis.__cockpitProjectStore) {
+  if (globalThis.__agentdeckProjectStore) {
     // @ts-expect-error - globalThis extension for HMR
-    return globalThis.__cockpitProjectStore;
+    return globalThis.__agentdeckProjectStore;
   }
   const store = new ProjectStore();
   // @ts-expect-error - globalThis extension for HMR
-  globalThis.__cockpitProjectStore = store;
+  globalThis.__agentdeckProjectStore = store;
   return store;
 }
 

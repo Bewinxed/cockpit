@@ -1,8 +1,8 @@
 import { Elysia, t } from 'elysia';
-import type { Db } from '@cockpit/db';
-import type { CreateProjectData, UpdateProjectData } from '@cockpit/core';
-import { projects, eq, desc, like } from '@cockpit/db';
-import { generateId } from '@cockpit/core/utils';
+import type { Db } from '@agentdeck/db';
+import type { CreateProjectData, UpdateProjectData } from '@agentdeck/core';
+import { projects, eq, desc, like } from '@agentdeck/db';
+import { generateId } from '@agentdeck/core/utils';
 import { getDashboardRegistry } from '../services';
 
 /**

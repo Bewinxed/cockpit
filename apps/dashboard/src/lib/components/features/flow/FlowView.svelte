@@ -12,7 +12,7 @@
     BackgroundVariant
   } from '@xyflow/svelte';
   import { onMount } from 'svelte';
-  import { instances, ui } from '$lib/stores';
+  import { instances, ui, updateInstancePreferences } from '$lib/stores';
   import { theme } from '$lib/stores/theme.svelte';
   import FlowContextMenu from './FlowContextMenu.svelte';
   import FlowAutoFit from './FlowAutoFit.svelte';
@@ -135,7 +135,7 @@
         // TODO: Implement branch - will need to call instance API
         break;
       case 'jump':
-        ui.setViewMode(instanceId, 'chat');
+        updateInstancePreferences({ instanceId, viewMode: 'chat' });
         break;
     }
     closeContextMenu();

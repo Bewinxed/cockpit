@@ -53,7 +53,7 @@
         description: 'Create a new Claude session',
         icon: Plus,
         action: () => {
-          window.dispatchEvent(new CustomEvent('cockpit:new-instance'));
+          window.dispatchEvent(new CustomEvent('agentdeck:new-instance'));
           ui.toggleCommandPalette();
         },
       });
@@ -81,7 +81,7 @@
         description: 'Open table view of all instances',
         icon: Table,
         action: () => {
-          window.dispatchEvent(new CustomEvent('cockpit:show-table-view'));
+          window.dispatchEvent(new CustomEvent('agentdeck:show-table-view'));
           ui.toggleCommandPalette();
         },
       });

@@ -1,4 +1,4 @@
-import { startHub } from '@cockpit/hub-server';
+import { startHub } from '@agentdeck/hub-server';
 
 interface HubOptions {
   port: string;

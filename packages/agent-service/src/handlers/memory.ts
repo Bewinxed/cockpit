@@ -1,14 +1,14 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
-import type { JsonRpcRequest } from '@cockpit/core';
-import { createResponse, createErrorResponse, JsonRpcErrorCode } from '@cockpit/core';
+import type { JsonRpcRequest } from '@agentdeck/core';
+import { createResponse, createErrorResponse, JsonRpcErrorCode } from '@agentdeck/core';
 import type {
   MemoryReadParams,
   MemoryReadResult,
   MemoryWriteParams,
   MemoryWriteResult,
-} from '@cockpit/core/protocol';
+} from '@agentdeck/core/protocol';
 import type { HubClient } from '../hub-client.js';
 
 /**

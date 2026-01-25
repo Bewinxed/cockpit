@@ -1,7 +1,7 @@
 import { Elysia, t } from 'elysia';
-import type { Db } from '@cockpit/db';
-import { credentials, eq, desc } from '@cockpit/db';
-import { generateId } from '@cockpit/core/utils';
+import type { Db } from '@agentdeck/db';
+import { credentials, eq, desc } from '@agentdeck/db';
+import { generateId } from '@agentdeck/core/utils';
 import {
   generateCodeVerifier,
   generateCodeChallenge,
@@ -9,7 +9,7 @@ import {
   exchangeCodeForTokens,
   refreshAccessToken,
   isTokenExpired,
-} from '@cockpit/auth';
+} from '@agentdeck/auth';
 
 // In-memory store for PKCE verifiers (with 10 min expiration)
 const pendingAuth = new Map<string, { verifier: string; expiresAt: number }>();

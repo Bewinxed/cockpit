@@ -14,6 +14,7 @@
     questions as questionsStore,
     sendQuestionResponse,
     sendInstanceMessage,
+    updateInstancePreferences,
     ui,
     type Message
   } from '$lib/stores';
@@ -1083,7 +1084,8 @@
   function handleKeydown(e: KeyboardEvent) {
     if ((e.ctrlKey || e.metaKey) && e.key === 'g') {
       e.preventDefault();
-      ui.toggleViewMode(instanceId);
+      const currentMode = ui.getViewMode(instanceId);
+      updateInstancePreferences({ instanceId, viewMode: currentMode === 'flow' ? 'chat' : 'flow' });
     }
   }
 </script>

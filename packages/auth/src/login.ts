@@ -58,7 +58,7 @@ export async function login(options: LoginOptions = {}): Promise<LoginResult> {
   if (await isAuthenticated()) {
     return {
       success: true,
-      message: 'Already authenticated. Use "cockpit logout" to sign out first.',
+      message: 'Already authenticated. Use "agentdeck logout" to sign out first.',
     };
   }
 

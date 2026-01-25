@@ -6,8 +6,8 @@
  * Uses river.ts format for all messages: { type, data }
  */
 
-import type { DashboardEventType, DashboardEventMap } from '@cockpit/core/dashboard';
-import { generateId } from '@cockpit/core/utils';
+import type { DashboardEventType, DashboardEventMap } from '@agentdeck/core/dashboard';
+import { generateId } from '@agentdeck/core/utils';
 
 /**
  * Dashboard client connection
@@ -187,16 +187,16 @@ export class DashboardRegistry {
 
 // HMR-persistent singleton
 declare global {
-  var __cockpitDashboardRegistry: DashboardRegistry | undefined;
+  var __agentdeckDashboardRegistry: DashboardRegistry | undefined;
 }
 
 export function getDashboardRegistry(): DashboardRegistry {
-  if (!globalThis.__cockpitDashboardRegistry) {
-    globalThis.__cockpitDashboardRegistry = new DashboardRegistry();
+  if (!globalThis.__agentdeckDashboardRegistry) {
+    globalThis.__agentdeckDashboardRegistry = new DashboardRegistry();
   }
-  return globalThis.__cockpitDashboardRegistry;
+  return globalThis.__agentdeckDashboardRegistry;
 }
 
 export function resetDashboardRegistry(): void {
-  globalThis.__cockpitDashboardRegistry = undefined;
+  globalThis.__agentdeckDashboardRegistry = undefined;
 }

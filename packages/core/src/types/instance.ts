@@ -12,6 +12,11 @@ export type InstanceStatus = 'starting' | 'running' | 'stopping' | 'stopped' | '
 export type PermissionMode = 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan' | 'delegate' | 'dontAsk';
 
 /**
+ * View mode for instance UI display
+ */
+export type ViewMode = 'flow' | 'chat';
+
+/**
  * Represents a running or stopped Claude Code session.
  * Instances are the actual Claude Code processes managed by machines.
  *
@@ -60,6 +65,9 @@ export interface Instance {
 
   /** When the instance was stopped (if stopped) */
   stoppedAt?: Date;
+
+  /** UI view mode preference */
+  viewMode?: ViewMode;
 }
 
 /**
@@ -90,6 +98,7 @@ export interface UpdateInstanceData {
   lastPrompt?: string;
   totalCostUsd?: number;
   stoppedAt?: Date;
+  viewMode?: ViewMode;
 }
 
 /**

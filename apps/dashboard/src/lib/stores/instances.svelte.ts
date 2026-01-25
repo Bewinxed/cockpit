@@ -10,7 +10,8 @@ import type {
   InstanceResumedEvent,
   InstanceTokenUsageEvent,
   InstanceModelChangedEvent,
-} from '@cockpit/core/dashboard';
+  InstanceViewModeChangedEvent,
+} from '@agentdeck/core/dashboard';
 
 /** Tool invocation data from the API */
 export interface ToolInvocationData {
@@ -185,6 +186,7 @@ class InstanceStore {
     cwd: string;
     model?: string;
     totalCostUsd?: number;
+    viewMode?: 'flow' | 'chat';
   }>): void {
     this.#instances.clear();
     for (const i of instancesData) {
@@ -200,6 +202,7 @@ class InstanceStore {
         cwd: i.cwd,
         model: i.model,
         totalCostUsd: i.totalCostUsd,
+        viewMode: i.viewMode ?? 'flow',
       });
     }
   }
@@ -860,6 +863,7 @@ class InstanceStore {
       cwd: event.cwd,
       model: event.model || undefined,
       totalCostUsd: 0,
+      viewMode: event.viewMode || 'flow',
     });
   }
 
@@ -1005,6 +1009,17 @@ class InstanceStore {
     }
   }
 
+  /** Handle instance:viewMode-changed WebSocket event */
+  handleViewModeChanged(event: InstanceViewModeChangedEvent): void {
+    const instance = this.#instances.get(event.instanceId);
+    if (instance) {
+      this.#instances.set(event.instanceId, {
+        ...instance,
+        viewMode: event.viewMode,
+      });
+    }
+  }
+
   /** Update instance model directly (used by SDK init message) */
   updateModel(instanceId: string, model: string): void {
     const instance = this.#instances.get(instanceId);
@@ -1020,13 +1035,13 @@ class InstanceStore {
 // Singleton with HMR persistence
 function createInstanceStore(): InstanceStore {
   // @ts-expect-error - globalThis extension for HMR
-  if (globalThis.__cockpitInstanceStore) {
+  if (globalThis.__agentdeckInstanceStore) {
     // @ts-expect-error - globalThis extension for HMR
-    return globalThis.__cockpitInstanceStore;
+    return globalThis.__agentdeckInstanceStore;
   }
   const store = new InstanceStore();
   // @ts-expect-error - globalThis extension for HMR
-  globalThis.__cockpitInstanceStore = store;
+  globalThis.__agentdeckInstanceStore = store;
   return store;
 }
 

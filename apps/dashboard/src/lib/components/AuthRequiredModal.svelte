@@ -39,7 +39,7 @@
             Open a terminal on <span class="font-medium text-foreground">{agentName}</span>
           </li>
           <li class="pl-1">
-            Run: <code class="bg-accent px-2 py-0.5 rounded text-foreground font-mono text-xs">cockpit login</code>
+            Run: <code class="bg-accent px-2 py-0.5 rounded text-foreground font-mono text-xs">agentdeck login</code>
           </li>
           <li class="pl-1">
             Complete the authentication in your browser

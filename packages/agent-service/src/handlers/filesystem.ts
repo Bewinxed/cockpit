@@ -1,13 +1,13 @@
 import { readdir, stat, realpath } from 'node:fs/promises';
 import { join, dirname, resolve } from 'node:path';
 import { homedir } from 'node:os';
-import type { JsonRpcRequest } from '@cockpit/core';
-import { createResponse, createErrorResponse, JsonRpcErrorCode } from '@cockpit/core';
+import type { JsonRpcRequest } from '@agentdeck/core';
+import { createResponse, createErrorResponse, JsonRpcErrorCode } from '@agentdeck/core';
 import type {
   FilesystemListParams,
   FilesystemListResult,
   FilesystemEntry,
-} from '@cockpit/core/protocol';
+} from '@agentdeck/core/protocol';
 import type { HubClient } from '../hub-client.js';
 
 /**

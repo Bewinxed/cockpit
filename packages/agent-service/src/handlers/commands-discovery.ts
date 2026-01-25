@@ -1,12 +1,12 @@
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { join, basename } from 'node:path';
-import type { JsonRpcRequest } from '@cockpit/core';
-import { createResponse, createErrorResponse, JsonRpcErrorCode } from '@cockpit/core';
+import type { JsonRpcRequest } from '@agentdeck/core';
+import { createResponse, createErrorResponse, JsonRpcErrorCode } from '@agentdeck/core';
 import type {
   CommandsListParams,
   CommandsListResult,
   AvailableCommand,
-} from '@cockpit/core/protocol';
+} from '@agentdeck/core/protocol';
 import type { HubClient } from '../hub-client.js';
 import type { InstanceManager } from '../instance-manager.js';
 

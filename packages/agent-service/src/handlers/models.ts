@@ -2,7 +2,7 @@
  * Handler for models.list and models.set protocol methods
  */
 
-import type { JsonRpcRequest } from '@cockpit/core';
+import type { JsonRpcRequest } from '@agentdeck/core';
 import {
   createResponse,
   createErrorResponse,
@@ -11,7 +11,7 @@ import {
   type ModelsListResult,
   type ModelsSetParams,
   type ModelsSetResult,
-} from '@cockpit/core';
+} from '@agentdeck/core';
 import type { HubClient } from '../hub-client.js';
 import type { InstanceManager } from '../instance-manager.js';
 

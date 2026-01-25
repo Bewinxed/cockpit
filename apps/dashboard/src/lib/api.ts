@@ -2,7 +2,7 @@
  * Type-safe API client using Eden Treaty
  */
 import { treaty } from '@elysiajs/eden';
-import type { App } from '@cockpit/hub-server';
+import type { App } from '@agentdeck/hub-server';
 
 // Lazy-initialize the Eden client to ensure we're in browser context
 // Uses current origin (goes through SvelteKit proxy to hub)

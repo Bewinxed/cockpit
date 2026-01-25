@@ -207,6 +207,33 @@ WS   /ws/dashboard (dashboard connection - river.ts format)
 
 **Dashboard proxies to hub via SvelteKit `/api/[...path]` and `/ws/[...path]`**
 
+## Remote Agent Deployment
+
+To connect an agent to a remote hub (outside mDNS discovery):
+
+**Via Environment Variable:**
+```bash
+export COCKPIT_HUB_URL=wss://hub.example.com:3456/ws/hub
+bun run agent
+```
+
+**Via CLI Flag:**
+```bash
+bun run agent --hub wss://hub.example.com:3456/ws/hub
+```
+
+**URL Format:**
+- `ws://` - Unencrypted WebSocket (local networks only)
+- `wss://` - TLS-encrypted WebSocket (recommended for remote)
+- Path must be `/ws/hub`
+
+**Priority Order:**
+1. CLI flag (`--hub <url>`)
+2. Environment variable (`COCKPIT_HUB_URL`)
+3. mDNS discovery (if enabled)
+
+When a hub URL is explicitly provided, mDNS discovery is automatically disabled.
+
 <!-- BEGIN FLOW-NEXT -->
 ## Flow-Next
 

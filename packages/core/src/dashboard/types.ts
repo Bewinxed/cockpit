@@ -4,8 +4,8 @@
  * These types are shared between hub-server and dashboard for type-safe
  * real-time communication via WebSocket (using river.ts).
  *
- * NOTE: Import from '@cockpit/core/events' to avoid naming conflicts with
- * the protocol events in '@cockpit/core' (which are for agent↔hub JSON-RPC).
+ * NOTE: Import from '@agentdeck/core/events' to avoid naming conflicts with
+ * the protocol events in '@agentdeck/core' (which are for agent↔hub JSON-RPC).
  *
  * Wire format: { type: string, data: T, id?: string }
  * - Events (no response): { type, data }
@@ -21,7 +21,8 @@ import type {
   TaskType,
   SdkMessageType,
   ToolInvocationStatus,
-} from '@cockpit/db';
+  ViewMode,
+} from '@agentdeck/db';
 import type { Question, QuestionOption } from '../types/question.js';
 
 // Re-export question types for convenience
@@ -68,6 +69,7 @@ export interface InstanceCreatedEvent {
   permissionMode?: string | null;
   lastPrompt?: string | null;
   createdAt: string | Date;
+  viewMode?: ViewMode | null;
 }
 
 export interface InstanceStartedEvent {
@@ -84,6 +86,7 @@ export interface InstanceStartedEvent {
   totalCostUsd?: number;
   createdAt: string | Date;
   stoppedAt?: string | Date | null;
+  viewMode?: ViewMode | null;
 }
 
 export interface InstanceStoppedEvent {
@@ -130,6 +133,7 @@ export interface InstanceResumedEvent {
   totalCostUsd?: number;
   createdAt: string | Date;
   stoppedAt?: string | Date | null;
+  viewMode?: ViewMode | null;
 }
 
 export interface InstanceTokenUsageEvent {
@@ -142,6 +146,11 @@ export interface InstanceTokenUsageEvent {
 export interface InstanceModelChangedEvent {
   instanceId: string;
   model: string;
+}
+
+export interface InstanceViewModeChangedEvent {
+  instanceId: string;
+  viewMode: ViewMode;
 }
 
 // ============================================================================
@@ -350,6 +359,7 @@ export interface DashboardEventMap {
   'instance:resumed': InstanceResumedEvent;
   'instance:token_usage': InstanceTokenUsageEvent;
   'instance:model-changed': InstanceModelChangedEvent;
+  'instance:viewMode-changed': InstanceViewModeChangedEvent;
 
   // SDK message event
   'sdk:message': SdkMessageEvent;

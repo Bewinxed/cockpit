@@ -11,6 +11,8 @@ export const agents = sqliteTable('agents', {
   status: text('status').notNull(), // 'online' | 'offline' | 'reconnecting'
   lastSeen: integer('last_seen', { mode: 'timestamp' }).notNull(),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+  // Agent settings (persisted)
+  defaultCwd: text('default_cwd'), // Default working directory for new instances
 }, (table) => [
   index('agents_status_idx').on(table.status),
   index('agents_last_seen_idx').on(table.lastSeen),
@@ -49,6 +51,8 @@ export const instances = sqliteTable('instances', {
   totalCostUsd: real('total_cost_usd').default(0),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
   stoppedAt: integer('stopped_at', { mode: 'timestamp' }),
+  // UI preferences (persisted per instance)
+  viewMode: text('view_mode').default('flow'), // 'flow' | 'chat'
 }, (table) => [
   index('instances_session_id_idx').on(table.sessionId),
   index('instances_sdk_session_id_idx').on(table.sdkSessionId),
@@ -189,3 +193,4 @@ export type TaskStatus = 'in_progress' | 'completed' | 'blocked' | 'cancelled';
 export type CredentialType = 'oauth' | 'api_key';
 export type SdkMessageType = 'user' | 'assistant' | 'system' | 'result';
 export type ToolInvocationStatus = 'pending' | 'success' | 'error';
+export type ViewMode = 'flow' | 'chat';

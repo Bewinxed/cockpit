@@ -64,7 +64,7 @@
             Run the following command on your machine:
           </p>
           <code class="block p-2 bg-background rounded text-xs font-mono">
-            bun install -g @cockpit/cli && cockpit agent
+            bun install -g @agentdeck/cli && agentdeck agent
           </code>
         </div>
       {/if}

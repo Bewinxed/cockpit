@@ -10,7 +10,11 @@ export interface Agent {
   ip: string;
   connectedAt?: Date;
   lastPing?: Date;
+  /** Default working directory for new instances on this agent */
+  defaultCwd?: string | null;
 }
+
+export type ViewMode = 'flow' | 'chat';
 
 export interface Instance {
   id: string;
@@ -24,6 +28,7 @@ export interface Instance {
   cwd: string;
   model?: string;
   totalCostUsd?: number;
+  viewMode?: ViewMode;
 }
 
 export interface Project {

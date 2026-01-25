@@ -17,6 +17,7 @@ export type {
   SpawnInstanceData,
   UpdateInstanceData,
   InstanceStats,
+  ViewMode,
 } from './instance.js';
 
 // Task types

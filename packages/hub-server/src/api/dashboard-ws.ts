@@ -9,17 +9,18 @@
  */
 
 import { Elysia } from 'elysia';
-import type { Db } from '@cockpit/db';
+import type { Db } from '@agentdeck/db';
 import type {
   SpawnInstanceRequest,
   SendMessageRequest,
   StopInstanceRequest,
   PermissionResponseRequest,
   QuestionResponseRequest,
+  UpdateInstancePreferencesRequest,
   DashboardEventType,
   DashboardEventMap,
-} from '@cockpit/core/dashboard';
-import type { PermissionMode } from '@cockpit/core';
+} from '@agentdeck/core/dashboard';
+import type { PermissionMode } from '@agentdeck/core';
 import { getAgentRegistry, getDashboardRegistry, createInstanceTracker } from '../services';
 
 /**
@@ -158,7 +159,22 @@ async function handleCommand(
   switch (type) {
     case 'instance.spawn': {
       const req = data as SpawnInstanceRequest;
-      const { machineId, cwd, model, projectId, permissionMode, resumeSessionId } = req;
+      const {
+        machineId,
+        cwd,
+        model,
+        projectId,
+        permissionMode,
+        resumeSessionId,
+        allowThinking,
+        // New fields
+        maxTurns,
+        maxBudgetUsd,
+        systemPrompt,
+        envVars,
+        allowedTools,
+        disallowedTools,
+      } = req;
 
       // Get agent for this machine
       const agent = getAgentRegistry().get(machineId);
@@ -187,6 +203,14 @@ async function handleCommand(
         model,
         permissionMode,
         resumeSessionId,
+        allowThinking,
+        // New fields
+        maxTurns,
+        maxBudgetUsd,
+        systemPrompt,
+        envVars,
+        allowedTools,
+        disallowedTools,
       });
 
       if ('error' in response && response.error) {
@@ -334,6 +358,25 @@ async function handleCommand(
       if (!sent) {
         throw new Error(`Failed to send question response to agent ${instance.machineId}`);
       }
+
+      return { success: true };
+    }
+
+    case 'instance.updatePreferences': {
+      const req = data as UpdateInstancePreferencesRequest;
+      const { instanceId, viewMode } = req;
+
+      // Update instance in database
+      const updated = await instanceTracker.update(instanceId, { viewMode });
+      if (!updated) {
+        throw new Error(`Instance ${instanceId} not found`);
+      }
+
+      // Broadcast the view mode change to all dashboards
+      getDashboardRegistry().broadcast('instance:viewMode-changed', {
+        instanceId,
+        viewMode,
+      });
 
       return { success: true };
     }

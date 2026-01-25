@@ -27,6 +27,7 @@ interface InstanceData {
   cwd: string;
   model?: string;
   totalCostUsd?: number;
+  viewMode?: 'flow' | 'chat';
 }
 
 interface ProjectData {

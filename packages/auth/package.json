@@ -1,5 +1,5 @@
 {
-  "name": "@cockpit/auth",
+  "name": "@agentdeck/auth",
   "version": "0.0.1",
   "type": "module",
   "main": "src/index.ts",
@@ -8,7 +8,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@cockpit/core": "workspace:*"
+    "@agentdeck/core": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.8.3"

@@ -23,4 +23,6 @@ export {
   type PermissionResponseResponse,
   type QuestionResponseRequest,
   type QuestionResponseResponse,
+  type UpdateInstancePreferencesRequest,
+  type UpdateInstancePreferencesResponse,
 } from './river.js';

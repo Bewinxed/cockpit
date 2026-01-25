@@ -15,7 +15,7 @@ import {
   exponentialBackoff,
   sleep,
   generateId,
-} from '@cockpit/core';
+} from '@agentdeck/core';
 
 export interface HubClientOptions {
   /** Maximum reconnection attempts (0 = infinite) */

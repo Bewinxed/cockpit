@@ -7,5 +7,5 @@ export * from './protocol/index.js';
 // Re-export utils
 export * from './utils/index.js';
 
-// Dashboard events are exported via subpath: '@cockpit/core/dashboard'
+// Dashboard events are exported via subpath: '@agentdeck/core/dashboard'
 // This avoids naming conflicts with protocol events

@@ -1,4 +1,4 @@
-import { login as performLogin, isAuthenticated, getCredentialsPath } from '@cockpit/auth';
+import { login as performLogin, isAuthenticated, getCredentialsPath } from '@agentdeck/auth';
 
 interface LoginOptions {
   browser: boolean;
@@ -12,7 +12,7 @@ export async function login(options: LoginOptions) {
   if (await isAuthenticated()) {
     console.log('✓ Already authenticated!');
     console.log(`  Credentials: ${getCredentialsPath()}`);
-    console.log('\nUse "cockpit logout" to sign out.');
+    console.log('\nUse "agentdeck logout" to sign out.');
     return;
   }
 

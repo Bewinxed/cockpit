@@ -2,19 +2,19 @@ import Bonjour, { type Service as BonjourService, type Browser } from 'bonjour-s
 import { EventEmitter } from 'events';
 
 /**
- * Service type for Cockpit mDNS discovery
+ * Service type for AgentDeck mDNS discovery
  */
-export const COCKPIT_SERVICE_TYPE = 'cockpit-hub';
+export const AGENTDECK_SERVICE_TYPE = 'agentdeck-hub';
 
 /**
- * Default port for Cockpit hub
+ * Default port for AgentDeck hub
  */
-export const COCKPIT_DEFAULT_PORT = 3847;
+export const AGENTDECK_DEFAULT_PORT = 3847;
 
 /**
- * Represents a discovered Cockpit service
+ * Represents a discovered AgentDeck service
  */
-export interface CockpitService {
+export interface AgentDeckService {
   /** Service name (usually hostname) */
   name: string;
   /** Host address */
@@ -36,9 +36,9 @@ export interface CockpitService {
  */
 export interface DiscoveryEvents {
   /** A new service was discovered */
-  serviceUp: (service: CockpitService) => void;
+  serviceUp: (service: AgentDeckService) => void;
   /** A service went offline */
-  serviceDown: (service: CockpitService) => void;
+  serviceDown: (service: AgentDeckService) => void;
   /** An error occurred */
   error: (error: Error) => void;
 }
@@ -47,14 +47,14 @@ export interface DiscoveryEvents {
  * Options for DiscoveryService
  */
 export interface DiscoveryOptions {
-  /** Service type to use (default: cockpit-hub) */
+  /** Service type to use (default: agentdeck-hub) */
   serviceType?: string;
   /** Port to advertise on (default: 3847) */
   port?: number;
 }
 
 /**
- * mDNS discovery service for finding Cockpit hubs and agents
+ * mDNS discovery service for finding AgentDeck hubs and agents
  */
 export class DiscoveryService extends EventEmitter {
   private bonjour: Bonjour;
@@ -62,13 +62,13 @@ export class DiscoveryService extends EventEmitter {
   private publishedService: BonjourService | null = null;
   private readonly serviceType: string;
   private readonly port: number;
-  private discovered: Map<string, CockpitService> = new Map();
+  private discovered: Map<string, AgentDeckService> = new Map();
 
   constructor(options: DiscoveryOptions = {}) {
     super();
     this.bonjour = new Bonjour();
-    this.serviceType = options.serviceType || COCKPIT_SERVICE_TYPE;
-    this.port = options.port || COCKPIT_DEFAULT_PORT;
+    this.serviceType = options.serviceType || AGENTDECK_SERVICE_TYPE;
+    this.port = options.port || AGENTDECK_DEFAULT_PORT;
   }
 
   /**
@@ -123,18 +123,18 @@ export class DiscoveryService extends EventEmitter {
     this.browser = this.bonjour.find({ type: this.serviceType });
 
     this.browser.on('up', (service: BonjourService) => {
-      const cockpitService = this.parseService(service);
-      if (cockpitService) {
-        this.discovered.set(cockpitService.name, cockpitService);
-        this.emit('serviceUp', cockpitService);
+      const agentdeckService = this.parseService(service);
+      if (agentdeckService) {
+        this.discovered.set(agentdeckService.name, agentdeckService);
+        this.emit('serviceUp', agentdeckService);
       }
     });
 
     this.browser.on('down', (service: BonjourService) => {
-      const cockpitService = this.parseService(service);
-      if (cockpitService) {
-        this.discovered.delete(cockpitService.name);
-        this.emit('serviceDown', cockpitService);
+      const agentdeckService = this.parseService(service);
+      if (agentdeckService) {
+        this.discovered.delete(agentdeckService.name);
+        this.emit('serviceDown', agentdeckService);
       }
     });
   }
@@ -152,21 +152,21 @@ export class DiscoveryService extends EventEmitter {
   /**
    * Get all currently discovered services
    */
-  getDiscoveredServices(): CockpitService[] {
+  getDiscoveredServices(): AgentDeckService[] {
     return Array.from(this.discovered.values());
   }
 
   /**
    * Get discovered hubs only
    */
-  getDiscoveredHubs(): CockpitService[] {
+  getDiscoveredHubs(): AgentDeckService[] {
     return this.getDiscoveredServices().filter((s) => s.type === 'hub');
   }
 
   /**
    * Get discovered agents only
    */
-  getDiscoveredAgents(): CockpitService[] {
+  getDiscoveredAgents(): AgentDeckService[] {
     return this.getDiscoveredServices().filter((s) => s.type === 'agent');
   }
 
@@ -182,9 +182,9 @@ export class DiscoveryService extends EventEmitter {
   }
 
   /**
-   * Parse a Bonjour service into a CockpitService
+   * Parse a Bonjour service into an AgentDeckService
    */
-  private parseService(service: BonjourService): CockpitService | null {
+  private parseService(service: BonjourService): AgentDeckService | null {
     try {
       const txt = (service.txt || {}) as Record<string, string>;
       const type = txt.type as 'hub' | 'agent';
@@ -213,7 +213,7 @@ export class DiscoveryService extends EventEmitter {
  * @param timeout - Maximum time to wait in milliseconds (default: 5000)
  * @returns The first discovered hub, or null if timeout
  */
-export async function discoverHub(timeout = 5000): Promise<CockpitService | null> {
+export async function discoverHub(timeout = 5000): Promise<AgentDeckService | null> {
   return new Promise((resolve) => {
     const discovery = new DiscoveryService();
     let resolved = false;
@@ -247,7 +247,7 @@ export async function discoverHub(timeout = 5000): Promise<CockpitService | null
  * @param timeout - Maximum time to wait in milliseconds (default: 3000)
  * @returns All discovered services
  */
-export async function discoverAll(timeout = 3000): Promise<CockpitService[]> {
+export async function discoverAll(timeout = 3000): Promise<AgentDeckService[]> {
   return new Promise((resolve) => {
     const discovery = new DiscoveryService();
 

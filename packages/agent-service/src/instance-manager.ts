@@ -1,5 +1,5 @@
 import { EventEmitter } from 'events';
-import { generateId } from '@cockpit/core';
+import { generateId } from '@agentdeck/core';
 import {
   PersistentSession,
   createPersistentSession,
@@ -10,7 +10,7 @@ import {
   type PermissionResult,
 } from './persistent-session';
 
-import type { InstanceStatus, PermissionMode, PermissionRequest, PermissionResponse, PermissionUpdate, QuestionRequest, QuestionResponse } from '@cockpit/core';
+import type { InstanceStatus, PermissionMode, PermissionRequest, PermissionResponse, PermissionUpdate, QuestionRequest, QuestionResponse } from '@agentdeck/core';
 
 /**
  * Internal representation of a managed Claude Code instance
@@ -76,6 +76,16 @@ export interface SpawnInstanceParams {
   maxTokens?: number;
   initialPrompt?: string;
   envVars?: Record<string, string>;
+  /** Whether to allow extended thinking (default: true) */
+  allowThinking?: boolean;
+  /** Max agentic turns before stopping */
+  maxTurns?: number;
+  /** Max budget in USD */
+  maxBudgetUsd?: number;
+  /** Whitelist of allowed tools */
+  allowedTools?: string[];
+  /** Blacklist of disallowed tools */
+  disallowedTools?: string[];
 }
 
 export interface McpServerConfig {
@@ -368,6 +378,9 @@ export class InstanceManager extends EventEmitter {
         ? this.createCanUseTool(instanceId)
         : undefined;
 
+      // Thinking tokens: undefined = default (enabled), 0 = disabled
+      const maxThinkingTokens = params.allowThinking === false ? 0 : undefined;
+
       // Debug log session creation options
       console.log(`[InstanceManager] Creating session for ${instanceId}:`, {
         resumeSessionId: params.resumeSessionId,
@@ -376,6 +389,7 @@ export class InstanceManager extends EventEmitter {
         enableFileCheckpointing: params.enableFileCheckpointing,
         permissionMode,
         hasCanUseTool: !!canUseTool,
+        allowThinking: params.allowThinking,
       });
 
       const session = params.resumeSessionId
@@ -392,6 +406,11 @@ export class InstanceManager extends EventEmitter {
             resumeSessionAt: params.resumeFromMessageId,
             forkSession: params.forkSession,
             enableFileCheckpointing: params.enableFileCheckpointing,
+            maxThinkingTokens,
+            maxTurns: params.maxTurns,
+            maxBudgetUsd: params.maxBudgetUsd,
+            allowedTools: params.allowedTools,
+            disallowedTools: params.disallowedTools,
           })
         : createPersistentSession({
             cwd: params.projectPath,
@@ -404,6 +423,11 @@ export class InstanceManager extends EventEmitter {
             systemPrompt: params.systemPrompt,
             settingSources,
             enableFileCheckpointing: params.enableFileCheckpointing,
+            maxThinkingTokens,
+            maxTurns: params.maxTurns,
+            maxBudgetUsd: params.maxBudgetUsd,
+            allowedTools: params.allowedTools,
+            disallowedTools: params.disallowedTools,
           });
 
       instance.session = session;

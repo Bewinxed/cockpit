@@ -1,5 +1,5 @@
 {
-  "name": "cockpit",
+  "name": "agentdeck",
   "private": true,
   "type": "module",
   "workspaces": [
@@ -9,15 +9,15 @@
   ],
   "scripts": {
     "dev": "bun run dev:dashboard",
-    "dev:dashboard": "bun run --filter @cockpit/dashboard dev",
-    "dev:agent": "bun run --filter @cockpit/agent-service dev",
+    "dev:dashboard": "bun run --filter @agentdeck/dashboard dev",
+    "dev:agent": "bun run --filter @agentdeck/agent-service dev",
     "dev:all": "bun run --filter '*' dev",
     "build": "bun run --filter '*' build",
-    "build:cli": "bun run --filter @cockpit/cli build",
+    "build:cli": "bun run --filter @agentdeck/cli build",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "typecheck": "bun run --filter '*' typecheck",
-    "check": "bun build packages/agent-service/src/index.ts packages/hub-server/src/index.ts --target=bun --outdir /tmp/cockpit-check",
+    "check": "bun build packages/agent-service/src/index.ts packages/hub-server/src/index.ts --target=bun --outdir /tmp/agentdeck-check",
     "hub": "bun cli/src/index.ts hub",
     "agent": "bun cli/src/index.ts agent",
     "agent:local": "bun cli/src/index.ts agent --hub ws://localhost:3456/ws/hub",
@@ -25,7 +25,7 @@
     "login": "bun cli/src/index.ts login",
     "logout": "bun cli/src/index.ts logout",
     "cli": "bun cli/src/index.ts",
-    "db:push": "bun run --filter @cockpit/db db:push"
+    "db:push": "bun run --filter @agentdeck/db db:push"
   },
   "overrides": {
     "vite": "npm:rolldown-vite@latest",

@@ -1,6 +1,6 @@
-import type { JsonRpcRequest, SpawnInstanceParams as SpawnParams } from '@cockpit/core';
-import { createResponse, createErrorResponse, JsonRpcErrorCode } from '@cockpit/core';
-import { saveCredentials } from '@cockpit/auth';
+import type { JsonRpcRequest, SpawnInstanceParams as SpawnParams } from '@agentdeck/core';
+import { createResponse, createErrorResponse, JsonRpcErrorCode } from '@agentdeck/core';
+import { saveCredentials } from '@agentdeck/auth';
 import type { InstanceManager, SpawnInstanceParams as LocalSpawnParams } from '../instance-manager.js';
 import type { HubClient } from '../hub-client.js';
 
@@ -74,6 +74,12 @@ export async function handleSpawn(
       maxTokens: params.maxTokens,
       initialPrompt: params.initialPrompt,
       envVars: params.envVars,
+      allowThinking: params.allowThinking,
+      // New spawn options
+      maxTurns: params.maxTurns,
+      maxBudgetUsd: params.maxBudgetUsd,
+      allowedTools: params.allowedTools,
+      disallowedTools: params.disallowedTools,
     };
 
     const instanceId = await instanceManager.spawn(spawnParams);

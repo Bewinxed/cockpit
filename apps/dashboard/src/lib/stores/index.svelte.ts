@@ -45,7 +45,7 @@ export type {
   TaskCompletedEvent,
   TaskCreatedEvent,
   TaskUpdatedEvent,
-} from '@cockpit/core/dashboard';
+} from '@agentdeck/core/dashboard';
 
 // Re-export entity stores
 export { agents } from './agents.svelte';
@@ -72,7 +72,7 @@ import { ui } from './ui.svelte';
 
 // river.ts - use pre-built schema and WebSocket adapter from core
 import { RiverSocketAdapter } from 'river.ts/websocket';
-import { dashboardEvents } from '@cockpit/core/dashboard';
+import { dashboardEvents } from '@agentdeck/core/dashboard';
 
 // ============================================
 // WEBSOCKET CONNECTION (river.ts with shared schema from core)
@@ -141,6 +141,7 @@ export function initializeFromSSR(
     cwd: string;
     model?: string;
     totalCostUsd?: number;
+    viewMode?: 'flow' | 'chat';
   }>,
   projectsData: Array<{
     id: string;
@@ -190,6 +191,7 @@ function setupEventHandlers(adapter: RiverSocketAdapter<typeof dashboardEvents>)
   adapter.on('instance:resumed', (data) => instances.handleResumed(data));
   adapter.on('instance:token_usage', (data) => instances.handleTokenUsage(data));
   adapter.on('instance:model-changed', (data) => instances.handleModelChanged(data));
+  adapter.on('instance:viewMode-changed', (data) => instances.handleViewModeChanged(data));
 
   // SDK message
   adapter.on('sdk:message', (data) => handleSdkMessage(data));
@@ -335,7 +337,9 @@ import type {
   PermissionResponseResponse,
   QuestionResponseRequest,
   QuestionResponseResponse,
-} from '@cockpit/core/dashboard';
+  UpdateInstancePreferencesRequest,
+  UpdateInstancePreferencesResponse,
+} from '@agentdeck/core/dashboard';
 
 /** Error thrown when WebSocket is not connected */
 export class WebSocketNotConnectedError extends Error {
@@ -408,6 +412,16 @@ export async function sendPermissionResponse(params: PermissionResponseRequest):
 export async function sendQuestionResponse(params: QuestionResponseRequest): Promise<QuestionResponseResponse> {
   const { ws, adapter } = getConnectedWs();
   return adapter.request('question.response', params, (msg) => ws.send(msg), 30000);
+}
+
+/**
+ * Update instance preferences (view mode, etc).
+ * @throws WebSocketNotConnectedError if not connected
+ * @throws RequestTimeoutError if no response within timeout
+ */
+export async function updateInstancePreferences(params: UpdateInstancePreferencesRequest): Promise<UpdateInstancePreferencesResponse> {
+  const { ws, adapter } = getConnectedWs();
+  return adapter.request('instance.updatePreferences', params, (msg) => ws.send(msg), 30000);
 }
 
 // ============================================
@@ -556,13 +570,13 @@ class CrossStoreDerivations {
 // Singleton with HMR persistence
 function createCrossStoreDerivations(): CrossStoreDerivations {
   // @ts-expect-error - globalThis extension for HMR
-  if (globalThis.__cockpitCrossStoreDerivations) {
+  if (globalThis.__agentdeckCrossStoreDerivations) {
     // @ts-expect-error - globalThis extension for HMR
-    return globalThis.__cockpitCrossStoreDerivations;
+    return globalThis.__agentdeckCrossStoreDerivations;
   }
   const derivations = new CrossStoreDerivations();
   // @ts-expect-error - globalThis extension for HMR
-  globalThis.__cockpitCrossStoreDerivations = derivations;
+  globalThis.__agentdeckCrossStoreDerivations = derivations;
   return derivations;
 }
 

@@ -1,10 +1,10 @@
 import { Elysia, t } from 'elysia';
-import type { Db } from '@cockpit/db';
-import { credentials, eq } from '@cockpit/db';
-import type { SpawnInstanceData } from '@cockpit/core';
-import type { JsonRpcError } from '@cockpit/core/protocol';
-import { CommandMethod } from '@cockpit/core/protocol';
-import { isTokenExpired, refreshAccessToken } from '@cockpit/auth';
+import type { Db } from '@agentdeck/db';
+import { credentials, eq } from '@agentdeck/db';
+import type { SpawnInstanceData } from '@agentdeck/core';
+import type { JsonRpcError } from '@agentdeck/core/protocol';
+import { CommandMethod } from '@agentdeck/core/protocol';
+import { isTokenExpired, refreshAccessToken } from '@agentdeck/auth';
 import { createInstanceTracker, getAgentRegistry, getDashboardRegistry } from '../services';
 
 /**

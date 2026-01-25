@@ -1,6 +1,6 @@
 import { SvelteMap } from 'svelte/reactivity';
-import type { QuestionRequest } from '@cockpit/core';
-import type { QuestionRequestEvent } from '@cockpit/core/dashboard';
+import type { QuestionRequest } from '@agentdeck/core';
+import type { QuestionRequestEvent } from '@agentdeck/core/dashboard';
 import { instances } from './instances.svelte';
 
 /**
@@ -118,13 +118,13 @@ class QuestionStore {
 // Singleton with HMR persistence
 function createQuestionStore(): QuestionStore {
   // @ts-expect-error - globalThis extension for HMR
-  if (globalThis.__cockpitQuestionStore) {
+  if (globalThis.__agentdeckQuestionStore) {
     // @ts-expect-error - globalThis extension for HMR
-    return globalThis.__cockpitQuestionStore;
+    return globalThis.__agentdeckQuestionStore;
   }
   const store = new QuestionStore();
   // @ts-expect-error - globalThis extension for HMR
-  globalThis.__cockpitQuestionStore = store;
+  globalThis.__agentdeckQuestionStore = store;
   return store;
 }
 

@@ -24,8 +24,8 @@ export class HubDiscovery {
       // Advertise the hub service
       // probe: false skips checking if service name exists (avoids collisions in dev)
       this.service = this.bonjour.publish({
-        name: 'cockpit-hub',
-        type: '_cockpit-hub._tcp',
+        name: 'agentdeck-hub',
+        type: '_agentdeck-hub._tcp',
         port,
         probe: false,
         txt: {
@@ -102,7 +102,7 @@ export class HubBrowser {
       let foundHub: DiscoveredHub | null = null;
       let resolved = false;
 
-      this.browser = this.bonjour.find({ type: '_cockpit-hub._tcp' }, (service) => {
+      this.browser = this.bonjour.find({ type: '_agentdeck-hub._tcp' }, (service) => {
         const hub: DiscoveredHub = {
           name: service.name,
           host: service.host,

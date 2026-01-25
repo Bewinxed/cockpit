@@ -4,7 +4,7 @@ import type {
   TaskCreatedEvent,
   TaskUpdatedEvent,
   TaskCompletedEvent,
-} from '@cockpit/core/dashboard';
+} from '@agentdeck/core/dashboard';
 
 /**
  * Task store - manages task state.
@@ -159,13 +159,13 @@ class TaskStore {
 // Singleton with HMR persistence
 function createTaskStore(): TaskStore {
   // @ts-expect-error - globalThis extension for HMR
-  if (globalThis.__cockpitTaskStore) {
+  if (globalThis.__agentdeckTaskStore) {
     // @ts-expect-error - globalThis extension for HMR
-    return globalThis.__cockpitTaskStore;
+    return globalThis.__agentdeckTaskStore;
   }
   const store = new TaskStore();
   // @ts-expect-error - globalThis extension for HMR
-  globalThis.__cockpitTaskStore = store;
+  globalThis.__agentdeckTaskStore = store;
   return store;
 }
 

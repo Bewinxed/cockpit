@@ -1,4 +1,4 @@
-import { getTailscaleStatus, getTailscaleIp } from '@cockpit/core/utils';
+import { getTailscaleStatus, getTailscaleIp } from '@agentdeck/core/utils';
 
 export async function status() {
   console.log('📊 Cockpit Status\n');
@@ -24,6 +24,6 @@ export async function status() {
   console.log('');
 
   // TODO: Check for running hub/agent
-  console.log('💡 Run "cockpit hub" to start a hub');
-  console.log('💡 Run "cockpit agent" to start an agent');
+  console.log('💡 Run "agentdeck hub" to start a hub');
+  console.log('💡 Run "agentdeck agent" to start an agent');
 }

@@ -35,7 +35,7 @@ export class AgentDiscovery extends EventEmitter {
 
   constructor(options: AgentDiscoveryOptions = {}) {
     super();
-    this.serviceType = options.serviceType ?? '_cockpit-hub._tcp';
+    this.serviceType = options.serviceType ?? '_agentdeck-hub._tcp';
     this.browseTimeout = options.browseTimeout ?? 30000;
   }
 
@@ -146,11 +146,11 @@ export class AgentDiscovery extends EventEmitter {
       this.unpublish();
     }
 
-    const serviceName = name ?? `cockpit-agent-${process.pid}`;
+    const serviceName = name ?? `agentdeck-agent-${process.pid}`;
 
     this.publisher = this.bonjour!.publish({
       name: serviceName,
-      type: '_cockpit-agent._tcp',
+      type: '_agentdeck-agent._tcp',
       port,
       txt: {
         ...txt,

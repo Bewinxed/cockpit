@@ -1,6 +1,6 @@
 import { Elysia } from 'elysia';
 import { cors } from '@elysiajs/cors';
-import { getDb, agents } from '@cockpit/db';
+import { getDb, agents } from '@agentdeck/db';
 
 import {
   createInstanceRoutes,
@@ -222,8 +222,8 @@ export async function startHub(options: HubOptions) {
  */
 async function main() {
   const port = parseInt(process.env.HUB_PORT || '3456', 10);
-  // Default to cockpit.db at project root
-  const dbPath = process.env.HUB_DB_PATH || `${import.meta.dir}/../../../cockpit.db`;
+  // Default to agentdeck.db at project root
+  const dbPath = process.env.HUB_DB_PATH || `${import.meta.dir}/../../../agentdeck.db`;
   const enableDiscovery = process.env.HUB_DISCOVERY !== 'false';
 
   const hub = await startHub({

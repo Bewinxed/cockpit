@@ -40,10 +40,10 @@ export interface TaskTrackerOptions {
  *
  * @example
  * ```typescript
- * import { createTaskTrackerServer, TaskStorage } from '@cockpit/mcp-task-tracker';
- * import { createDb } from '@cockpit/db';
+ * import { createTaskTrackerServer, TaskStorage } from '@agentdeck/mcp-task-tracker';
+ * import { createDb } from '@agentdeck/db';
  *
- * const db = createDb('./cockpit.db');
+ * const db = createDb('./agentdeck.db');
  * const storage = new TaskStorage(db);
  *
  * const server = createTaskTrackerServer({

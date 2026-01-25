@@ -3,7 +3,7 @@
  * Extracts nested fields from SDK message JSON for efficient database queries.
  */
 
-import type { SdkMessageType, ToolInvocationStatus } from '@cockpit/db';
+import type { SdkMessageType, ToolInvocationStatus } from '@agentdeck/db';
 
 /**
  * Raw SDK message structure (from Claude SDK)

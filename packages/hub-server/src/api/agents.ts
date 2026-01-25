@@ -1,8 +1,8 @@
 import { Elysia, t } from 'elysia';
-import type { Db } from '@cockpit/db';
-import type { Agent } from '@cockpit/core';
-import { CommandMethod, type FilesystemListResult, type ClaudeVersionResult, type JsonRpcError } from '@cockpit/core/protocol';
-import { agents, eq, desc } from '@cockpit/db';
+import type { Db } from '@agentdeck/db';
+import type { Agent } from '@agentdeck/core';
+import { CommandMethod, type FilesystemListResult, type ClaudeVersionResult, type JsonRpcError } from '@agentdeck/core/protocol';
+import { agents, eq, desc } from '@agentdeck/db';
 import { getAgentRegistry, createInstanceTracker } from '../services';
 
 /**
@@ -41,10 +41,12 @@ export function createAgentRoutes(db: Db) {
         let dbQuery = db.select().from(agents).$dynamic();
 
         if (query.status === 'online') {
-          // Only return online machines from registry
+          // For online machines, also fetch DB records for defaultCwd
+          const dbMachines = await db.select().from(agents);
+          const dbMachineMap = new Map(dbMachines.map(m => [m.machineId, m]));
           return {
             success: true,
-            data: connectedMachines.map(connectedMachineToResponse),
+            data: connectedMachines.map(m => connectedMachineToResponse(m, dbMachineMap.get(m.machineId))),
             total: connectedMachines.length,
           };
         }
@@ -359,13 +361,58 @@ export function createAgentRoutes(db: Db) {
           machineId: t.String(),
         }),
       }
+    )
+
+    // Update machine settings
+    .patch(
+      '/:machineId',
+      async ({ params, body, set }) => {
+        // Check if machine exists (in registry or database)
+        const connected = getAgentRegistry().get(params.machineId);
+        const dbMachine = await db
+          .select()
+          .from(agents)
+          .where(eq(agents.machineId, params.machineId))
+          .limit(1);
+
+        if (!connected && dbMachine.length === 0) {
+          set.status = 404;
+          return {
+            success: false,
+            error: 'Machine not found',
+          };
+        }
+
+        // Update settings in database
+        await db.update(agents)
+          .set({
+            defaultCwd: body.defaultCwd,
+          })
+          .where(eq(agents.machineId, params.machineId));
+
+        return {
+          success: true,
+          data: {
+            machineId: params.machineId,
+            defaultCwd: body.defaultCwd,
+          },
+        };
+      },
+      {
+        params: t.Object({
+          machineId: t.String(),
+        }),
+        body: t.Object({
+          defaultCwd: t.Optional(t.Union([t.String(), t.Null()])),
+        }),
+      }
     );
 }
 
 /**
  * Convert connected machine to API response
  */
-function connectedMachineToResponse(machine: ReturnType<ReturnType<typeof getAgentRegistry>['getAll']>[0]) {
+function connectedMachineToResponse(machine: ReturnType<ReturnType<typeof getAgentRegistry>['getAll']>[0], dbMachine?: typeof agents.$inferSelect | null) {
   return {
     machineId: machine.machineId,
     hostname: machine.hostname,
@@ -376,6 +423,7 @@ function connectedMachineToResponse(machine: ReturnType<ReturnType<typeof getAge
     createdAt: machine.createdAt,
     connectedAt: machine.connectedAt,
     lastPing: machine.lastPing,
+    defaultCwd: dbMachine?.defaultCwd ?? null,
   };
 }
 
@@ -391,5 +439,6 @@ function dbMachineToResponse(machine: typeof agents.$inferSelect) {
     status: machine.status as 'online' | 'offline' | 'reconnecting',
     lastSeen: machine.lastSeen,
     createdAt: machine.createdAt,
+    defaultCwd: machine.defaultCwd,
   };
 }

@@ -29,6 +29,20 @@
       "when": 1768294412417,
       "tag": "0003_concerned_ricochet",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1768825946963,
+      "tag": "0004_tough_sunspot",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1768828919778,
+      "tag": "0005_big_jackal",
+      "breakpoints": true
     }
   ]
 }
