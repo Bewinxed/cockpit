@@ -1,12 +1,7 @@
 <script lang="ts">
 	import { Cpu, Check, ArrowRight, CircleAlert, LoaderCircle, CircleX } from 'lucide-svelte';
+	import type { ModelInfo } from '@agentdeck/core/protocol';
 	import type { MessageRendererProps } from './types';
-
-	interface ModelInfo {
-		value: string;
-		displayName: string;
-		description: string;
-	}
 
 	let {
 		message,

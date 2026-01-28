@@ -14,11 +14,6 @@ import {
 import type { JsonRpcRequest, JsonRpcResponse, JsonRpcNotification } from '@agentdeck/core/protocol';
 import { getAgentRegistry, getDashboardRegistry, createInstanceTracker } from '../services';
 import { safeJsonParse } from '@agentdeck/core/utils';
-import {
-  extractMessageFields,
-  extractToolInvocations,
-  extractToolResults,
-} from '../services/message-extractor';
 
 // Map to store machineId by WebSocket connection ID
 // We use a module-level Map since Elysia ws wrappers don't preserve properties between calls
@@ -352,6 +347,27 @@ async function handleNotification(
       break;
     }
 
+    case EventMethod.INSTANCE_TURN_STARTED: {
+      const { instanceId, timestamp } = params as { instanceId: string; timestamp?: string };
+      getDashboardRegistry().broadcast('instance:turn', {
+        instanceId,
+        phase: 'started',
+        timestamp: timestamp ? new Date(timestamp) : new Date(),
+      });
+      break;
+    }
+
+    case EventMethod.INSTANCE_TURN_COMPLETED: {
+      const { instanceId, isError, timestamp } = params as { instanceId: string; isError?: boolean; timestamp?: string };
+      getDashboardRegistry().broadcast('instance:turn', {
+        instanceId,
+        phase: 'completed',
+        isError,
+        timestamp: timestamp ? new Date(timestamp) : new Date(),
+      });
+      break;
+    }
+
     // Handle SDK messages from machine
     case 'sdk.message': {
       const { instanceId, message } = params as { instanceId: string; message: unknown };
@@ -362,6 +378,7 @@ async function handleNotification(
         parent_tool_use_id?: string | null;  // For subagent messages
         usage?: { input_tokens?: number; output_tokens?: number };
         total_cost_usd?: number;
+        event?: { type?: string; [key: string]: unknown };
       };
 
       // Capture and persist SDK session ID (used for resume)
@@ -375,13 +392,56 @@ async function handleNotification(
         }
       }
 
-      // Persist message to database with SDK UUID for resumeSessionAt
+      // Forward stream events immediately (ephemeral)
+      if (msg.type === 'stream_event' && msg.event) {
+        getDashboardRegistry().broadcast('message:stream', {
+          instanceId,
+          sdkUuid: msg.uuid ?? null,
+          parentToolUseId: msg.parent_tool_use_id ?? null,
+          event: {
+            ...msg.event,
+            type: msg.event.type ?? 'unknown',
+          },
+        });
+        break;
+      }
+
+      // Forward high-value SDK messages immediately for live UI updates
+      if (
+        msg.type === 'system' &&
+        (msg.subtype === 'status' || msg.subtype === 'init' || msg.subtype === 'compact_boundary' || msg.subtype === 'hook_response')
+      ) {
+        getDashboardRegistry().broadcast('sdk:message', {
+          instanceId,
+          message,
+          receivedAt: new Date(),
+        });
+      }
+
+      if (msg.type === 'tool_progress' || msg.type === 'auth_status' || msg.type === 'result') {
+        getDashboardRegistry().broadcast('sdk:message', {
+          instanceId,
+          message,
+          receivedAt: new Date(),
+        });
+      }
+
+      // Persist canonical messages to database
       try {
-        await instanceTracker.saveMessage(instanceId, {
+        const result = await instanceTracker.saveMessage(instanceId, {
           content: message,
           timestamp: new Date(),
-          sdkUuid: msg.uuid,  // Store SDK's UUID for edit/resume functionality
+          sdkUuid: msg.uuid,
         });
+        for (const created of result.created) {
+          getDashboardRegistry().broadcast('message:created', {
+            instanceId,
+            message: {
+              ...created,
+              metadata: created.metadata ?? null,
+            },
+          });
+        }
       } catch (err) {
         console.error('[Hub] Failed to save SDK message:', err);
       }
@@ -403,28 +463,6 @@ async function handleNotification(
         });
       }
 
-      // Forward SDK messages to dashboard with normalized fields
-      // Extract fields so frontend doesn't need to parse JSON
-      const extracted = extractMessageFields(message);
-      const toolInvocations = extractToolInvocations(message);
-      const toolResults = extractToolResults(message);
-
-
-      getDashboardRegistry().broadcast('sdk:message', {
-        instanceId,
-        message,  // Keep raw for backwards compat / debugging
-        // Normalized fields for direct use
-        sdkUuid: msg.uuid,
-        sdkType: extracted.sdkType,
-        sdkSubtype: extracted.sdkSubtype,
-        parentToolUseId: extracted.parentToolUseId,
-        role: extracted.role,
-        textContent: extracted.textContent,
-        model: extracted.model,
-        // Tool data extracted from content blocks
-        toolInvocations,
-        toolResults,
-      });
       break;
     }
 
@@ -506,7 +544,6 @@ async function handleNotification(
       getDashboardRegistry().broadcast('question:request', {
         requestId,
         instanceId,
-        machineId,
         toolUseId,
         questions,
         createdAt,

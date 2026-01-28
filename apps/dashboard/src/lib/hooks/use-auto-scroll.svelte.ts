@@ -1,32 +1,23 @@
 /**
  * Auto-scroll hook for chat containers.
- * Keeps chat scrolled to bottom unless user scrolls up.
+ * Supports both standard and flex-col-reverse scroll directions.
  *
- * Usage in Svelte 5:
- * ```svelte
- * <script>
- *   const scroll = createAutoScroll();
- *
- *   // Trigger scroll when content changes
- *   $effect(() => {
- *     messages.length; // dependency
- *     scroll.scrollToBottom();
- *   });
- * </script>
- *
- * <div bind:this={scroll.ref} onscroll={scroll.onScroll}>
- *   {#each messages as msg}...{/each}
- * </div>
- * ```
+ * With flex-col-reverse, scrollTop=0 is the visual bottom (newest content),
+ * and scrolling up gives negative scrollTop values.
  */
 
 export function createAutoScroll() {
 	let ref = $state<HTMLElement | undefined>(undefined);
 	let userHasScrolled = $state(false);
+	let reversed = false;
 
 	function isAtBottom(): boolean {
 		if (!ref) return true;
 		const threshold = 50;
+		if (reversed) {
+			// flex-col-reverse: scrollTop=0 at visual bottom, negative when scrolled up
+			return Math.abs(ref.scrollTop) < threshold;
+		}
 		return ref.scrollTop + ref.clientHeight >= ref.scrollHeight - threshold;
 	}
 
@@ -38,10 +29,9 @@ export function createAutoScroll() {
 		if (!ref) return;
 		if (!force && userHasScrolled) return;
 
-		// Use requestAnimationFrame to ensure DOM has updated
 		requestAnimationFrame(() => {
 			if (!ref) return;
-			ref.scrollTo({ top: ref.scrollHeight, behavior: 'smooth' });
+			ref.scrollTo({ top: reversed ? 0 : ref.scrollHeight, behavior: 'smooth' });
 			userHasScrolled = false;
 		});
 	}
@@ -50,9 +40,12 @@ export function createAutoScroll() {
 		get ref() { return ref; },
 		set ref(el: HTMLElement | undefined) {
 			ref = el;
-			// Start at bottom
 			if (ref) {
-				ref.scrollTop = ref.scrollHeight;
+				reversed = getComputedStyle(ref).flexDirection === 'column-reverse';
+				if (!reversed) {
+					ref.scrollTop = ref.scrollHeight;
+				}
+				// flex-col-reverse already starts at scrollTop=0 (visual bottom)
 			}
 		},
 		onScroll,

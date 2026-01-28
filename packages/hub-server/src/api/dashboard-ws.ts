@@ -17,6 +17,7 @@ import type {
   PermissionResponseRequest,
   QuestionResponseRequest,
   UpdateInstancePreferencesRequest,
+  SetThinkingRequest,
   DashboardEventType,
   DashboardEventMap,
 } from '@agentdeck/core/dashboard';
@@ -360,6 +361,35 @@ async function handleCommand(
       }
 
       return { success: true };
+    }
+
+    case 'instance.setThinking': {
+      const req = data as SetThinkingRequest;
+      const { instanceId, mode } = req;
+
+      // Get instance to find machine
+      const instance = await instanceTracker.get(instanceId);
+      if (!instance) {
+        throw new Error(`Instance ${instanceId} not found`);
+      }
+
+      // Send thinking.set command to agent
+      const response = await getAgentRegistry().sendToMachine(instance.machineId, 'thinking.set', {
+        instanceId,
+        mode,
+      });
+
+      if ('error' in response && response.error) {
+        throw new Error(response.error.message);
+      }
+
+      // Broadcast thinking mode change to all dashboards
+      getDashboardRegistry().broadcast('instance:thinking-changed', {
+        instanceId,
+        mode,
+      });
+
+      return { success: true, mode };
     }
 
     case 'instance.updatePreferences': {

@@ -7,7 +7,7 @@
 		"dev": "vite dev",
 		"build": "vite build",
 		"preview": "vite preview",
-		"typecheck": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json"
+		"typecheck": "bun --bun svelte-fast-check --incremental"
 	},
 	"dependencies": {
 		"@agentdeck/core": "workspace:*",
@@ -52,6 +52,7 @@
 		"paneforge": "^1.0.2",
 		"svelte": "^5.46.1",
 		"svelte-check": "^4.2.0",
+		"svelte-fast-check": "^0.4.5",
 		"svelte-sonner": "^1.0.7",
 		"sveltekit-superforms": "^2.28.1",
 		"tailwindcss": "^4.1.0",

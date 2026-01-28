@@ -23,7 +23,13 @@
     'detail'
   );
 
-  const subtype = $derived(data?.message?.metadata?.subtype || 'status');
+  const subtype = $derived.by(() => {
+    const type = data?.message?.type;
+    if (type?.startsWith('system.')) return type.slice('system.'.length);
+    if (type?.startsWith('result.')) return type.slice('result.'.length);
+    if (type?.startsWith('ui.')) return type.slice('ui.'.length);
+    return data?.message?.metadata?.subtype || 'status';
+  });
   const displayContent = $derived((data?.content || data?.message?.content || '') as string);
 
   // Icon based on subtype

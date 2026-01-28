@@ -20,6 +20,10 @@ import type {
   InstanceTokenUsageEvent,
   InstanceModelChangedEvent,
   InstanceViewModeChangedEvent,
+  InstanceThinkingChangedEvent,
+  InstanceTurnEvent,
+  MessageCreatedEvent,
+  MessageStreamEvent,
   SdkMessageEvent,
   TaskCreatedEvent,
   TaskUpdatedEvent,
@@ -32,6 +36,7 @@ import type {
   ConnectedEvent,
 } from './types.js';
 import type { PermissionResponse, QuestionResponse } from '../types/index.js';
+import type { ThinkingMode } from '../protocol/commands.js';
 
 // ============================================================================
 // Command Request/Response Types (for RPC-style operations)
@@ -58,6 +63,18 @@ export interface SpawnInstanceRequest {
   allowedTools?: string[];
   /** Blacklist of disallowed tools */
   disallowedTools?: string[];
+}
+
+/** Set thinking mode on an instance */
+export interface SetThinkingRequest {
+  instanceId: string;
+  mode: ThinkingMode;
+}
+
+export interface SetThinkingResponse {
+  success: boolean;
+  mode?: ThinkingMode;
+  error?: string;
 }
 
 /** Update instance preferences (view mode, etc.) */
@@ -177,8 +194,20 @@ export function buildDashboardEvents() {
     .defineEvent('instance:viewMode-changed', {
       data: {} as InstanceViewModeChangedEvent,
     })
+    .defineEvent('instance:thinking-changed', {
+      data: {} as InstanceThinkingChangedEvent,
+    })
+    .defineEvent('instance:turn', {
+      data: {} as InstanceTurnEvent,
+    })
 
-    // SDK message event
+    // Message events
+    .defineEvent('message:created', {
+      data: {} as MessageCreatedEvent,
+    })
+    .defineEvent('message:stream', {
+      data: {} as MessageStreamEvent,
+    })
     .defineEvent('sdk:message', {
       data: {} as SdkMessageEvent,
     })
@@ -242,6 +271,10 @@ export function buildDashboardEvents() {
     .defineEvent('instance.updatePreferences', {
       data: {} as UpdateInstancePreferencesRequest,
       response: {} as UpdateInstancePreferencesResponse,
+    })
+    .defineEvent('instance.setThinking', {
+      data: {} as SetThinkingRequest,
+      response: {} as SetThinkingResponse,
     })
 
     .build();

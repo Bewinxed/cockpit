@@ -3,10 +3,10 @@
   import '@xyflow/svelte/dist/style.css';
   import { onMount, onDestroy } from 'svelte';
   import { toast } from 'svelte-sonner';
+  import { page } from '$app/state';
   import { HUB_URL } from '$lib/config';
   // Stores and WebSocket setup
-  import { instances, permissions, ui, initializeFromSSR, setupWSAndConnect, disconnectWS } from '$lib/stores';
-  import { getAgents, getInstances, getProjects } from '$lib/data.remote';
+  import { agents, instances, permissions, projects, ui, setupWSAndConnect, disconnectWS } from '$lib/stores';
   import { restoreTabsFromStorage, persistTabsToStorage, openInstance } from '$lib/stores/url-sync.svelte';
   import '$lib/stores/theme.svelte';
   import type { Snippet } from 'svelte';
@@ -42,15 +42,14 @@
     }
   });
 
-  // Use $derived with await for remote functions - this works during SSR
-  const agentsData = $derived(await getAgents());
-  const instancesData = $derived(await getInstances());
-  const projectsData = $derived(await getProjects());
-
-  // Initialize stores reactively when data changes
-  $effect(() => {
-    initializeFromSSR(agentsData, instancesData, projectsData);
-  });
+  // Populate stores from server-loaded data ($page.data is serialized into HTML
+  // by SvelteKit and available synchronously on both server render and client hydration).
+  agents.initializeFromSSR(page.data.agents);
+  instances.initializeFromSSR(page.data.instances);
+  projects.initializeFromSSR(page.data.projects);
+  for (const [id, msgs] of Object.entries(page.data.tabMessages as Record<string, any[]>)) {
+    instances.initializeMessagesFromSSR(id, msgs);
+  }
 
   // Connect to real-time updates (client-side only)
   onMount(() => {

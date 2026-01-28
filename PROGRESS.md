@@ -18,6 +18,7 @@ Make slash commands functional in the dashboard, matching CLI behavior. This inc
    - This forces Claude SDK to emit token-by-token updates instead of buffering
    - Added `instance.statusChanged` events to Daemon and InstanceManager
    - Result: Dashboard terminal now shows real-time "typing" effect and immediate status changes (thinking -> running -> etc)
+   - **TODO for full ms feedback:** forward all SDK messages (raw) to the dashboard and drive UI state directly from `sdk:message` (not just high-value subset)
 
 3. **Memory Feature (`/memory`):**
    - Implemented full read/write support for project (`./CLAUDE.md`) and user (`~/.claude/CLAUDE.md`) memory

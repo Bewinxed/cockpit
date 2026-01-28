@@ -129,14 +129,14 @@ export function parseBackgroundAgentOutput(output: string): ParsedBackgroundAgen
 export function toolUsesToMessages(
   toolUses: ParsedToolUse[],
   resultText: string
-): Array<{ type: 'tool_use' | 'assistant'; content: string; toolName?: string; toolInput?: Record<string, unknown>; timestamp: Date }> {
-  const messages: Array<{ type: 'tool_use' | 'assistant'; content: string; toolName?: string; toolInput?: Record<string, unknown>; timestamp: Date }> = [];
+): Array<{ type: 'tool.use' | 'assistant'; content: string; toolName?: string; toolInput?: Record<string, unknown>; timestamp: Date }> {
+  const messages: Array<{ type: 'tool.use' | 'assistant'; content: string; toolName?: string; toolInput?: Record<string, unknown>; timestamp: Date }> = [];
   const now = new Date();
 
   // Add tool use messages
   for (const toolUse of toolUses) {
     messages.push({
-      type: 'tool_use',
+      type: 'tool.use',
       content: toolUse.toolName,
       toolName: toolUse.toolName,
       toolInput: toolUse.input,

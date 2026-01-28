@@ -17,19 +17,19 @@ const renderers: MessageRenderer[] = [
 	// Interactive system message types (priority 100)
 	{
 		component: LoginPrompt,
-		match: (m: Message) => m.type === 'system' && m.metadata?.subtype === 'login_prompt',
+		match: (m: Message) => m.type === 'system.login_prompt',
 		priority: 100,
 		name: 'LoginPrompt'
 	},
 	{
 		component: ModelPicker,
-		match: (m: Message) => m.type === 'system' && m.metadata?.subtype === 'model_picker',
+		match: (m: Message) => m.type === 'system.model_picker',
 		priority: 100,
 		name: 'ModelPicker'
 	},
 	{
 		component: MemoryPicker,
-		match: (m: Message) => m.type === 'system' && m.metadata?.subtype === 'memory_picker',
+		match: (m: Message) => m.type === 'system.memory_picker',
 		priority: 100,
 		name: 'MemoryPicker'
 	},
@@ -37,11 +37,11 @@ const renderers: MessageRenderer[] = [
 		component: AskQuestionPicker,
 		match: (m: Message) => {
 			// Match system messages created during live conversation
-			if (m.type === 'system' && m.metadata?.subtype === 'ask_question') {
+			if (m.type === 'system.ask_question') {
 				return true;
 			}
-			// Match tool_use/tool_result messages for AskUserQuestion (from DB after refresh)
-			if ((m.type === 'tool_use' || m.type === 'tool_result') && m.metadata?.toolName === 'AskUserQuestion') {
+			// Match tool.use/tool.result messages for AskUserQuestion (from DB after refresh)
+			if ((m.type === 'tool.use' || m.type === 'tool.result') && m.metadata?.toolName === 'AskUserQuestion') {
 				return true;
 			}
 			return false;
@@ -53,7 +53,7 @@ const renderers: MessageRenderer[] = [
 	// Visual system message types (priority 80)
 	{
 		component: CompactBoundary,
-		match: (m: Message) => m.type === 'system' && m.metadata?.subtype === 'compact_boundary',
+		match: (m: Message) => m.type === 'system.compact_boundary',
 		priority: 80,
 		name: 'CompactBoundary'
 	},
@@ -69,7 +69,7 @@ const renderers: MessageRenderer[] = [
 	// Result error messages (priority 85)
 	{
 		component: ResultError,
-		match: (m: Message) => m.type === 'result_error',
+		match: (m: Message) => m.type === 'result.error',
 		priority: 85,
 		name: 'ResultError'
 	}

@@ -33,6 +33,15 @@ export interface Instance {
   /** Claude SDK's session ID (for resume) */
   sdkSessionId?: string;
 
+  /** Conversation root ID */
+  conversationId?: string;
+
+  /** Active thread ID (branch) */
+  activeThreadId?: string;
+
+  /** Active span ID (execution context) */
+  activeSpanId?: string;
+
   /** Project this instance belongs to (if any) */
   projectId?: string;
 
@@ -94,6 +103,9 @@ export interface SpawnInstanceData {
 export interface UpdateInstanceData {
   sessionId?: string;
   sdkSessionId?: string;
+  conversationId?: string | null;
+  activeThreadId?: string | null;
+  activeSpanId?: string | null;
   status?: InstanceStatus;
   lastPrompt?: string;
   totalCostUsd?: number;

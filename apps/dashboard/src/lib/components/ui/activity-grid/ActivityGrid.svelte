@@ -1,10 +1,9 @@
 <script lang="ts">
-	import { instances, type StreamingState, type Message } from '$lib/stores';
-
 	type GridActivity =
 		| 'idle'
 		| 'thinking'
 		| 'streaming'
+		| 'streaming_chunk'
 		| 'tool_use'
 		| 'permission'
 		| 'error'
@@ -14,97 +13,52 @@
 		| 'subagent';
 
 	interface Props {
-		instanceId?: string;
 		size?: 'sm' | 'md' | 'lg';
-		/** Override the activity state manually */
+		/** Activity state to render */
 		activity?: GridActivity;
-		/** Session is being resumed */
-		isResuming?: boolean;
-		/** Instance is starting up */
-		isStarting?: boolean;
-		/** Number of active subagents running */
-		activeSubagentCount?: number;
+		/** Pulse on streaming chunks */
+		chunkPulse?: boolean;
 	}
 
 	// Use props object to avoid state_referenced_locally warning
 	const props: Props = $props();
 	const size = $derived(props.size ?? 'md');
-	const activity = $derived(props.activity);
-	const instanceId = $derived(props.instanceId);
-	const isResuming = $derived(props.isResuming ?? false);
-	const isStarting = $derived(props.isStarting ?? false);
-	const activeSubagentCount = $derived(props.activeSubagentCount ?? 0);
+	const activity = $derived(props.activity ?? 'idle');
+	const chunkPulse = $derived(props.chunkPulse ?? false);
 
-	// Derive current state from store
-	const streamingState = $derived(instanceId ? instances.getStreamingState(instanceId) : null);
-	const messages = $derived(instanceId ? instances.getMessages(instanceId) : []);
-	const instance = $derived(instanceId ? instances.get(instanceId) : null);
-
-	// Get the last message to determine activity type
-	const lastMessage = $derived(messages && messages.length > 0 ? messages[messages.length - 1] : null);
-
-	// Compute grid state based on activity
 	function computeGridState(
-		streaming: StreamingState | null,
-		last: Message | null,
-		instanceStatus: string | null,
-		resuming: boolean,
-		starting: boolean,
-		subagentCount: number
+		state: GridActivity,
+		pulseChunk: boolean
 	): { state: GridActivity; activeDots: number[]; pattern: 'ripple' | 'wave' | 'orbit' | 'pulse' | 'shake' | 'breathe' | 'sequential' | 'branch' } {
-		// Error state takes priority
-		if (instanceStatus === 'error') {
-			return { state: 'error', activeDots: [0, 1, 2, 3, 4, 5, 6, 7, 8], pattern: 'shake' };
-		}
+		const resolvedState = state === 'streaming' && pulseChunk ? 'streaming_chunk' : state;
 
-		// Resuming state - slower breathing pattern
-		if (resuming) {
-			return { state: 'resuming', activeDots: [0, 1, 2, 3, 4, 5, 6, 7, 8], pattern: 'breathe' };
+		switch (resolvedState) {
+			case 'error':
+				return { state: 'error', activeDots: [0, 1, 2, 3, 4, 5, 6, 7, 8], pattern: 'shake' };
+			case 'resuming':
+				return { state: 'resuming', activeDots: [0, 1, 2, 3, 4, 5, 6, 7, 8], pattern: 'breathe' };
+			case 'starting':
+				return { state: 'starting', activeDots: [0, 1, 2, 3, 4, 5, 6, 7, 8], pattern: 'sequential' };
+			case 'streaming_chunk':
+				return { state: 'streaming_chunk', activeDots: [0, 1, 2, 3, 4, 5, 6, 7, 8], pattern: 'pulse' };
+			case 'streaming':
+				return { state: 'streaming', activeDots: [0, 1, 2, 3, 4, 5, 6, 7, 8], pattern: 'ripple' };
+			case 'permission':
+				return { state: 'permission', activeDots: [0, 1, 2, 3, 4, 5, 6, 7, 8], pattern: 'pulse' };
+			case 'thinking':
+				return { state: 'thinking', activeDots: [0, 1, 2, 3, 4, 5, 6, 7, 8], pattern: 'ripple' };
+			case 'tool_use':
+				return { state: 'tool_use', activeDots: [0, 2, 4, 6, 8], pattern: 'orbit' };
+			case 'subagent':
+				return { state: 'subagent', activeDots: [0, 2, 4, 6, 8], pattern: 'branch' };
+			case 'success':
+				return { state: 'success', activeDots: [0, 1, 2, 3, 4, 5, 6, 7, 8], pattern: 'pulse' };
+			default:
+				return { state: 'idle', activeDots: [4], pattern: 'pulse' };
 		}
-
-		// Starting state - sequential activation
-		if (starting || instanceStatus === 'starting') {
-			return { state: 'starting', activeDots: [0, 1, 2, 3, 4, 5, 6, 7, 8], pattern: 'sequential' };
-		}
-
-		// Initializing state - SDK init received, Claude is about to respond
-		if (streaming?.isInitializing) {
-			return { state: 'thinking', activeDots: [0, 1, 2, 3, 4, 5, 6, 7, 8], pattern: 'ripple' };
-		}
-
-		// Check for tool use in progress
-		if (last?.type === 'tool_use' && last?.metadata?.toolStatus === 'pending') {
-			return { state: 'tool_use', activeDots: [0, 2, 4, 6, 8], pattern: 'orbit' };
-		}
-
-		// Streaming state - actively receiving response
-		if (streaming?.isStreaming) {
-			return { state: 'streaming', activeDots: [0, 1, 2, 3, 4, 5, 6, 7, 8], pattern: 'ripple' };
-		}
-
-		// Subagent activity - show when subagents are running (lower priority than direct streaming)
-		if (subagentCount > 0) {
-			return { state: 'subagent', activeDots: [0, 2, 4, 6, 8], pattern: 'branch' };
-		}
-
-		// Success flash after result
-		if (last?.type === 'assistant' && !streaming?.isStreaming) {
-			// Brief success state - will transition to idle
-			return { state: 'idle', activeDots: [4], pattern: 'pulse' };
-		}
-
-		// Default idle - gentle breathing from center
-		return { state: 'idle', activeDots: [4], pattern: 'pulse' };
 	}
 
-	const gridState = $derived.by(() => {
-		const result = activity
-			? { state: activity, activeDots: [0, 1, 2, 3, 4, 5, 6, 7, 8], pattern: 'ripple' as const }
-			: computeGridState(streamingState, lastMessage, instance?.status || null, isResuming, isStarting, activeSubagentCount);
-
-		console.log(`[ActivityGrid ${new Date().toISOString()}] state=${result.state} instanceStatus=${instance?.status} isResuming=${isResuming} isStarting=${isStarting} isInitializing=${streamingState?.isInitializing} isStreaming=${streamingState?.isStreaming}`);
-		return result;
-	});
+	const gridState = $derived.by(() => computeGridState(activity, chunkPulse));
 
 	// Dot configuration for 3x3 grid with distance from center for ripple effect
 	// Grid layout:
@@ -154,6 +108,7 @@
 <style>
 	.activity-grid {
 		--dot-color: var(--muted-foreground);
+		transition: transform 200ms ease, opacity 200ms ease;
 	}
 
 	/* State-based colors */
@@ -164,6 +119,9 @@
 		--dot-color: var(--primary);
 	}
 	.activity-grid[data-state='streaming'] {
+		--dot-color: var(--chart-2);
+	}
+	.activity-grid[data-state='streaming_chunk'] {
 		--dot-color: var(--chart-2);
 	}
 	.activity-grid[data-state='tool_use'] {
@@ -193,6 +151,7 @@
 		background-color: var(--dot-color);
 		opacity: 0.2;
 		transform: scale(0.8);
+		transition: background-color 200ms ease, transform 200ms ease, opacity 200ms ease;
 	}
 
 	.activity-dot.active {
@@ -209,6 +168,12 @@
 	.activity-grid[data-state='streaming'] .activity-dot {
 		animation: activity-ripple 1.2s ease-in-out infinite;
 		animation-delay: calc(var(--delay));
+	}
+	/* Streaming chunk - short pulse on chunk arrival */
+	.activity-grid[data-state='streaming_chunk'] .activity-dot.active {
+		animation: activity-pulse 0.5s ease-in-out infinite;
+		animation-delay: calc(var(--delay) * 0.4);
+		filter: drop-shadow(0 0 4px var(--dot-color));
 	}
 
 	/* Thinking - similar to streaming but different timing */

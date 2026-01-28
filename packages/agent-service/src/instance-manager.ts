@@ -37,6 +37,8 @@ interface ManagedInstance {
    * Used to dedupe repeated init messages while allowing new ones on session change.
    */
   lastEmittedInitSessionId?: string;
+  /** Captured stderr output from the SDK child process */
+  stderrOutput?: string[];
 }
 
 interface ConversationMessage {
@@ -344,6 +346,7 @@ export class InstanceManager extends EventEmitter {
       lastActivityAt: new Date(),
       model: params.model,
       permissionMode: params.permissionMode,
+      stderrOutput: [],
     };
 
     this.instances.set(instanceId, instance);
@@ -392,6 +395,13 @@ export class InstanceManager extends EventEmitter {
         allowThinking: params.allowThinking,
       });
 
+      // Capture stderr from the SDK child process for crash diagnostics
+      const stderrCallback = (data: string) => {
+        const line = data.trimEnd();
+        console.error(`[SDK:${instanceId}] ${line}`);
+        instance.stderrOutput?.push(line);
+      };
+
       const session = params.resumeSessionId
         ? resumePersistentSession(params.resumeSessionId, {
             cwd: params.projectPath,
@@ -411,6 +421,8 @@ export class InstanceManager extends EventEmitter {
             maxBudgetUsd: params.maxBudgetUsd,
             allowedTools: params.allowedTools,
             disallowedTools: params.disallowedTools,
+            includePartialMessages: true,
+            stderr: stderrCallback,
           })
         : createPersistentSession({
             cwd: params.projectPath,
@@ -428,6 +440,8 @@ export class InstanceManager extends EventEmitter {
             maxBudgetUsd: params.maxBudgetUsd,
             allowedTools: params.allowedTools,
             disallowedTools: params.disallowedTools,
+            includePartialMessages: true,
+            stderr: stderrCallback,
           });
 
       instance.session = session;
@@ -448,20 +462,33 @@ export class InstanceManager extends EventEmitter {
       return instanceId;
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
-      // Capture full error details including stack for debugging
       const errorDetails = err.stack || err.message;
       console.error(`[InstanceManager] Session creation failed for ${instanceId}:`, errorDetails);
 
-      // Check if this is an SDK error with more context
       const errorContext = (error as { cause?: Error })?.cause;
       if (errorContext) {
         console.error(`[InstanceManager] Caused by:`, errorContext.stack || errorContext.message);
       }
 
+      let detailedMessage = err.message;
+      if (errorContext) {
+        detailedMessage += ` (caused by: ${errorContext.message})`;
+      }
+      if (params.resumeSessionId) {
+        detailedMessage += ` [resuming session ${params.resumeSessionId.slice(0, 8)}...]`;
+      }
+      // Append captured stderr output for crash diagnostics
+      const stderrLines = instance.stderrOutput?.filter(Boolean);
+      if (stderrLines && stderrLines.length > 0) {
+        detailedMessage += `\n[stderr]: ${stderrLines.join('\n')}`;
+      }
+
       instance.state = 'error';
-      instance.error = err.message;
-      this.emit('instance.error', instanceId, err);
-      throw err;
+      instance.error = detailedMessage;
+      const detailedErr = new Error(detailedMessage);
+      detailedErr.cause = errorContext;
+      this.emit('instance.error', instanceId, detailedErr);
+      throw detailedErr;
     }
   }
 
@@ -499,6 +526,7 @@ export class InstanceManager extends EventEmitter {
     this.resetIdleTimer(instanceId);
 
     try {
+      this.emit('instance.turnStarted', instanceId);
       // Send the message
       await instance.session.send(content);
 
@@ -554,6 +582,7 @@ export class InstanceManager extends EventEmitter {
               timestamp: new Date(),
             });
           }
+          this.emit('instance.turnCompleted', instanceId, message.is_error === true);
           // Result received - turn complete, but session still alive!
           break;
         }
@@ -561,9 +590,24 @@ export class InstanceManager extends EventEmitter {
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
       if (err.name !== 'AbortError') {
+        // Build detailed error with context
+        const errorContext = (error as { cause?: Error })?.cause;
+        let detailedMessage = err.message;
+        if (errorContext) {
+          detailedMessage += ` (caused by: ${errorContext.message})`;
+        }
+        // Append captured stderr output for crash diagnostics
+        const stderrLines = instance.stderrOutput?.filter(Boolean);
+        if (stderrLines && stderrLines.length > 0) {
+          detailedMessage += `\n[stderr]: ${stderrLines.join('\n')}`;
+        }
+        console.error(`[InstanceManager] sendMessage failed for ${instanceId}:`, detailedMessage);
+
         instance.state = 'error';
-        instance.error = err.message;
-        this.emit('instance.error', instanceId, err);
+        instance.error = detailedMessage;
+        const detailedErr = new Error(detailedMessage);
+        detailedErr.cause = errorContext;
+        this.emit('instance.error', instanceId, detailedErr);
       }
       throw err;
     }
@@ -728,6 +772,31 @@ export class InstanceManager extends EventEmitter {
     if (instance) {
       instance.model = model;
     }
+  }
+
+  /**
+   * Set thinking mode on an instance.
+   * - 'off': maxThinkingTokens = 0 (disabled)
+   * - 'think': maxThinkingTokens = 10000 (medium budget)
+   * - 'ultrathink': maxThinkingTokens = null (max/default)
+   */
+  async setThinking(instanceId: string, mode: 'off' | 'think' | 'ultrathink'): Promise<void> {
+    const instance = this.instances.get(instanceId);
+    if (!instance) {
+      throw new Error(`Instance ${instanceId} not found`);
+    }
+    if (!instance.session) {
+      throw new Error(`Instance ${instanceId} has no session`);
+    }
+
+    const tokenMap: Record<string, number | null> = {
+      off: 0,
+      think: 10_000,
+      ultrathink: null, // null = max/default in SDK
+    };
+
+    await instance.session.setMaxThinkingTokens(tokenMap[mode]);
+    console.log(`[InstanceManager] Set thinking mode to '${mode}' for ${instanceId}`);
   }
 
   /**

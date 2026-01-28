@@ -25,14 +25,14 @@ export type { MessageGroup, FlowData, FlowTransformOptions } from './flow-types'
 // Message Type Detection Helpers
 // ============================================================
 
-/** Check if a message is a Task tool_use (subagent spawn) */
+/** Check if a message is a Task tool.use (subagent spawn) */
 export function isTaskToolUse(msg: Message): boolean {
-  return msg.type === 'tool_use' && !!msg.metadata?.subagentType;
+  return msg.type === 'tool.use' && !!msg.metadata?.subagentType;
 }
 
 /** Check if a message is a TaskOutput tool (retrieves subagent results) */
 export function isTaskOutputTool(msg: Message): boolean {
-  return msg.type === 'tool_use' && msg.metadata?.toolName === 'TaskOutput';
+  return msg.type === 'tool.use' && msg.metadata?.toolName === 'TaskOutput';
 }
 
 /** Check if a message belongs to a subagent (has parentToolUseId) */
@@ -63,7 +63,7 @@ export function groupMessages(messages: Message[]): MessageGroup[] {
   while (i < chatMessages.length) {
     const msg = chatMessages[i];
 
-    // Task tool_use messages - group consecutive ones for parallel display
+    // Task tool.use messages - group consecutive ones for parallel display
     if (isTaskToolUse(msg)) {
       const subagentMessages: Message[] = [msg];
       const startIndex = i;
@@ -78,7 +78,7 @@ export function groupMessages(messages: Message[]): MessageGroup[] {
       groups.push({ type: 'subagent_group', messages: subagentMessages, startIndex });
     }
     // Regular tool messages get grouped together
-    else if (msg.type === 'tool_use' || msg.type === 'tool_result') {
+    else if (msg.type === 'tool.use' || msg.type === 'tool.result') {
       const toolMessages: Message[] = [msg];
       const startIndex = i;
       i++;
@@ -86,7 +86,7 @@ export function groupMessages(messages: Message[]): MessageGroup[] {
       while (i < chatMessages.length) {
         const nextMsg = chatMessages[i];
         if (
-          (nextMsg.type === 'tool_use' || nextMsg.type === 'tool_result') &&
+          (nextMsg.type === 'tool.use' || nextMsg.type === 'tool.result') &&
           !isTaskToolUse(nextMsg) &&
           !isTaskOutputTool(nextMsg)
         ) {
@@ -126,14 +126,10 @@ function getNodeType(group: MessageGroup): string {
     case 'assistant':
     case 'thinking':
       return NODE_TYPES.ASSISTANT;
-    case 'system':
-    case 'hook_response':
-    case 'command_output':
-    case 'help_menu':
-    case 'error':
-    case 'result_error':
-      return NODE_TYPES.SYSTEM;
     default:
+      if (msg.type.startsWith('system.') || msg.type.startsWith('result.') || msg.type.startsWith('ui.')) {
+        return NODE_TYPES.SYSTEM;
+      }
       return NODE_TYPES.ASSISTANT;
   }
 }
@@ -166,14 +162,14 @@ function groupSubagentMessages(messages: Message[]): MessageGroup[] {
   while (i < messages.length) {
     const msg = messages[i];
 
-    if (msg.type === 'tool_use' || msg.type === 'tool_result') {
+    if (msg.type === 'tool.use' || msg.type === 'tool.result') {
       const toolMessages: Message[] = [msg];
       const startIndex = i;
       i++;
 
       while (i < messages.length) {
         const nextMsg = messages[i];
-        if (nextMsg.type === 'tool_use' || nextMsg.type === 'tool_result') {
+        if (nextMsg.type === 'tool.use' || nextMsg.type === 'tool.result') {
           toolMessages.push(nextMsg);
           i++;
         } else {
@@ -295,7 +291,7 @@ export function messagesToFlow(
 
               let nodeType: string = NODE_TYPES.ASSISTANT;
               if (singleMsg.type === 'user') nodeType = NODE_TYPES.USER;
-              else if (singleMsg.type === 'system' || singleMsg.type === 'error') nodeType = NODE_TYPES.SYSTEM;
+              else if (singleMsg.type.startsWith('system.') || singleMsg.type.startsWith('result.') || singleMsg.type.startsWith('ui.')) nodeType = NODE_TYPES.SYSTEM;
 
               const singleData: AssistantNodeData | UserNodeData | SystemNodeData = {
                 instanceId,

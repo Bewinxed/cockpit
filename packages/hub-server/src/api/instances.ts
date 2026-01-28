@@ -640,6 +640,11 @@ export function createInstanceRoutes(db: Db) {
           console.warn(`[Resume] Cannot use resumeFromMessageId without sdkSessionId for instance ${params.id}`);
         }
 
+        // Fork conversation thread when resuming from a specific message or explicitly forking
+        if (body?.forkSession || resumeFromMessageId) {
+          await tracker.forkThreadWithHistory(params.id, resumeFromMessageId ?? null);
+        }
+
         // Send spawn request to machine with the same instanceId
         const response = await getAgentRegistry().sendToMachine(
           instance.machineId,
@@ -712,6 +717,30 @@ export function createInstanceRoutes(db: Db) {
           /** Enable file checkpointing for rewind functionality */
           enableFileCheckpointing: t.Optional(t.Boolean()),
         })),
+      }
+    )
+
+    // Reset session - clear sdkSessionId so the instance can be spawned fresh
+    .post(
+      '/:id/reset-session',
+      async ({ params, set }) => {
+        const instance = await tracker.get(params.id);
+
+        if (!instance) {
+          set.status = 404;
+          return { success: false, error: 'Instance not found' };
+        }
+
+        // Clear the SDK session ID so next resume spawns fresh
+        await tracker.update(params.id, { sdkSessionId: null as unknown as string });
+
+        return {
+          success: true,
+          data: { instanceId: params.id },
+        };
+      },
+      {
+        params: t.Object({ id: t.String() }),
       }
     )
 

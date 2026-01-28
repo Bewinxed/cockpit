@@ -53,9 +53,9 @@
     }
   });
 
-  // Filter tool_use messages from subagent messages (not tool_result - those update the tool_use)
+  // Filter tool.use messages from subagent messages (not tool.result - those update the tool.use)
   const toolMessages = $derived(
-    subagent.messages.filter(m => m.type === 'tool_use')
+    subagent.messages.filter(m => m.type === 'tool.use')
   );
 
   // Toggle tool expansion

@@ -1,17 +1,8 @@
 <script lang="ts">
   import { Shield, Check, X, ChevronDown, ChevronRight, LoaderCircle, Clock, Infinity as InfinityIcon } from 'lucide-svelte';
   import { permissions as permissionsStore, sendPermissionResponse, type PermissionRequest } from '$lib/stores';
+  import type { PermissionUpdate } from '@agentdeck/core/types';
   import { Button } from '$lib/components/ui/button';
-
-  // Permission update types from SDK
-  interface PermissionUpdate {
-    type: 'addRules' | 'replaceRules' | 'removeRules' | 'setMode' | 'addDirectories' | 'removeDirectories';
-    rules?: Array<{ toolName: string; ruleContent?: string }>;
-    behavior?: 'allow' | 'deny' | 'ask';
-    destination: 'userSettings' | 'projectSettings' | 'localSettings' | 'session' | 'cliArg';
-    mode?: string;
-    directories?: string[];
-  }
 
   interface Props {
     request: PermissionRequest;

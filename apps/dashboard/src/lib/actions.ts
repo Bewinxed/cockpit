@@ -10,6 +10,7 @@
  */
 
 import { api } from '$lib/api';
+import type { CanonicalMessage } from '@agentdeck/core/dashboard';
 import {
   spawnInstance as wsSpawnInstance,
   WebSocketNotConnectedError,
@@ -29,7 +30,7 @@ export interface ActionResult<T = unknown> {
 
 /**
  * Check if an error indicates authentication is required.
- * Uses only error codes - auth is handled via SDK messages with subtype 'login_prompt'.
+ * Uses only error codes - auth is handled via system.login_prompt messages.
  */
 function isAuthError(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false;
@@ -202,22 +203,7 @@ export async function resumeInstance(
  * Fetch messages for an instance to get UUIDs for recently sent messages
  * This is used to enable editing after sending when WebSocket doesn't provide UUIDs
  */
-export interface StoredMessage {
-  id: string;
-  instanceId: string;
-  timestamp: string;
-  sdkUuid?: string;
-  sdkType: string;
-  sdkSubtype?: string | null;
-  parentToolUseId?: string | null;
-  role?: 'user' | 'assistant' | null;
-  textContent?: string | null;
-  rawContent: unknown;
-  model?: string | null;
-  inputTokens?: number | null;
-  outputTokens?: number | null;
-  costUsd?: number | null;
-}
+export type StoredMessage = CanonicalMessage;
 
 export async function fetchInstanceMessages(instanceId: string): Promise<{
   success: boolean;

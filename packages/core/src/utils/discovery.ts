@@ -11,6 +11,10 @@ export const AGENTDECK_SERVICE_TYPE = 'agentdeck-hub';
  */
 export const AGENTDECK_DEFAULT_PORT = 3847;
 
+// Backing exports for legacy cockpit naming (used by current core utils index)
+export const COCKPIT_SERVICE_TYPE = AGENTDECK_SERVICE_TYPE;
+export const COCKPIT_DEFAULT_PORT = AGENTDECK_DEFAULT_PORT;
+
 /**
  * Represents a discovered AgentDeck service
  */
@@ -30,6 +34,8 @@ export interface AgentDeckService {
   /** Version of the service */
   version?: string;
 }
+
+export type CockpitService = AgentDeckService;
 
 /**
  * Events emitted by DiscoveryService

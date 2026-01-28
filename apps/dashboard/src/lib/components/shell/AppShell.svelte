@@ -1,8 +1,7 @@
 <script lang="ts">
   import Sidebar from './Sidebar.svelte';
-  import TopBar from './TopBar.svelte';
-  import StatusBar from './StatusBar.svelte';
-  import WorkspaceTabs from '../workspace/WorkspaceTabs.svelte';
+  import HeaderBar from './HeaderBar.svelte';
+  import WorkspaceContent from '../workspace/WorkspaceContent.svelte';
   import InstancesTable from '../workspace/InstancesTable.svelte';
   import CommandPalette from '../command-palette/CommandPalette.svelte';
   import NotificationCenter from '../notifications/NotificationCenter.svelte';
@@ -12,14 +11,12 @@
   let showNewInstanceModal = $state(false);
   let showTableView = $state(false);
 
-  // Close sidebar on mobile when clicking backdrop
   function closeMobileSidebar() {
     if (typeof window !== 'undefined' && window.innerWidth < 1024) {
       ui.sidebarOpen = false;
     }
   }
 
-  // Listen for new instance event from keyboard shortcuts
   $effect(() => {
     const handler = () => {
       showNewInstanceModal = true;
@@ -28,7 +25,6 @@
     return () => window.removeEventListener('agentdeck:new-instance', handler);
   });
 
-  // Listen for table view toggle event
   $effect(() => {
     const handler = () => {
       showTableView = true;
@@ -37,10 +33,8 @@
     return () => window.removeEventListener('agentdeck:show-table-view', handler);
   });
 
-  // Global keyboard shortcuts
   $effect(() => {
     const handleKeydown = (e: KeyboardEvent) => {
-      // Ignore if in input/textarea
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
         return;
       }
@@ -48,13 +42,11 @@
       const isMac = navigator.platform.includes('Mac');
       const cmdKey = isMac ? e.metaKey : e.ctrlKey;
 
-      // ⌘K - Command palette
       if (cmdKey && e.key === 'k') {
         e.preventDefault();
         ui.toggleCommandPalette();
       }
 
-      // ⌘N - New instance
       if (cmdKey && e.key === 'n') {
         e.preventDefault();
         showNewInstanceModal = true;
@@ -67,8 +59,8 @@
 </script>
 
 <div class="h-screen flex flex-col bg-background overflow-hidden">
-  <!-- Top Bar -->
-  <TopBar />
+  <!-- Header Bar (logo + inline tabs + search + connection) -->
+  <HeaderBar onNewInstance={() => showNewInstanceModal = true} />
 
   <div class="flex-1 flex overflow-hidden relative">
     <!-- Mobile Sidebar Backdrop -->
@@ -81,7 +73,7 @@
       ></button>
     {/if}
 
-    <!-- Sidebar - fixed overlay on mobile, normal flow on desktop -->
+    <!-- Sidebar -->
     <div
       class="fixed inset-y-0 left-0 z-50 transition-transform duration-300 ease-in-out lg:relative lg:z-auto lg:translate-x-0 {ui.sidebarOpen ? 'translate-x-0' : '-translate-x-full'}"
     >
@@ -91,7 +83,7 @@
       />
     </div>
 
-    <!-- Main Workspace - Tabs with all open instances -->
+    <!-- Main Workspace -->
     <main class="flex-1 flex flex-col overflow-hidden">
       {#if showTableView}
         <div class="flex-1 flex flex-col overflow-hidden">
@@ -107,13 +99,10 @@
           <InstancesTable />
         </div>
       {:else}
-        <WorkspaceTabs onNewInstance={() => showNewInstanceModal = true} />
+        <WorkspaceContent onNewInstance={() => showNewInstanceModal = true} />
       {/if}
     </main>
   </div>
-
-  <!-- Status Bar -->
-  <StatusBar />
 
   <!-- Overlays -->
   {#if ui.commandPaletteOpen}

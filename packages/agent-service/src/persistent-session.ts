@@ -151,6 +151,11 @@ export interface PersistentSessionOptions {
    * using `rewindFiles()`.
    */
   enableFileCheckpointing?: boolean;
+  /**
+   * Callback for stderr output from the Claude Code child process.
+   * Useful for debugging crashes and capturing error output.
+   */
+  stderr?: (data: string) => void;
 }
 
 /**
@@ -195,6 +200,8 @@ export class PersistentSession {
         settingSources: options.settingSources,
         // Enable file checkpointing for rewind functionality
         enableFileCheckpointing: options.enableFileCheckpointing,
+        // Capture stderr from the Claude Code child process
+        stderr: options.stderr,
       },
     });
   }
@@ -330,6 +337,17 @@ export class PersistentSession {
       throw new Error('Cannot rewind on closed session');
     }
     return this.queryInstance.rewindFiles(userMessageId);
+  }
+
+  /**
+   * Set the maximum thinking tokens for the session.
+   * Use 0 to disable thinking, null to reset to default.
+   */
+  async setMaxThinkingTokens(maxThinkingTokens: number | null): Promise<void> {
+    if (this._closed) {
+      throw new Error('Cannot set thinking tokens on closed session');
+    }
+    return this.queryInstance.setMaxThinkingTokens(maxThinkingTokens);
   }
 
   /**

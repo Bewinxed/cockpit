@@ -1,5 +1,8 @@
 // Shared types for real-time stores
 // Extracted from realtime.svelte.ts for use across entity stores
+import type { MessageMetadata as DbMessageMetadata } from '@agentdeck/db';
+import type { ViewMode as CoreViewMode, Task as CoreTask, Project as CoreProject } from '@agentdeck/core/types';
+import type { PermissionRequestEvent } from '@agentdeck/core/dashboard';
 
 export interface Agent {
   machineId: string;
@@ -14,7 +17,7 @@ export interface Agent {
   defaultCwd?: string | null;
 }
 
-export type ViewMode = 'flow' | 'chat';
+export type ViewMode = CoreViewMode;
 
 export interface Instance {
   id: string;
@@ -24,123 +27,68 @@ export interface Instance {
   machineId: string;
   project: string | null;
   projectId: string | null;
+  conversationId?: string | null;
+  activeThreadId?: string | null;
+  activeSpanId?: string | null;
   lastActivity: string;
   cwd: string;
   model?: string;
   totalCostUsd?: number;
   viewMode?: ViewMode;
+  thinkingMode?: 'off' | 'think' | 'ultrathink';
 }
 
-export interface Project {
-  id: string;
-  name: string;
-  description?: string;
-  rootPath?: string;
-  machineId?: string;
+export type Project = CoreProject & {
   instanceCount: number;
-  createdAt: Date;
-  updatedAt: Date;
-}
+};
 
-export interface Task {
-  id: string;
-  instanceId: string;
-  projectId?: string;
-  parentTaskId?: string;
-  title: string;
-  description: string;
-  type: 'major' | 'minor';
-  status: 'in_progress' | 'completed' | 'blocked' | 'cancelled';
-  progress: number;
-  startedAt: Date;
+export type Task = Omit<CoreTask, 'notes' | 'metadata' | 'updatedAt' | 'completedAt'> & {
   completedAt?: Date;
   updatedAt?: Date;
-}
+};
+
+export type MessageType =
+  | 'user'
+  | 'assistant'
+  | 'thinking'
+  | 'tool.use'
+  | 'tool.result'
+  | 'tool.progress'
+  | 'result.success'
+  | 'result.error'
+  | `system.${string}`
+  | `ui.${string}`;
 
 export interface Message {
   id?: string;
   instanceId: string;
-  type: 'assistant' | 'user' | 'system' | 'tool_use' | 'tool_result' | 'error' | 'hook_response' | 'command_output' | 'help_menu' | 'thinking' | 'result_error';
+  threadId?: string;
+  spanId?: string;
+  parentMessageId?: string | null;
+  /** Links to the Task tool.use that spawned this message (for subagent messages) */
+  parentToolUseId?: string;
+  type: MessageType;
   content: string;
+  contentJson?: unknown;
   timestamp: Date;
   /** SDK message UUID - used for resumeSessionAt when editing */
   sdkUuid?: string;
-  /** Links to the Task tool_use that spawned this message (for subagent messages) */
-  parentToolUseId?: string;
+  toolCallId?: string | null;
+  status?: string | null;
+  seq?: number;
   // Metadata for richer rendering
   metadata?: MessageMetadata;
 }
 
-export interface MessageMetadata {
-  // For tool_use messages
-  toolId?: string;
-  toolName?: string;
-  toolInput?: unknown;
-  toolResult?: unknown;
-  toolStatus?: 'pending' | 'success' | 'error';
-  // For system messages
-  subtype?: 'init' | 'compact_boundary' | 'status' | 'hook_response' | 'login_prompt' | 'auth_required' | 'model_picker' | 'memory_info' | 'vim_info' | 'terminal_setup_info' | 'memory_picker' | 'ask_question';
-  // For command_output messages
-  command?: string;
-  model?: string;
-  cwd?: string;
-  tools?: string[];
-  sessionId?: string;
-  // For compact_boundary
-  preTokens?: number;
-  trigger?: 'manual' | 'auto';
-  // For hook_response
-  hookName?: string;
-  exitCode?: number;
-  stdout?: string;
-  stderr?: string;
-  // For login_prompt
-  authUrl?: string;
-  oauthState?: string;
-  // For model_picker
-  loading?: boolean;
-  error?: string;
-  models?: Array<{ value: string; displayName: string; description: string }>;
-  currentModel?: string;
-  selectedModel?: string;
-  // For memory_picker
-  memoryPhase?: 'selection' | 'editing';
-  selectedMemoryType?: 'project' | 'user';
-  memoryContent?: string;
-  memoryPath?: string;
-  // For ask_question (AskUserQuestion tool)
-  questionRequestId?: string;
-  questions?: Array<{
-    question: string;
-    header: string;
-    options: Array<{ label: string; description: string }>;
-    multiSelect: boolean;
-  }>;
-  questionAnswers?: Record<string, string>;
-  // For help_menu
-  version?: string;
-  commands?: Array<{ name: string; description?: string; type: 'builtin' | 'custom' | 'skill' | 'mcp' }>;
-  // For thinking blocks
-  thinking?: string;
-  thinkingSignature?: string;
-  isRedactedThinking?: boolean;
-  // For result error messages
-  resultSubtype?: 'error_max_turns' | 'error_during_execution' | 'error_max_budget_usd' | 'error_max_structured_output_retries';
-  resultErrors?: string[];
-  totalCost?: number;
-  numTurns?: number;
-  // For system init messages - MCP server status
-  mcpServers?: Array<{ name: string; status: string }>;
-  // For Task tool_use messages (subagent spawning)
-  subagentType?: string;
-  subagentDescription?: string;
-}
+export type MessageMetadata = DbMessageMetadata;
 
 export interface StreamingState {
   instanceId: string;
   isStreaming: boolean;
   /** SDK init received, Claude is about to respond */
   isInitializing: boolean;
+  /** Timestamp of the last streaming chunk */
+  lastChunkAt?: Date;
   inputTokens: number;
   outputTokens: number;
   sessionInputTokens: number;
@@ -165,26 +113,15 @@ export interface StreamingMessage {
   startedAt: Date;
 }
 
-export interface PermissionRequest {
-  requestId: string;
-  instanceId: string;
-  machineId: string;
-  toolName: string;
-  toolInput: Record<string, unknown>;
-  toolUseID: string;
-  decisionReason?: string;
-  blockedPath?: string;
-  subAgentID?: string;
-  suggestions?: unknown[];
-  createdAt: number;
-}
+export type PermissionRequest = PermissionRequestEvent;
+
 
 /**
  * State for tracking active subagents (spawned via Task tool).
  * Used for the Mission Control tree visualization.
  */
 export interface SubagentState {
-  /** The Task tool_use ID that spawned this subagent */
+  /** The Task tool.use ID that spawned this subagent */
   toolUseId: string;
   /** Instance this subagent belongs to */
   instanceId: string;

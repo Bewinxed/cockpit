@@ -71,8 +71,9 @@ instance:created     { id, machineId, status: 'starting', cwd, projectId?, model
 instance:started     { id, status: 'running' }
 instance:stopped     { instanceId, instance: { status, totalCostUsd }, stats }
 instance:sleeping    { instanceId, sdkSessionId? }
-instance:error       { instanceId, error }
+instance:error       { instanceId, error }  // error includes stderr from SDK child process
 instance:resumed     { id, status: 'starting' }
+instance:thinking-changed { instanceId, mode: 'off'|'think'|'ultrathink' }
 ```
 
 ### Message Streaming Events
@@ -125,6 +126,7 @@ All agent-hub communication uses JSON-RPC 2.0 over WebSocket.
 | `instance.stop` | Stop instance |
 | `instance.interrupt` | Interrupt running operation |
 | `instance.rewind` | Revert to previous message |
+| `thinking.set` | Set thinking mode (off/think/ultrathink) |
 | `filesystem.list` | List directory contents |
 | `models.list` / `models.set` | Model management |
 | `memory.read` / `memory.write` | Project/user memory files |
@@ -135,6 +137,7 @@ All agent-hub communication uses JSON-RPC 2.0 over WebSocket.
 | `instance.message` | SDK message with content, tokens |
 | `instance.stopped` | Instance exited with stats |
 | `instance.sleeping` | Idle timeout triggered |
+| `instance.error` | Instance crash with stderr details |
 | `task.updated` | Task progress update |
 
 ## Frontend Architecture
@@ -151,16 +154,18 @@ stores.populatedInstances, stores.runningInstances, stores.stats, stores.instanc
 ```
 
 **Key Components:**
-- `ChatMessage` - Renders with Shiki syntax highlighting
+- `ChatMessage` - Renders messages with Shiki syntax highlighting, tool diffs, session error recovery UI
 - `ToolGroup` - Expandable tool invocations
 - `PermissionRequest` - Permission dialog
-- `ChatInput` - User input with command detection
+- `ChatInput` - User input with command detection (flexbox layout)
+- `InstanceHeader` - Instance name, token counts, model badge, thinking mode toggle (Alt+T)
+- `WorkspaceInstance` - Orchestrator: message list, activity, keyboard shortcuts, session recovery
 
 **Real-time flow:** WebSocket (agent) → Hub → DashboardRegistry → WebSocket (river.ts) → Svelte store → Component
 
 **Dashboard-Hub Communication:**
-- **WebSocket (river.ts):** spawn, send, stop, permission/question responses - bidirectional RPC + events
-- **REST (Eden Treaty):** resume, interrupt, messages, projects CRUD - request/response only
+- **WebSocket (river.ts):** spawn, send, stop, thinking.set, permission/question responses - bidirectional RPC + events
+- **REST (Eden Treaty):** resume, interrupt, reset-session, messages, projects CRUD - request/response only
 
 ## Database Schema (packages/db/)
 
@@ -185,6 +190,28 @@ export function getAgentRegistry() {
 }
 ```
 
+## Thinking Mode
+
+Three-mode toggle: `off` → `think` → `ultrathink` (cycles on click or Alt+T).
+
+- **off**: `maxThinkingTokens = 0`
+- **think**: `maxThinkingTokens = 10000`
+- **ultrathink**: `maxThinkingTokens = null` (SDK default/max)
+
+Toggle works regardless of instance status. Saves preference locally, only sends RPC to agent if instance is live. Protocol: `thinking.set` command via JSON-RPC, `instance:thinking-changed` event broadcast.
+
+**Files:** `packages/core/src/protocol/commands.ts` (ThinkingMode type), `packages/agent-service/src/handlers/thinking.ts`, `InstanceHeader.svelte` (UI), `WorkspaceInstance.svelte` (Alt+T shortcut).
+
+## Session Recovery
+
+When resuming an instance fails because the SDK session file is missing/corrupted (error: "No conversation found with session ID"), the dashboard shows a special `ui.session_error` message with:
+- **"Start fresh session"** — clears the invalid `sdkSessionId` via `POST /api/instances/:id/reset-session`, then spawns a new session with the full conversation history injected as context in a `<system-reminder>` block
+- **"Download transcript"** — exports all messages (user, assistant, tool use/results, thinking) as a text file
+
+The SDK child process stderr is captured via the `stderr` callback in `PersistentSessionOptions` and included in error events for crash diagnostics.
+
+**Files:** `persistent-session.ts` (stderr option), `instance-manager.ts` (stderr capture + error enrichment), `hub-server/api/instances.ts` (reset-session endpoint), `WorkspaceInstance.svelte` (recovery handlers), `ChatMessage.svelte` (session error UI).
+
 ## Slash Commands
 
 **Client-side (no backend):** `/help`, `/clear`, `/memory`, `/vim`, `/logout`
@@ -198,6 +225,7 @@ export function getAgentRegistry() {
 GET  /api/agents, /api/agents/:machineId
 GET  /api/instances, /api/instances/:id, /api/instances/:id/messages
 POST /api/instances/:id/resume, /api/instances/:id/interrupt
+POST /api/instances/:id/reset-session  # Clear invalid sdkSessionId for fresh spawn
 GET  /api/projects, POST /api/projects, PATCH/DELETE /api/projects/:id
 
 # WebSocket endpoints
@@ -257,3 +285,14 @@ This project uses Flow-Next for task tracking. Use `.flow/bin/flowctl` instead o
 
 **More info:** `.flow/bin/flowctl --help` or read `.flow/usage.md`
 <!-- END FLOW-NEXT -->
+
+<!-- BEGIN WDYT -->
+## Code Analysis Tools (MCP)
+When exploring code, prefer the wdyt MCP tools over raw grep/read:
+- Use tldr_codemap to get file overviews instead of reading entire files
+- Use tldr_impact to find function callers/callees instead of grepping
+- Use tldr_semantic_search to find related code by behavior
+- Use tldr_structure to list all definitions in a file
+- Use tldr_context for deep investigation of a specific function
+- Use tldr_complexity to check cyclomatic complexity before refactoring
+<!-- END WDYT -->

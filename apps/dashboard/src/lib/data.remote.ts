@@ -2,8 +2,9 @@
  * Remote functions for SSR data loading
  * These run on the server and are called from components
  */
-import { query } from '$app/server';
+import { query, getRequestEvent } from '$app/server';
 import * as v from 'valibot';
+import type { CanonicalMessage } from '@agentdeck/core/dashboard';
 
 const HUB_URL = process.env.HUB_URL || 'http://localhost:3456';
 
@@ -40,24 +41,7 @@ interface ProjectData {
   updatedAt: string;
 }
 
-interface InstanceMessage {
-  id: string;
-  instanceId: string;
-  timestamp: string;
-  /** SDK's message UUID - required for resumeSessionAt when editing */
-  sdkUuid?: string;
-  // Normalized fields from schema
-  sdkType: string;
-  sdkSubtype?: string | null;
-  parentToolUseId?: string | null;
-  role?: 'user' | 'assistant' | null;
-  textContent?: string | null;
-  rawContent: unknown;
-  model?: string | null;
-  inputTokens?: number | null;
-  outputTokens?: number | null;
-  costUsd?: number | null;
-}
+type InstanceMessage = CanonicalMessage;
 
 async function fetchFromHub<T>(path: string): Promise<T[]> {
   try {
@@ -115,3 +99,33 @@ export const getInstanceMessages = query(
     return fetchFromHub<InstanceMessage>(`instances/${id}/messages`);
   }
 );
+
+/**
+ * Preload messages for all open tabs (from URL query params).
+ * Returns a map of instanceId -> messages[]
+ */
+export const getTabMessages = query(async () => {
+  // Must call getRequestEvent synchronously (before any await)
+  const event = getRequestEvent();
+  const tabsParam = event.url.searchParams.get('tabs');
+  const tabIds = tabsParam ? tabsParam.split(',').filter(Boolean) : [];
+
+  if (tabIds.length === 0) {
+    return {} as Record<string, InstanceMessage[]>;
+  }
+
+  // Fetch messages for all tabs in parallel
+  const results = await Promise.all(
+    tabIds.map(async (id) => {
+      const messages = await fetchFromHub<InstanceMessage>(`instances/${id}/messages`);
+      return { id, messages };
+    })
+  );
+
+  // Convert to map
+  const messagesMap: Record<string, InstanceMessage[]> = {};
+  for (const { id, messages } of results) {
+    messagesMap[id] = messages;
+  }
+  return messagesMap;
+});

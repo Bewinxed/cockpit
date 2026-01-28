@@ -12,7 +12,7 @@
 	}: MessageRendererProps = $props();
 
 	// Extract questions from message metadata
-	// Supports both system messages (live) and tool_use/tool_result messages (from DB)
+	// Supports both system messages (live) and tool.use/tool.result messages (from DB)
 	let questions = $derived.by<Question[]>(() => {
 		let rawQuestions: unknown[] = [];
 
@@ -56,7 +56,7 @@
 	});
 
 	// For tool messages, extract the answers that were provided
-	// Note: DB-loaded messages are type 'tool_use' but have toolResult in metadata
+	// Note: DB-loaded messages are type 'tool.use' but have toolResult in metadata
 	let storedAnswers = $derived.by((): Record<string, string> | null => {
 		// System message format (answers stored after submission in-memory)
 		const questionAnswers = message.metadata?.questionAnswers;
@@ -330,7 +330,7 @@
 	}
 
 	// Get display info for answered questions (inactive state)
-	// Uses storedAnswers which handles both system message and tool_result formats
+	// Uses storedAnswers which handles both system message and tool.result formats
 	let answeredSummary = $derived.by(() => {
 		const answers = storedAnswers;
 		if (!answers) return null;

@@ -160,55 +160,56 @@
   }
 </script>
 
-<form class="bg-card border-t border-border px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]" onsubmit={handleSubmit}>
-  <div class="flex items-center gap-3">
-    <div class="flex-1 relative group">
-      <!-- Command Palette -->
-      <CommandPalette
-        {commands}
-        filter={message}
-        {selectedIndex}
-        onSelect={handleCommandSelect}
-        visible={showPalette}
-      />
+<div class="border-t border-border px-4 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+  <form class="max-w-3xl mx-auto" onsubmit={handleSubmit}>
+    <!-- Command Palette -->
+    <CommandPalette
+      {commands}
+      filter={message}
+      {selectedIndex}
+      onSelect={handleCommandSelect}
+      visible={showPalette}
+    />
 
+    <div class="flex items-end gap-2 bg-background border border-input rounded-lg
+                focus-within:ring-2 focus-within:ring-ring/20 focus-within:border-ring
+                transition-colors"
+    >
       <textarea
         bind:this={textareaRef}
         bind:value={message}
         {placeholder}
         disabled={disabled || loading}
         rows={1}
-        class="w-full resize-none min-h-11 max-h-[200px] py-2.5 px-4
-               bg-background border border-input rounded-xl
-               text-sm leading-6 overflow-y-hidden
+        class="flex-1 resize-none min-h-10 max-h-[200px] py-2.5 pl-3
+               bg-transparent border-none
+               text-sm leading-5 overflow-y-hidden
                placeholder:text-muted-foreground
-               focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-ring
-               disabled:opacity-50 disabled:cursor-not-allowed
-               transition-colors"
+               focus:outline-none
+               disabled:opacity-50 disabled:cursor-not-allowed"
         oninput={handleInput}
         onkeydown={handleKeydown}
       ></textarea>
-    </div>
 
-    <button
-      type="submit"
-      disabled={disabled || loading || !message.trim()}
-      class="shrink-0 size-11 rounded-xl
-             bg-primary text-primary-foreground
-             flex items-center justify-center
-             hover:bg-primary/90
-             active:scale-95
-             disabled:opacity-40 disabled:cursor-not-allowed
-             transition-all shadow-sm
-             [&>div]:flex [&>div]:items-center [&>div]:justify-center"
-      title="Send message"
-      aria-label={loading ? 'Sending message' : 'Send message'}
-    >
-      {#if loading}
-        <LoaderCircle class="size-5 animate-spin" />
-      {:else}
-        <Send size={20} />
-      {/if}
-    </button>
-  </div>
-</form>
+      <button
+        type="submit"
+        disabled={disabled || loading || !message.trim()}
+        class="shrink-0 size-7 m-1.5 rounded-md
+               bg-primary text-primary-foreground
+               flex items-center justify-center
+               hover:bg-primary/90
+               active:scale-95
+               disabled:opacity-30 disabled:cursor-not-allowed
+               transition-all"
+        title="Send message"
+        aria-label={loading ? 'Sending message' : 'Send message'}
+      >
+        {#if loading}
+          <LoaderCircle class="size-3.5 animate-spin" />
+        {:else}
+          <Send size={14} />
+        {/if}
+      </button>
+    </div>
+  </form>
+</div>

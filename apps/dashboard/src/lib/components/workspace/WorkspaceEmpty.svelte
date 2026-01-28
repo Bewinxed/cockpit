@@ -1,7 +1,8 @@
 <script lang="ts">
-  import { Plus, Terminal, Sparkles } from 'lucide-svelte';
+  import { Plus, Terminal, Sparkles, Clock, Folder, Circle } from 'lucide-svelte';
   import { Button } from '$lib/components/ui/button';
-  import { stores, agents } from '$lib/stores';
+  import { stores, agents, instances } from '$lib/stores';
+  import { openInstance } from '$lib/stores/url-sync.svelte';
 
   interface Props {
     onNewInstance?: () => void;
@@ -10,28 +11,94 @@
   let { onNewInstance }: Props = $props();
 
   const hasAgents = $derived(agents.online.length > 0);
+
+  // Recent instances sorted by last activity (up to 6)
+  const recentInstances = $derived(
+    stores.populatedInstances
+      .sort((a, b) => new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime())
+      .slice(0, 6)
+  );
+
+  function getStatusColor(status: string): string {
+    switch (status) {
+      case 'running': return 'text-success';
+      case 'starting': return 'text-warning';
+      case 'error': return 'text-destructive';
+      case 'sleeping': return 'text-info';
+      default: return 'text-muted-foreground/50';
+    }
+  }
+
+  function formatTimeAgo(dateStr: string): string {
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const minutes = Math.floor(diff / 60000);
+    if (minutes < 1) return 'just now';
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    return `${days}d ago`;
+  }
+
+  function getInstanceName(instance: { name?: string; cwd?: string; id: string }): string {
+    if (instance.name && instance.name !== 'Instance') return instance.name;
+    if (instance.cwd) {
+      const parts = instance.cwd.split('/');
+      return parts[parts.length - 1] || 'Instance';
+    }
+    return instance.id.slice(0, 8);
+  }
 </script>
 
 <div class="flex-1 flex items-center justify-center p-8">
-  <div class="max-w-md text-center space-y-6">
-    <!-- Icon -->
-    <div class="mx-auto w-16 h-16 rounded-2xl bg-muted flex items-center justify-center">
-      <Terminal class="w-8 h-8 text-muted-foreground" />
-    </div>
-
-    <!-- Title -->
+  <div class="max-w-xl w-full text-center space-y-8">
+    <!-- Header -->
     <div class="space-y-2">
-      <h2 class="text-2xl font-semibold text-foreground">
+      <div class="mx-auto w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
+        <Terminal class="w-6 h-6 text-primary" />
+      </div>
+      <h2 class="text-xl font-semibold text-foreground">
         Welcome to Cockpit
       </h2>
-      <p class="text-muted-foreground">
+      <p class="text-sm text-muted-foreground">
         {#if hasAgents}
-          Select an instance from the sidebar or create a new one to get started.
+          Pick up where you left off or start something new.
         {:else}
           Connect an agent to start running Claude instances.
         {/if}
       </p>
     </div>
+
+    <!-- Recent Instances Grid -->
+    {#if recentInstances.length > 0}
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-left">
+        {#each recentInstances as instance (instance.id)}
+          <button
+            class="group flex flex-col gap-2 p-3 rounded-lg border border-border bg-card hover:bg-accent/50 hover:border-accent transition-colors text-left"
+            onclick={() => openInstance(instance.id, true)}
+          >
+            <div class="flex items-center gap-2 min-w-0">
+              <Circle class="size-2 shrink-0 fill-current {getStatusColor(instance.status)}" />
+              <span class="text-sm font-medium text-foreground truncate">
+                {getInstanceName(instance)}
+              </span>
+            </div>
+            <div class="flex items-center gap-3 text-xs text-muted-foreground">
+              {#if instance.project}
+                <span class="flex items-center gap-1 truncate">
+                  <Folder class="size-3 shrink-0" />
+                  {instance.project}
+                </span>
+              {/if}
+              <span class="flex items-center gap-1 shrink-0">
+                <Clock class="size-3" />
+                {formatTimeAgo(instance.lastActivity)}
+              </span>
+            </div>
+          </button>
+        {/each}
+      </div>
+    {/if}
 
     <!-- Quick Stats -->
     {#if stores.stats.totalInstances > 0 || stores.stats.onlineAgents > 0}
@@ -73,7 +140,7 @@
     <!-- Tip -->
     <p class="text-xs text-muted-foreground flex items-center justify-center gap-1.5">
       <Sparkles class="w-3.5 h-3.5" />
-      Pro tip: Press <kbd class="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">⌘K</kbd> to quickly search and navigate
+      Press <kbd class="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">⌘K</kbd> to search and navigate
     </p>
   </div>
 </div>

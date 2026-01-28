@@ -1,5 +1,7 @@
 import { SvelteMap } from 'svelte/reactivity';
 import { parseBackgroundAgentOutput, toolUsesToMessages } from '$lib/utils/background-agent-parser';
+import { mapApiMessages } from '$lib/utils/message-mapper';
+import type { CanonicalMessage } from '@agentdeck/core/dashboard';
 import type { Instance, Message, StreamingState, StreamingMessage, SubagentState } from './types';
 import type {
   InstanceCreatedEvent,
@@ -11,7 +13,20 @@ import type {
   InstanceTokenUsageEvent,
   InstanceModelChangedEvent,
   InstanceViewModeChangedEvent,
+  InstanceThinkingChangedEvent,
+  InstanceTurnEvent,
+  DashboardEventPayload,
+  DashboardEventType,
+  MessageCreatedEvent,
+  MessageStreamEvent,
+  SdkMessageEvent,
 } from '@agentdeck/core/dashboard';
+import type {
+  SDKAuthStatusMessage,
+  SDKResultMessage,
+  SDKSystemMessage,
+  SDKToolProgressMessage,
+} from '@anthropic-ai/claude-agent-sdk';
 
 /** Tool invocation data from the API */
 export interface ToolInvocationData {
@@ -22,8 +37,8 @@ export interface ToolInvocationData {
   toolResultContent: string | null;
   status: string;
   isError: boolean;
-  subagentType: string | null;
-  subagentDescription: string | null;
+  subagentType?: string | null;
+  subagentDescription?: string | null;
   createdAt: Date;
   completedAt: Date | null;
 }
@@ -50,6 +65,9 @@ class InstanceStore {
 
   // Transient instance status (compacting, etc.)
   #statuses = $state(new SvelteMap<string, string | null>());
+
+  // Last activity event per instance (from websocket)
+  #activityEvents = $state(new SvelteMap<string, MessageCreatedEvent | MessageStreamEvent | SdkMessageEvent | InstanceTurnEvent>());
 
   // Background agent ID mapping - maps SDK internal agentId to toolUseId
   #backgroundAgentIdMap = new Map<string, string>();
@@ -202,8 +220,30 @@ class InstanceStore {
         cwd: i.cwd,
         model: i.model,
         totalCostUsd: i.totalCostUsd,
-        viewMode: i.viewMode ?? 'flow',
+        viewMode: i.viewMode ?? 'chat',
       });
+    }
+  }
+
+  /** Initialize messages from SSR-preloaded data */
+  initializeMessagesFromSSR(instanceId: string, messages: CanonicalMessage[]): void {
+    // Skip if we already have messages for this instance
+    if (this.#messages.has(instanceId) && this.#messages.get(instanceId)!.length > 0) {
+      return;
+    }
+
+    if (!messages || messages.length === 0) {
+      return;
+    }
+
+    const { parsed, toolResults } = mapApiMessages(instanceId, messages);
+
+    // Set messages directly
+    this.#messages.set(instanceId, parsed);
+
+    // Apply any tool results that arrived before their tool.use message
+    for (const [toolId, result] of toolResults) {
+      this.updateToolResult(instanceId, toolId, result.result, result.status === 'error');
     }
   }
 
@@ -251,7 +291,7 @@ class InstanceStore {
   updateToolResult(instanceId: string, toolId: string, result: unknown, isError = false): void {
     const msgs = this.#messages.get(instanceId) || [];
     const updated = msgs.map(msg => {
-      if (msg.type === 'tool_use' && msg.metadata?.toolId === toolId) {
+      if (msg.type === 'tool.use' && msg.metadata?.toolId === toolId) {
         return {
           ...msg,
           metadata: {
@@ -275,7 +315,7 @@ class InstanceStore {
   updateQuestionAnswers(instanceId: string, requestId: string, answers: Record<string, string>): void {
     const msgs = this.#messages.get(instanceId) || [];
     const updated = msgs.map(msg => {
-      if (msg.type === 'system' && msg.metadata?.subtype === 'ask_question' && msg.metadata?.questionRequestId === requestId) {
+      if (msg.type === 'system.ask_question' && msg.metadata?.questionRequestId === requestId) {
         return {
           ...msg,
           metadata: {
@@ -357,6 +397,7 @@ class InstanceStore {
       instanceId,
       isStreaming: false,
       isInitializing: false,
+      lastChunkAt: undefined,
       inputTokens: 0,
       outputTokens: 0,
       sessionInputTokens: 0,
@@ -429,6 +470,7 @@ class InstanceStore {
     if (msg) {
       const existing = msg.contentBlocks.get(index) || '';
       msg.contentBlocks.set(index, existing + text);
+      this.updateStreamingState(instanceId, { isStreaming: true, lastChunkAt: new Date() });
     }
   }
 
@@ -477,6 +519,21 @@ class InstanceStore {
     return this.#statuses.get(instanceId) || null;
   }
 
+  /** Record last activity event */
+  recordActivityEvent(
+    event: MessageCreatedEvent | MessageStreamEvent | SdkMessageEvent | InstanceTurnEvent
+  ): void {
+    this.#activityEvents.set(event.instanceId, event);
+  }
+
+  /** Get last activity event */
+  getActivityEvent(
+    instanceId: string
+  ): MessageCreatedEvent | MessageStreamEvent | SdkMessageEvent | InstanceTurnEvent | null {
+    void this.#activityEvents.size;
+    return this.#activityEvents.get(instanceId) || null;
+  }
+
   // ========================================
   // Subagent Methods (Mission Control)
   // ========================================
@@ -514,7 +571,7 @@ class InstanceStore {
     }
   }
 
-  /** Update subagent type/description (for race condition when messages arrive before Task tool_use) */
+  /** Update subagent type/description (for race condition when messages arrive before Task tool.use) */
   updateSubagentInfo(toolUseId: string, subagentType: string, description?: string): void {
     const subagent = this.#subagents.get(toolUseId);
     if (subagent) {
@@ -550,7 +607,7 @@ class InstanceStore {
         content: msg.content,
         timestamp: msg.timestamp,
         parentToolUseId: toolUseId,
-        metadata: msg.type === 'tool_use' ? {
+        metadata: msg.type === 'tool.use' ? {
           toolName: msg.toolName,
           toolInput: msg.toolInput,
           toolStatus: 'success' as const,
@@ -630,7 +687,7 @@ class InstanceStore {
     if (!subagent) return;
 
     const updatedMessages = subagent.messages.map(m => {
-      if (m.type === 'tool_use' && m.metadata?.toolId === toolId) {
+      if (m.type === 'tool.use' && m.metadata?.toolId === toolId) {
         return {
           ...m,
           metadata: {
@@ -717,7 +774,7 @@ class InstanceStore {
             content: m.content,
             timestamp: m.timestamp,
             parentToolUseId: tool.id,
-            metadata: m.type === 'tool_use' ? {
+            metadata: m.type === 'tool.use' ? {
               toolName: m.toolName,
               toolInput: m.toolInput,
               toolStatus: 'success' as const,
@@ -761,7 +818,7 @@ class InstanceStore {
 
   #reconstructFromMessages(instanceId: string, messages: Message[]): void {
     for (const msg of messages) {
-      if (msg.type === 'tool_use' && msg.metadata?.toolName === 'Task') {
+      if (msg.type === 'tool.use' && msg.metadata?.toolName === 'Task') {
         const toolId = msg.metadata.toolId as string;
         if (!toolId) continue;
 
@@ -790,7 +847,7 @@ class InstanceStore {
             content: m.content,
             timestamp: m.timestamp,
             parentToolUseId: toolId,
-            metadata: m.type === 'tool_use' ? {
+            metadata: m.type === 'tool.use' ? {
               toolName: m.toolName,
               toolInput: m.toolInput,
               toolStatus: 'success' as const,
@@ -859,6 +916,9 @@ class InstanceStore {
       machineId: event.machineId,
       project: null,
       projectId: event.projectId || null,
+      conversationId: event.conversationId ?? null,
+      activeThreadId: event.activeThreadId ?? null,
+      activeSpanId: event.activeSpanId ?? null,
       lastActivity: createdAt,
       cwd: event.cwd,
       model: event.model || undefined,
@@ -878,6 +938,9 @@ class InstanceStore {
         ...instance,
         status: 'running',
         model: event.model || instance.model,
+        conversationId: event.conversationId ?? instance.conversationId,
+        activeThreadId: event.activeThreadId ?? instance.activeThreadId,
+        activeSpanId: event.activeSpanId ?? instance.activeSpanId,
       });
     } else {
       // Create if not exists
@@ -890,6 +953,9 @@ class InstanceStore {
         machineId: event.machineId,
         project: null,
         projectId: event.projectId || null,
+        conversationId: event.conversationId ?? null,
+        activeThreadId: event.activeThreadId ?? null,
+        activeSpanId: event.activeSpanId ?? null,
         lastActivity: createdAt,
         cwd: event.cwd,
         model: event.model || undefined,
@@ -953,6 +1019,9 @@ class InstanceStore {
         ...instance,
         status: event.status,
         model: event.model || instance.model,
+        conversationId: event.conversationId ?? instance.conversationId,
+        activeThreadId: event.activeThreadId ?? instance.activeThreadId,
+        activeSpanId: event.activeSpanId ?? instance.activeSpanId,
       });
     } else {
       // Create if not exists
@@ -965,6 +1034,9 @@ class InstanceStore {
         machineId: event.machineId,
         project: null,
         projectId: event.projectId || null,
+        conversationId: event.conversationId ?? null,
+        activeThreadId: event.activeThreadId ?? null,
+        activeSpanId: event.activeSpanId ?? null,
         lastActivity: createdAt,
         cwd: event.cwd,
         model: event.model || undefined,
@@ -998,6 +1070,62 @@ class InstanceStore {
     });
   }
 
+  /** Handle instance:turn WebSocket event */
+  handleTurnEvent(event: InstanceTurnEvent): void {
+    this.recordActivityEvent(event);
+    if (event.phase === 'started') {
+      this.updateStreamingState(event.instanceId, { isInitializing: true });
+      return;
+    }
+    this.updateStreamingState(event.instanceId, { isStreaming: false, isInitializing: false });
+    this.clearStreamingMessage(event.instanceId);
+  }
+
+  /** Handle live SDK messages forwarded directly from agent */
+  handleSdkMessage(event: SdkMessageEvent): void {
+    const { instanceId, message } = event;
+    this.recordActivityEvent(event);
+
+    if (message.type === 'system') {
+      const sys = message as SDKSystemMessage;
+      if (sys.subtype === 'status') {
+        this.setStatus(instanceId, sys.status ?? null);
+      } else if (sys.subtype === 'init') {
+        if (sys.model) {
+          this.updateModel(instanceId, sys.model);
+        }
+      } else if (sys.subtype === 'compact_boundary') {
+        this.setStatus(instanceId, 'compacting');
+      }
+      return;
+    }
+
+    if (message.type === 'tool_progress') {
+      const progress = message as SDKToolProgressMessage;
+      this.setStatus(instanceId, progress.tool_name ? `running ${progress.tool_name}` : 'running tool');
+      return;
+    }
+
+    if (message.type === 'auth_status') {
+      const auth = message as SDKAuthStatusMessage;
+      if (auth.isAuthenticating) {
+        this.setStatus(instanceId, 'authenticating');
+      } else {
+        this.setStatus(instanceId, auth.error ? 'auth error' : null);
+      }
+      return;
+    }
+
+    if (message.type === 'result') {
+      const result = message as SDKResultMessage;
+      this.updateStreamingState(instanceId, { isStreaming: false, isInitializing: false });
+      if (result.subtype === 'success') {
+        this.setStatus(instanceId, null);
+      }
+      return;
+    }
+  }
+
   /** Handle instance:model-changed WebSocket event */
   handleModelChanged(event: InstanceModelChangedEvent): void {
     const instance = this.#instances.get(event.instanceId);
@@ -1016,6 +1144,28 @@ class InstanceStore {
       this.#instances.set(event.instanceId, {
         ...instance,
         viewMode: event.viewMode,
+      });
+    }
+  }
+
+  /** Handle instance:thinking-changed WebSocket event */
+  handleThinkingChanged(event: InstanceThinkingChangedEvent): void {
+    const instance = this.#instances.get(event.instanceId);
+    if (instance) {
+      this.#instances.set(event.instanceId, {
+        ...instance,
+        thinkingMode: event.mode,
+      });
+    }
+  }
+
+  /** Set thinking mode optimistically (called before RPC for fast UI) */
+  setThinkingMode(instanceId: string, mode: 'off' | 'think' | 'ultrathink'): void {
+    const instance = this.#instances.get(instanceId);
+    if (instance) {
+      this.#instances.set(instanceId, {
+        ...instance,
+        thinkingMode: mode,
       });
     }
   }

@@ -17,6 +17,10 @@ export const EventMethod = {
   INSTANCE_SLEEPING: 'instance.sleeping',
   /** An instance's status changed */
   INSTANCE_STATUS_CHANGED: 'instance.statusChanged',
+  /** An instance started processing a user turn */
+  INSTANCE_TURN_STARTED: 'instance.turnStarted',
+  /** An instance completed processing a user turn */
+  INSTANCE_TURN_COMPLETED: 'instance.turnCompleted',
   /** A task was created or updated */
   TASK_UPDATED: 'task.updated',
   /** Agent connected to hub */
@@ -126,6 +130,28 @@ export interface InstanceStatusChangedEvent {
 }
 
 /**
+ * Event data for instance turn start
+ */
+export interface InstanceTurnStartedEvent {
+  /** Instance that started processing a turn */
+  instanceId: string;
+  /** Timestamp */
+  timestamp: string;
+}
+
+/**
+ * Event data for instance turn completion
+ */
+export interface InstanceTurnCompletedEvent {
+  /** Instance that completed processing a turn */
+  instanceId: string;
+  /** Whether the turn ended in error */
+  isError?: boolean;
+  /** Timestamp */
+  timestamp: string;
+}
+
+/**
  * Event data for task updates
  */
 export interface TaskUpdatedEvent {
@@ -190,6 +216,8 @@ export interface EventParamsMap {
   [EventMethod.INSTANCE_STOPPED]: InstanceStoppedEvent;
   [EventMethod.INSTANCE_SLEEPING]: InstanceSleepingEvent;
   [EventMethod.INSTANCE_STATUS_CHANGED]: InstanceStatusChangedEvent;
+  [EventMethod.INSTANCE_TURN_STARTED]: InstanceTurnStartedEvent;
+  [EventMethod.INSTANCE_TURN_COMPLETED]: InstanceTurnCompletedEvent;
   [EventMethod.TASK_UPDATED]: TaskUpdatedEvent;
   [EventMethod.AGENT_CONNECTED]: AgentConnectedEvent;
   [EventMethod.AGENT_DISCONNECTED]: AgentDisconnectedEvent;

@@ -10,6 +10,7 @@
     pkgs.gh
     pkgs.nodejs
     pkgs.bun
+    pkgs.uv
     
     
     # pkgs.go

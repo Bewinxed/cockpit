@@ -166,10 +166,10 @@ class UIStore {
   // Instance View Mode (read from persisted DB state)
   // ========================================
 
-  /** Get view mode for an instance (from persisted DB state, defaults to 'flow') */
+  /** Get view mode for an instance (from persisted DB state, defaults to 'chat') */
   getViewMode(instanceId: string): ViewMode {
     const instance = instances.get(instanceId);
-    return instance?.viewMode ?? 'flow';
+    return instance?.viewMode ?? 'chat';
   }
 
   /** Get saved flow state (zoom, pan) for restoration */

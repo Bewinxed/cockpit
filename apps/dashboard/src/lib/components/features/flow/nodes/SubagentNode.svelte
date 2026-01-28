@@ -101,7 +101,7 @@
 
   // Get tool messages for a subagent
   function getToolMessages(subagent: SubagentState): Message[] {
-    return subagent.messages?.filter((m: Message) => m.type === 'tool_use') || [];
+    return subagent.messages?.filter((m: Message) => m.type === 'tool.use') || [];
   }
 
   // Get child subagents (nested)
@@ -129,7 +129,7 @@
   function getCurrentAction(subagent: SubagentState): string {
     if (subagent.status !== 'running') return '';
     const lastMsg = subagent.messages?.[subagent.messages.length - 1];
-    if (lastMsg?.type === 'tool_use') {
+    if (lastMsg?.type === 'tool.use') {
       return lastMsg.metadata?.toolName || 'Working...';
     }
     return 'Working...';

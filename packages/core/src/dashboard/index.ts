@@ -25,4 +25,6 @@ export {
   type QuestionResponseResponse,
   type UpdateInstancePreferencesRequest,
   type UpdateInstancePreferencesResponse,
+  type SetThinkingRequest,
+  type SetThinkingResponse,
 } from './river.js';

@@ -53,6 +53,7 @@ import {
   handleClaudeVersion,
   handleMemoryRead,
   handleMemoryWrite,
+  handleThinkingSet,
 } from './handlers/index.js';
 
 export interface AgentDaemonOptions {
@@ -354,6 +355,23 @@ export class AgentDaemon extends EventEmitter {
       });
     });
 
+    this.instanceManager.on('instance.turnStarted', (instanceId: string) => {
+      this.hubClient.notify(PROTOCOL_METHODS.INSTANCE_TURN_STARTED, {
+        machineId: this.machineId,
+        instanceId,
+        timestamp: new Date().toISOString(),
+      });
+    });
+
+    this.instanceManager.on('instance.turnCompleted', (instanceId: string, isError?: boolean) => {
+      this.hubClient.notify(PROTOCOL_METHODS.INSTANCE_TURN_COMPLETED, {
+        machineId: this.machineId,
+        instanceId,
+        isError,
+        timestamp: new Date().toISOString(),
+      });
+    });
+
     this.instanceManager.on('sdk.message', (instanceId: string, message: unknown) => {
       // Forward SDK messages to hub
       this.hubClient.notify(PROTOCOL_METHODS.SDK_MESSAGE, {
@@ -461,6 +479,10 @@ export class AgentDaemon extends EventEmitter {
 
       case PROTOCOL_METHODS.MEMORY_WRITE:
         await handleMemoryWrite(request, this.hubClient);
+        break;
+
+      case PROTOCOL_METHODS.THINKING_SET:
+        await handleThinkingSet(request, this.instanceManager, this.hubClient);
         break;
 
       default:

@@ -15,7 +15,10 @@
 		CircleQuestionMark,
 		Pencil,
 		Check,
-		Bot
+		Bot,
+		RotateCcw,
+		Download,
+		AlertTriangle,
 	} from 'lucide-svelte';
 	import Markdown from '@humanspeak/svelte-markdown';
 	import { formatTimestamp } from '$lib/utils/time';
@@ -52,6 +55,10 @@
 		isQuestionPickerActive?: boolean;
 		/** Whether editing is supported for this message */
 		canEdit?: boolean;
+		/** Callback to reset session and start fresh (for session_error recovery) */
+		onResetSession?: () => Promise<void>;
+		/** Callback to download chat transcript */
+		onDownloadTranscript?: () => void;
 	}
 
 	let {
@@ -69,6 +76,8 @@
 		onQuestionCancel,
 		onDismissMessage,
 		onEditMessage,
+		onResetSession,
+		onDownloadTranscript,
 		isLoginActive = false,
 		isModelPickerActive = false,
 		isMemoryPickerActive = false,
@@ -109,7 +118,7 @@
 
 	// Auto-expand for diff tools, collapsed for others
 	const hasDiff = $derived.by(() => {
-		if (message.type !== 'tool_use' && message.type !== 'tool_result') return false;
+		if (message.type !== 'tool.use' && message.type !== 'tool.result') return false;
 		const toolName = message.metadata?.toolName;
 		if (!toolName) return false;
 		const diffTools = [
@@ -140,6 +149,7 @@
 	// Message editing state
 	let isEditing = $state(false);
 	let editContent = $state('');
+	let resettingSession = $state(false);
 	let editLoading = $state(false);
 
 	function startEditing() {
@@ -187,7 +197,7 @@
 
 	// Get tool info from metadata or parse from content (backwards compatibility)
 	const toolInfo = $derived.by(() => {
-		if (message.type !== 'tool_use' && message.type !== 'tool_result') return null;
+		if (message.type !== 'tool.use' && message.type !== 'tool.result') return null;
 
 		// Use metadata if available (new format)
 		if (message.metadata?.toolName) {
@@ -218,7 +228,7 @@
 
 	// Get hook info from metadata
 	const hookInfo = $derived.by(() => {
-		if (message.type !== 'hook_response') return null;
+		if (message.type !== 'system.hook_response') return null;
 		return {
 			name: message.metadata?.hookName || 'Hook',
 			exitCode: message.metadata?.exitCode ?? 0,
@@ -295,27 +305,35 @@
 			iconBg: 'bg-secondary border border-border',
 			iconColor: 'text-muted-foreground'
 		},
-		tool_use: {
+		'tool.use': {
 			align: 'justify-start',
 			bubble: 'px-3 py-2.5 text-sm rounded-xl bg-card border border-border shadow-sm',
 			icon: Wrench,
 			iconBg: 'bg-amber-500/10',
 			iconColor: 'text-amber-600 dark:text-amber-400'
 		},
-		tool_result: {
+		'tool.result': {
 			align: 'justify-start',
 			bubble: 'px-3 py-2.5 text-sm rounded-xl bg-card border border-border shadow-sm',
 			icon: FileText,
 			iconBg: 'bg-emerald-500/10',
 			iconColor: 'text-emerald-600 dark:text-emerald-400'
 		},
-		error: {
+		'ui.error': {
 			align: 'justify-start',
 			bubble:
 				'relative px-4 py-3 text-sm leading-relaxed rounded-2xl rounded-bl-sm bg-destructive/10 text-destructive border border-destructive/30 shadow-sm',
 			icon: CircleAlert,
 			iconBg: 'bg-destructive/10',
 			iconColor: 'text-destructive'
+		},
+		'ui.session_error': {
+			align: 'justify-start',
+			bubble:
+				'relative px-4 py-3 text-sm leading-relaxed rounded-2xl rounded-bl-sm bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/30 shadow-sm',
+			icon: AlertTriangle,
+			iconBg: 'bg-amber-500/10',
+			iconColor: 'text-amber-600 dark:text-amber-400'
 		},
 		system: {
 			align: 'justify-center',
@@ -325,14 +343,14 @@
 			iconBg: 'bg-accent',
 			iconColor: 'text-muted-foreground'
 		},
-		hook_response: {
+		'system.hook_response': {
 			align: 'justify-start',
 			bubble: 'px-3 py-2.5 text-sm rounded-xl bg-card border border-border shadow-sm',
 			icon: Terminal,
 			iconBg: 'bg-blue-500/10',
 			iconColor: 'text-blue-600 dark:text-blue-400'
 		},
-		command_output: {
+		'ui.command_output': {
 			align: 'justify-start',
 			bubble:
 				'relative px-4 py-3 text-sm leading-relaxed rounded-2xl rounded-bl-sm bg-card text-card-foreground border border-border shadow-sm',
@@ -340,7 +358,7 @@
 			iconBg: 'bg-accent',
 			iconColor: 'text-muted-foreground'
 		},
-		help_menu: {
+		'ui.help_menu': {
 			align: 'justify-start',
 			bubble: '',
 			icon: CircleQuestionMark,
@@ -354,7 +372,7 @@
 			iconBg: 'bg-accent',
 			iconColor: 'text-muted-foreground'
 		},
-		result_error: {
+		'result.error': {
 			align: 'justify-start',
 			bubble:
 				'relative px-4 py-3 text-sm leading-relaxed rounded-2xl rounded-bl-sm bg-destructive/10 text-destructive border border-destructive/30 shadow-sm',
@@ -364,7 +382,10 @@
 		}
 	};
 
-	const config = $derived(messageConfig[message.type] || messageConfig.assistant);
+	const config = $derived(
+		messageConfig[message.type] ||
+		(message.type.startsWith('system.') ? messageConfig.system : messageConfig.assistant)
+	);
 </script>
 
 <!-- If there's a specialized renderer, use it -->
@@ -373,7 +394,7 @@
 {:else}
 	<!-- Default rendering logic -->
 	<div class="flex {config.align} gap-3 group">
-		{#if message.type !== 'user' && message.type !== 'system' && message.type !== 'help_menu'}
+		{#if message.type !== 'user' && !message.type.startsWith('system.') && message.type !== 'ui.help_menu'}
 			<!-- Avatar -->
 			<div
 				class="shrink-0 size-9 rounded-xl {config.iconBg} flex items-center justify-center mt-0.5"
@@ -390,9 +411,9 @@
 		<div
 			class="flex flex-col gap-1 {message.type === 'user'
 				? 'items-end'
-				: 'items-start'} {message.type === 'help_menu' ? 'w-full' : 'max-w-[85%]'}"
+				: 'items-start'} {message.type === 'ui.help_menu' ? 'w-full' : 'max-w-[85%]'}"
 		>
-			{#if message.type === 'tool_use' || message.type === 'tool_result'}
+			{#if message.type === 'tool.use' || message.type === 'tool.result'}
 				<!-- Tool message - collapsible card -->
 				<div class="w-full bg-card border border-border rounded-xl overflow-hidden shadow-sm">
 					<button
@@ -501,7 +522,7 @@
 						</div>
 					{/if}
 				</div>
-			{:else if message.type === 'hook_response'}
+			{:else if message.type === 'system.hook_response'}
 				<!-- Hook response - collapsible card -->
 				<div class="w-full bg-card border border-border rounded-xl overflow-hidden shadow-sm">
 					<button
@@ -564,7 +585,7 @@
 						</div>
 					{/if}
 				</div>
-			{:else if message.type === 'command_output'}
+			{:else if message.type === 'ui.command_output'}
 				<!-- Command output (like /help) - rendered with markdown and terminal styling -->
 				<div class="chat-bubble chat-bubble-assistant relative bg-muted border border-border">
 					{#if message.metadata?.command}
@@ -581,7 +602,7 @@
 						<Markdown source={message.content} options={{ breaks: true }} />
 					</div>
 				</div>
-			{:else if message.type === 'help_menu'}
+			{:else if message.type === 'ui.help_menu'}
 				<!-- Help menu with tabs (Claude CLI-style) -->
 				<div class="w-full max-w-2xl">
 					<HelpMenu
@@ -590,7 +611,46 @@
 						onClose={onDismissMessage}
 					/>
 				</div>
-			{:else if message.type === 'system'}
+			{:else if message.type === 'ui.session_error'}
+				<!-- Session error with recovery actions -->
+				<div class="{config.bubble} flex flex-col gap-3">
+					<div class="flex items-start gap-2">
+						<AlertTriangle class="w-4 h-4 shrink-0 mt-0.5" />
+						<div class="flex flex-col gap-1">
+							<span class="font-medium">Session not found</span>
+							<span class="text-xs opacity-80">{message.content}</span>
+						</div>
+					</div>
+					<div class="flex items-center gap-2 pt-1 border-t border-current/10">
+						{#if onResetSession}
+							<button
+								onclick={async () => { resettingSession = true; try { await onResetSession?.(); } finally { resettingSession = false; } }}
+								disabled={resettingSession}
+								class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md
+									bg-primary text-primary-foreground hover:bg-primary/90
+									disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+							>
+								{#if resettingSession}
+									<LoaderCircle class="w-3 h-3 animate-spin" />
+								{:else}
+									<RotateCcw class="w-3 h-3" />
+								{/if}
+								Start fresh session
+							</button>
+						{/if}
+						{#if onDownloadTranscript}
+							<button
+								onclick={onDownloadTranscript}
+								class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md
+									border border-current/20 hover:bg-current/5 transition-colors"
+							>
+								<Download class="w-3 h-3" />
+								Download transcript
+							</button>
+						{/if}
+					</div>
+				</div>
+			{:else if message.type.startsWith('system.')}
 				<!-- Simple system message - subtle banner -->
 				<div class="flex flex-col max-w-md">
 					<div class="{config.bubble}">

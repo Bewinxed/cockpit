@@ -19,11 +19,11 @@ import type {
   InstanceStatus,
   TaskStatus,
   TaskType,
-  SdkMessageType,
-  ToolInvocationStatus,
   ViewMode,
+  MessageMetadata,
 } from '@agentdeck/db';
 import type { Question, QuestionOption } from '../types/question.js';
+import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 
 // Re-export question types for convenience
 export type { Question, QuestionOption };
@@ -63,6 +63,9 @@ export interface InstanceCreatedEvent {
   id: string;
   machineId: string;
   projectId?: string | null;
+  conversationId?: string | null;
+  activeThreadId?: string | null;
+  activeSpanId?: string | null;
   cwd: string;
   status: InstanceStatus;
   model?: string | null;
@@ -78,6 +81,9 @@ export interface InstanceStartedEvent {
   sdkSessionId?: string | null;
   machineId: string;
   projectId?: string | null;
+  conversationId?: string | null;
+  activeThreadId?: string | null;
+  activeSpanId?: string | null;
   cwd: string;
   status: InstanceStatus;
   model?: string | null;
@@ -125,6 +131,9 @@ export interface InstanceResumedEvent {
   sdkSessionId?: string | null;
   machineId: string;
   projectId?: string | null;
+  conversationId?: string | null;
+  activeThreadId?: string | null;
+  activeSpanId?: string | null;
   cwd: string;
   status: InstanceStatus;
   model?: string | null;
@@ -153,84 +162,58 @@ export interface InstanceViewModeChangedEvent {
   viewMode: ViewMode;
 }
 
+export interface InstanceThinkingChangedEvent {
+  instanceId: string;
+  mode: 'off' | 'think' | 'ultrathink';
+}
+
+export interface InstanceTurnEvent {
+  instanceId: string;
+  phase: 'started' | 'completed';
+  isError?: boolean;
+  timestamp: string | Date;
+}
+
 // ============================================================================
-// SDK Message Events
+// Canonical Message Events
 // ============================================================================
 
-/**
- * Tool invocation extracted from message content blocks
- */
-export interface ExtractedToolInvocation {
+export interface CanonicalMessage {
   id: string;
-  toolName: string;
-  toolInput: Record<string, unknown> | null;
-  subagentType?: string | null;
-  subagentDescription?: string | null;
+  threadId: string;
+  spanId: string;
+  parentMessageId?: string | null;
+  parentToolUseId?: string | null;
+  type: string;
+  contentText?: string | null;
+  contentJson?: unknown | null;
+  metadata?: MessageMetadata | null;
+  sdkUuid?: string | null;
+  toolCallId?: string | null;
+  status?: string | null;
+  seq: number;
+  createdAt: string | Date;
 }
 
-/**
- * Tool result update from user message content blocks
- */
-export interface ExtractedToolResult {
-  toolUseId: string;
-  toolResult: Record<string, unknown> | null;
-  toolResultContent: string | null;
-  status: ToolInvocationStatus;
-  isError: boolean;
-  durationMs: number | null;
-  isBackgroundAgent?: boolean;
-  backgroundAgentId?: string;
+export interface MessageCreatedEvent {
+  instanceId: string;
+  message: CanonicalMessage;
 }
 
-/**
- * Raw SDK message structure (from Claude SDK via agent)
- */
-export interface RawSdkMessage {
-  type?: string;
-  uuid?: string;
-  session_id?: string;
-  parent_tool_use_id?: string | null;
-  message?: {
-    role?: 'user' | 'assistant';
-    model?: string;
-    content?: unknown[];
-    usage?: {
-      input_tokens?: number;
-      output_tokens?: number;
-    };
+export interface MessageStreamEvent {
+  instanceId: string;
+  sdkUuid?: string | null;
+  parentToolUseId?: string | null;
+  event: {
+    type: string;
+    [key: string]: unknown;
   };
-  tool_use_result?: {
-    filenames?: string[];
-    durationMs?: number;
-    numFiles?: number;
-    truncated?: boolean;
-    isAsync?: boolean;
-    status?: string;
-    agentId?: string;
-    description?: string;
-  };
-  usage?: {
-    input_tokens?: number;
-    output_tokens?: number;
-  };
-  total_cost_usd?: number;
 }
 
-/**
- * sdk:message event - the most complex event type
- */
 export interface SdkMessageEvent {
   instanceId: string;
-  message: RawSdkMessage;
-  sdkUuid?: string;
-  sdkType: SdkMessageType;
-  sdkSubtype?: string | null;
-  parentToolUseId?: string | null;
-  role?: 'user' | 'assistant' | null;
-  textContent?: string | null;
-  model?: string | null;
-  toolInvocations: ExtractedToolInvocation[];
-  toolResults: ExtractedToolResult[];
+  message: SDKMessage;
+  receivedAt?: string | Date;
 }
 
 // ============================================================================
@@ -360,8 +343,12 @@ export interface DashboardEventMap {
   'instance:token_usage': InstanceTokenUsageEvent;
   'instance:model-changed': InstanceModelChangedEvent;
   'instance:viewMode-changed': InstanceViewModeChangedEvent;
+  'instance:thinking-changed': InstanceThinkingChangedEvent;
+  'instance:turn': InstanceTurnEvent;
 
-  // SDK message event
+  // Canonical message events
+  'message:created': MessageCreatedEvent;
+  'message:stream': MessageStreamEvent;
   'sdk:message': SdkMessageEvent;
 
   // Task events

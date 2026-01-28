@@ -2,12 +2,7 @@
   import Modal from '../ui/Modal.svelte';
   import { Check, LoaderCircle } from 'lucide-svelte';
   import { Button } from '$lib/components/ui/button';
-
-  interface ModelInfo {
-    value: string;
-    displayName: string;
-    description: string;
-  }
+  import type { ModelInfo } from '@agentdeck/core/protocol';
 
   interface Props {
     open: boolean;

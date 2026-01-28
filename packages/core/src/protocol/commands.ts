@@ -35,6 +35,8 @@ export const CommandMethod = {
   MEMORY_READ: 'memory.read',
   /** Write a memory file (CLAUDE.md) */
   MEMORY_WRITE: 'memory.write',
+  /** Set thinking mode on an instance */
+  THINKING_SET: 'thinking.set',
 } as const;
 
 export type CommandMethodValue = (typeof CommandMethod)[keyof typeof CommandMethod];
@@ -219,6 +221,21 @@ export interface MemoryWriteParams {
   content: string;
   /** Working directory (for project memory) */
   cwd?: string;
+}
+
+/**
+ * Thinking mode: off (0 tokens), think (default), ultrathink (max budget)
+ */
+export type ThinkingMode = 'off' | 'think' | 'ultrathink';
+
+/**
+ * Parameters for setting thinking mode on an instance
+ */
+export interface ThinkingSetParams {
+  /** Instance ID to set thinking mode for */
+  instanceId: string;
+  /** Thinking mode to set */
+  mode: ThinkingMode;
 }
 
 /**
@@ -419,6 +436,16 @@ export interface MemoryWriteResult {
   path: string;
 }
 
+/**
+ * Result of setting thinking mode
+ */
+export interface ThinkingSetResult {
+  /** Whether the change was successful */
+  success: boolean;
+  /** The active thinking mode */
+  mode: ThinkingMode;
+}
+
 // ============================================================================
 // Command Type Mapping
 // ============================================================================
@@ -441,6 +468,7 @@ export interface CommandParamsMap {
   [CommandMethod.CLAUDE_VERSION]: ClaudeVersionParams;
   [CommandMethod.MEMORY_READ]: MemoryReadParams;
   [CommandMethod.MEMORY_WRITE]: MemoryWriteParams;
+  [CommandMethod.THINKING_SET]: ThinkingSetParams;
 }
 
 /**
@@ -461,6 +489,7 @@ export interface CommandResultMap {
   [CommandMethod.CLAUDE_VERSION]: ClaudeVersionResult;
   [CommandMethod.MEMORY_READ]: MemoryReadResult;
   [CommandMethod.MEMORY_WRITE]: MemoryWriteResult;
+  [CommandMethod.THINKING_SET]: ThinkingSetResult;
 }
 
 // ============================================================================

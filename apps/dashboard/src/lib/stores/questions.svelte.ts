@@ -93,7 +93,7 @@ class QuestionStore {
 
     // Create a system message for the UI to render
     instances.addMessage(event.instanceId, {
-      type: 'system',
+      type: 'system.ask_question',
       content: event.questions[0]?.question || 'Question',
       timestamp: new Date(event.createdAt),
       metadata: {
