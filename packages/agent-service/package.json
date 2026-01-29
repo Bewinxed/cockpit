@@ -16,7 +16,7 @@
     "start": "bun src/cli.ts",
     "typecheck": "tsc --noEmit",
     "build": "bun run build:bundle && bun run build:types",
-    "build:bundle": "bun build src/cli.ts src/index.ts --outdir dist --target bun --splitting --external @anthropic-ai/claude-agent-sdk --external bonjour-service --external ws",
+    "build:bundle": "bun build src/cli.ts src/index.ts --outdir dist --target bun --external @anthropic-ai/claude-agent-sdk --external bonjour-service --external ws",
     "build:types": "tsc --declaration --emitDeclarationOnly --outDir dist",
     "prepublishOnly": "bun run build"
   },

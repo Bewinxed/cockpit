@@ -13,6 +13,7 @@ import {
   type CanUseTool,
   type PermissionBehavior,
   type PermissionRuleValue,
+  type RewindFilesResult,
 } from '@anthropic-ai/claude-agent-sdk';
 import type { PermissionMode } from '@agentdeck/core';
 
@@ -23,7 +24,7 @@ type SDKMessage = Awaited<ReturnType<typeof query>> extends AsyncIterable<infer 
 export type CanUseToolOptions = Parameters<CanUseTool>[2];
 
 // Re-export SDK types for consumers
-export type { PermissionUpdate, PermissionResult, CanUseTool, PermissionBehavior, PermissionRuleValue };
+export type { PermissionUpdate, PermissionResult, CanUseTool, PermissionBehavior, PermissionRuleValue, RewindFilesResult };
 
 /**
  * Internal stream class that stays open until done() is called.
@@ -332,7 +333,7 @@ export class PersistentSession {
    *
    * @param userMessageId - UUID of the user message to rewind to
    */
-  async rewindFiles(userMessageId: string): Promise<void> {
+  async rewindFiles(userMessageId: string): Promise<RewindFilesResult> {
     if (this._closed) {
       throw new Error('Cannot rewind on closed session');
     }

@@ -17,6 +17,7 @@ export {
   type CanUseTool,
   type CanUseToolOptions,
   type PermissionResult,
+  type RewindFilesResult,
 } from './persistent-session.js';
 
 // Hub client
@@ -37,12 +38,10 @@ export {
 // Handlers
 export * from './handlers/index.js';
 
-// Default export
-export { AgentDaemon as default } from './daemon.js';
-
 // Convenience function to create and start a daemon
 export async function createAgent(options: import('./daemon.js').AgentDaemonOptions = {}) {
-  const daemon = new (await import('./daemon.js')).AgentDaemon(options);
+  const { AgentDaemon } = await import('./daemon.js');
+  const daemon = new AgentDaemon(options);
   await daemon.start();
   return daemon;
 }

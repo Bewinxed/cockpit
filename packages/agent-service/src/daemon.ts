@@ -663,5 +663,3 @@ export class AgentDaemon extends EventEmitter {
     return this.discovery;
   }
 }
-
-export default AgentDaemon;
