@@ -354,6 +354,43 @@ export function createInstanceRoutes(db: Db) {
       }
     )
 
+    // Batch get messages for multiple instances (for query.batch optimization)
+    .post(
+      '/batch/messages',
+      async ({ body }) => {
+        const { instanceIds, limit = 100 } = body;
+
+        // Fetch messages for all instances in parallel
+        const results = await Promise.all(
+          instanceIds.map(async (id) => {
+            const instance = await tracker.get(id);
+            if (!instance) {
+              return { instanceId: id, messages: [], error: 'Instance not found' };
+            }
+            const messages = await tracker.getMessages(id, limit, 0);
+            return { instanceId: id, messages };
+          })
+        );
+
+        // Return as a map for easy client-side lookup
+        const data: Record<string, unknown[]> = {};
+        for (const result of results) {
+          data[result.instanceId] = result.messages;
+        }
+
+        return {
+          success: true,
+          data,
+        };
+      },
+      {
+        body: t.Object({
+          instanceIds: t.Array(t.String()),
+          limit: t.Optional(t.Number()),
+        }),
+      }
+    )
+
     // Clear messages for an instance
     .delete(
       '/:id/messages',
@@ -590,7 +627,7 @@ export function createInstanceRoutes(db: Db) {
               CommandMethod.INSTANCE_SEND,
               {
                 instanceId: params.id,
-                content: body.prompt,
+                message: body.prompt,
               }
             );
 
