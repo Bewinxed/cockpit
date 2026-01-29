@@ -14,7 +14,6 @@
   import InstanceHeader from './InstanceHeader.svelte';
   import MessageList from './MessageList.svelte';
   import { PermissionRequest } from '$lib/components/features';
-  import { FlowView } from '$lib/components/features/flow';
   import { ChatInput } from '$lib/components/features';
   import { createAutoScroll } from '$lib/hooks/use-auto-scroll.svelte';
   import {
@@ -27,7 +26,6 @@
   } from '$lib/stores';
   import { api } from '$lib/api';
   import { mapApiMessages } from '$lib/utils/message-mapper';
-  import { getInstanceMessages } from '$lib/data.remote';
   import { deriveActivityState } from './ActivityIndicator.svelte';
   import type { ActivityEvent } from './ActivityIndicator.svelte';
   import {
@@ -58,39 +56,31 @@
 
   interface Props {
     instanceId: string;
+    ssrMessages?: import('@agentdeck/core/dashboard').CanonicalMessage[];
+    isLoadingMessages?: boolean;
   }
 
-  let { instanceId }: Props = $props();
-
-  // ============================================
-  // SSR Message Loading (remote function)
-  // ============================================
-
-  // Query re-runs when instanceId changes via $derived
-  const messagesQuery = $derived(getInstanceMessages(instanceId));
+  let { instanceId, ssrMessages: ssrMessagesRaw = [], isLoadingMessages = false }: Props = $props();
 
   // Map raw API messages to UI format (pure function)
-  function mapToUIMessages(raw: Awaited<ReturnType<typeof getInstanceMessages>> | null): Message[] {
+  function mapToUIMessages(raw: typeof ssrMessagesRaw): Message[] {
     if (!raw?.length) return [];
     const { parsed } = mapApiMessages(instanceId, raw);
     return parsed;
   }
 
-  // Sync SSR data to store after hydration for WebSocket updates
-  $effect(() => {
-    const raw = messagesQuery.current;
-    if (raw && raw.length > 0) {
-      instances.initializeMessagesFromSSR(instanceId, raw);
-    }
-  });
+  // Initialize store from SSR data on mount
+  if (ssrMessagesRaw.length > 0) {
+    instances.initializeMessagesFromSSR(instanceId, ssrMessagesRaw);
+  }
 
   // ============================================
   // Store-derived state
   // ============================================
 
   const instance = $derived(instances.get(instanceId));
-  // Use store messages if available (after hydration + WS updates), else SSR query data
-  const ssrMessages = $derived(mapToUIMessages(messagesQuery.current));
+  // Use store messages if available (after hydration + WS updates), else SSR data
+  const ssrMessages = $derived(mapToUIMessages(ssrMessagesRaw));
   const storeMessages = $derived(instances.getMessages(instanceId));
   const currentMessages = $derived(storeMessages.length > 0 ? storeMessages : ssrMessages);
   const currentPermissions = $derived(permissionsStore.getByInstance(instanceId));
@@ -527,7 +517,9 @@
   <!-- View Mode: Flow or Chat -->
   {#if viewMode === 'flow'}
     <div class="flex-1 overflow-hidden" transition:fade={{ duration: 150 }}>
-      <FlowView {instanceId} />
+      {#await import('$lib/components/features/flow') then { FlowView }}
+        <FlowView {instanceId} />
+      {/await}
     </div>
   {:else}
     <!-- Chat View — flex-col-reverse so the browser scrolls to bottom before JS loads -->
@@ -541,7 +533,7 @@
         <MessageList
           {instanceId}
           messages={currentMessages}
-          isLoadingMessages={messagesQuery.loading}
+          {isLoadingMessages}
           {isActive}
           {streamingText}
           {activityRaw}

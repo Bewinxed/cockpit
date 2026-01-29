@@ -1,23 +1,55 @@
 <script lang="ts">
   import { Plus, Terminal, Sparkles, Clock, Folder, Circle } from 'lucide-svelte';
   import { Button } from '$lib/components/ui/button';
-  import { stores, agents, instances } from '$lib/stores';
-  import { openInstance } from '$lib/stores/url-sync.svelte';
+  import { stores, agents, projects } from '$lib/stores';
+  import { tabs } from '$lib/stores/tabs.svelte';
 
   interface Props {
-    onNewInstance?: () => void;
+    ssrInstances?: Array<{
+      id: string;
+      status: string;
+      cwd: string;
+      name?: string;
+      projectId?: string;
+      createdAt?: string;
+    }>;
+    ssrAgents?: Array<{ machineId: string; status: string }>;
+    ssrProjects?: Array<{ id: string; name: string }>;
   }
 
-  let { onNewInstance }: Props = $props();
+  let { ssrInstances = [], ssrAgents = [], ssrProjects = [] }: Props = $props();
 
-  const hasAgents = $derived(agents.online.length > 0);
+  // Use store if populated (after WS updates), otherwise SSR data
+  const hasAgents = $derived(
+    agents.online.length > 0 || ssrAgents.filter(a => a.status === 'online').length > 0
+  );
+
+  // Build project lookup from SSR or store
+  const projectLookup = $derived(() => {
+    const storeProjects = projects.sorted;
+    const source = storeProjects.length > 0 ? storeProjects : ssrProjects;
+    return new Map(source.map((p: { id: string; name: string }) => [p.id, p.name]));
+  });
 
   // Recent instances sorted by last activity (up to 6)
-  const recentInstances = $derived(
-    stores.populatedInstances
+  // Use store if populated, otherwise fall back to SSR data
+  const recentInstances = $derived(() => {
+    const storeInstances = stores.populatedInstances;
+    if (storeInstances.length > 0) {
+      return storeInstances
+        .sort((a, b) => new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime())
+        .slice(0, 6);
+    }
+    // SSR fallback - transform to match expected shape
+    return ssrInstances
+      .map(inst => ({
+        ...inst,
+        lastActivity: inst.createdAt ?? new Date().toISOString(),
+        project: inst.projectId ? projectLookup().get(inst.projectId) : undefined,
+      }))
       .sort((a, b) => new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime())
-      .slice(0, 6)
-  );
+      .slice(0, 6);
+  });
 
   function getStatusColor(status: string): string {
     switch (status) {
@@ -48,6 +80,10 @@
     }
     return instance.id.slice(0, 8);
   }
+
+  function onNewInstance() {
+    window.dispatchEvent(new CustomEvent('agentdeck:new-instance'));
+  }
 </script>
 
 <div class="flex-1 flex items-center justify-center p-8">
@@ -70,12 +106,15 @@
     </div>
 
     <!-- Recent Instances Grid -->
-    {#if recentInstances.length > 0}
+    {#if recentInstances().length > 0}
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-left">
-        {#each recentInstances as instance (instance.id)}
-          <button
+        {#each recentInstances() as instance (instance.id)}
+          <a
+            href="/instance/{instance.id}"
             class="group flex flex-col gap-2 p-3 rounded-lg border border-border bg-card hover:bg-accent/50 hover:border-accent transition-colors text-left"
-            onclick={() => openInstance(instance.id, true)}
+            style="view-transition-name: instance-{instance.id}"
+            data-sveltekit-preload-data
+            onclick={() => tabs.ensureActiveInTabs(instance.id)}
           >
             <div class="flex items-center gap-2 min-w-0">
               <Circle class="size-2 shrink-0 fill-current {getStatusColor(instance.status)}" />
@@ -95,7 +134,7 @@
                 {formatTimeAgo(instance.lastActivity)}
               </span>
             </div>
-          </button>
+          </a>
         {/each}
       </div>
     {/if}
@@ -120,7 +159,7 @@
     <!-- Actions -->
     <div class="flex items-center justify-center gap-3">
       {#if hasAgents}
-        <Button onclick={() => onNewInstance?.()} class="gap-2">
+        <Button onclick={onNewInstance} class="gap-2">
           <Plus class="w-4 h-4" />
           New Instance
         </Button>
@@ -140,7 +179,7 @@
     <!-- Tip -->
     <p class="text-xs text-muted-foreground flex items-center justify-center gap-1.5">
       <Sparkles class="w-3.5 h-3.5" />
-      Press <kbd class="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">⌘K</kbd> to search and navigate
+      Press <kbd class="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">{'\u2318'}K</kbd> to search and navigate
     </p>
   </div>
 </div>

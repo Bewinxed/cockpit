@@ -249,12 +249,35 @@ button.text-destructive-foreground { color: var(--destructive-foreground); }
   @apply transition-shadow;
 }
 
+/* ========================================
+   View Transitions
+   ======================================== */
+
+/* Default crossfade for old/new page snapshots */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 200ms;
+  animation-timing-function: ease-in-out;
+}
+
+/* Instance card → header morphing transition */
+::view-transition-old(instance-*),
+::view-transition-new(instance-*) {
+  animation-duration: 250ms;
+  animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
 /* Respect reduced motion */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation-duration: 0.01ms !important;
   }
 }
 

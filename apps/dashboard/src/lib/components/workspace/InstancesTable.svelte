@@ -3,7 +3,7 @@
   import { Button } from '$lib/components/ui/button';
   import { Checkbox } from '$lib/components/ui/checkbox';
   import { stores, agents, stopInstance as wsStopInstance, type Instance } from '$lib/stores';
-  import { openInstance } from '$lib/stores/url-sync.svelte';
+  import { tabs } from '$lib/stores/tabs.svelte';
 
   type SortKey = 'status' | 'name' | 'project' | 'agent' | 'model' | 'cost' | 'lastActivity';
   type SortDirection = 'asc' | 'desc';
@@ -150,7 +150,7 @@
     if (target.closest('[data-checkbox]') || target.closest('[data-action]')) {
       return;
     }
-    openInstance(id, event.metaKey || event.ctrlKey);
+    tabs.open(id);
   }
 
   async function stopSelected() {

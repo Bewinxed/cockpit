@@ -24,7 +24,11 @@ class UIStore {
   commandPaletteOpen = $state(false);
 
   // Sidebar collapsed state (for desktop - minimizes to icons)
-  sidebarCollapsed = $state(false);
+  sidebarCollapsed = $state(
+    typeof localStorage !== 'undefined'
+      ? localStorage.getItem('cockpit:sidebar-collapsed') === 'true'
+      : false
+  );
 
   // Sidebar open state (for mobile - shows/hides overlay)
   sidebarOpen = $state(false);
@@ -92,6 +96,9 @@ class UIStore {
       this.sidebarOpen = !this.sidebarOpen;
     } else {
       this.sidebarCollapsed = !this.sidebarCollapsed;
+      try {
+        localStorage.setItem('cockpit:sidebar-collapsed', String(this.sidebarCollapsed));
+      } catch {}
     }
   }
 

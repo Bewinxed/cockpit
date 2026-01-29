@@ -2,11 +2,11 @@
   import { Bell, X, Terminal, Shield } from 'lucide-svelte';
   import { Button } from '$lib/components/ui/button';
   import { instances, permissions, ui } from '$lib/stores';
-  import { openInstance } from '$lib/stores/url-sync.svelte';
+  import { tabs } from '$lib/stores/tabs.svelte';
   import PermissionNotification from './PermissionNotification.svelte';
 
   function handlePermissionClick(instanceId: string) {
-    openInstance(instanceId);
+    tabs.open(instanceId);
     ui.toggleNotificationCenter();
   }
 

@@ -55,7 +55,7 @@
   }
 </script>
 
-<header class="h-10 flex items-center justify-between px-4 border-b border-border bg-card/30">
+<header class="h-10 flex items-center justify-between px-4 border-b border-border bg-card/30" style="view-transition-name: instance-{instance.id}">
   <!-- Left: Instance name + project -->
   <div class="flex items-center gap-2 min-w-0">
     <span class="text-sm font-medium text-foreground truncate">

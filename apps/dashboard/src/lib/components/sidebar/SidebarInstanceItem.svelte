@@ -1,10 +1,10 @@
 <script lang="ts">
   import { page } from '$app/state';
-  import { Square, Copy, Trash2, FolderOpen, Columns2 } from 'lucide-svelte';
+  import { Square, Copy, Trash2, Columns2 } from 'lucide-svelte';
   import * as SidebarUI from '$lib/components/ui/sidebar';
   import * as ContextMenu from '$lib/components/ui/context-menu';
   import { instances, ui, stopInstance as wsStopInstance, type Instance } from '$lib/stores';
-  import { openInstance, getTabsFromUrl, closeTab } from '$lib/stores/url-sync.svelte';
+  import { openInstance, closeTab } from '$lib/stores/url-sync.svelte';
 
   interface Props {
     instance: Instance;
@@ -72,36 +72,48 @@
 
 <ContextMenu.Root bind:open={isMenuOpen}>
   <ContextMenu.Trigger>
-    <SidebarUI.SidebarMenuSubButton
-      href="/?tabs={instance.id}&active={instance.id}"
-      onclick={handleClick}
-      isActive={isActiveTab}
-      title={collapsed ? displayName : undefined}
-    >
-      <!-- Status Dot -->
-      <div class="relative shrink-0">
-        <div class="size-2 rounded-full {statusColor}"></div>
-        {#if streamingState?.isStreaming}
-          <div class="absolute -top-0.5 -right-0.5 size-1.5 bg-info rounded-full animate-ping"></div>
-        {/if}
-      </div>
+    {#snippet child({ props: contextProps })}
+      <SidebarUI.SidebarMenuSubButton
+        isActive={isActiveTab}
+        title={collapsed ? displayName : undefined}
+      >
+        {#snippet child({ props: buttonProps })}
+          {@const mergedClass = [buttonProps.class, contextProps.class].filter(Boolean).join(' ')}
+          <a
+            href="/instance/{instance.id}"
+            data-sveltekit-preload-data="hover"
+            {...buttonProps}
+            {...contextProps}
+            class={mergedClass}
+            onclick={handleClick}
+          >
+            <!-- Status Dot -->
+            <div class="relative shrink-0">
+              <div class="size-2 rounded-full {statusColor}"></div>
+              {#if streamingState?.isStreaming}
+                <div class="absolute -top-0.5 -right-0.5 size-1.5 bg-info rounded-full animate-ping"></div>
+              {/if}
+            </div>
 
-      <span class="flex-1 truncate">
-        {displayName}
-      </span>
+            <span class="flex-1 truncate">
+              {displayName}
+            </span>
 
-      <!-- Indicate if open but not active -->
-      {#if isOpenTab && !isActiveTab}
-        <div class="size-1.5 rounded-full bg-primary/50"></div>
-      {/if}
+            <!-- Indicate if open but not active -->
+            {#if isOpenTab && !isActiveTab}
+              <div class="size-1.5 rounded-full bg-primary/50"></div>
+            {/if}
 
-      <!-- Cost (if running) -->
-      {#if instance.status === 'running' && instance.totalCostUsd}
-        <span class="text-xs opacity-60 font-mono">
-          ${instance.totalCostUsd.toFixed(2)}
-        </span>
-      {/if}
-    </SidebarUI.SidebarMenuSubButton>
+            <!-- Cost (if running) -->
+            {#if instance.status === 'running' && instance.totalCostUsd}
+              <span class="text-xs opacity-60 font-mono">
+                ${instance.totalCostUsd.toFixed(2)}
+              </span>
+            {/if}
+          </a>
+        {/snippet}
+      </SidebarUI.SidebarMenuSubButton>
+    {/snippet}
   </ContextMenu.Trigger>
 
   <ContextMenu.Content class="w-48">

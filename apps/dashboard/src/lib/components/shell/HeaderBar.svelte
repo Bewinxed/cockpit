@@ -4,7 +4,7 @@
   import * as ContextMenu from '$lib/components/ui/context-menu';
   import { Button } from '$lib/components/ui/button';
   import { instances, ui, permissions, connection } from '$lib/stores';
-  import { switchToTab, closeTab, closeOtherTabs, closeAllTabs } from '$lib/stores/url-sync.svelte';
+  import { tabs } from '$lib/stores/tabs.svelte';
 
   interface Props {
     onNewInstance?: () => void;
@@ -15,10 +15,9 @@
   const isMac = typeof navigator !== 'undefined' && navigator.platform.includes('Mac');
   const cmdKey = isMac ? '⌘' : 'Ctrl';
 
-  // Parse tabs from URL reactively
-  const tabsParam = $derived(page.url.searchParams.get('tabs'));
-  const tabIds = $derived(tabsParam ? tabsParam.split(',').filter(Boolean) : []);
-  const activeId = $derived(page.url.searchParams.get('active') ?? tabIds[0] ?? null);
+  // Tab list from store, active ID from route params
+  const tabIds = $derived(tabs.tabs);
+  const activeId = $derived(page.params?.id ?? null);
 
   function getTabName(instanceId: string): string {
     const instance = instances.get(instanceId);
@@ -46,7 +45,7 @@
   function handleCloseTab(e: MouseEvent, id: string) {
     e.stopPropagation();
     e.preventDefault();
-    closeTab(id);
+    tabs.close(id, activeId);
   }
 
   function copyInstancePath(id: string) {
@@ -58,24 +57,23 @@
 </script>
 
 <header class="h-10 flex items-center border-b border-border bg-card/50 backdrop-blur-sm shrink-0">
-  <!-- Left: Logo & Sidebar Toggle -->
+  <!-- Left: Sidebar Toggle & Logo -->
   <div class="flex items-center gap-2 px-3 shrink-0">
     <Button
       variant="ghost"
       size="icon-sm"
-      onclick={ui.toggleSidebar}
-      class="lg:hidden"
-      title={ui.sidebarCollapsed ? 'Open sidebar' : 'Close sidebar'}
+      onclick={() => ui.toggleSidebar()}
+      title={ui.sidebarCollapsed ? 'Expand sidebar (⌘B)' : 'Collapse sidebar (⌘B)'}
     >
       <PanelLeft class="size-4" />
     </Button>
 
-    <div class="flex items-center gap-1.5">
+    <a href="/" class="flex items-center gap-1.5" data-sveltekit-preload-data>
       <div class="size-6 bg-primary rounded-md flex items-center justify-center">
         <span class="text-primary-foreground font-bold text-xs">C</span>
       </div>
       <span class="font-semibold text-foreground text-sm hidden sm:inline">Cockpit</span>
-    </div>
+    </a>
 
     <!-- Divider -->
     <div class="w-px h-5 bg-border ml-1"></div>
@@ -86,10 +84,12 @@
     {#each tabIds as id (id)}
       <ContextMenu.Root>
         <ContextMenu.Trigger>
-          <button
+          <a
+            href="/instance/{id}"
             class="group relative flex items-center gap-1.5 h-10 px-3 text-sm border-r border-border transition-colors shrink-0
               {id === activeId ? 'bg-background text-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'}"
-            onclick={() => switchToTab(id)}
+            data-sveltekit-preload-data
+            style="view-transition-name: tab-{id}"
           >
             <!-- Status dot -->
             <div class="size-1.5 rounded-full {getStatusColor(id)} shrink-0"></div>
@@ -114,7 +114,7 @@
             {#if id === activeId}
               <div class="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"></div>
             {/if}
-          </button>
+          </a>
         </ContextMenu.Trigger>
 
         <ContextMenu.Content class="w-48">
@@ -125,13 +125,13 @@
             Copy Path
           </ContextMenu.Item>
           <ContextMenu.Separator />
-          <ContextMenu.Item onclick={() => closeTab(id)}>
+          <ContextMenu.Item onclick={() => tabs.close(id, activeId)}>
             Close Tab
           </ContextMenu.Item>
-          <ContextMenu.Item onclick={() => closeOtherTabs(id)}>
+          <ContextMenu.Item onclick={() => tabs.closeOthers(id, activeId)}>
             Close Other Tabs
           </ContextMenu.Item>
-          <ContextMenu.Item class="text-destructive focus:text-destructive" onclick={closeAllTabs}>
+          <ContextMenu.Item class="text-destructive focus:text-destructive" onclick={() => tabs.closeAll()}>
             Close All Tabs
           </ContextMenu.Item>
         </ContextMenu.Content>

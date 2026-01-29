@@ -2,7 +2,7 @@
   import { Terminal, Plus, Square, Table } from 'lucide-svelte';
   import * as Command from '$lib/components/ui/command';
   import { stores, ui } from '$lib/stores';
-  import { openInstance } from '$lib/stores/url-sync.svelte';
+  import { tabs } from '$lib/stores/tabs.svelte';
 
   let value = $state('');
 
@@ -37,7 +37,7 @@
           description: cwd,
           icon: Terminal,
           action: () => {
-            openInstance(instance.id, false); // Open in current tab
+            tabs.open(instance.id); // Open in current tab
             ui.toggleCommandPalette();
           },
         });
