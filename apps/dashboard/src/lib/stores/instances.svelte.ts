@@ -2,7 +2,7 @@ import { SvelteMap } from 'svelte/reactivity';
 import { parseBackgroundAgentOutput, toolUsesToMessages } from '$lib/utils/background-agent-parser';
 import { mapApiMessages } from '$lib/utils/message-mapper';
 import type { CanonicalMessage } from '@agentdeck/core/dashboard';
-import type { Instance, Message, StreamingState, StreamingMessage, SubagentState } from './types';
+import type { Instance, Message, MessageMetadata, StreamingState, StreamingMessage, SubagentState } from './types';
 import type {
   InstanceCreatedEvent,
   InstanceStartedEvent,
@@ -15,8 +15,6 @@ import type {
   InstanceViewModeChangedEvent,
   InstanceThinkingChangedEvent,
   InstanceTurnEvent,
-  DashboardEventPayload,
-  DashboardEventType,
   MessageCreatedEvent,
   MessageStreamEvent,
   SdkMessageEvent,
@@ -27,21 +25,6 @@ import type {
   SDKSystemMessage,
   SDKToolProgressMessage,
 } from '@anthropic-ai/claude-agent-sdk';
-
-/** Tool invocation data from the API */
-export interface ToolInvocationData {
-  id: string;
-  toolName: string;
-  toolInput: unknown;
-  toolResult: unknown;
-  toolResultContent: string | null;
-  status: string;
-  isError: boolean;
-  subagentType?: string | null;
-  subagentDescription?: string | null;
-  createdAt: Date;
-  completedAt: Date | null;
-}
 
 /**
  * Instance store - manages instances, messages, streaming, and subagents.
@@ -60,17 +43,11 @@ class InstanceStore {
   // Streaming message content (partial text being received)
   #streamingMessages = $state(new SvelteMap<string, StreamingMessage>());
 
-  // Active subagents keyed by toolUseId
-  #subagents = $state(new SvelteMap<string, SubagentState>());
-
   // Transient instance status (compacting, etc.)
   #statuses = $state(new SvelteMap<string, string | null>());
 
   // Last activity event per instance (from websocket)
   #activityEvents = $state(new SvelteMap<string, MessageCreatedEvent | MessageStreamEvent | SdkMessageEvent | InstanceTurnEvent>());
-
-  // Background agent ID mapping - maps SDK internal agentId to toolUseId
-  #backgroundAgentIdMap = new Map<string, string>();
 
   // Track instances that are resuming (waiting for instance:started WebSocket)
   #resumingInstances = $state(new Set<string>());
@@ -157,7 +134,6 @@ class InstanceStore {
     this.#streamingMessages.delete(id);
     this.#statuses.delete(id);
     this.#resumingInstances.delete(id);
-    this.clearSubagentsForInstance(id);
     return this.#instances.delete(id);
   }
 
@@ -188,7 +164,6 @@ class InstanceStore {
     this.#messages.clear();
     this.#streamingStates.clear();
     this.#streamingMessages.clear();
-    this.#subagents.clear();
     this.#statuses.clear();
     this.#resumingInstances.clear();
   }
@@ -535,352 +510,129 @@ class InstanceStore {
   }
 
   // ========================================
-  // Subagent Methods (Mission Control)
+  // Subagent Methods (Derived from Messages)
   // ========================================
 
-  /** Get subagents map */
-  get subagents() {
-    return this.#subagents;
-  }
-
-  /** Start tracking a new subagent */
-  startSubagent(
-    toolUseId: string,
-    instanceId: string,
-    subagentType: string,
-    description?: string,
-    parentSubagentId?: string
-  ): void {
-    this.#subagents.set(toolUseId, {
-      toolUseId,
-      instanceId,
-      subagentType,
-      description,
-      status: 'starting',
-      startedAt: new Date(),
-      parentSubagentId,
-      messages: [],
-    });
-  }
-
-  /** Update subagent status to running */
-  setSubagentRunning(toolUseId: string): void {
-    const subagent = this.#subagents.get(toolUseId);
-    if (subagent) {
-      this.#subagents.set(toolUseId, { ...subagent, status: 'running' });
-    }
-  }
-
-  /** Update subagent type/description (for race condition when messages arrive before Task tool.use) */
-  updateSubagentInfo(toolUseId: string, subagentType: string, description?: string): void {
-    const subagent = this.#subagents.get(toolUseId);
-    if (subagent) {
-      this.#subagents.set(toolUseId, { ...subagent, subagentType, description });
-    }
-  }
-
-  /** Mark subagent as background agent */
-  markSubagentBackground(toolUseId: string): void {
-    const subagent = this.#subagents.get(toolUseId);
-    if (subagent) {
-      this.#subagents.set(toolUseId, { ...subagent, isBackground: true });
-    }
-  }
-
-  /** Complete a subagent with result */
-  completeSubagent(toolUseId: string, result?: string): void {
-    const subagent = this.#subagents.get(toolUseId);
-    if (!subagent) return;
-
-    let parsedMessages: Message[] = [];
-    let finalResult = result;
-
-    // For background agents, parse the result to extract tool uses
-    if (subagent.isBackground && result) {
-      const parsed = parseBackgroundAgentOutput(result);
-      finalResult = parsed.resultText;
-
-      const toolMessages = toolUsesToMessages(parsed.toolUses, parsed.resultText);
-      parsedMessages = toolMessages.map(msg => ({
-        instanceId: subagent.instanceId,
-        type: msg.type,
-        content: msg.content,
-        timestamp: msg.timestamp,
-        parentToolUseId: toolUseId,
-        metadata: msg.type === 'tool.use' ? {
-          toolName: msg.toolName,
-          toolInput: msg.toolInput,
-          toolStatus: 'success' as const,
-        } : undefined,
-      }));
-    }
-
-    this.#subagents.set(toolUseId, {
-      ...subagent,
-      status: 'complete',
-      completedAt: new Date(),
-      result: finalResult,
-      messages: subagent.isBackground
-        ? [...subagent.messages, ...parsedMessages]
-        : subagent.messages,
-    });
-  }
-
-  /** Mark subagent as errored */
-  errorSubagent(toolUseId: string, error: string): void {
-    const subagent = this.#subagents.get(toolUseId);
-    if (subagent) {
-      this.#subagents.set(toolUseId, {
-        ...subagent,
-        status: 'error',
-        completedAt: new Date(),
-        error,
-      });
-    }
-  }
-
-  /** Add a message to a subagent */
-  addSubagentMessage(toolUseId: string, message: Message): void {
-    const subagent = this.#subagents.get(toolUseId);
-    if (subagent) {
-      this.#subagents.set(toolUseId, {
-        ...subagent,
-        messages: [...subagent.messages, message],
-      });
-    }
-  }
-
-  /** Get subagent by toolUseId */
-  getSubagent(toolUseId: string): SubagentState | null {
-    return this.#subagents.get(toolUseId) || null;
-  }
-
-  /** Get all subagents for an instance */
+  /**
+   * Derive subagents from messages - single source of truth.
+   * Subagents are Task tool.use messages. Status derived from toolStatus.
+   * Messages with parentToolUseId are collected under their parent subagent.
+   */
   getSubagentsForInstance(instanceId: string): SubagentState[] {
-    return Array.from(this.#subagents.values()).filter(s => s.instanceId === instanceId);
+    const messages = this.getMessages(instanceId);
+    return this.#deriveSubagentsFromMessages(instanceId, messages);
+  }
+
+  /** Get subagent by toolUseId (derived from messages) */
+  getSubagent(toolUseId: string): SubagentState | null {
+    // Find the message store to determine instanceId
+    for (const [instanceId, msgs] of this.#messages) {
+      const msg = msgs.find(
+        m => m.type === 'tool.use' && m.metadata?.toolId === toolUseId && m.metadata?.toolName === 'Task'
+      );
+      if (msg) {
+        const subagents = this.#deriveSubagentsFromMessages(instanceId, msgs);
+        return subagents.find(s => s.toolUseId === toolUseId) || null;
+      }
+    }
+    return null;
   }
 
   /** Get active (non-complete) subagents for an instance */
   getActiveSubagentsForInstance(instanceId: string): SubagentState[] {
-    return Array.from(this.#subagents.values()).filter(
-      s => s.instanceId === instanceId && (s.status === 'starting' || s.status === 'running')
+    return this.getSubagentsForInstance(instanceId).filter(
+      s => s.status === 'starting' || s.status === 'running'
     );
   }
 
   /** Get child subagents (nested) */
   getChildSubagents(parentToolUseId: string): SubagentState[] {
-    return Array.from(this.#subagents.values()).filter(s => s.parentSubagentId === parentToolUseId);
-  }
-
-  /** Clear subagents for an instance */
-  clearSubagentsForInstance(instanceId: string): void {
-    for (const [toolUseId, subagent] of this.#subagents) {
-      if (subagent.instanceId === instanceId) {
-        this.#subagents.delete(toolUseId);
-      }
+    // Need to find which instance this belongs to
+    for (const [instanceId] of this.#messages) {
+      const subagents = this.getSubagentsForInstance(instanceId);
+      const children = subagents.filter(s => s.parentSubagentId === parentToolUseId);
+      if (children.length > 0) return children;
     }
+    return [];
   }
 
-  /** Update subagent tool result */
-  updateSubagentToolResult(parentToolUseId: string, toolId: string, result: unknown, isError: boolean): void {
-    const subagent = this.#subagents.get(parentToolUseId);
-    if (!subagent) return;
+  #deriveSubagentsFromMessages(instanceId: string, messages: Message[]): SubagentState[] {
+    const subagentMap = new Map<string, SubagentState>();
 
-    const updatedMessages = subagent.messages.map(m => {
-      if (m.type === 'tool.use' && m.metadata?.toolId === toolId) {
-        return {
-          ...m,
-          metadata: {
-            ...m.metadata,
-            toolResult: result,
-            toolStatus: isError ? 'error' as const : 'success' as const,
-          },
-        };
-      }
-      return m;
-    });
-    this.#subagents.set(parentToolUseId, { ...subagent, messages: updatedMessages });
-  }
-
-  /** Register background agent ID mapping */
-  registerBackgroundAgent(agentId: string, toolUseId: string): void {
-    this.#backgroundAgentIdMap.set(agentId, toolUseId);
-  }
-
-  /** Get toolUseId from background agent ID */
-  getToolUseIdFromAgentId(agentId: string): string | undefined {
-    return this.#backgroundAgentIdMap.get(agentId);
-  }
-
-  /** Reconstruct subagents from history (for page reload) */
-  reconstructSubagentsFromHistory(
-    instanceId: string,
-    messages: Message[],
-    toolInvocations?: ToolInvocationData[]
-  ): void {
-    this.clearSubagentsForInstance(instanceId);
-
-    if (toolInvocations && toolInvocations.length > 0) {
-      this.#reconstructFromToolInvocations(instanceId, messages, toolInvocations);
-    } else {
-      this.#reconstructFromMessages(instanceId, messages);
-    }
-  }
-
-  #reconstructFromToolInvocations(
-    instanceId: string,
-    messages: Message[],
-    toolInvocations: ToolInvocationData[]
-  ): void {
-    // Build TaskOutput results map
-    const taskOutputResults = new Map<string, string>();
-    for (const tool of toolInvocations) {
-      if (tool.toolName === 'TaskOutput' && tool.toolResultContent) {
-        const taskIdMatch = tool.toolResultContent.match(/<task_id>([a-f0-9]+)<\/task_id>/i);
-        if (taskIdMatch) {
-          const outputMatch = tool.toolResultContent.match(/<output>([\s\S]*?)<\/output>/i);
-          if (outputMatch) {
-            taskOutputResults.set(taskIdMatch[1], outputMatch[1].trim());
-          }
-        }
-      }
-    }
-
-    // Process Task tools
-    for (const tool of toolInvocations) {
-      if (tool.toolName !== 'Task') continue;
-
-      const toolInput = tool.toolInput as Record<string, unknown> | undefined;
-      const toolResult = tool.toolResult as Record<string, unknown> | undefined;
-
-      const subagentType = tool.subagentType || (toolInput?.subagent_type as string) || 'unknown';
-      const description = tool.subagentDescription || (toolInput?.description as string);
-      const isBackground = toolResult?.isAsync === true || toolInput?.run_in_background === true;
-      const agentId = toolResult?.agentId as string | undefined;
-
-      let resultText: string | undefined;
-      let parsedMessages: Message[] = [];
-
-      if (isBackground && agentId) {
-        const taskOutputContent = taskOutputResults.get(agentId);
-        if (taskOutputContent) {
-          const parsed = parseBackgroundAgentOutput(taskOutputContent);
-          resultText = parsed.resultText;
-
-          const toolMessages = toolUsesToMessages(parsed.toolUses, parsed.resultText);
-          parsedMessages = toolMessages.map(m => ({
-            instanceId,
-            type: m.type,
-            content: m.content,
-            timestamp: m.timestamp,
-            parentToolUseId: tool.id,
-            metadata: m.type === 'tool.use' ? {
-              toolName: m.toolName,
-              toolInput: m.toolInput,
-              toolStatus: 'success' as const,
-            } : undefined,
-          }));
-        }
-      } else if (!isBackground) {
-        resultText = tool.toolResultContent || undefined;
-      }
-
-      const hasResult = tool.status === 'success' || tool.status === 'error';
-
-      this.#subagents.set(tool.id, {
-        toolUseId: tool.id,
-        instanceId,
-        subagentType,
-        description,
-        status: hasResult ? (tool.isError ? 'error' : 'complete') : 'running',
-        startedAt: new Date(tool.createdAt),
-        completedAt: tool.completedAt ? new Date(tool.completedAt) : undefined,
-        messages: parsedMessages,
-        result: !tool.isError ? resultText : undefined,
-        error: tool.isError ? resultText : undefined,
-        isBackground,
-      });
-    }
-
-    // Add streaming messages from blocking agents
     for (const msg of messages) {
-      if (msg.parentToolUseId && this.#subagents.has(msg.parentToolUseId)) {
-        const subagent = this.#subagents.get(msg.parentToolUseId)!;
-        if (!subagent.isBackground) {
-          this.#subagents.set(msg.parentToolUseId, {
-            ...subagent,
-            messages: [...subagent.messages, msg],
-          });
-        }
-      }
-    }
-  }
-
-  #reconstructFromMessages(instanceId: string, messages: Message[]): void {
-    for (const msg of messages) {
+      // Find Task tool.use messages (subagent spawns)
       if (msg.type === 'tool.use' && msg.metadata?.toolName === 'Task') {
         const toolId = msg.metadata.toolId as string;
         if (!toolId) continue;
 
         const toolInput = msg.metadata.toolInput as Record<string, unknown> | undefined;
-        const subagentType = (toolInput?.subagent_type as string) || 'unknown';
-        const description = toolInput?.description as string | undefined;
+        const toolStatus = msg.metadata.toolStatus as string | undefined;
+        const toolResult = msg.metadata.toolResult;
+
+        const status = this.#deriveSubagentStatus(toolStatus);
+        const isError = toolStatus === 'error';
         const isBackground = toolInput?.run_in_background === true;
 
-        const toolStatus = msg.metadata?.toolStatus as string | undefined;
-        const hasResult = toolStatus !== 'pending' && toolStatus !== undefined;
-        const isError = toolStatus === 'error';
-        const resultContent = msg.metadata?.toolResult;
-        const rawResultText = hasResult && !isError ? this.#extractResultText(resultContent) : undefined;
+        // For background agents, parse the result to extract tool uses
+        let derivedMessages: Message[] = [];
+        let resultText: string | undefined;
 
-        let parsedMessages: Message[] = [];
-        let finalResult = rawResultText;
-
-        if (isBackground && rawResultText) {
-          const parsed = parseBackgroundAgentOutput(rawResultText);
-          finalResult = parsed.resultText;
+        if (isBackground && toolResult && !isError) {
+          const rawResult = this.#extractResultText(toolResult);
+          const parsed = parseBackgroundAgentOutput(rawResult);
+          resultText = parsed.resultText;
 
           const toolMessages = toolUsesToMessages(parsed.toolUses, parsed.resultText);
-          parsedMessages = toolMessages.map(m => ({
+          derivedMessages = toolMessages.map((m): Message => ({
             instanceId,
-            type: m.type,
+            type: m.type as Message['type'],
             content: m.content,
             timestamp: m.timestamp,
             parentToolUseId: toolId,
             metadata: m.type === 'tool.use' ? {
               toolName: m.toolName,
-              toolInput: m.toolInput,
+              toolInput: m.toolInput as MessageMetadata['toolInput'],
               toolStatus: 'success' as const,
             } : undefined,
           }));
+        } else if (!isError && toolResult) {
+          resultText = this.#extractResultText(toolResult);
         }
 
-        this.#subagents.set(toolId, {
+        subagentMap.set(toolId, {
           toolUseId: toolId,
           instanceId,
-          subagentType,
-          description,
-          status: hasResult ? (isError ? 'error' : 'complete') : 'running',
+          subagentType: (msg.metadata.subagentType as string) || (toolInput?.subagent_type as string) || 'unknown',
+          description: (msg.metadata.subagentDescription as string) || (toolInput?.description as string),
+          status,
           startedAt: msg.timestamp,
-          completedAt: hasResult ? msg.timestamp : undefined,
-          messages: parsedMessages,
-          result: finalResult,
-          error: isError ? this.#extractResultText(resultContent) : undefined,
+          completedAt: status === 'complete' || status === 'error' ? msg.timestamp : undefined,
+          parentSubagentId: msg.parentToolUseId || undefined,
+          messages: derivedMessages,
+          result: !isError ? resultText : undefined,
+          error: isError ? this.#extractResultText(toolResult) : undefined,
           isBackground,
         });
       }
-    }
 
-    // Add messages with parentToolUseId
-    for (const msg of messages) {
-      if (msg.parentToolUseId && this.#subagents.has(msg.parentToolUseId)) {
-        const subagent = this.#subagents.get(msg.parentToolUseId)!;
-        this.#subagents.set(msg.parentToolUseId, {
-          ...subagent,
-          messages: [...subagent.messages, msg],
-        });
+      // Collect messages belonging to subagents (non-background only)
+      if (msg.parentToolUseId && subagentMap.has(msg.parentToolUseId)) {
+        const subagent = subagentMap.get(msg.parentToolUseId)!;
+        // Only add streamed messages for non-background agents
+        if (!subagent.isBackground) {
+          subagent.messages = [...subagent.messages, msg];
+        }
       }
     }
+
+    return Array.from(subagentMap.values());
+  }
+
+  #deriveSubagentStatus(toolStatus: string | undefined): SubagentState['status'] {
+    if (!toolStatus || toolStatus === 'pending') return 'running';
+    if (toolStatus === 'success') return 'complete';
+    if (toolStatus === 'error') return 'error';
+    return 'running';
   }
 
   #extractResultText(content: unknown): string {

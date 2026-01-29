@@ -271,8 +271,8 @@ export async function handleClientCommand(
   }
 
   if (command === '/clear') {
+    // Subagents are derived from messages, so clearing messages automatically clears subagents
     instances.clearMessages(instanceId);
-    instances.clearSubagentsForInstance(instanceId);
 
     try {
       await fetch(`/api/instances/${instanceId}/messages`, { method: 'DELETE' });

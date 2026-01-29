@@ -65,7 +65,10 @@ export async function resumeAndSend(
   try {
     const result = await api.api.instances({ id: instanceId }).resume.post({ prompt });
     if (result.error || !result.data?.success) {
-      return { error: (result.error as { message?: string })?.message || 'Failed to resume session' };
+      const errorObj = result.error as { error?: string; message?: string } | undefined;
+      const dataObj = result.data as { error?: string } | undefined;
+      const errorMsg = errorObj?.error || errorObj?.message || dataObj?.error || 'Failed to resume session';
+      return { error: errorMsg };
     }
     return {};
   } catch (err) {
@@ -125,9 +128,9 @@ export async function editMessage(
   }
 
   // Clear and re-add messages before the edit point
+  // Subagents are derived from messages, so clearing messages automatically clears subagents
   const messagesToKeep = currentMessages.slice(0, msgIndex);
   instances.clearMessages(instanceId);
-  instances.clearSubagentsForInstance(instanceId);
   for (const msg of messagesToKeep) {
     instances.addMessage(instanceId, msg);
   }
@@ -153,7 +156,11 @@ export async function editMessage(
 
     const result = await api.api.instances({ id: instanceId }).resume.post(resumeParams);
     if (result.error || !result.data?.success) {
-      return { error: (result.error as { message?: string })?.message || 'Failed to resume' };
+      // Eden Treaty puts error response body in result.error, successful but failed response in result.data
+      const errorObj = result.error as { error?: string; message?: string } | undefined;
+      const dataObj = result.data as { error?: string } | undefined;
+      const errorMsg = errorObj?.error || errorObj?.message || dataObj?.error || 'Failed to resume';
+      return { error: errorMsg };
     }
     return {};
   } catch (err) {

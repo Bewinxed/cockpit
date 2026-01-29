@@ -25,9 +25,9 @@
     ui,
     type Message,
   } from '$lib/stores';
-  import type { CanonicalMessage } from '@agentdeck/core/dashboard';
   import { api } from '$lib/api';
   import { mapApiMessages } from '$lib/utils/message-mapper';
+  import { getInstanceMessages } from '$lib/data.remote';
   import { deriveActivityState } from './ActivityIndicator.svelte';
   import type { ActivityEvent } from './ActivityIndicator.svelte';
   import {
@@ -63,11 +63,36 @@
   let { instanceId }: Props = $props();
 
   // ============================================
+  // SSR Message Loading (remote function)
+  // ============================================
+
+  // Call query at top level - returns object with .loading, .error, .current
+  const messagesQuery = getInstanceMessages(instanceId);
+
+  // Map raw API messages to UI format (pure function)
+  function mapToUIMessages(raw: Awaited<ReturnType<typeof getInstanceMessages>> | null): Message[] {
+    if (!raw?.length) return [];
+    const { parsed } = mapApiMessages(instanceId, raw);
+    return parsed;
+  }
+
+  // Sync SSR data to store after hydration for WebSocket updates
+  $effect(() => {
+    const raw = messagesQuery.current;
+    if (raw && raw.length > 0) {
+      instances.initializeMessagesFromSSR(instanceId, raw);
+    }
+  });
+
+  // ============================================
   // Store-derived state
   // ============================================
 
   const instance = $derived(instances.get(instanceId));
-  const currentMessages = $derived(instances.getMessages(instanceId));
+  // Use store messages if available (after hydration + WS updates), else SSR query data
+  const ssrMessages = $derived(mapToUIMessages(messagesQuery.current));
+  const storeMessages = $derived(instances.getMessages(instanceId));
+  const currentMessages = $derived(storeMessages.length > 0 ? storeMessages : ssrMessages);
   const currentPermissions = $derived(permissionsStore.getByInstance(instanceId));
   const streamingState = $derived(instances.getStreamingState(instanceId));
   const streamingMessage = $derived(instances.getStreamingMessage(instanceId));
@@ -95,7 +120,7 @@
   const isActive = $derived(instance?.status === 'running' || instance?.status === 'starting');
   const hasPermissionRequests = $derived(currentPermissions.length > 0);
   const lastMessage = $derived.by(() =>
-    currentMessages && currentMessages.length > 0 ? currentMessages[currentMessages.length - 1] : null
+    storeMessages && storeMessages.length > 0 ? storeMessages[storeMessages.length - 1] : null
   );
 
   // ============================================
@@ -159,56 +184,6 @@
     })
   );
 
-  // ============================================
-  // Message loading
-  // ============================================
-
-  let loadedInstances = $state(new Set<string>());
-  let isLoadingMessages = $state(false);
-
-  $effect(() => {
-    if (instanceId && !loadedInstances.has(instanceId)) {
-      loadedInstances.add(instanceId);
-      isLoadingMessages = true;
-      loadMessages(instanceId).finally(() => { isLoadingMessages = false; });
-    }
-  });
-
-  async function loadMessages(id: string) {
-    try {
-      const [messagesResponse, toolsResponse] = await Promise.all([
-        api.api.instances({ id }).messages.get(),
-        api.api.instances({ id }).tools.get(),
-      ]);
-
-      const messages = messagesResponse.data?.data;
-      const toolInvocations = toolsResponse.data?.data;
-
-      if (messages && Array.isArray(messages) && messages.length > 0) {
-        const existingMessages = instances.getMessages(id);
-        let parsedMessages: Message[];
-
-        if (existingMessages.length === 0) {
-          const { parsed, toolResults } = mapApiMessages(id, messages as CanonicalMessage[]);
-          parsedMessages = parsed;
-          for (const msg of parsedMessages) {
-            instances.addMessage(id, msg);
-          }
-          for (const [toolId, result] of toolResults) {
-            instances.updateToolResult(id, toolId, result.result, result.status === 'error');
-          }
-        } else {
-          parsedMessages = existingMessages;
-        }
-
-        if (parsedMessages.length > 0) {
-          instances.reconstructSubagentsFromHistory(id, parsedMessages, toolInvocations);
-        }
-      }
-    } catch (err) {
-      console.error('Failed to load messages:', err);
-    }
-  }
 
   // ============================================
   // Command fetching
@@ -243,7 +218,7 @@
   const autoScroll = createAutoScroll();
 
   $effect(() => {
-    const _msgCount = currentMessages.length;
+    const _msgCount = storeMessages.length;
     const _streaming = streamingText;
     requestAnimationFrame(() => { autoScroll.scrollToBottom(); });
   });
@@ -317,7 +292,7 @@
 
   async function onMemorySave(content: string): Promise<void> {
     if (pendingMemoryPickerIndex === null) return;
-    await doMemorySave(instanceId, content, currentMessages, pendingMemoryPickerIndex);
+    await doMemorySave(instanceId, content, storeMessages, pendingMemoryPickerIndex);
     pendingMemoryPickerIndex = null;
   }
 
@@ -335,7 +310,7 @@
 
   async function onEditMessage(messageId: string, newContent: string): Promise<void> {
     restarting = true;
-    const result = await editMessage(instanceId, messageId, newContent, currentMessages);
+    const result = await editMessage(instanceId, messageId, newContent, storeMessages);
     if (result.error) {
       error = result.error;
     }
@@ -403,7 +378,7 @@
       await api.api.instances({ id: instanceId })['reset-session'].post({});
 
       // 2. Build full conversation transcript to inject as context
-      const transcript = buildConversationTranscript(currentMessages);
+      const transcript = buildConversationTranscript(storeMessages);
       const contextPrompt = transcript
         ? `<system-reminder>\nThis is a continuation of a previous conversation. The SDK session data was lost, so this is a fresh session.\nBelow is the full conversation history from the previous session. Continue naturally from where we left off.\n\n${transcript}\n</system-reminder>\n\nThe previous session was recovered. Please acknowledge briefly and continue.`
         : 'Continue from where we left off.';
@@ -427,7 +402,7 @@
   }
 
   function onDownloadTranscript(): void {
-    const transcript = buildConversationTranscript(currentMessages);
+    const transcript = buildConversationTranscript(storeMessages);
     const blob = new Blob([transcript], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -499,7 +474,7 @@
         instance,
         commands,
         isActive,
-        currentMessages,
+        currentMessages: storeMessages,
       });
       if (cmdResult.commands) commands = cmdResult.commands;
       if (cmdResult.pendingModelPickerIndex !== undefined) pendingModelPickerIndex = cmdResult.pendingModelPickerIndex;
@@ -566,7 +541,7 @@
         <MessageList
           {instanceId}
           messages={currentMessages}
-          {isLoadingMessages}
+          isLoadingMessages={messagesQuery.loading}
           {isActive}
           {streamingText}
           {activityRaw}

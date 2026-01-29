@@ -48,7 +48,7 @@ export type {
 
 // Re-export entity stores
 export { agents } from './agents.svelte';
-export { instances, type ToolInvocationData } from './instances.svelte';
+export { instances } from './instances.svelte';
 export { permissions } from './permissions.svelte';
 export { projects } from './projects.svelte';
 export { questions } from './questions.svelte';
@@ -90,24 +90,35 @@ declare global {
   var __wsReconnectTimeout: ReturnType<typeof setTimeout> | null;
   var __wsReconnectAttempts: number;
   var __wsBaseUrl: string;
+  var __wsDisposing: boolean;
 }
 globalThis.__wsSocket ??= null;
 globalThis.__wsAdapter ??= null;
 globalThis.__wsReconnectTimeout ??= null;
 globalThis.__wsReconnectAttempts ??= 0;
 globalThis.__wsBaseUrl ??= '';
+globalThis.__wsDisposing ??= false;
 
 // HMR: Invalidate stale adapter on module reload
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {
-    if (globalThis.__wsSocket) {
-      globalThis.__wsSocket.close();
-      globalThis.__wsSocket = null;
-    }
-    globalThis.__wsAdapter = null;
+    // Flag to prevent ws.onclose from triggering reconnect during HMR
+    globalThis.__wsDisposing = true;
     if (globalThis.__wsReconnectTimeout) {
       clearTimeout(globalThis.__wsReconnectTimeout);
       globalThis.__wsReconnectTimeout = null;
+    }
+    if (globalThis.__wsSocket) {
+      // Null out handlers before closing to prevent orphan onclose/onmessage callbacks
+      globalThis.__wsSocket.onclose = null;
+      globalThis.__wsSocket.onmessage = null;
+      globalThis.__wsSocket.onerror = null;
+      globalThis.__wsSocket.close();
+      globalThis.__wsSocket = null;
+    }
+    if (globalThis.__wsAdapter) {
+      globalThis.__wsAdapter.clearPendingRequests();
+      globalThis.__wsAdapter = null;
     }
   });
 }
@@ -188,9 +199,19 @@ function setupEventHandlers(adapter: RiverSocketAdapter<typeof dashboardEvents>)
  */
 export function setupWSAndConnect(baseUrl: string = ''): void {
   globalThis.__wsBaseUrl = baseUrl;
+  globalThis.__wsDisposing = false;
 
-  // Close existing connection
+  // Cancel any pending reconnect to prevent duplicate connections
+  if (globalThis.__wsReconnectTimeout) {
+    clearTimeout(globalThis.__wsReconnectTimeout);
+    globalThis.__wsReconnectTimeout = null;
+  }
+
+  // Close existing connection (null out handlers first to prevent orphan callbacks)
   if (globalThis.__wsSocket) {
+    globalThis.__wsSocket.onclose = null;
+    globalThis.__wsSocket.onmessage = null;
+    globalThis.__wsSocket.onerror = null;
     globalThis.__wsSocket.close();
     globalThis.__wsSocket = null;
   }
@@ -223,7 +244,10 @@ export function setupWSAndConnect(baseUrl: string = ''): void {
     console.log('[WS] WebSocket closed:', event.code, event.reason);
     connection.status = 'disconnected';
     adapter.clearPendingRequests();
-    attemptReconnect();
+    // Don't reconnect if we're being disposed by HMR or intentional disconnect
+    if (!globalThis.__wsDisposing) {
+      attemptReconnect();
+    }
   };
 
   ws.onerror = (error) => {
@@ -251,6 +275,7 @@ function attemptReconnect(): void {
 }
 
 export function disconnectWS(): void {
+  globalThis.__wsDisposing = true;
   if (globalThis.__wsReconnectTimeout) {
     clearTimeout(globalThis.__wsReconnectTimeout);
     globalThis.__wsReconnectTimeout = null;
@@ -260,6 +285,9 @@ export function disconnectWS(): void {
     globalThis.__wsAdapter = null;
   }
   if (globalThis.__wsSocket) {
+    globalThis.__wsSocket.onclose = null;
+    globalThis.__wsSocket.onmessage = null;
+    globalThis.__wsSocket.onerror = null;
     globalThis.__wsSocket.close();
     globalThis.__wsSocket = null;
   }

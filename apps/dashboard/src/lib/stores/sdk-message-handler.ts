@@ -2,137 +2,15 @@
  * Canonical Message Handler Service
  *
  * Processes message:created and message:stream events from the hub.
+ *
+ * Subagents are derived automatically from messages in instances.svelte.ts.
+ * This handler just routes messages to the store - no manual subagent sync needed.
  */
 
 import type { MessageCreatedEvent, MessageStreamEvent } from '@agentdeck/core/dashboard';
 import { instances } from './instances.svelte';
-import type { Message, MessageMetadata } from './types';
+import type { Message } from './types';
 import { toUiMessage } from '$lib/utils/message-mapper';
-
-function extractToolResultText(content: unknown): string | undefined {
-  if (typeof content === 'string') return content;
-  if (Array.isArray(content)) {
-    const parts = content
-      .map((block) => {
-        if (typeof block === 'string') return block;
-        if (block && typeof block === 'object' && 'type' in block) {
-          const typed = block as { type: string; text?: string };
-          if (typed.type === 'text' && typed.text) return typed.text;
-        }
-        return '';
-      })
-      .filter(Boolean);
-    return parts.length ? parts.join('\n') : undefined;
-  }
-  if (content && typeof content === 'object') {
-    return JSON.stringify(content);
-  }
-  return undefined;
-}
-
-function findToolUseMessage(instanceId: string, parentToolUseId: string | undefined, toolId: string): Message | undefined {
-  if (parentToolUseId) {
-    const subagent = instances.getSubagent(parentToolUseId);
-    return subagent?.messages.find(
-      (m) => m.type === 'tool.use' && m.metadata?.toolId === toolId
-    );
-  }
-  return instances.getMessages(instanceId).find(
-    (m) => m.type === 'tool.use' && m.metadata?.toolId === toolId
-  );
-}
-
-function handleToolResult(instanceId: string, message: ReturnType<typeof toUiMessage>): void {
-  const metadata = message.metadata as MessageMetadata | undefined;
-  const toolId = metadata?.toolId as string | undefined;
-  if (!toolId) return;
-
-  const toolResult = metadata?.toolResult;
-  const toolStatus = metadata?.toolStatus as 'pending' | 'success' | 'error' | undefined;
-  const isError = toolStatus === 'error';
-
-  if (message.parentToolUseId) {
-    instances.updateSubagentToolResult(message.parentToolUseId, toolId, toolResult, isError);
-  } else {
-    instances.updateToolResult(instanceId, toolId, toolResult, isError);
-  }
-
-  const toolUseMessage = findToolUseMessage(instanceId, message.parentToolUseId, toolId);
-  const toolName = toolUseMessage?.metadata?.toolName as string | undefined;
-
-  if (toolName === 'Task') {
-    const toolInput = toolUseMessage?.metadata?.toolInput as Record<string, unknown> | undefined;
-    const resultPayload = toolResult as { isAsync?: boolean; agentId?: string } | undefined;
-    const isBackground = toolInput?.run_in_background === true || resultPayload?.isAsync === true;
-    const agentId = resultPayload?.agentId;
-
-    if (isBackground && agentId) {
-      instances.registerBackgroundAgent(agentId, toolId);
-      instances.markSubagentBackground(toolId);
-      return;
-    }
-
-    const resultText = extractToolResultText(toolResult);
-    if (isError) {
-      instances.errorSubagent(toolId, resultText || 'Unknown error');
-    } else {
-      instances.completeSubagent(toolId, resultText || '');
-    }
-    return;
-  }
-
-  if (toolName === 'TaskOutput') {
-    const resultText = extractToolResultText(toolResult);
-    if (!resultText) return;
-
-    const taskIdMatch = resultText.match(/<task_id>([a-f0-9]+)<\/task_id>/i);
-    const outputMatch = resultText.match(/<output>([\s\S]*?)<\/output>/i);
-    if (!taskIdMatch || !outputMatch) return;
-
-    const taskId = taskIdMatch[1];
-    const output = outputMatch[1].trim();
-    const originalToolUseId = instances.getToolUseIdFromAgentId(taskId);
-    if (!originalToolUseId) return;
-
-    const isTaskError = resultText.includes('<status>error</status>');
-    if (isTaskError) {
-      instances.errorSubagent(originalToolUseId, output || 'Unknown error');
-    } else {
-      instances.completeSubagent(originalToolUseId, output || '');
-    }
-  }
-}
-
-function handleSubagentMessage(instanceId: string, uiMessage: Message): void {
-  const parentToolUseId = uiMessage.parentToolUseId as string;
-  if (!instances.getSubagent(parentToolUseId)) {
-    instances.startSubagent(parentToolUseId, instanceId, 'unknown', 'Subagent');
-  }
-  instances.setSubagentRunning(parentToolUseId);
-
-  if (uiMessage.type === 'tool.use') {
-    const toolId = uiMessage.metadata?.toolId as string | undefined;
-    const toolName = uiMessage.metadata?.toolName as string | undefined;
-    if (toolName === 'Task' && toolId) {
-      const toolInput = uiMessage.metadata?.toolInput as Record<string, unknown> | undefined;
-      const subagentType = (uiMessage.metadata?.subagentType as string) || (toolInput?.subagent_type as string) || 'unknown';
-      const subagentDescription = (uiMessage.metadata?.subagentDescription as string) || (toolInput?.description as string | undefined);
-      instances.startSubagent(toolId, instanceId, subagentType, subagentDescription, parentToolUseId);
-    }
-    instances.addSubagentMessage(parentToolUseId, uiMessage);
-  } else if (uiMessage.type === 'tool.result') {
-    handleToolResult(instanceId, uiMessage);
-  } else if (uiMessage.type === 'result.success' || uiMessage.type === 'result.error') {
-    const resultText = uiMessage.metadata?.result as string | undefined;
-    if (uiMessage.type === 'result.error') {
-      instances.errorSubagent(parentToolUseId, resultText || 'Unknown error');
-    } else {
-      instances.completeSubagent(parentToolUseId, resultText || '');
-    }
-  } else {
-    instances.addSubagentMessage(parentToolUseId, uiMessage);
-  }
-}
 
 /**
  * Handle message:created events.
@@ -166,11 +44,7 @@ export function handleMessageCreated(event: MessageCreatedEvent): void {
 
   const uiMessage = toUiMessage(instanceId, message);
 
-  if (uiMessage.parentToolUseId) {
-    handleSubagentMessage(instanceId, uiMessage);
-    return;
-  }
-
+  // Handle user messages - try to update existing message with sdkUuid first
   if (uiMessage.type === 'user') {
     const updated = uiMessage.sdkUuid && instances.updateUserMessageUuid(instanceId, uiMessage.content, uiMessage.sdkUuid);
     if (!updated) {
@@ -179,28 +53,30 @@ export function handleMessageCreated(event: MessageCreatedEvent): void {
     return;
   }
 
-  if (uiMessage.type === 'tool.use') {
-    const toolId = uiMessage.metadata?.toolId as string | undefined;
-    const toolName = uiMessage.metadata?.toolName as string | undefined;
-    if (toolName === 'Task' && toolId) {
-      const toolInput = uiMessage.metadata?.toolInput as Record<string, unknown> | undefined;
-      const subagentType = (uiMessage.metadata?.subagentType as string) || (toolInput?.subagent_type as string) || 'unknown';
-      const subagentDescription = (uiMessage.metadata?.subagentDescription as string) || (toolInput?.description as string | undefined);
-      instances.startSubagent(toolId, instanceId, subagentType, subagentDescription, uiMessage.parentToolUseId);
-    }
-    instances.addMessage(instanceId, uiMessage);
-    return;
-  }
-
+  // Handle tool results - update the corresponding tool.use message
   if (uiMessage.type === 'tool.result') {
-    handleToolResult(instanceId, uiMessage);
+    const toolId = uiMessage.metadata?.toolId as string | undefined;
+    if (toolId) {
+      const toolResult = uiMessage.metadata?.toolResult;
+      const toolStatus = uiMessage.metadata?.toolStatus as 'pending' | 'success' | 'error' | undefined;
+      const isError = toolStatus === 'error';
+
+      if (uiMessage.parentToolUseId) {
+        // Update tool result within a subagent's messages (will be re-derived)
+        instances.updateToolResult(instanceId, toolId, toolResult, isError);
+      } else {
+        instances.updateToolResult(instanceId, toolId, toolResult, isError);
+      }
+    }
     return;
   }
 
+  // Skip result.success messages (no-op)
   if (uiMessage.type === 'result.success') {
     return;
   }
 
+  // Handle result.error - only add to main messages if not in a subagent
   if (uiMessage.type === 'result.error') {
     if (!uiMessage.parentToolUseId) {
       instances.addMessage(instanceId, uiMessage);
@@ -208,12 +84,16 @@ export function handleMessageCreated(event: MessageCreatedEvent): void {
     return;
   }
 
+  // Skip tool.progress messages
   if (uiMessage.type === 'tool.progress') {
     return;
   }
 
+  // Add all other messages to the store
+  // Subagents are derived automatically from Task tool.use messages
   instances.addMessage(instanceId, uiMessage);
 
+  // Clear streaming message if this assistant message matches
   if (uiMessage.type === 'assistant' && uiMessage.sdkUuid) {
     const streaming = instances.getStreamingMessage(instanceId);
     if (streaming?.sdkUuid === uiMessage.sdkUuid) {
