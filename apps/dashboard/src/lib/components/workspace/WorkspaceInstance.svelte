@@ -66,8 +66,8 @@
   // SSR Message Loading (remote function)
   // ============================================
 
-  // Call query at top level - returns object with .loading, .error, .current
-  const messagesQuery = getInstanceMessages(instanceId);
+  // Query re-runs when instanceId changes via $derived
+  const messagesQuery = $derived(getInstanceMessages(instanceId));
 
   // Map raw API messages to UI format (pure function)
   function mapToUIMessages(raw: Awaited<ReturnType<typeof getInstanceMessages>> | null): Message[] {

@@ -195,35 +195,18 @@
 		}
 	}
 
-	// Get tool info from metadata or parse from content (backwards compatibility)
+	// Get tool info from metadata
 	const toolInfo = $derived.by(() => {
 		if (message.type !== 'tool.use' && message.type !== 'tool.result') return null;
+		if (!message.metadata?.toolName) return null;
 
-		// Use metadata if available (new format)
-		if (message.metadata?.toolName) {
-			return {
-				name: message.metadata.toolName,
-				id: message.metadata.toolId,
-				input: message.metadata.toolInput,
-				result: message.metadata.toolResult,
-				status: message.metadata.toolStatus || 'pending'
-			};
-		}
-
-		// Fallback: parse from content (old format)
-		try {
-			const parsed =
-				typeof message.content === 'string' ? JSON.parse(message.content) : message.content;
-			return {
-				name: parsed?.name || 'Tool',
-				id: parsed?.id,
-				input: parsed?.input || parsed,
-				result: null,
-				status: 'success' as const
-			};
-		} catch {
-			return { name: 'Tool', input: message.content, result: null, status: 'success' as const };
-		}
+		return {
+			name: message.metadata.toolName,
+			id: message.metadata.toolId,
+			input: message.metadata.toolInput,
+			result: message.metadata.toolResult,
+			status: message.metadata.toolStatus || 'pending'
+		};
 	});
 
 	// Get hook info from metadata

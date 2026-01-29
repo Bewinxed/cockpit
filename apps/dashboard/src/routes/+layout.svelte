@@ -1,22 +1,48 @@
 <script lang="ts">
   import '../app.css';
   import '@xyflow/svelte/dist/style.css';
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount } from 'svelte';
+  import { onNavigate } from '$app/navigation';
   import { toast } from 'svelte-sonner';
-  import { page } from '$app/state';
   import { HUB_URL } from '$lib/config';
-  // Stores and WebSocket setup
   import { agents, instances, permissions, projects, ui, setupWSAndConnect, disconnectWS } from '$lib/stores';
-  import { restoreTabsFromStorage, persistTabsToStorage, openInstance } from '$lib/stores/url-sync.svelte';
+  import { tabs } from '$lib/stores/tabs.svelte';
+  import { getAgents, getInstances, getProjects } from '$lib/data.remote';
   import '$lib/stores/theme.svelte';
   import type { Snippet } from 'svelte';
 
-  // Shell components
   import AppShell from '$lib/components/shell/AppShell.svelte';
   import { Toaster } from '$lib/components/ui/sonner';
 
-  // Svelte 5: children snippet for layout
   let { children }: { children: Snippet } = $props();
+
+  // ============================================
+  // SSR Data Loading (remote functions)
+  // ============================================
+
+  // Call queries at top level - .current is available during SSR
+  const agentsQuery = getAgents();
+  const instancesQuery = getInstances();
+  const projectsQuery = getProjects();
+
+  // Sync SSR data to stores after hydration for WebSocket updates
+  $effect(() => {
+    if (agentsQuery.current?.length) {
+      agents.initializeFromSSR(agentsQuery.current);
+    }
+  });
+
+  $effect(() => {
+    if (instancesQuery.current?.length) {
+      instances.initializeFromSSR(instancesQuery.current);
+    }
+  });
+
+  $effect(() => {
+    if (projectsQuery.current?.length) {
+      projects.initializeFromSSR(projectsQuery.current);
+    }
+  });
 
   // Track seen permission IDs to show toasts only for new ones
   let seenPermissionIds = new Set<string>();
@@ -34,7 +60,7 @@
           description: `${instanceName} wants to use ${perm.toolName}`,
           action: {
             label: 'View',
-            onClick: () => openInstance(perm.instanceId)
+            onClick: () => tabs.open(perm.instanceId)
           },
           duration: 10000
         });
@@ -42,73 +68,65 @@
     }
   });
 
-  // Populate stores from server-loaded data ($page.data is serialized into HTML
-  // by SvelteKit and available synchronously on both server render and client hydration).
-  agents.initializeFromSSR(page.data.agents);
-  instances.initializeFromSSR(page.data.instances);
-  projects.initializeFromSSR(page.data.projects);
-  for (const [id, msgs] of Object.entries(page.data.tabMessages as Record<string, any[]>)) {
-    instances.initializeMessagesFromSSR(id, msgs);
-  }
+  // View Transitions — wraps every client-side navigation with the browser's View Transition API
+  onNavigate((navigation) => {
+    // Skip if browser doesn't support View Transitions
+    if (!document.startViewTransition) return;
 
-  // Connect to real-time updates (client-side only)
+    return new Promise((resolve) => {
+      document.startViewTransition(async () => {
+        resolve();
+        await navigation.complete;
+      });
+    });
+  });
+
   onMount(() => {
     setupWSAndConnect(HUB_URL);
 
-    // Restore tabs from localStorage if URL has none
-    restoreTabsFromStorage();
+    // Restore tabs from localStorage
+    tabs.restore();
 
-    // Register global keyboard shortcuts
     function handleKeydown(e: KeyboardEvent) {
-      // Ignore if in input/textarea
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
-        // Allow Escape to still work
         if (e.key !== 'Escape') return;
       }
 
       const isMac = navigator.platform.includes('Mac');
       const cmdKey = isMac ? e.metaKey : e.ctrlKey;
 
-      // Cmd+K - Command palette
       if (cmdKey && e.key === 'k') {
         e.preventDefault();
         ui.toggleCommandPalette();
         return;
       }
 
-      // Cmd+N - New instance
       if (cmdKey && e.key === 'n') {
         e.preventDefault();
         window.dispatchEvent(new CustomEvent('agentdeck:new-instance'));
         return;
       }
 
-      // Escape - Close modals or clear selection
-      if (e.key === 'Escape') {
-        // Don't clear selection if in a modal - the modal will handle it
+      // Cmd+B — Toggle sidebar
+      if (cmdKey && e.key === 'b') {
+        e.preventDefault();
+        ui.toggleSidebar();
         return;
       }
     }
 
     window.addEventListener('keydown', handleKeydown);
 
-    // Persist tabs to storage when URL changes
-    function handlePopState() {
-      persistTabsToStorage();
-    }
-    window.addEventListener('popstate', handlePopState);
-
     return () => {
       window.removeEventListener('keydown', handleKeydown);
-      window.removeEventListener('popstate', handlePopState);
+      disconnectWS();
     };
-  });
-
-  onDestroy(() => {
-    disconnectWS();
   });
 </script>
 
 <Toaster position="bottom-right" />
-<AppShell />
-{@render children()}
+<AppShell>
+  {#snippet workspace()}
+    {@render children()}
+  {/snippet}
+</AppShell>

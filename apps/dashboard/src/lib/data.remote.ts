@@ -2,7 +2,7 @@
  * Remote functions for SSR data loading
  * These run on the server and are called from components
  */
-import { query, getRequestEvent } from '$app/server';
+import { query } from '$app/server';
 import * as v from 'valibot';
 import type { CanonicalMessage } from '@agentdeck/core/dashboard';
 
@@ -100,32 +100,3 @@ export const getInstanceMessages = query(
   }
 );
 
-/**
- * Preload messages for all open tabs (from URL query params).
- * Returns a map of instanceId -> messages[]
- */
-export const getTabMessages = query(async () => {
-  // Must call getRequestEvent synchronously (before any await)
-  const event = getRequestEvent();
-  const tabsParam = event.url.searchParams.get('tabs');
-  const tabIds = tabsParam ? tabsParam.split(',').filter(Boolean) : [];
-
-  if (tabIds.length === 0) {
-    return {} as Record<string, InstanceMessage[]>;
-  }
-
-  // Fetch messages for all tabs in parallel
-  const results = await Promise.all(
-    tabIds.map(async (id) => {
-      const messages = await fetchFromHub<InstanceMessage>(`instances/${id}/messages`);
-      return { id, messages };
-    })
-  );
-
-  // Convert to map
-  const messagesMap: Record<string, InstanceMessage[]> = {};
-  for (const { id, messages } of results) {
-    messagesMap[id] = messages;
-  }
-  return messagesMap;
-});
