@@ -1,0 +1,16 @@
+{
+  "assignee": null,
+  "claim_note": "",
+  "claimed_at": null,
+  "created_at": "2026-07-30T23:22:45.101674Z",
+  "depends_on": [
+    "fn-15.3"
+  ],
+  "epic": "fn-15",
+  "id": "fn-15.4",
+  "priority": 3,
+  "spec_path": ".flow/tasks/fn-15.4.md",
+  "status": "todo",
+  "title": "E2E: two machines side by side \u2014 browse, resume, stream concurrently (done-criterion)",
+  "updated_at": "2026-07-30T23:22:45.101686Z"
+}

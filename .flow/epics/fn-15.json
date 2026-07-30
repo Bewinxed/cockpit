@@ -1,0 +1,13 @@
+{
+  "branch_name": "fn-15",
+  "created_at": "2026-07-30T23:22:44.825229Z",
+  "depends_on_epics": [],
+  "id": "fn-15",
+  "next_task": 1,
+  "plan_review_status": "unknown",
+  "plan_reviewed_at": null,
+  "spec_path": ".flow/specs/fn-15.md",
+  "status": "open",
+  "title": "Phase 2 \u2014 sessions & machines: history, resume, peer machines, one tab system",
+  "updated_at": "2026-07-30T23:22:44.825255Z"
+}

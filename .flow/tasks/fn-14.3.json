@@ -8,10 +8,15 @@
     "fn-14.2"
   ],
   "epic": "fn-14",
+  "evidence": {
+    "live": "spawn+stream+permission via ws scripts",
+    "routes": "/session 200, /session/[id] 200",
+    "svelte-check": "26 baseline, 0 new"
+  },
   "id": "fn-14.3",
   "priority": 2,
   "spec_path": ".flow/tasks/fn-14.3.md",
-  "status": "in_progress",
+  "status": "done",
   "title": "dashboard: new-spine session view \u2014 WS client, streaming chat on existing renderers, send box, permission approve/deny",
-  "updated_at": "2026-07-30T22:59:55.801925Z"
+  "updated_at": "2026-07-30T23:19:38.522303Z"
 }
