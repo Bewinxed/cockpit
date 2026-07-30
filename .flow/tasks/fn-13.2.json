@@ -1,0 +1,22 @@
+{
+  "assignee": "bewinxed@gmail.com",
+  "claim_note": "",
+  "claimed_at": "2026-07-30T22:19:48.642191Z",
+  "created_at": "2026-07-30T22:14:57.776371Z",
+  "depends_on": [
+    "fn-13.1"
+  ],
+  "epic": "fn-13",
+  "evidence": {
+    "boot": "health 200 + ws register ack on :3457",
+    "effect": "4.0.0-beta.102",
+    "elysia": "2.0.0-beta.1",
+    "typecheck": "exit 0"
+  },
+  "id": "fn-13.2",
+  "priority": 2,
+  "spec_path": ".flow/tasks/fn-13.2.md",
+  "status": "done",
+  "title": "Scaffold @cockpit/hub (Elysia 2 + Effect v4, health + ws echo, 4-table drizzle schema)",
+  "updated_at": "2026-07-30T22:30:29.189241Z"
+}

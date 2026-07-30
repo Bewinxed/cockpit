@@ -29,7 +29,6 @@
   },
   "overrides": {
     "vite": "npm:rolldown-vite@latest",
-    "elysia": "^1.4.22",
     "@types/bun": "latest"
   },
   "dependencies": {

@@ -1,0 +1,2 @@
+export { ConnectionLost, startDaemon, type RegisterPayload } from './daemon';
+export { machineId } from './machine-id';

@@ -1,0 +1,21 @@
+{
+  "assignee": "bewinxed@gmail.com",
+  "claim_note": "",
+  "claimed_at": "2026-07-30T22:30:29.329640Z",
+  "created_at": "2026-07-30T22:14:57.916819Z",
+  "depends_on": [
+    "fn-13.2",
+    "fn-13.3"
+  ],
+  "epic": "fn-13",
+  "evidence": {
+    "claude_md": "rewritten",
+    "new_md": "drift log appended to \u00a75"
+  },
+  "id": "fn-13.4",
+  "priority": 3,
+  "spec_path": ".flow/tasks/fn-13.4.md",
+  "status": "done",
+  "title": "Rewrite CLAUDE.md to match Phase 0 reality",
+  "updated_at": "2026-07-30T22:31:20.566347Z"
+}

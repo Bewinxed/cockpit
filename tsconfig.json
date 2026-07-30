@@ -24,6 +24,9 @@
   ],
   "references": [
     { "path": "./packages/core" },
+    { "path": "./packages/hub" },
+    { "path": "./packages/agent" },
+    { "path": "./packages/legacy-core" },
     { "path": "./packages/db" },
     { "path": "./packages/hub-server" },
     { "path": "./packages/agent-service" },

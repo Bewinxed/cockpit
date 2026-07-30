@@ -1,11 +1,34 @@
-// Re-export all types
-export * from './types/index.js';
+// The SDK is the type system: consumers tunnel these types, never re-model them.
+export type * from '@anthropic-ai/claude-agent-sdk';
 
-// Re-export protocol (agent↔hub JSON-RPC 2.0)
-export * from './protocol/index.js';
+/** The whole agent↔hub↔dashboard protocol. Adding a verb is a design decision. */
+export type Verb =
+  | 'register'
+  | 'heartbeat'
+  | 'spawn'
+  | 'send'
+  | 'stop'
+  | 'control'
+  | 'frames'
+  | 'fs';
 
-// Re-export utils
-export * from './utils/index.js';
+/**
+ * Every message on every hop. `payload` is whatever the verb carries — an SDK
+ * message, an `Options` object, a `Query` method call — passed through verbatim.
+ */
+export interface Envelope<T = unknown> {
+  verb: Verb;
+  machineId: string;
+  instanceId?: string;
+  /** SDK `requestId` when the payload correlates to a permission or dialog request. */
+  requestId?: string;
+  payload: T;
+}
 
-// Dashboard events are exported via subpath: '@agentdeck/core/dashboard'
-// This avoids naming conflicts with protocol events
+export const COCKPIT_HUB_PORT = 3456;
+
+export const COCKPIT_ENV = {
+  hubUrl: 'COCKPIT_HUB_URL',
+  hubPort: 'COCKPIT_HUB_PORT',
+  machineId: 'COCKPIT_MACHINE_ID',
+} as const;
