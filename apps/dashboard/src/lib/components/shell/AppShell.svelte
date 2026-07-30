@@ -1,5 +1,8 @@
 <script lang="ts">
+  import type { Snippet } from 'svelte';
+  import { page } from '$app/state';
   import Sidebar from './Sidebar.svelte';
+  import { Provider as SidebarProvider } from '$lib/components/ui/sidebar';
   import HeaderBar from './HeaderBar.svelte';
   import WorkspaceContent from '../workspace/WorkspaceContent.svelte';
   import InstancesTable from '../workspace/InstancesTable.svelte';
@@ -7,6 +10,8 @@
   import NotificationCenter from '../notifications/NotificationCenter.svelte';
   import NewInstanceModal from '../NewInstanceModal.svelte';
   import { ui } from '$lib/stores';
+
+  let { children, workspace }: { children?: Snippet; workspace?: Snippet } = $props();
 
   let showNewInstanceModal = $state(false);
   let showTableView = $state(false);
@@ -62,7 +67,7 @@
   <!-- Header Bar (logo + inline tabs + search + connection) -->
   <HeaderBar onNewInstance={() => showNewInstanceModal = true} />
 
-  <div class="flex-1 flex overflow-hidden relative">
+  <SidebarProvider class="flex-1 flex overflow-hidden relative min-h-0">
     <!-- Mobile Sidebar Backdrop -->
     {#if ui.sidebarOpen}
       <button
@@ -98,11 +103,13 @@
           </div>
           <InstancesTable />
         </div>
-      {:else}
+      {:else if page.route.id === '/'}
         <WorkspaceContent onNewInstance={() => showNewInstanceModal = true} />
+      {:else}
+        {@render (workspace ?? children)?.()}
       {/if}
     </main>
-  </div>
+  </SidebarProvider>
 
   <!-- Overlays -->
   {#if ui.commandPaletteOpen}
