@@ -1,5 +1,8 @@
 <script lang="ts">
-  import { LoaderCircle, Send } from 'lucide-svelte';
+  import type { Snippet } from 'svelte';
+  import { slide } from 'svelte/transition';
+  import { quintOut } from 'svelte/easing';
+  import { LoaderCircle, Send, Square } from 'lucide-svelte';
   import CommandPalette from './CommandPalette.svelte';
 
   interface AvailableCommand {
@@ -17,6 +20,9 @@
     commands?: AvailableCommand[];
     onSend: (message: string) => void | Promise<void>;
     onInterrupt?: () => void | Promise<void>;
+    /** Content the input card grows to accommodate (permission prompts, pickers) */
+    attachment?: Snippet;
+    attachmentOpen?: boolean;
   }
 
   let {
@@ -27,7 +33,11 @@
     commands = [],
     onSend,
     onInterrupt,
+    attachment,
+    attachmentOpen = false,
   }: Props = $props();
+
+  const uid = $props.id();
 
   let message = $state('');
   let textareaRef = $state<HTMLTextAreaElement | null>(null);
@@ -58,6 +68,8 @@
         (cmd.description?.toLowerCase().includes(searchTerm) ?? false);
     })
   );
+
+  const paletteOpen = $derived(showPalette && filteredCommands.length > 0);
 
   // Auto-resize textarea
   function handleInput(e: Event) {
@@ -160,21 +172,33 @@
   }
 </script>
 
-<div class="border-t border-border px-4 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
-  <form class="max-w-3xl mx-auto" onsubmit={handleSubmit}>
-    <!-- Command Palette -->
-    <CommandPalette
-      {commands}
-      filter={message}
-      {selectedIndex}
-      onSelect={handleCommandSelect}
-      visible={showPalette}
-    />
-
-    <div class="flex items-end gap-2 bg-background border border-input rounded-lg
+<div>
+  <form class="relative" onsubmit={handleSubmit}>
+    <!-- One card: grows to accommodate prompts and the command palette, input row at the bottom -->
+    <div class="bg-card border border-border rounded-xl shadow-lg overflow-hidden
                 focus-within:ring-2 focus-within:ring-ring/20 focus-within:border-ring
                 transition-colors"
     >
+      {#if attachmentOpen && attachment}
+        <div transition:slide={{ duration: 300, easing: quintOut }}>
+          {@render attachment()}
+        </div>
+      {/if}
+
+      {#if paletteOpen}
+        <div transition:slide={{ duration: 250, easing: quintOut }}>
+          <CommandPalette
+            {commands}
+            filter={message}
+            {selectedIndex}
+            onSelect={handleCommandSelect}
+            listboxId="cmd-list-{uid}"
+            optionIdPrefix="cmd-opt-{uid}"
+          />
+        </div>
+      {/if}
+
+      <div class="flex items-end gap-2 {attachmentOpen || paletteOpen ? 'border-t border-border' : ''}">
       <textarea
         bind:this={textareaRef}
         bind:value={message}
@@ -183,13 +207,38 @@
         rows={1}
         class="flex-1 resize-none min-h-10 max-h-[200px] py-2.5 pl-3
                bg-transparent border-none
-               text-sm leading-5 overflow-y-hidden
+               text-base sm:text-sm leading-5 overflow-y-hidden
                placeholder:text-muted-foreground
                focus:outline-none
                disabled:opacity-50 disabled:cursor-not-allowed"
+        role="combobox"
+        aria-label="Message"
+        aria-autocomplete="list"
+        aria-controls="cmd-list-{uid}"
+        aria-expanded={showPalette}
+        aria-activedescendant={showPalette && filteredCommands.length > 0
+          ? `cmd-opt-${uid}-${selectedIndex}`
+          : undefined}
         oninput={handleInput}
         onkeydown={handleKeydown}
       ></textarea>
+
+      {#if streaming && onInterrupt}
+        <button
+          type="button"
+          class="shrink-0 size-7 m-1.5 rounded-md
+                 bg-destructive/10 text-destructive
+                 flex items-center justify-center
+                 hover:bg-destructive/20
+                 active:scale-95
+                 transition-all"
+          title="Stop (Ctrl+Enter)"
+          aria-label="Stop response"
+          onclick={() => onInterrupt?.()}
+        >
+          <Square size={14} />
+        </button>
+      {/if}
 
       <button
         type="submit"
@@ -210,6 +259,7 @@
           <Send size={14} />
         {/if}
       </button>
+      </div>
     </div>
   </form>
 </div>

@@ -13,7 +13,8 @@
     filter: string;
     selectedIndex: number;
     onSelect: (command: AvailableCommand) => void;
-    visible: boolean;
+    listboxId?: string;
+    optionIdPrefix?: string;
   }
 
   let {
@@ -21,14 +22,15 @@
     filter,
     selectedIndex,
     onSelect,
-    visible,
+    listboxId = 'cmd-list',
+    optionIdPrefix = 'cmd-opt',
   }: Props = $props();
 
   let itemRefs: HTMLButtonElement[] = [];
 
   // Scroll selected item into view when index changes
   $effect(() => {
-    if (visible && itemRefs[selectedIndex]) {
+    if (itemRefs[selectedIndex]) {
       itemRefs[selectedIndex].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     }
   });
@@ -41,6 +43,7 @@
         (cmd.description?.toLowerCase().includes(searchTerm) ?? false);
     })
   );
+
 
   function getCommandIcon(type: AvailableCommand['type']) {
     switch (type) {
@@ -81,29 +84,30 @@
       case 'skill':
         return 'bg-warning/20 text-warning';
       case 'mcp':
-        return 'bg-secondary/20 text-secondary';
+        return 'bg-info/20 text-info';
       default:
-        return 'bg-text-muted/20 text-muted-foreground';
+        return 'bg-muted text-muted-foreground';
     }
   }
 </script>
 
-{#if visible && filteredCommands.length > 0}
-  <div
-    class="absolute bottom-full left-0 right-0 mb-2 bg-card border border-border rounded-lg shadow-lg max-h-64 overflow-y-auto z-50"
-  >
-    <div class="p-2 border-b border-border">
+<!-- Plain content block — the input card gates, frames, and animates this -->
+<div class="max-h-64 overflow-y-auto">
+  <div class="p-2 border-b border-border">
       <span class="text-xs text-muted-foreground">
         Available commands ({filteredCommands.length})
       </span>
     </div>
-    <div class="py-1">
+    <div class="p-2 space-y-0.5" role="listbox" id={listboxId} aria-label="Commands">
       {#each filteredCommands as command, index (command.name)}
         {@const Icon = getCommandIcon(command.type)}
         <button
           bind:this={itemRefs[index]}
           type="button"
-          class="w-full px-3 py-2 flex items-center gap-3 hover:bg-accent transition-colors text-left
+          role="option"
+          id="{optionIdPrefix}-{index}"
+          aria-selected={index === selectedIndex}
+          class="w-full px-2.5 py-2 flex items-center gap-3 rounded-md hover:bg-accent transition-colors text-left
                  {index === selectedIndex ? 'bg-accent' : ''}"
           onclick={() => onSelect(command)}
         >
@@ -130,4 +134,3 @@
       <span><kbd class="px-1 bg-accent rounded">esc</kbd> close</span>
     </div>
   </div>
-{/if}

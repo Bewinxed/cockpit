@@ -105,6 +105,12 @@
   let commands = $state<AvailableCommand[]>(DEFAULT_COMMANDS);
   let commandsFetched = $state(false);
 
+  // Keep the last prompt contents rendered while the dock panel animates closed
+  let displayedPermissions: typeof currentPermissions = $state([]);
+  $effect(() => {
+    if (currentPermissions.length > 0) displayedPermissions = currentPermissions;
+  });
+
   const isStreaming = $derived(streamingState?.isStreaming ?? false);
   const isInitializing = $derived(streamingState?.isInitializing ?? false);
   const isActive = $derived(instance?.status === 'running' || instance?.status === 'starting');
@@ -529,7 +535,7 @@
       onscroll={autoScroll.onScroll}
       transition:fade={{ duration: 150 }}
     >
-      <div class="max-w-3xl mx-auto px-4 py-6 space-y-4">
+      <div class="max-w-4xl mx-auto px-4 py-6 space-y-4">
         <MessageList
           {instanceId}
           messages={currentMessages}
@@ -558,38 +564,6 @@
     </div>
   {/if}
 
-  <!-- Permission Requests -->
-  {#if currentPermissions.length > 0}
-    <div class="border-t border-border bg-warning/5 px-4 py-3">
-      {#each currentPermissions as permission (permission.requestId)}
-        <PermissionRequest request={permission} />
-      {/each}
-    </div>
-  {/if}
-
-  <!-- Error Display -->
-  {#if error}
-    <div class="border-t border-error/30 bg-error/10 px-4 py-2 flex items-center justify-between">
-      <span class="text-sm text-error">{error}</span>
-      <Button
-        variant="ghost"
-        size="sm"
-        class="text-error hover:text-error"
-        onclick={() => error = null}
-      >
-        Dismiss
-      </Button>
-    </div>
-  {/if}
-
-  <!-- Transient Status -->
-  {#if transientStatus}
-    <div class="border-t border-border bg-warning/10 px-4 py-2 flex items-center gap-2">
-      <LoaderCircle class="size-4 animate-spin text-warning" />
-      <span class="text-sm text-warning capitalize">{transientStatus}...</span>
-    </div>
-  {/if}
-
   <!-- Jump to Present -->
   {#if autoScroll.userHasScrolled}
     <Button
@@ -603,24 +577,59 @@
     </Button>
   {/if}
 
-  <!-- Chat Input -->
-  <ChatInput
-    disabled={!instance}
-    loading={sending || restarting}
-    streaming={isStreaming}
-    {commands}
-    onSend={handleSend}
-    onInterrupt={handleInterrupt}
-    placeholder={
-      restarting
-        ? 'Resuming session...'
-        : instance?.status === 'sleeping'
-        ? 'Send a message to resume...'
-        : instance?.status === 'stopped'
-        ? 'Send a message to restart...'
-        : isStreaming
-        ? 'Claude is responding... (⌘↵ to interrupt)'
-        : 'Ask Claude anything... (⌘↵ to send)'
-    }
-  />
+  <!-- Floating dock — input card plus the prompt panel that slides up out of it -->
+  <div class="px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-1">
+    <div class="max-w-4xl mx-auto relative">
+
+      {#if error}
+        <div class="mb-2 rounded-xl border border-error/30 bg-card shadow-lg px-3 py-2 flex items-center justify-between">
+          <span class="text-sm text-error">{error}</span>
+          <Button
+            variant="ghost"
+            size="sm"
+            class="text-error hover:text-error"
+            onclick={() => error = null}
+          >
+            Dismiss
+          </Button>
+        </div>
+      {/if}
+
+      {#if transientStatus}
+        <div class="mb-2 rounded-xl border border-border bg-card shadow-lg px-3 py-2 flex items-center gap-2">
+          <LoaderCircle class="size-4 animate-spin text-warning" />
+          <span class="text-sm text-warning capitalize">{transientStatus}...</span>
+        </div>
+      {/if}
+
+      <ChatInput
+        disabled={!instance}
+        loading={sending || restarting}
+        streaming={isStreaming}
+        {commands}
+        onSend={handleSend}
+        onInterrupt={handleInterrupt}
+        attachmentOpen={hasPermissionRequests}
+        placeholder={
+          restarting
+            ? 'Resuming session...'
+            : instance?.status === 'sleeping'
+            ? 'Send a message to resume...'
+            : instance?.status === 'stopped'
+            ? 'Send a message to restart...'
+            : isStreaming
+            ? 'Claude is responding... (⌘↵ to interrupt)'
+            : 'Ask Claude anything... (⌘↵ to send)'
+        }
+      >
+        {#snippet attachment()}
+          <div class="divide-y divide-border/60">
+            {#each displayedPermissions as permission (permission.requestId)}
+              <PermissionRequest request={permission} />
+            {/each}
+          </div>
+        {/snippet}
+      </ChatInput>
+    </div>
+  </div>
 </div>
