@@ -6,6 +6,7 @@ const timestamp = (column: string) => integer(column, { mode: 'timestamp_ms' });
 export const agents = sqliteTable('agents', {
   machineId: text('machine_id').primaryKey(),
   hostname: text('hostname').notNull(),
+  os: text('os').notNull(),
   status: text('status').$type<'online' | 'offline'>().notNull().default('offline'),
   lastSeenAt: timestamp('last_seen_at'),
   createdAt: timestamp('created_at').notNull().$defaultFn(() => new Date()),

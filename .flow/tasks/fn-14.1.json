@@ -1,0 +1,19 @@
+{
+  "assignee": "bewinxed@gmail.com",
+  "claim_note": "",
+  "claimed_at": "2026-07-30T22:48:24.284569Z",
+  "created_at": "2026-07-30T22:48:24.002880Z",
+  "depends_on": [],
+  "epic": "fn-14",
+  "evidence": {
+    "cost": "~$0.41",
+    "live": "real Claude session: send/permission/control/stop all exercised, no orphan processes",
+    "typecheck": "exit 0 both"
+  },
+  "id": "fn-14.1",
+  "priority": 1,
+  "spec_path": ".flow/tasks/fn-14.1.md",
+  "status": "done",
+  "title": "@cockpit/agent: session supervisor \u2014 spawn/send/stop/control, query() + input stream, frames pump, permission relay via requestId (+thin payload types in core)",
+  "updated_at": "2026-07-30T22:58:25.307719Z"
+}

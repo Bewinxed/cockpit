@@ -3,6 +3,7 @@ import { COCKPIT_ENV, COCKPIT_HUB_PORT } from '@cockpit/core';
 import { Data, Duration, Effect, Schedule } from 'effect';
 import { arch, hostname, platform } from 'node:os';
 import { machineId } from './machine-id';
+import { SessionSupervisor } from './session';
 
 const DEFAULT_HUB_URL = `ws://localhost:${COCKPIT_HUB_PORT}/ws`;
 const HEARTBEAT_INTERVAL = Duration.seconds(15);
@@ -60,11 +61,25 @@ const closed = (socket: WebSocket, url: string) =>
     return Effect.sync(() => socket.removeEventListener('close', onClose));
   });
 
-const session = (identity: RegisterPayload, url: string) =>
+const attach = (supervisor: SessionSupervisor, identity: RegisterPayload, url: string) =>
   Effect.gen(function* () {
     const socket = yield* connection(url);
     send(socket, { verb: 'register', machineId: identity.machineId, payload: identity });
     yield* Effect.logInfo(`registered with ${url}`);
+
+    supervisor.sink = (frame) => {
+      if (socket.readyState !== WebSocket.OPEN) return;
+      send(socket, {
+        verb: 'frames',
+        machineId: identity.machineId,
+        instanceId: frame.instanceId,
+        requestId: frame.kind === 'sdk' ? undefined : frame.requestId,
+        payload: frame,
+      });
+    };
+    socket.addEventListener('message', (event) => {
+      supervisor.dispatch(JSON.parse(String(event.data)) as Envelope);
+    });
 
     yield* Effect.forkScoped(
       Effect.repeat(
@@ -91,9 +106,15 @@ export const startDaemon = Effect.gen(function* () {
     os: `${platform()}-${arch()}`,
   };
 
+  // Outlives any one connection: a hub restart must not kill running sessions.
+  const supervisor = yield* Effect.acquireRelease(
+    Effect.sync(() => new SessionSupervisor()),
+    (running) => Effect.promise(() => running.shutdown())
+  );
+
   yield* Effect.logInfo(`cockpit agent ${identity.machineId} connecting to ${url}`);
-  yield* Effect.scoped(session(identity, url)).pipe(
+  yield* Effect.scoped(attach(supervisor, identity, url)).pipe(
     Effect.tapError((error) => Effect.logWarning(`${error.reason} — reconnecting`)),
     Effect.retry(reconnect)
   );
-});
+}).pipe(Effect.scoped);
