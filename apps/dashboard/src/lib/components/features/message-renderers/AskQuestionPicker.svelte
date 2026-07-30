@@ -268,22 +268,6 @@
 		// Don't capture shortcuts when typing in an input
 		const isTyping = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
 
-		// Tab to switch between question tabs (when multiple questions and not typing)
-		if (e.key === 'Tab' && questions.length > 1 && !isTyping) {
-			e.preventDefault();
-			if (e.shiftKey) {
-				// Previous tab
-				activeTab = activeTab === 0 ? questions.length - 1 : activeTab - 1;
-			} else {
-				// Next tab
-				activeTab = (activeTab + 1) % questions.length;
-			}
-			return;
-		}
-
-		// Let Tab work normally when typing or single question
-		if (e.key === 'Tab') return;
-
 		// Number keys 1-4 for quick selection (when not typing)
 		if (!isTyping && e.key >= '1' && e.key <= '4') {
 			e.preventDefault();
@@ -315,8 +299,8 @@
 			return;
 		}
 
-		// Enter to submit (works everywhere except in textarea)
-		if (e.key === 'Enter' && !e.shiftKey && !(e.target instanceof HTMLTextAreaElement) && canSubmit()) {
+		// Enter to submit (inputs and textareas handle their own Enter)
+		if (e.key === 'Enter' && !e.shiftKey && !isTyping && canSubmit()) {
 			e.preventDefault();
 			handleSubmit();
 			return;
@@ -343,23 +327,63 @@
 
 <svelte:window onkeydown={handleKeydown} />
 
+<!-- Option row content (shared by the interactive and read-only variants) -->
+{#snippet optionBody(
+	question: Question,
+	qIdx: number,
+	option: Question['options'][number],
+	optIdx: number,
+	showShortcuts: boolean
+)}
+	<!-- Selection indicator -->
+	<div
+		class="shrink-0 w-5 h-5 mt-0.5 rounded-{question.multiSelect
+			? 'sm'
+			: 'full'} border-2 flex items-center justify-center transition-colors
+		{isOptionSelected(qIdx, option.label)
+			? 'border-primary bg-primary'
+			: 'border-muted-foreground/30'}"
+	>
+		{#if isOptionSelected(qIdx, option.label)}
+			<Check class="w-3 h-3 text-primary-foreground" />
+		{/if}
+	</div>
+
+	<div class="flex-1 min-w-0">
+		<div class="flex items-center gap-2">
+			<span class="font-medium text-sm text-foreground">{option.label}</span>
+			{#if showShortcuts && optIdx < 4}
+				<kbd
+					class="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-mono"
+					>{optIdx + 1}</kbd
+				>
+			{/if}
+		</div>
+		{#if option.description}
+			<p class="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+				{option.description}
+			</p>
+		{/if}
+	</div>
+{/snippet}
+
 <!-- Single question content (reusable snippet) -->
 {#snippet questionContent(question: Question, qIdx: number, showShortcuts: boolean, readOnly: boolean = false)}
 	<!-- Question header -->
 	<div class="flex items-start gap-3 mb-3">
 		<div
-			class="w-8 h-8 rounded-lg bg-secondary/10 flex items-center justify-center shrink-0"
+			class="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0"
 		>
 			{#if question.multiSelect}
-				<ListChecks class="w-4 h-4 text-secondary" />
+				<ListChecks class="w-4 h-4 text-primary" />
 			{:else}
-				<CircleHelp class="w-4 h-4 text-secondary" />
+				<CircleHelp class="w-4 h-4 text-primary" />
 			{/if}
 		</div>
 		<div class="flex-1 min-w-0">
 			<div class="flex items-center gap-2 mb-1">
 				<span
-					class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-secondary/20 text-secondary uppercase tracking-wider"
+					class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-primary/15 text-primary uppercase tracking-wider"
 				>
 					{question.header}
 				</span>
@@ -374,58 +398,42 @@
 	</div>
 
 	<!-- Options grid -->
-	<div class="space-y-2 ml-11">
+	<div
+		class="space-y-2 ml-11"
+		role={question.multiSelect ? 'group' : 'radiogroup'}
+		aria-label={question.question}
+	>
 		{#each question.options as option, optIdx (option.label)}
-			<div
-				class="w-full text-left px-3 py-2.5 rounded-lg transition-all flex items-start gap-3 border
-					{isOptionSelected(qIdx, option.label)
-					? 'bg-secondary/10 border-secondary/40 shadow-sm'
-					: 'bg-background/50 border-transparent'}
-					{!readOnly ? 'cursor-pointer' : ''}
-					{!readOnly && !isOptionSelected(qIdx, option.label) ? 'hover:border-border hover:bg-accent/50' : ''}"
-				role={readOnly ? undefined : "button"}
-				tabindex={readOnly ? undefined : 0}
-				onclick={readOnly ? undefined : () => toggleOption(qIdx, option.label)}
-				onkeydown={readOnly ? undefined : (e) => { if (e.key === 'Enter' || e.key === ' ') toggleOption(qIdx, option.label); }}
-			>
-				<!-- Selection indicator -->
+			{#if readOnly}
 				<div
-					class="shrink-0 w-5 h-5 mt-0.5 rounded-{question.multiSelect
-						? 'sm'
-						: 'full'} border-2 flex items-center justify-center transition-colors
-					{isOptionSelected(qIdx, option.label)
-						? 'border-secondary bg-secondary'
-						: 'border-muted-foreground/30'}"
+					class="w-full text-left px-3 py-2.5 rounded-lg transition-all flex items-start gap-3 border
+						{isOptionSelected(qIdx, option.label)
+						? 'bg-primary/10 border-primary/40 shadow-sm'
+						: 'bg-background/50 border-transparent'}"
 				>
-					{#if isOptionSelected(qIdx, option.label)}
-						<Check class="w-3 h-3 text-secondary-foreground" />
-					{/if}
+					{@render optionBody(question, qIdx, option, optIdx, showShortcuts)}
 				</div>
-
-				<div class="flex-1 min-w-0">
-					<div class="flex items-center gap-2">
-						<span class="font-medium text-sm text-foreground">{option.label}</span>
-						{#if showShortcuts && optIdx < 4}
-							<kbd
-								class="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-mono"
-								>{optIdx + 1}</kbd
-							>
-						{/if}
-					</div>
-					{#if option.description}
-						<p class="text-xs text-muted-foreground mt-0.5 leading-relaxed">
-							{option.description}
-						</p>
-					{/if}
-				</div>
-			</div>
+			{:else}
+				<button
+					type="button"
+					role={question.multiSelect ? 'checkbox' : 'radio'}
+					aria-checked={isOptionSelected(qIdx, option.label)}
+					class="w-full text-left px-3 py-2.5 rounded-lg transition-all flex items-start gap-3 border cursor-pointer
+						{isOptionSelected(qIdx, option.label)
+						? 'bg-primary/10 border-primary/40 shadow-sm'
+						: 'bg-background/50 border-transparent hover:border-border hover:bg-accent/50'}"
+					onclick={() => toggleOption(qIdx, option.label)}
+				>
+					{@render optionBody(question, qIdx, option, optIdx, showShortcuts)}
+				</button>
+			{/if}
 		{/each}
 
 		<!-- Other option -->
 		<div
 			class="w-full text-left px-3 py-2.5 rounded-lg transition-all border
 			{otherSelected.get(qIdx)
-				? 'bg-secondary/10 border-secondary/40'
+				? 'bg-primary/10 border-primary/40'
 				: 'bg-background/50 border-transparent'}
 			{!readOnly && !otherSelected.get(qIdx) ? 'hover:border-border hover:bg-accent/50' : ''}"
 		>
@@ -434,9 +442,9 @@
 					<div
 						class="shrink-0 w-5 h-5 mt-0.5 rounded-{question.multiSelect
 							? 'sm'
-							: 'full'} border-2 border-secondary bg-secondary flex items-center justify-center"
+							: 'full'} border-2 border-primary bg-primary flex items-center justify-center"
 					>
-						<Check class="w-3 h-3 text-secondary-foreground" />
+						<Check class="w-3 h-3 text-primary-foreground" />
 					</div>
 					<div class="flex-1 min-w-0">
 						<div class="flex items-center gap-2 mb-2">
@@ -446,6 +454,7 @@
 								<button
 									type="button"
 									class="ml-auto p-0.5 rounded hover:bg-accent"
+										aria-label="Clear custom answer"
 									onclick={() => {
 										otherSelected.set(qIdx, false);
 										otherSelected = new Map(otherSelected);
@@ -462,8 +471,9 @@
 						{:else}
 							<input
 								type="text"
+								aria-label="Custom answer"
 								class="w-full px-2 py-1.5 text-sm bg-background border border-border rounded-md
-									focus:outline-none focus:ring-2 focus:ring-secondary/50 focus:border-secondary"
+									focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
 								placeholder="Type your answer..."
 								value={otherTexts.get(qIdx) || ''}
 								oninput={(e) => {
@@ -530,18 +540,18 @@
 									type="button"
 									class="flex-1 px-3 py-2.5 text-sm font-medium transition-all relative
 										{activeTab === qIdx
-											? 'text-secondary bg-card/50'
+											? 'text-primary bg-card/50'
 											: 'text-muted-foreground hover:text-foreground hover:bg-accent/30'}"
 									onclick={() => activeTab = qIdx}
 								>
 									<div class="flex items-center justify-center gap-2">
 										<span class="truncate max-w-[100px]">{question.header}</span>
 										{#if isQuestionAnswered(qIdx)}
-											<Check class="w-3.5 h-3.5 text-green-500 shrink-0" />
+											<Check class="w-3.5 h-3.5 text-success shrink-0" />
 										{/if}
 									</div>
 									{#if activeTab === qIdx}
-										<div class="absolute bottom-0 left-0 right-0 h-0.5 bg-secondary"></div>
+										<div class="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"></div>
 									{/if}
 								</button>
 							{/each}
@@ -574,7 +584,7 @@
 					>
 						<p class="text-[10px] text-muted-foreground">
 							{#if questions.length > 1}
-								<kbd class="px-1 py-0.5 rounded bg-muted font-mono">Tab</kbd> switch •
+								<kbd class="px-1 py-0.5 rounded bg-muted font-mono">←/→</kbd> switch •
 								<kbd class="px-1 py-0.5 rounded bg-muted font-mono">1-4</kbd> select •
 								<kbd class="px-1 py-0.5 rounded bg-muted font-mono">Enter</kbd> submit
 							{:else}
@@ -595,12 +605,12 @@
 							<button
 								onclick={handleSubmit}
 								disabled={!canSubmit() || isSubmitting}
-								class="flex items-center gap-1.5 px-4 py-1.5 bg-secondary text-secondary-foreground rounded-md text-sm font-medium
-									hover:bg-secondary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+								class="flex items-center gap-1.5 px-4 py-1.5 bg-primary text-primary-foreground rounded-md text-sm font-medium
+									hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
 							>
 								{#if isSubmitting}
 									<div
-										class="w-3.5 h-3.5 border-2 border-secondary-foreground/30 border-t-secondary-foreground rounded-full animate-spin"
+										class="w-3.5 h-3.5 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin"
 									></div>
 									<span>Sending...</span>
 								{:else}
@@ -635,7 +645,7 @@
 									<div
 										class="inline-flex items-center gap-2 px-3 py-1.5 bg-accent/50 border border-border/50 rounded-full text-sm"
 									>
-										<span class="text-[10px] font-semibold text-secondary uppercase">{header}</span>
+										<span class="text-[10px] font-semibold text-primary uppercase">{header}</span>
 										<span class="text-muted-foreground">→</span>
 										<span class="text-foreground font-medium truncate max-w-[200px]">{answer}</span>
 									</div>
@@ -645,8 +655,9 @@
 						{#if onDismissMessage}
 							<button
 								onclick={() => onDismissMessage?.()}
-								class="p-1 rounded-full hover:bg-accent transition-colors opacity-0 group-hover:opacity-100"
+								class="p-1 rounded-full hover:bg-accent transition-colors opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100"
 								title="Dismiss"
+								aria-label="Dismiss"
 							>
 								<X class="w-3.5 h-3.5 text-muted-foreground" />
 							</button>
@@ -664,16 +675,16 @@
 											type="button"
 											class="flex-1 px-3 py-2 text-xs font-medium transition-all relative
 												{activeTab === qIdx
-													? 'text-secondary bg-card/50'
+													? 'text-primary bg-card/50'
 													: 'text-muted-foreground hover:text-foreground'}"
 											onclick={() => activeTab = qIdx}
 										>
 											<div class="flex items-center justify-center gap-1.5">
 												<span class="truncate max-w-[80px]">{question.header}</span>
-												<Check class="w-3 h-3 text-green-500 shrink-0" />
+												<Check class="w-3 h-3 text-success shrink-0" />
 											</div>
 											{#if activeTab === qIdx}
-												<div class="absolute bottom-0 left-0 right-0 h-0.5 bg-secondary/50"></div>
+												<div class="absolute bottom-0 left-0 right-0 h-0.5 bg-primary/50"></div>
 											{/if}
 										</button>
 									{/each}
@@ -699,8 +710,9 @@
 						{#if onDismissMessage}
 							<button
 								onclick={onDismissMessage}
-								class="p-1 rounded-full hover:bg-accent transition-colors opacity-0 group-hover:opacity-100"
+								class="p-1 rounded-full hover:bg-accent transition-colors opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100"
 								title="Dismiss"
+								aria-label="Dismiss"
 							>
 								<X class="w-3.5 h-3.5 text-muted-foreground" />
 							</button>

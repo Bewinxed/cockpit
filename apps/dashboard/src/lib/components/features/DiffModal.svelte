@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import { FileDiff, type FileContents } from '@pierre/diffs';
+  import { FileDiff, parseDiffFromFile, type FileContents } from '@pierre/diffs';
   import { X, Columns2, TextAlignStart } from 'lucide-svelte';
   import { Button } from '$lib/components/ui/button';
   import { CopyButton } from '$lib/components/ui/copy-button';
@@ -14,6 +14,7 @@
 
   let { filePath, oldContent, newContent, onClose }: Props = $props();
   let container = $state<HTMLDivElement | null>(null);
+  let panel = $state<HTMLDivElement | null>(null);
   let diffInstance: FileDiff | null = null;
   let diffStyle = $state<'unified' | 'split'>('unified');
 
@@ -104,16 +105,43 @@
   }
 
   onMount(() => {
-    renderDiff();
+    const previouslyFocused = document.activeElement;
 
-    // Handle escape key
+    renderDiff();
+    panel?.focus();
+
+    // Handle escape key and keep Tab inside the dialog
     function handleKeydown(e: KeyboardEvent) {
       if (e.key === 'Escape') {
         onClose();
+        return;
+      }
+
+      if (e.key !== 'Tab' || !panel) return;
+
+      const focusable = panel.querySelectorAll<HTMLElement>(
+        'button, [href], input, [tabindex]:not([tabindex="-1"])'
+      );
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (!first || !last) return;
+
+      if (e.shiftKey && (document.activeElement === first || document.activeElement === panel)) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
       }
     }
     window.addEventListener('keydown', handleKeydown);
-    return () => window.removeEventListener('keydown', handleKeydown);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeydown);
+      if (previouslyFocused instanceof HTMLElement && previouslyFocused.isConnected) {
+        previouslyFocused.focus();
+      }
+    };
   });
 
   onDestroy(() => {
@@ -138,20 +166,17 @@
 
   // Calculate stats
   const stats = $derived(() => {
-    const oldLines = oldContent.split('\n');
-    const newLines = newContent.split('\n');
+    const fileName = getFileName(filePath);
+    const fileDiff = parseDiffFromFile(
+      { name: fileName, contents: oldContent },
+      { name: fileName, contents: newContent }
+    );
 
-    // Simple line-based diff stats
     let additions = 0;
     let deletions = 0;
-
-    // Count lines that changed
-    const maxLen = Math.max(oldLines.length, newLines.length);
-    for (let i = 0; i < maxLen; i++) {
-      if (oldLines[i] !== newLines[i]) {
-        if (i < oldLines.length && oldLines[i]) deletions++;
-        if (i < newLines.length && newLines[i]) additions++;
-      }
+    for (const hunk of fileDiff.hunks) {
+      additions += hunk.additionLines;
+      deletions += hunk.deletionLines;
     }
 
     return { additions, deletions };
@@ -165,6 +190,11 @@
   onclick={handleBackdropClick}
 >
   <div
+    bind:this={panel}
+    role="dialog"
+    aria-modal="true"
+    aria-label={`Diff: ${filePath}`}
+    tabindex="-1"
     class="relative w-[95vw] h-[90vh] max-w-7xl bg-background rounded-xl shadow-2xl border border-border flex flex-col overflow-hidden animate-scale-in"
   >
     <!-- Header -->
@@ -257,29 +287,14 @@
     animation: scale-in 0.2s ease-out;
   }
 
+  /* @pierre/diffs renders into a shadowRoot, so it can only be themed through
+     the inherited custom properties it documents in its core stylesheet. */
   .diff-modal-content {
     min-height: 100%;
-  }
-
-  /* Override @pierre/diffs styles for modal */
-  .diff-modal-content :global(pre) {
-    margin: 0;
-    font-size: 0.8125rem;
-    line-height: 1.6;
-  }
-
-  .diff-modal-content :global(.diffs-line-added) {
-    background-color: rgba(var(--color-success-rgb), 0.15);
-  }
-
-  .diff-modal-content :global(.diffs-line-removed) {
-    background-color: rgba(var(--color-error-rgb), 0.15);
-  }
-
-  .diff-modal-content :global(.diffs-hunk-separator) {
-    background-color: var(--color-surface-hover);
-    color: var(--color-text-muted);
-    font-size: 0.75rem;
-    padding: 0.5rem 1rem;
+    --diffs-font-size: 0.8125rem;
+    --diffs-line-height: 1.6;
+    --diffs-bg-addition-override: color-mix(in srgb, var(--color-success) 15%, transparent);
+    --diffs-bg-deletion-override: color-mix(in srgb, var(--color-error) 15%, transparent);
+    --diffs-bg-separator-override: var(--muted);
   }
 </style>

@@ -29,11 +29,11 @@
 	function getStatusColor(status: string) {
 		switch (status) {
 			case 'connected':
-				return 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400';
+				return 'bg-success/10 text-success';
 			case 'needs-auth':
-				return 'bg-amber-500/10 text-amber-600 dark:text-amber-400';
+				return 'bg-warning/10 text-warning';
 			case 'error':
-				return 'bg-red-500/10 text-red-600 dark:text-red-400';
+				return 'bg-error/10 text-error';
 			default:
 				return 'bg-muted text-muted-foreground';
 		}
@@ -42,11 +42,11 @@
 	function getDotColor(status: string) {
 		switch (status) {
 			case 'connected':
-				return 'text-emerald-500';
+				return 'text-success';
 			case 'needs-auth':
-				return 'text-amber-500';
+				return 'text-warning';
 			case 'error':
-				return 'text-red-500';
+				return 'text-error';
 			default:
 				return 'text-muted-foreground';
 		}
@@ -57,9 +57,9 @@
 	<div class="mcp-status mt-3 pt-3 border-t border-border/50">
 		<div class="flex items-center gap-2 text-xs text-muted-foreground mb-2">
 			<Server class="size-3" />
-			<span class="font-medium">MCP Servers ({servers.length})</span>
+			<span class="font-medium">MCP servers ({servers.length})</span>
 			{#if problemServers.length > 0}
-				<span class="text-amber-500 text-[10px]">({problemServers.length} need attention)</span>
+				<span class="text-warning text-[10px]">({problemServers.length} need attention)</span>
 			{/if}
 		</div>
 

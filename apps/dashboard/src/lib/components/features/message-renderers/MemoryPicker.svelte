@@ -114,13 +114,13 @@
 					<!-- Header -->
 					<div class="flex items-start gap-3">
 						<div
-							class="w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0"
+							class="w-10 h-10 rounded-lg bg-warning/10 flex items-center justify-center shrink-0"
 						>
-							<BookOpen class="w-5 h-5 text-amber-600" />
+							<BookOpen class="w-5 h-5 text-warning" />
 						</div>
 						<div class="flex-1">
 							<h3 class="font-sans font-semibold text-foreground text-lg leading-tight">
-								Edit Memory
+								Edit memory
 							</h3>
 							<p class="text-sm text-muted-foreground mt-0.5">
 								{#if isMemoryEditing}
@@ -160,9 +160,10 @@
 							</div>
 							<textarea
 								use:autofocus
+								aria-label="Memory content"
 								class="w-full h-64 px-3 py-2 bg-background border border-border rounded-lg font-mono text-sm
-                       placeholder:text-muted-foreground focus:outline-none focus:border-border focus:ring-0
-                       resize-y transition-colors"
+                       placeholder:text-muted-foreground focus-visible:outline-none focus-visible:border-ring
+                       focus-visible:ring-2 focus-visible:ring-ring/30 resize-y transition-colors"
 								placeholder="# Memory instructions for Claude..."
 								value={message.metadata?.memoryContent || ''}
 								oninput={(e: Event & { currentTarget: EventTarget & HTMLTextAreaElement }) => {
@@ -180,8 +181,8 @@
 							<button
 								onclick={handleMemorySave}
 								disabled={memorySaving}
-								class="flex items-center gap-2 px-4 py-2 bg-[#37352f] text-white rounded-md text-sm font-medium
-                       hover:bg-[#2f2d29] disabled:opacity-40 disabled:cursor-not-allowed transition-all group"
+								class="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium
+                       hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-all group"
 							>
 								{#if memorySaving}
 									<LoaderCircle class="w-4 h-4 animate-spin" />
@@ -205,22 +206,22 @@
 							class="space-y-2 outline-none"
 							tabindex="-1"
 							use:autofocus
-							role="listbox"
-							aria-label="Memory location selection"
+							role="group"
+							aria-label="Memory location"
 						>
 							<button
 								type="button"
 								class="w-full text-left px-4 py-3 rounded-lg border transition-colors flex items-start gap-3 group
                   {selectedMemoryOption === 'project'
-									? 'border-amber-500/50 bg-amber-500/10'
-									: 'border-border hover:border-amber-500/50 hover:bg-amber-500/5'}"
+									? 'border-warning/50 bg-warning/10'
+									: 'border-border hover:border-warning/50 hover:bg-warning/5'}"
 								onclick={() => onMemorySelect?.('project')}
 								onmouseenter={() => (selectedMemoryOption = 'project')}
 							>
 								<div
-									class="shrink-0 w-6 h-6 rounded bg-amber-500/10 flex items-center justify-center mt-0.5"
+									class="shrink-0 w-6 h-6 rounded bg-warning/10 flex items-center justify-center mt-0.5"
 								>
-									<FolderOpen class="w-3.5 h-3.5 text-amber-600" />
+									<FolderOpen class="w-3.5 h-3.5 text-warning" />
 								</div>
 								<div class="flex-1 min-w-0">
 									<div class="flex items-center gap-2">
@@ -242,15 +243,15 @@
 								type="button"
 								class="w-full text-left px-4 py-3 rounded-lg border transition-colors flex items-start gap-3 group
                   {selectedMemoryOption === 'user'
-									? 'border-amber-500/50 bg-amber-500/10'
-									: 'border-border hover:border-amber-500/50 hover:bg-amber-500/5'}"
+									? 'border-warning/50 bg-warning/10'
+									: 'border-border hover:border-warning/50 hover:bg-warning/5'}"
 								onclick={() => onMemorySelect?.('user')}
 								onmouseenter={() => (selectedMemoryOption = 'user')}
 							>
 								<div
-									class="shrink-0 w-6 h-6 rounded bg-amber-500/10 flex items-center justify-center mt-0.5"
+									class="shrink-0 w-6 h-6 rounded bg-warning/10 flex items-center justify-center mt-0.5"
 								>
-									<House class="w-3.5 h-3.5 text-amber-600" />
+									<House class="w-3.5 h-3.5 text-warning" />
 								</div>
 								<div class="flex-1 min-w-0">
 									<div class="flex items-center gap-2">
@@ -296,8 +297,9 @@
 				{#if onDismissMessage}
 					<button
 						onclick={onDismissMessage}
-						class="ml-1 p-0.5 rounded hover:bg-accent transition-colors opacity-0 group-hover:opacity-100"
+						class="ml-1 p-0.5 rounded hover:bg-accent transition-colors opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100"
 						title="Dismiss"
+						aria-label="Dismiss"
 					>
 						<CircleX class="w-3.5 h-3.5 text-muted-foreground hover:text-muted-foreground" />
 					</button>

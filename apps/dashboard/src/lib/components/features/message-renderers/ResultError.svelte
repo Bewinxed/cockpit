@@ -35,37 +35,37 @@
 	}> = {
 		error_max_turns: {
 			icon: RotateCcw,
-			iconColor: 'text-amber-500',
-			borderColor: 'border-amber-500/40',
-			bgColor: 'bg-amber-500/5',
-			title: 'Turn Limit Reached',
+			iconColor: 'text-warning',
+			borderColor: 'border-warning/40',
+			bgColor: 'bg-warning/5',
+			title: 'Turn limit reached',
 			description: 'The session reached its maximum number of turns.',
 			action: 'Start a new session or increase the turn limit'
 		},
 		error_max_budget_usd: {
 			icon: DollarSign,
-			iconColor: 'text-red-500',
-			borderColor: 'border-red-500/40',
-			bgColor: 'bg-red-500/5',
-			title: 'Budget Exceeded',
+			iconColor: 'text-error',
+			borderColor: 'border-error/40',
+			bgColor: 'bg-error/5',
+			title: 'Budget exceeded',
 			description: 'The session exceeded its cost budget.',
 			action: 'Increase the budget in session settings'
 		},
 		error_during_execution: {
 			icon: TriangleAlert,
-			iconColor: 'text-red-500',
-			borderColor: 'border-red-500/40',
-			bgColor: 'bg-red-500/5',
-			title: 'Execution Error',
+			iconColor: 'text-error',
+			borderColor: 'border-error/40',
+			bgColor: 'bg-error/5',
+			title: 'Execution error',
 			description: 'An error occurred during tool execution.',
 			action: 'Review the error details and try again'
 		},
 		error_max_structured_output_retries: {
 			icon: Settings,
-			iconColor: 'text-amber-500',
-			borderColor: 'border-amber-500/40',
-			bgColor: 'bg-amber-500/5',
-			title: 'Output Validation Failed',
+			iconColor: 'text-warning',
+			borderColor: 'border-warning/40',
+			bgColor: 'bg-warning/5',
+			title: 'Output validation failed',
 			description: 'Structured output could not be validated after multiple retries.',
 			action: 'Check the output schema requirements'
 		}
@@ -130,7 +130,7 @@
 								? 'rotate-90'
 								: ''}"
 						/>
-						<span class="font-medium">Error Details ({errors.length})</span>
+						<span class="font-medium">Error details ({errors.length})</span>
 					</button>
 
 					{#if showDetails}

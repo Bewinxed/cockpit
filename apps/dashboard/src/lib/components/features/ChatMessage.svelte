@@ -292,15 +292,15 @@
 			align: 'justify-start',
 			bubble: 'px-3 py-2.5 text-sm rounded-xl bg-card border border-border shadow-sm',
 			icon: Wrench,
-			iconBg: 'bg-amber-500/10',
-			iconColor: 'text-amber-600 dark:text-amber-400'
+			iconBg: 'bg-warning/10',
+			iconColor: 'text-warning'
 		},
 		'tool.result': {
 			align: 'justify-start',
 			bubble: 'px-3 py-2.5 text-sm rounded-xl bg-card border border-border shadow-sm',
 			icon: FileText,
-			iconBg: 'bg-emerald-500/10',
-			iconColor: 'text-emerald-600 dark:text-emerald-400'
+			iconBg: 'bg-success/10',
+			iconColor: 'text-success'
 		},
 		'ui.error': {
 			align: 'justify-start',
@@ -313,10 +313,10 @@
 		'ui.session_error': {
 			align: 'justify-start',
 			bubble:
-				'relative px-4 py-3 text-sm leading-relaxed rounded-2xl rounded-bl-sm bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/30 shadow-sm',
+				'relative px-4 py-3 text-sm leading-relaxed rounded-2xl rounded-bl-sm bg-warning/10 text-warning border border-warning/30 shadow-sm',
 			icon: AlertTriangle,
-			iconBg: 'bg-amber-500/10',
-			iconColor: 'text-amber-600 dark:text-amber-400'
+			iconBg: 'bg-warning/10',
+			iconColor: 'text-warning'
 		},
 		system: {
 			align: 'justify-center',
@@ -330,8 +330,8 @@
 			align: 'justify-start',
 			bubble: 'px-3 py-2.5 text-sm rounded-xl bg-card border border-border shadow-sm',
 			icon: Terminal,
-			iconBg: 'bg-blue-500/10',
-			iconColor: 'text-blue-600 dark:text-blue-400'
+			iconBg: 'bg-info/10',
+			iconColor: 'text-info'
 		},
 		'ui.command_output': {
 			align: 'justify-start',
@@ -417,11 +417,11 @@
 						</span>
 						<!-- Status indicator -->
 						{#if toolInfo?.status === 'pending'}
-							<LoaderCircle class="w-4 h-4 text-amber-500 animate-spin ml-auto" />
+							<LoaderCircle class="w-4 h-4 text-warning animate-spin ml-auto" />
 						{:else if toolInfo?.status === 'error'}
 							<CircleX class="w-4 h-4 text-destructive ml-auto" />
 						{:else}
-							<CircleCheck class="w-4 h-4 text-emerald-500 ml-auto" />
+							<CircleCheck class="w-4 h-4 text-success ml-auto" />
 						{/if}
 					</button>
 
@@ -447,16 +447,16 @@
 										newContent={diffInfo.newContent}
 									/>
 									{#if needsExpansion && !diffFullyExpanded}
-										<!-- svelte-ignore a11y_click_events_have_key_events -->
-										<!-- svelte-ignore a11y_no_static_element_interactions -->
-										<div
+										<button
+											type="button"
+											aria-label="Show full diff"
 											class="absolute bottom-0 left-0 right-0 h-[60px] flex items-center justify-center cursor-pointer z-10 bg-gradient-to-b from-transparent via-card/85 to-card/95"
 											onclick={() => (diffFullyExpanded = true)}
 										>
 											<ChevronDown
 												class="w-6 h-6 p-1 text-muted-foreground bg-muted border border-border rounded-full shadow-sm hover:text-foreground hover:translate-y-0.5 transition-all"
 											/>
-										</div>
+										</button>
 									{/if}
 								</div>
 								{#if needsExpansion && diffFullyExpanded}
@@ -486,13 +486,13 @@
 								<div
 									class="rounded-lg p-3 font-mono text-xs overflow-x-auto {tool?.status === 'error'
 										? 'bg-destructive/5 border border-destructive/20'
-										: 'bg-emerald-500/5 border border-emerald-500/20'}"
+										: 'bg-success/5 border border-success/20'}"
 								>
 									<div
 										class="text-[10px] uppercase tracking-wide mb-1.5 font-medium {tool?.status ===
 										'error'
 											? 'text-destructive'
-											: 'text-emerald-600 dark:text-emerald-400'}"
+											: 'text-success'}"
 									>
 										{tool?.status === 'error' ? 'Error' : 'Result'}
 									</div>
@@ -526,7 +526,7 @@
 						</span>
 						<!-- Exit code indicator -->
 						{#if hookInfo?.exitCode === 0}
-							<CircleCheck class="w-4 h-4 text-emerald-500 ml-auto" />
+							<CircleCheck class="w-4 h-4 text-success ml-auto" />
 						{:else}
 							<CircleX class="w-4 h-4 text-destructive ml-auto" />
 						{/if}
@@ -541,10 +541,10 @@
 							<!-- stdout -->
 							{#if hook?.stdout}
 								<div
-									class="bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-3 font-mono text-xs overflow-x-auto mt-3"
+									class="bg-success/5 border border-success/20 rounded-lg p-3 font-mono text-xs overflow-x-auto mt-3"
 								>
 									<div
-										class="text-emerald-600 dark:text-emerald-400 text-[10px] uppercase tracking-wide mb-1.5 font-medium"
+										class="text-success text-[10px] uppercase tracking-wide mb-1.5 font-medium"
 									>
 										stdout
 									</div>
@@ -570,7 +570,9 @@
 				</div>
 			{:else if message.type === 'ui.command_output'}
 				<!-- Command output (like /help) - rendered with markdown and terminal styling -->
-				<div class="chat-bubble chat-bubble-assistant relative bg-muted border border-border">
+				<div
+					class="relative px-4 py-3 text-sm leading-relaxed rounded-2xl rounded-bl-sm bg-muted border border-border shadow-sm"
+				>
 					{#if message.metadata?.command}
 						<div
 							class="flex items-center gap-1.5 text-xs text-muted-foreground mb-2 pb-2 border-b border-border"
@@ -580,7 +582,7 @@
 						</div>
 					{/if}
 					<div
-						class="prose prose-sm max-w-none [&_pre]:bg-muted [&_pre]:border [&_pre]:border-border [&_pre]:rounded-lg [&_code]:text-xs [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded"
+						class="prose prose-sm max-w-none [&_pre]:bg-muted [&_pre]:text-foreground [&_pre]:border [&_pre]:border-border [&_pre]:rounded-lg [&_code]:text-xs [&_code]:bg-muted [&_code]:text-foreground [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded"
 					>
 						<Markdown source={message.content} options={{ breaks: true }} />
 					</div>
@@ -654,6 +656,7 @@
 								class="w-full min-h-[80px] px-3 py-2 bg-background border border-border rounded-lg text-sm
                        placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20
                        resize-y transition-colors"
+								aria-label="Edited message"
 								placeholder="Edit your message..."
 								bind:value={editContent}
 								onkeydown={handleEditKeydown}
@@ -674,8 +677,8 @@
 									<button
 										onclick={submitEdit}
 										disabled={!editContent.trim() || editLoading}
-										class="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-white rounded-md text-sm font-medium
-                           hover:bg-primary-dark disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+										class="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground rounded-md text-sm font-medium
+                           hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
 									>
 										{#if editLoading}
 											<LoaderCircle class="w-3.5 h-3.5 animate-spin" />
@@ -693,20 +696,21 @@
 						<div
 							class="prose prose-sm max-w-none {message.type === 'user'
 								? 'prose-invert'
-								: ''} [&_pre]:bg-muted [&_pre]:border [&_pre]:border-border [&_pre]:rounded-lg [&_code]:text-xs [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded"
+								: ''} [&_pre]:bg-muted [&_pre]:text-foreground [&_pre]:border [&_pre]:border-border [&_pre]:rounded-lg [&_code]:text-xs [&_code]:bg-muted [&_code]:text-foreground [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded"
 						>
 							<Markdown source={message.content} />
 						</div>
 
 						<!-- Action buttons -->
 						<div
-							class="absolute -right-2 -top-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
+							class="absolute -right-2 -top-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity"
 						>
 							{#if message.type === 'user' && canEdit && onEditMessage}
 								<!-- Edit button for user messages -->
 								<button
-									class="p-1.5 rounded-md bg-card border border-border shadow-sm hover:bg-accent"
+									class="p-1.5 rounded-md bg-card border border-border shadow-sm hover:bg-accent focus-visible:opacity-100"
 									onclick={startEditing}
+									aria-label="Edit message"
 									title="Edit message and restart from here"
 								>
 									<Pencil class="w-3.5 h-3.5 text-muted-foreground" />
@@ -727,7 +731,7 @@
 			<!-- Timestamp (shown on hover) -->
 			{#if message.timestamp}
 				<span
-					class="text-[10px] text-muted-foreground mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+					class="text-[10px] text-muted-foreground mt-0.5 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity"
 				>
 					{formatTimestamp(new Date(message.timestamp))}
 				</span>

@@ -205,7 +205,7 @@
               <!-- Expanded result -->
               {#if isExpanded && result}
                 <div class="px-2 py-1 bg-muted/10" transition:slide={{ duration: 150 }}>
-                  <div class="prose prose-xs max-w-none text-[11px] overflow-auto max-h-48 custom-scrollbar [&_pre]:bg-muted/50 [&_pre]:p-1.5 [&_pre]:rounded [&_pre]:text-[10px] [&_code]:text-[10px] [&_p]:my-0.5 [&_br]:block">
+                  <div class="prose prose-xs max-w-none text-[11px] overflow-auto max-h-48 custom-scrollbar [&_pre]:bg-muted [&_pre]:text-foreground/50 [&_pre]:p-1.5 [&_pre]:rounded [&_pre]:text-[10px] [&_code]:text-[10px] [&_p]:my-0.5 [&_br]:block">
                     <Markdown source={result} options={{ breaks: true }} />
                   </div>
                 </div>

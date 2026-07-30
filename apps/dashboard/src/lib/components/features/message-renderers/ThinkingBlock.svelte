@@ -20,7 +20,7 @@
 
 <div class="flex justify-start gap-3 group">
 	<div class="flex flex-col gap-1 items-start w-full max-w-[85%]">
-		<div class="thinking-block border-l-2 border-violet-500/30 pl-3 py-1 w-full">
+		<div class="thinking-block border-l-2 border-border pl-3 py-1 w-full">
 			<button
 				type="button"
 				class="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors w-full text-left"
@@ -31,8 +31,8 @@
 						? 'rotate-90'
 						: ''}"
 				/>
-				<Brain class="size-4 shrink-0 text-violet-500/70" />
-				<span class="font-medium text-violet-600 dark:text-violet-400">Thinking</span>
+				<Brain class="size-4 shrink-0 text-muted-foreground" />
+				<span class="font-medium text-muted-foreground">Thinking</span>
 				{#if !expanded}
 					<span class="text-xs opacity-60 truncate max-w-[300px]">{summary}</span>
 				{/if}

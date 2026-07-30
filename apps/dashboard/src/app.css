@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@plugin "@tailwindcss/typography";
 
 @custom-variant dark (&:where(.dark, .dark *));
 
@@ -162,7 +163,7 @@
   --radius-md: var(--radius);
   --radius-lg: calc(var(--radius) + 4px);
   --radius-xl: calc(var(--radius) + 8px);
-  --radius-2xl: 1rem;
+  --radius-2xl: calc(var(--radius) + 12px);
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -242,9 +243,9 @@ button.text-destructive-foreground { color: var(--destructive-foreground); }
 
 /* Form inputs */
 .input {
-  @apply w-full rounded-xl border-0 bg-muted px-4 py-2.5 text-sm;
+  @apply w-full rounded-xl border-0 bg-muted px-4 py-2.5 text-base sm:text-sm;
   @apply placeholder:text-muted-foreground/60;
-  @apply focus:outline-none focus:ring-2 focus:ring-ring/20;
+  @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring;
   @apply disabled:cursor-not-allowed disabled:opacity-50;
   @apply transition-shadow;
 }

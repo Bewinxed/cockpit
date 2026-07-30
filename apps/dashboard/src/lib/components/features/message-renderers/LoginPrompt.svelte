@@ -28,9 +28,7 @@
 		}
 	}
 
-	function handleKeydown(e: KeyboardEvent) {
-		if (!isActive) return;
-
+	function handleCodeKeydown(e: KeyboardEvent) {
 		if (e.key === 'Enter' && !e.shiftKey) {
 			e.preventDefault();
 			handleLoginSubmit();
@@ -39,8 +37,6 @@
 		}
 	}
 </script>
-
-<svelte:window onkeydown={handleKeydown} />
 
 <div class="flex justify-start gap-3 group">
 	<div
@@ -59,7 +55,7 @@
 						</div>
 						<div>
 							<h3 class="font-sans font-semibold text-foreground text-lg leading-tight">
-								Login to Claude
+								Log in to Claude
 							</h3>
 							<p class="text-sm text-muted-foreground mt-0.5">
 								Authenticate with your Claude MAX subscription
@@ -74,7 +70,7 @@
 								class="flex items-center gap-2 text-xs text-muted-foreground uppercase tracking-wide"
 							>
 								<span
-									class="w-5 h-5 rounded-full bg-text-muted/10 flex items-center justify-center text-[10px] font-medium"
+									class="w-5 h-5 rounded-full bg-muted flex items-center justify-center text-[10px] font-medium"
 									>1</span
 								>
 								<span>Open login page</span>
@@ -83,9 +79,9 @@
 								href={message.metadata.authUrl}
 								target="_blank"
 								rel="noopener noreferrer"
-								class="flex items-center gap-2 px-4 py-2.5 bg-primary text-white rounded-md hover:bg-primary-dark transition-colors text-sm font-medium group w-fit"
+								class="flex items-center gap-2 px-4 py-2.5 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors text-sm font-medium group w-fit"
 							>
-								<span>Open Anthropic Login</span>
+								<span>Open Anthropic login</span>
 								<ExternalLink
 									class="w-4 h-4 opacity-70 group-hover:opacity-100 transition-opacity"
 								/>
@@ -99,7 +95,7 @@
 							class="flex items-center gap-2 text-xs text-muted-foreground uppercase tracking-wide"
 						>
 							<span
-								class="w-5 h-5 rounded-full bg-text-muted/10 flex items-center justify-center text-[10px] font-medium"
+								class="w-5 h-5 rounded-full bg-muted flex items-center justify-center text-[10px] font-medium"
 								>2</span
 							>
 							<span>Paste the code</span>
@@ -109,7 +105,9 @@
 								type="text"
 								bind:value={loginCode}
 								placeholder="Paste code here..."
+								aria-label="Authorization code"
 								disabled={loginLoading}
+								onkeydown={handleCodeKeydown}
 								class="w-full px-4 py-2.5 bg-background border border-border rounded-md text-sm font-mono
                        placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20
                        disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
@@ -135,14 +133,14 @@
 						<button
 							onclick={handleLoginSubmit}
 							disabled={!loginCode.trim() || loginLoading}
-							class="flex items-center gap-2 px-4 py-2 bg-[#37352f] text-white rounded-md text-sm font-medium
-                     hover:bg-[#2f2d29] disabled:opacity-40 disabled:cursor-not-allowed transition-all group"
+							class="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium
+                     hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-all group"
 						>
 							{#if loginLoading}
 								<LoaderCircle class="w-4 h-4 animate-spin" />
 								<span>Logging in...</span>
 							{:else}
-								<span>Complete Login</span>
+								<span>Complete login</span>
 								<ArrowRight
 									class="w-4 h-4 opacity-70 group-hover:translate-x-0.5 transition-transform"
 								/>
@@ -169,8 +167,9 @@
 				{#if onDismissMessage}
 					<button
 						onclick={onDismissMessage}
-						class="ml-1 p-0.5 rounded hover:bg-accent transition-colors opacity-0 group-hover:opacity-100"
+						class="ml-1 p-0.5 rounded hover:bg-accent transition-colors opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100"
 						title="Dismiss"
+						aria-label="Dismiss"
 					>
 						<CircleX class="w-3.5 h-3.5 text-muted-foreground hover:text-muted-foreground" />
 					</button>

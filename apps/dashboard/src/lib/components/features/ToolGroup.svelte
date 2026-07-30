@@ -85,14 +85,14 @@
 		</span>
 		<div class="ml-auto flex items-center gap-1.5">
 			{#if pendingCount > 0}
-				<LoaderCircle class="w-4 h-4 text-amber-500 animate-spin" />
+				<LoaderCircle class="w-4 h-4 text-warning animate-spin" />
 				<span class="text-xs text-muted-foreground">{pendingCount} running</span>
 			{:else if hasErrors}
 				<CircleX class="w-4 h-4 text-destructive" />
 				<span class="text-xs text-destructive">Error</span>
 			{:else}
-				<CircleCheck class="w-4 h-4 text-emerald-500" />
-				<span class="text-xs text-emerald-600 dark:text-emerald-400">Complete</span>
+				<CircleCheck class="w-4 h-4 text-success" />
+				<span class="text-xs text-success">Complete</span>
 			{/if}
 		</div>
 	</div>
@@ -119,8 +119,8 @@
 
 						<!-- Tool icon -->
 						<div class="shrink-0 w-6 h-6 rounded-md flex items-center justify-center
-							{status === 'pending' ? 'bg-amber-500/10' : status === 'error' ? 'bg-destructive/10' : 'bg-emerald-500/10'}">
-							<ToolIcon class="w-3.5 h-3.5 {status === 'pending' ? 'text-amber-600 dark:text-amber-400' : status === 'error' ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-400'}" />
+							{status === 'pending' ? 'bg-warning/10' : status === 'error' ? 'bg-destructive/10' : 'bg-success/10'}">
+							<ToolIcon class="w-3.5 h-3.5 {status === 'pending' ? 'text-warning' : status === 'error' ? 'text-destructive' : 'text-success'}" />
 						</div>
 
 						<!-- Tool info -->
@@ -143,11 +143,11 @@
 						<!-- Status badge -->
 						<div class="shrink-0">
 							{#if status === 'pending'}
-								<LoaderCircle class="w-4 h-4 text-amber-500 animate-spin" />
+								<LoaderCircle class="w-4 h-4 text-warning animate-spin" />
 							{:else if status === 'error'}
 								<CircleX class="w-4 h-4 text-destructive" />
 							{:else}
-								<CircleCheck class="w-4 h-4 text-emerald-500" />
+								<CircleCheck class="w-4 h-4 text-success" />
 							{/if}
 						</div>
 					</div>
@@ -185,9 +185,9 @@
 							<!-- Result section -->
 							{#if result !== undefined && result !== null}
 								<div class="rounded-lg p-3 font-mono text-xs overflow-auto max-h-[300px]
-									{status === 'error' ? 'bg-destructive/5 border border-destructive/20' : 'bg-emerald-500/5 border border-emerald-500/20'}">
+									{status === 'error' ? 'bg-destructive/5 border border-destructive/20' : 'bg-success/5 border border-success/20'}">
 									<div class="text-[10px] uppercase tracking-wide mb-2 font-medium font-sans
-										{status === 'error' ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-400'}">
+										{status === 'error' ? 'text-destructive' : 'text-success'}">
 										{status === 'error' ? 'Error' : 'Result'}
 									</div>
 									<pre class="whitespace-pre-wrap break-all text-muted-foreground">{typeof result === 'string' ? result : JSON.stringify(result, null, 2)}</pre>
