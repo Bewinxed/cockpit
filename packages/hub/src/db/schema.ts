@@ -33,7 +33,11 @@ export const instances = sqliteTable('instances', {
   /** SDK session id, absent until the first init frame arrives. */
   sessionId: text('session_id'),
   cwd: text('cwd').notNull(),
-  status: text('status').$type<'starting' | 'running' | 'stopped'>().notNull().default('starting'),
+  /** `unknown`: the agent socket dropped, so the hub can no longer see the session. */
+  status: text('status')
+    .$type<'starting' | 'running' | 'stopped' | 'unknown'>()
+    .notNull()
+    .default('starting'),
   createdAt: timestamp('created_at').notNull().$defaultFn(() => new Date()),
   updatedAt: timestamp('updated_at').notNull().$defaultFn(() => new Date()),
 });

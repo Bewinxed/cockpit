@@ -157,6 +157,9 @@ Drift log (real installed types vs the summaries above; types win — §9):
   WS lifecycle hooks are per-route, not on the plugin; TypeBox 1.3 is the
   `typebox` package (renamed from `@sinclair/typebox`), a required peer along
   with `exact-mirror`; incoming WS strings are JSON-parsed by default.
+- Elysia 2 WS: a NEW `ElysiaWS` wrapper is constructed per lifecycle callback —
+  socket objects have no stable identity across open/message/close; key every
+  registry on the memoized `ws.id`, never on the wrapper reference.
 - Effect v4: `Effect.async` → `Effect.callback`; no `Effect.Service` — use
   `Context.Service` classes + curried `Layer.effect(Key)(effect)`; capped
   backoff is `Schedule.min([exponential, spaced])` + `Schedule.jittered`;

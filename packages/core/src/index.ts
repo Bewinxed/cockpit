@@ -59,9 +59,14 @@ export interface StopPayload {
  * key of the SDK's `Query` handle, plus {@link RESOLVE_PERMISSION}, which the
  * agent answers itself. The reply comes back as a `control_result` frame
  * carrying the same `requestId`.
+ *
+ * Without `instanceId` the call is machine-scoped and `method` names one of the
+ * SDK's module-level session functions instead (`listSessions`,
+ * `getSessionInfo`, `getSessionMessages`, `renameSession`, `deleteSession`) —
+ * the session catalog is readable with nothing running on the machine.
  */
 export interface ControlPayload {
-  instanceId: string;
+  instanceId?: string;
   requestId: string;
   method: string;
   args?: unknown[];
@@ -82,8 +87,9 @@ export type FramePayload =
       suggestions?: PermissionUpdate[];
     }
   | {
+      /** No `instanceId` when the call it answers was machine-scoped. */
       kind: 'control_result';
-      instanceId: string;
+      instanceId?: string;
       requestId: string;
       ok: boolean;
       result?: unknown;

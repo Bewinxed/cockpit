@@ -38,13 +38,19 @@ const failure = (
 
 /**
  * The hub routes on envelope fields and is otherwise payload-opaque (NEW.md
- * §6); `hostname`/`os` on register, `cwd` on spawn and `kind` on a frame are
- * the whole set of sanctioned peeks.
+ * §6); `hostname`/`os` on register, `cwd` and `options.resume` on spawn and
+ * `kind` on a frame are the whole set of sanctioned peeks.
  */
 const peek = (payload: unknown, key: string): string | undefined => {
   if (typeof payload !== 'object' || payload === null) return undefined;
   const value = (payload as Record<string, unknown>)[key];
   return typeof value === 'string' ? value : undefined;
+};
+
+/** The SDK session a `spawn` resumes, so the instance row records what it re-opened. */
+const peekResume = (payload: unknown): string | undefined => {
+  if (typeof payload !== 'object' || payload === null) return undefined;
+  return peek((payload as Record<string, unknown>).options, 'resume');
 };
 
 export const createServer = ({ registry, db, pending }: HubServices) => {
@@ -86,18 +92,28 @@ export const createServer = ({ registry, db, pending }: HubServices) => {
             db.touchAgent(message.machineId);
             ws.send(ack(message));
             break;
-          case 'frames':
-            if (message.requestId && peek(message.payload, 'kind') === 'permission_request')
+          case 'frames': {
+            const kind = peek(message.payload, 'kind');
+            if (message.requestId && kind === 'permission_request')
               pending.remember(message.requestId, message);
-            registry.broadcast(message);
+            // A control's reply belongs to the dashboard that asked; the rest is fan-out.
+            const requester =
+              message.requestId && kind === 'control_result'
+                ? registry.takeRequester(message.requestId)
+                : undefined;
+            if (requester) requester.send(message);
+            else registry.broadcast(message);
             break;
+          }
           default:
             console.warn(`[hub] unhandled verb ${message.verb} from ${message.machineId}`);
         }
       },
       close(ws) {
         const machineId = registry.dropAgent(ws.id);
-        if (machineId) db.markAgentOffline(machineId);
+        if (!machineId) return;
+        db.markAgentOffline(machineId);
+        db.markInstancesUnknown(machineId);
       },
     })
     .ws('/ws/dashboard', {
@@ -117,6 +133,7 @@ export const createServer = ({ registry, db, pending }: HubServices) => {
                 id: message.instanceId,
                 machineId: message.machineId,
                 cwd: peek(message.payload, 'cwd') ?? '',
+                sessionId: peekResume(message.payload),
               });
             break;
           case 'send':
@@ -126,7 +143,10 @@ export const createServer = ({ registry, db, pending }: HubServices) => {
             if (forward(message, ws) && message.instanceId) db.stopInstance(message.instanceId);
             break;
           case 'control':
-            if (forward(message, ws) && message.requestId) pending.resolve(message.requestId);
+            if (forward(message, ws) && message.requestId) {
+              registry.rememberRequester(message.requestId, ws);
+              pending.resolve(message.requestId);
+            }
             break;
           default:
             console.warn(`[hub] unhandled dashboard verb ${message.verb}`);

@@ -170,7 +170,14 @@ function handleFrame(frame: FramePayload): void {
     return;
   }
 
-  const target = session(frame.instanceId);
+  // Machine-scoped control results carry no instanceId — correlate by requestId
+  // (session-catalog consumers arrive with the Phase 2 sidebar).
+  if (frame.kind === 'control_result' && !frame.instanceId) {
+    if (!frame.ok) console.error('[cockpit] machine control failed:', frame.error);
+    return;
+  }
+
+  const target = session(frame.instanceId!);
 
   switch (frame.kind) {
     case 'sdk': {
@@ -203,7 +210,7 @@ function handleFrame(frame: FramePayload): void {
 
     case 'control_result': {
       if (!frame.ok) {
-        target.messages.push(errorMessage(frame.instanceId, frame.error ?? 'control call failed'));
+        target.messages.push(errorMessage(frame.instanceId!, frame.error ?? 'control call failed'));
       }
       break;
     }

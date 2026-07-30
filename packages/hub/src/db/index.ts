@@ -1,5 +1,5 @@
 import { Context, Effect, Layer } from 'effect';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
 import { migrate } from 'drizzle-orm/bun-sqlite/migrator';
 import { DB_PATH } from '../config';
@@ -12,8 +12,15 @@ export interface DbShape {
   readonly upsertAgent: (agent: { machineId: string; hostname: string; os: string }) => void;
   readonly touchAgent: (machineId: string) => void;
   readonly markAgentOffline: (machineId: string) => void;
-  readonly openInstance: (instance: { id: string; machineId: string; cwd: string }) => void;
+  readonly openInstance: (instance: {
+    id: string;
+    machineId: string;
+    cwd: string;
+    sessionId?: string;
+  }) => void;
   readonly stopInstance: (id: string) => void;
+  /** The agent socket dropped: its sessions may outlive it, the hub cannot tell. */
+  readonly markInstancesUnknown: (machineId: string) => void;
   readonly listAgents: () => (typeof agents.$inferSelect)[];
   readonly listInstances: () => (typeof instances.$inferSelect)[];
 }
@@ -47,13 +54,16 @@ const make = (path: string): DbShape => {
         .where(eq(agents.machineId, machineId))
         .run();
     },
-    openInstance: ({ id, machineId, cwd }) => {
+    openInstance: ({ id, machineId, cwd, sessionId }) => {
       const now = new Date();
       db.insert(instances)
-        .values({ id, machineId, cwd, status: 'running', createdAt: now, updatedAt: now })
+        .values({ id, machineId, cwd, sessionId, status: 'running', createdAt: now, updatedAt: now })
         .onConflictDoUpdate({
           target: instances.id,
-          set: { cwd, status: 'running', updatedAt: now },
+          // A respawn that names no session keeps whatever session the row already had.
+          set: sessionId
+            ? { cwd, sessionId, status: 'running', updatedAt: now }
+            : { cwd, status: 'running', updatedAt: now },
         })
         .run();
     },
@@ -61,6 +71,12 @@ const make = (path: string): DbShape => {
       db.update(instances)
         .set({ status: 'stopped', updatedAt: new Date() })
         .where(eq(instances.id, id))
+        .run();
+    },
+    markInstancesUnknown: (machineId) => {
+      db.update(instances)
+        .set({ status: 'unknown', updatedAt: new Date() })
+        .where(and(eq(instances.machineId, machineId), eq(instances.status, 'running')))
         .run();
     },
     listAgents: () => db.select().from(agents).all(),

@@ -1,4 +1,14 @@
-import { query, type PermissionResult, type Query, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
+import {
+  deleteSession,
+  getSessionInfo,
+  getSessionMessages,
+  listSessions,
+  query,
+  renameSession,
+  type PermissionResult,
+  type Query,
+  type SDKUserMessage,
+} from '@anthropic-ai/claude-agent-sdk';
 import type {
   ControlPayload,
   Envelope,
@@ -63,8 +73,20 @@ interface Session {
   readonly pump: Promise<void>;
 }
 
-/** A `Query` method reached by name through the `control` verb. */
+/** A `Query` method or SDK session function reached by name through `control`. */
 type ControlMethod = (...args: unknown[]) => unknown;
+
+/**
+ * The SDK's session catalog: module-level functions, not `Query` methods, so a
+ * machine-scoped `control` reaches them with nothing running on this machine.
+ */
+const SESSION_FUNCTIONS = {
+  listSessions,
+  getSessionInfo,
+  getSessionMessages,
+  renameSession,
+  deleteSession,
+} as Record<string, ControlMethod | undefined>;
 
 /**
  * Owns every live SDK session on this machine and pumps their messages at the
@@ -171,10 +193,7 @@ export class SessionSupervisor {
 
   async #control({ instanceId, requestId, method, args = [] }: ControlPayload): Promise<void> {
     try {
-      const result =
-        method === RESOLVE_PERMISSION
-          ? this.#resolvePermission(instanceId, args as [string, PermissionResult])
-          : await this.#invoke(instanceId, method, args);
+      const result = await this.#call(instanceId, method, args);
       this.sink({ kind: 'control_result', instanceId, requestId, ok: true, result });
     } catch (error) {
       this.sink({
@@ -185,6 +204,19 @@ export class SessionSupervisor {
         error: error instanceof Error ? error.message : String(error),
       });
     }
+  }
+
+  /** No instanceId means the call is about this machine, not about a session. */
+  async #call(instanceId: string | undefined, method: string, args: unknown[]): Promise<unknown> {
+    if (instanceId === undefined) {
+      const sessionFunction = SESSION_FUNCTIONS[method];
+      if (!sessionFunction) throw new Error(`unknown session function: ${method}`);
+      return await sessionFunction(...args);
+    }
+    if (method === RESOLVE_PERMISSION) {
+      return this.#resolvePermission(instanceId, args as [string, PermissionResult]);
+    }
+    return await this.#invoke(instanceId, method, args);
   }
 
   async #invoke(instanceId: string, method: string, args: unknown[]): Promise<unknown> {
