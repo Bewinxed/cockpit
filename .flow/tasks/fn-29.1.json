@@ -5,10 +5,15 @@
   "created_at": "2026-07-31T21:53:25.664235Z",
   "depends_on": [],
   "epic": "fn-29",
+  "evidence": {
+    "gates": "all green",
+    "merge": "conflict in handleSend resolved to sendOrRevive(text, extras)",
+    "proof": "model named image colour + quoted pasted name"
+  },
   "id": "fn-29.1",
   "priority": null,
   "spec_path": ".flow/tasks/fn-29.1.md",
-  "status": "in_progress",
+  "status": "done",
   "title": "Large-paste chips, image attach, SDK image blocks",
-  "updated_at": "2026-07-31T21:53:25.736803Z"
+  "updated_at": "2026-07-31T22:14:10.327761Z"
 }
