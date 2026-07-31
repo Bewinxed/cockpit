@@ -359,7 +359,7 @@
 			<span class="font-medium text-sm text-foreground">{option.label}</span>
 			{#if showShortcuts && optIdx < 9}
 				<kbd
-					class="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-mono"
+					class="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-mono"
 					>{optIdx + 1}</kbd
 				>
 			{/if}
@@ -388,12 +388,12 @@
 		<div class="flex-1 min-w-0">
 			<div class="flex items-center gap-2 mb-1">
 				<span
-					class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-primary/15 text-primary-foreground text-primary uppercase tracking-wider"
+					class="text-xs font-semibold px-2 py-0.5 rounded-full bg-primary/15 text-primary-foreground text-primary uppercase tracking-wider"
 				>
 					{question.header}
 				</span>
 				{#if question.multiSelect}
-					<span class="text-[10px] text-muted-foreground">Select multiple</span>
+					<span class="text-xs text-muted-foreground">Select multiple</span>
 				{/if}
 			</div>
 			<p class="text-sm text-foreground font-medium leading-snug">
@@ -510,7 +510,7 @@
 						<span class="text-sm text-muted-foreground">Other...</span>
 						{#if showShortcuts}
 							<kbd
-								class="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-mono"
+								class="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-mono"
 								>O</kbd
 							>
 						{/if}
@@ -587,7 +587,7 @@
 					<div
 						class="flex items-center justify-between gap-3 px-4 py-3 bg-muted/30 border-t border-border/50"
 					>
-						<p class="text-[10px] text-muted-foreground">
+						<p class="text-xs text-muted-foreground">
 							{#if questions.length > 1}
 								<kbd class="px-1 py-0.5 rounded bg-muted font-mono">←/→</kbd> switch •
 								<kbd class="px-1 py-0.5 rounded bg-muted font-mono">1-9</kbd> select •
@@ -647,7 +647,7 @@
 										<div
 											class="inline-flex items-center gap-2 px-3 py-1.5 bg-accent/50 text-accent-foreground border border-border/50 rounded-full text-sm"
 										>
-											<span class="text-[10px] font-semibold text-primary uppercase">{header}</span>
+											<span class="text-xs font-semibold text-primary uppercase">{header}</span>
 											<span class="text-muted-foreground">→</span>
 											<span class="text-foreground font-medium truncate max-w-[200px]">{answer}</span>
 										</div>

@@ -163,7 +163,7 @@
         aria-label="Project docs"
       >
         <span
-          class="px-3 pb-1 text-[11px] font-medium tracking-wider text-muted-foreground uppercase"
+          class="px-3 pb-1 text-xs font-medium tracking-wider text-muted-foreground uppercase"
         >
           Docs
         </span>
@@ -181,7 +181,7 @@
               {doc.name}
             </button>
           {:else}
-            <p class="px-3 py-1 text-[11px] text-muted-foreground">
+            <p class="px-3 py-1 text-xs text-muted-foreground">
               {docsError ?? 'No markdown yet. Add a README.md at the top of the checkout and it shows up here.'}
             </p>
           {/each}
@@ -224,7 +224,7 @@
         {/if}
 
         <section class="flex flex-col gap-2">
-          <h2 class="text-[11px] font-medium tracking-wider text-muted-foreground uppercase">
+          <h2 class="text-xs font-medium tracking-wider text-muted-foreground uppercase">
             Plan
           </h2>
           {#each epics as epic (epic.id)}
@@ -251,7 +251,7 @@
                         style="width: {total === 0 ? 0 : (epic.done / total) * 100}%"
                       ></span>
                     </span>
-                    <span class="font-mono text-[11px] text-muted-foreground">
+                    <span class="font-mono text-xs text-muted-foreground">
                       {epic.done}/{total}
                     </span>
                   </span>
@@ -260,7 +260,7 @@
                   <ul class="border-t border-border">
                     {#each epic.tasks as task (task.id)}
                       <li class="flex items-baseline gap-3 px-3 py-1.5">
-                        <span class="shrink-0 font-mono text-[11px] text-muted-foreground">
+                        <span class="shrink-0 font-mono text-xs text-muted-foreground">
                           {task.id}
                         </span>
                         <span
@@ -270,7 +270,7 @@
                         >
                           {task.title}
                         </span>
-                        <span class="ml-auto shrink-0 text-[11px] text-muted-foreground">
+                        <span class="ml-auto shrink-0 text-xs text-muted-foreground">
                           {task.status}
                         </span>
                       </li>
@@ -290,7 +290,7 @@
         </section>
 
         <section class="flex flex-col gap-2">
-          <h2 class="text-[11px] font-medium tracking-wider text-muted-foreground uppercase">
+          <h2 class="text-xs font-medium tracking-wider text-muted-foreground uppercase">
             Happening
           </h2>
           {#each live as instance (instance.id)}

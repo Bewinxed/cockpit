@@ -185,7 +185,7 @@
 								</div>
 							{:else if input}
 								<div class="bg-muted/50 rounded-lg p-3 font-mono text-xs overflow-auto max-h-[250px]">
-									<div class="text-muted-foreground text-[10px] uppercase tracking-wide mb-2 font-medium font-sans">Input</div>
+									<div class="text-muted-foreground text-xs uppercase tracking-wide mb-2 font-medium font-sans">Input</div>
 									<pre class="whitespace-pre-wrap break-all text-muted-foreground">{JSON.stringify(input, null, 2)}</pre>
 								</div>
 							{/if}
@@ -194,7 +194,7 @@
 							{#if result !== undefined && result !== null}
 								<div class="rounded-lg p-3 font-mono text-xs overflow-auto max-h-[300px]
 									{status === 'error' ? 'bg-destructive text-destructive-foreground/5 border border-destructive/20' : 'bg-success/5 border border-success/20'}">
-									<div class="text-[10px] uppercase tracking-wide mb-2 font-medium font-sans
+									<div class="text-xs uppercase tracking-wide mb-2 font-medium font-sans
 										{status === 'error' ? 'text-destructive' : 'text-success'}">
 										{status === 'error' ? 'Error' : 'Result'}
 									</div>

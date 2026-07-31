@@ -39,7 +39,7 @@
   /** The rule an "always allow" would add, when the SDK suggested one. */
   const rule = $derived(request.suggestions?.length ? suggestedRule(request.suggestions) : null);
 
-  const kbd = 'rounded bg-muted px-1 py-0.5 font-mono text-[10px] text-muted-foreground';
+  const kbd = 'rounded bg-muted px-1 py-0.5 font-mono text-xs text-muted-foreground';
 </script>
 
 <div class="bg-warning/10 p-3" role="alert">

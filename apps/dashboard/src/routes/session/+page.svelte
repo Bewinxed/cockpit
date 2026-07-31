@@ -227,7 +227,7 @@
         >
           <IconShield class="size-3.5" />
           Needs attention
-          <span class="ml-auto font-mono text-[11px] normal-case">
+          <span class="ml-auto font-mono text-xs normal-case">
             {cockpit.blocked.length}
           </span>
         </h2>
@@ -365,7 +365,7 @@
                     Reading repositories…
                   </span>
                 {:else if repoNotice}
-                  <span class="block border-l-2 border-warning px-2 py-1.5 text-[11px] text-warning">
+                  <span class="block border-l-2 border-warning px-2 py-1.5 text-xs text-warning">
                     {#if repoNotice.kind === 'failed'}
                       {repoNotice.message}
                     {:else if repoNotice.kind === 'gh-missing'}
@@ -391,20 +391,20 @@
                         </span>
                         {#if row.visibility === 'PRIVATE'}
                           <span
-                            class="shrink-0 rounded bg-muted px-1 py-px text-[10px] text-muted-foreground"
+                            class="shrink-0 rounded bg-muted px-1 py-px text-xs text-muted-foreground"
                           >
                             private
                           </span>
                         {/if}
                       </span>
                       {#if row.description}
-                        <span class="w-full truncate text-[11px] text-muted-foreground">
+                        <span class="w-full truncate text-xs text-muted-foreground">
                           {row.description}
                         </span>
                       {/if}
                     </button>
                   {:else}
-                    <span class="block px-2 py-1.5 text-[11px] text-muted-foreground">
+                    <span class="block px-2 py-1.5 text-xs text-muted-foreground">
                       No repository by that name here — it is cloned as you wrote it.
                     </span>
                   {/each}
@@ -437,7 +437,7 @@
         />
 
         {#if source === 'repo' && cloneInto}
-          <span class="font-mono text-[11px] text-muted-foreground/70">{cloneInto}</span>
+          <span class="font-mono text-xs text-muted-foreground/70">{cloneInto}</span>
         {/if}
 
         {#if workdir}
@@ -558,7 +558,7 @@
           class="flex flex-col gap-2"
         >
           <Collapsible.Trigger
-            class="flex min-h-6 items-center gap-2 text-left text-[11px] font-medium tracking-wider text-muted-foreground uppercase transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+            class="flex min-h-6 items-center gap-2 text-left text-xs font-medium tracking-wider text-muted-foreground uppercase transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
           >
             <IconChevronRight class="size-3 transition-transform {showStale ? 'rotate-90' : ''}" />
             Stale

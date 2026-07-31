@@ -486,7 +486,7 @@
 									{/if}
 								{:else}
 									<div class="bg-muted/50 rounded-lg p-3 font-mono text-xs overflow-x-auto mt-3">
-										<div class="text-muted-foreground text-[10px] uppercase tracking-wide mb-1.5 font-medium">
+										<div class="text-muted-foreground text-xs uppercase tracking-wide mb-1.5 font-medium">
 											Input
 										</div>
 										<pre class="whitespace-pre-wrap break-all text-muted-foreground">{JSON.stringify(
@@ -505,7 +505,7 @@
 											: 'bg-success/5 border border-success/20'}"
 									>
 										<div
-											class="text-[10px] uppercase tracking-wide mb-1.5 font-medium {tool?.status ===
+											class="text-xs uppercase tracking-wide mb-1.5 font-medium {tool?.status ===
 											'error'
 												? 'text-destructive'
 												: 'text-success'}"
@@ -559,7 +559,7 @@
 										class="bg-success/5 border border-success/20 rounded-lg p-3 font-mono text-xs overflow-x-auto mt-3"
 									>
 										<div
-											class="text-success text-[10px] uppercase tracking-wide mb-1.5 font-medium"
+											class="text-success text-xs uppercase tracking-wide mb-1.5 font-medium"
 										>
 											stdout
 										</div>
@@ -573,7 +573,7 @@
 										class="bg-destructive/5 text-destructive-foreground border border-destructive/20 rounded-lg p-3 font-mono text-xs overflow-x-auto"
 									>
 										<div
-											class="text-destructive text-[10px] uppercase tracking-wide mb-1.5 font-medium"
+											class="text-destructive text-xs uppercase tracking-wide mb-1.5 font-medium"
 										>
 											stderr
 										</div>
@@ -825,7 +825,7 @@
 			<!-- Timestamp (shown on hover) -->
 			{#if message.timestamp}
 				<span
-					class="text-[10px] text-muted-foreground mt-0.5 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity"
+					class="text-xs text-muted-foreground mt-0.5 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity"
 				>
 					{formatTimestamp(new Date(message.timestamp))}
 				</span>

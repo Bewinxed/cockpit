@@ -109,7 +109,7 @@
     onkeydown={handleKeydown}
   />
   {#if query.trim()}
-    <span class="shrink-0 text-[11px] text-muted-foreground tabular-nums">
+    <span class="shrink-0 text-xs text-muted-foreground tabular-nums">
       {matches.length ? current + 1 : 0}/{matches.length}
     </span>
   {/if}

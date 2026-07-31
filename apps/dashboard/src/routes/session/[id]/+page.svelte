@@ -448,7 +448,7 @@
     <h1 class="truncate font-mono text-sm font-normal">{session?.cwd || viewId}</h1>
     {#if session?.scratch}
       <span
-        class="shrink-0 rounded-sm border border-dashed border-muted-foreground/40 px-1.5 py-0.5 text-[10px] tracking-wide text-muted-foreground uppercase"
+        class="shrink-0 rounded-sm border border-dashed border-muted-foreground/40 px-1.5 py-0.5 text-xs tracking-wide text-muted-foreground uppercase"
       >
         side quest
       </span>

@@ -72,7 +72,7 @@
 								class="flex items-center gap-2 text-xs text-muted-foreground uppercase tracking-wide"
 							>
 								<span
-									class="w-5 h-5 rounded-full bg-muted flex items-center justify-center text-[10px] font-medium"
+									class="w-5 h-5 rounded-full bg-muted flex items-center justify-center text-xs font-medium"
 									>1</span
 								>
 								<span>Open login page</span>
@@ -97,7 +97,7 @@
 							class="flex items-center gap-2 text-xs text-muted-foreground uppercase tracking-wide"
 						>
 							<span
-								class="w-5 h-5 rounded-full bg-muted flex items-center justify-center text-[10px] font-medium"
+								class="w-5 h-5 rounded-full bg-muted flex items-center justify-center text-xs font-medium"
 								>2</span
 							>
 							<span>Paste the code</span>
@@ -119,7 +119,7 @@
 						</div>
 						<p class="text-xs text-muted-foreground">
 							After authorizing, you'll see a code like <code
-								class="px-1 py-0.5 bg-muted rounded text-[11px]">abc123#xyz789</code
+								class="px-1 py-0.5 bg-muted rounded text-xs">abc123#xyz789</code
 							>
 						</p>
 					</div>

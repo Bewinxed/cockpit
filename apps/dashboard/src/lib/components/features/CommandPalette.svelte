@@ -114,7 +114,7 @@
           <div class="flex-1 min-w-0">
             <div class="flex items-center gap-2">
               <span class="font-medium text-foreground">{command.name}</span>
-              <span class="text-[10px] px-1.5 py-0.5 rounded {getTypeColor(command.type)}">
+              <span class="text-xs px-1.5 py-0.5 rounded {getTypeColor(command.type)}">
                 {getTypeLabel(command.type)}
               </span>
             </div>

@@ -227,7 +227,7 @@
 								<div class="flex-1 min-w-0">
 									<div class="flex items-center gap-2">
 										<span class="font-medium text-foreground text-sm">Project memory</span>
-										<span class="text-[10px] px-1.5 py-0.5 rounded bg-accent text-accent-foreground"
+										<span class="text-xs px-1.5 py-0.5 rounded bg-accent text-accent-foreground"
 											>1</span
 										>
 									</div>
@@ -258,7 +258,7 @@
 								<div class="flex-1 min-w-0">
 									<div class="flex items-center gap-2">
 										<span class="font-medium text-foreground text-sm">User memory</span>
-										<span class="text-[10px] px-1.5 py-0.5 rounded bg-accent text-accent-foreground"
+										<span class="text-xs px-1.5 py-0.5 rounded bg-accent text-accent-foreground"
 											>2</span
 										>
 									</div>

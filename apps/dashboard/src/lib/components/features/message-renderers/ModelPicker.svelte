@@ -137,7 +137,7 @@
 											<span class="font-medium text-foreground text-sm">{model.displayName}</span>
 											{#if currentModel === model.value}
 												<span
-													class="text-[10px] px-1.5 py-0.5 rounded bg-primary/15 text-primary-foreground text-primary uppercase tracking-wide"
+													class="text-xs px-1.5 py-0.5 rounded bg-primary/15 text-primary-foreground text-primary uppercase tracking-wide"
 													>current</span
 												>
 											{/if}

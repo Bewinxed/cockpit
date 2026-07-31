@@ -36,7 +36,7 @@
     {/if}
     <span class="truncate font-mono">{instance.cwd || '—'}</span>
     {#if instance.kind === 'scratch'}
-      <span class="shrink-0 rounded-sm bg-accent text-accent-foreground px-1 text-[10px] tracking-wide">scratch</span>
+      <span class="shrink-0 rounded-sm bg-accent text-accent-foreground px-1 text-xs tracking-wide">scratch</span>
     {/if}
     <span
       class="ml-auto inline-grid shrink-0 justify-items-end text-xs {failed ||

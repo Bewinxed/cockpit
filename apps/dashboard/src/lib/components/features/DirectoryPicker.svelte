@@ -125,7 +125,7 @@
             Reading directory…
           </span>
         {:else if error}
-          <span class="block px-2 py-1 text-[11px] text-destructive">{error}</span>
+          <span class="block px-2 py-1 text-xs text-destructive">{error}</span>
         {:else}
           {#each dirs as dir (dir.name)}
             <button
@@ -137,7 +137,7 @@
               <span class="truncate">{dir.name}</span>
             </button>
           {:else}
-            <span class="block px-2 py-1 text-[11px] text-muted-foreground">No subdirectories.</span>
+            <span class="block px-2 py-1 text-xs text-muted-foreground">No subdirectories.</span>
           {/each}
         {/if}
       </div>

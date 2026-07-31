@@ -90,7 +90,7 @@
 
         <div class="flex shrink-0 items-center gap-1.5">
           {#if branch.messages.length > 0}
-            <span class="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+            <span class="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-muted-foreground">
               {branch.messages.length}
             </span>
           {/if}

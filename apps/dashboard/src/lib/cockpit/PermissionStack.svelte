@@ -61,7 +61,7 @@
         {/each}
         {#if rest.length}
           <span
-            class="pointer-events-none absolute top-0 right-2 rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground"
+            class="pointer-events-none absolute top-0 right-2 rounded-full bg-muted px-1.5 py-0.5 text-xs text-muted-foreground"
           >
             +{rest.length} more
           </span>

@@ -224,10 +224,10 @@
   <div class="px-4 py-2 border-t border-border bg-accent/50 text-accent-foreground text-xs flex items-center justify-between">
     <span>
       Press
-      <kbd class="px-1 py-0.5 bg-card border border-border rounded text-[10px]">←</kbd>
-      <kbd class="px-1 py-0.5 bg-card border border-border rounded text-[10px]">→</kbd>
+      <kbd class="px-1 py-0.5 bg-card border border-border rounded text-xs">←</kbd>
+      <kbd class="px-1 py-0.5 bg-card border border-border rounded text-xs">→</kbd>
       to switch tabs
     </span>
-    <span>Press <kbd class="px-1 py-0.5 bg-card border border-border rounded text-[10px]">Esc</kbd> to close</span>
+    <span>Press <kbd class="px-1 py-0.5 bg-card border border-border rounded text-xs">Esc</kbd> to close</span>
   </div>
 </Tabs.Root>

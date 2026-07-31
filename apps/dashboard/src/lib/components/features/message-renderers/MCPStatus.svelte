@@ -68,7 +68,7 @@
 
 {#snippet chip(server: MCPServer)}
 	<span
-		class="inline-flex min-h-6 items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium {getStatusColor(server.status)}"
+		class="inline-flex min-h-6 items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium {getStatusColor(server.status)}"
 		title="{server.name}: {statusLabel(server.status)}"
 	>
 		<IconDot class="size-1.5 fill-current {getDotColor(server.status)}" aria-hidden="true" />
@@ -83,7 +83,7 @@
 			<IconServer class="size-3" />
 			<span class="font-medium">MCP servers ({servers.length})</span>
 			{#if problemServers.length > 0}
-				<span class="text-warning text-[10px]">({problemServers.length} need attention)</span>
+				<span class="text-warning text-xs">({problemServers.length} need attention)</span>
 			{/if}
 		</div>
 
@@ -95,7 +95,7 @@
 
 				{#if shouldCollapse && !expanded}
 					<Collapsible.Trigger
-						class="inline-flex min-h-6 items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-muted hover:bg-accent hover:text-accent-foreground transition-colors focus-visible:ring-2 focus-visible:ring-ring"
+						class="inline-flex min-h-6 items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-muted hover:bg-accent hover:text-accent-foreground transition-colors focus-visible:ring-2 focus-visible:ring-ring"
 					>
 						<span>+{hiddenCount} more</span>
 					</Collapsible.Trigger>
@@ -111,7 +111,7 @@
 
 				{#if shouldCollapse}
 					<Collapsible.Trigger
-						class="mt-2 flex min-h-6 items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors focus-visible:ring-2 focus-visible:ring-ring"
+						class="mt-2 flex min-h-6 items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors focus-visible:ring-2 focus-visible:ring-ring"
 					>
 						<IconChevronRight class="size-3 rotate-90" />
 						<span>Show less</span>

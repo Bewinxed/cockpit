@@ -127,7 +127,7 @@
     <a href="/session" class="font-mono text-sm font-semibold tracking-tight">COCKPIT</a>
     <button
       type="button"
-      class="ml-auto flex min-h-6 items-center gap-1.5 rounded px-1.5 py-0.5 text-[11px] transition-colors hover:bg-accent hover:text-accent-foreground hover:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
+      class="ml-auto flex min-h-6 items-center gap-1.5 rounded px-1.5 py-0.5 text-xs transition-colors hover:bg-accent hover:text-accent-foreground hover:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
       title="Jump to a project, machine, or session (Cmd/Ctrl + K)"
       onclick={() => (palette = true)}
     >
@@ -136,7 +136,7 @@
     </button>
     <a
       href="/session"
-      class="flex min-h-6 items-center gap-1.5 rounded px-1.5 py-0.5 text-[11px] transition-colors {blocked >
+      class="flex min-h-6 items-center gap-1.5 rounded px-1.5 py-0.5 text-xs transition-colors {blocked >
       0
         ? 'bg-warning/10 text-warning hover:bg-warning/20'
         : 'text-muted-foreground/50 hover:text-muted-foreground'}"
@@ -158,7 +158,7 @@
         </span>
       {/if}
     </a>
-    <span class="flex min-h-6 items-center gap-1.5 text-[11px] text-muted-foreground">
+    <span class="flex min-h-6 items-center gap-1.5 text-xs text-muted-foreground">
       <span class="size-1.5 rounded-full {dot}"></span>
       {cockpit.status}
     </span>

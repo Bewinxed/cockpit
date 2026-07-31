@@ -178,7 +178,7 @@
             <div id="jump-results" role="listbox" aria-label="Results" class="overflow-y-auto p-2">
               {#each results as entry, index (entry.id)}
                 {#if index === 0 || results[index - 1].group !== entry.group}
-                  <p class="px-2.5 pt-2 pb-1 text-[11px] font-medium tracking-wider text-muted-foreground uppercase">
+                  <p class="px-2.5 pt-2 pb-1 text-xs font-medium tracking-wider text-muted-foreground uppercase">
                     {entry.group}
                   </p>
                 {/if}
@@ -194,7 +194,7 @@
                   onclick={() => jump(entry)}
                 >
                   <span class="truncate text-sm text-foreground">{entry.label}</span>
-                  <span class="ml-auto truncate font-mono text-[11px] text-muted-foreground">
+                  <span class="ml-auto truncate font-mono text-xs text-muted-foreground">
                     {entry.detail}
                   </span>
                 </button>
@@ -203,7 +203,7 @@
               {/each}
             </div>
 
-            <div class="flex gap-4 border-t border-border px-4 py-2 text-[11px] text-muted-foreground">
+            <div class="flex gap-4 border-t border-border px-4 py-2 text-xs text-muted-foreground">
               <span><kbd class="rounded bg-accent text-accent-foreground px-1">↑↓</kbd> navigate</span>
               <span><kbd class="rounded bg-accent text-accent-foreground px-1">↵</kbd> open</span>
               <span><kbd class="rounded bg-accent text-accent-foreground px-1">esc</kbd> close</span>
