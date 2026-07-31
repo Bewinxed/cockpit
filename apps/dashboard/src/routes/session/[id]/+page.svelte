@@ -156,12 +156,19 @@
     return toolId ? subagents[toolId] : undefined;
   };
 
-  // A session that died with nothing to show for it: the error frame reached the
-  // tabs that were watching, so the registry row is where a tab that opened
-  // afterwards reads what happened. A session merely stopped before it said
+  /**
+   * What the session itself said. The error notices the frames deliver are the
+   * same death the registry row records, so they are not the session speaking —
+   * counting them would let the tab that watched a session die end up with a
+   * bare error line where the tab that opened afterwards gets the card.
+   */
+  const said = $derived((session?.messages ?? []).filter((message) => message.type !== 'ui.error'));
+
+  // A session that died with nothing to show for it. The row is what explains
+  // it, live or long afterwards. A session merely stopped before it said
   // anything has nothing to explain — only one that died of something does.
   const failure = $derived.by((): Message | null => {
-    if (browsing || (session?.messages.length ?? 0) > 0) return null;
+    if (browsing || said.length > 0) return null;
     const row = cockpit.instances.find((instance) => instance.id === viewId);
     if (!row || (row.status !== 'error' && row.status !== 'stopped') || !row.lastError) return null;
     return sessionFailedMessage(viewId, row.lastError);
@@ -171,6 +178,9 @@
   // Task call becomes its branch card instead, so the subagent it spawned reads
   // as one line until the user opens it.
   const groups = $derived.by((): TranscriptGroup[] => {
+    // The card carries the same reason the error notices do, so it stands in
+    // for them rather than sitting under a repeat of itself.
+    if (failure) return [{ kind: 'single', message: failure, index: 0 }];
     const messages = session?.messages ?? [];
     const result: TranscriptGroup[] = [];
     let i = 0;
@@ -194,7 +204,6 @@
       }
       result.push({ kind: 'tools', messages: tools, index: start });
     }
-    if (failure) result.push({ kind: 'single', message: failure, index: messages.length });
     return result;
   });
 
@@ -518,7 +527,7 @@
       {#if session?.scratch}
         {#if confirmingDiscard}
           <span class="hidden shrink-0 text-xs text-muted-foreground lg:inline">
-            Deletes this quest's worktree and closes the session.
+            Deletes this quest's worktree and its transcript, for good.
           </span>
           <button type="button" class={action} onclick={() => (confirmingDiscard = false)}>
             Cancel
@@ -707,10 +716,9 @@
         {#if session?.relaunching}
           <p class="text-xs text-muted-foreground">Relaunching with new permissions…</p>
         {/if}
-        {#if session?.ephemeral}
+        {#if session?.scratch}
           <p class="text-xs text-muted-foreground">
-            Session is ephemeral — future turns continue live only, nothing is written to session
-            storage.
+            Side quest — hidden from your history. Discard deletes it for good.
           </p>
         {/if}
         <ChatInput

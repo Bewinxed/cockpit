@@ -123,9 +123,37 @@ export interface FsEntry {
   size: number;
 }
 
+/**
+ * A session the hub knows about — one row of its `instances` table. The hub is
+ * the only writer, so this is the shape both its REST reads and its `instances`
+ * frames answer with.
+ */
+export interface InstanceRow {
+  id: string;
+  machineId: string;
+  cwd: string;
+  status: string;
+  sessionId: string | null;
+  /** Set when the session was started from a project page. */
+  projectId?: string | null;
+  /** `scratch` for a side quest; absent from a hub that predates the column. */
+  kind?: string;
+  /** What killed the session, on a row the agent reported as `error`. */
+  lastError?: string | null;
+}
+
 /** `frames`: everything a session produces, flowing agent→hub→dashboard. */
 export type FramePayload =
   | { kind: 'sdk'; instanceId: string; message: SDKMessage }
+  | {
+      /**
+       * Hub-originated: every session it still lists, pushed whenever one of the
+       * rows moves. A dashboard that is already open follows the fleet from
+       * these, so opening, failing, settling and discarding need no re-fetch.
+       */
+      kind: 'instances';
+      instances: InstanceRow[];
+    }
   | {
       kind: 'permission_request';
       instanceId: string;
@@ -153,6 +181,14 @@ export type FramePayload =
     };
 
 export const COCKPIT_HUB_PORT = 3456;
+
+/**
+ * The SDK session tag a side quest's transcript carries (NEW.md §1). The agent
+ * applies it when the session names itself and clears it when the quest is
+ * kept; the catalogs the rails read hide what wears it, so a side quest stays
+ * out of the user's history without hiding the directory it ran in.
+ */
+export const COCKPIT_SCRATCH_TAG = 'cockpit-scratch';
 
 export const COCKPIT_ENV = {
   hubUrl: 'COCKPIT_HUB_URL',

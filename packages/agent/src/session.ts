@@ -5,8 +5,10 @@ import {
   listSessions,
   query,
   renameSession,
+  tagSession,
   type PermissionResult,
   type Query,
+  type SDKMessage,
   type SDKUserMessage,
 } from '@anthropic-ai/claude-agent-sdk';
 import type {
@@ -18,14 +20,15 @@ import type {
   SpawnPayload,
   StopPayload,
 } from '@cockpit/core';
-import { RESOLVE_PERMISSION } from '@cockpit/core';
+import { COCKPIT_SCRATCH_TAG, RESOLVE_PERMISSION } from '@cockpit/core';
 import { Effect } from 'effect';
 import { stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { runFs } from './fs';
 
-export type FrameSink = (frame: FramePayload) => void;
+/** The frames an agent has to send. The hub's own registry news is not one. */
+export type FrameSink = (frame: Exclude<FramePayload, { kind: 'instances' }>) => void;
 
 const warn = (message: string): void => {
   Effect.runFork(Effect.logWarning(message));
@@ -135,6 +138,21 @@ interface Worktree {
 /** Where a side quest's worktrees live, relative to the repo they branch off. */
 const WORKTREE_DIR = '.cockpit-worktrees';
 
+/**
+ * The SDK session a side quest is writing, once its init frame names one. Kept
+ * so the tag can be applied to it and so a discard can delete it — both need
+ * the directory too, which is how the SDK finds a session's transcript.
+ */
+interface Quest {
+  dir: string;
+  sessionId?: string;
+  /**
+   * Whether the tag question is closed: applied here, or moved by whoever kept
+   * the quest. Either way the agent is done deciding what this session wears.
+   */
+  tagged?: boolean;
+}
+
 /** A `Query` method or SDK session function reached by name through `control`. */
 type ControlMethod = (...args: unknown[]) => unknown;
 
@@ -147,6 +165,7 @@ const SESSION_FUNCTIONS = {
   getSessionInfo,
   getSessionMessages,
   renameSession,
+  tagSession,
   deleteSession,
 } as Record<string, ControlMethod | undefined>;
 
@@ -158,6 +177,8 @@ export class SessionSupervisor {
   readonly #sessions = new Map<string, Session>();
   /** Outlives its session: a discard can arrive after the query already ended. */
   readonly #worktrees = new Map<string, Worktree>();
+  /** Side quests running here, by instance — for the same reason, same lifetime. */
+  readonly #quests = new Map<string, Quest>();
   /** One chain per instance, so envelopes about it are handled in arrival order. */
   readonly #queues = new Map<string, Promise<void>>();
 
@@ -242,6 +263,11 @@ export class SessionSupervisor {
         workdir = await this.#addWorktree(instanceId, expandHome(scratch.baseCwd ?? cwd));
       }
 
+      // Each spawn says for itself whether this is a side quest, so a relaunch
+      // of one that has since been kept stops being tagged as scratch.
+      if (scratch) this.#quests.set(instanceId, { ...this.#quests.get(instanceId), dir: workdir });
+      else this.#quests.delete(instanceId);
+
       // A spawn for an instance that is already running is a relaunch: some
       // options can only be chosen at launch — `bypassPermissions` is the one
       // the dashboard offers — so the process is replaced under the same id.
@@ -310,7 +336,13 @@ export class SessionSupervisor {
   async #pump(instanceId: string, handle: Query, turn: Turn): Promise<void> {
     try {
       for await (const message of handle) {
-        if (message.type === 'result') turn.end();
+        if (message.type === 'system' && message.subtype === 'init') {
+          this.#noteQuest(instanceId, message);
+        }
+        if (message.type === 'result') {
+          turn.end();
+          this.#tagQuest(instanceId);
+        }
         this.sink({ kind: 'sdk', instanceId, message });
       }
     } catch (error) {
@@ -320,6 +352,45 @@ export class SessionSupervisor {
       if (this.#sessions.has(instanceId)) this.#fail(instanceId, error);
     } finally {
       this.#sessions.delete(instanceId);
+    }
+  }
+
+  /** The SDK session a side quest turned out to be writing, from its init frame. */
+  #noteQuest(instanceId: string, init: Extract<SDKMessage, { subtype: 'init' }>): void {
+    const quest = this.#quests.get(instanceId);
+    // Init is re-announced every turn; only a session that is new to us is news.
+    if (!quest || quest.sessionId === init.session_id) return;
+    quest.sessionId = init.session_id;
+    quest.dir = init.cwd;
+    quest.tagged = false;
+  }
+
+  /**
+   * Keeps a side quest out of the catalogs the rails read. The tag is the whole
+   * test there — hiding by directory instead would hide the mainline sessions a
+   * user legitimately runs in the same checkout.
+   *
+   * Applied at the end of a turn rather than at init, because until the session
+   * has said something the SDK has written no transcript for a tag to live on.
+   * Fire-and-forget, and tried again next turn if it does not land: the session
+   * is running either way, and the cost of failing is a quest that shows up in
+   * the history, not a broken session.
+   */
+  #tagQuest(instanceId: string): void {
+    const quest = this.#quests.get(instanceId);
+    if (!quest?.sessionId || quest.tagged) return;
+    const { sessionId, dir } = quest;
+    quest.tagged = true;
+    void tagSession(sessionId, COCKPIT_SCRATCH_TAG, { dir }).catch((error: unknown) => {
+      quest.tagged = false;
+      warn(`could not tag side quest ${sessionId}: ${error}`);
+    });
+  }
+
+  /** A session whose tag someone has just set by hand is no longer ours to set. */
+  #closeTagging(sessionId: unknown): void {
+    for (const quest of this.#quests.values()) {
+      if (quest.sessionId === sessionId) quest.tagged = true;
     }
   }
 
@@ -374,6 +445,7 @@ export class SessionSupervisor {
     // on `requestId` to learn whether the worktree really went away.
     try {
       await this.#removeWorktree(instanceId);
+      await this.#removeQuestSession(instanceId);
       if (requestId) this.sink({ kind: 'control_result', instanceId, requestId, ok: true });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -419,6 +491,18 @@ export class SessionSupervisor {
     await Bun.$`git -C ${worktree.root} worktree prune`.quiet().nothrow();
   }
 
+  /**
+   * Discarding a side quest throws its transcript away too — the quest was
+   * hidden from the history, and "discard" is the user saying it never
+   * happened. A quest that never named a session has nothing to delete.
+   */
+  async #removeQuestSession(instanceId: string): Promise<void> {
+    const quest = this.#quests.get(instanceId);
+    this.#quests.delete(instanceId);
+    if (!quest?.sessionId) return;
+    await deleteSession(quest.sessionId, { dir: quest.dir });
+  }
+
   /** Answered like a control call, but about the machine's files, not a session. */
   async #fs(payload: FsPayload): Promise<void> {
     const { requestId } = payload;
@@ -454,7 +538,11 @@ export class SessionSupervisor {
     if (instanceId === undefined) {
       const sessionFunction = SESSION_FUNCTIONS[method];
       if (!sessionFunction) throw new Error(`unknown session function: ${method}`);
-      return await sessionFunction(...args);
+      const result = await sessionFunction(...args);
+      // Keeping a quest clears its tag through here. Whoever asked has the last
+      // word, or the next turn to end would quietly hide the session again.
+      if (method === 'tagSession') this.#closeTagging(args[0]);
+      return result;
     }
     if (method === RESOLVE_PERMISSION) {
       return this.#resolvePermission(instanceId, args as [string, PermissionResult]);

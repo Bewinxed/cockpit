@@ -1,4 +1,4 @@
-import type { Envelope, Verb } from '@cockpit/core';
+import type { Envelope, InstanceRow, Verb } from '@cockpit/core';
 import { Elysia, t } from 'elysia';
 import { websocket } from 'elysia/websocket';
 import { HUB_VERSION } from './config';
@@ -105,6 +105,17 @@ export const createServer = ({ registry, db, pending }: HubServices) => {
     return true;
   };
 
+  /**
+   * Every row, to every dashboard, after any one of them moves — a session
+   * opening, failing, settling or being discarded is fleet news, and a rail
+   * that only learns it by re-fetching is a rail that lies until you reload.
+   * The whole table because it is small and a snapshot cannot drift.
+   */
+  const publishInstances = (machineId: string): void => {
+    const instances: InstanceRow[] = db.listInstances();
+    registry.broadcast({ verb: 'frames', machineId, payload: { kind: 'instances', instances } });
+  };
+
   return new Elysia()
     .use(websocket())
     .get('/health', () => ({ ok: true, version: HUB_VERSION }))
@@ -113,7 +124,11 @@ export const createServer = ({ registry, db, pending }: HubServices) => {
     .patch(
       '/api/instances/:id',
       { body: t.Object({ kind: t.Union([t.Literal('mainline'), t.Literal('scratch')]) }) },
-      ({ params, body }) => db.setInstanceKind(params.id, body.kind)
+      ({ params, body }) => {
+        const row = db.setInstanceKind(params.id, body.kind);
+        if (row) publishInstances(row.machineId);
+        return row;
+      }
     )
     .get('/api/pending', () => pending.list())
     .get('/api/projects', () => db.listProjects())
@@ -142,6 +157,7 @@ export const createServer = ({ registry, db, pending }: HubServices) => {
               os: peek(message.payload, 'os') ?? 'unknown',
             });
             db.settleInstances(message.machineId, peekInstances(message.payload));
+            publishInstances(message.machineId);
             ws.send(ack(message));
             break;
           case 'heartbeat':
@@ -154,7 +170,10 @@ export const createServer = ({ registry, db, pending }: HubServices) => {
               pending.remember(message.requestId, message);
             if (kind === 'sdk' && message.instanceId) {
               const init = peekInit(message.payload);
-              if (init) db.noteInstanceSession(message.instanceId, init.sessionId, init.cwd);
+              if (init) {
+                db.noteInstanceSession(message.instanceId, init.sessionId, init.cwd);
+                publishInstances(message.machineId);
+              }
             }
             // An agent only frames an error about a session that failed to start
             // or died on its own, so the row records it for whoever looks later.
@@ -163,6 +182,7 @@ export const createServer = ({ registry, db, pending }: HubServices) => {
                 message.instanceId,
                 peek(message.payload, 'message') ?? 'the session failed'
               );
+              publishInstances(message.machineId);
             }
             // A control's reply belongs to the dashboard that asked; the rest is fan-out.
             const requester =
@@ -182,6 +202,7 @@ export const createServer = ({ registry, db, pending }: HubServices) => {
         if (!machineId) return;
         db.markAgentOffline(machineId);
         db.reconcileInstances(machineId, []);
+        publishInstances(machineId);
       },
     })
     .ws('/ws/dashboard', {
@@ -196,7 +217,7 @@ export const createServer = ({ registry, db, pending }: HubServices) => {
 
         switch (message.verb) {
           case 'spawn':
-            if (forward(message, ws) && message.instanceId)
+            if (forward(message, ws) && message.instanceId) {
               db.openInstance({
                 id: message.instanceId,
                 machineId: message.machineId,
@@ -205,6 +226,8 @@ export const createServer = ({ registry, db, pending }: HubServices) => {
                 projectId: peek(message.payload, 'projectId'),
                 kind: peekKind(message.payload),
               });
+              publishInstances(message.machineId);
+            }
             break;
           case 'send':
             forward(message, ws);
@@ -213,6 +236,7 @@ export const createServer = ({ registry, db, pending }: HubServices) => {
             if (forward(message, ws) && message.instanceId) {
               if (peekDiscard(message.payload)) db.discardInstance(message.instanceId);
               else db.stopInstance(message.instanceId);
+              publishInstances(message.machineId);
             }
             break;
           case 'control':

@@ -7,6 +7,7 @@ import type {
   Envelope,
   FramePayload,
   FsPayload,
+  InstanceRow,
   Options,
   PermissionMode,
   PermissionResult,
@@ -17,7 +18,7 @@ import type {
   SpawnPayload,
   StopPayload,
 } from '@cockpit/core';
-import { RESOLVE_PERMISSION } from '@cockpit/core';
+import { COCKPIT_SCRATCH_TAG, RESOLVE_PERMISSION } from '@cockpit/core';
 import type { SubagentState } from '$lib/utils/flow-types';
 import type { Activity } from './activity';
 import { activityOf } from './activity';
@@ -55,20 +56,8 @@ export interface Machine {
   lastSeenAt: string;
 }
 
-/** A session the hub knows about (`GET /api/instances`). */
-export interface InstanceRow {
-  id: string;
-  machineId: string;
-  cwd: string;
-  status: string;
-  sessionId: string | null;
-  /** Set when the session was started from a project page. */
-  projectId?: string | null;
-  /** `scratch` for a side quest; absent from a hub that predates the column. */
-  kind?: string;
-  /** What killed the session, on a row the agent reported as `error`. */
-  lastError?: string | null;
-}
+/** A session the hub knows about (`GET /api/instances`, and `instances` frames). */
+export type { InstanceRow };
 
 /** A project the hub knows about (`GET /api/projects`). */
 export interface ProjectRow {
@@ -95,6 +84,13 @@ const isStale = (row: InstanceRow): boolean => row.status === 'unknown';
 /** A side quest's worktree sits under the project's checkout, so it counts as in it. */
 const under = (root: string, path: string): boolean =>
   path === root || path.startsWith(`${root}/`);
+
+/**
+ * A side quest is history nobody asked for until they keep it, and the agent
+ * tags its SDK session on the way out to say so. The tag is the whole test —
+ * the directory a session ran in says nothing about whether it was a quest.
+ */
+const listedInHistory = (info: SDKSessionInfo): boolean => info.tag !== COCKPIT_SCRATCH_TAG;
 
 export interface PendingPermission {
   requestId: string;
@@ -148,8 +144,6 @@ export interface SessionState {
   relaunching: boolean;
   /** A side quest (NEW.md §1) — kept visually apart until it is kept or discarded. */
   scratch: boolean;
-  /** Spawned with `persistSession: false`: the SDK is writing no transcript for it. */
-  ephemeral: boolean;
 }
 
 const state = $state({
@@ -244,7 +238,6 @@ function session(instanceId: string): SessionState {
     permissionMode: 'default',
     relaunching: false,
     scratch: false,
-    ephemeral: false,
   };
   state.sessions[instanceId] = created;
   // Read it back: the literal above is the raw target, and `$state` writes land
@@ -284,6 +277,16 @@ async function load<T>(path: string): Promise<T | null> {
   }
 }
 
+/**
+ * Takes the hub's word on what is running — whether it was asked for or pushed.
+ * Views this browser opened for a session it did not spawn learn their machine
+ * from it, so a snapshot is also how a bare `/session/[id]` fills itself in.
+ */
+function adoptInstances(instances: InstanceRow[]): void {
+  state.instances = instances;
+  for (const target of Object.values(state.sessions)) hydrate(target);
+}
+
 /** Registry reads: on connect and again after every reconnect. */
 async function refresh(): Promise<void> {
   const [machines, instances, projects, pending] = await Promise.all([
@@ -295,10 +298,7 @@ async function refresh(): Promise<void> {
 
   if (machines) state.machines = machines;
   if (projects) state.projects = projects;
-  if (instances) {
-    state.instances = instances;
-    for (const target of Object.values(state.sessions)) hydrate(target);
-  }
+  if (instances) adoptInstances(instances);
   if (pending) {
     for (const envelope of pending) handleFrame(envelope.payload);
   }
@@ -322,6 +322,11 @@ function settle(requestId: string | undefined, answer: (waiter: Waiter) => void)
 }
 
 function handleFrame(frame: FramePayload): void {
+  if (frame.kind === 'instances') {
+    adoptInstances(frame.instances);
+    return;
+  }
+
   if (frame.kind === 'error') {
     const { instanceId, message } = frame;
     if (settle(frame.requestId, (waiter) => waiter.reject(new Error(message)))) return;
@@ -527,7 +532,6 @@ function start({ machineId, ...spawn }: Omit<SpawnPayload, 'instanceId'> & { mac
   created.machineId = machineId;
   created.cwd = spawn.cwd;
   created.permissionMode = spawn.permissionMode ?? 'default';
-  created.ephemeral = spawn.options?.persistSession === false;
   created.scratch = Boolean(spawn.scratch);
   return created;
 }
@@ -647,8 +651,13 @@ export async function discardSession(instanceId: string, machineId: string): Pro
   }
 }
 
-/** Promotes a side quest to mainline work — the UI stops setting it apart. */
+/**
+ * Promotes a side quest to mainline work: the UI stops setting it apart, and
+ * the tag that kept its transcript out of the machine's catalog comes off, so
+ * the session joins the history it was being hidden from.
+ */
 export async function keepSession(instanceId: string): Promise<void> {
+  const target = session(instanceId);
   const response = await fetch(`/api/instances/${instanceId}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
@@ -658,8 +667,17 @@ export async function keepSession(instanceId: string): Promise<void> {
     throw new Error(`Could not keep this session — the hub answered ${response.status}. Try again.`);
   }
 
-  session(instanceId).scratch = false;
-  await refresh();
+  target.scratch = false;
+  if (target.sessionId && target.machineId) {
+    // `null` is how the SDK clears a tag; the catalog is re-read for the entry
+    // that has just stopped being hidden.
+    await machineControl(target.machineId, 'tagSession', [
+      target.sessionId,
+      null,
+      { dir: target.cwd || undefined },
+    ]);
+    await loadCatalog(target.machineId);
+  }
 }
 
 /** The view state a session leaves behind once it is no longer running. */
@@ -995,6 +1013,9 @@ export async function relaunchSession(
     instanceId,
     cwd: target.cwd,
     options: { resume: target.sessionId },
+    // A relaunch is a spawn like any other, so it has to say what it is: a quest
+    // that stayed silent about it would come back as mainline work, untagged.
+    scratch: target.scratch ? {} : undefined,
     permissionMode,
     requestId,
   };
@@ -1091,8 +1112,9 @@ export const cockpit = {
   get scratchInstances(): InstanceRow[] {
     return state.instances.filter((row) => isListed(row) && row.kind === 'scratch');
   },
-  /** Stored sessions on one machine, as `listSessions` returned them. */
-  catalogOf: (machineId: string): SDKSessionInfo[] => state.catalog[machineId] ?? [],
+  /** Stored sessions on one machine, minus the side quests hiding among them. */
+  catalogOf: (machineId: string): SDKSessionInfo[] =>
+    (state.catalog[machineId] ?? []).filter(listedInHistory),
   get projects() {
     return state.projects;
   },
@@ -1112,7 +1134,7 @@ export const cockpit = {
   /** Stored sessions the SDK recorded somewhere inside the project's checkout. */
   storedIn: (project: ProjectRow): SDKSessionInfo[] =>
     (state.catalog[project.machineId] ?? []).filter(
-      (info) => info.cwd && under(project.cwd, info.cwd)
+      (info) => listedInHistory(info) && info.cwd && under(project.cwd, info.cwd)
     ),
   session: (instanceId: string): SessionState | null => state.sessions[instanceId] ?? null,
   /** What a session needs from you — `idle` for one nothing has been heard from. */
