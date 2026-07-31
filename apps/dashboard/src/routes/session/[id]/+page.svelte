@@ -1,8 +1,10 @@
 <script lang="ts">
-  import { IconAgent, IconSpinner, IconSubagent, IconTools } from '$lib/icons';
+  import { IconAgent, IconSubagent, IconTools } from '$lib/icons';
   import { onMount, tick, untrack } from 'svelte';
   import { fly } from 'svelte/transition';
   import { quintOut } from 'svelte/easing';
+  import { Virtualizer } from 'virtua/svelte';
+  import type { VirtualizerHandle } from 'virtua/svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import type { PermissionResult } from '@cockpit/core';
@@ -40,7 +42,7 @@
     const cwd = browsingCwd;
     const id = viewId;
     untrack(() => {
-      windowSize = WINDOW;
+      anchored = false;
       if (machineId) void openTranscript({ viewId: id, machineId, sessionId: id, cwd });
       else openSession(id);
     });
@@ -56,13 +58,8 @@
     untrack(() => void backfillSession(id));
   });
 
-  /** How many trailing groups mount. A transcript can be thousands of groups;
-   *  the viewport shows ten. History unfolds in pages, newest stay live. */
-  const WINDOW = 40;
-  let windowSize = $state(WINDOW);
-
   let scroller = $state<HTMLDivElement | null>(null);
-  let historySentinel = $state<HTMLDivElement | null>(null);
+  let vlist = $state<VirtualizerHandle | null>(null);
   /** Whether the reader is parked at the live edge — measured before every growth. */
   let atBottom = $state(true);
   let unseen = $state(false);
@@ -70,6 +67,8 @@
    *  must not chase growth the reader asked for. Re-armed from real geometry
    *  once the animation settles. */
   let followHold = 0;
+  /** Whether this transcript has been parked at its end since it opened. */
+  let anchored = false;
 
   function trackScroll() {
     if (!scroller) return;
@@ -77,9 +76,21 @@
     if (atBottom) unseen = false;
   }
 
-  function jumpToLatest() {
+  // Virtua keeps re-applying scrollToIndex while the items it landed on are
+  // still being measured, so it beats a raw write to an estimated scrollHeight.
+  // It only knows its own items, though — a streaming reply renders after the
+  // list, and the last group's end is not the end of the column.
+  function pinToLatest() {
     if (!scroller) return;
-    scroller.scrollTop = scroller.scrollHeight;
+    if (vlist && groups.length && !session?.streaming) {
+      vlist.scrollToIndex(groups.length - 1, { align: 'end' });
+    } else {
+      scroller.scrollTop = scroller.scrollHeight;
+    }
+  }
+
+  function jumpToLatest() {
+    pinToLatest();
     unseen = false;
   }
 
@@ -94,7 +105,7 @@
     const follow = new ResizeObserver(() => {
       if (!scroller) return;
       if (performance.now() < followHold) return;
-      if (atBottom) scroller.scrollTop = scroller.scrollHeight;
+      if (atBottom) pinToLatest();
     });
     const noteToggle = (event: MouseEvent) => {
       const target = event.target as HTMLElement;
@@ -166,43 +177,13 @@
     return result;
   });
 
-  const hiddenCount = $derived(Math.max(0, groups.length - windowSize));
-  const visibleGroups = $derived(hiddenCount > 0 ? groups.slice(hiddenCount) : groups);
-
-  let expandingHistory = false;
-
-  // History prepends above the viewport, so the reader is put back on the line
-  // they were reading rather than wherever the taller column left them.
-  async function showEarlier() {
-    if (!scroller || expandingHistory || hiddenCount === 0) return;
-    expandingHistory = true;
-    // The pin must not chase the bottom while history mounts above the fold.
-    followHold = Number.MAX_SAFE_INTEGER;
-    try {
-      const before = scroller.scrollHeight;
-      windowSize += 80;
-      await tick();
-      scroller.scrollTop += scroller.scrollHeight - before;
-    } finally {
-      followHold = performance.now() + 100; // let layout settle, then re-arm
-      expandingHistory = false;
-      setTimeout(trackScroll, 120);
-    }
-  }
-
-  // The next page loads as the sentinel nears the top of the viewport, so
-  // scrolling up through a long transcript never stops at a button.
+  // A transcript opens on its last line. The groups arrive after the view
+  // mounts and virtua only estimates their heights until they measure, so the
+  // anchor waits a tick and then lets scrollToIndex correct itself.
   $effect(() => {
-    const node = historySentinel;
-    if (!node || !scroller) return;
-    const io = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((e) => e.isIntersecting)) void showEarlier();
-      },
-      { root: scroller, rootMargin: '600px 0px 0px 0px' }
-    );
-    io.observe(node);
-    return () => io.disconnect();
+    if (anchored || !groups.length) return;
+    anchored = true;
+    void tick().then(pinToLatest);
   });
 
   let view = $state<'chat' | 'flow'>('chat');
@@ -420,44 +401,50 @@
           onscroll={trackScroll}
           class="h-full space-y-4 overflow-y-auto overflow-x-hidden px-4 pt-4 pb-44 [overflow-anchor:none]"
         >
-          <div class="mx-auto flex max-w-4xl flex-col gap-4">
-            {#if hiddenCount > 0}
-              <div
-                bind:this={historySentinel}
-                class="flex min-h-7 items-center justify-center gap-1.5 text-xs text-muted-foreground"
+          <div class="mx-auto max-w-4xl">
+            <!-- Mounted once the scroller exists: virtua reads scrollRef once, on
+                 mount, and silently falls back to its parent element if it is unset. -->
+            {#if scroller}
+              <Virtualizer
+                bind:this={vlist}
+                data={groups}
+                getKey={(g) =>
+                  g.kind === 'single' ? (g.message.id ?? `single-${g.index}`) : `${g.kind}-${g.index}`}
+                scrollRef={scroller}
+                itemSize={120}
+                bufferSize={400}
               >
-                <IconSpinner class="size-3.5 animate-spin" />
-                Loading earlier messages…
-              </div>
+                {#snippet children(group)}
+                  <div class="pb-4">
+                    {#if group.kind === 'tools'}
+                      <div class="flex justify-start gap-3">
+                        <div
+                          class="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl border border-border bg-secondary"
+                        >
+                          <IconTools class="size-[18px] text-muted-foreground" />
+                        </div>
+                        <div class="w-full max-w-[85%] min-w-0">
+                          <ToolGroup tools={group.messages} />
+                        </div>
+                      </div>
+                    {:else if group.kind === 'subagent'}
+                      <div class="flex justify-start gap-3">
+                        <div
+                          class="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl border border-border bg-secondary"
+                        >
+                          <IconSubagent class="size-[18px] text-muted-foreground" />
+                        </div>
+                        <div class="w-full max-w-[85%] min-w-0">
+                          <SubagentBranch branch={group.branch} spawn={group.spawn} />
+                        </div>
+                      </div>
+                    {:else}
+                      <ChatMessage message={group.message} instanceId={viewId} />
+                    {/if}
+                  </div>
+                {/snippet}
+              </Virtualizer>
             {/if}
-
-            {#each visibleGroups as group (group.kind === 'single' ? group.message.id : `${group.kind}-${group.index}`)}
-              {#if group.kind === 'tools'}
-                <div class="flex justify-start gap-3">
-                  <div
-                    class="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl border border-border bg-secondary"
-                  >
-                    <IconTools class="size-[18px] text-muted-foreground" />
-                  </div>
-                  <div class="w-full max-w-[85%] min-w-0">
-                    <ToolGroup tools={group.messages} />
-                  </div>
-                </div>
-              {:else if group.kind === 'subagent'}
-                <div class="flex justify-start gap-3">
-                  <div
-                    class="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl border border-border bg-secondary"
-                  >
-                    <IconSubagent class="size-[18px] text-muted-foreground" />
-                  </div>
-                  <div class="w-full max-w-[85%] min-w-0">
-                    <SubagentBranch branch={group.branch} spawn={group.spawn} />
-                  </div>
-                </div>
-              {:else}
-                <ChatMessage message={group.message} instanceId={viewId} />
-              {/if}
-            {/each}
 
             {#if session?.loading}
               <p class="text-sm text-muted-foreground">Reading transcript…</p>
