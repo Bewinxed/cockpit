@@ -5,6 +5,8 @@
   import { fly, scale } from 'svelte/transition';
   import { quintOut } from 'svelte/easing';
   import { afterNavigate } from '$app/navigation';
+  import { browser } from '$app/environment';
+  import * as SidebarPrimitive from '$lib/components/ui/sidebar';
   import ThemeSwitcher from '$lib/components/ui/ThemeSwitcher.svelte';
   import { cockpit } from './client.svelte';
   import JumpPalette from './JumpPalette.svelte';
@@ -17,6 +19,57 @@
   let rail = $state(false);
 
   afterNavigate(() => (rail = false));
+
+  const RAIL_KEY = 'cockpit-rail-width';
+  const RAIL_DEFAULT = 288;
+  const RAIL_MIN = 216;
+  const RAIL_MAX = 520;
+
+  const clampRail = (px: number) => Math.min(RAIL_MAX, Math.max(RAIL_MIN, Math.round(px)));
+
+  function readRailWidth(): number {
+    if (!browser) return RAIL_DEFAULT;
+    const stored = Number(localStorage.getItem(RAIL_KEY));
+    return Number.isFinite(stored) && stored > 0 ? clampRail(stored) : RAIL_DEFAULT;
+  }
+
+  let railWidth = $state(readRailWidth());
+
+  /** Only committed widths are persisted, so a drag in progress writes once. */
+  function commitRailWidth(px: number): void {
+    railWidth = clampRail(px);
+    localStorage.setItem(RAIL_KEY, String(railWidth));
+  }
+
+  function startResize(event: PointerEvent): void {
+    const handle = event.currentTarget as HTMLElement;
+    const startX = event.clientX;
+    const startWidth = railWidth;
+    event.preventDefault();
+    handle.setPointerCapture(event.pointerId);
+
+    const move = (e: PointerEvent) => (railWidth = clampRail(startWidth + e.clientX - startX));
+    const end = () => {
+      handle.removeEventListener('pointermove', move);
+      handle.removeEventListener('pointerup', end);
+      handle.removeEventListener('pointercancel', end);
+      commitRailWidth(railWidth);
+    };
+
+    handle.addEventListener('pointermove', move);
+    handle.addEventListener('pointerup', end);
+    handle.addEventListener('pointercancel', end);
+  }
+
+  function resizeKeydown(event: KeyboardEvent): void {
+    const step = event.shiftKey ? 48 : 16;
+    if (event.key === 'ArrowLeft') commitRailWidth(railWidth - step);
+    else if (event.key === 'ArrowRight') commitRailWidth(railWidth + step);
+    else if (event.key === 'Home') commitRailWidth(RAIL_MIN);
+    else if (event.key === 'End') commitRailWidth(RAIL_MAX);
+    else return;
+    event.preventDefault();
+  }
 
   const TYPING = new Set(['INPUT', 'TEXTAREA', 'SELECT']);
 
@@ -112,26 +165,49 @@
     <ThemeSwitcher />
   </header>
 
-  <div class="flex min-h-0 flex-1">
+  <SidebarPrimitive.Provider
+    class="min-h-0 flex-1"
+    style="--sidebar-width: {railWidth}px;"
+    open={true}
+  >
     <div class="hidden md:flex" style="view-transition-name: app-rail">
       <Sidebar />
     </div>
+    <!-- The rail is sized by --sidebar-width rather than a pane library: the
+         min/max here are pixels, and percentage panes would redefine them on
+         every viewport change. -->
+    <!-- A focusable separator is the ARIA window-splitter widget; the rule below
+         only knows the decorative kind. -->
+    <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+    <div
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="Rail width"
+      aria-valuenow={railWidth}
+      aria-valuemin={RAIL_MIN}
+      aria-valuemax={RAIL_MAX}
+      tabindex="0"
+      class="hidden w-1 shrink-0 cursor-col-resize touch-none transition-colors hover:bg-border focus-visible:bg-ring focus-visible:outline-none md:block"
+      onpointerdown={startResize}
+      onkeydown={resizeKeydown}
+    ></div>
     <main id="main" class="flex min-w-0 flex-1 flex-col overflow-hidden">
       {@render children()}
     </main>
-  </div>
-</div>
 
-{#if rail}
-  <div class="fixed inset-0 z-40 flex md:hidden">
-    <button
-      type="button"
-      class="absolute inset-0 bg-black/40"
-      aria-label="Close navigation"
-      onclick={() => (rail = false)}
-    ></button>
-    <div class="relative flex max-w-[85vw] shadow-lg">
-      <Sidebar />
-    </div>
-  </div>
-{/if}
+    {#if rail}
+      <div class="fixed inset-0 z-40 flex md:hidden">
+        <button
+          type="button"
+          class="absolute inset-0 bg-black/40"
+          aria-label="Close navigation"
+          onclick={() => (rail = false)}
+        ></button>
+        <div class="relative flex max-w-[85vw] shadow-lg">
+          <Sidebar />
+        </div>
+      </div>
+    {/if}
+  </SidebarPrimitive.Provider>
+</div>

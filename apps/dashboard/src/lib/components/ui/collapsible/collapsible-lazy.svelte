@@ -6,13 +6,16 @@
 	 *  pre blocks and diffs eagerly is what made route renders take seconds. */
 	let { open, children }: { open: boolean; children?: Snippet } = $props();
 
-	let rendered = $state(false);
+	// Seeded from the initial `open` so a panel that starts open is server-rendered:
+	// effects do not run during SSR, so waiting for one would ship it empty.
+	// svelte-ignore state_referenced_locally
+	let rendered = $state(open);
 
 	$effect.pre(() => {
 		if (open) rendered = true;
 	});
 
-	// Keep content through the closing animation (180ms + slack), then drop it.
+	// Keep content through the collapsible-up animation (200ms + slack), then drop it.
 	$effect(() => {
 		if (!open && rendered) {
 			const timer = setTimeout(() => (rendered = false), 220);

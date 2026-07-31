@@ -504,10 +504,10 @@
     {#if !browsing}
       <Select.Root type="single" value={permissionMode} onValueChange={chooseMode}>
           <Select.Trigger
+            size="sm"
             aria-label="Permission mode"
             title="How this session answers tool permissions"
-            class="min-h-7 w-auto shrink-0 gap-1 px-2 py-0 text-xs {permissionMode ===
-            'bypassPermissions'
+            class="shrink-0 text-xs {permissionMode === 'bypassPermissions'
               ? 'font-medium text-warning'
               : 'text-muted-foreground'}"
           >

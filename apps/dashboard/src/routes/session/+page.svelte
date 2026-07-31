@@ -259,7 +259,7 @@
             <Select.Trigger
               bind:ref={machineTrigger}
               aria-labelledby="machine-label"
-              class="text-foreground motion-reduce:animate-none
+              class="w-full text-foreground motion-reduce:animate-none
                 {invalid === 'machine' ? 'animate-shake border-error' : ''}"
             >
               {machineLabel ? `${machineLabel.hostname} · ${machineLabel.os}` : 'No machines online'}
@@ -289,7 +289,9 @@
           >
             <Select.Trigger
               aria-labelledby="permissions-label"
-              class={permissionMode === 'bypassPermissions' ? 'text-warning' : 'text-foreground'}
+              class="w-full {permissionMode === 'bypassPermissions'
+                ? 'text-warning'
+                : 'text-foreground'}"
             >
               {permissionModeLabel(permissionMode)}
             </Select.Trigger>

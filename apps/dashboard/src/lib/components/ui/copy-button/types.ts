@@ -1,12 +1,10 @@
 import type { Snippet } from 'svelte';
-import type { ButtonPropsWithoutHTML } from '$lib/components/ui/button';
+import type { ButtonProps } from '$lib/components/ui/button';
 import type { UseClipboard } from '$lib/hooks/use-clipboard.svelte';
-import type { HTMLAttributes } from 'svelte/elements';
 import type { WithChildren, WithoutChildren } from 'bits-ui';
 
 export type CopyButtonPropsWithoutHTML = WithChildren<
-	Pick<ButtonPropsWithoutHTML, 'size' | 'variant'> & {
-		ref?: HTMLButtonElement | null;
+	Pick<ButtonProps, 'size' | 'variant'> & {
 		text: string;
 		icon?: Snippet<[]>;
 		animationDuration?: number;
@@ -14,5 +12,6 @@ export type CopyButtonPropsWithoutHTML = WithChildren<
 	}
 >;
 
-export type CopyButtonProps = CopyButtonPropsWithoutHTML &
-	WithoutChildren<HTMLAttributes<HTMLButtonElement>>;
+// The HTML half comes from `Button` itself: anything narrower is a second, subtly
+// different props type that TypeScript then has to reconcile at the spread.
+export type CopyButtonProps = CopyButtonPropsWithoutHTML & WithoutChildren<ButtonProps>;
