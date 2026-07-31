@@ -7,6 +7,7 @@
   import { FlowView } from '$lib/components/features/flow';
   import PermissionCard from '$lib/cockpit/PermissionCard.svelte';
   import {
+    backfillSession,
     cockpit,
     discardSession,
     forkSession,
@@ -40,6 +41,15 @@
     });
   });
   const session = $derived(cockpit.session(viewId));
+
+  // A live session this browser did not start has already said things, and frames
+  // only carry what comes next — so read it back the moment the registry names
+  // the SDK session behind it. Re-arms on `sessionId`, which is what arrives late.
+  $effect(() => {
+    const id = viewId;
+    if (browsing || !cockpit.session(id)?.sessionId) return;
+    untrack(() => void backfillSession(id));
+  });
 
   let scroller = $state<HTMLDivElement | null>(null);
 
@@ -173,7 +183,7 @@
     <span class="truncate font-mono text-sm">{session?.cwd || viewId}</span>
     {#if session?.scratch}
       <span
-        class="shrink-0 rounded-sm border border-dashed border-border px-1.5 py-0.5 text-[10px] tracking-wide text-muted-foreground uppercase"
+        class="shrink-0 rounded-sm border border-dashed border-muted-foreground/40 px-1.5 py-0.5 text-[10px] tracking-wide text-muted-foreground uppercase"
       >
         side quest
       </span>
@@ -251,6 +261,12 @@
 
         {#if session?.loading}
           <p class="text-sm text-muted-foreground">Reading transcript…</p>
+        {:else if groups.length === 0 && !session?.streaming}
+          <p class="text-sm text-muted-foreground">
+            {browsing
+              ? 'This session recorded no messages.'
+              : 'Nothing said yet — send a message below to start.'}
+          </p>
         {/if}
 
         {#if session?.streaming}

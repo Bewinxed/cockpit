@@ -11,8 +11,8 @@
 
 <a
   href="/session/{instance.id}"
-  class="flex flex-col gap-0.5 rounded-lg border border-border bg-card px-3 py-2 text-sm transition-colors hover:bg-accent
-    {instance.kind === 'scratch' ? 'border-dashed' : ''}"
+  class="flex flex-col gap-0.5 rounded-lg border bg-card px-3 py-2 text-sm transition-colors hover:bg-accent
+    {instance.kind === 'scratch' ? 'border-dashed border-muted-foreground/30' : 'border-border'}"
 >
   <span class="flex items-center gap-3">
     <ActivityDot {activity} />

@@ -73,9 +73,15 @@ export interface ProjectRow {
   createdAt: string;
 }
 
-/** Stopped and discarded sessions are history — the rails only show live ones. */
+/** Only a session the hub can still reach is live; the rest is history. */
 const isLive = (row: InstanceRow): boolean =>
-  row.status !== 'stopped' && row.status !== 'discarded';
+  row.status === 'running' || row.status === 'starting';
+
+/**
+ * A session whose daemon went away mid-flight. It may or may not still be alive
+ * on its machine — the hub cannot tell — so it is kept, but never as a live row.
+ */
+const isStale = (row: InstanceRow): boolean => row.status === 'unknown';
 
 /** A side quest's worktree sits under the project's checkout, so it counts as in it. */
 const under = (root: string, path: string): boolean =>
@@ -144,6 +150,11 @@ interface Waiter {
 
 /** Control calls awaiting their `control_result`, keyed by the SDK `requestId`. */
 const inflight = new Map<string, Waiter>();
+
+/** Frames held back while a late-joined session reads its transcript, by instance. */
+const backfilling = new Map<string, FramePayload[]>();
+/** Instances whose transcript has been read back — it is only ever read once. */
+const backfilled = new Set<string>();
 
 // Lets the store be asserted from the console while developing.
 if (import.meta.env.DEV && typeof window !== 'undefined') {
@@ -315,6 +326,14 @@ function handleFrame(frame: FramePayload): void {
   }
 
   const target = session(frame.instanceId);
+
+  // A backfill owns the transcript until it lands. Frames that arrive meanwhile
+  // are held and replayed after it, so none is lost and none arrives twice.
+  const held = backfilling.get(frame.instanceId);
+  if (held) {
+    held.push(frame);
+    return;
+  }
 
   switch (frame.kind) {
     case 'sdk': {
@@ -757,6 +776,55 @@ export async function openTranscript({
   }
 }
 
+/**
+ * Seeds a live session this browser joined late. Frames only carry what happens
+ * from now on, so a session already under way renders as an empty transcript
+ * until what it has already said is read back out of SDK session storage.
+ */
+export async function backfillSession(instanceId: string): Promise<void> {
+  if (backfilled.has(instanceId) || backfilling.has(instanceId)) return;
+  const target = session(instanceId);
+  if (target.messages.length > 0 || target.loading) return;
+  const { machineId, sessionId, cwd } = target;
+  if (!machineId || !sessionId) return;
+
+  backfilled.add(instanceId);
+  backfilling.set(instanceId, []);
+  target.loading = true;
+  try {
+    const transcript = await machineControl<SessionMessage[]>(machineId, 'getSessionMessages', [
+      sessionId,
+      { dir: cwd || undefined },
+    ]);
+    const { messages, subagents } = mapTranscript(instanceId, transcript);
+    target.messages = messages;
+    target.subagents = subagents;
+    target.streaming = '';
+    replayHeld(instanceId, new Set(transcript.map((entry) => entry.uuid)));
+  } catch (error) {
+    replayHeld(instanceId, new Set());
+    console.error(`[cockpit] backfilling ${instanceId} failed:`, error);
+  } finally {
+    target.loading = false;
+  }
+}
+
+/** Hands the held frames back to the store, minus what the transcript already had. */
+function replayHeld(instanceId: string, seeded: Set<string>): void {
+  const held = backfilling.get(instanceId) ?? [];
+  backfilling.delete(instanceId);
+  for (const frame of held) {
+    if (frame.kind === 'sdk') {
+      // A partial paints text whose final message may already be seeded. The
+      // turn's own frames land right behind it, so dropping these costs nothing.
+      if (frame.message.type === 'stream_event') continue;
+      const uuid = 'uuid' in frame.message ? frame.message.uuid : undefined;
+      if (uuid && seeded.has(uuid)) continue;
+    }
+    handleFrame(frame);
+  }
+}
+
 export function interrupt(instanceId: string, machineId: string): void {
   control(instanceId, machineId, 'interrupt', []);
   session(instanceId).busy = false;
@@ -822,6 +890,10 @@ export const cockpit = {
   },
   get runningInstances() {
     return state.instances.filter(isLive);
+  },
+  /** Sessions the hub lost track of — shown apart, never as live work. */
+  get staleInstances(): InstanceRow[] {
+    return state.instances.filter(isStale);
   },
   /** Live mainline sessions on one machine — what the sidebar groups under it. */
   runningOn: (machineId: string): InstanceRow[] =>

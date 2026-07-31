@@ -1,5 +1,5 @@
 import { Context, Effect, Layer } from 'effect';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, gt, ne, notInArray, or } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
 import { migrate } from 'drizzle-orm/bun-sqlite/migrator';
 import { DB_PATH } from '../config';
@@ -9,6 +9,9 @@ import { agents, instances, projects } from './schema';
 const MIGRATIONS_DIR = Bun.fileURLToPath(new URL('../../drizzle', import.meta.url));
 
 export type InstanceKind = (typeof instances.$inferSelect)['kind'];
+
+/** How long a session that stopped moving stays in the listings the rails read. */
+const STALE_AFTER_MS = 24 * 60 * 60 * 1000;
 
 export interface DbShape {
   readonly upsertAgent: (agent: { machineId: string; hostname: string; os: string }) => void;
@@ -27,8 +30,14 @@ export interface DbShape {
   readonly discardInstance: (id: string) => void;
   /** "Keep": a side quest that earned its place stops being treated as scratch. */
   readonly setInstanceKind: (id: string, kind: InstanceKind) => typeof instances.$inferSelect | undefined;
-  /** The agent socket dropped: its sessions may outlive it, the hub cannot tell. */
-  readonly markInstancesUnknown: (machineId: string) => void;
+  /** The SDK session an `init` frame named, so the row can be read back from. */
+  readonly noteInstanceSession: (id: string, sessionId: string) => void;
+  /**
+   * Marks every running instance on the machine that `liveIds` does not name as
+   * unknown: those belong to a daemon that is gone, and the hub cannot tell
+   * whether they outlived it. An empty list means the machine runs nothing.
+   */
+  readonly reconcileInstances: (machineId: string, liveIds: string[]) => void;
   readonly listAgents: () => (typeof agents.$inferSelect)[];
   readonly listInstances: () => (typeof instances.$inferSelect)[];
   readonly listProjects: () => (typeof projects.$inferSelect)[];
@@ -117,14 +126,41 @@ const make = (path: string): DbShape => {
         .where(eq(instances.id, id))
         .returning()
         .get(),
-    markInstancesUnknown: (machineId) => {
+    noteInstanceSession: (id, sessionId) => {
+      db.update(instances)
+        .set({ sessionId, updatedAt: new Date() })
+        .where(eq(instances.id, id))
+        .run();
+    },
+    reconcileInstances: (machineId, liveIds) => {
       db.update(instances)
         .set({ status: 'unknown', updatedAt: new Date() })
-        .where(and(eq(instances.machineId, machineId), eq(instances.status, 'running')))
+        .where(
+          and(
+            eq(instances.machineId, machineId),
+            eq(instances.status, 'running'),
+            liveIds.length > 0 ? notInArray(instances.id, liveIds) : undefined
+          )
+        )
         .run();
     },
     listAgents: () => db.select().from(agents).all(),
-    listInstances: () => db.select().from(instances).all(),
+    // A discarded side quest is gone for good, and a row that has not moved in a
+    // day is history no rail has a use for — a running one stays whatever its age.
+    listInstances: () =>
+      db
+        .select()
+        .from(instances)
+        .where(
+          and(
+            ne(instances.status, 'discarded'),
+            or(
+              eq(instances.status, 'running'),
+              gt(instances.updatedAt, new Date(Date.now() - STALE_AFTER_MS))
+            )
+          )
+        )
+        .all(),
     listProjects: () => db.select().from(projects).all(),
     createProject: ({ id, machineId, name, cwd }) =>
       db.insert(projects).values({ id, machineId, name, cwd }).returning().get(),

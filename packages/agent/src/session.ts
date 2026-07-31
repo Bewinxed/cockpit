@@ -136,6 +136,11 @@ export class SessionSupervisor {
     });
   }
 
+  /** The sessions running right now — what `register` reconciles the hub against. */
+  get instanceIds(): string[] {
+    return [...this.#sessions.keys()];
+  }
+
   /** Ends every session, so the daemon's scope closing leaves no child processes. */
   async shutdown(): Promise<void> {
     await Promise.all([...this.#sessions.keys()].map((instanceId) => this.#stop({ instanceId })));

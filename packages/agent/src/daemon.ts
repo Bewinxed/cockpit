@@ -8,11 +8,20 @@ import { SessionSupervisor } from './session';
 const DEFAULT_HUB_URL = `ws://localhost:${COCKPIT_HUB_PORT}/ws`;
 const HEARTBEAT_INTERVAL = Duration.seconds(15);
 
-/** What `register` carries: how the hub identifies this machine in its registry. */
-export interface RegisterPayload {
+/** How the hub identifies this machine in its registry. */
+interface MachineIdentity {
   machineId: string;
   hostname: string;
   os: string;
+}
+
+/**
+ * What `register` carries. The supervisor outlives any one connection, so a
+ * register is not a promise of zero sessions — `instances` names the ones still
+ * running and the hub marks every other row it calls running as unknown.
+ */
+export interface RegisterPayload extends MachineIdentity {
+  instances: string[];
 }
 
 export class ConnectionLost extends Data.TaggedError('ConnectionLost')<{
@@ -61,10 +70,11 @@ const closed = (socket: WebSocket, url: string) =>
     return Effect.sync(() => socket.removeEventListener('close', onClose));
   });
 
-const attach = (supervisor: SessionSupervisor, identity: RegisterPayload, url: string) =>
+const attach = (supervisor: SessionSupervisor, identity: MachineIdentity, url: string) =>
   Effect.gen(function* () {
     const socket = yield* connection(url);
-    send(socket, { verb: 'register', machineId: identity.machineId, payload: identity });
+    const payload: RegisterPayload = { ...identity, instances: supervisor.instanceIds };
+    send(socket, { verb: 'register', machineId: identity.machineId, payload });
     yield* Effect.logInfo(`registered with ${url}`);
 
     supervisor.sink = (frame) => {
@@ -100,7 +110,7 @@ const attach = (supervisor: SessionSupervisor, identity: RegisterPayload, url: s
 /** Runs until interrupted: connect, register, heartbeat, reconnect on loss. */
 export const startDaemon = Effect.gen(function* () {
   const url = process.env[COCKPIT_ENV.hubUrl] ?? DEFAULT_HUB_URL;
-  const identity: RegisterPayload = {
+  const identity: MachineIdentity = {
     machineId: yield* Effect.promise(() => machineId()),
     hostname: hostname(),
     os: `${platform()}-${arch()}`,

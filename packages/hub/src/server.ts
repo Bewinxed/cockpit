@@ -64,6 +64,26 @@ const peekKind = (payload: unknown): InstanceKind => {
   return scratch || ephemeral ? 'scratch' : 'mainline';
 };
 
+/** `register`'s list of the sessions the daemon still has running. */
+const peekInstances = (payload: unknown): string[] => {
+  if (typeof payload !== 'object' || payload === null) return [];
+  const value = (payload as { instances?: unknown }).instances;
+  return Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : [];
+};
+
+/**
+ * The SDK session an `init` frame announces. Recording it is what lets a
+ * dashboard that joins a live session late read its transcript back.
+ */
+const peekSessionId = (payload: unknown): string | undefined => {
+  if (typeof payload !== 'object' || payload === null) return undefined;
+  const message = (payload as { message?: unknown }).message;
+  if (typeof message !== 'object' || message === null) return undefined;
+  const sdk = message as Record<string, unknown>;
+  if (sdk.type !== 'system' || sdk.subtype !== 'init') return undefined;
+  return typeof sdk.session_id === 'string' ? sdk.session_id : undefined;
+};
+
 /** `stop { discard: true }`: the side quest is being thrown away, not paused. */
 const peekDiscard = (payload: unknown): boolean =>
   typeof payload === 'object' &&
@@ -118,6 +138,7 @@ export const createServer = ({ registry, db, pending }: HubServices) => {
               hostname: peek(message.payload, 'hostname') ?? message.machineId,
               os: peek(message.payload, 'os') ?? 'unknown',
             });
+            db.reconcileInstances(message.machineId, peekInstances(message.payload));
             ws.send(ack(message));
             break;
           case 'heartbeat':
@@ -128,6 +149,10 @@ export const createServer = ({ registry, db, pending }: HubServices) => {
             const kind = peek(message.payload, 'kind');
             if (message.requestId && kind === 'permission_request')
               pending.remember(message.requestId, message);
+            if (kind === 'sdk' && message.instanceId) {
+              const sessionId = peekSessionId(message.payload);
+              if (sessionId) db.noteInstanceSession(message.instanceId, sessionId);
+            }
             // A control's reply belongs to the dashboard that asked; the rest is fan-out.
             const requester =
               message.requestId && kind === 'control_result'
@@ -145,7 +170,7 @@ export const createServer = ({ registry, db, pending }: HubServices) => {
         const machineId = registry.dropAgent(ws.id);
         if (!machineId) return;
         db.markAgentOffline(machineId);
-        db.markInstancesUnknown(machineId);
+        db.reconcileInstances(machineId, []);
       },
     })
     .ws('/ws/dashboard', {

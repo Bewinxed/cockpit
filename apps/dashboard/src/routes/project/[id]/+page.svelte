@@ -175,7 +175,7 @@
           </button>
         {:else}
           <p class="px-3 py-1 text-[11px] text-muted-foreground">
-            {docsError ?? 'No markdown in this checkout.'}
+            {docsError ?? 'No markdown yet. Add a README.md at the top of the checkout and it shows up here.'}
           </p>
         {/each}
       </nav>
@@ -275,7 +275,8 @@
             </div>
           {:else}
             <p class="text-sm text-muted-foreground">
-              {planError ?? 'No .flow epics in this checkout.'}
+              {planError ??
+                'No flowctl epics here yet. This reads .flow/ in the checkout — create one with .flow/bin/flowctl and it appears.'}
             </p>
           {/each}
         </section>

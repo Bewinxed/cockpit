@@ -1,6 +1,7 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
-  import { ShieldAlert } from '@lucide/svelte';
+  import { page } from '$app/state';
+  import { ChevronRight, ShieldAlert } from '@lucide/svelte';
   import { cockpit, createProject, spawnSession } from '$lib/cockpit/client.svelte';
   import LiveSessionRow from '$lib/cockpit/LiveSessionRow.svelte';
   import StoredSessionRow from '$lib/cockpit/StoredSessionRow.svelte';
@@ -17,12 +18,16 @@
 
   const leaf = (path: string) => path.split('/').filter(Boolean).pop() ?? path;
 
-  // Default to the first machine that comes online.
+  // The jump palette names a machine in the query; otherwise the first one online.
   $effect(() => {
-    if (!machineId && cockpit.onlineMachines.length > 0) {
-      machineId = cockpit.onlineMachines[0].machineId;
-    }
+    if (machineId) return;
+    const asked = page.url.searchParams.get('machine');
+    const online = cockpit.onlineMachines;
+    machineId = online.find((row) => row.machineId === asked)?.machineId ?? online[0]?.machineId ?? '';
   });
+
+  const stale = $derived(cockpit.staleInstances);
+  let showStale = $state(false);
 
   async function start(event: SubmitEvent) {
     event.preventDefault();
@@ -207,7 +212,43 @@
         {/each}
       </section>
     {:else}
-      <p class="text-sm text-muted-foreground">No machines registered.</p>
+      <section class="flex flex-col gap-2 rounded-xl border border-border bg-card p-4">
+        <h2 class="text-sm font-medium">No machines yet</h2>
+        <p class="text-sm text-muted-foreground">
+          Cockpit runs Claude Code on your own hardware and watches it from here. Start the agent
+          daemon on a machine, pointed at this hub, and it shows up in the rail.
+        </p>
+        <pre
+          class="overflow-x-auto rounded-lg bg-muted px-3 py-2 font-mono text-xs text-foreground">COCKPIT_HUB_URL=ws://&lt;this-host&gt;:3456/ws bun run agent</pre>
+      </section>
     {/each}
+
+    {#if stale.length > 0}
+      <section class="flex flex-col gap-2">
+        <button
+          type="button"
+          class="flex items-center gap-2 text-left text-[11px] font-medium tracking-wider text-muted-foreground uppercase transition-colors hover:text-foreground"
+          onclick={() => (showStale = !showStale)}
+        >
+          <ChevronRight size={12} class="transition-transform {showStale ? 'rotate-90' : ''}" />
+          Stale
+          <span class="font-mono normal-case">{stale.length}</span>
+        </button>
+        {#if showStale}
+          <p class="text-xs text-muted-foreground">
+            The daemon running these went away. They may still be alive on their machine — the hub
+            cannot tell, so it stops counting them as live.
+          </p>
+          {#each stale as instance (instance.id)}
+            <span
+              class="flex items-baseline gap-3 rounded-lg border border-dashed border-muted-foreground/30 px-3 py-2 text-xs text-muted-foreground"
+            >
+              <span class="truncate font-mono">{instance.cwd || '—'}</span>
+              <span class="ml-auto shrink-0 font-mono">{instance.machineId}</span>
+            </span>
+          {/each}
+        {/if}
+      </section>
+    {/if}
   </div>
 </div>
