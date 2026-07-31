@@ -1,33 +1,40 @@
 <script lang="ts">
-	import { IconCheck } from '$lib/icons';
-	import { Checkbox as CheckboxPrimitive } from 'bits-ui';
-	import { scale } from 'svelte/transition';
-	import { quintOut } from 'svelte/easing';
-	import { cn } from '$lib/utils.js';
+	import { Checkbox as CheckboxPrimitive } from "bits-ui";
+	import { HugeiconsIcon } from "@hugeicons/svelte"
+	import { Tick02Icon } from '@hugeicons/core-free-icons';
+	import { MinusSignIcon } from '@hugeicons/core-free-icons';
+	import { cn, type WithoutChildrenOrChild } from "$lib/utils.js";
 
 	let {
 		ref = $bindable(null),
 		checked = $bindable(false),
+		indeterminate = $bindable(false),
 		class: className,
 		...restProps
-	}: CheckboxPrimitive.RootProps = $props();
+	}: WithoutChildrenOrChild<CheckboxPrimitive.RootProps> = $props();
 </script>
 
 <CheckboxPrimitive.Root
 	bind:ref
-	bind:checked
 	data-slot="checkbox"
 	class={cn(
-		'flex size-4 shrink-0 items-center justify-center rounded border border-border bg-card transition-colors data-[state=checked]:border-primary data-[state=checked]:bg-primary focus-visible:ring-2 focus-visible:ring-ring',
+		"flex size-4 items-center justify-center rounded-[6px] border border-input transition-shadow group-has-disabled/field:opacity-50 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-[3px] aria-invalid:ring-destructive/20 aria-invalid:aria-checked:border-primary dark:bg-input/30 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 data-checked:border-primary data-checked:bg-primary data-checked:text-primary-foreground dark:data-checked:bg-primary peer relative shrink-0 outline-none after:absolute after:-inset-x-3 after:-inset-y-2 disabled:cursor-not-allowed disabled:opacity-50",
 		className
 	)}
+	bind:checked
+	bind:indeterminate
 	{...restProps}
 >
-	{#snippet children({ checked: isChecked })}
-		{#if isChecked}
-			<span in:scale={{ start: 0.25, duration: 200, easing: quintOut }}>
-				<IconCheck class="size-3 text-primary-foreground" />
-			</span>
-		{/if}
+	{#snippet children({ checked, indeterminate })}
+		<div
+			data-slot="checkbox-indicator"
+			class="[&>svg]:size-3.5 grid place-content-center text-current transition-none"
+		>
+			{#if checked}
+				<HugeiconsIcon icon={Tick02Icon} strokeWidth={2}  />
+			{:else if indeterminate}
+				<HugeiconsIcon icon={MinusSignIcon} strokeWidth={2}  />
+			{/if}
+		</div>
 	{/snippet}
 </CheckboxPrimitive.Root>

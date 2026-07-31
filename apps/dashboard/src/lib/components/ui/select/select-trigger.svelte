@@ -1,28 +1,30 @@
 <script lang="ts">
-	import { IconChevronDown } from '$lib/icons';
-	import { Select as SelectPrimitive } from 'bits-ui';
-	import type { Snippet } from 'svelte';
-	import { cn } from '$lib/utils.js';
+	import { Select as SelectPrimitive } from "bits-ui";
+	import { HugeiconsIcon } from "@hugeicons/svelte"
+	import { UnfoldMoreIcon } from '@hugeicons/core-free-icons';
+	import { cn, type WithoutChild } from "$lib/utils.js";
 
 	let {
 		ref = $bindable(null),
 		class: className,
 		children,
+		size = "default",
 		...restProps
-	}: SelectPrimitive.TriggerProps & { children?: Snippet } = $props();
+	}: WithoutChild<SelectPrimitive.TriggerProps> & {
+		size?: "sm" | "default";
+	} = $props();
 </script>
 
 <SelectPrimitive.Trigger
 	bind:ref
 	data-slot="select-trigger"
+	data-size={size}
 	class={cn(
-		'group flex w-full items-center justify-between rounded-md border border-border bg-card px-3 py-2 text-sm transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring',
+		"gap-1.5 rounded-4xl border border-input bg-input/30 px-3 py-2 text-sm transition-colors focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-[3px] aria-invalid:ring-destructive/20 data-placeholder:text-muted-foreground data-[size=default]:h-9 data-[size=sm]:h-8 *:data-[slot=select-value]:flex *:data-[slot=select-value]:gap-1.5 dark:hover:bg-input/50 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg:not([class*='size-'])]:size-4 flex w-fit items-center justify-between whitespace-nowrap outline-none disabled:cursor-not-allowed disabled:opacity-50 *:data-[slot=select-value]:line-clamp-1 *:data-[slot=select-value]:flex *:data-[slot=select-value]:items-center [&_svg]:pointer-events-none [&_svg]:shrink-0",
 		className
 	)}
 	{...restProps}
 >
 	{@render children?.()}
-	<IconChevronDown
-		class="size-3.5 shrink-0 text-muted-foreground transition-transform duration-200 ease-out group-data-[state=open]:rotate-180"
-	/>
+	<HugeiconsIcon icon={UnfoldMoreIcon} strokeWidth={2} class="size-4 text-muted-foreground pointer-events-none" />
 </SelectPrimitive.Trigger>

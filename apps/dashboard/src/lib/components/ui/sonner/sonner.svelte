@@ -1,8 +1,12 @@
 <script lang="ts">
-
-	import { IconSuccess, IconInfo, IconSpinner, IconError, IconWarningTriangle } from "$lib/icons";
-	import { Toaster as Sonner, type ToasterProps as SonnerProps } from "svelte-sonner";
 	import { mode } from "mode-watcher";
+	import { Toaster as Sonner, type ToasterProps as SonnerProps } from "svelte-sonner";
+	import { HugeiconsIcon } from "@hugeicons/svelte"
+	import { Loading03Icon } from '@hugeicons/core-free-icons';
+	import { CheckmarkCircle02Icon } from '@hugeicons/core-free-icons';
+	import { MultiplicationSignCircleIcon } from '@hugeicons/core-free-icons';
+	import { InformationCircleIcon } from '@hugeicons/core-free-icons';
+	import { Alert02Icon } from '@hugeicons/core-free-icons';
 
 	let { ...restProps }: SonnerProps = $props();
 </script>
@@ -12,19 +16,20 @@
 	class="toaster group"
 	style="--normal-bg: var(--color-popover); --normal-text: var(--color-popover-foreground); --normal-border: var(--color-border);"
 	{...restProps}
-	>{#snippet loadingIcon()}
-		<IconSpinner class="size-4 animate-spin" />
+>
+	{#snippet loadingIcon()}
+		<HugeiconsIcon icon={Loading03Icon} strokeWidth={2} class="size-4 animate-spin" />
 	{/snippet}
 	{#snippet successIcon()}
-		<IconSuccess class="size-4" />
+		<HugeiconsIcon icon={CheckmarkCircle02Icon} strokeWidth={2} class="size-4" />
 	{/snippet}
 	{#snippet errorIcon()}
-		<IconError class="size-4" />
+		<HugeiconsIcon icon={MultiplicationSignCircleIcon} strokeWidth={2} class="size-4" />
 	{/snippet}
 	{#snippet infoIcon()}
-		<IconInfo class="size-4" />
+		<HugeiconsIcon icon={InformationCircleIcon} strokeWidth={2} class="size-4" />
 	{/snippet}
 	{#snippet warningIcon()}
-		<IconWarningTriangle class="size-4" />
+		<HugeiconsIcon icon={Alert02Icon} strokeWidth={2} class="size-4" />
 	{/snippet}
 </Sonner>
