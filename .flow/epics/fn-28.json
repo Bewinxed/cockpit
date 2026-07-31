@@ -1,0 +1,13 @@
+{
+  "branch_name": "fn-28",
+  "created_at": "2026-07-31T21:45:54.860210Z",
+  "depends_on_epics": [],
+  "id": "fn-28",
+  "next_task": 1,
+  "plan_review_status": "unknown",
+  "plan_reviewed_at": null,
+  "spec_path": ".flow/specs/fn-28.md",
+  "status": "done",
+  "title": "GitHub bootstrap for new sessions",
+  "updated_at": "2026-07-31T22:01:24.178116Z"
+}

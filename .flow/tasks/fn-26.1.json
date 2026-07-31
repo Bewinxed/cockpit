@@ -1,0 +1,18 @@
+{
+  "assignee": "bewinxed@gmail.com",
+  "claim_note": "",
+  "claimed_at": "2026-07-31T22:01:23.688832Z",
+  "created_at": "2026-07-31T20:05:19.305788Z",
+  "depends_on": [],
+  "epic": "fn-26",
+  "evidence": {
+    "commits": "163b804,bfacabf,c924dc1",
+    "gates": "all green"
+  },
+  "id": "fn-26.1",
+  "priority": null,
+  "spec_path": ".flow/tasks/fn-26.1.md",
+  "status": "done",
+  "title": "Tunnel canUseTool suggestions; Always-allow action on PermissionCard",
+  "updated_at": "2026-07-31T22:01:23.762746Z"
+}

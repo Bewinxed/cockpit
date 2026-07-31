@@ -1,0 +1,13 @@
+{
+  "branch_name": "fn-26",
+  "created_at": "2026-07-31T20:05:19.239045Z",
+  "depends_on_epics": [],
+  "id": "fn-26",
+  "next_task": 1,
+  "plan_review_status": "unknown",
+  "plan_reviewed_at": null,
+  "spec_path": ".flow/specs/fn-26.md",
+  "status": "done",
+  "title": "Permission rule suggestions (allow-always)",
+  "updated_at": "2026-07-31T22:01:24.112346Z"
+}
