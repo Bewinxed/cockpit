@@ -1,5 +1,5 @@
 import { Context, Effect, Layer } from 'effect';
-import { and, eq, gt, ne, notInArray, or } from 'drizzle-orm';
+import { and, eq, gt, inArray, ne, notInArray, or } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
 import { migrate } from 'drizzle-orm/bun-sqlite/migrator';
 import { DB_PATH } from '../config';
@@ -44,6 +44,7 @@ export interface DbShape {
    * whether they outlived it. An empty list means the machine runs nothing.
    */
   readonly reconcileInstances: (machineId: string, liveIds: string[]) => void;
+  readonly settleInstances: (machineId: string, liveIds: string[]) => void;
   readonly listAgents: () => (typeof agents.$inferSelect)[];
   readonly listInstances: () => (typeof instances.$inferSelect)[];
   readonly listProjects: () => (typeof projects.$inferSelect)[];
@@ -147,13 +148,32 @@ const make = (path: string): DbShape => {
         .where(eq(instances.id, id))
         .run();
     },
+    // The daemon went away: its sessions may or may not still be alive out there.
     reconcileInstances: (machineId, liveIds) => {
       db.update(instances)
         .set({ status: 'unknown', updatedAt: new Date() })
         .where(
           and(
             eq(instances.machineId, machineId),
-            eq(instances.status, 'running'),
+            inArray(instances.status, ['running', 'starting']),
+            liveIds.length > 0 ? notInArray(instances.id, liveIds) : undefined
+          )
+        )
+        .run();
+    },
+    // The daemon is back and authoritative: a session it no longer carries is
+    // dead — settled as an error so it stays on the board instead of ghosting.
+    settleInstances: (machineId, liveIds) => {
+      db.update(instances)
+        .set({
+          status: 'error',
+          lastError: 'The agent restarted; this session did not survive it.',
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(instances.machineId, machineId),
+            inArray(instances.status, ['running', 'starting', 'unknown']),
             liveIds.length > 0 ? notInArray(instances.id, liveIds) : undefined
           )
         )

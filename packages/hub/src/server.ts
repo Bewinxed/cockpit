@@ -141,7 +141,7 @@ export const createServer = ({ registry, db, pending }: HubServices) => {
               hostname: peek(message.payload, 'hostname') ?? message.machineId,
               os: peek(message.payload, 'os') ?? 'unknown',
             });
-            db.reconcileInstances(message.machineId, peekInstances(message.payload));
+            db.settleInstances(message.machineId, peekInstances(message.payload));
             ws.send(ack(message));
             break;
           case 'heartbeat':
