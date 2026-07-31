@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Collapsible as CollapsiblePrimitive } from 'bits-ui';
 	import type { Snippet } from 'svelte';
+	import CollapsibleLazy from './collapsible-lazy.svelte';
 
 	let {
 		ref = $bindable(null),
@@ -25,7 +26,7 @@
 			inert={!open}
 		>
 			<div class="collapsible-content-inner">
-				{@render children?.()}
+				<CollapsibleLazy {open} {children} />
 			</div>
 		</div>
 	{/snippet}

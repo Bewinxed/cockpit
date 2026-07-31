@@ -24,13 +24,7 @@
     return new Promise((resolve) => {
       const transition = document.startViewTransition(async () => {
         resolve();
-        // Never hold the frozen frame hostage to a slow load: if the new
-        // route isn't rendered within the budget, transition to its loading
-        // shell and let data settle afterwards.
-        await Promise.race([
-          navigation.complete.catch(() => {}),
-          new Promise((r) => setTimeout(r, 200)),
-        ]);
+        await navigation.complete.catch(() => {});
       });
       transition.finished.catch(() => {});
     });
