@@ -4,15 +4,18 @@
   import { quintOut } from 'svelte/easing';
   import * as Collapsible from '$lib/components/ui/collapsible';
   import type { PermissionResult } from '@cockpit/core';
-  import type { PendingPermission } from './client.svelte';
-  import { permissionSummary } from './permission-summary';
+  import type { PendingPermission, PermissionAnswer } from './client.svelte';
+  import { permissionAnswer } from './client.svelte';
+  import { permissionSummary, suggestedRule } from './permission-summary';
 
   interface Props {
     request: PendingPermission;
+    /** Whether the keyboard shortcuts answer this card — the stack's top one. */
+    shortcuts?: boolean;
     onResolve: (requestId: string, result: PermissionResult) => void;
   }
 
-  let { request, onResolve }: Props = $props();
+  let { request, shortcuts = false, onResolve }: Props = $props();
 
   let isExpanded = $state(false);
   /**
@@ -21,15 +24,10 @@
    */
   let resolved = $state<'allow' | 'deny' | null>(null);
 
-  function resolve(answer: 'allow' | 'deny') {
+  function answer(kind: PermissionAnswer) {
     if (resolved) return;
-    resolved = answer;
-    onResolve(
-      request.requestId,
-      answer === 'allow'
-        ? { behavior: 'allow', updatedInput: request.input }
-        : { behavior: 'deny', message: 'User denied permission' }
-    );
+    resolved = kind === 'deny' ? 'deny' : 'allow';
+    onResolve(request.requestId, permissionAnswer(request, kind));
   }
 
   const summary = $derived(permissionSummary(request.toolName, request.input));
@@ -38,6 +36,10 @@
   const command = $derived(
     typeof request.input.command === 'string' ? request.input.command : null
   );
+  /** The rule an "always allow" would add, when the SDK suggested one. */
+  const rule = $derived(request.suggestions?.length ? suggestedRule(request.suggestions) : null);
+
+  const kbd = 'rounded bg-muted px-1 py-0.5 font-mono text-[10px] text-muted-foreground';
 </script>
 
 <div class="bg-warning/10 p-3" role="alert">
@@ -49,6 +51,9 @@
       <div class="flex items-start justify-between gap-3">
         <div class="font-semibold text-warning text-sm">Permission required</div>
         <div class="flex items-center gap-1.5 shrink-0 -mt-0.5">
+          {#if shortcuts}
+            <kbd class={kbd}>N</kbd>
+          {/if}
           <button
             type="button"
             disabled={!!resolved}
@@ -59,12 +64,15 @@
               : resolved
                 ? 'text-muted-foreground opacity-0'
                 : 'text-muted-foreground hover:text-error hover:bg-error/10'}"
-            onclick={() => resolve('deny')}
+            onclick={() => answer('deny')}
             aria-label="Deny"
             title="Deny"
           >
             <IconClose class="size-3.5" />
           </button>
+          {#if shortcuts}
+            <kbd class={kbd}>Y</kbd>
+          {/if}
           <button
             type="button"
             disabled={!!resolved}
@@ -75,7 +83,7 @@
               : resolved
                 ? 'bg-primary text-primary-foreground opacity-0'
                 : 'bg-primary text-primary-foreground hover:bg-primary/90'}"
-            onclick={() => resolve('allow')}
+            onclick={() => answer('allow')}
             aria-label="Allow once"
             title="Allow once"
           >
@@ -90,14 +98,34 @@
       <div class="text-muted-foreground text-sm mt-0.5 break-words">{summary}</div>
 
       <Collapsible.Root open={isExpanded} onOpenChange={() => (isExpanded = !isExpanded)}>
-        <Collapsible.Trigger
-          class="flex items-center gap-1 bg-transparent border-none py-1 text-muted-foreground text-xs cursor-pointer mt-1.5 hover:text-foreground"
-        >
-          <IconChevronRight
-            class="size-3.5 transition-transform duration-200 ease-out {isExpanded ? 'rotate-90' : ''}"
-          />
-          <span>Details</span>
-        </Collapsible.Trigger>
+        <div class="flex items-center gap-3 mt-1.5 min-w-0">
+          <Collapsible.Trigger
+            class="flex items-center gap-1 bg-transparent border-none py-1 text-muted-foreground text-xs cursor-pointer shrink-0 hover:text-foreground"
+          >
+            <IconChevronRight
+              class="size-3.5 transition-transform duration-200 ease-out {isExpanded ? 'rotate-90' : ''}"
+            />
+            <span>Details</span>
+          </Collapsible.Trigger>
+
+          <!-- The SDK's own suggestions, granted verbatim — including where it
+               wants them remembered, which is what the scope in the label says. -->
+          {#if rule}
+            <button
+              type="button"
+              disabled={!!resolved}
+              class="flex items-center gap-1.5 min-w-0 bg-transparent border-none py-1 text-muted-foreground text-xs cursor-pointer
+                     transition-colors hover:text-foreground disabled:opacity-40"
+              title={rule.full}
+              onclick={() => answer('always')}
+            >
+              <span class="truncate">Always allow {rule.short} ({rule.scope})</span>
+              {#if shortcuts}
+                <kbd class="{kbd} shrink-0">⇧Y</kbd>
+              {/if}
+            </button>
+          {/if}
+        </div>
 
         <Collapsible.Content>
           <div class="bg-muted rounded p-2 mt-1 text-xs flex flex-col gap-2">

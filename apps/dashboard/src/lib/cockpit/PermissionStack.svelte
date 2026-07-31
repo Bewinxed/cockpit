@@ -1,0 +1,86 @@
+<script lang="ts">
+  /**
+   * Everything one session is parked on, as one card deep enough to see past.
+   * A queue of permissions rendered in full pushes the transcript off screen and
+   * asks the reader to decide four things at once — so the oldest is the card,
+   * the rest are slivers behind it, and the whole list is one hover away.
+   */
+  import { slide } from 'svelte/transition';
+  import { quintOut } from 'svelte/easing';
+  import { prefersReducedMotion } from 'svelte/motion';
+  import type { PermissionResult } from '@cockpit/core';
+  import type { PendingPermission } from './client.svelte';
+  import PermissionCard from './PermissionCard.svelte';
+
+  interface Props {
+    requests: PendingPermission[];
+    onResolve: (requestId: string, result: PermissionResult) => void;
+  }
+
+  let { requests, onResolve }: Props = $props();
+
+  let hovered = $state(false);
+  let focused = $state(false);
+  const expanded = $derived(hovered || focused);
+
+  /** How far behind the top card each sliver sits. Two deep; the chip counts the rest. */
+  const DEPTH = [
+    { offset: 6, scale: 0.97, opacity: 0.7 },
+    { offset: 12, scale: 0.94, opacity: 0.5 },
+  ];
+
+  /** The oldest request: the card the shortcuts answer, and the only one always shown. */
+  const top = $derived(requests[0]);
+  const rest = $derived(requests.slice(1));
+  const slivers = $derived(DEPTH.slice(0, rest.length));
+
+  const duration = (ms: number): number => (prefersReducedMotion.current ? 0 : ms);
+</script>
+
+<div
+  role="group"
+  aria-label="Permissions waiting on you"
+  onmouseenter={() => (hovered = true)}
+  onmouseleave={() => (hovered = false)}
+  onfocusin={() => (focused = true)}
+  onfocusout={(event) => {
+    // Moving between the stack's own buttons is not leaving it.
+    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) focused = false;
+  }}
+>
+  {#if top}
+    <!-- The band the slivers peek into is held open expanded too, or the top card
+         would jump up by it the moment the pointer arrives. -->
+    <div class="relative {rest.length ? 'pt-4' : ''}">
+      {#if !expanded}
+        {#each slivers as depth, level (level)}
+          <div
+            class="pointer-events-none absolute inset-x-0 top-4 bottom-0 origin-top rounded-md border border-warning/20 bg-card"
+            style="transform: translateY(-{depth.offset}px) scale({depth.scale}); opacity: {depth.opacity};"
+          ></div>
+        {/each}
+        {#if rest.length}
+          <span
+            class="pointer-events-none absolute top-0 right-2 rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground"
+          >
+            +{rest.length} more
+          </span>
+        {/if}
+      {/if}
+
+      <PermissionCard request={top} shortcuts {onResolve} />
+    </div>
+
+    {#if expanded}
+      {#each rest as request (request.requestId)}
+        <div
+          class="border-t border-warning/20"
+          in:slide={{ duration: duration(250), easing: quintOut }}
+          out:slide={{ duration: duration(180), easing: quintOut }}
+        >
+          <PermissionCard {request} {onResolve} />
+        </div>
+      {/each}
+    {/if}
+  {/if}
+</div>

@@ -16,8 +16,9 @@
     TranscriptSearch,
   } from '$lib/components/features';
   import { FlowView } from '$lib/components/features/flow';
-  import PermissionCard from '$lib/cockpit/PermissionCard.svelte';
+  import PermissionStack from '$lib/cockpit/PermissionStack.svelte';
   import { ACTIVITY_LABEL } from '$lib/cockpit/activity';
+  import type { PendingPermission, PermissionAnswer } from '$lib/cockpit/client.svelte';
   import {
     backfillSession,
     cockpit,
@@ -27,6 +28,7 @@
     keepSession,
     openSession,
     openTranscript,
+    permissionAnswer,
     relaunchSession,
     resolvePermission,
     resumeSession,
@@ -34,6 +36,7 @@
     setPermissionMode,
     stopSession,
   } from '$lib/cockpit/client.svelte';
+  import { isTyping } from '$lib/utils/typing';
   import { PERMISSION_MODES, permissionModeLabel } from '$lib/cockpit/permission-modes';
   import * as Select from '$lib/components/ui/select';
   import { sessionFailedMessage } from '$lib/cockpit/frames';
@@ -244,13 +247,40 @@
   let flashKey = $state<string | null>(null);
   let flashTimer: ReturnType<typeof setTimeout>;
 
-  // Find belongs to the transcript, so it only takes the key over the chat pane —
-  // and unlike Cmd+K it takes it mid-typing too, as the native find would.
   function handleKeydown(event: KeyboardEvent) {
-    if (event.key !== 'f' || !(event.metaKey || event.ctrlKey) || view !== 'chat') return;
+    // Find belongs to the transcript, so it only takes the key over the chat pane —
+    // and unlike Cmd+K it takes it mid-typing too, as the native find would.
+    if (event.key === 'f' && (event.metaKey || event.ctrlKey) && view === 'chat') {
+      event.preventDefault();
+      if (searchOpen) search?.focus();
+      else searchOpen = true;
+      return;
+    }
+    answerPending(event);
+  }
+
+  /** Which answer a bare key is, for the card that would take it. */
+  function answerFor(event: KeyboardEvent, request: PendingPermission): PermissionAnswer | null {
+    const key = event.key.toLowerCase();
+    if (event.shiftKey) {
+      return key === 'y' && request.suggestions?.length ? 'always' : null;
+    }
+    if (key === 'y' || key === 'a') return 'allow';
+    if (key === 'n' || key === 'd') return 'deny';
+    return null;
+  }
+
+  /**
+   * The permission the stack shows on top is the one the keyboard answers: the
+   * card the eye is on, and the only one that shows the hints.
+   */
+  function answerPending(event: KeyboardEvent) {
+    const request = session?.pending[0];
+    if (!request || event.metaKey || event.ctrlKey || event.altKey || isTyping()) return;
+    const answer = answerFor(event, request);
+    if (!answer) return;
     event.preventDefault();
-    if (searchOpen) search?.focus();
-    else searchOpen = true;
+    handleResolve(request.requestId, permissionAnswer(request, answer));
   }
 
   // Matches live wherever the transcript put them, which is usually off screen
@@ -729,9 +759,7 @@
           attachmentOpen={(session?.pending.length ?? 0) > 0}
         >
           {#snippet attachment()}
-            {#each session?.pending ?? [] as request (request.requestId)}
-              <PermissionCard {request} onResolve={handleResolve} />
-            {/each}
+            <PermissionStack requests={session?.pending ?? []} onResolve={handleResolve} />
           {/snippet}
         </ChatInput>
       {/if}

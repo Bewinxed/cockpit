@@ -2,6 +2,7 @@
 	import { IconHelp, IconCheck, IconChecklist, IconSend, IconClose, IconPenLine, IconChevronDown, IconChevronRight } from '$lib/icons';
 	import * as Collapsible from '$lib/components/ui/collapsible';
 	import type { MessageMetadata } from '$lib/cockpit/types';
+	import { isTyping } from '$lib/utils/typing';
 	import type { MessageRendererProps } from './types';
 
 	type Question = NonNullable<MessageMetadata['questions']>[number];
@@ -269,11 +270,11 @@
 	function handleKeydown(e: KeyboardEvent) {
 		if (!isActive || isSubmitting) return;
 
-		// Don't capture shortcuts when typing in an input
-		const isTyping = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
+		// Don't capture shortcuts when typing — the custom answer is an input
+		const typing = isTyping();
 
-		// Number keys 1-4 for quick selection (when not typing)
-		if (!isTyping && e.key >= '1' && e.key <= '4') {
+		// Number keys 1-9 for quick selection (when not typing)
+		if (!typing && e.key >= '1' && e.key <= '9') {
 			e.preventDefault();
 			const optionIdx = parseInt(e.key) - 1;
 			const currentQ = questions.length > 1 ? activeTab : 0;
@@ -285,7 +286,7 @@
 		}
 
 		// 'O' for Other (when not typing)
-		if (!isTyping && (e.key === 'o' || e.key === 'O')) {
+		if (!typing && (e.key === 'o' || e.key === 'O')) {
 			e.preventDefault();
 			const currentQ = questions.length > 1 ? activeTab : 0;
 			selectOther(currentQ);
@@ -293,7 +294,7 @@
 		}
 
 		// Left/Right arrow keys to switch tabs (when multiple questions and not typing)
-		if (!isTyping && questions.length > 1 && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+		if (!typing && questions.length > 1 && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
 			e.preventDefault();
 			if (e.key === 'ArrowLeft') {
 				activeTab = activeTab === 0 ? questions.length - 1 : activeTab - 1;
@@ -304,7 +305,7 @@
 		}
 
 		// Enter to submit (inputs and textareas handle their own Enter)
-		if (e.key === 'Enter' && !e.shiftKey && !isTyping && canSubmit()) {
+		if (e.key === 'Enter' && !e.shiftKey && !typing && canSubmit()) {
 			e.preventDefault();
 			handleSubmit();
 			return;
@@ -356,7 +357,7 @@
 	<div class="flex-1 min-w-0">
 		<div class="flex items-center gap-2">
 			<span class="font-medium text-sm text-foreground">{option.label}</span>
-			{#if showShortcuts && optIdx < 4}
+			{#if showShortcuts && optIdx < 9}
 				<kbd
 					class="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-mono"
 					>{optIdx + 1}</kbd
@@ -589,10 +590,10 @@
 						<p class="text-[10px] text-muted-foreground">
 							{#if questions.length > 1}
 								<kbd class="px-1 py-0.5 rounded bg-muted font-mono">←/→</kbd> switch •
-								<kbd class="px-1 py-0.5 rounded bg-muted font-mono">1-4</kbd> select •
+								<kbd class="px-1 py-0.5 rounded bg-muted font-mono">1-9</kbd> select •
 								<kbd class="px-1 py-0.5 rounded bg-muted font-mono">Enter</kbd> submit
 							{:else}
-								<kbd class="px-1 py-0.5 rounded bg-muted font-mono">1-4</kbd> select •
+								<kbd class="px-1 py-0.5 rounded bg-muted font-mono">1-9</kbd> select •
 								<kbd class="px-1 py-0.5 rounded bg-muted font-mono">O</kbd> other •
 								<kbd class="px-1 py-0.5 rounded bg-muted font-mono">Enter</kbd> submit
 							{/if}
