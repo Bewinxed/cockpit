@@ -32,6 +32,7 @@
     sendText,
     stopSession,
   } from '$lib/cockpit/client.svelte';
+  import { sessionFailedMessage } from '$lib/cockpit/frames';
   import type { Message, TranscriptGroup } from '$lib/cockpit/types';
   import type { SubagentState } from '$lib/utils/flow-types';
 
@@ -65,7 +66,10 @@
   });
 
   let scroller = $state<HTMLDivElement | null>(null);
-  let vlist = $state<VirtualizerHandle | null>(null);
+  // bind:this yields the component instance; fast-check can't see that its
+  // exports satisfy VirtualizerHandle, so the cast lives in one derived.
+  let vlistRaw = $state<unknown>(null);
+  const vlist = $derived(vlistRaw as VirtualizerHandle | null);
   /** Whether the reader is parked at the live edge — measured before every growth. */
   let atBottom = $state(true);
   let unseen = $state(false);
@@ -148,6 +152,17 @@
     return toolId ? subagents[toolId] : undefined;
   };
 
+  // A session that died with nothing to show for it: the error frame reached the
+  // tabs that were watching, so the registry row is where a tab that opened
+  // afterwards reads what happened. A session merely stopped before it said
+  // anything has nothing to explain — only one that died of something does.
+  const failure = $derived.by((): Message | null => {
+    if (browsing || (session?.messages.length ?? 0) > 0) return null;
+    const row = cockpit.instances.find((instance) => instance.id === viewId);
+    if (!row || (row.status !== 'error' && row.status !== 'stopped') || !row.lastError) return null;
+    return sessionFailedMessage(viewId, row.lastError);
+  });
+
   // Consecutive tool calls collapse into one ToolGroup, as MessageList does; a
   // Task call becomes its branch card instead, so the subagent it spawned reads
   // as one line until the user opens it.
@@ -175,6 +190,7 @@
       }
       result.push({ kind: 'tools', messages: tools, index: start });
     }
+    if (failure) result.push({ kind: 'single', message: failure, index: messages.length });
     return result;
   });
 
@@ -465,7 +481,7 @@
                  mount, and silently falls back to its parent element if it is unset. -->
             {#if scroller}
               <Virtualizer
-                bind:this={vlist}
+                bind:this={vlistRaw}
                 data={groups}
                 getKey={groupKey}
                 scrollRef={scroller}
