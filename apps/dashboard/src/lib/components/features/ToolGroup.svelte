@@ -86,7 +86,6 @@
 <div class="tool-group w-full bg-card border border-border rounded-xl overflow-hidden shadow-sm">
 	<!-- Group Header -->
 	<div class="px-3 py-2 bg-muted/30 border-b border-border flex items-center gap-2">
-		<Wrench class="w-4 h-4 text-muted-foreground" />
 		<span class="text-sm font-medium text-foreground">
 			{tools.length} Tool{tools.length > 1 ? 's' : ''}
 		</span>

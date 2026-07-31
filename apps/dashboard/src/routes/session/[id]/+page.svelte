@@ -4,6 +4,7 @@
   import { quintOut } from 'svelte/easing';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
+  import { Bot, GitBranch, Wrench } from '@lucide/svelte';
   import type { PermissionResult } from '@cockpit/core';
   import { ChatInput, ChatMessage, SubagentBranch, ToolGroup } from '$lib/components/features';
   import { FlowView } from '$lib/components/features/flow';
@@ -344,9 +345,27 @@
           <div class="mx-auto flex max-w-4xl flex-col gap-4">
             {#each groups as group (group.kind === 'single' ? group.message.id : `${group.kind}-${group.index}`)}
               {#if group.kind === 'tools'}
-                <ToolGroup tools={group.messages} />
+                <div class="flex justify-start gap-3">
+                  <div
+                    class="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl border border-border bg-secondary"
+                  >
+                    <Wrench class="size-[18px] text-muted-foreground" />
+                  </div>
+                  <div class="w-full max-w-[85%] min-w-0">
+                    <ToolGroup tools={group.messages} />
+                  </div>
+                </div>
               {:else if group.kind === 'subagent'}
-                <SubagentBranch branch={group.branch} spawn={group.spawn} />
+                <div class="flex justify-start gap-3">
+                  <div
+                    class="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl border border-border bg-secondary"
+                  >
+                    <GitBranch class="size-[18px] text-muted-foreground" />
+                  </div>
+                  <div class="w-full max-w-[85%] min-w-0">
+                    <SubagentBranch branch={group.branch} spawn={group.spawn} />
+                  </div>
+                </div>
               {:else}
                 <ChatMessage message={group.message} instanceId={viewId} />
               {/if}
@@ -363,7 +382,12 @@
             {/if}
 
             {#if session?.streaming}
-              <div class="flex justify-start">
+              <div class="flex justify-start gap-3">
+                <div
+                  class="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl border border-border bg-secondary"
+                >
+                  <Bot class="size-[18px] text-muted-foreground" />
+                </div>
                 <div
                   class="max-w-[85%] min-w-0 rounded-2xl rounded-bl-sm border border-border bg-card px-4 py-3 text-sm leading-relaxed break-words whitespace-pre-wrap text-card-foreground shadow-sm"
                 >

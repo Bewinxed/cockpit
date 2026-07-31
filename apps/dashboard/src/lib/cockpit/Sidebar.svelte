@@ -106,9 +106,9 @@
   <div class="py-2">
     <a
       href="/session"
-      class="flex min-h-7 items-center gap-1.5 rounded-md border border-border px-2 text-[13px] font-medium text-foreground transition-colors hover:bg-accent"
+      class="flex min-h-7 items-center gap-1.5 rounded-md bg-primary px-2 text-[13px] font-medium text-primary-foreground shadow-sm transition-[background-color,scale] duration-150 ease-out hover:bg-primary/90 active:scale-[0.96] focus-visible:ring-2 focus-visible:ring-ring"
     >
-      <Plus size={14} class="shrink-0 text-muted-foreground" />
+      <Plus size={14} class="shrink-0" />
       New session
     </a>
   </div>
