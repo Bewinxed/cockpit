@@ -7,14 +7,11 @@
 		ChevronRight,
 		CircleAlert
 	} from '@lucide/svelte';
-	import { slide } from 'svelte/transition';
-	import { quintOut } from 'svelte/easing';
+	import * as Collapsible from '$lib/components/ui/collapsible';
 	import type { MessageRendererProps } from './types';
 
 	let { message }: MessageRendererProps = $props();
 	let showDetails = $state(false);
-
-	const detailsId = $props.id();
 
 	type ErrorSubtype =
 		| 'error_max_turns'
@@ -123,35 +120,28 @@
 			<!-- Error details (expandable) -->
 			{#if errors.length > 0}
 				<div class="border-t border-border/50 pt-3">
-					<button
-						type="button"
-						class="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
-						aria-expanded={showDetails}
-						aria-controls={detailsId}
-						onclick={() => (showDetails = !showDetails)}
-					>
-						<ChevronRight
-							class="size-3 shrink-0 transition-transform duration-200 {showDetails
-								? 'rotate-90'
-								: ''}"
-						/>
-						<span class="font-medium">Error details ({errors.length})</span>
-					</button>
-
-					{#if showDetails}
-						<div
-							id={detailsId}
-							class="mt-2 space-y-2"
-							in:slide={{ duration: 250, easing: quintOut }}
-							out:slide={{ duration: 180, easing: quintOut }}
+					<Collapsible.Root open={showDetails} onOpenChange={() => (showDetails = !showDetails)}>
+						<Collapsible.Trigger
+							class="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
 						>
-							{#each errors as error, i (i)}
-								<div class="text-xs font-mono text-muted-foreground bg-muted/50 rounded px-2 py-1.5 whitespace-pre-wrap">
-									{error}
-								</div>
-							{/each}
-						</div>
-					{/if}
+							<ChevronRight
+								class="size-3 shrink-0 transition-transform duration-200 {showDetails
+									? 'rotate-90'
+									: ''}"
+							/>
+							<span class="font-medium">Error details ({errors.length})</span>
+						</Collapsible.Trigger>
+
+						<Collapsible.Content>
+							<div class="mt-2 space-y-2">
+								{#each errors as error, i (i)}
+									<div class="text-xs font-mono text-muted-foreground bg-muted/50 rounded px-2 py-1.5 whitespace-pre-wrap">
+										{error}
+									</div>
+								{/each}
+							</div>
+						</Collapsible.Content>
+					</Collapsible.Root>
 				</div>
 			{/if}
 

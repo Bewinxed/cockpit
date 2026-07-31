@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { CircleHelp, Check, ListChecks, Send, X, PenLine, ChevronDown, ChevronRight } from '@lucide/svelte';
+	import * as Collapsible from '$lib/components/ui/collapsible';
 	import type { MessageMetadata } from '$lib/cockpit/types';
 	import type { MessageRendererProps } from './types';
 
@@ -126,7 +127,6 @@
 
 	// Expandable state for answered questions
 	let isExpanded = $state(false);
-	const answeredId = $props.id();
 
 	// Initialize selections when questions change (for active state)
 	$effect(() => {
@@ -630,84 +630,77 @@
 			<!-- Inactive: Expandable answered state -->
 			<div class="w-full">
 				{#if answeredSummary}
-					<!-- Compact summary (clickable to expand) -->
-					<div class="flex items-center gap-2 w-full">
-						<button
-							type="button"
-							class="flex items-center gap-2 flex-1 text-left"
-							aria-expanded={isExpanded}
-							aria-controls={answeredId}
-							onclick={() => isExpanded = !isExpanded}
-						>
-							<div class="flex items-center gap-1 text-muted-foreground">
-								{#if isExpanded}
-									<ChevronDown class="w-4 h-4" />
-								{:else}
-									<ChevronRight class="w-4 h-4" />
-								{/if}
-							</div>
-							<div class="flex flex-wrap gap-2 flex-1">
-								{#each answeredSummary || [] as { header, answer }, idx (idx)}
-									<div
-										class="inline-flex items-center gap-2 px-3 py-1.5 bg-accent/50 border border-border/50 rounded-full text-sm"
-									>
-										<span class="text-[10px] font-semibold text-primary uppercase">{header}</span>
-										<span class="text-muted-foreground">→</span>
-										<span class="text-foreground font-medium truncate max-w-[200px]">{answer}</span>
-									</div>
-								{/each}
-							</div>
-						</button>
-						{#if onDismissMessage}
-							<button
-								onclick={() => onDismissMessage?.()}
-								class="p-1 rounded-full hover:bg-accent transition-colors opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100"
-								title="Dismiss"
-								aria-label="Dismiss"
-							>
-								<X class="w-3.5 h-3.5 text-muted-foreground" />
-							</button>
-						{/if}
-					</div>
-
-					<!-- Expanded view: Show full question UI (read-only) -->
-					{#if isExpanded}
-						<div
-							id={answeredId}
-							class="mt-3 border border-border/50 rounded-xl bg-card/30 overflow-hidden"
-						>
-							{#if questions.length > 1}
-								<!-- Multi-question: Tab navigation (read-only) -->
-								<div class="flex border-b border-border/50 bg-muted/10">
-									{#each questions as question, qIdx (qIdx)}
-										<button
-											type="button"
-											class="flex-1 px-3 py-2 text-xs font-medium transition-colors duration-150 ease-out relative
-												{activeTab === qIdx
-													? 'text-primary bg-card/50'
-													: 'text-muted-foreground hover:text-foreground'}"
-											onclick={() => activeTab = qIdx}
+					<Collapsible.Root open={isExpanded} onOpenChange={() => isExpanded = !isExpanded}>
+						<!-- Compact summary (clickable to expand) -->
+						<div class="flex items-center gap-2 w-full">
+							<Collapsible.Trigger class="flex items-center gap-2 flex-1 text-left">
+								<div class="flex items-center gap-1 text-muted-foreground">
+									{#if isExpanded}
+										<ChevronDown class="w-4 h-4" />
+									{:else}
+										<ChevronRight class="w-4 h-4" />
+									{/if}
+								</div>
+								<div class="flex flex-wrap gap-2 flex-1">
+									{#each answeredSummary || [] as { header, answer }, idx (idx)}
+										<div
+											class="inline-flex items-center gap-2 px-3 py-1.5 bg-accent/50 border border-border/50 rounded-full text-sm"
 										>
-											<div class="flex items-center justify-center gap-1.5">
-												<span class="truncate max-w-[80px]">{question.header}</span>
-												<Check class="w-3 h-3 text-success shrink-0" />
-											</div>
-											{#if activeTab === qIdx}
-												<div class="absolute bottom-0 left-0 right-0 h-0.5 bg-primary/50"></div>
-											{/if}
-										</button>
+											<span class="text-[10px] font-semibold text-primary uppercase">{header}</span>
+											<span class="text-muted-foreground">→</span>
+											<span class="text-foreground font-medium truncate max-w-[200px]">{answer}</span>
+										</div>
 									{/each}
 								</div>
-								<div class="p-3 opacity-75">
-									{@render questionContent(questions[activeTab], activeTab, false, true)}
-								</div>
-							{:else}
-								<div class="p-3 opacity-75">
-									{@render questionContent(questions[0], 0, false, true)}
-								</div>
+							</Collapsible.Trigger>
+							{#if onDismissMessage}
+								<button
+									onclick={() => onDismissMessage?.()}
+									class="p-1 rounded-full hover:bg-accent transition-colors opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100"
+									title="Dismiss"
+									aria-label="Dismiss"
+								>
+									<X class="w-3.5 h-3.5 text-muted-foreground" />
+								</button>
 							{/if}
 						</div>
-					{/if}
+
+						<!-- Expanded view: Show full question UI (read-only) -->
+						<Collapsible.Content>
+							<div class="mt-3 border border-border/50 rounded-xl bg-card/30 overflow-hidden">
+								{#if questions.length > 1}
+									<!-- Multi-question: Tab navigation (read-only) -->
+									<div class="flex border-b border-border/50 bg-muted/10">
+										{#each questions as question, qIdx (qIdx)}
+											<button
+												type="button"
+												class="flex-1 px-3 py-2 text-xs font-medium transition-colors duration-150 ease-out relative
+													{activeTab === qIdx
+														? 'text-primary bg-card/50'
+														: 'text-muted-foreground hover:text-foreground'}"
+												onclick={() => activeTab = qIdx}
+											>
+												<div class="flex items-center justify-center gap-1.5">
+													<span class="truncate max-w-[80px]">{question.header}</span>
+													<Check class="w-3 h-3 text-success shrink-0" />
+												</div>
+												{#if activeTab === qIdx}
+													<div class="absolute bottom-0 left-0 right-0 h-0.5 bg-primary/50"></div>
+												{/if}
+											</button>
+										{/each}
+									</div>
+									<div class="p-3 opacity-75">
+										{@render questionContent(questions[activeTab], activeTab, false, true)}
+									</div>
+								{:else}
+									<div class="p-3 opacity-75">
+										{@render questionContent(questions[0], 0, false, true)}
+									</div>
+								{/if}
+							</div>
+						</Collapsible.Content>
+					</Collapsible.Root>
 				{:else}
 					<div class="flex items-center gap-2">
 						<div

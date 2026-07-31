@@ -2,6 +2,7 @@
   import { Handle, Position, useStore } from '@xyflow/svelte';
   import { Wrench, Check, X, Loader2, FileText, Terminal, Search, FolderOpen, Pencil } from '@lucide/svelte';
   import { getToolGlance, getToolStatus, getResultGlimpse } from '$lib/utils/tool-display';
+  import * as Collapsible from '$lib/components/ui/collapsible';
   import type { Message } from '$lib/cockpit/types';
 
   // Props passed by SvelteFlow
@@ -38,8 +39,6 @@
   const statusLabel = $derived(
     isStreaming ? 'Running' : toolStatus === 'success' ? 'Done' : toolStatus === 'error' ? 'Failed' : 'Pending'
   );
-
-  const resultId = $props.id();
 
   // Get tool icon based on name
   const ToolIcon = $derived.by(() => {
@@ -148,27 +147,24 @@
       {/if}
 
       {#if resultPreview && !isStreaming}
-        <button
-          type="button"
-          class="w-full text-left focus-visible:ring-2 focus-visible:ring-ring"
-          aria-expanded={expanded}
-          aria-controls={resultId}
-          onclick={() => expanded = !expanded}
-        >
-          <div class="text-xs text-muted-foreground mb-1">Result {expanded ? '(collapse)' : '(expand)'}</div>
-          {#if expanded}
+        <Collapsible.Root open={expanded} onOpenChange={() => expanded = !expanded}>
+          <Collapsible.Trigger class="w-full text-left focus-visible:ring-2 focus-visible:ring-ring">
+            <div class="text-xs text-muted-foreground mb-1">Result {expanded ? '(collapse)' : '(expand)'}</div>
+            {#if !expanded}
+              <div class="text-xs font-mono bg-muted/50 px-2 py-1 rounded truncate">
+                {resultPreview}
+              </div>
+            {/if}
+          </Collapsible.Trigger>
+
+          <Collapsible.Content>
             <div
-              id={resultId}
               class="text-xs font-mono bg-muted/50 px-2 py-1 rounded max-h-40 overflow-y-auto whitespace-pre-wrap"
             >
               {primaryTool?.metadata?.toolResult}
             </div>
-          {:else}
-            <div id={resultId} class="text-xs font-mono bg-muted/50 px-2 py-1 rounded truncate">
-              {resultPreview}
-            </div>
-          {/if}
-        </button>
+          </Collapsible.Content>
+        </Collapsible.Root>
       {/if}
     </div>
   {/if}

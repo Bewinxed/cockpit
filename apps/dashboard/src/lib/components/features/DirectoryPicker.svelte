@@ -1,9 +1,8 @@
 <script lang="ts">
   /** Walks a machine's filesystem over the `fs` verb so a cwd can be picked, not typed. */
   import type { FsEntry, SDKSessionInfo } from '@cockpit/core';
-  import { slide } from 'svelte/transition';
-  import { quintOut } from 'svelte/easing';
   import { ArrowUp, Folder, LoaderCircle } from '@lucide/svelte';
+  import * as Collapsible from '$lib/components/ui/collapsible';
   import { cockpit, machineFs } from '$lib/cockpit/client.svelte';
 
   let {
@@ -96,23 +95,16 @@
   }}
 />
 
-<div class="flex flex-col">
-  <button
-    type="button"
+<Collapsible.Root {open} onOpenChange={toggle} class="flex flex-col">
+  <Collapsible.Trigger
     class="flex items-center gap-1.5 self-start text-xs text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-    aria-expanded={open}
-    onclick={toggle}
   >
     <Folder size={14} />
     Browse
-  </button>
+  </Collapsible.Trigger>
 
-  {#if open}
-    <div
-      class="mt-2 flex flex-col gap-2 border-t border-border pt-2"
-      in:slide={{ duration: 250, easing: quintOut }}
-      out:slide={{ duration: 180, easing: quintOut }}
-    >
+  <Collapsible.Content>
+    <div class="mt-2 flex flex-col gap-2 border-t border-border pt-2">
       <div class="flex items-center gap-2">
         <button
           type="button"
@@ -160,5 +152,5 @@
         </button>
       </div>
     </div>
-  {/if}
-</div>
+  </Collapsible.Content>
+</Collapsible.Root>

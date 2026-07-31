@@ -1,7 +1,8 @@
 <script lang="ts">
-  import { scale, slide } from 'svelte/transition';
+  import { scale } from 'svelte/transition';
   import { quintOut } from 'svelte/easing';
   import { Check, ChevronRight, Shield, X } from '@lucide/svelte';
+  import * as Collapsible from '$lib/components/ui/collapsible';
   import type { PermissionResult } from '@cockpit/core';
   import type { PendingPermission } from './client.svelte';
   import { permissionSummary } from './permission-summary';
@@ -37,8 +38,6 @@
   const command = $derived(
     typeof request.input.command === 'string' ? request.input.command : null
   );
-
-  const detailsId = $props.id();
 </script>
 
 <div class="bg-warning/10 p-3" role="alert">
@@ -90,43 +89,36 @@
       </div>
       <div class="text-muted-foreground text-sm mt-0.5 break-words">{summary}</div>
 
-      <button
-        type="button"
-        class="flex items-center gap-1 bg-transparent border-none py-1 text-muted-foreground text-xs cursor-pointer mt-1.5 hover:text-foreground"
-        aria-expanded={isExpanded}
-        aria-controls={detailsId}
-        onclick={() => (isExpanded = !isExpanded)}
-      >
-        <ChevronRight
-          size={14}
-          class="transition-transform duration-200 ease-out {isExpanded ? 'rotate-90' : ''}"
-        />
-        <span>Details</span>
-      </button>
-
-      {#if isExpanded}
-        <div
-          id={detailsId}
-          class="bg-muted rounded p-2 mt-1 text-xs flex flex-col gap-2"
-          in:slide={{ duration: 250, easing: quintOut }}
-          out:slide={{ duration: 180, easing: quintOut }}
+      <Collapsible.Root open={isExpanded} onOpenChange={() => (isExpanded = !isExpanded)}>
+        <Collapsible.Trigger
+          class="flex items-center gap-1 bg-transparent border-none py-1 text-muted-foreground text-xs cursor-pointer mt-1.5 hover:text-foreground"
         >
-          {#if command}
+          <ChevronRight
+            size={14}
+            class="transition-transform duration-200 ease-out {isExpanded ? 'rotate-90' : ''}"
+          />
+          <span>Details</span>
+        </Collapsible.Trigger>
+
+        <Collapsible.Content>
+          <div class="bg-muted rounded p-2 mt-1 text-xs flex flex-col gap-2">
+            {#if command}
+              <div class="flex gap-2">
+                <span class="font-medium text-muted-foreground shrink-0">Command:</span>
+                <pre class="bg-background/50 px-2 py-1 rounded font-mono text-xs whitespace-pre-wrap break-all max-h-[200px] overflow-auto m-0 flex-1">{command}</pre>
+              </div>
+            {/if}
             <div class="flex gap-2">
-              <span class="font-medium text-muted-foreground shrink-0">Command:</span>
-              <pre class="bg-background/50 px-2 py-1 rounded font-mono text-xs whitespace-pre-wrap break-all max-h-[200px] overflow-auto m-0 flex-1">{command}</pre>
+              <span class="font-medium text-muted-foreground shrink-0">Input:</span>
+              <pre class="bg-background/50 px-2 py-1 rounded font-mono text-xs whitespace-pre-wrap break-all max-h-[200px] overflow-auto m-0 flex-1">{JSON.stringify(
+                  request.input,
+                  null,
+                  2
+                )}</pre>
             </div>
-          {/if}
-          <div class="flex gap-2">
-            <span class="font-medium text-muted-foreground shrink-0">Input:</span>
-            <pre class="bg-background/50 px-2 py-1 rounded font-mono text-xs whitespace-pre-wrap break-all max-h-[200px] overflow-auto m-0 flex-1">{JSON.stringify(
-                request.input,
-                null,
-                2
-              )}</pre>
           </div>
-        </div>
-      {/if}
+        </Collapsible.Content>
+      </Collapsible.Root>
     </div>
   </div>
 </div>

@@ -9,6 +9,7 @@
   import Markdown from '@humanspeak/svelte-markdown';
   import { ChevronRight } from '@lucide/svelte';
   import { PROSE } from '$lib/prose';
+  import * as Collapsible from '$lib/components/ui/collapsible';
   import { cockpit, deleteProject, machineFs, spawnSession } from '$lib/cockpit/client.svelte';
   import type { ProjectRow } from '$lib/cockpit/client.svelte';
   import { readDocs, type Doc } from '$lib/cockpit/docs';
@@ -232,56 +233,57 @@
           {#each epics as epic (epic.id)}
             {@const total = epic.tasks.length}
             <div class="rounded-lg border border-border bg-card">
-              <button
-                type="button"
-                class="flex w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
-                aria-expanded={!!expanded[epic.id]}
-                aria-controls="epic-{epic.id}"
-                onclick={() => (expanded[epic.id] = !expanded[epic.id])}
+              <Collapsible.Root
+                open={!!expanded[epic.id]}
+                onOpenChange={() => (expanded[epic.id] = !expanded[epic.id])}
               >
-                <ChevronRight
-                  size={12}
-                  class="shrink-0 text-muted-foreground transition-transform {expanded[epic.id]
-                    ? 'rotate-90'
-                    : ''}"
-                />
-                <span class="shrink-0 font-mono text-xs text-muted-foreground">{epic.id}</span>
-                <span class="truncate text-sm">{epic.title}</span>
-                <span class="ml-auto flex shrink-0 items-center gap-2">
-                  <span class="h-1 w-16 overflow-hidden rounded-full bg-border">
-                    <span
-                      class="block h-full {epic.status === 'done' ? 'bg-success' : 'bg-primary'}"
-                      style="width: {total === 0 ? 0 : (epic.done / total) * 100}%"
-                    ></span>
-                  </span>
-                  <span class="font-mono text-[11px] text-muted-foreground">
-                    {epic.done}/{total}
-                  </span>
-                </span>
-              </button>
-              {#if expanded[epic.id]}
-                <ul id="epic-{epic.id}" class="border-t border-border">
-                  {#each epic.tasks as task (task.id)}
-                    <li class="flex items-baseline gap-3 px-3 py-1.5">
-                      <span class="shrink-0 font-mono text-[11px] text-muted-foreground">
-                        {task.id}
-                      </span>
+                <Collapsible.Trigger
+                  class="flex w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <ChevronRight
+                    size={12}
+                    class="shrink-0 text-muted-foreground transition-transform {expanded[epic.id]
+                      ? 'rotate-90'
+                      : ''}"
+                  />
+                  <span class="shrink-0 font-mono text-xs text-muted-foreground">{epic.id}</span>
+                  <span class="truncate text-sm">{epic.title}</span>
+                  <span class="ml-auto flex shrink-0 items-center gap-2">
+                    <span class="h-1 w-16 overflow-hidden rounded-full bg-border">
                       <span
-                        class="truncate text-xs {task.status === 'done'
-                          ? 'text-muted-foreground line-through'
-                          : ''}"
-                      >
-                        {task.title}
-                      </span>
-                      <span class="ml-auto shrink-0 text-[11px] text-muted-foreground">
-                        {task.status}
-                      </span>
-                    </li>
-                  {:else}
-                    <li class="px-3 py-1.5 text-xs text-muted-foreground">No tasks.</li>
-                  {/each}
-                </ul>
-              {/if}
+                        class="block h-full {epic.status === 'done' ? 'bg-success' : 'bg-primary'}"
+                        style="width: {total === 0 ? 0 : (epic.done / total) * 100}%"
+                      ></span>
+                    </span>
+                    <span class="font-mono text-[11px] text-muted-foreground">
+                      {epic.done}/{total}
+                    </span>
+                  </span>
+                </Collapsible.Trigger>
+                <Collapsible.Content>
+                  <ul class="border-t border-border">
+                    {#each epic.tasks as task (task.id)}
+                      <li class="flex items-baseline gap-3 px-3 py-1.5">
+                        <span class="shrink-0 font-mono text-[11px] text-muted-foreground">
+                          {task.id}
+                        </span>
+                        <span
+                          class="truncate text-xs {task.status === 'done'
+                            ? 'text-muted-foreground line-through'
+                            : ''}"
+                        >
+                          {task.title}
+                        </span>
+                        <span class="ml-auto shrink-0 text-[11px] text-muted-foreground">
+                          {task.status}
+                        </span>
+                      </li>
+                    {:else}
+                      <li class="px-3 py-1.5 text-xs text-muted-foreground">No tasks.</li>
+                    {/each}
+                  </ul>
+                </Collapsible.Content>
+              </Collapsible.Root>
             </div>
           {:else}
             <p class="text-sm text-muted-foreground">

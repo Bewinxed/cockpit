@@ -1,13 +1,12 @@
 <script lang="ts">
   import { Handle, Position, useStore, useSvelteFlow } from '@xyflow/svelte';
   import { Zap, LoaderCircle, CircleCheck, CircleX, ChevronRight, ChevronDown, Layers, Wrench } from '@lucide/svelte';
-  import { slide } from 'svelte/transition';
+  import * as Collapsible from '$lib/components/ui/collapsible';
   import type { Message } from '$lib/cockpit/types';
   import type { SubagentState } from '$lib/utils/flow-types';
   import { getToolGlance, getToolStatus } from '$lib/utils/tool-display';
   import {
     ELAPSED_TIME_UPDATE_INTERVAL,
-    SLIDE_DURATION,
     ZOOM_THRESHOLD_OVERVIEW,
     ZOOM_THRESHOLD_SUMMARY,
     SUBAGENT_RESULT_MAX_CHARS,
@@ -147,8 +146,7 @@
   }
 
   // Toggle expansion for a specific subagent
-  function toggleExpanded(toolUseId: string, e: MouseEvent) {
-    e.stopPropagation();
+  function toggleExpanded(toolUseId: string) {
     const newSet = new Set(expandedSet);
     if (newSet.has(toolUseId)) {
       newSet.delete(toolUseId);
@@ -328,58 +326,57 @@
 
           <!-- Expand/collapse -->
           {#if toolMessages.length > 0 || childSubagents.length > 0}
-            <button
-              type="button"
-              class="flex w-full items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-              aria-expanded={isExpanded}
-              aria-controls="subagent-tools-{subagent.toolUseId}"
-              onclick={(e) => toggleExpanded(subagent.toolUseId, e)}
+            <Collapsible.Root
+              open={isExpanded}
+              onOpenChange={() => toggleExpanded(subagent.toolUseId)}
+              class="space-y-2"
             >
-              {#if isExpanded}
-                <ChevronDown class="h-3 w-3" />
-                <span>Hide details</span>
-              {:else}
-                <ChevronRight class="h-3 w-3" />
-                <span>Show {toolMessages.length} tools{childSubagents.length > 0 ? `, ${childSubagents.length} nested` : ''}</span>
-              {/if}
-            </button>
-          {/if}
+              <Collapsible.Trigger
+                class="flex w-full items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                onclick={(e: MouseEvent) => e.stopPropagation()}
+              >
+                {#if isExpanded}
+                  <ChevronDown class="h-3 w-3" />
+                  <span>Hide details</span>
+                {:else}
+                  <ChevronRight class="h-3 w-3" />
+                  <span>Show {toolMessages.length} tools{childSubagents.length > 0 ? `, ${childSubagents.length} nested` : ''}</span>
+                {/if}
+              </Collapsible.Trigger>
 
-          <!-- Expanded content -->
-          {#if isExpanded}
-            <div
-              id="subagent-tools-{subagent.toolUseId}"
-              class="border-t border-border/50 pt-2 space-y-1"
-              transition:slide={{ duration: SLIDE_DURATION }}
-            >
-              {#each toolMessages as tool (tool.metadata?.toolId)}
-                <div class="flex items-center gap-2 text-xs py-1 px-2 rounded bg-muted/50">
-                  <Wrench class="h-3 w-3 {getToolStatusColor(tool)} shrink-0" />
-                  <span class="font-medium">{tool.metadata?.toolName || 'Tool'}</span>
-                  <span class="text-muted-foreground truncate">
-                    {getToolGlance(tool.metadata?.toolInput as Record<string, unknown>) || ''}
-                  </span>
-                </div>
-              {/each}
+              <!-- Expanded content -->
+              <Collapsible.Content>
+                <div class="border-t border-border/50 pt-2 space-y-1">
+                  {#each toolMessages as tool (tool.metadata?.toolId)}
+                    <div class="flex items-center gap-2 text-xs py-1 px-2 rounded bg-muted/50">
+                      <Wrench class="h-3 w-3 {getToolStatusColor(tool)} shrink-0" />
+                      <span class="font-medium">{tool.metadata?.toolName || 'Tool'}</span>
+                      <span class="text-muted-foreground truncate">
+                        {getToolGlance(tool.metadata?.toolInput as Record<string, unknown>) || ''}
+                      </span>
+                    </div>
+                  {/each}
 
-              {#each childSubagents as child (child.toolUseId)}
-                <div class="flex items-center gap-2 text-xs py-1 px-2 rounded bg-info/10 border-l-2 border-info">
-                  <Zap class="h-3 w-3 text-info shrink-0" />
-                  <span class="font-medium">{child.subagentType}</span>
-                  <span class="text-muted-foreground">{statusLabel(child.status)}</span>
-                  {#if child.messages.length > 0}
-                    <span class="text-xs bg-muted px-1 rounded">{child.messages.length}</span>
+                  {#each childSubagents as child (child.toolUseId)}
+                    <div class="flex items-center gap-2 text-xs py-1 px-2 rounded bg-info/10 border-l-2 border-info">
+                      <Zap class="h-3 w-3 text-info shrink-0" />
+                      <span class="font-medium">{child.subagentType}</span>
+                      <span class="text-muted-foreground">{statusLabel(child.status)}</span>
+                      {#if child.messages.length > 0}
+                        <span class="text-xs bg-muted px-1 rounded">{child.messages.length}</span>
+                      {/if}
+                    </div>
+                  {/each}
+
+                  {#if subagent.status === 'complete' && subagent.result}
+                    <div class="text-xs text-muted-foreground bg-muted/30 p-2 rounded max-h-20 overflow-y-auto">
+                      <span class="font-medium">Result: </span>
+                      {subagent.result.slice(0, SUBAGENT_RESULT_MAX_CHARS)}{subagent.result.length > SUBAGENT_RESULT_MAX_CHARS ? '...' : ''}
+                    </div>
                   {/if}
                 </div>
-              {/each}
-
-              {#if subagent.status === 'complete' && subagent.result}
-                <div class="text-xs text-muted-foreground bg-muted/30 p-2 rounded max-h-20 overflow-y-auto">
-                  <span class="font-medium">Result: </span>
-                  {subagent.result.slice(0, SUBAGENT_RESULT_MAX_CHARS)}{subagent.result.length > SUBAGENT_RESULT_MAX_CHARS ? '...' : ''}
-                </div>
-              {/if}
-            </div>
+              </Collapsible.Content>
+            </Collapsible.Root>
           {/if}
         </div>
       {/each}

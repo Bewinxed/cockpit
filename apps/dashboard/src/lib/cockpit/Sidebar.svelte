@@ -30,6 +30,7 @@
   import { slide } from 'svelte/transition';
   import { quintOut } from 'svelte/easing';
   import { ChevronRight, Folder, History, Plus, Server } from '@lucide/svelte';
+  import * as Collapsible from '$lib/components/ui/collapsible';
   import type { SDKSessionInfo } from '@cockpit/core';
   import { formatDistanceToNow } from '$lib/utils/time';
   import { ACTIVITY_LABEL } from './activity';
@@ -189,119 +190,108 @@
     {@const open = !collapsed[machine.machineId]}
     {@const expanded = !!showAll[machine.machineId]}
     <section class="flex flex-col pb-2">
-      <header class="flex items-center">
-        <button
-          type="button"
-          class="flex min-h-7 flex-1 items-center gap-1.5 rounded-md px-2 py-1 text-left transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
-          aria-expanded={open}
-          aria-controls="machine-{machine.machineId}"
-          onclick={() => toggleMachine(machine.machineId)}
-        >
-          <ChevronRight
-            size={12}
-            class="shrink-0 text-muted-foreground transition-transform duration-200 ease-out {open
-              ? 'rotate-90'
-              : ''}"
-          />
-          <Server size={14} class="shrink-0 text-muted-foreground" />
-          <span class="truncate text-[13px] font-medium text-foreground">{machine.hostname}</span>
-          <span
-            class="size-1.5 shrink-0 rounded-full {machine.status === 'online'
-              ? 'bg-success'
-              : 'bg-muted-foreground'}"
-            title={machine.status === 'online' ? 'Online' : 'Offline'}
-          ></span>
-        </button>
-        <button
-          type="button"
-          class="min-h-7 rounded px-1.5 font-mono text-[10px] text-muted-foreground/60 uppercase transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-          onclick={() => loadCatalog(machine.machineId)}
-          title="Reload sessions"
-        >
-          {machine.os}
-        </button>
-      </header>
-
-      {#if open}
-        <div
-          id="machine-{machine.machineId}"
-          class="ml-4 flex flex-col border-l border-border/60 pl-1"
-          in:slide={{ duration: 250, easing: quintOut }}
-          out:slide={{ duration: 180, easing: quintOut }}
-        >
-          {#if running.length > 0}
+      <Collapsible.Root {open} onOpenChange={() => toggleMachine(machine.machineId)}>
+        <header class="flex items-center">
+          <Collapsible.Trigger
+            class="flex min-h-7 flex-1 items-center gap-1.5 rounded-md px-2 py-1 text-left transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <ChevronRight
+              size={12}
+              class="shrink-0 text-muted-foreground transition-transform duration-200 ease-out {open
+                ? 'rotate-90'
+                : ''}"
+            />
+            <Server size={14} class="shrink-0 text-muted-foreground" />
+            <span class="truncate text-[13px] font-medium text-foreground">{machine.hostname}</span>
             <span
-              class="px-1.5 pt-2 pb-0.5 text-[10px] font-medium tracking-wider text-muted-foreground/60 uppercase"
-            >
-              Live
-            </span>
-            {#each running as instance (instance.id)}
-              {@const activity = cockpit.activityOf(instance.id)}
-              {@const current = isCurrent(`/session/${instance.id}`)}
-              <a
-                href="/session/{instance.id}"
-                aria-current={current ? 'page' : undefined}
-                class="flex min-h-7 items-center gap-2 rounded-md px-1.5 py-1 text-[13px] transition-colors hover:bg-accent
-                  {current ? 'bg-accent' : ''}"
-                in:slide={rowIn}
-                out:slide={rowOut}
-              >
-                <ActivityDot {activity} size={1.5} />
-                <span class="truncate font-mono text-foreground/90 {current ? 'font-medium' : ''}">
-                  {leaf(instance.cwd)}
-                </span>
-                <span
-                  class="ml-auto shrink-0 text-[10px] tabular-nums {activity === 'blocked'
-                    ? 'text-warning'
-                    : 'text-muted-foreground/70'}"
-                >
-                  {ACTIVITY_LABEL[activity]}
-                </span>
-              </a>
-            {/each}
-          {/if}
+              class="size-1.5 shrink-0 rounded-full {machine.status === 'online'
+                ? 'bg-success'
+                : 'bg-muted-foreground'}"
+              title={machine.status === 'online' ? 'Online' : 'Offline'}
+            ></span>
+          </Collapsible.Trigger>
+          <button
+            type="button"
+            class="min-h-7 rounded px-1.5 font-mono text-[10px] text-muted-foreground/60 uppercase transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+            onclick={() => loadCatalog(machine.machineId)}
+            title="Reload sessions"
+          >
+            {machine.os}
+          </button>
+        </header>
 
-          {#if stored.length > 0}
-            <span
-              class="px-1.5 pt-2 pb-0.5 text-[10px] font-medium tracking-wider text-muted-foreground/60 uppercase"
-              title="Claude Code sessions stored on this machine — any directory"
-            >
-              Recent sessions
-            </span>
-            {#each stored.slice(0, RECENT) as info (info.sessionId)}
-              {@render storedRow(machine.machineId, info)}
-            {/each}
-
-            {#if stored.length > RECENT}
-              {#if expanded}
-                <div
-                  id="stored-{machine.machineId}"
-                  class="flex flex-col"
-                  in:slide={{ duration: 250, easing: quintOut }}
-                  out:slide={{ duration: 180, easing: quintOut }}
-                >
-                  {#each stored.slice(RECENT) as info (info.sessionId)}
-                    {@render storedRow(machine.machineId, info)}
-                  {/each}
-                </div>
-              {/if}
-              <button
-                type="button"
-                class="flex min-h-6 items-center px-1.5 py-1 text-left text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-                aria-expanded={expanded}
-                aria-controls="stored-{machine.machineId}"
-                onclick={() => (showAll[machine.machineId] = !expanded)}
+        <Collapsible.Content>
+          <div class="ml-4 flex flex-col border-l border-border/60 pl-1">
+            {#if running.length > 0}
+              <span
+                class="px-1.5 pt-2 pb-0.5 text-[10px] font-medium tracking-wider text-muted-foreground/60 uppercase"
               >
-                {expanded ? 'Show fewer' : `Show all ${stored.length}`}
-              </button>
+                Live
+              </span>
+              {#each running as instance (instance.id)}
+                {@const activity = cockpit.activityOf(instance.id)}
+                {@const current = isCurrent(`/session/${instance.id}`)}
+                <a
+                  href="/session/{instance.id}"
+                  aria-current={current ? 'page' : undefined}
+                  class="flex min-h-7 items-center gap-2 rounded-md px-1.5 py-1 text-[13px] transition-colors hover:bg-accent
+                    {current ? 'bg-accent' : ''}"
+                  in:slide={rowIn}
+                  out:slide={rowOut}
+                >
+                  <ActivityDot {activity} size={1.5} />
+                  <span class="truncate font-mono text-foreground/90 {current ? 'font-medium' : ''}">
+                    {leaf(instance.cwd)}
+                  </span>
+                  <span
+                    class="ml-auto shrink-0 text-[10px] tabular-nums {activity === 'blocked'
+                      ? 'text-warning'
+                      : 'text-muted-foreground/70'}"
+                  >
+                    {ACTIVITY_LABEL[activity]}
+                  </span>
+                </a>
+              {/each}
             {/if}
-          {/if}
 
-          {#if running.length === 0 && stored.length === 0}
-            <p class="px-1.5 py-1 text-[11px] text-muted-foreground/70">No sessions.</p>
-          {/if}
-        </div>
-      {/if}
+            {#if stored.length > 0}
+              <span
+                class="px-1.5 pt-2 pb-0.5 text-[10px] font-medium tracking-wider text-muted-foreground/60 uppercase"
+                title="Claude Code sessions stored on this machine — any directory"
+              >
+                Recent sessions
+              </span>
+              {#each stored.slice(0, RECENT) as info (info.sessionId)}
+                {@render storedRow(machine.machineId, info)}
+              {/each}
+
+              {#if stored.length > RECENT}
+                <Collapsible.Root
+                  open={expanded}
+                  onOpenChange={() => (showAll[machine.machineId] = !expanded)}
+                >
+                  <Collapsible.Content>
+                    <div class="flex flex-col">
+                      {#each stored.slice(RECENT) as info (info.sessionId)}
+                        {@render storedRow(machine.machineId, info)}
+                      {/each}
+                    </div>
+                  </Collapsible.Content>
+                  <Collapsible.Trigger
+                    class="flex min-h-6 items-center px-1.5 py-1 text-left text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    {expanded ? 'Show fewer' : `Show all ${stored.length}`}
+                  </Collapsible.Trigger>
+                </Collapsible.Root>
+              {/if}
+            {/if}
+
+            {#if running.length === 0 && stored.length === 0}
+              <p class="px-1.5 py-1 text-[11px] text-muted-foreground/70">No sessions.</p>
+            {/if}
+          </div>
+        </Collapsible.Content>
+      </Collapsible.Root>
     </section>
   {:else}
     <p class="px-2 py-2 text-[13px] text-muted-foreground">

@@ -11,6 +11,7 @@
   import { permissionSummary } from '$lib/cockpit/permission-summary';
   import DirectoryPicker from '$lib/components/features/DirectoryPicker.svelte';
   import { Checkbox } from '$lib/components/ui/checkbox';
+  import * as Collapsible from '$lib/components/ui/collapsible';
   import * as Select from '$lib/components/ui/select';
 
   let machineId = $state('');
@@ -316,34 +317,36 @@
     {/each}
 
     {#if stale.length > 0}
-      <section class="flex flex-col gap-2">
-        <button
-          type="button"
-          class="flex min-h-6 items-center gap-2 text-left text-[11px] font-medium tracking-wider text-muted-foreground uppercase transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-          aria-expanded={showStale}
-          aria-controls="stale-instances"
-          onclick={() => (showStale = !showStale)}
+      <section>
+        <Collapsible.Root
+          open={showStale}
+          onOpenChange={() => (showStale = !showStale)}
+          class="flex flex-col gap-2"
         >
-          <ChevronRight size={12} class="transition-transform {showStale ? 'rotate-90' : ''}" />
-          Stale
-          <span class="font-mono normal-case">{stale.length}</span>
-        </button>
-        {#if showStale}
-          <div id="stale-instances" class="flex flex-col gap-2">
-            <p class="text-xs text-muted-foreground">
-              The daemon running these went away. They may still be alive on their machine — the hub
-              cannot tell, so it stops counting them as live.
-            </p>
-            {#each stale as instance (instance.id)}
-              <span
-                class="flex items-baseline gap-3 rounded-lg border border-dashed border-muted-foreground/30 px-3 py-2 text-xs text-muted-foreground"
-              >
-                <span class="truncate font-mono">{instance.cwd || '—'}</span>
-                <span class="ml-auto shrink-0 font-mono">{instance.machineId}</span>
-              </span>
-            {/each}
-          </div>
-        {/if}
+          <Collapsible.Trigger
+            class="flex min-h-6 items-center gap-2 text-left text-[11px] font-medium tracking-wider text-muted-foreground uppercase transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <ChevronRight size={12} class="transition-transform {showStale ? 'rotate-90' : ''}" />
+            Stale
+            <span class="font-mono normal-case">{stale.length}</span>
+          </Collapsible.Trigger>
+          <Collapsible.Content>
+            <div class="flex flex-col gap-2">
+              <p class="text-xs text-muted-foreground">
+                The daemon running these went away. They may still be alive on their machine — the
+                hub cannot tell, so it stops counting them as live.
+              </p>
+              {#each stale as instance (instance.id)}
+                <span
+                  class="flex items-baseline gap-3 rounded-lg border border-dashed border-muted-foreground/30 px-3 py-2 text-xs text-muted-foreground"
+                >
+                  <span class="truncate font-mono">{instance.cwd || '—'}</span>
+                  <span class="ml-auto shrink-0 font-mono">{instance.machineId}</span>
+                </span>
+              {/each}
+            </div>
+          </Collapsible.Content>
+        </Collapsible.Root>
       </section>
     {/if}
   </div>

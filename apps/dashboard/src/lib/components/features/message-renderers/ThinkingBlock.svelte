@@ -1,13 +1,10 @@
 <script lang="ts">
 	import { ChevronRight, Brain } from '@lucide/svelte';
-	import { slide } from 'svelte/transition';
-	import { quintOut } from 'svelte/easing';
+	import * as Collapsible from '$lib/components/ui/collapsible';
 	import type { MessageRendererProps } from './types';
 
 	let { message }: MessageRendererProps = $props();
 	let expanded = $state(false);
-
-	const panelId = $props.id();
 
 	const thinking = $derived(message.metadata?.thinking || message.content || '');
 	const isRedacted = $derived(message.metadata?.isRedactedThinking === true);
@@ -24,43 +21,38 @@
 <div class="flex justify-start gap-3 group">
 	<div class="flex flex-col gap-1 items-start w-full max-w-[85%]">
 		<div class="thinking-block border-l-2 border-border pl-3 py-1 w-full">
-			<button
-				type="button"
-				class="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors w-full text-left"
-				aria-expanded={expanded}
-				aria-controls={panelId}
-				onclick={() => (expanded = !expanded)}
-			>
-				<ChevronRight
-					class="size-4 shrink-0 transition-transform duration-200 {expanded
-						? 'rotate-90'
-						: ''}"
-				/>
-				<Brain class="size-4 shrink-0 text-muted-foreground" />
-				<span class="font-medium text-muted-foreground">Thinking</span>
-				{#if !expanded}
-					<span class="text-xs opacity-60 truncate max-w-[300px]">{summary}</span>
-				{/if}
-			</button>
-
-			{#if expanded}
-				<div
-					id={panelId}
-					class="mt-2 text-sm text-muted-foreground font-mono whitespace-pre-wrap pl-6 {isRedacted
-						? 'italic'
-						: ''}"
-					in:slide={{ duration: 250, easing: quintOut }}
-					out:slide={{ duration: 180, easing: quintOut }}
+			<Collapsible.Root open={expanded} onOpenChange={() => (expanded = !expanded)}>
+				<Collapsible.Trigger
+					class="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors w-full text-left"
 				>
-					{#if isRedacted}
-						<span class="text-muted-foreground/60"
-							>The reasoning for this response has been redacted.</span
-						>
-					{:else}
-						{thinking}
+					<ChevronRight
+						class="size-4 shrink-0 transition-transform duration-200 {expanded
+							? 'rotate-90'
+							: ''}"
+					/>
+					<Brain class="size-4 shrink-0 text-muted-foreground" />
+					<span class="font-medium text-muted-foreground">Thinking</span>
+					{#if !expanded}
+						<span class="text-xs opacity-60 truncate max-w-[300px]">{summary}</span>
 					{/if}
-				</div>
-			{/if}
+				</Collapsible.Trigger>
+
+				<Collapsible.Content>
+					<div
+						class="mt-2 text-sm text-muted-foreground font-mono whitespace-pre-wrap pl-6 {isRedacted
+							? 'italic'
+							: ''}"
+					>
+						{#if isRedacted}
+							<span class="text-muted-foreground/60"
+								>The reasoning for this response has been redacted.</span
+							>
+						{:else}
+							{thinking}
+						{/if}
+					</div>
+				</Collapsible.Content>
+			</Collapsible.Root>
 		</div>
 	</div>
 </div>
