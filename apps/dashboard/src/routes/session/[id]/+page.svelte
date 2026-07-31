@@ -7,7 +7,7 @@
   import type { VirtualizerHandle } from 'virtua/svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
-  import type { PermissionResult } from '@cockpit/core';
+  import type { PermissionMode, PermissionResult } from '@cockpit/core';
   import {
     ChatInput,
     ChatMessage,
@@ -27,11 +27,15 @@
     keepSession,
     openSession,
     openTranscript,
+    relaunchSession,
     resolvePermission,
     resumeSession,
     sendText,
+    setPermissionMode,
     stopSession,
   } from '$lib/cockpit/client.svelte';
+  import { PERMISSION_MODES, permissionModeLabel } from '$lib/cockpit/permission-modes';
+  import * as Select from '$lib/components/ui/select';
   import { sessionFailedMessage } from '$lib/cockpit/frames';
   import type { Message, TranscriptGroup } from '$lib/cockpit/types';
   import type { SubagentState } from '$lib/utils/flow-types';
@@ -285,6 +289,50 @@
     resolvePermission(viewId, session.machineId, requestId, result);
   }
 
+  /** The store shows the mode optimistically and puts it back if the agent refuses. */
+  async function handlePermissionMode(mode: PermissionMode) {
+    if (!session) return;
+    error = null;
+    try {
+      await setPermissionMode(viewId, session.machineId, mode);
+    } catch (err) {
+      error = err instanceof Error ? err.message : String(err);
+    }
+  }
+
+  const permissionMode = $derived(session?.permissionMode ?? 'default');
+
+  /**
+   * The SDK will not switch a running session into bypass, so choosing it means
+   * relaunching on the SDK session this one named. Offering it before there is
+   * one is what would surface the SDK's refusal as an error, so it waits.
+   */
+  const canRelaunch = $derived(Boolean(session?.sessionId));
+
+  /** Bypass throws the current turn away, so it asks once before it does. */
+  let confirmingBypass = $state(false);
+
+  function chooseMode(value: string) {
+    const mode = value as PermissionMode;
+    if (mode === permissionMode) return;
+    if (mode === 'bypassPermissions') {
+      confirmingBypass = true;
+      return;
+    }
+    void handlePermissionMode(mode);
+  }
+
+  async function relaunchInBypass() {
+    if (!session) return;
+    confirmingBypass = false;
+    error = null;
+    try {
+      await relaunchSession(viewId, session.machineId, 'bypassPermissions');
+    } catch (err) {
+      error = err instanceof Error ? err.message : String(err);
+    }
+  }
+
   async function handleResume() {
     if (!browsing) return;
     const instanceId = resumeSession({
@@ -344,6 +392,8 @@
     'shrink-0 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40';
   const destructive =
     'shrink-0 rounded-md border border-error bg-error px-2 py-1 text-xs text-error-foreground transition-colors hover:bg-error/90 focus-visible:ring-2 focus-visible:ring-ring';
+  const dangerous =
+    'shrink-0 rounded-md border border-warning px-2 py-1 text-xs font-medium text-warning transition-colors hover:bg-warning/10 focus-visible:ring-2 focus-visible:ring-ring';
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
@@ -408,6 +458,54 @@
     </div>
 
     {#if !browsing}
+      {#if confirmingBypass}
+        <span class="hidden shrink-0 text-xs text-muted-foreground lg:inline">
+          Relaunches the session with all permissions granted. The current turn stops.
+        </span>
+        <button type="button" class={action} onclick={() => (confirmingBypass = false)}>
+          Cancel
+        </button>
+        <button type="button" class={dangerous} onclick={relaunchInBypass}>
+          Relaunch in bypass
+        </button>
+      {:else}
+        <Select.Root type="single" value={permissionMode} onValueChange={chooseMode}>
+          <Select.Trigger
+            aria-label="Permission mode"
+            title="How this session answers tool permissions"
+            class="min-h-7 w-auto shrink-0 gap-1 px-2 py-0 text-xs {permissionMode ===
+            'bypassPermissions'
+              ? 'font-medium text-warning'
+              : 'text-muted-foreground'}"
+          >
+            {permissionModeLabel(permissionMode)}
+          </Select.Trigger>
+          <Select.Content>
+            {#each PERMISSION_MODES as option (option.value)}
+              {@const locked =
+                option.value === 'bypassPermissions' &&
+                option.value !== permissionMode &&
+                !canRelaunch}
+              <Select.Item
+                value={option.value}
+                label={option.label}
+                disabled={locked}
+                title={locked
+                  ? 'This session has not started yet — try again in a moment'
+                  : option.description}
+                class="text-foreground {locked ? 'opacity-40' : ''}"
+              >
+                <span class="flex flex-col">
+                  <span class={option.value === 'bypassPermissions' ? 'text-warning' : ''}>
+                    {option.label}
+                  </span>
+                  <span class="text-xs text-muted-foreground">{option.description}</span>
+                </span>
+              </Select.Item>
+            {/each}
+          </Select.Content>
+        </Select.Root>
+      {/if}
       <button
         type="button"
         class={action}
@@ -606,6 +704,9 @@
           </button>
         </div>
       {:else}
+        {#if session?.relaunching}
+          <p class="text-xs text-muted-foreground">Relaunching with new permissions…</p>
+        {/if}
         {#if session?.ephemeral}
           <p class="text-xs text-muted-foreground">
             Session is ephemeral — future turns continue live only, nothing is written to session
@@ -616,7 +717,7 @@
           onSend={handleSend}
           onInterrupt={handleInterrupt}
           streaming={session?.busy ?? false}
-          disabled={cockpit.status !== 'connected'}
+          disabled={cockpit.status !== 'connected' || (session?.relaunching ?? false)}
           attachmentOpen={(session?.pending.length ?? 0) > 0}
         >
           {#snippet attachment()}

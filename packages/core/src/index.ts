@@ -1,5 +1,6 @@
 import type {
   Options,
+  PermissionMode,
   PermissionUpdate,
   SDKMessage,
   SDKUserMessage,
@@ -41,6 +42,12 @@ export interface SpawnPayload {
   instanceId: string;
   cwd: string;
   options?: Options;
+  /**
+   * How the session answers tool permissions. Hoisted out of `options` because
+   * it is the one option the user keeps choosing — and the only one they can
+   * still change afterwards, with a `setPermissionMode` {@link ControlPayload}.
+   */
+  permissionMode?: PermissionMode;
   /** The project this session was started from, when it was started from one. */
   projectId?: string;
   /**
@@ -49,6 +56,14 @@ export interface SpawnPayload {
    * experiment cannot touch the checkout the mainline session is using.
    */
   scratch?: { worktree?: boolean; baseCwd?: string };
+  /**
+   * Correlates the `control_result` frame the agent answers the spawn with, once
+   * the session is in place. A relaunch — the same `instanceId` spawned again,
+   * for an option only a new process can take — is what needs the answer: the
+   * SDK does not start the process until the session is given work, so its first
+   * frame is no signal that the swap happened.
+   */
+  requestId?: string;
 }
 
 /** `send`: one turn of input for a live session's prompt stream. */

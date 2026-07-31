@@ -321,3 +321,11 @@ implementations are gone.
 - When old code disagrees with this file, this file wins. When the SDK's real
   types disagree with this file, the types win — note the drift here in one
   line, don't write a new doc about it.
+- SDK drift (fn-24): `bypassPermissions` cannot be entered live —
+  `setPermissionMode` refuses it unless the session was launched with
+  `allowDangerouslySkipPermissions` — so switching into it relaunches the
+  session on its own SDK session. Every other direction switches live,
+  downgrades out of bypass included.
+- SDK drift (fn-24): `query()` holds its process back until the session is given
+  work, so a relaunch's first frame is no signal that it is up. `spawn` carries
+  an optional `requestId` and the agent answers it with a `control_result`.

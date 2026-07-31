@@ -84,13 +84,46 @@ class InputStream implements AsyncIterable<SDKUserMessage> {
   }
 }
 
+/**
+ * Whether a turn is in flight, and a way to wait for the one that is. Ending a
+ * session between turns rather than in the middle of a tool call is what leaves
+ * the transcript on disk coherent enough to resume from.
+ */
+class Turn {
+  busy = false;
+  #ended = Promise.withResolvers<void>();
+
+  start(): void {
+    this.busy = true;
+  }
+
+  end(): void {
+    this.busy = false;
+    this.#ended.resolve();
+    this.#ended = Promise.withResolvers<void>();
+  }
+
+  /** Resolves when the turn in flight ends, or when `ms` runs out — whichever first. */
+  async settle(ms: number): Promise<void> {
+    if (!this.busy) return;
+    await Promise.race([this.#ended.promise, Bun.sleep(ms)]);
+  }
+}
+
 interface Session {
   readonly handle: Query;
   readonly input: InputStream;
   /** Parked `canUseTool` resolvers, keyed by the SDK's `requestId`. */
   readonly permissions: Map<string, (result: PermissionResult) => void>;
+  readonly turn: Turn;
   readonly pump: Promise<void>;
 }
+
+/** How long a stop waits for the turn it interrupted to end before cutting it off. */
+const SETTLE_TIMEOUT_MS = 5_000;
+
+/** And how long every session on the machine gets, together, when the daemon exits. */
+const DRAIN_TIMEOUT_MS = 8_000;
 
 /** The checkout a side quest ran in, kept until the quest is discarded. */
 interface Worktree {
@@ -158,9 +191,14 @@ export class SessionSupervisor {
     return [...this.#sessions.keys()];
   }
 
-  /** Ends every session, so the daemon's scope closing leaves no child processes. */
+  /**
+   * Ends every session, so the daemon's scope closing leaves no child processes.
+   * Each stop settles its own turn first; the drain as a whole is bounded too,
+   * because a machine going down cannot wait on a CLI that will not answer.
+   */
   async shutdown(): Promise<void> {
-    await Promise.all([...this.#sessions.keys()].map((instanceId) => this.#stop({ instanceId })));
+    const stops = [...this.#sessions.keys()].map((instanceId) => this.#stop({ instanceId }));
+    await Promise.race([Promise.allSettled(stops), Bun.sleep(DRAIN_TIMEOUT_MS)]);
   }
 
   #route(envelope: Envelope): Promise<void> {
@@ -180,7 +218,14 @@ export class SessionSupervisor {
     }
   }
 
-  async #spawn({ instanceId, cwd, options, scratch }: SpawnPayload): Promise<void> {
+  async #spawn({
+    instanceId,
+    cwd,
+    options,
+    permissionMode,
+    scratch,
+    requestId: ack,
+  }: SpawnPayload): Promise<void> {
     try {
       let workdir = expandHome(cwd);
       // Checked here rather than left to the SDK: a query() started in a missing
@@ -189,8 +234,23 @@ export class SessionSupervisor {
       if (!(await isDirectory(workdir))) {
         throw new Error(`working directory does not exist: ${workdir}`);
       }
-      if (scratch?.worktree) {
+      // A relaunch stays in the checkout the side quest has been working in —
+      // cutting a second one would strand whatever it has done so far.
+      const cut = this.#worktrees.get(instanceId);
+      if (cut) workdir = cut.path;
+      else if (scratch?.worktree) {
         workdir = await this.#addWorktree(instanceId, expandHome(scratch.baseCwd ?? cwd));
+      }
+
+      // A spawn for an instance that is already running is a relaunch: some
+      // options can only be chosen at launch — `bypassPermissions` is the one
+      // the dashboard offers — so the process is replaced under the same id.
+      // Settled first, or the transcript the new process reads back ends in a
+      // turn that never finished.
+      const running = this.#sessions.get(instanceId);
+      if (running) {
+        this.#sessions.delete(instanceId);
+        await this.#settleAndClose(running);
       }
 
       const input = new InputStream();
@@ -205,6 +265,11 @@ export class SessionSupervisor {
           forwardSubagentText: true,
           agentProgressSummaries: true,
           ...options,
+          ...(permissionMode && { permissionMode }),
+          // The SDK will not bypass permissions unless it is asked twice over.
+          ...(permissionMode === 'bypassPermissions' && {
+            allowDangerouslySkipPermissions: true,
+          }),
           cwd: workdir,
           includePartialMessages: true,
           canUseTool: (toolName, toolInput, { requestId, suggestions }) =>
@@ -222,16 +287,30 @@ export class SessionSupervisor {
         },
       });
 
-      const session: Session = { handle, input, permissions, pump: this.#pump(instanceId, handle) };
+      const turn = new Turn();
+      const session: Session = {
+        handle,
+        input,
+        permissions,
+        turn,
+        pump: this.#pump(instanceId, handle, turn),
+      };
       this.#sessions.set(instanceId, session);
+      // The session is in place. Worth saying out loud for a relaunch, whose
+      // caller has nothing else to wait on: the SDK holds the process back until
+      // the session is given work, so no frame of its own means it is up.
+      if (ack) this.sink({ kind: 'control_result', instanceId, requestId: ack, ok: true });
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (ack) this.sink({ kind: 'control_result', instanceId, requestId: ack, ok: false, error: message });
       this.#fail(instanceId, error);
     }
   }
 
-  async #pump(instanceId: string, handle: Query): Promise<void> {
+  async #pump(instanceId: string, handle: Query, turn: Turn): Promise<void> {
     try {
       for await (const message of handle) {
+        if (message.type === 'result') turn.end();
         this.sink({ kind: 'sdk', instanceId, message });
       }
     } catch (error) {
@@ -259,24 +338,35 @@ export class SessionSupervisor {
   }
 
   async #send({ instanceId, message }: SendPayload): Promise<void> {
-    this.#session(instanceId).input.push(message);
+    const session = this.#session(instanceId);
+    session.turn.start();
+    session.input.push(message);
+  }
+
+  /**
+   * Ends a session's query without cutting a turn in half: unblock it, ask it to
+   * stop, then give the turn it is in the time to end on its own. Bounded — a
+   * CLI that never answers must not hold a stop, or a relaunch behind it, open.
+   */
+  async #settleAndClose(session: Session): Promise<void> {
+    session.input.end();
+    // Unblock anything parked on a permission prompt, or the loop never ends.
+    for (const resolve of session.permissions.values()) {
+      resolve({ behavior: 'deny', message: 'session stopped' });
+    }
+    session.permissions.clear();
+
+    await session.handle.interrupt().catch(() => {});
+    await session.turn.settle(SETTLE_TIMEOUT_MS);
+    session.handle.close();
+    await session.pump;
   }
 
   async #stop({ instanceId, discard, requestId }: StopPayload): Promise<void> {
     const session = this.#sessions.get(instanceId);
     if (session) {
       this.#sessions.delete(instanceId);
-
-      session.input.end();
-      // Unblock anything parked on a permission prompt, or the loop never ends.
-      for (const resolve of session.permissions.values()) {
-        resolve({ behavior: 'deny', message: 'session stopped' });
-      }
-      session.permissions.clear();
-
-      await session.handle.interrupt().catch(() => {});
-      session.handle.close();
-      await session.pump;
+      await this.#settleAndClose(session);
     }
     if (!discard) return;
 

@@ -8,6 +8,7 @@ import type {
   FramePayload,
   FsPayload,
   Options,
+  PermissionMode,
   PermissionResult,
   PermissionUpdate,
   SDKSessionInfo,
@@ -82,6 +83,9 @@ export interface ProjectRow {
 const isLive = (row: InstanceRow): boolean =>
   row.status === 'running' || row.status === 'starting';
 
+/** A session that died of something stays on the board until the user discards it. */
+const isListed = (row: InstanceRow): boolean => isLive(row) || row.status === 'error';
+
 /**
  * A session whose daemon went away mid-flight. It may or may not still be alive
  * on its machine — the hub cannot tell — so it is kept, but never as a live row.
@@ -134,6 +138,14 @@ export interface SessionState {
   hydrating: boolean;
   /** The `system.init` banner is re-emitted every turn; render it once. */
   initialized: boolean;
+  /**
+   * How the session answers tool permissions, as far as this browser knows: set
+   * from what it spawned, moved by a switch the agent confirmed. Nothing reports
+   * it back, so a session another tab started reads as `default` here.
+   */
+  permissionMode: PermissionMode;
+  /** Started again in place for a mode it could not switch into; ends at the next init. */
+  relaunching: boolean;
   /** A side quest (NEW.md §1) — kept visually apart until it is kept or discarded. */
   scratch: boolean;
   /** Spawned with `persistSession: false`: the SDK is writing no transcript for it. */
@@ -229,6 +241,8 @@ function session(instanceId: string): SessionState {
     loading: false,
     hydrating: false,
     initialized: false,
+    permissionMode: 'default',
+    relaunching: false,
     scratch: false,
     ephemeral: false,
   };
@@ -251,10 +265,7 @@ function hydrate(target: SessionState): void {
   target.machineId = known.machineId;
   target.cwd = known.cwd;
   target.sessionId = known.sessionId;
-  // The row records the kind, not the SDK option behind it — every side quest
-  // this app spawns is ephemeral, so the row answers for both after a reload.
   target.scratch = known.kind === 'scratch';
-  target.ephemeral = target.scratch;
 }
 
 /** Opens a session's view state — the route's half of arriving at `/session/[id]`. */
@@ -314,8 +325,12 @@ function handleFrame(frame: FramePayload): void {
   if (frame.kind === 'error') {
     const { instanceId, message } = frame;
     if (settle(frame.requestId, (waiter) => waiter.reject(new Error(message)))) return;
-    if (instanceId) session(instanceId).messages.push(errorMessage(instanceId, message));
-    else console.error('[cockpit] hub error:', message);
+    if (instanceId) {
+      const target = session(instanceId);
+      // A relaunch that never came up has no init frame to end its wait.
+      target.relaunching = false;
+      target.messages.push(errorMessage(instanceId, message));
+    } else console.error('[cockpit] hub error:', message);
     return;
   }
 
@@ -359,6 +374,8 @@ function handleFrame(frame: FramePayload): void {
       for (const message of mapping.messages) {
         if (message.type === 'system.init') {
           target.sessionId = message.metadata?.sessionId ?? target.sessionId;
+          // The process behind a relaunch is up: this is the frame it opens with.
+          target.relaunching = false;
           if (target.initialized) continue;
           target.initialized = true;
         }
@@ -501,22 +518,17 @@ function userMessage(text: string): SendPayload['message'] {
 }
 
 /** Spawns a session on `machineId` and registers the view it streams into. */
-function start(
-  machineId: string,
-  cwd: string,
-  options: Options,
-  scratch?: SpawnPayload['scratch'],
-  projectId?: string
-): SessionState {
+function start({ machineId, ...spawn }: Omit<SpawnPayload, 'instanceId'> & { machineId: string }): SessionState {
   const instanceId = crypto.randomUUID();
-  const payload: SpawnPayload = { instanceId, cwd, options, scratch, projectId };
+  const payload: SpawnPayload = { instanceId, ...spawn };
   send({ verb: 'spawn', machineId, instanceId, payload });
 
   const created = session(instanceId);
   created.machineId = machineId;
-  created.cwd = cwd;
-  created.ephemeral = options.persistSession === false;
-  created.scratch = created.ephemeral || Boolean(scratch);
+  created.cwd = spawn.cwd;
+  created.permissionMode = spawn.permissionMode ?? 'default';
+  created.ephemeral = spawn.options?.persistSession === false;
+  created.scratch = Boolean(spawn.scratch);
   return created;
 }
 
@@ -526,6 +538,7 @@ export function spawnSession({
   cwd,
   prompt,
   options = {},
+  permissionMode,
   scratch,
   projectId,
 }: {
@@ -533,10 +546,11 @@ export function spawnSession({
   cwd: string;
   prompt?: string;
   options?: Options;
+  permissionMode?: PermissionMode;
   scratch?: SpawnPayload['scratch'];
   projectId?: string;
 }): string {
-  const created = start(machineId, cwd, options, scratch, projectId);
+  const created = start({ machineId, cwd, options, permissionMode, scratch, projectId });
   if (prompt?.trim()) sendText(created.instanceId, machineId, prompt.trim());
   void refresh();
   return created.instanceId;
@@ -559,7 +573,7 @@ export function resumeSession({
   history?: Message[];
   options?: Options;
 }): string {
-  const created = start(machineId, cwd, { ...options, resume: sessionId });
+  const created = start({ machineId, cwd, options: { ...options, resume: sessionId } });
   created.sessionId = sessionId;
   created.messages = history.map((message) => ({ ...message, instanceId: created.instanceId }));
   void refresh();
@@ -567,9 +581,10 @@ export function resumeSession({
 }
 
 /**
- * Branches a side quest off a session (NEW.md §1): the same context, a new SDK
- * session, and nothing written to disk — a fork exists to be thrown away. The
- * transcript on screen is seeded so the branch reads on from where it left.
+ * Branches a side quest off a session (NEW.md §1): the same context carried into
+ * a new SDK session, kept apart from mainline work until it is kept or
+ * discarded. The transcript on screen is seeded so the branch reads on from
+ * where it left.
  */
 export function forkSession({
   machineId,
@@ -582,10 +597,11 @@ export function forkSession({
   sessionId: string;
   history?: Message[];
 }): string {
-  const created = start(machineId, cwd, {
-    resume: sessionId,
-    forkSession: true,
-    persistSession: false,
+  const created = start({
+    machineId,
+    cwd,
+    options: { resume: sessionId, forkSession: true },
+    scratch: {},
   });
   created.messages = history.map((message) => ({ ...message, instanceId: created.instanceId }));
   void refresh();
@@ -926,6 +942,81 @@ export function interrupt(instanceId: string, machineId: string): void {
   session(instanceId).busy = false;
 }
 
+/**
+ * Changes how a live session answers permissions, from now on. Unlike the other
+ * instance controls this one is awaited: the view already shows the mode that
+ * was asked for, so a machine that refuses has to be able to put it back.
+ */
+export async function setPermissionMode(
+  instanceId: string,
+  machineId: string,
+  mode: PermissionMode
+): Promise<void> {
+  const target = session(instanceId);
+  const previous = target.permissionMode;
+  target.permissionMode = mode;
+
+  const requestId = crypto.randomUUID();
+  const payload: ControlPayload = {
+    instanceId,
+    requestId,
+    method: 'setPermissionMode',
+    args: [mode],
+  };
+  try {
+    await ask<void>(requestId, 'setPermissionMode', CONTROL_TIMEOUT_MS, () =>
+      send({ verb: 'control', machineId, instanceId, requestId, payload })
+    );
+  } catch (error) {
+    target.permissionMode = previous;
+    throw error;
+  }
+}
+
+/**
+ * `bypassPermissions` is a launch decision — the SDK refuses to switch a running
+ * session into it — so a session that wants it now is started again in place:
+ * same instance id, same hub row, its own SDK session resumed, so the new
+ * process reads the whole conversation back. A side quest relaunches the same
+ * way; the agent keeps it in the checkout it was already working in.
+ */
+export async function relaunchSession(
+  instanceId: string,
+  machineId: string,
+  permissionMode: PermissionMode
+): Promise<void> {
+  const target = session(instanceId);
+  if (!target.sessionId) {
+    throw new Error('This session has not named itself yet. Try again in a moment.');
+  }
+
+  const requestId = crypto.randomUUID();
+  const payload: SpawnPayload = {
+    instanceId,
+    cwd: target.cwd,
+    options: { resume: target.sessionId },
+    permissionMode,
+    requestId,
+  };
+
+  const previous = target.permissionMode;
+  target.permissionMode = permissionMode;
+  target.relaunching = true;
+  // Whatever was in flight belongs to the process being replaced.
+  settleStopped(instanceId);
+  try {
+    await ask<void>(requestId, 'relaunch', CONTROL_TIMEOUT_MS, () =>
+      send({ verb: 'spawn', machineId, instanceId, requestId, payload })
+    );
+  } catch (error) {
+    target.permissionMode = previous;
+    throw error;
+  } finally {
+    target.relaunching = false;
+    void refresh();
+  }
+}
+
 export function resolvePermission(
   instanceId: string,
   machineId: string,
@@ -991,14 +1082,14 @@ export const cockpit = {
   get staleInstances(): InstanceRow[] {
     return state.instances.filter(isStale);
   },
-  /** Live mainline sessions on one machine — what the sidebar groups under it. */
+  /** Mainline sessions on one machine — what the sidebar groups under it. */
   runningOn: (machineId: string): InstanceRow[] =>
     state.instances.filter(
-      (row) => row.machineId === machineId && isLive(row) && row.kind !== 'scratch'
+      (row) => row.machineId === machineId && isListed(row) && row.kind !== 'scratch'
     ),
-  /** Live side quests across the fleet — kept in their own section, not per machine. */
+  /** Side quests across the fleet — kept in their own section, not per machine. */
   get scratchInstances(): InstanceRow[] {
-    return state.instances.filter((row) => isLive(row) && row.kind === 'scratch');
+    return state.instances.filter((row) => isListed(row) && row.kind === 'scratch');
   },
   /** Stored sessions on one machine, as `listSessions` returned them. */
   catalogOf: (machineId: string): SDKSessionInfo[] => state.catalog[machineId] ?? [],
@@ -1009,11 +1100,12 @@ export const cockpit = {
     state.projects.filter((project) => project.machineId === machineId),
   project: (id: string): ProjectRow | null =>
     state.projects.find((project) => project.id === id) ?? null,
-  /** Live sessions a project owns: started from it, or running in its checkout. */
+  /** Sessions a project owns: started from it, or running in its checkout.
+   *  Failed ones stay listed here too — same board rule as the sidebar. */
   liveIn: (project: ProjectRow): InstanceRow[] =>
     state.instances.filter(
       (row) =>
-        isLive(row) &&
+        isListed(row) &&
         (row.projectId === project.id ||
           (row.machineId === project.machineId && under(project.cwd, row.cwd)))
     ),

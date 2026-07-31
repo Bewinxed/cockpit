@@ -113,7 +113,7 @@
       machineId: project.machineId,
       cwd: project.cwd,
       projectId: project.id,
-      options: scratch ? { persistSession: false } : {},
+      scratch: scratch ? {} : undefined,
     });
     await goto(`/session/${instanceId}`);
   }

@@ -5,9 +5,11 @@
   import { quintOut } from 'svelte/easing';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
+  import type { PermissionMode } from '@cockpit/core';
   import { cockpit, createProject, spawnSession } from '$lib/cockpit/client.svelte';
   import LiveSessionRow from '$lib/cockpit/LiveSessionRow.svelte';
   import StoredSessionRow from '$lib/cockpit/StoredSessionRow.svelte';
+  import { PERMISSION_MODES, permissionModeLabel } from '$lib/cockpit/permission-modes';
   import { permissionSummary } from '$lib/cockpit/permission-summary';
   import DirectoryPicker from '$lib/components/features/DirectoryPicker.svelte';
   import { Checkbox } from '$lib/components/ui/checkbox';
@@ -17,6 +19,7 @@
   let machineId = $state('');
   let cwd = $state('');
   let prompt = $state('');
+  let permissionMode = $state<PermissionMode>('default');
   let sideQuest = $state(false);
   let worktree = $state(false);
   let projectName = $state('');
@@ -89,8 +92,8 @@
         machineId,
         cwd: cwd.trim(),
         prompt,
-        options: sideQuest ? { persistSession: false } : {},
-        scratch: sideQuest && worktree ? { worktree: true, baseCwd: cwd.trim() } : undefined,
+        permissionMode,
+        scratch: sideQuest ? { worktree, baseCwd: cwd.trim() } : undefined,
       });
       await goto(`/session/${instanceId}`);
     } catch (err) {
@@ -184,6 +187,34 @@
           </Select.Root>
         </div>
 
+        <div class="flex flex-col gap-1 text-xs text-muted-foreground">
+          <span id="permissions-label">Permissions</span>
+          <Select.Root
+            type="single"
+            value={permissionMode}
+            onValueChange={(value) => (permissionMode = value as PermissionMode)}
+          >
+            <Select.Trigger
+              aria-labelledby="permissions-label"
+              class={permissionMode === 'bypassPermissions' ? 'text-warning' : 'text-foreground'}
+            >
+              {permissionModeLabel(permissionMode)}
+            </Select.Trigger>
+            <Select.Content>
+              {#each PERMISSION_MODES as mode (mode.value)}
+                <Select.Item value={mode.value} label={mode.label} class="text-foreground">
+                  <span class="flex flex-col">
+                    <span class={mode.value === 'bypassPermissions' ? 'text-warning' : ''}>
+                      {mode.label}
+                    </span>
+                    <span class="text-xs text-muted-foreground">{mode.description}</span>
+                  </span>
+                </Select.Item>
+              {/each}
+            </Select.Content>
+          </Select.Root>
+        </div>
+
         <label class="flex flex-col gap-1 text-xs text-muted-foreground">
           Working directory
           <input
@@ -239,7 +270,7 @@
         <div class="flex items-center gap-2 text-xs text-muted-foreground">
           <Checkbox id="side-quest" bind:checked={sideQuest} />
           <label for="side-quest" class="cursor-pointer">
-            Side quest — ephemeral, nothing written to session storage
+            Side quest — kept apart from mainline work until you keep or discard it
           </label>
         </div>
 

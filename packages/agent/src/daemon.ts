@@ -119,7 +119,10 @@ export const startDaemon = Effect.gen(function* () {
   // Outlives any one connection: a hub restart must not kill running sessions.
   const supervisor = yield* Effect.acquireRelease(
     Effect.sync(() => new SessionSupervisor()),
-    (running) => Effect.promise(() => running.shutdown())
+    (running) =>
+      Effect.logInfo(`draining ${running.instanceIds.length} session(s)`).pipe(
+        Effect.andThen(Effect.promise(() => running.shutdown()))
+      )
   );
 
   yield* Effect.logInfo(`cockpit agent ${identity.machineId} connecting to ${url}`);
