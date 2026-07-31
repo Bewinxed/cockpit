@@ -72,14 +72,28 @@
     unseen = false;
   }
 
+  // Following is driven by content size, not message events: any growth —
+  // streamed tokens, a card expanding, an image landing — keeps the live edge
+  // pinned frame by frame, and never fights an in-flight height animation.
+  $effect(() => {
+    if (!scroller) return;
+    const column = scroller.firstElementChild;
+    if (!column) return;
+    const follow = new ResizeObserver(() => {
+      if (!scroller) return;
+      if (atBottom) scroller.scrollTop = scroller.scrollHeight;
+    });
+    follow.observe(column);
+    return () => follow.disconnect();
+  });
+
   // Chasing the bottom while the user is reading further up yanks the transcript
-  // out from under them — only follow when they were already at the live edge.
+  // out from under them — so growth behind their scroll position is flagged instead.
   $effect(() => {
     const count = session?.messages.length ?? 0;
     const streaming = session?.streaming ?? '';
-    if (!scroller || (!count && !streaming)) return;
-    if (untrack(() => atBottom)) scroller.scrollTop = scroller.scrollHeight;
-    else unseen = true;
+    if (!count && !streaming) return;
+    if (!untrack(() => atBottom)) unseen = true;
   });
 
   type Group =
@@ -340,7 +354,7 @@
         <div
           bind:this={scroller}
           onscroll={trackScroll}
-          class="h-full space-y-4 overflow-y-auto overflow-x-hidden px-4 pt-4 pb-44"
+          class="h-full space-y-4 overflow-y-auto overflow-x-hidden px-4 pt-4 pb-44 [overflow-anchor:none]"
         >
           <div class="mx-auto flex max-w-4xl flex-col gap-4">
             {#each groups as group (group.kind === 'single' ? group.message.id : `${group.kind}-${group.index}`)}
