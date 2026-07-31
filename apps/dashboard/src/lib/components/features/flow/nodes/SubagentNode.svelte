@@ -2,8 +2,8 @@
   import { Handle, Position, useStore, useSvelteFlow } from '@xyflow/svelte';
   import { Zap, LoaderCircle, CircleCheck, CircleX, ChevronRight, ChevronDown, Layers, Wrench } from 'lucide-svelte';
   import { slide } from 'svelte/transition';
-  import type { SubagentState, Message } from '$lib/stores/types';
-  import { instances } from '$lib/stores';
+  import type { Message } from '$lib/cockpit/types';
+  import type { SubagentState } from '$lib/utils/flow-types';
   import { getToolGlance, getToolStatus } from '$lib/utils/tool-display';
   import {
     ELAPSED_TIME_UPDATE_INTERVAL,
@@ -15,7 +15,7 @@
   } from '$lib/utils/flow-constants';
 
   // Props passed by SvelteFlow
-  let { id, data } = $props<{
+  interface Props {
     id: string;
     data: {
       subagent?: SubagentState;
@@ -24,7 +24,9 @@
       branchColor?: string;
       instanceId?: string;
     };
-  }>();
+  }
+
+  let { id, data }: Props = $props();
 
   // Get store for zoom level
   const { viewport } = $derived(useStore());
@@ -104,9 +106,9 @@
     return subagent.messages?.filter((m: Message) => m.type === 'tool.use') || [];
   }
 
-  // Get child subagents (nested)
+  // Get child subagents (nested) from the branch this node was handed
   function getChildSubagents(subagent: SubagentState): SubagentState[] {
-    return subagent.toolUseId ? instances.getChildSubagents(subagent.toolUseId) : [];
+    return allSubagents.filter((child) => child.parentSubagentId === subagent.toolUseId);
   }
 
   // Format elapsed time

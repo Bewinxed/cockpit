@@ -5,8 +5,8 @@
  * The SDK's own types are the input contract (tunnelled through `@cockpit/core`),
  * so nothing here re-models them.
  */
-import type { SDKAssistantMessage, SDKMessage } from '@cockpit/core';
-import type { Message, MessageMetadata, MessageType } from '$lib/stores/types';
+import type { SDKAssistantMessage, SDKMessage, SessionMessage } from '@cockpit/core';
+import type { Message, MessageMetadata, MessageType } from './types';
 
 type AssistantBlock = SDKAssistantMessage['message']['content'][number];
 
@@ -230,6 +230,56 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
   }
 
   return mapping;
+}
+
+/**
+ * The user's own text, which live frames never echo (the local copy covers it)
+ * but a stored transcript is the only source of.
+ */
+function transcriptUserText(message: unknown): string | null {
+  if (typeof message !== 'object' || message === null) return null;
+  const content = (message as { content?: unknown }).content;
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return null;
+  const text = content
+    .filter((block: unknown) => (block as { type?: string })?.type === 'text')
+    .map((block: unknown) => String((block as { text?: unknown }).text ?? ''))
+    .join('\n');
+  return text || null;
+}
+
+/**
+ * A stored session (`getSessionMessages`) as a transcript. Each entry's `message`
+ * is the raw SDK message, so the live mapping does the work — only user text,
+ * which live sessions render from the local copy, is handled here.
+ */
+export function mapTranscript(instanceId: string, transcript: SessionMessage[]): Message[] {
+  const messages: Message[] = [];
+
+  for (const entry of transcript) {
+    if (entry.type === 'system') continue;
+
+    if (entry.type === 'user') {
+      const text = transcriptUserText(entry.message);
+      if (text !== null) {
+        messages.push({
+          id: entry.uuid,
+          instanceId,
+          type: 'user',
+          content: text,
+          timestamp: new Date(),
+          sdkUuid: entry.uuid,
+        });
+        continue;
+      }
+    }
+
+    const mapping = mapFrame(instanceId, entry as unknown as SDKMessage);
+    messages.push(...mapping.messages);
+    for (const result of mapping.toolResults) applyToolResult(messages, result);
+  }
+
+  return messages;
 }
 
 /** The message optimistically shown for text the user just sent. */

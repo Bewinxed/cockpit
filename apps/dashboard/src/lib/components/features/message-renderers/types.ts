@@ -1,4 +1,4 @@
-import type { Message } from '$lib/stores';
+import type { Message } from '$lib/cockpit/types';
 import type { Component } from 'svelte';
 
 /**

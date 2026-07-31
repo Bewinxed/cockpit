@@ -1,14 +1,13 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
-  import { cockpit, ensureConnected, spawnSession } from '$lib/cockpit/client.svelte';
+  import { formatDistanceToNow } from '$lib/utils/time';
+  import { cockpit, spawnSession } from '$lib/cockpit/client.svelte';
+  import { sessionTitle, transcriptHref } from '$lib/cockpit/links';
 
   let machineId = $state('');
   let cwd = $state('');
   let prompt = $state('');
   let error = $state<string | null>(null);
-
-  onMount(ensureConnected);
 
   // Default to the first machine that comes online.
   $effect(() => {
@@ -86,35 +85,55 @@
       </form>
     </section>
 
-    <section class="flex flex-col gap-2">
-      <h2 class="text-sm font-medium">Machines</h2>
-      {#each cockpit.machines as machine (machine.machineId)}
-        <div class="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm">
+    {#each cockpit.machines as machine (machine.machineId)}
+      {@const running = cockpit.runningOn(machine.machineId)}
+      {@const stored = cockpit.catalogOf(machine.machineId)}
+      <section class="flex flex-col gap-2">
+        <h2 class="flex items-center gap-2 text-sm font-medium">
           <span
-            class="size-2 rounded-full {machine.status === 'online' ? 'bg-success' : 'bg-muted-foreground'}"
+            class="size-2 rounded-full {machine.status === 'online'
+              ? 'bg-success'
+              : 'bg-muted-foreground'}"
           ></span>
-          <span class="font-medium">{machine.hostname}</span>
-          <span class="text-xs text-muted-foreground">{machine.os}</span>
-          <span class="ml-auto font-mono text-xs text-muted-foreground">{machine.machineId}</span>
-        </div>
-      {:else}
-        <p class="text-sm text-muted-foreground">No machines registered.</p>
-      {/each}
-    </section>
+          {machine.hostname}
+          <span class="text-xs font-normal text-muted-foreground">{machine.os}</span>
+          <span class="ml-auto font-mono text-xs font-normal text-muted-foreground">
+            {machine.machineId}
+          </span>
+        </h2>
 
-    <section class="flex flex-col gap-2">
-      <h2 class="text-sm font-medium">Running sessions</h2>
-      {#each cockpit.runningInstances as instance (instance.id)}
-        <a
-          href="/session/{instance.id}"
-          class="flex items-center gap-3 rounded-lg border border-border bg-card px-3 py-2 text-sm transition-colors hover:bg-accent"
-        >
-          <span class="font-mono">{instance.cwd || '—'}</span>
-          <span class="ml-auto text-xs text-muted-foreground">{instance.status}</span>
-        </a>
-      {:else}
-        <p class="text-sm text-muted-foreground">Nothing running.</p>
-      {/each}
-    </section>
+        {#each running as instance (instance.id)}
+          <a
+            href="/session/{instance.id}"
+            class="flex items-center gap-3 rounded-lg border border-border bg-card px-3 py-2 text-sm transition-colors hover:bg-accent"
+          >
+            <span class="size-1.5 shrink-0 animate-pulse rounded-full bg-success"></span>
+            <span class="truncate font-mono">{instance.cwd || '—'}</span>
+            <span class="ml-auto shrink-0 text-xs text-muted-foreground">{instance.status}</span>
+          </a>
+        {/each}
+
+        {#each stored.slice(0, 8) as info (info.sessionId)}
+          <a
+            href={transcriptHref(machine.machineId, info)}
+            class="flex flex-col rounded-lg border border-border px-3 py-2 transition-colors hover:bg-accent"
+          >
+            <span class="flex items-baseline gap-3">
+              <span class="truncate text-sm">{sessionTitle(info)}</span>
+              <span class="ml-auto shrink-0 text-xs text-muted-foreground">
+                {formatDistanceToNow(new Date(info.lastModified))}
+              </span>
+            </span>
+            <span class="truncate font-mono text-xs text-muted-foreground">{info.cwd ?? ''}</span>
+          </a>
+        {:else}
+          {#if running.length === 0}
+            <p class="text-sm text-muted-foreground">No sessions on this machine yet.</p>
+          {/if}
+        {/each}
+      </section>
+    {:else}
+      <p class="text-sm text-muted-foreground">No machines registered.</p>
+    {/each}
   </div>
 </div>

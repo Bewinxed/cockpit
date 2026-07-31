@@ -1,0 +1,112 @@
+/**
+ * The transcript shape the ported renderers consume. It is a *view* type, not a
+ * protocol type: frames arrive as SDK messages (`@cockpit/core`) and `frames.ts`
+ * folds them into these. Anything that describes the wire belongs in the SDK.
+ */
+import type {
+  SDKCompactBoundaryMessage,
+  SDKHookResponseMessage,
+  SDKResultMessage,
+  SDKStatus,
+  SDKSystemMessage,
+} from '@cockpit/core';
+
+export type JsonPrimitive = string | number | boolean | null;
+export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
+
+export type MessageType =
+  | 'user'
+  | 'assistant'
+  | 'thinking'
+  | 'tool.use'
+  | 'tool.result'
+  | 'tool.progress'
+  | 'result.success'
+  | 'result.error'
+  | `system.${string}`
+  | `ui.${string}`;
+
+export interface Message {
+  id?: string;
+  instanceId: string;
+  /** Links this message to the Task tool.use that spawned it (subagent output). */
+  parentToolUseId?: string;
+  type: MessageType;
+  content: string;
+  timestamp: Date;
+  /** The SDK message's own uuid — the handle for rewind and fork. */
+  sdkUuid?: string;
+  toolCallId?: string | null;
+  metadata?: MessageMetadata;
+}
+
+/** Everything a renderer may need beyond `content`, keyed by the type that uses it. */
+export interface MessageMetadata {
+  // Tool messages
+  toolId?: string;
+  toolName?: string;
+  toolInput?: JsonValue;
+  toolResult?: JsonValue;
+  toolStatus?: 'pending' | 'success' | 'error';
+  toolUseResult?: JsonValue;
+  // System messages
+  subtype?: string;
+  command?: string;
+  model?: SDKSystemMessage['model'];
+  cwd?: string;
+  tools?: SDKSystemMessage['tools'];
+  sessionId?: string;
+  status?: SDKStatus;
+  mcpServers?: SDKSystemMessage['mcp_servers'];
+  // Compact boundary
+  preTokens?: SDKCompactBoundaryMessage['compact_metadata']['pre_tokens'];
+  trigger?: SDKCompactBoundaryMessage['compact_metadata']['trigger'];
+  // Hook response
+  hookName?: SDKHookResponseMessage['hook_name'];
+  exitCode?: SDKHookResponseMessage['exit_code'];
+  stdout?: SDKHookResponseMessage['stdout'];
+  stderr?: SDKHookResponseMessage['stderr'];
+  // Login prompt
+  authUrl?: string;
+  oauthState?: string;
+  // Model picker
+  loading?: boolean;
+  error?: string;
+  models?: Array<{ value: string; displayName: string; description: string }>;
+  currentModel?: string;
+  selectedModel?: string;
+  // Memory picker
+  memoryPhase?: 'selection' | 'editing';
+  selectedMemoryType?: 'project' | 'user';
+  memoryContent?: string;
+  memoryPath?: string;
+  // Ask question (AskUserQuestion tool / onUserDialog)
+  questionRequestId?: string;
+  questions?: Array<{
+    question: string;
+    header: string;
+    options: Array<{ label: string; description: string }>;
+    multiSelect: boolean;
+  }>;
+  questionAnswers?: Record<string, string>;
+  // Help menu
+  version?: string;
+  commands?: Array<{
+    name: string;
+    description?: string;
+    type: 'builtin' | 'custom' | 'skill' | 'mcp';
+  }>;
+  // Thinking blocks
+  thinking?: string;
+  thinkingSignature?: string;
+  isRedactedThinking?: boolean;
+  // Result errors
+  resultSubtype?: SDKResultMessage['subtype'];
+  resultErrors?: Extract<SDKResultMessage, { errors: string[] }>['errors'];
+  totalCost?: SDKResultMessage['total_cost_usd'];
+  numTurns?: SDKResultMessage['num_turns'];
+  result?: Extract<SDKResultMessage, { subtype: 'success' }>['result'];
+  // Subagent spawning (Task tool)
+  subagentType?: string;
+  subagentDescription?: string;
+}

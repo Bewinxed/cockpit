@@ -1,7 +1,9 @@
 <script lang="ts">
 	import { Cpu, Check, ArrowRight, CircleAlert, LoaderCircle, CircleX } from 'lucide-svelte';
-	import type { ModelInfo } from '@agentdeck/core/protocol';
+	import type { MessageMetadata } from '$lib/cockpit/types';
 	import type { MessageRendererProps } from './types';
+
+	type ModelInfo = NonNullable<MessageMetadata['models']>[number];
 
 	let {
 		message,

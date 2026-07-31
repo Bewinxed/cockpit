@@ -4,7 +4,7 @@
  */
 
 import type { Node, Edge } from '@xyflow/svelte';
-import type { Message } from '$lib/stores/types';
+import type { Message } from '$lib/cockpit/types';
 import { NODE_TYPES } from '$lib/components/features/flow/nodes';
 import { COMPACT_CONFIG } from './flow-constants';
 import type {

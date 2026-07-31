@@ -1,7 +1,9 @@
 <script lang="ts">
 	import { CircleHelp, Check, ListChecks, Send, X, PenLine, ChevronDown, ChevronRight } from 'lucide-svelte';
+	import type { MessageMetadata } from '$lib/cockpit/types';
 	import type { MessageRendererProps } from './types';
-	import type { Question } from '@agentdeck/core/dashboard';
+
+	type Question = NonNullable<MessageMetadata['questions']>[number];
 
 	let {
 		message,
@@ -93,10 +95,11 @@
 			}
 			// If it's an object, try to extract answers
 			if (typeof result === 'object' && result !== null) {
-				const obj = result as { answers?: Record<string, string> } | Record<string, string>;
+				const obj = result as Record<string, unknown>;
 				// Could be { answers: {...} } or directly {...}
-				if ('answers' in obj && obj.answers) {
-					return obj.answers;
+				const answers = obj.answers;
+				if (answers && typeof answers === 'object') {
+					return answers as Record<string, string>;
 				}
 				// If it's a record with numeric keys, it's the answers directly
 				const keys = Object.keys(obj);

@@ -2,8 +2,7 @@
   import { Handle, Position, useStore } from '@xyflow/svelte';
   import { Bot, Sparkles, LoaderCircle } from 'lucide-svelte';
   import Markdown from '@humanspeak/svelte-markdown';
-  import type { Message } from '$lib/stores/types';
-  import { instances } from '$lib/stores';
+  import type { Message } from '$lib/cockpit/types';
 
   // Props passed by SvelteFlow
   let { id, data } = $props<{
@@ -14,6 +13,8 @@
       model?: string;
       instanceId?: string;
       isStreaming?: boolean;
+      /** Partial text for the turn still being streamed. */
+      streamingText?: string;
     };
   }>();
 
@@ -28,22 +29,8 @@
     'detail'
   );
 
-  // Get streaming content if this message is currently streaming
-  const streamingMessage = $derived(
-    data?.instanceId ? instances.getStreamingMessage(data.instanceId) : null
-  );
-
-  // Check if this specific message is streaming
-  const isStreaming = $derived(
-    data?.isStreaming ||
-    (streamingMessage?.sdkUuid && data?.message?.sdkUuid === streamingMessage.sdkUuid)
-  );
-
-  // Get streaming text from content blocks
-  const streamingText = $derived.by(() => {
-    if (!streamingMessage) return '';
-    return Array.from(streamingMessage.contentBlocks.values()).join('');
-  });
+  const isStreaming = $derived(Boolean(data?.isStreaming));
+  const streamingText = $derived(data?.streamingText ?? '');
 
   // Display content: use streaming text if available, otherwise message content
   const displayContent = $derived(

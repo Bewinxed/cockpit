@@ -4,7 +4,29 @@
  */
 
 import type { Node, Edge } from '@xyflow/svelte';
-import type { Message, SubagentState } from '$lib/stores/types';
+import type { Message } from '$lib/cockpit/types';
+
+/**
+ * A subagent branch as the flow view draws it. Phase 3 re-bases this on the
+ * SDK's `parent_agent_id` (NEW.md §8); until then it is the flow view's own
+ * shape and nothing else produces it.
+ */
+export interface SubagentState {
+  /** The Task tool.use id that spawned this subagent. */
+  toolUseId: string;
+  instanceId: string;
+  subagentType: string;
+  description?: string;
+  status: 'starting' | 'running' | 'complete' | 'error';
+  startedAt: Date;
+  completedAt?: Date;
+  /** Parent subagent's toolUseId, for nested branches. */
+  parentSubagentId?: string;
+  messages: Message[];
+  result?: string;
+  error?: string;
+  isBackground?: boolean;
+}
 
 // ============================================================
 // Node Data Types

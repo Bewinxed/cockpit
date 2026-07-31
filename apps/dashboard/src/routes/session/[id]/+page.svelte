@@ -1,29 +1,35 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import type { PermissionResult } from '@cockpit/core';
   import { ChatInput, ChatMessage, ToolGroup } from '$lib/components/features';
   import PermissionCard from '$lib/cockpit/PermissionCard.svelte';
   import {
     cockpit,
-    ensureConnected,
     interrupt,
     openSession,
+    openTranscript,
     resolvePermission,
+    resumeSession,
     sendText,
     stopSession,
   } from '$lib/cockpit/client.svelte';
-  import type { Message } from '$lib/stores/types';
+  import type { Message } from '$lib/cockpit/types';
 
-  const instanceId = $derived(page.params.id ?? '');
+  const viewId = $derived(page.params.id ?? '');
+  /** A `machine` in the query means this id is a stored session, not a live one. */
+  const browsing = $derived(page.url.searchParams.get('machine'));
+  const browsingCwd = $derived(page.url.searchParams.get('cwd') ?? '');
 
   // Opening writes to the store, so it stays in an effect; the read is derived.
   $effect(() => {
-    openSession(instanceId);
+    if (browsing) {
+      void openTranscript({ viewId, machineId: browsing, sessionId: viewId, cwd: browsingCwd });
+    } else {
+      openSession(viewId);
+    }
   });
-  const session = $derived(cockpit.session(instanceId));
-
-  onMount(ensureConnected);
+  const session = $derived(cockpit.session(viewId));
 
   let scroller = $state<HTMLDivElement | null>(null);
 
@@ -63,34 +69,51 @@
 
   function handleSend(text: string) {
     if (!session) return;
-    sendText(instanceId, session.machineId, text);
+    sendText(viewId, session.machineId, text);
   }
 
   function handleInterrupt() {
     if (!session) return;
-    interrupt(instanceId, session.machineId);
+    interrupt(viewId, session.machineId);
   }
 
   function handleResolve(requestId: string, result: PermissionResult) {
     if (!session) return;
-    resolvePermission(instanceId, session.machineId, requestId, result);
+    resolvePermission(viewId, session.machineId, requestId, result);
+  }
+
+  async function handleResume() {
+    if (!browsing) return;
+    const instanceId = resumeSession({
+      machineId: browsing,
+      cwd: browsingCwd,
+      sessionId: viewId,
+      history: session?.messages ?? [],
+    });
+    await goto(`/session/${instanceId}`);
   }
 </script>
 
 <div class="flex h-full flex-1 flex-col overflow-hidden">
   <header class="flex items-center gap-3 border-b border-border px-4 py-2">
     <a href="/session" class="text-sm text-muted-foreground hover:text-foreground">Sessions</a>
-    <span class="font-mono text-sm">{session?.cwd || instanceId}</span>
-    <span class="ml-auto text-xs text-muted-foreground">
-      {session?.busy ? 'working' : 'idle'} · hub {cockpit.status}
+    <span class="truncate font-mono text-sm">{session?.cwd || viewId}</span>
+    <span class="ml-auto shrink-0 text-xs text-muted-foreground">
+      {#if browsing}
+        transcript · {session?.loading ? 'loading' : `${session?.messages.length ?? 0} messages`}
+      {:else}
+        {session?.busy ? 'working' : 'idle'} · hub {cockpit.status}
+      {/if}
     </span>
-    <button
-      type="button"
-      class="rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-      onclick={() => session && stopSession(instanceId, session.machineId)}
-    >
-      Stop
-    </button>
+    {#if !browsing}
+      <button
+        type="button"
+        class="rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        onclick={() => session && stopSession(viewId, session.machineId)}
+      >
+        Stop
+      </button>
+    {/if}
   </header>
 
   <div bind:this={scroller} class="flex-1 space-y-4 overflow-y-auto px-4 py-4">
@@ -99,9 +122,13 @@
         {#if group.kind === 'tools'}
           <ToolGroup tools={group.messages} />
         {:else}
-          <ChatMessage message={group.message} {instanceId} />
+          <ChatMessage message={group.message} instanceId={viewId} />
         {/if}
       {/each}
+
+      {#if session?.loading}
+        <p class="text-sm text-muted-foreground">Reading transcript…</p>
+      {/if}
 
       {#if session?.streaming}
         <div class="flex justify-start">
@@ -117,19 +144,35 @@
 
   <div class="border-t border-border px-4 py-3">
     <div class="mx-auto max-w-3xl">
-      <ChatInput
-        onSend={handleSend}
-        onInterrupt={handleInterrupt}
-        streaming={session?.busy ?? false}
-        disabled={cockpit.status !== 'connected'}
-        attachmentOpen={(session?.pending.length ?? 0) > 0}
-      >
-        {#snippet attachment()}
-          {#each session?.pending ?? [] as request (request.requestId)}
-            <PermissionCard {request} onResolve={handleResolve} />
-          {/each}
-        {/snippet}
-      </ChatInput>
+      {#if browsing}
+        <div class="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3">
+          <span class="text-sm text-muted-foreground">
+            Read-only transcript of a stored session.
+          </span>
+          <button
+            type="button"
+            class="ml-auto rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-40"
+            disabled={session?.loading || cockpit.status !== 'connected'}
+            onclick={handleResume}
+          >
+            Resume session
+          </button>
+        </div>
+      {:else}
+        <ChatInput
+          onSend={handleSend}
+          onInterrupt={handleInterrupt}
+          streaming={session?.busy ?? false}
+          disabled={cockpit.status !== 'connected'}
+          attachmentOpen={(session?.pending.length ?? 0) > 0}
+        >
+          {#snippet attachment()}
+            {#each session?.pending ?? [] as request (request.requestId)}
+              <PermissionCard {request} onResolve={handleResolve} />
+            {/each}
+          {/snippet}
+        </ChatInput>
+      {/if}
     </div>
   </div>
 </div>

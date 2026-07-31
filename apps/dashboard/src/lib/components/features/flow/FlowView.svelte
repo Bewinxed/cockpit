@@ -11,9 +11,11 @@
     type ColorMode,
     BackgroundVariant
   } from '@xyflow/svelte';
+  import '@xyflow/svelte/dist/style.css';
   import { onMount } from 'svelte';
-  import { instances, ui, updateInstancePreferences } from '$lib/stores';
-  import { theme } from '$lib/stores/theme.svelte';
+  import { theme } from '$lib/theme.svelte';
+  import type { Message } from '$lib/cockpit/types';
+  import type { SubagentState } from '$lib/utils/flow-types';
   import FlowContextMenu from './FlowContextMenu.svelte';
   import FlowAutoFit from './FlowAutoFit.svelte';
   import FlowZoomTracker from './FlowZoomTracker.svelte';
@@ -25,22 +27,24 @@
 
   interface Props {
     instanceId: string;
+    messages: Message[];
+    /** Subagent branches to draw, keyed by the Task tool.use that spawned them. */
+    subagents?: Map<string, SubagentState>;
+    /** The tool whose output is still streaming, if any. */
+    streamingToolId?: string;
+    totalCostUsd?: number;
+    /** Invoked by the context menu's "jump to chat". */
+    onJump?: (nodeId: string) => void;
   }
 
-  let { instanceId }: Props = $props();
-
-  // Get messages from store
-  const messages = $derived(instances.getMessages(instanceId));
-
-  // Get all subagents for this instance (including completed ones for history)
-  const subagentsMap = $derived.by(() => {
-    const subagents = instances.getSubagentsForInstance(instanceId);
-    return new Map(subagents.map(s => [s.toolUseId, s]));
-  });
-
-  // Check if any tool is currently streaming
-  const streamingMessage = $derived(instances.getStreamingMessage(instanceId));
-  const streamingToolId = $derived(streamingMessage?.sdkUuid);
+  let {
+    instanceId,
+    messages,
+    subagents: subagentsMap = new Map(),
+    streamingToolId,
+    totalCostUsd = 0,
+    onJump,
+  }: Props = $props();
 
   // Transform messages to raw flow data (nodes/edges without positions)
   const rawFlowData = $derived.by(() => {
@@ -99,9 +103,7 @@
     });
   });
 
-  // Get instance for cost display
-  const instance = $derived(instances.get(instanceId));
-  const totalCost = $derived(instance?.totalCostUsd?.toFixed(4) ?? '0.0000');
+  const totalCost = $derived(totalCostUsd.toFixed(4));
 
   // Handle node context menu - svelte-flow passes { node, event }
   function handleNodeContextMenu({ node, event }: { node: Node; event: MouseEvent }) {
@@ -135,7 +137,7 @@
         // TODO: Implement branch - will need to call instance API
         break;
       case 'jump':
-        updateInstancePreferences({ instanceId, viewMode: 'chat' });
+        onJump?.(nodeId);
         break;
     }
     closeContextMenu();

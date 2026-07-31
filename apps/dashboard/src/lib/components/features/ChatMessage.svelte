@@ -22,7 +22,7 @@
 	} from 'lucide-svelte';
 	import Markdown from '@humanspeak/svelte-markdown';
 	import { formatTimestamp } from '$lib/utils/time';
-	import type { Message } from '$lib/stores';
+	import type { Message } from '$lib/cockpit/types';
 	import HelpMenu from './HelpMenu.svelte';
 	import DiffView from './DiffView.svelte';
 	import { CopyButton } from '$lib/components/ui/copy-button';
@@ -366,7 +366,7 @@
 	};
 
 	const config = $derived(
-		messageConfig[message.type] ||
+		messageConfig[message.type as keyof typeof messageConfig] ||
 		(message.type.startsWith('system.') ? messageConfig.system : messageConfig.assistant)
 	);
 </script>
