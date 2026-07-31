@@ -339,7 +339,7 @@
         <div
           bind:this={scroller}
           onscroll={trackScroll}
-          class="h-full space-y-4 overflow-y-auto px-4 py-4"
+          class="h-full space-y-4 overflow-y-auto overflow-x-hidden px-4 pt-4 pb-44"
         >
           <div class="mx-auto flex max-w-4xl flex-col gap-4">
             {#each groups as group (group.kind === 'single' ? group.message.id : `${group.kind}-${group.index}`)}
@@ -365,7 +365,7 @@
             {#if session?.streaming}
               <div class="flex justify-start">
                 <div
-                  class="max-w-[85%] rounded-2xl rounded-bl-sm border border-border bg-card px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap text-card-foreground shadow-sm"
+                  class="max-w-[85%] min-w-0 rounded-2xl rounded-bl-sm border border-border bg-card px-4 py-3 text-sm leading-relaxed break-words whitespace-pre-wrap text-card-foreground shadow-sm"
                 >
                   {session.streaming}
                 </div>
@@ -385,10 +385,9 @@
         {/if}
       </div>
     {/if}
-  </div>
 
-  <div class="px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-1">
-    <div class="mx-auto flex max-w-4xl flex-col gap-2">
+    <div class="pointer-events-none absolute inset-x-0 bottom-0 px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+      <div class="pointer-events-auto mx-auto flex max-w-4xl flex-col gap-2">
       {#if error}
         <!-- Keyed so a second failure shakes again instead of sitting there. -->
         {#key error}
@@ -440,6 +439,7 @@
           {/snippet}
         </ChatInput>
       {/if}
+      </div>
     </div>
   </div>
 </div>

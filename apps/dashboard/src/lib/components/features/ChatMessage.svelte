@@ -395,7 +395,7 @@
 		<div
 			class="flex flex-col gap-1 {message.type === 'user'
 				? 'items-end'
-				: 'items-start'} {message.type === 'ui.help_menu' ? 'w-full' : 'max-w-[85%]'}"
+				: 'items-start'} min-w-0 {message.type === 'ui.help_menu' ? 'w-full' : 'max-w-[85%]'}"
 		>
 			{#if message.type === 'tool.use' || message.type === 'tool.result'}
 				<!-- Tool message - collapsible card -->
