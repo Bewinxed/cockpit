@@ -341,7 +341,7 @@
           onscroll={trackScroll}
           class="h-full space-y-4 overflow-y-auto px-4 py-4"
         >
-          <div class="mx-auto flex max-w-3xl flex-col gap-4">
+          <div class="mx-auto flex max-w-4xl flex-col gap-4">
             {#each groups as group (group.kind === 'single' ? group.message.id : `${group.kind}-${group.index}`)}
               {#if group.kind === 'tools'}
                 <ToolGroup tools={group.messages} />
@@ -387,8 +387,8 @@
     {/if}
   </div>
 
-  <div class="border-t border-border px-4 py-3">
-    <div class="mx-auto flex max-w-3xl flex-col gap-2">
+  <div class="px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-1">
+    <div class="mx-auto flex max-w-4xl flex-col gap-2">
       {#if error}
         <!-- Keyed so a second failure shakes again instead of sitting there. -->
         {#key error}
@@ -398,7 +398,7 @@
         {/key}
       {/if}
       {#if browsing}
-        <div class="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3">
+        <div class="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3 shadow-lg">
           <span class="text-sm text-muted-foreground">
             Read-only transcript of a stored session.
           </span>
