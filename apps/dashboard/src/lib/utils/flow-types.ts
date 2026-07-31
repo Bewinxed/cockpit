@@ -7,9 +7,9 @@ import type { Node, Edge } from '@xyflow/svelte';
 import type { Message } from '$lib/cockpit/types';
 
 /**
- * A subagent branch as the flow view draws it. Phase 3 re-bases this on the
- * SDK's `parent_agent_id` (NEW.md §8); until then it is the flow view's own
- * shape and nothing else produces it.
+ * A subagent branch, as both the chat view's branch card and the flow view draw
+ * it. Produced by `frames.ts` from the `parent_tool_use_id` that forwarded
+ * subagent messages carry, and moved by the `task_*` system messages.
  */
 export interface SubagentState {
   /** The Task tool.use id that spawned this subagent. */
@@ -26,6 +26,11 @@ export interface SubagentState {
   result?: string;
   error?: string;
   isBackground?: boolean;
+  /** The task the `task_*` progress messages report under. */
+  taskId?: string;
+  /** `agentProgressSummaries`' present-tense line, when enabled. */
+  summary?: string;
+  lastToolName?: string;
 }
 
 // ============================================================

@@ -2,6 +2,7 @@
   import { Check, ChevronDown, ChevronRight, Shield, X } from '@lucide/svelte';
   import type { PermissionResult } from '@cockpit/core';
   import type { PendingPermission } from './client.svelte';
+  import { permissionSummary } from './permission-summary';
 
   interface Props {
     request: PendingPermission;
@@ -12,22 +13,7 @@
 
   let isExpanded = $state(false);
 
-  function summary(): string {
-    const { toolName, input } = request;
-    switch (toolName) {
-      case 'Edit':
-      case 'Write':
-      case 'Read':
-        return `${toolName} ${input.file_path ?? 'unknown'}`;
-      case 'Bash':
-        return `Run: ${String(input.command ?? '').slice(0, 80)}`;
-      case 'Glob':
-      case 'Grep':
-        return `${toolName} ${input.pattern ?? 'unknown'}`;
-      default:
-        return `${toolName} operation`;
-    }
-  }
+  const summary = $derived(permissionSummary(request.toolName, request.input));
 </script>
 
 <div class="bg-warning/10 p-3">
@@ -63,7 +49,7 @@
           </button>
         </div>
       </div>
-      <div class="text-muted-foreground text-sm mt-0.5 break-words">{summary()}</div>
+      <div class="text-muted-foreground text-sm mt-0.5 break-words">{summary}</div>
 
       <button
         type="button"

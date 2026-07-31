@@ -1,8 +1,11 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
+  import { ShieldAlert } from '@lucide/svelte';
   import { formatDistanceToNow } from '$lib/utils/time';
+  import ActivityDot from '$lib/cockpit/ActivityDot.svelte';
   import { cockpit, spawnSession } from '$lib/cockpit/client.svelte';
   import { sessionTitle, transcriptHref } from '$lib/cockpit/links';
+  import { permissionSummary } from '$lib/cockpit/permission-summary';
 
   let machineId = $state('');
   let cwd = $state('');
@@ -34,6 +37,36 @@
       <h1 class="text-lg font-semibold">Sessions</h1>
       <span class="text-xs text-muted-foreground">hub {cockpit.status}</span>
     </header>
+
+    {#if cockpit.blocked.length > 0}
+      <section class="rounded-xl border border-warning/40 bg-warning/5">
+        <h2
+          class="flex items-center gap-2 border-b border-warning/20 px-4 py-2 text-xs font-medium tracking-wider text-warning uppercase"
+        >
+          <ShieldAlert size={14} />
+          Needs attention
+          <span class="ml-auto font-mono text-[11px] normal-case">
+            {cockpit.blocked.length}
+          </span>
+        </h2>
+        <div class="divide-y divide-warning/15">
+          {#each cockpit.blocked as blocked (blocked.request.requestId)}
+            <a
+              href="/session/{blocked.instanceId}"
+              class="flex flex-col gap-0.5 px-4 py-2.5 transition-colors hover:bg-warning/10"
+            >
+              <span class="flex items-baseline gap-2 text-xs text-muted-foreground">
+                <span class="font-medium text-foreground">{blocked.hostname}</span>
+                <span class="truncate font-mono">{blocked.cwd || '—'}</span>
+              </span>
+              <span class="truncate text-sm text-warning">
+                {permissionSummary(blocked.request.toolName, blocked.request.input)}
+              </span>
+            </a>
+          {/each}
+        </div>
+      </section>
+    {/if}
 
     <section class="rounded-xl border border-border bg-card p-4">
       <h2 class="mb-3 text-sm font-medium">New session</h2>
@@ -103,13 +136,23 @@
         </h2>
 
         {#each running as instance (instance.id)}
+          {@const activity = cockpit.activityOf(instance.id)}
+          {@const tool = cockpit.currentToolOf(instance.id)}
           <a
             href="/session/{instance.id}"
-            class="flex items-center gap-3 rounded-lg border border-border bg-card px-3 py-2 text-sm transition-colors hover:bg-accent"
+            class="flex flex-col gap-0.5 rounded-lg border border-border bg-card px-3 py-2 text-sm transition-colors hover:bg-accent"
           >
-            <span class="size-1.5 shrink-0 animate-pulse rounded-full bg-success"></span>
-            <span class="truncate font-mono">{instance.cwd || '—'}</span>
-            <span class="ml-auto shrink-0 text-xs text-muted-foreground">{instance.status}</span>
+            <span class="flex items-center gap-3">
+              <ActivityDot {activity} />
+              <span class="truncate font-mono">{instance.cwd || '—'}</span>
+              <span class="ml-auto shrink-0 text-xs text-muted-foreground">{activity}</span>
+            </span>
+            {#if activity === 'working' && tool}
+              <span class="flex items-baseline gap-2 pl-5 text-xs text-muted-foreground">
+                <span class="shrink-0">{tool.name}</span>
+                <span class="truncate font-mono opacity-70">{tool.glance}</span>
+              </span>
+            {/if}
           </a>
         {/each}
 

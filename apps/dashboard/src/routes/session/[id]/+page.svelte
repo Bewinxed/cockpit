@@ -3,7 +3,8 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import type { PermissionResult } from '@cockpit/core';
-  import { ChatInput, ChatMessage, ToolGroup } from '$lib/components/features';
+  import { ChatInput, ChatMessage, SubagentBranch, ToolGroup } from '$lib/components/features';
+  import { FlowView } from '$lib/components/features/flow';
   import PermissionCard from '$lib/cockpit/PermissionCard.svelte';
   import {
     cockpit,
@@ -16,6 +17,7 @@
     stopSession,
   } from '$lib/cockpit/client.svelte';
   import type { Message } from '$lib/cockpit/types';
+  import type { SubagentState } from '$lib/utils/flow-types';
 
   const viewId = $derived(page.params.id ?? '');
   /** A `machine` in the query means this id is a stored session, not a live one. */
@@ -46,16 +48,33 @@
 
   type Group =
     | { kind: 'single'; message: Message; index: number }
-    | { kind: 'tools'; messages: Message[]; index: number };
+    | { kind: 'tools'; messages: Message[]; index: number }
+    | { kind: 'subagent'; branch: SubagentState; spawn: Message; index: number };
 
   const isTool = (message: Message) => message.type === 'tool.use' || message.type === 'tool.result';
 
-  // Consecutive tool calls collapse into one ToolGroup, as MessageList does.
+  const subagents = $derived(session?.subagents ?? {});
+
+  /** The branch a Task tool.use opened, if this session has one for it. */
+  const branchOf = (message: Message): SubagentState | undefined => {
+    const toolId = message.metadata?.toolId;
+    return toolId ? subagents[toolId] : undefined;
+  };
+
+  // Consecutive tool calls collapse into one ToolGroup, as MessageList does; a
+  // Task call becomes its branch card instead, so the subagent it spawned reads
+  // as one line until the user opens it.
   const groups = $derived.by((): Group[] => {
     const messages = session?.messages ?? [];
     const result: Group[] = [];
     let i = 0;
     while (i < messages.length) {
+      const branch = branchOf(messages[i]);
+      if (branch) {
+        result.push({ kind: 'subagent', branch, spawn: messages[i], index: i });
+        i++;
+        continue;
+      }
       if (!isTool(messages[i])) {
         result.push({ kind: 'single', message: messages[i], index: i });
         i++;
@@ -63,7 +82,7 @@
       }
       const start = i;
       const tools: Message[] = [];
-      while (i < messages.length && isTool(messages[i])) {
+      while (i < messages.length && isTool(messages[i]) && !branchOf(messages[i])) {
         tools.push(messages[i]);
         i++;
       }
@@ -71,6 +90,13 @@
     }
     return result;
   });
+
+  let view = $state<'chat' | 'flow'>('chat');
+
+  const branches = $derived(new Map(Object.entries(subagents)));
+  const totalCostUsd = $derived(
+    session?.messages.reduce((cost, message) => message.metadata?.totalCost ?? cost, 0) ?? 0
+  );
 
   function handleSend(text: string) {
     if (!session) return;
@@ -107,9 +133,24 @@
       {#if browsing}
         transcript · {session?.loading ? 'loading' : `${session?.messages.length ?? 0} messages`}
       {:else}
-        {session?.busy ? 'working' : 'idle'} · hub {cockpit.status}
+        {cockpit.activityOf(viewId)} · hub {cockpit.status}
       {/if}
     </span>
+
+    <div class="flex shrink-0 items-center gap-0.5 rounded-md border border-border p-0.5">
+      {#each ['chat', 'flow'] as const as mode (mode)}
+        <button
+          type="button"
+          class="rounded px-2 py-0.5 text-xs capitalize transition-colors {view === mode
+            ? 'bg-accent text-foreground'
+            : 'text-muted-foreground hover:text-foreground'}"
+          onclick={() => (view = mode)}
+        >
+          {mode}
+        </button>
+      {/each}
+    </div>
+
     {#if !browsing}
       <button
         type="button"
@@ -121,31 +162,46 @@
     {/if}
   </header>
 
-  <div bind:this={scroller} class="flex-1 space-y-4 overflow-y-auto px-4 py-4">
-    <div class="mx-auto flex max-w-3xl flex-col gap-4">
-      {#each groups as group (group.kind === 'tools' ? `tools-${group.index}` : group.message.id)}
-        {#if group.kind === 'tools'}
-          <ToolGroup tools={group.messages} />
-        {:else}
-          <ChatMessage message={group.message} instanceId={viewId} />
-        {/if}
-      {/each}
-
-      {#if session?.loading}
-        <p class="text-sm text-muted-foreground">Reading transcript…</p>
-      {/if}
-
-      {#if session?.streaming}
-        <div class="flex justify-start">
-          <div
-            class="max-w-[85%] rounded-2xl rounded-bl-sm border border-border bg-card px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap text-card-foreground shadow-sm"
-          >
-            {session.streaming}
-          </div>
-        </div>
-      {/if}
+  {#if view === 'flow'}
+    <div class="min-h-0 flex-1">
+      <FlowView
+        instanceId={viewId}
+        messages={session?.messages ?? []}
+        subagents={branches}
+        streamingToolId={session?.currentTool?.toolId}
+        {totalCostUsd}
+        onJump={() => (view = 'chat')}
+      />
     </div>
-  </div>
+  {:else}
+    <div bind:this={scroller} class="flex-1 space-y-4 overflow-y-auto px-4 py-4">
+      <div class="mx-auto flex max-w-3xl flex-col gap-4">
+        {#each groups as group (group.kind === 'single' ? group.message.id : `${group.kind}-${group.index}`)}
+          {#if group.kind === 'tools'}
+            <ToolGroup tools={group.messages} />
+          {:else if group.kind === 'subagent'}
+            <SubagentBranch branch={group.branch} spawn={group.spawn} />
+          {:else}
+            <ChatMessage message={group.message} instanceId={viewId} />
+          {/if}
+        {/each}
+
+        {#if session?.loading}
+          <p class="text-sm text-muted-foreground">Reading transcript…</p>
+        {/if}
+
+        {#if session?.streaming}
+          <div class="flex justify-start">
+            <div
+              class="max-w-[85%] rounded-2xl rounded-bl-sm border border-border bg-card px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap text-card-foreground shadow-sm"
+            >
+              {session.streaming}
+            </div>
+          </div>
+        {/if}
+      </div>
+    </div>
+  {/if}
 
   <div class="border-t border-border px-4 py-3">
     <div class="mx-auto max-w-3xl">

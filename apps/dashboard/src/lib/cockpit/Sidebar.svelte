@@ -5,6 +5,7 @@
    */
   import { page } from '$app/state';
   import { formatDistanceToNow } from '$lib/utils/time';
+  import ActivityDot from './ActivityDot.svelte';
   import { cockpit, loadCatalog } from './client.svelte';
   import { sessionTitle, transcriptHref } from './links';
 
@@ -50,6 +51,7 @@
       </header>
 
       {#each running as instance (instance.id)}
+        {@const activity = cockpit.activityOf(instance.id)}
         <a
           href="/session/{instance.id}"
           class="flex items-center gap-2 px-3 py-1 text-xs transition-colors hover:bg-accent
@@ -57,9 +59,11 @@
             ? 'bg-accent text-foreground'
             : 'text-muted-foreground'}"
         >
-          <span class="size-1.5 shrink-0 animate-pulse rounded-full bg-success"></span>
+          <ActivityDot {activity} size={1.5} />
           <span class="truncate font-mono">{instance.cwd.split('/').pop() || instance.cwd}</span>
-          <span class="ml-auto shrink-0 text-[11px]">{instance.status}</span>
+          <span class="ml-auto shrink-0 text-[11px] {activity === 'blocked' ? 'text-warning' : ''}">
+            {activity}
+          </span>
         </a>
       {/each}
 

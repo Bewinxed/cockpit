@@ -136,6 +136,11 @@ export class SessionSupervisor {
     const handle = query({
       prompt: input,
       options: {
+        // Subagent observability is the product's first promise (NEW.md §1), so
+        // the full nested conversation and its progress summaries are on unless
+        // the spawn payload deliberately turns them off.
+        forwardSubagentText: true,
+        agentProgressSummaries: true,
         ...options,
         cwd,
         includePartialMessages: true,

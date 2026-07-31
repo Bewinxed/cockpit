@@ -6,6 +6,8 @@
  * so nothing here re-models them.
  */
 import type { SDKAssistantMessage, SDKMessage, SessionMessage } from '@cockpit/core';
+import type { SubagentState } from '$lib/utils/flow-types';
+import { getToolGlance } from '$lib/utils/tool-display';
 import type { Message, MessageMetadata, MessageType } from './types';
 
 type AssistantBlock = SDKAssistantMessage['message']['content'][number];
@@ -17,10 +19,44 @@ export interface ToolResult {
   isError: boolean;
 }
 
+/** The tool a session is running right now — the fleet view's glance line. */
+export interface ToolGlance {
+  toolId: string;
+  name: string;
+  glance: string;
+}
+
+/**
+ * How one frame moves a subagent branch. Branches are keyed by the Task
+ * `tool_use_id`, which is what forwarded subagent messages carry as their
+ * `parent_tool_use_id`; the `task_*` system messages that report progress carry
+ * a `task_id` instead, so a branch remembers both.
+ */
+export interface BranchEvent {
+  toolUseId?: string;
+  taskId?: string;
+  subagentType?: string;
+  description?: string;
+  status?: SubagentState['status'];
+  /** `agentProgressSummaries`' present-tense line, when enabled. */
+  summary?: string;
+  lastToolName?: string;
+  result?: string;
+}
+
 export interface FrameMapping {
   /** Appended to the transcript, in order. */
   messages: Message[];
   toolResults: ToolResult[];
+  /**
+   * The subagent branch `messages` and `toolResults` belong to. Absent means the
+   * main transcript.
+   */
+  agentId?: string;
+  /** A subagent branch's lifecycle, moved by this frame. */
+  branch?: BranchEvent;
+  /** The tool that just went in flight on the main loop. */
+  currentTool?: ToolGlance;
   /** Text to append to the instance's streaming buffer. */
   delta: string;
   /** The streaming buffer has been superseded by a final message. */
@@ -28,6 +64,16 @@ export interface FrameMapping {
   /** The turn is over — the session is idle again. */
   endsTurn: boolean;
 }
+
+/** `task_updated`'s wire statuses, in the vocabulary the branch card renders. */
+const TASK_STATUS: Record<string, SubagentState['status']> = {
+  pending: 'starting',
+  running: 'running',
+  paused: 'running',
+  completed: 'complete',
+  failed: 'error',
+  killed: 'error',
+};
 
 /**
  * Message types (and `system` subtypes) with no transcript meaning. Rendering a
@@ -95,7 +141,8 @@ function blockToMessage(
         content: '',
         metadata: { isRedactedThinking: true },
       };
-    case 'tool_use':
+    case 'tool_use': {
+      const spawn = subagentSpawn(block.input);
       return {
         ...base,
         type: 'tool.use',
@@ -106,11 +153,26 @@ function blockToMessage(
           toolName: block.name,
           toolInput: block.input as MessageMetadata['toolInput'],
           toolStatus: 'pending',
+          subagentType: spawn?.subagentType,
+          subagentDescription: spawn?.description,
         },
       };
+    }
     default:
       return null;
   }
+}
+
+/**
+ * A tool call that spawns a subagent, recognised by its input rather than by the
+ * tool's name — the same call is the Task tool and the Agent tool depending on
+ * the session's tool set.
+ */
+function subagentSpawn(input: unknown): { subagentType: string; description?: string } | null {
+  if (typeof input !== 'object' || input === null) return null;
+  const { subagent_type: type, description } = input as Record<string, unknown>;
+  if (typeof type !== 'string') return null;
+  return { subagentType: type, description: typeof description === 'string' ? description : undefined };
 }
 
 function systemLine(
@@ -126,19 +188,35 @@ function systemLine(
 export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
   const mapping = empty();
   const uuid = uuidOf(sdk);
+  // `forwardSubagentText` forwards a subagent's own turns with their
+  // `parent_tool_use_id` set to the Task call that spawned them, so this is the
+  // attribution the tree is built from — not `parent_agent_id`, which only ever
+  // names a *grandparent* and is always null at the SDK's depth cap of 1.
+  const agentId = parentOf(sdk);
   const base: Omit<Message, 'type' | 'content'> = {
     id: uuid ?? crypto.randomUUID(),
     instanceId,
     timestamp: new Date(),
     sdkUuid: uuid,
-    parentToolUseId: parentOf(sdk),
+    parentToolUseId: agentId,
   };
+  mapping.agentId = agentId;
 
   switch (sdk.type) {
     case 'assistant': {
       sdk.message.content.forEach((block, index) => {
         const message = blockToMessage(block, { ...base, id: `${base.id}:${index}` });
         if (message) mapping.messages.push(message);
+        if (block.type !== 'tool_use' || agentId) return;
+        mapping.currentTool = {
+          toolId: block.id,
+          name: block.name,
+          glance: getToolGlance(block.input as Record<string, unknown>),
+        };
+        const spawn = subagentSpawn(block.input);
+        if (spawn) {
+          mapping.branch = { toolUseId: block.id, ...spawn, status: 'starting' };
+        }
       });
       // The final message supersedes whatever the partials painted.
       mapping.clearsStream = true;
@@ -146,9 +224,14 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
     }
 
     case 'user': {
-      // Only tool results: the user's own text is rendered from the local copy
-      // added on send — the SDK does not echo it back.
       const content = sdk.message.content;
+      // A subagent's opening prompt has no local copy to render from, and it is
+      // the first thing its branch should say. The main loop's own text does
+      // have one, added on send, so it is skipped here.
+      if (agentId) {
+        const text = transcriptUserText(sdk.message);
+        if (text) mapping.messages.push({ ...base, type: 'user', content: text });
+      }
       if (typeof content === 'string') break;
       for (const block of content) {
         if (block.type !== 'tool_result') continue;
@@ -202,6 +285,43 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
           break;
         case 'status':
           break;
+        case 'task_started':
+          mapping.branch = {
+            toolUseId: sdk.tool_use_id,
+            taskId: sdk.task_id,
+            subagentType: sdk.subagent_type,
+            description: sdk.description,
+            status: 'running',
+          };
+          break;
+        case 'task_progress':
+          mapping.branch = {
+            toolUseId: sdk.tool_use_id,
+            taskId: sdk.task_id,
+            subagentType: sdk.subagent_type,
+            description: sdk.description,
+            status: 'running',
+            summary: sdk.summary,
+            lastToolName: sdk.last_tool_name,
+          };
+          break;
+        case 'task_notification':
+          mapping.branch = {
+            toolUseId: sdk.tool_use_id,
+            taskId: sdk.task_id,
+            status: sdk.status === 'completed' ? 'complete' : 'error',
+            summary: sdk.summary,
+            result: sdk.summary,
+          };
+          break;
+        case 'task_updated':
+          mapping.branch = {
+            taskId: sdk.task_id,
+            description: sdk.patch.description,
+            status: sdk.patch.status ? TASK_STATUS[sdk.patch.status] : undefined,
+            summary: sdk.patch.error,
+          };
+          break;
         case 'compact_boundary':
           mapping.messages.push(
             systemLine(base, 'system.compact_boundary', 'Context compacted', {
@@ -229,7 +349,75 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
       }
   }
 
+  // A subagent's own text streams under its branch; letting it through here
+  // would repaint the main loop's buffer with a nested agent's sentences.
+  if (agentId) {
+    mapping.delta = '';
+    mapping.clearsStream = false;
+  }
+
   return mapping;
+}
+
+/**
+ * The branch a subagent's messages belong to, created on first sight. Callers
+ * must use the returned value rather than the literal: when `branches` is a
+ * `$state` proxy, writes land on the proxy's signals and never on the object
+ * that was assigned in.
+ */
+export function branchFor(
+  branches: Record<string, SubagentState>,
+  instanceId: string,
+  toolUseId: string
+): SubagentState {
+  const existing = branches[toolUseId];
+  if (existing) return existing;
+
+  branches[toolUseId] = {
+    toolUseId,
+    instanceId,
+    subagentType: 'subagent',
+    status: 'starting',
+    startedAt: new Date(),
+    messages: [],
+  };
+  return branches[toolUseId];
+}
+
+/** Folds a frame's branch event into the session's subagent branches. */
+export function applyBranchEvent(
+  branches: Record<string, SubagentState>,
+  instanceId: string,
+  event: BranchEvent
+): void {
+  // `task_updated` names only the task, so an already-known branch answers for it.
+  const key =
+    event.toolUseId ??
+    Object.values(branches).find((branch) => branch.taskId === event.taskId)?.toolUseId;
+  if (!key) return;
+
+  const branch = branchFor(branches, instanceId, key);
+  if (event.taskId) branch.taskId = event.taskId;
+  if (event.subagentType) branch.subagentType = event.subagentType;
+  if (event.description) branch.description = event.description;
+  if (event.summary) branch.summary = event.summary;
+  if (event.lastToolName) branch.lastToolName = event.lastToolName;
+  if (event.result) branch.result = event.result;
+  // A late `starting` must not walk a running branch backwards.
+  if (event.status && !(event.status === 'starting' && branch.status !== 'starting')) {
+    branch.status = event.status;
+    if (event.status === 'complete' || event.status === 'error') branch.completedAt = new Date();
+  }
+}
+
+/** The one line a collapsed branch card shows for what its subagent is doing. */
+export function branchActivity(branch: SubagentState): string {
+  if (branch.summary) return branch.summary;
+  if (branch.status === 'complete' && branch.result) return branch.result;
+  const last = branch.messages[branch.messages.length - 1];
+  if (last?.type === 'tool.use') return last.metadata?.toolName ?? 'working';
+  if (last?.type === 'assistant') return last.content;
+  return branch.lastToolName ?? branch.description ?? '';
 }
 
 /**
@@ -248,18 +436,26 @@ function transcriptUserText(message: unknown): string | null {
   return text || null;
 }
 
+/** A stored session, split the same way a live one is. */
+export interface Transcript {
+  messages: Message[];
+  /** Subagent branches, keyed by the Task `tool_use_id` that spawned them. */
+  subagents: Record<string, SubagentState>;
+}
+
 /**
  * A stored session (`getSessionMessages`) as a transcript. Each entry's `message`
  * is the raw SDK message, so the live mapping does the work — only user text,
  * which live sessions render from the local copy, is handled here.
  */
-export function mapTranscript(instanceId: string, transcript: SessionMessage[]): Message[] {
+export function mapTranscript(instanceId: string, transcript: SessionMessage[]): Transcript {
   const messages: Message[] = [];
+  const subagents: Record<string, SubagentState> = {};
 
   for (const entry of transcript) {
     if (entry.type === 'system') continue;
 
-    if (entry.type === 'user') {
+    if (entry.type === 'user' && !entry.parent_tool_use_id) {
       const text = transcriptUserText(entry.message);
       if (text !== null) {
         messages.push({
@@ -275,11 +471,22 @@ export function mapTranscript(instanceId: string, transcript: SessionMessage[]):
     }
 
     const mapping = mapFrame(instanceId, entry as unknown as SDKMessage);
-    messages.push(...mapping.messages);
-    for (const result of mapping.toolResults) applyToolResult(messages, result);
+    if (mapping.branch) applyBranchEvent(subagents, instanceId, mapping.branch);
+
+    const sink = mapping.agentId
+      ? branchFor(subagents, instanceId, mapping.agentId).messages
+      : messages;
+    sink.push(...mapping.messages);
+    for (const result of mapping.toolResults) applyToolResult(sink, result);
   }
 
-  return messages;
+  // Nothing further will arrive for a stored session; anything still open ended
+  // with the session rather than being live.
+  for (const branch of Object.values(subagents)) {
+    if (branch.status !== 'error') branch.status = 'complete';
+  }
+
+  return { messages, subagents };
 }
 
 /** The message optimistically shown for text the user just sent. */

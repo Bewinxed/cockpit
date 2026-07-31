@@ -160,6 +160,12 @@ Drift log (real installed types vs the summaries above; types win — §9):
 - Elysia 2 WS: a NEW `ElysiaWS` wrapper is constructed per lifecycle callback —
   socket objects have no stable identity across open/message/close; key every
   registry on the memoized `ws.id`, never on the wrapper reference.
+- Subagent attribution (corrects §4): live `SDKMessage`s carry
+  `parent_tool_use_id` (the Agent tool's use id) — that is the tree key.
+  `parent_agent_id` exists only on stored `SessionMessage`s and is always
+  null at depth 1. The spawn tool is named `Agent` (detect via
+  `subagent_type` in input); `task_started/updated/notification` frames
+  carry description, last tool, and `agentProgressSummaries` output.
 - Svelte 5 runes: a `$state` proxy never writes back to its target object —
   after `record[key] = literal`, return/keep `record[key]` (the proxy), never
   the literal; mutations on the raw literal are invisible to the UI.

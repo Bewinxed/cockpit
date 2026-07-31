@@ -34,6 +34,11 @@ export function getToolGlance(input: Record<string, unknown> | undefined): strin
 		return String(input.glob);
 	}
 
+	// Task/Agent and other described calls — the only readable part of the input
+	if (input.description) {
+		return String(input.description);
+	}
+
 	return '';
 }
 

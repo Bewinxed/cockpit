@@ -16,6 +16,9 @@ import type {
   StopPayload,
 } from '@cockpit/core';
 import { RESOLVE_PERMISSION } from '@cockpit/core';
+import type { SubagentState } from '$lib/utils/flow-types';
+import type { Activity } from './activity';
+import { activityOf } from './activity';
 import type { Message } from './types';
 import {
   SESSION_CATALOG_LIMIT,
@@ -23,7 +26,16 @@ import {
   WS_RECONNECT_MAX_ATTEMPTS,
   WS_RECONNECT_MAX_DELAY,
 } from '$lib/config';
-import { applyToolResult, errorMessage, localUserMessage, mapFrame, mapTranscript } from './frames';
+import type { ToolGlance } from './frames';
+import {
+  applyBranchEvent,
+  applyToolResult,
+  branchFor,
+  errorMessage,
+  localUserMessage,
+  mapFrame,
+  mapTranscript,
+} from './frames';
 
 export type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'error';
 
@@ -53,6 +65,15 @@ export interface PendingPermission {
   suggestions?: PermissionUpdate[];
 }
 
+/** A permission parked anywhere in the fleet, with the context to act on it. */
+export interface BlockedRequest {
+  instanceId: string;
+  machineId: string;
+  hostname: string;
+  cwd: string;
+  request: PendingPermission;
+}
+
 /** Everything one session view needs — live or browsed from storage. */
 export interface SessionState {
   /** The id this view lives at: a spawned instance, or the SDK session browsed. */
@@ -62,11 +83,16 @@ export interface SessionState {
   /** The SDK session behind this view, once one is known. */
   sessionId: string | null;
   messages: Message[];
+  /** Subagent branches, keyed by the Task `tool_use_id` that spawned them. */
+  subagents: Record<string, SubagentState>;
   pending: PendingPermission[];
   /** Partial assistant text, between `stream_event`s and the final message. */
   streaming: string;
   /** A turn is in flight (sent, no `result` yet). */
   busy: boolean;
+  /** The main loop's tool in flight, cleared by its result or the turn's end. */
+  currentTool: ToolGlance | null;
+  lastActivityAt: Date | null;
   /** A stored transcript is being fetched. */
   loading: boolean;
   /** The `system.init` banner is re-emitted every turn; render it once. */
@@ -145,9 +171,12 @@ function session(instanceId: string): SessionState {
     cwd: '',
     sessionId: null,
     messages: [],
+    subagents: {},
     pending: [],
     streaming: '',
     busy: false,
+    currentTool: null,
+    lastActivityAt: null,
     loading: false,
     initialized: false,
   };
@@ -155,7 +184,11 @@ function session(instanceId: string): SessionState {
   // Read it back: the literal above is the raw target, and `$state` writes land
   // on the proxy's signals, never on it. Handing out the raw object would give
   // callers a view the UI stops tracking the moment it first renders one.
-  return state.sessions[instanceId];
+  const target = state.sessions[instanceId];
+  // A session this browser never opened — a permission replayed from `/api/pending`
+  // is the usual way — still has to name its machine on the fleet view.
+  hydrate(target);
+  return target;
 }
 
 /** Fills in what the registry knows about a session this browser did not spawn. */
@@ -249,18 +282,35 @@ function handleFrame(frame: FramePayload): void {
   switch (frame.kind) {
     case 'sdk': {
       const mapping = mapFrame(frame.instanceId, frame.message);
+      if (mapping.branch) applyBranchEvent(target.subagents, frame.instanceId, mapping.branch);
+
+      // A subagent's turns belong to its branch, not to the main transcript —
+      // interleaving them is what buries the conversation the user is reading.
+      const sink = mapping.agentId
+        ? branchFor(target.subagents, frame.instanceId, mapping.agentId).messages
+        : target.messages;
+
       for (const message of mapping.messages) {
         if (message.type === 'system.init') {
           target.sessionId = message.metadata?.sessionId ?? target.sessionId;
           if (target.initialized) continue;
           target.initialized = true;
         }
-        target.messages.push(message);
+        sink.push(message);
       }
-      for (const result of mapping.toolResults) applyToolResult(target.messages, result);
+      for (const result of mapping.toolResults) applyToolResult(sink, result);
+
+      if (mapping.currentTool) target.currentTool = mapping.currentTool;
+      const answered = target.currentTool?.toolId;
+      if (mapping.toolResults.some((result) => result.toolId === answered)) {
+        target.currentTool = null;
+      }
       if (mapping.delta) target.streaming += mapping.delta;
       if (mapping.clearsStream) target.streaming = '';
-      if (mapping.endsTurn) target.busy = false;
+      if (mapping.endsTurn) {
+        target.busy = false;
+        target.currentTool = null;
+      }
       break;
     }
 
@@ -276,6 +326,8 @@ function handleFrame(frame: FramePayload): void {
       break;
     }
   }
+
+  target.lastActivityAt = new Date();
 }
 
 function send(envelope: Envelope): void {
@@ -438,7 +490,13 @@ export function sendText(instanceId: string, machineId: string, text: string): v
 export function stopSession(instanceId: string, machineId: string): void {
   const payload: StopPayload = { instanceId };
   send({ verb: 'stop', machineId, instanceId, payload });
-  session(instanceId).busy = false;
+
+  const target = session(instanceId);
+  target.busy = false;
+  target.currentTool = null;
+  // The agent denies whatever was parked as it tears the session down, so these
+  // answer to nobody — leaving them would pin a dead session to the fleet rail.
+  target.pending = [];
   void refresh();
 }
 
@@ -520,7 +578,9 @@ export async function openTranscript({
       sessionId,
       { dir: cwd || undefined },
     ]);
-    target.messages = mapTranscript(viewId, transcript);
+    const { messages, subagents } = mapTranscript(viewId, transcript);
+    target.messages = messages;
+    target.subagents = subagents;
   } catch (error) {
     target.messages = [
       errorMessage(viewId, `could not read transcript: ${error instanceof Error ? error.message : error}`),
@@ -553,6 +613,33 @@ export function resolvePermission(
   target.pending = target.pending.filter((p) => p.requestId !== requestId);
 }
 
+/**
+ * Every permission waiting on the user, across every machine. This is the
+ * question the fleet view exists to answer, so it is derived from the sessions
+ * themselves rather than tracked separately.
+ */
+function blockedRequests(): BlockedRequest[] {
+  const stopped = new Set(
+    state.instances.filter((row) => row.status === 'stopped').map((row) => row.id)
+  );
+
+  const rows: BlockedRequest[] = [];
+  for (const target of Object.values(state.sessions)) {
+    if (target.pending.length === 0 || stopped.has(target.instanceId)) continue;
+    const machine = state.machines.find((row) => row.machineId === target.machineId);
+    for (const request of target.pending) {
+      rows.push({
+        instanceId: target.instanceId,
+        machineId: target.machineId,
+        hostname: machine?.hostname ?? target.machineId,
+        cwd: target.cwd,
+        request,
+      });
+    }
+  }
+  return rows;
+}
+
 export const cockpit = {
   get status() {
     return state.status;
@@ -575,4 +662,17 @@ export const cockpit = {
   /** Stored sessions on one machine, as `listSessions` returned them. */
   catalogOf: (machineId: string): SDKSessionInfo[] => state.catalog[machineId] ?? [],
   session: (instanceId: string): SessionState | null => state.sessions[instanceId] ?? null,
+  /** What a session needs from you — `idle` for one nothing has been heard from. */
+  activityOf: (instanceId: string): Activity => {
+    const target = state.sessions[instanceId];
+    return target ? activityOf(target) : 'idle';
+  },
+  currentToolOf: (instanceId: string): ToolGlance | null =>
+    state.sessions[instanceId]?.currentTool ?? null,
+  get blocked(): BlockedRequest[] {
+    return blockedRequests();
+  },
+  get blockedCount(): number {
+    return blockedRequests().length;
+  },
 };

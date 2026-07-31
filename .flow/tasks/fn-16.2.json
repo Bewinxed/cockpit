@@ -1,0 +1,16 @@
+{
+  "assignee": null,
+  "claim_note": "",
+  "claimed_at": null,
+  "created_at": "2026-07-31T00:42:19.419184Z",
+  "depends_on": [
+    "fn-16.1"
+  ],
+  "epic": "fn-16",
+  "id": "fn-16.2",
+  "priority": 2,
+  "spec_path": ".flow/tasks/fn-16.2.md",
+  "status": "todo",
+  "title": "E2E: 3+ concurrent sessions incl. subagents + blocked-on-permission \u2014 'what needs me?' at a glance (done-criterion)",
+  "updated_at": "2026-07-31T00:42:19.419196Z"
+}

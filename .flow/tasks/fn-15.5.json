@@ -7,10 +7,15 @@
     "fn-15.4"
   ],
   "epic": "fn-15",
+  "evidence": {
+    "agentdeck_refs": 0,
+    "deleted_units": 6,
+    "gates": "all green"
+  },
   "id": "fn-15.5",
   "priority": 4,
   "spec_path": ".flow/tasks/fn-15.5.md",
-  "status": "in_progress",
+  "status": "done",
   "title": "Legacy deletion sweep: hub-server, agent-service, db, mcp-task-tracker, legacy-core, cli, orphaned dashboard files",
-  "updated_at": "2026-07-31T00:32:22.954956Z"
+  "updated_at": "2026-07-31T00:42:19.135622Z"
 }
