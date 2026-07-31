@@ -21,9 +21,8 @@
 		IconGallery,
 		IconWarningTriangle
 	} from '$lib/icons';
-	import Markdown from '@humanspeak/svelte-markdown';
+	import { Markdown } from '$lib/components/ui/markdown';
 	import * as Collapsible from '$lib/components/ui/collapsible';
-	import { PROSE } from '$lib/prose';
 	import { formatTimestamp } from '$lib/utils/time';
 	import type { Message } from '$lib/cockpit/types';
 	import HelpMenu from './HelpMenu.svelte';
@@ -608,7 +607,7 @@
 						</Collapsible.Trigger>
 
 						<Collapsible.Content>
-							<div class="border-t border-border p-3 {PROSE} text-muted-foreground">
+							<div class="border-t border-border p-3 text-muted-foreground">
 								<Markdown source={message.content} />
 							</div>
 						</Collapsible.Content>
@@ -627,9 +626,7 @@
 							<code class="font-mono">{message.metadata.command}</code>
 						</div>
 					{/if}
-					<div class={PROSE}>
-						<Markdown source={message.content} options={{ breaks: true }} />
-					</div>
+					<Markdown source={message.content} />
 				</div>
 			{:else if message.type === 'ui.help_menu'}
 				<!-- Help menu with tabs (Claude CLI-style) -->
@@ -777,13 +774,9 @@
 
 						{#if isHuge}
 							<Collapsible.Root bind:open={fullMessageOpen}>
-								<div class="{PROSE} prose-invert">
-									<Markdown source={fullMessageOpen ? messageHead : `${messageHead}…`} />
-								</div>
+								<Markdown source={fullMessageOpen ? messageHead : `${messageHead}…`} invert />
 								<Collapsible.Content>
-									<div class="{PROSE} prose-invert">
-										<Markdown source={messageRest} />
-									</div>
+									<Markdown source={messageRest} invert />
 								</Collapsible.Content>
 								<Collapsible.Trigger
 									class="mt-2 flex items-center gap-1.5 text-xs opacity-70 transition-opacity hover:opacity-100"
@@ -799,9 +792,7 @@
 								</Collapsible.Trigger>
 							</Collapsible.Root>
 						{:else}
-							<div class="{PROSE} {message.type === 'user' ? 'prose-invert' : ''}">
-								<Markdown source={message.content} />
-							</div>
+							<Markdown source={message.content} invert={message.type === 'user'} />
 						{/if}
 
 						<!-- Action buttons -->

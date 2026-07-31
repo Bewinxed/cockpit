@@ -1,9 +1,9 @@
 <script lang="ts">
   import { IconAgent, IconSubagent, IconTools } from '$lib/icons';
   import { onMount, tick, untrack } from 'svelte';
-  import Markdown from '@humanspeak/svelte-markdown';
-import { PROSE } from '$lib/prose';
-import { fly } from 'svelte/transition';
+  import { Markdown } from '$lib/components/ui/markdown';
+  import { smoothText } from '$lib/utils/smooth-text.svelte';
+  import { fly } from 'svelte/transition';
   import { quintOut } from 'svelte/easing';
   import { Virtualizer } from 'virtua/svelte';
   import type { VirtualizerHandle } from 'virtua/svelte';
@@ -65,6 +65,11 @@ import { fly } from 'svelte/transition';
     });
   });
   const session = $derived(cockpit.session(viewId));
+
+  // Frames land in bursts; the preview reveals them at a steady rate so a turn
+  // reads as typing rather than as a slideshow. Presentation only — the follow
+  // pin and the unseen flag below still read `session.streaming` itself.
+  const stream = smoothText(() => session?.streaming ?? '');
 
   // A live session this browser did not start has already said things, and frames
   // only carry what comes next — so read it back the moment the registry names
@@ -668,9 +673,7 @@ import { fly } from 'svelte/transition';
                 >
                   <!-- The stream renders as markdown too — raw asterisks mid-turn
                        read as a bug, and long resumed turns stream for minutes. -->
-                  <div class={PROSE}>
-                    <Markdown source={session.streaming} options={{ breaks: true }} />
-                  </div>
+                  <Markdown source={stream.text} />
                 </div>
               </div>
             {/if}

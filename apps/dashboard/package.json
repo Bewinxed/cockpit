@@ -12,7 +12,6 @@
 	"dependencies": {
 		"@cockpit/core": "workspace:*",
 		"@dagrejs/dagre": "^1.1.8",
-		"@humanspeak/svelte-markdown": "^0.8.13",
 		"@pierre/diffs": "^1.0.4",
 		"@xyflow/svelte": "^1.5.0",
 		"bits-ui": "^2.15.2",

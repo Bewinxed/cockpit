@@ -1,7 +1,7 @@
 <script lang="ts">
   import { IconAgent, IconSparkles, IconSpinner } from '$lib/icons';
   import { Handle, Position, useStore } from '@xyflow/svelte';
-  import Markdown from '@humanspeak/svelte-markdown';
+  import { Markdown } from '$lib/components/ui/markdown';
   import type { Message } from '$lib/cockpit/types';
 
   // Props passed by SvelteFlow
@@ -78,7 +78,7 @@
             <span class="text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary">{model}</span>
           {/if}
         </div>
-        <div class="text-sm prose prose-sm dark:prose-invert max-w-none">
+        <div class="text-sm">
           <Markdown source={displayContent} />
           {#if isStreaming}
             <span class="inline-block w-0.5 h-4 bg-primary ml-0.5 animate-pulse"></span>

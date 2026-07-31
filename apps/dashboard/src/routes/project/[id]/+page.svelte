@@ -7,8 +7,7 @@
   import { IconChevronRight } from '$lib/icons';
   import { untrack } from 'svelte';
   import { goto } from '$app/navigation';
-  import Markdown from '@humanspeak/svelte-markdown';
-  import { PROSE } from '$lib/prose';
+  import { Markdown } from '$lib/components/ui/markdown';
   import * as Collapsible from '$lib/components/ui/collapsible';
   import { cockpit, deleteProject, machineFs, spawnSession } from '$lib/cockpit/client.svelte';
   import type { ProjectRow } from '$lib/cockpit/client.svelte';
@@ -212,9 +211,7 @@
             </header>
             {#if draft === null}
               <div class="max-h-[60vh] overflow-y-auto px-4 py-3">
-                <div class={PROSE}>
-                  <Markdown source={content} />
-                </div>
+                <Markdown source={content} />
               </div>
             {:else}
               <textarea
