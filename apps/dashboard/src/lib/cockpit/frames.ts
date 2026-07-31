@@ -489,6 +489,68 @@ export interface Transcript {
 }
 
 /**
+ * The text of an entry that opens a main-loop turn, and null for everything else
+ * — including the user-role entries that carry nothing but a tool result. Only
+ * one of these can begin a chunk: anywhere else a slice would open mid-turn,
+ * with results arriving for a `tool.use` that is on the other side of the cut.
+ */
+function turnStartText(entry: SessionMessage): string | null {
+  if (entry.type !== 'user' || entry.parent_tool_use_id) return null;
+  return transcriptUserText(entry.message);
+}
+
+/**
+ * The entries between a tool call and the result answering it, marked so no
+ * chunk boundary can land inside one. A turn start is nearly always outside them
+ * already, but the harness writes its own user-role text mid-turn (a skill's
+ * base directory, for one), and a Task call has its subagent's whole branch in
+ * there. A call that was never answered spans nothing and blocks nothing.
+ */
+function spannedByToolCalls(transcript: SessionMessage[]): Int32Array {
+  const depth = new Int32Array(transcript.length + 1);
+  const open = new Map<string, number>();
+
+  transcript.forEach((entry, index) => {
+    const content = (entry.message as { content?: unknown } | null)?.content;
+    if (!Array.isArray(content)) return;
+    for (const block of content as { type?: string; id?: string; tool_use_id?: string }[]) {
+      if (block.type === 'tool_use' && block.id) open.set(block.id, index);
+      if (block.type !== 'tool_result' || !block.tool_use_id) continue;
+      const from = open.get(block.tool_use_id);
+      if (from === undefined) continue;
+      open.delete(block.tool_use_id);
+      depth[from + 1]++;
+      depth[index]--;
+    }
+  });
+
+  for (let index = 1; index < depth.length; index++) depth[index] += depth[index - 1];
+  return depth;
+}
+
+/**
+ * Where a transcript can be split into chunks of roughly `size` entries,
+ * ascending from 0. Each index is a multiple of `size` snapped back to the turn
+ * it landed in, so mapping any `[boundary, next boundary)` slice on its own
+ * gives what mapping the whole would have given for that stretch.
+ */
+export function turnBoundaries(transcript: SessionMessage[], size: number): number[] {
+  if (transcript.length <= size) return [0];
+  const spanned = spannedByToolCalls(transcript);
+  const cuttable = (index: number) => !spanned[index] && turnStartText(transcript[index]) !== null;
+
+  const boundaries = [0];
+  for (let cursor = size; cursor < transcript.length; cursor += size) {
+    let index = cursor;
+    while (index > 0 && !cuttable(index)) index--;
+    // A turn longer than one chunk snaps onto the boundary already taken, and
+    // stays one chunk rather than being cut where the pairs would not survive.
+    if (index > boundaries[boundaries.length - 1]) boundaries.push(index);
+  }
+  return boundaries;
+}
+
+/**
  * A stored session (`getSessionMessages`) as a transcript. Each entry's `message`
  * is the raw SDK message, so the live mapping does the work — only user text,
  * which live sessions render from the local copy, is handled here.
@@ -500,18 +562,16 @@ export function mapTranscript(instanceId: string, transcript: SessionMessage[]):
   for (const entry of transcript) {
     if (entry.type === 'system') continue;
 
-    if (entry.type === 'user' && !entry.parent_tool_use_id) {
-      const text = transcriptUserText(entry.message);
-      if (text !== null) {
-        messages.push({
-          id: entry.uuid,
-          instanceId,
-          ...userBody(text),
-          timestamp: new Date(),
-          sdkUuid: entry.uuid,
-        });
-        continue;
-      }
+    const opening = turnStartText(entry);
+    if (opening !== null) {
+      messages.push({
+        id: entry.uuid,
+        instanceId,
+        ...userBody(opening),
+        timestamp: new Date(),
+        sdkUuid: entry.uuid,
+      });
+      continue;
     }
 
     const mapping = mapFrame(instanceId, entry as unknown as SDKMessage);

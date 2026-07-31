@@ -25,6 +25,8 @@ import {
   CONTROL_TIMEOUT_MS,
   DISCARD_TIMEOUT_MS,
   SESSION_CATALOG_LIMIT,
+  TRANSCRIPT_CHUNK_SIZE,
+  TRANSCRIPT_CHUNK_THRESHOLD,
   WS_RECONNECT_BASE_DELAY,
   WS_RECONNECT_MAX_ATTEMPTS,
   WS_RECONNECT_MAX_DELAY,
@@ -38,6 +40,7 @@ import {
   localUserMessage,
   mapFrame,
   mapTranscript,
+  turnBoundaries,
 } from './frames';
 
 export type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'error';
@@ -125,6 +128,8 @@ export interface SessionState {
   lastActivityAt: Date | null;
   /** A stored transcript is being fetched. */
   loading: boolean;
+  /** The older chunks of a long transcript are still being prepended. */
+  hydrating: boolean;
   /** The `system.init` banner is re-emitted every turn; render it once. */
   initialized: boolean;
   /** A side quest (NEW.md §1) — kept visually apart until it is kept or discarded. */
@@ -155,6 +160,8 @@ const inflight = new Map<string, Waiter>();
 const backfilling = new Map<string, FramePayload[]>();
 /** Instances whose transcript has been read back — it is only ever read once. */
 const backfilled = new Set<string>();
+/** The current transcript read per view; a chunk loop stops once it is not it. */
+const hydrations = new Map<string, number>();
 
 // Lets the store be asserted from the console while developing.
 if (import.meta.env.DEV && typeof window !== 'undefined') {
@@ -218,6 +225,7 @@ function session(instanceId: string): SessionState {
     currentTool: null,
     lastActivityAt: null,
     loading: false,
+    hydrating: false,
     initialized: false,
     scratch: false,
     ephemeral: false,
@@ -615,6 +623,8 @@ export async function discardSession(instanceId: string, machineId: string): Pro
     );
   } finally {
     delete state.sessions[instanceId];
+    // The view this session's chunks were being prepended to is gone with it.
+    hydrations.delete(instanceId);
     await refresh();
   }
 }
@@ -758,6 +768,63 @@ export async function loadCatalog(machineId: string): Promise<void> {
   }
 }
 
+/**
+ * Publishes a stored transcript into a session view, newest first. A short one
+ * lands in one pass. A long one paints its last turns on their own — mapping the
+ * whole of it, and handing the view thousands of messages at once, is what the
+ * reader would wait through — and the rest are prepended a chunk at a time with
+ * the event loop free in between. `onPublished` runs once the last turns are on
+ * screen, and the loop stops early if a later read for this view supersedes it.
+ */
+async function ingestTranscript(
+  viewId: string,
+  target: SessionState,
+  transcript: SessionMessage[],
+  epoch: number,
+  onPublished?: () => void
+): Promise<void> {
+  if (transcript.length <= TRANSCRIPT_CHUNK_THRESHOLD) {
+    const { messages, subagents } = mapTranscript(viewId, transcript);
+    target.messages = messages;
+    target.subagents = subagents;
+    onPublished?.();
+    return;
+  }
+
+  const bounds = turnBoundaries(transcript, TRANSCRIPT_CHUNK_SIZE);
+  const newest = mapTranscript(viewId, transcript.slice(bounds[bounds.length - 1]));
+  target.messages = newest.messages;
+  target.subagents = newest.subagents;
+  target.hydrating = true;
+  target.loading = false;
+  onPublished?.();
+
+  for (let i = bounds.length - 2; i >= 0; i--) {
+    // Mapping a chunk is the blocking work, so the loop hands the event loop
+    // back between them — this is what the reader scrolls and types through.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    if (hydrations.get(viewId) !== epoch) return;
+    const older = mapTranscript(viewId, transcript.slice(bounds[i], bounds[i + 1]));
+    target.messages = [...older.messages, ...target.messages];
+    // Branches are keyed by the Task `tool_use_id` that opened them, so an older
+    // chunk mostly adds keys — except where a compacted transcript re-emits the
+    // same call, and then its turns belong in front of the ones already read
+    // back for it.
+    for (const [toolUseId, branch] of Object.entries(older.subagents)) {
+      const known = target.subagents[toolUseId];
+      if (known) known.messages = [...branch.messages, ...known.messages];
+      else target.subagents[toolUseId] = branch;
+    }
+  }
+}
+
+/** Starts a read of this view's transcript, superseding whatever was reading it. */
+function claimTranscript(viewId: string): number {
+  const epoch = (hydrations.get(viewId) ?? 0) + 1;
+  hydrations.set(viewId, epoch);
+  return epoch;
+}
+
 /** Loads a stored session's transcript into the view it is being browsed under. */
 export async function openTranscript({
   viewId,
@@ -774,23 +841,28 @@ export async function openTranscript({
   target.machineId = machineId;
   target.cwd = cwd;
   target.sessionId = sessionId;
+  // Re-opening what is already read — or still hydrating, which has published
+  // its newest turns by now — must not start a second read over the top of it.
   if (target.messages.length > 0 || target.loading) return;
 
+  const epoch = claimTranscript(viewId);
   target.loading = true;
   try {
     const transcript = await machineControl<SessionMessage[]>(machineId, 'getSessionMessages', [
       sessionId,
       { dir: cwd || undefined },
     ]);
-    const { messages, subagents } = mapTranscript(viewId, transcript);
-    target.messages = messages;
-    target.subagents = subagents;
+    await ingestTranscript(viewId, target, transcript, epoch);
   } catch (error) {
+    // The newest turns may already be on screen; a failure reading the rest
+    // joins them rather than taking the transcript down with it.
     target.messages = [
       errorMessage(viewId, `could not read transcript: ${error instanceof Error ? error.message : error}`),
+      ...target.messages,
     ];
   } finally {
     target.loading = false;
+    target.hydrating = false;
   }
 }
 
@@ -808,22 +880,26 @@ export async function backfillSession(instanceId: string): Promise<void> {
 
   backfilled.add(instanceId);
   backfilling.set(instanceId, []);
+  const epoch = claimTranscript(instanceId);
   target.loading = true;
   try {
     const transcript = await machineControl<SessionMessage[]>(machineId, 'getSessionMessages', [
       sessionId,
       { dir: cwd || undefined },
     ]);
-    const { messages, subagents } = mapTranscript(instanceId, transcript);
-    target.messages = messages;
-    target.subagents = subagents;
-    target.streaming = '';
-    replayHeld(instanceId, new Set(transcript.map((entry) => entry.uuid)));
+    const seeded = new Set(transcript.map((entry) => entry.uuid));
+    await ingestTranscript(instanceId, target, transcript, epoch, () => {
+      target.streaming = '';
+      // What was held belongs to the end of the transcript, which is now on
+      // screen: it appends while the older chunks prepend, so neither waits.
+      replayHeld(instanceId, seeded);
+    });
   } catch (error) {
     replayHeld(instanceId, new Set());
     console.error(`[cockpit] backfilling ${instanceId} failed:`, error);
   } finally {
     target.loading = false;
+    target.hydrating = false;
   }
 }
 

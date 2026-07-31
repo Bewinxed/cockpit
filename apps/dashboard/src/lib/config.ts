@@ -15,3 +15,9 @@ export const CONTROL_TIMEOUT_MS = 15000;
 
 /** Discarding a side quest removes a git worktree, which is slower disk work. */
 export const DISCARD_TIMEOUT_MS = 30000;
+
+/** Up to this many entries, a stored transcript is mapped in one pass. */
+export const TRANSCRIPT_CHUNK_THRESHOLD = 300;
+
+/** Entries per chunk beyond that, mapped one chunk per macrotask. */
+export const TRANSCRIPT_CHUNK_SIZE = 250;

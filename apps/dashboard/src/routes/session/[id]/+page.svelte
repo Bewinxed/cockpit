@@ -177,13 +177,32 @@
     return result;
   });
 
-  // A transcript opens on its last line. The groups arrive after the view
-  // mounts and virtua only estimates their heights until they measure, so the
-  // anchor waits a tick and then lets scrollToIndex correct itself.
+  // Keyed by what a group holds rather than where it sits: hydrating a long
+  // transcript prepends older turns to the front, and a key that moved with the
+  // index would remount every group below it and lose its measured height.
+  const groupKey = (group: Group): string => {
+    if (group.kind === 'single') return group.message.id ?? `single-${group.index}`;
+    if (group.kind === 'subagent') return `subagent-${group.branch.toolUseId}`;
+    return `tools-${group.messages[0].id ?? group.index}`;
+  };
+
+  // A transcript opens on its last line. Virtua revises its estimated heights
+  // over the first few frames, so a single landing can end up thousands of
+  // pixels short — hold the end through the settling window with bounded raw
+  // writes (always the true bottom of the current layout), stop the moment
+  // the reader scrolls away, and let the ResizeObserver own it from there.
   $effect(() => {
     if (anchored || !groups.length) return;
     anchored = true;
-    void tick().then(pinToLatest);
+    void tick().then(async () => {
+      for (const delay of [0, 80, 240, 600]) {
+        if (delay) await new Promise((r) => setTimeout(r, delay));
+        if (!scroller) return;
+        if (delay && !atBottom) return;
+        scroller.scrollTop = scroller.scrollHeight;
+        trackScroll();
+      }
+    });
   });
 
   let view = $state<'chat' | 'flow'>('chat');
@@ -230,6 +249,10 @@
 
   /** The SDK session this view can branch from: the stored one, or the live one's. */
   const forkable = $derived(browsing ? viewId : (session?.sessionId ?? null));
+
+  // Resuming and forking seed the new view from what is on screen, so both wait
+  // for the whole of it: a transcript still hydrating has only its last turns.
+  const wholeTranscript = $derived(!session?.loading && !session?.hydrating);
 
   async function handleFork() {
     if (!session || !forkable) return;
@@ -337,7 +360,7 @@
       <button
         type="button"
         class={action}
-        disabled={!forkable}
+        disabled={!forkable || !wholeTranscript}
         title="Branch a side quest off this session"
         onclick={handleFork}
       >
@@ -408,11 +431,11 @@
               <Virtualizer
                 bind:this={vlist}
                 data={groups}
-                getKey={(g) =>
-                  g.kind === 'single' ? (g.message.id ?? `single-${g.index}`) : `${g.kind}-${g.index}`}
+                getKey={groupKey}
                 scrollRef={scroller}
                 itemSize={120}
                 bufferSize={400}
+                shift={session?.hydrating ?? false}
               >
                 {#snippet children(group)}
                   <div class="pb-4">
@@ -512,7 +535,7 @@
           <button
             type="button"
             class="ml-auto {action}"
-            disabled={session?.loading || cockpit.status !== 'connected'}
+            disabled={!wholeTranscript || cockpit.status !== 'connected'}
             onclick={handleFork}
           >
             Fork
@@ -520,7 +543,7 @@
           <button
             type="button"
             class="rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-40"
-            disabled={session?.loading || cockpit.status !== 'connected'}
+            disabled={!wholeTranscript || cockpit.status !== 'connected'}
             onclick={handleResume}
           >
             Resume session
