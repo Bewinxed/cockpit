@@ -20,9 +20,10 @@
 
 <a
   href="/session/{instance.id}"
-  class="flex flex-col gap-0.5 rounded-lg border bg-card px-3 py-2 text-sm
+  class="flex flex-col gap-0.5 rounded-lg border px-3 py-2 text-sm
     transition-[background-color,box-shadow,translate] duration-150 ease-out
     hover:-translate-y-px hover:bg-accent hover:shadow-md motion-reduce:hover:translate-y-0
+    {activity === 'blocked' ? 'bg-warning/10' : 'bg-card'}
     {instance.kind === 'scratch' ? 'border-dashed border-muted-foreground/30' : 'border-border'}"
 >
   <span class="flex items-center gap-3">
@@ -31,7 +32,11 @@
     {#if instance.kind === 'scratch'}
       <span class="shrink-0 rounded-sm bg-accent px-1 text-[10px] tracking-wide">scratch</span>
     {/if}
-    <span class="ml-auto inline-grid shrink-0 justify-items-end text-xs text-muted-foreground">
+    <span
+      class="ml-auto inline-grid shrink-0 justify-items-end text-xs {activity === 'blocked'
+        ? 'font-medium text-warning'
+        : 'text-muted-foreground'}"
+    >
       {#key activity}
         <span
           class="col-start-1 row-start-1"

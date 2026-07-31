@@ -19,7 +19,12 @@
   );
 </script>
 
-<span
-  class="shrink-0 rounded-full {size === 2 ? 'size-2' : 'size-1.5'} {tone}"
-  title={ACTIVITY_LABEL[activity]}
-></span>
+<span class="relative shrink-0 {size === 2 ? 'size-2' : 'size-1.5'}" title={ACTIVITY_LABEL[activity]}>
+  <!-- Blocked is the only state waiting on a human, so it is the loudest one. -->
+  {#if activity === 'blocked'}
+    <span
+      class="absolute inset-0 rounded-full bg-warning opacity-75 animate-ping motion-reduce:animate-none"
+    ></span>
+  {/if}
+  <span class="absolute inset-0 rounded-full {tone}"></span>
+</span>

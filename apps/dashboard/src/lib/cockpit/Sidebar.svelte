@@ -1,4 +1,5 @@
 <script module lang="ts">
+  import { IconChevronRight, IconFolder, IconHistory, IconPlus, IconServer } from '$lib/icons';
   import { browser } from '$app/environment';
 
   const STORAGE_KEY = 'cockpit-sidebar';
@@ -29,7 +30,6 @@
   import { page } from '$app/state';
   import { slide } from 'svelte/transition';
   import { quintOut } from 'svelte/easing';
-  import { ChevronRight, Folder, History, Plus, Server } from '@lucide/svelte';
   import * as Collapsible from '$lib/components/ui/collapsible';
   import type { SDKSessionInfo } from '@cockpit/core';
   import { formatDistanceToNow } from '$lib/utils/time';
@@ -78,7 +78,7 @@
     in:slide={rowIn}
     out:slide={rowOut}
   >
-    <History size={14} class="mt-0.5 shrink-0 text-muted-foreground/70" />
+    <IconHistory class="size-3.5 mt-0.5 shrink-0 text-muted-foreground/70" />
     <span class="flex min-w-0 flex-1 flex-col">
       <span class="flex items-baseline gap-2">
         <span class="truncate text-[13px] leading-5 text-foreground {current ? 'font-medium' : ''}">
@@ -109,7 +109,7 @@
       href="/session"
       class="flex min-h-7 items-center gap-1.5 rounded-md bg-primary px-2 text-[13px] font-medium text-primary-foreground shadow-sm transition-[background-color,scale] duration-150 ease-out hover:bg-primary/90 active:scale-[0.96] focus-visible:ring-2 focus-visible:ring-ring"
     >
-      <Plus size={14} class="shrink-0" />
+      <IconPlus class="size-3.5 shrink-0" />
       New session
     </a>
   </div>
@@ -129,7 +129,7 @@
           class="flex items-start gap-2 rounded-md px-2 py-1 transition-colors hover:bg-accent
             {current ? 'bg-accent' : ''}"
         >
-          <Folder size={14} class="mt-0.5 shrink-0 text-muted-foreground" />
+          <IconFolder class="size-3.5 mt-0.5 shrink-0 text-muted-foreground" />
           <span class="flex min-w-0 flex-1 flex-col">
             <span
               class="truncate text-[13px] leading-5 text-foreground {current ? 'font-medium' : ''}"
@@ -186,6 +186,7 @@
 
   {#each machines as machine (machine.machineId)}
     {@const running = cockpit.runningOn(machine.machineId)}
+    {@const blockedCount = running.filter((i) => cockpit.activityOf(i.id) === 'blocked').length}
     {@const stored = cockpit.catalogOf(machine.machineId)}
     {@const open = !collapsed[machine.machineId]}
     {@const expanded = !!showAll[machine.machineId]}
@@ -195,13 +196,12 @@
           <Collapsible.Trigger
             class="flex min-h-7 flex-1 items-center gap-1.5 rounded-md px-2 py-1 text-left transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
           >
-            <ChevronRight
-              size={12}
-              class="shrink-0 text-muted-foreground transition-transform duration-200 ease-out {open
+            <IconChevronRight
+              class="size-3 shrink-0 text-muted-foreground transition-transform duration-200 ease-out {open
                 ? 'rotate-90'
                 : ''}"
             />
-            <Server size={14} class="shrink-0 text-muted-foreground" />
+            <IconServer class="size-3.5 shrink-0 text-muted-foreground" />
             <span class="truncate text-[13px] font-medium text-foreground">{machine.hostname}</span>
             <span
               class="size-1.5 shrink-0 rounded-full {machine.status === 'online'
@@ -210,6 +210,14 @@
               title={machine.status === 'online' ? 'Online' : 'Offline'}
             ></span>
           </Collapsible.Trigger>
+          <!-- Outside the content, so folding a machine away cannot hide what it is waiting on. -->
+          {#if blockedCount > 0}
+            <span
+              class="shrink-0 rounded-full bg-warning/15 px-1.5 text-[10px] font-medium text-warning tabular-nums"
+            >
+              {blockedCount} needs you
+            </span>
+          {/if}
           <button
             type="button"
             class="min-h-7 rounded px-1.5 font-mono text-[10px] text-muted-foreground/60 uppercase transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
@@ -235,7 +243,7 @@
                   href="/session/{instance.id}"
                   aria-current={current ? 'page' : undefined}
                   class="flex min-h-7 items-center gap-2 rounded-md px-1.5 py-1 text-[13px] transition-colors hover:bg-accent
-                    {current ? 'bg-accent' : ''}"
+                    {current ? 'bg-accent' : activity === 'blocked' ? 'bg-warning/10' : ''}"
                   in:slide={rowIn}
                   out:slide={rowOut}
                 >
@@ -245,7 +253,7 @@
                   </span>
                   <span
                     class="ml-auto shrink-0 text-[10px] tabular-nums {activity === 'blocked'
-                      ? 'text-warning'
+                      ? 'font-medium text-warning'
                       : 'text-muted-foreground/70'}"
                   >
                     {ACTIVITY_LABEL[activity]}

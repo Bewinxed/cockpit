@@ -17,6 +17,6 @@ export function activityOf(session: { pending: readonly unknown[]; busy: boolean
 /** The word each state is shown as — the enum is wire vocabulary, not copy. */
 export const ACTIVITY_LABEL: Record<Activity, string> = {
   working: 'Working',
-  blocked: 'Blocked',
+  blocked: 'Needs you',
   idle: 'Idle',
 };
