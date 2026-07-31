@@ -8,6 +8,8 @@ import { Context, Effect, Layer } from 'effect';
 export interface PendingShape {
   readonly remember: (requestId: string, envelope: Envelope) => void;
   readonly resolve: (requestId: string) => void;
+  /** A relaunch or a death answers every question its process had open. */
+  readonly forget: (instanceId: string) => void;
   readonly list: () => Envelope[];
 }
 
@@ -22,6 +24,11 @@ const make = (): PendingShape => {
     },
     resolve: (requestId) => {
       requests.delete(requestId);
+    },
+    forget: (instanceId) => {
+      for (const [requestId, envelope] of requests) {
+        if (envelope.instanceId === instanceId) requests.delete(requestId);
+      }
     },
     list: () => [...requests.values()],
   };

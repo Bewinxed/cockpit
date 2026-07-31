@@ -182,6 +182,7 @@ export const createServer = ({ registry, db, pending }: HubServices) => {
                 message.instanceId,
                 peek(message.payload, 'message') ?? 'the session failed'
               );
+              pending.forget(message.instanceId);
               publishInstances(message.machineId);
             }
             // A control's reply belongs to the dashboard that asked; the rest is fan-out.
@@ -218,6 +219,9 @@ export const createServer = ({ registry, db, pending }: HubServices) => {
         switch (message.verb) {
           case 'spawn':
             if (forward(message, ws) && message.instanceId) {
+              // A relaunch replaces the process — questions the old one had
+              // open are settled by its teardown and must not replay.
+              pending.forget(message.instanceId);
               db.openInstance({
                 id: message.instanceId,
                 machineId: message.machineId,

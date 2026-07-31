@@ -384,6 +384,17 @@ function handleFrame(frame: FramePayload): void {
           if (target.initialized) continue;
           target.initialized = true;
         }
+        // The settle that precedes a relaunch ends the old turn with an error
+        // result the reader asked for — a quiet note, not a red card.
+        if (target.relaunching && message.type === 'result.error') {
+          sink.push({
+            ...message,
+            type: 'system.status',
+            content: 'Turn stopped to change the permission mode.',
+            metadata: {},
+          });
+          continue;
+        }
         sink.push(message);
       }
       for (const result of mapping.toolResults) applyToolResult(sink, result);
@@ -1021,6 +1032,9 @@ export async function relaunchSession(
   };
 
   const previous = target.permissionMode;
+  // Work the relaunch interrupts must resume on its own: the reader unblocked
+  // the session, they should not also have to nudge it.
+  const hadWork = target.busy || target.pending.length > 0;
   target.permissionMode = permissionMode;
   target.relaunching = true;
   // Whatever was in flight belongs to the process being replaced.
@@ -1029,6 +1043,13 @@ export async function relaunchSession(
     await ask<void>(requestId, 'relaunch', CONTROL_TIMEOUT_MS, () =>
       send({ verb: 'spawn', machineId, instanceId, requestId, payload })
     );
+    if (hadWork) {
+      sendText(
+        instanceId,
+        machineId,
+        `The permission mode is now "${permissionMode}". Continue the interrupted work.`
+      );
+    }
   } catch (error) {
     target.permissionMode = previous;
     throw error;
