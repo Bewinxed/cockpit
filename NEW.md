@@ -173,6 +173,12 @@ Drift log (real installed types vs the summaries above; types win — §9):
   `Context.Service` classes + curried `Layer.effect(Key)(effect)`; capped
   backoff is `Schedule.min([exponential, spaced])` + `Schedule.jittered`;
   Schema is `effect/Schema`, not `@effect/schema`.
+- Transcript rendering (extends §8 polish): the session view virtualizes via
+  `virtua` (Virtualizer + external scrollRef; `ssr.noExternal` required) and
+  ingests stored transcripts newest-first in turn-aligned chunks; the wire
+  still ships the whole JSONL in one `getSessionMessages` reply — chunked
+  transport over the tunnel is the known follow-up. Native find is replaced
+  by store-backed Ctrl+F (virtualized DOM defeats browser find).
 
 ---
 
