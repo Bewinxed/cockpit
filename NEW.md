@@ -160,6 +160,9 @@ Drift log (real installed types vs the summaries above; types win — §9):
 - Elysia 2 WS: a NEW `ElysiaWS` wrapper is constructed per lifecycle callback —
   socket objects have no stable identity across open/message/close; key every
   registry on the memoized `ws.id`, never on the wrapper reference.
+- Svelte 5 runes: a `$state` proxy never writes back to its target object —
+  after `record[key] = literal`, return/keep `record[key]` (the proxy), never
+  the literal; mutations on the raw literal are invisible to the UI.
 - Effect v4: `Effect.async` → `Effect.callback`; no `Effect.Service` — use
   `Context.Service` classes + curried `Layer.effect(Key)(effect)`; capped
   backoff is `Schedule.min([exponential, spaced])` + `Schedule.jittered`;

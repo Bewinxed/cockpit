@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import type { PermissionResult } from '@cockpit/core';
@@ -22,12 +23,16 @@
   const browsingCwd = $derived(page.url.searchParams.get('cwd') ?? '');
 
   // Opening writes to the store, so it stays in an effect; the read is derived.
+  // Untracked, or the store reads it makes would re-arm this effect against the
+  // very fields it writes — a transcript that comes back empty would reload forever.
   $effect(() => {
-    if (browsing) {
-      void openTranscript({ viewId, machineId: browsing, sessionId: viewId, cwd: browsingCwd });
-    } else {
-      openSession(viewId);
-    }
+    const machineId = browsing;
+    const cwd = browsingCwd;
+    const id = viewId;
+    untrack(() => {
+      if (machineId) void openTranscript({ viewId: id, machineId, sessionId: id, cwd });
+      else openSession(id);
+    });
   });
   const session = $derived(cockpit.session(viewId));
 

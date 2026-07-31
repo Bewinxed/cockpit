@@ -90,6 +90,11 @@ interface Waiter {
 /** Control calls awaiting their `control_result`, keyed by the SDK `requestId`. */
 const inflight = new Map<string, Waiter>();
 
+// Lets the store be asserted from the console while developing.
+if (import.meta.env.DEV && typeof window !== 'undefined') {
+  Object.assign(globalThis, { __cockpitDebug: { state, inflight } });
+}
+
 // HMR-persistent socket references, so a module reload never leaves an orphan.
 declare global {
   var __cockpitSocket: WebSocket | null;
@@ -147,7 +152,10 @@ function session(instanceId: string): SessionState {
     initialized: false,
   };
   state.sessions[instanceId] = created;
-  return created;
+  // Read it back: the literal above is the raw target, and `$state` writes land
+  // on the proxy's signals, never on it. Handing out the raw object would give
+  // callers a view the UI stops tracking the moment it first renders one.
+  return state.sessions[instanceId];
 }
 
 /** Fills in what the registry knows about a session this browser did not spawn. */
@@ -333,7 +341,27 @@ export function ensureConnected(): void {
   if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
     return;
   }
+  // A navigation is a fresh user intent — earlier exhausted retries don't apply.
+  globalThis.__cockpitReconnectAttempts = 0;
   connect();
+}
+
+/** Resolves once the app socket is OPEN, connecting it if needed. */
+function waitForOpen(timeoutMs = 5000): Promise<void> {
+  ensureConnected();
+  const socket = globalThis.__cockpitSocket;
+  if (socket && socket.readyState === WebSocket.OPEN) return Promise.resolve();
+
+  return new Promise((resolve, reject) => {
+    const deadline = Date.now() + timeoutMs;
+    const poll = () => {
+      const current = globalThis.__cockpitSocket;
+      if (current && current.readyState === WebSocket.OPEN) return resolve();
+      if (Date.now() > deadline) return reject(new Error('hub connection timed out'));
+      setTimeout(poll, 100);
+    };
+    poll();
+  });
 }
 
 function userMessage(text: string): SendPayload['message'] {
@@ -424,14 +452,33 @@ function control(instanceId: string, machineId: string, method: string, args: un
  * session functions. The reply is correlated by `requestId`, which the hub routes
  * back to this socket alone.
  */
-export function machineControl<T>(machineId: string, method: string, args: unknown[] = []): Promise<T> {
+export async function machineControl<T>(
+  machineId: string,
+  method: string,
+  args: unknown[] = [],
+  replyTimeoutMs = 15000
+): Promise<T> {
+  await waitForOpen();
   const requestId = crypto.randomUUID();
   const payload: ControlPayload = { requestId, method, args };
   return new Promise<T>((resolve, reject) => {
-    inflight.set(requestId, { resolve: resolve as (result: unknown) => void, reject });
+    const timer = setTimeout(() => {
+      if (inflight.delete(requestId)) reject(new Error(`${method} timed out`));
+    }, replyTimeoutMs);
+    inflight.set(requestId, {
+      resolve: (result) => {
+        clearTimeout(timer);
+        resolve(result as T);
+      },
+      reject: (error) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    });
     try {
       send({ verb: 'control', machineId, requestId, payload });
     } catch (error) {
+      clearTimeout(timer);
       inflight.delete(requestId);
       reject(error instanceof Error ? error : new Error(String(error)));
     }
