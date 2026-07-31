@@ -29,7 +29,7 @@
   import { page } from '$app/state';
   import { slide } from 'svelte/transition';
   import { quintOut } from 'svelte/easing';
-  import { ChevronRight, Folder, History, Server } from '@lucide/svelte';
+  import { ChevronRight, Folder, History, Plus, Server } from '@lucide/svelte';
   import type { SDKSessionInfo } from '@cockpit/core';
   import { formatDistanceToNow } from '$lib/utils/time';
   import { ACTIVITY_LABEL } from './activity';
@@ -68,24 +68,30 @@
 
 {#snippet storedRow(machineId: string, info: SDKSessionInfo)}
   {@const href = transcriptHref(machineId, info)}
+  {@const current = isCurrent(href)}
   <a
     {href}
-    aria-current={isCurrent(href) ? 'page' : undefined}
-    class="flex items-start gap-1.5 rounded-md px-1.5 py-1 transition-colors hover:bg-accent
-      {isCurrent(href) ? 'bg-accent' : ''}"
+    aria-current={current ? 'page' : undefined}
+    class="flex items-start gap-2 rounded-md px-1.5 py-1 transition-colors hover:bg-accent
+      {current ? 'bg-accent' : ''}"
     in:slide={rowIn}
     out:slide={rowOut}
   >
-    <History size={12} class="mt-0.5 shrink-0 text-muted-foreground" />
+    <History size={14} class="mt-0.5 shrink-0 text-muted-foreground/70" />
     <span class="flex min-w-0 flex-1 flex-col">
       <span class="flex items-baseline gap-2">
-        <span class="truncate text-xs text-foreground/80">{sessionTitle(info)}</span>
-        <span class="ml-auto shrink-0 text-[11px] text-muted-foreground">
+        <span class="truncate text-[13px] leading-5 text-foreground {current ? 'font-medium' : ''}">
+          {sessionTitle(info)}
+        </span>
+        <span class="ml-auto shrink-0 text-[10px] text-muted-foreground/60 tabular-nums">
           {formatDistanceToNow(new Date(info.lastModified))}
         </span>
       </span>
       {#if info.cwd}
-        <span class="truncate font-mono text-[11px] text-muted-foreground" title={info.cwd}>
+        <span
+          class="truncate font-mono text-[11px] leading-4 text-muted-foreground/70"
+          title={info.cwd}
+        >
           {leaf(info.cwd)}
         </span>
       {/if}
@@ -97,31 +103,41 @@
   class="flex w-64 shrink-0 flex-col overflow-y-auto border-r border-border bg-sidebar px-2"
   aria-label="Machines and sessions"
 >
-  <div class="flex items-center justify-end py-2">
+  <div class="py-2">
     <a
       href="/session"
-      class="rounded px-1.5 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+      class="flex min-h-7 items-center gap-1.5 rounded-md border border-border px-2 text-[13px] font-medium text-foreground transition-colors hover:bg-accent"
     >
-      + New session
+      <Plus size={14} class="shrink-0 text-muted-foreground" />
+      New session
     </a>
   </div>
 
   {#if cockpit.projects.length > 0}
-    <section class="flex flex-col gap-1 pb-2">
-      <span class="px-2 text-xs font-medium tracking-wider text-muted-foreground uppercase">
+    <section class="flex flex-col gap-1 pb-3">
+      <span
+        class="px-2 pb-1 text-[11px] font-semibold tracking-wide text-muted-foreground/70 uppercase"
+      >
         Projects
       </span>
       {#each cockpit.projects as project (project.id)}
+        {@const current = isCurrent(`/project/${project.id}`)}
         <a
           href="/project/{project.id}"
-          aria-current={isCurrent(`/project/${project.id}`) ? 'page' : undefined}
-          class="flex items-start gap-1.5 rounded-md px-2 py-1 transition-colors hover:bg-accent
-            {isCurrent(`/project/${project.id}`) ? 'bg-accent' : ''}"
+          aria-current={current ? 'page' : undefined}
+          class="flex items-start gap-2 rounded-md px-2 py-1 transition-colors hover:bg-accent
+            {current ? 'bg-accent' : ''}"
         >
-          <Folder size={12} class="mt-0.5 shrink-0 text-muted-foreground" />
+          <Folder size={14} class="mt-0.5 shrink-0 text-muted-foreground" />
           <span class="flex min-w-0 flex-1 flex-col">
-            <span class="truncate text-xs text-foreground/80">{project.name}</span>
-            <span class="truncate font-mono text-[11px] text-muted-foreground">{project.cwd}</span>
+            <span
+              class="truncate text-[13px] leading-5 text-foreground {current ? 'font-medium' : ''}"
+            >
+              {project.name}
+            </span>
+            <span class="truncate font-mono text-[11px] leading-4 text-muted-foreground/70">
+              {project.cwd}
+            </span>
           </span>
         </a>
       {/each}
@@ -129,8 +145,10 @@
   {/if}
 
   {#if sideQuests.length > 0}
-    <section class="flex flex-col gap-1 pb-2">
-      <span class="px-2 text-xs font-medium tracking-wider text-muted-foreground uppercase">
+    <section class="flex flex-col gap-1 pb-3">
+      <span
+        class="px-2 pb-1 text-[11px] font-semibold tracking-wide text-muted-foreground/70 uppercase"
+      >
         Side quests
       </span>
       {#each sideQuests as instance (instance.id)}
@@ -138,7 +156,7 @@
         <a
           href="/session/{instance.id}"
           aria-current={isCurrent(`/session/${instance.id}`) ? 'page' : undefined}
-          class="flex items-center gap-2 rounded-md border border-dashed border-muted-foreground/30 px-2 py-1 text-xs transition-colors hover:bg-accent
+          class="flex min-h-7 items-center gap-2 rounded-md border border-dashed border-muted-foreground/30 px-2 py-1 text-[13px] transition-colors hover:bg-accent
             {isCurrent(`/session/${instance.id}`)
             ? 'bg-accent text-foreground'
             : 'text-muted-foreground'}"
@@ -147,7 +165,9 @@
         >
           <ActivityDot {activity} size={1.5} />
           <span class="truncate font-mono">{leaf(instance.cwd)}</span>
-          <span class="ml-auto shrink-0 rounded-sm bg-accent px-1 text-[10px] tracking-wide">
+          <span
+            class="ml-auto shrink-0 rounded-sm bg-accent px-1 py-px text-[10px] tracking-wide text-muted-foreground"
+          >
             scratch
           </span>
         </a>
@@ -156,7 +176,9 @@
   {/if}
 
   {#if machines.length > 0}
-    <span class="px-2 pb-1 text-xs font-medium tracking-wider text-muted-foreground uppercase">
+    <span
+      class="px-2 pb-1 text-[11px] font-semibold tracking-wide text-muted-foreground/70 uppercase"
+    >
       Machines
     </span>
   {/if}
@@ -170,7 +192,7 @@
       <header class="flex items-center">
         <button
           type="button"
-          class="flex min-h-6 flex-1 items-center gap-1.5 rounded-md px-2 py-1 text-left transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
+          class="flex min-h-7 flex-1 items-center gap-1.5 rounded-md px-2 py-1 text-left transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
           aria-expanded={open}
           aria-controls="machine-{machine.machineId}"
           onclick={() => toggleMachine(machine.machineId)}
@@ -181,8 +203,8 @@
               ? 'rotate-90'
               : ''}"
           />
-          <Server size={12} class="shrink-0 text-muted-foreground" />
-          <span class="truncate text-xs font-medium">{machine.hostname}</span>
+          <Server size={14} class="shrink-0 text-muted-foreground" />
+          <span class="truncate text-[13px] font-medium text-foreground">{machine.hostname}</span>
           <span
             class="size-1.5 shrink-0 rounded-full {machine.status === 'online'
               ? 'bg-success'
@@ -192,7 +214,7 @@
         </button>
         <button
           type="button"
-          class="min-h-6 rounded px-1 text-[11px] text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+          class="min-h-7 rounded px-1.5 font-mono text-[10px] text-muted-foreground/60 uppercase transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
           onclick={() => loadCatalog(machine.machineId)}
           title="Reload sessions"
         >
@@ -208,25 +230,30 @@
           out:slide={{ duration: 180, easing: quintOut }}
         >
           {#if running.length > 0}
-            <span class="px-1.5 py-1 text-xs tracking-wide text-muted-foreground uppercase">
+            <span
+              class="px-1.5 pt-2 pb-0.5 text-[10px] font-medium tracking-wider text-muted-foreground/60 uppercase"
+            >
               Live
             </span>
             {#each running as instance (instance.id)}
               {@const activity = cockpit.activityOf(instance.id)}
+              {@const current = isCurrent(`/session/${instance.id}`)}
               <a
                 href="/session/{instance.id}"
-                aria-current={isCurrent(`/session/${instance.id}`) ? 'page' : undefined}
-                class="flex items-center gap-1.5 rounded-md px-1.5 py-1 text-xs transition-colors hover:bg-accent
-                  {isCurrent(`/session/${instance.id}`)
-                  ? 'bg-accent text-foreground'
-                  : 'text-muted-foreground'}"
+                aria-current={current ? 'page' : undefined}
+                class="flex min-h-7 items-center gap-2 rounded-md px-1.5 py-1 text-[13px] transition-colors hover:bg-accent
+                  {current ? 'bg-accent' : ''}"
                 in:slide={rowIn}
                 out:slide={rowOut}
               >
                 <ActivityDot {activity} size={1.5} />
-                <span class="truncate font-mono">{leaf(instance.cwd)}</span>
+                <span class="truncate font-mono text-foreground/90 {current ? 'font-medium' : ''}">
+                  {leaf(instance.cwd)}
+                </span>
                 <span
-                  class="ml-auto shrink-0 text-[11px] {activity === 'blocked' ? 'text-warning' : ''}"
+                  class="ml-auto shrink-0 text-[10px] tabular-nums {activity === 'blocked'
+                    ? 'text-warning'
+                    : 'text-muted-foreground/70'}"
                 >
                   {ACTIVITY_LABEL[activity]}
                 </span>
@@ -236,7 +263,7 @@
 
           {#if stored.length > 0}
             <span
-              class="px-1.5 py-1 text-xs tracking-wide text-muted-foreground uppercase"
+              class="px-1.5 pt-2 pb-0.5 text-[10px] font-medium tracking-wider text-muted-foreground/60 uppercase"
               title="Claude Code sessions stored on this machine — any directory"
             >
               Recent sessions
@@ -260,7 +287,7 @@
               {/if}
               <button
                 type="button"
-                class="flex min-h-6 items-center px-1.5 py-1 text-left text-[11px] text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                class="flex min-h-6 items-center px-1.5 py-1 text-left text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
                 aria-expanded={expanded}
                 aria-controls="stored-{machine.machineId}"
                 onclick={() => (showAll[machine.machineId] = !expanded)}
@@ -271,13 +298,13 @@
           {/if}
 
           {#if running.length === 0 && stored.length === 0}
-            <p class="px-1.5 py-1 text-[11px] text-muted-foreground">No sessions.</p>
+            <p class="px-1.5 py-1 text-[11px] text-muted-foreground/70">No sessions.</p>
           {/if}
         </div>
       {/if}
     </section>
   {:else}
-    <p class="px-2 py-2 text-xs text-muted-foreground">
+    <p class="px-2 py-2 text-[13px] text-muted-foreground">
       No machines connected.
       <a href="/session" class="underline transition-colors hover:text-foreground">
         How to connect one
