@@ -32,7 +32,7 @@
     relaunchSession,
     resolvePermission,
     resumeSession,
-    sendText,
+    sendOrRevive,
     setPermissionMode,
     stopSession,
   } from '$lib/cockpit/client.svelte';
@@ -315,7 +315,7 @@
 
   function handleSend(text: string) {
     if (!session) return;
-    sendText(viewId, session.machineId, text);
+    void sendOrRevive(viewId, session.machineId, text);
   }
 
   function handleInterrupt() {

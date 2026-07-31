@@ -634,6 +634,42 @@ export function sendText(instanceId: string, machineId: string, text: string): v
   target.busy = true;
 }
 
+/**
+ * The other half of durability: a message to a dead session revives it first.
+ * The daemon respawns the same instance with `resume`, then the text goes
+ * through as usual — the reader never has to know the process died.
+ */
+export async function sendOrRevive(
+  instanceId: string,
+  machineId: string,
+  text: string
+): Promise<void> {
+  const target = session(instanceId);
+  const row = state.instances.find((candidate) => candidate.id === instanceId);
+  const dead = row && (row.status === 'error' || row.status === 'stopped');
+  if (dead && target.sessionId) {
+    const requestId = crypto.randomUUID();
+    const payload: SpawnPayload = {
+      instanceId,
+      cwd: target.cwd,
+      options: { resume: target.sessionId },
+      scratch: target.scratch ? {} : undefined,
+      permissionMode: target.permissionMode,
+      requestId,
+    };
+    target.relaunching = true;
+    try {
+      await ask<void>(requestId, 'revive', CONTROL_TIMEOUT_MS, () =>
+        send({ verb: 'spawn', machineId, instanceId, requestId, payload })
+      );
+    } finally {
+      target.relaunching = false;
+    }
+    void refresh();
+  }
+  sendText(instanceId, machineId, text);
+}
+
 export function stopSession(instanceId: string, machineId: string): void {
   const payload: StopPayload = { instanceId };
   send({ verb: 'stop', machineId, instanceId, payload });
