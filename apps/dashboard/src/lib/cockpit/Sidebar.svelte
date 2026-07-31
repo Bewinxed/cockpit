@@ -33,6 +33,24 @@
     </a>
   </div>
 
+  {#if cockpit.projects.length > 0}
+    <section class="flex flex-col gap-1 px-2 pb-2">
+      <span class="px-1 text-[11px] font-medium tracking-wider text-muted-foreground uppercase">
+        Projects
+      </span>
+      {#each cockpit.projects as project (project.id)}
+        <a
+          href="/project/{project.id}"
+          class="flex flex-col rounded-md px-2 py-1 transition-colors hover:bg-accent
+            {isCurrent(`/project/${project.id}`) ? 'bg-accent' : ''}"
+        >
+          <span class="truncate text-xs text-foreground/80">{project.name}</span>
+          <span class="truncate font-mono text-[11px] text-muted-foreground">{project.cwd}</span>
+        </a>
+      {/each}
+    </section>
+  {/if}
+
   {#if sideQuests.length > 0}
     <section class="flex flex-col gap-1 px-2 pb-2">
       <span class="px-1 text-[11px] font-medium tracking-wider text-muted-foreground uppercase">

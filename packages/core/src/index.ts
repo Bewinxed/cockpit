@@ -41,6 +41,8 @@ export interface SpawnPayload {
   instanceId: string;
   cwd: string;
   options?: Options;
+  /** The project this session was started from, when it was started from one. */
+  projectId?: string;
   /**
    * A side quest (NEW.md §1): throwaway work. `worktree` runs the session in a
    * detached git worktree of `baseCwd` (the spawn's `cwd` when absent) so the
@@ -84,6 +86,27 @@ export interface ControlPayload {
 
 /** Settles a parked `canUseTool` request; args are `[requestId, PermissionResult]`. */
 export const RESOLVE_PERMISSION = 'resolvePermission';
+
+/**
+ * `fs`: the machine's files, for the cwd picker and light markdown editing
+ * (NEW.md §6) — not a file transfer. `list` answers with {@link FsEntry}[],
+ * `read` with the file's text, `write` with the byte count it wrote. Like a
+ * `control` call, the reply rides a `control_result` frame with this `requestId`.
+ */
+export interface FsPayload {
+  requestId: string;
+  op: 'list' | 'read' | 'write';
+  path: string;
+  /** `write` only: the text the file is replaced with. */
+  content?: string;
+}
+
+/** One dirent of an `fs list`. `size` is 0 for a directory. */
+export interface FsEntry {
+  name: string;
+  kind: 'dir' | 'file';
+  size: number;
+}
 
 /** `frames`: everything a session produces, flowing agent→hub→dashboard. */
 export type FramePayload =

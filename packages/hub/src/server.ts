@@ -38,8 +38,8 @@ const failure = (
 
 /**
  * The hub routes on envelope fields and is otherwise payload-opaque (NEW.md
- * §6); `hostname`/`os` on register, `cwd`/`options.resume`/`scratch` on spawn,
- * `discard` on stop and `kind` on a frame are the whole set of sanctioned peeks.
+ * §6); `hostname`/`os` on register, `cwd`/`options.resume`/`scratch`/`projectId`
+ * on spawn, `discard` on stop and `kind` on a frame are the sanctioned peeks.
  */
 const peek = (payload: unknown, key: string): string | undefined => {
   if (typeof payload !== 'object' || payload === null) return undefined;
@@ -93,6 +93,16 @@ export const createServer = ({ registry, db, pending }: HubServices) => {
       ({ params, body }) => db.setInstanceKind(params.id, body.kind)
     )
     .get('/api/pending', () => pending.list())
+    .get('/api/projects', () => db.listProjects())
+    .post(
+      '/api/projects',
+      { body: t.Object({ name: t.String(), cwd: t.String(), machineId: t.String() }) },
+      ({ body }) => db.createProject({ id: crypto.randomUUID(), ...body })
+    )
+    .delete('/api/projects/:id', ({ params }) => {
+      db.deleteProject(params.id);
+      return { ok: true };
+    })
     .ws('/ws', {
       message(ws, message) {
         if (!isEnvelope(message)) {
@@ -156,6 +166,7 @@ export const createServer = ({ registry, db, pending }: HubServices) => {
                 machineId: message.machineId,
                 cwd: peek(message.payload, 'cwd') ?? '',
                 sessionId: peekResume(message.payload),
+                projectId: peek(message.payload, 'projectId'),
                 kind: peekKind(message.payload),
               });
             break;
@@ -173,6 +184,11 @@ export const createServer = ({ registry, db, pending }: HubServices) => {
               registry.rememberRequester(message.requestId, ws);
               pending.resolve(message.requestId);
             }
+            break;
+          case 'fs':
+            // Answered on `control_result` too, so the same requester map routes it.
+            if (forward(message, ws) && message.requestId)
+              registry.rememberRequester(message.requestId, ws);
             break;
           default:
             console.warn(`[hub] unhandled dashboard verb ${message.verb}`);

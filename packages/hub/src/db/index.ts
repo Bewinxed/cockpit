@@ -3,7 +3,7 @@ import { and, eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
 import { migrate } from 'drizzle-orm/bun-sqlite/migrator';
 import { DB_PATH } from '../config';
-import { agents, instances } from './schema';
+import { agents, instances, projects } from './schema';
 
 /** Shipped with the package so a fresh boot never needs a drizzle-kit step. */
 const MIGRATIONS_DIR = Bun.fileURLToPath(new URL('../../drizzle', import.meta.url));
@@ -19,6 +19,7 @@ export interface DbShape {
     machineId: string;
     cwd: string;
     sessionId?: string;
+    projectId?: string;
     kind: InstanceKind;
   }) => void;
   readonly stopInstance: (id: string) => void;
@@ -30,6 +31,14 @@ export interface DbShape {
   readonly markInstancesUnknown: (machineId: string) => void;
   readonly listAgents: () => (typeof agents.$inferSelect)[];
   readonly listInstances: () => (typeof instances.$inferSelect)[];
+  readonly listProjects: () => (typeof projects.$inferSelect)[];
+  readonly createProject: (project: {
+    id: string;
+    machineId: string;
+    name: string;
+    cwd: string;
+  }) => typeof projects.$inferSelect | undefined;
+  readonly deleteProject: (id: string) => void;
 }
 
 export class Db extends Context.Service<Db, DbShape>()('Db') {}
@@ -61,7 +70,7 @@ const make = (path: string): DbShape => {
         .where(eq(agents.machineId, machineId))
         .run();
     },
-    openInstance: ({ id, machineId, cwd, sessionId, kind }) => {
+    openInstance: ({ id, machineId, cwd, sessionId, projectId, kind }) => {
       const now = new Date();
       db.insert(instances)
         .values({
@@ -69,6 +78,7 @@ const make = (path: string): DbShape => {
           machineId,
           cwd,
           sessionId,
+          projectId,
           kind,
           status: 'running',
           createdAt: now,
@@ -76,10 +86,15 @@ const make = (path: string): DbShape => {
         })
         .onConflictDoUpdate({
           target: instances.id,
-          // A respawn that names no session keeps whatever session the row already had.
-          set: sessionId
-            ? { cwd, sessionId, kind, status: 'running', updatedAt: now }
-            : { cwd, kind, status: 'running', updatedAt: now },
+          // A respawn that names no session or project keeps whichever the row had.
+          set: {
+            cwd,
+            kind,
+            status: 'running',
+            updatedAt: now,
+            ...(sessionId ? { sessionId } : {}),
+            ...(projectId ? { projectId } : {}),
+          },
         })
         .run();
     },
@@ -110,6 +125,14 @@ const make = (path: string): DbShape => {
     },
     listAgents: () => db.select().from(agents).all(),
     listInstances: () => db.select().from(instances).all(),
+    listProjects: () => db.select().from(projects).all(),
+    createProject: ({ id, machineId, name, cwd }) =>
+      db.insert(projects).values({ id, machineId, name, cwd }).returning().get(),
+    deleteProject: (id) => {
+      // The sessions started from it outlive it; they just stop being its.
+      db.update(instances).set({ projectId: null }).where(eq(instances.projectId, id)).run();
+      db.delete(projects).where(eq(projects.id, id)).run();
+    },
   };
 };
 

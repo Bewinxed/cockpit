@@ -6,6 +6,7 @@ import type {
   ControlPayload,
   Envelope,
   FramePayload,
+  FsPayload,
   Options,
   PermissionResult,
   PermissionUpdate,
@@ -57,13 +58,28 @@ export interface InstanceRow {
   cwd: string;
   status: string;
   sessionId: string | null;
+  /** Set when the session was started from a project page. */
+  projectId?: string | null;
   /** `scratch` for a side quest; absent from a hub that predates the column. */
   kind?: string;
+}
+
+/** A project the hub knows about (`GET /api/projects`). */
+export interface ProjectRow {
+  id: string;
+  machineId: string;
+  name: string;
+  cwd: string;
+  createdAt: string;
 }
 
 /** Stopped and discarded sessions are history — the rails only show live ones. */
 const isLive = (row: InstanceRow): boolean =>
   row.status !== 'stopped' && row.status !== 'discarded';
+
+/** A side quest's worktree sits under the project's checkout, so it counts as in it. */
+const under = (root: string, path: string): boolean =>
+  path === root || path.startsWith(`${root}/`);
 
 export interface PendingPermission {
   requestId: string;
@@ -115,6 +131,7 @@ const state = $state({
   status: 'disconnected' as ConnectionStatus,
   machines: [] as Machine[],
   instances: [] as InstanceRow[],
+  projects: [] as ProjectRow[],
   sessions: {} as Record<string, SessionState>,
   /** Stored sessions per machine, newest first (`listSessions` through the tunnel). */
   catalog: {} as Record<string, SDKSessionInfo[]>,
@@ -237,13 +254,15 @@ async function load<T>(path: string): Promise<T | null> {
 
 /** Registry reads: on connect and again after every reconnect. */
 async function refresh(): Promise<void> {
-  const [machines, instances, pending] = await Promise.all([
+  const [machines, instances, projects, pending] = await Promise.all([
     load<Machine[]>('/api/agents'),
     load<InstanceRow[]>('/api/instances'),
+    load<ProjectRow[]>('/api/projects'),
     load<Envelope<FramePayload>[]>('/api/pending'),
   ]);
 
   if (machines) state.machines = machines;
+  if (projects) state.projects = projects;
   if (instances) {
     state.instances = instances;
     for (const target of Object.values(state.sessions)) hydrate(target);
@@ -447,10 +466,11 @@ function start(
   machineId: string,
   cwd: string,
   options: Options,
-  scratch?: SpawnPayload['scratch']
+  scratch?: SpawnPayload['scratch'],
+  projectId?: string
 ): SessionState {
   const instanceId = crypto.randomUUID();
-  const payload: SpawnPayload = { instanceId, cwd, options, scratch };
+  const payload: SpawnPayload = { instanceId, cwd, options, scratch, projectId };
   send({ verb: 'spawn', machineId, instanceId, payload });
 
   const created = session(instanceId);
@@ -468,14 +488,16 @@ export function spawnSession({
   prompt,
   options = {},
   scratch,
+  projectId,
 }: {
   machineId: string;
   cwd: string;
   prompt?: string;
   options?: Options;
   scratch?: SpawnPayload['scratch'];
+  projectId?: string;
 }): string {
-  const created = start(machineId, cwd, options, scratch);
+  const created = start(machineId, cwd, options, scratch, projectId);
   if (prompt?.trim()) sendText(created.instanceId, machineId, prompt.trim());
   void refresh();
   return created.instanceId;
@@ -613,6 +635,48 @@ export async function machineControl<T>(
   return ask<T>(requestId, method, replyTimeoutMs, () =>
     send({ verb: 'control', machineId, requestId, payload })
   );
+}
+
+/**
+ * The `fs` verb (NEW.md §6): a machine's files, for the docs rail and the light
+ * markdown editing on top of it. Answered by `requestId` like a control call.
+ */
+export async function machineFs<T>(
+  machineId: string,
+  op: FsPayload['op'],
+  path: string,
+  content?: string
+): Promise<T> {
+  await waitForOpen();
+  const requestId = crypto.randomUUID();
+  const payload: FsPayload = { requestId, op, path, content };
+  return ask<T>(requestId, `fs ${op} ${path}`, CONTROL_TIMEOUT_MS, () =>
+    send({ verb: 'fs', machineId, requestId, payload })
+  );
+}
+
+/** Names a machine + directory so it can be opened as a project home. */
+export async function createProject(project: {
+  name: string;
+  cwd: string;
+  machineId: string;
+}): Promise<ProjectRow> {
+  const response = await fetch('/api/projects', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(project),
+  });
+  if (!response.ok) throw new Error(`could not save project: ${response.status}`);
+  const created = (await response.json()) as ProjectRow;
+  await refresh();
+  return created;
+}
+
+/** Forgets the project; the sessions started from it stay, just unattached. */
+export async function deleteProject(id: string): Promise<void> {
+  const response = await fetch(`/api/projects/${id}`, { method: 'DELETE' });
+  if (!response.ok) throw new Error(`could not delete project: ${response.status}`);
+  await refresh();
 }
 
 /** Sends something the agent answers by `requestId`, and waits for that answer. */
@@ -770,6 +834,26 @@ export const cockpit = {
   },
   /** Stored sessions on one machine, as `listSessions` returned them. */
   catalogOf: (machineId: string): SDKSessionInfo[] => state.catalog[machineId] ?? [],
+  get projects() {
+    return state.projects;
+  },
+  projectsOn: (machineId: string): ProjectRow[] =>
+    state.projects.filter((project) => project.machineId === machineId),
+  project: (id: string): ProjectRow | null =>
+    state.projects.find((project) => project.id === id) ?? null,
+  /** Live sessions a project owns: started from it, or running in its checkout. */
+  liveIn: (project: ProjectRow): InstanceRow[] =>
+    state.instances.filter(
+      (row) =>
+        isLive(row) &&
+        (row.projectId === project.id ||
+          (row.machineId === project.machineId && under(project.cwd, row.cwd)))
+    ),
+  /** Stored sessions the SDK recorded somewhere inside the project's checkout. */
+  storedIn: (project: ProjectRow): SDKSessionInfo[] =>
+    (state.catalog[project.machineId] ?? []).filter(
+      (info) => info.cwd && under(project.cwd, info.cwd)
+    ),
   session: (instanceId: string): SessionState | null => state.sessions[instanceId] ?? null,
   /** What a session needs from you — `idle` for one nothing has been heard from. */
   activityOf: (instanceId: string): Activity => {

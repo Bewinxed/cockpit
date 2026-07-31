@@ -13,12 +13,14 @@ import type {
   ControlPayload,
   Envelope,
   FramePayload,
+  FsPayload,
   SendPayload,
   SpawnPayload,
   StopPayload,
 } from '@cockpit/core';
 import { RESOLVE_PERMISSION } from '@cockpit/core';
 import { Effect } from 'effect';
+import { runFs } from './fs';
 
 export type FrameSink = (frame: FramePayload) => void;
 
@@ -149,6 +151,8 @@ export class SessionSupervisor {
         return this.#stop(envelope.payload as StopPayload);
       case 'control':
         return this.#control(envelope.payload as ControlPayload);
+      case 'fs':
+        return this.#fs(envelope.payload as FsPayload);
       default:
         return Promise.resolve();
     }
@@ -284,6 +288,21 @@ export class SessionSupervisor {
       throw new Error(`git worktree remove failed: ${removed.stderr.toString().trim()}`);
     }
     await Bun.$`git -C ${worktree.root} worktree prune`.quiet().nothrow();
+  }
+
+  /** Answered like a control call, but about the machine's files, not a session. */
+  async #fs(payload: FsPayload): Promise<void> {
+    const { requestId } = payload;
+    try {
+      this.sink({ kind: 'control_result', requestId, ok: true, result: await runFs(payload) });
+    } catch (error) {
+      this.sink({
+        kind: 'control_result',
+        requestId,
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   async #control({ instanceId, requestId, method, args = [] }: ControlPayload): Promise<void> {

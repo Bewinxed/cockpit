@@ -21,6 +21,7 @@
 		AlertTriangle,
 	} from '@lucide/svelte';
 	import Markdown from '@humanspeak/svelte-markdown';
+	import { PROSE } from '$lib/prose';
 	import { formatTimestamp } from '$lib/utils/time';
 	import type { Message } from '$lib/cockpit/types';
 	import HelpMenu from './HelpMenu.svelte';
@@ -581,9 +582,7 @@
 							<code class="font-mono">{message.metadata.command}</code>
 						</div>
 					{/if}
-					<div
-						class="prose prose-sm max-w-none [&_pre]:bg-muted [&_pre]:text-foreground [&_pre]:border [&_pre]:border-border [&_pre]:rounded-lg [&_code]:text-xs [&_code]:bg-muted [&_code]:text-foreground [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded"
-					>
+					<div class={PROSE}>
 						<Markdown source={message.content} options={{ breaks: true }} />
 					</div>
 				</div>
@@ -693,11 +692,7 @@
 					</div>
 				{:else}
 					<div class="{config.bubble} relative">
-						<div
-							class="prose prose-sm max-w-none {message.type === 'user'
-								? 'prose-invert'
-								: ''} [&_pre]:bg-muted [&_pre]:text-foreground [&_pre]:border [&_pre]:border-border [&_pre]:rounded-lg [&_code]:text-xs [&_code]:bg-muted [&_code]:text-foreground [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded"
-						>
+						<div class="{PROSE} {message.type === 'user' ? 'prose-invert' : ''}">
 							<Markdown source={message.content} />
 						</div>
 

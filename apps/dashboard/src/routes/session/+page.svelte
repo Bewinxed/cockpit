@@ -1,10 +1,9 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import { ShieldAlert } from '@lucide/svelte';
-  import { formatDistanceToNow } from '$lib/utils/time';
-  import ActivityDot from '$lib/cockpit/ActivityDot.svelte';
-  import { cockpit, spawnSession } from '$lib/cockpit/client.svelte';
-  import { sessionTitle, transcriptHref } from '$lib/cockpit/links';
+  import { cockpit, createProject, spawnSession } from '$lib/cockpit/client.svelte';
+  import LiveSessionRow from '$lib/cockpit/LiveSessionRow.svelte';
+  import StoredSessionRow from '$lib/cockpit/StoredSessionRow.svelte';
   import { permissionSummary } from '$lib/cockpit/permission-summary';
 
   let machineId = $state('');
@@ -12,7 +11,11 @@
   let prompt = $state('');
   let sideQuest = $state(false);
   let worktree = $state(false);
+  let projectName = $state('');
+  let saving = $state(false);
   let error = $state<string | null>(null);
+
+  const leaf = (path: string) => path.split('/').filter(Boolean).pop() ?? path;
 
   // Default to the first machine that comes online.
   $effect(() => {
@@ -35,6 +38,24 @@
       await goto(`/session/${instanceId}`);
     } catch (err) {
       error = err instanceof Error ? err.message : String(err);
+    }
+  }
+
+  /** Names this machine + directory so it gets a project home to come back to. */
+  async function saveProject() {
+    saving = true;
+    error = null;
+    try {
+      const project = await createProject({
+        machineId,
+        cwd: cwd.trim(),
+        name: projectName.trim() || leaf(cwd.trim()),
+      });
+      await goto(`/project/${project.id}`);
+    } catch (err) {
+      error = err instanceof Error ? err.message : String(err);
+    } finally {
+      saving = false;
     }
   }
 </script>
@@ -102,6 +123,24 @@
           />
         </label>
 
+        {#if cwd.trim()}
+          <div class="flex items-center gap-2">
+            <input
+              bind:value={projectName}
+              placeholder={leaf(cwd.trim())}
+              class="w-40 rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground placeholder:text-muted-foreground"
+            />
+            <button
+              type="button"
+              class="rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40"
+              disabled={!machineId || saving}
+              onclick={saveProject}
+            >
+              Save as project
+            </button>
+          </div>
+        {/if}
+
         <label class="flex flex-col gap-1 text-xs text-muted-foreground">
           First prompt (optional)
           <textarea
@@ -156,39 +195,11 @@
         </h2>
 
         {#each running as instance (instance.id)}
-          {@const activity = cockpit.activityOf(instance.id)}
-          {@const tool = cockpit.currentToolOf(instance.id)}
-          <a
-            href="/session/{instance.id}"
-            class="flex flex-col gap-0.5 rounded-lg border border-border bg-card px-3 py-2 text-sm transition-colors hover:bg-accent"
-          >
-            <span class="flex items-center gap-3">
-              <ActivityDot {activity} />
-              <span class="truncate font-mono">{instance.cwd || '—'}</span>
-              <span class="ml-auto shrink-0 text-xs text-muted-foreground">{activity}</span>
-            </span>
-            {#if activity === 'working' && tool}
-              <span class="flex items-baseline gap-2 pl-5 text-xs text-muted-foreground">
-                <span class="shrink-0">{tool.name}</span>
-                <span class="truncate font-mono opacity-70">{tool.glance}</span>
-              </span>
-            {/if}
-          </a>
+          <LiveSessionRow {instance} />
         {/each}
 
         {#each stored.slice(0, 8) as info (info.sessionId)}
-          <a
-            href={transcriptHref(machine.machineId, info)}
-            class="flex flex-col rounded-lg border border-border px-3 py-2 transition-colors hover:bg-accent"
-          >
-            <span class="flex items-baseline gap-3">
-              <span class="truncate text-sm">{sessionTitle(info)}</span>
-              <span class="ml-auto shrink-0 text-xs text-muted-foreground">
-                {formatDistanceToNow(new Date(info.lastModified))}
-              </span>
-            </span>
-            <span class="truncate font-mono text-xs text-muted-foreground">{info.cwd ?? ''}</span>
-          </a>
+          <StoredSessionRow machineId={machine.machineId} {info} />
         {:else}
           {#if running.length === 0}
             <p class="text-sm text-muted-foreground">No sessions on this machine yet.</p>
