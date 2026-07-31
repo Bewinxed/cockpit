@@ -1,6 +1,6 @@
 import type { Envelope } from '@cockpit/core';
 import { COCKPIT_ENV, COCKPIT_HUB_PORT } from '@cockpit/core';
-import { Data, Duration, Effect, Schedule } from 'effect';
+import { Data, Duration, Effect, Fiber, Schedule } from 'effect';
 import { arch, hostname, platform } from 'node:os';
 import { machineId } from './machine-id';
 import { SessionSupervisor } from './session';
@@ -131,3 +131,19 @@ export const startDaemon = Effect.gen(function* () {
     Effect.retry(reconnect)
   );
 }).pipe(Effect.scoped);
+
+/**
+ * Runs {@link startDaemon} until the process is signalled — how a daemon
+ * normally ends, on a deliberate restart or a machine going down. Interrupting
+ * the fiber runs the supervisor's drain first, so the sessions it owns stop
+ * between turns instead of mid-tool. A second signal arrives with the handler
+ * already gone, and kills the daemon the usual way.
+ */
+export const runDaemon = (): void => {
+  const daemon = Effect.runFork(startDaemon);
+  const drain = (signal: NodeJS.Signals): void => {
+    process.off(signal, drain);
+    void Effect.runPromise(Fiber.interrupt(daemon)).then(() => process.exit(0));
+  };
+  process.on('SIGINT', drain).on('SIGTERM', drain);
+};

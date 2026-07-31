@@ -18,6 +18,7 @@
     "typecheck": "bun run --filter '*' typecheck",
     "hub": "bun run --filter '@cockpit/hub' start",
     "agent": "bun run --filter '@cockpit/agent' start",
+    "cockpit": "bun packages/cli/src/cli.ts",
     "db:push": "bun run --filter '@cockpit/hub' db:push"
   },
   "overrides": {

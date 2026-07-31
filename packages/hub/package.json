@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@cockpit/core": "workspace:*",
+    "bonjour-service": "^1.4.4",
     "drizzle-orm": "^0.44.0",
     "effect": "beta",
     "elysia": "next",

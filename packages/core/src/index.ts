@@ -241,4 +241,12 @@ export const COCKPIT_ENV = {
   hubUrl: 'COCKPIT_HUB_URL',
   hubPort: 'COCKPIT_HUB_PORT',
   machineId: 'COCKPIT_MACHINE_ID',
+  /** `1` stops the hub advertising itself over mDNS, and is not read anywhere else. */
+  noMdns: 'COCKPIT_NO_MDNS',
 } as const;
+
+/**
+ * The mDNS service the hub advertises and `cockpit` browses for, as
+ * `_cockpit._tcp.local`. Both ends name it from here so they cannot drift.
+ */
+export const COCKPIT_MDNS_TYPE = 'cockpit';
