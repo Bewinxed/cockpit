@@ -386,6 +386,11 @@
       </div>
     {/if}
 
+    <!-- Content dissolves into the page as it slides under the floating dock -->
+    <div
+      class="pointer-events-none absolute inset-x-0 bottom-0 h-36 bg-linear-to-t from-background via-background/70 to-transparent"
+    ></div>
+
     <div class="pointer-events-none absolute inset-x-0 bottom-0 px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
       <div class="pointer-events-auto mx-auto flex max-w-4xl flex-col gap-2">
       {#if error}
