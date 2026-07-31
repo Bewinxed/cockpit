@@ -343,6 +343,13 @@
 			iconBg: 'bg-accent',
 			iconColor: 'text-muted-foreground'
 		},
+		'ui.system_note': {
+			align: 'justify-start',
+			bubble: '',
+			icon: Settings,
+			iconBg: 'bg-muted',
+			iconColor: 'text-muted-foreground'
+		},
 		'ui.help_menu': {
 			align: 'justify-start',
 			bubble: '',
@@ -560,6 +567,35 @@
 										<pre class="whitespace-pre-wrap break-all text-muted-foreground">{hook.stderr}</pre>
 									</div>
 								{/if}
+							</div>
+						</Collapsible.Content>
+					</Collapsible.Root>
+				</div>
+			{:else if message.type === 'ui.system_note'}
+				<!-- Harness-injected note that arrived as a user turn - collapsible card -->
+				<div class="w-full bg-muted/30 border border-border rounded-xl overflow-hidden">
+					<Collapsible.Root open={isExpanded} onOpenChange={toggleExpanded}>
+						<Collapsible.Trigger class="w-full text-left">
+							<div
+								class="w-full px-3 py-2.5 text-left hover:bg-muted/50 transition-colors flex items-center gap-2"
+							>
+								<ChevronRight
+									class="w-4 h-4 text-muted-foreground shrink-0 transition-transform duration-200 ease-out {isExpanded
+										? 'rotate-90'
+										: ''}"
+								/>
+								<span class="text-xs font-medium text-muted-foreground">
+									{message.metadata?.noteKind}
+								</span>
+								<span class="truncate text-xs text-muted-foreground/70">
+									{message.metadata?.noteTitle}
+								</span>
+							</div>
+						</Collapsible.Trigger>
+
+						<Collapsible.Content>
+							<div class="border-t border-border p-3 {PROSE} text-muted-foreground">
+								<Markdown source={message.content} />
 							</div>
 						</Collapsible.Content>
 					</Collapsible.Root>

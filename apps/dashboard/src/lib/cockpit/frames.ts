@@ -227,10 +227,11 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
       const content = sdk.message.content;
       // A subagent's opening prompt has no local copy to render from, and it is
       // the first thing its branch should say. The main loop's own text does
-      // have one, added on send, so it is skipped here.
-      if (agentId) {
-        const text = transcriptUserText(sdk.message);
-        if (text) mapping.messages.push({ ...base, type: 'user', content: text });
+      // have one, added on send, so it is skipped — except when it isn't the
+      // human's at all, which nothing echoes either.
+      const text = transcriptUserText(sdk.message);
+      if (text && (agentId || systemNote(text))) {
+        mapping.messages.push({ ...base, ...userBody(text) });
       }
       if (typeof content === 'string') break;
       for (const block of content) {
@@ -436,6 +437,50 @@ function transcriptUserText(message: unknown): string | null {
   return text || null;
 }
 
+/**
+ * What a user-role message renders as. Both the live and the stored path build
+ * their user messages from this, so the harness's own voice is never mistaken
+ * for the human's on one of them.
+ */
+function userBody(text: string): Pick<Message, 'type' | 'content' | 'metadata'> {
+  const note = systemNote(text);
+  if (!note) return { type: 'user', content: text };
+  return {
+    type: 'ui.system_note',
+    content: text,
+    metadata: { noteKind: note.kind, noteTitle: note.title },
+  };
+}
+
+/** Harness-injected content arrives with role "user" but is not the human. */
+function systemNote(text: string): { kind: string; title: string } | null {
+  const head = text.trimStart().slice(0, 200);
+  if (head.startsWith('[SYSTEM NOTIFICATION') || head.includes('<task-notification>')) {
+    const summary = /<summary>([\s\S]*?)<\/summary>/.exec(text)?.[1]?.trim();
+    return { kind: 'Task notification', title: summary ?? firstPlainLine(text) };
+  }
+  if (head.startsWith('<system-reminder>')) {
+    return { kind: 'System reminder', title: firstPlainLine(text) };
+  }
+  if (head.startsWith('This session is being continued from a previous conversation')) {
+    return { kind: 'Session continued', title: 'Compacted conversation summary' };
+  }
+  return null;
+}
+
+/** A note's opening line, with the markup that wraps it taken back out. */
+function firstPlainLine(text: string): string {
+  const plain = text
+    .replace(/<[^>]+>/g, '')
+    .replace('[SYSTEM NOTIFICATION - NOT USER INPUT]', '');
+  const line = plain
+    .split('\n')
+    .map((each) => each.trim())
+    .find(Boolean);
+  if (!line) return '';
+  return line.length > 80 ? `${line.slice(0, 79)}…` : line;
+}
+
 /** A stored session, split the same way a live one is. */
 export interface Transcript {
   messages: Message[];
@@ -461,8 +506,7 @@ export function mapTranscript(instanceId: string, transcript: SessionMessage[]):
         messages.push({
           id: entry.uuid,
           instanceId,
-          type: 'user',
-          content: text,
+          ...userBody(text),
           timestamp: new Date(),
           sdkUuid: entry.uuid,
         });

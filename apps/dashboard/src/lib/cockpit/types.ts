@@ -109,4 +109,7 @@ export interface MessageMetadata {
   // Subagent spawning (Task tool)
   subagentType?: string;
   subagentDescription?: string;
+  // Harness-injected user-role content (task notifications, reminders, compaction)
+  noteKind?: string;
+  noteTitle?: string;
 }
