@@ -154,23 +154,33 @@
       </span>
       {#each sideQuests as instance (instance.id)}
         {@const activity = cockpit.activityOf(instance.id)}
+        {@const failed = instance.status === 'error'}
         <a
           href="/session/{instance.id}"
           aria-current={isCurrent(`/session/${instance.id}`) ? 'page' : undefined}
           class="flex min-h-7 items-center gap-2 rounded-md border border-dashed border-muted-foreground/30 px-2 py-1 text-[13px] transition-colors hover:bg-accent
             {isCurrent(`/session/${instance.id}`)
             ? 'bg-accent text-foreground'
-            : 'text-muted-foreground'}"
+            : failed
+              ? 'bg-warning/10 text-muted-foreground'
+              : 'text-muted-foreground'}"
           in:slide={rowIn}
           out:slide={rowOut}
         >
-          <ActivityDot {activity} size={1.5} />
+          {#if failed}
+            <span class="size-1.5 shrink-0 rounded-full bg-warning"></span>
+          {:else}
+            <ActivityDot {activity} size={1.5} />
+          {/if}
           <span class="truncate font-mono">{leaf(instance.cwd)}</span>
           <span
             class="ml-auto shrink-0 rounded-sm bg-accent px-1 py-px text-[10px] tracking-wide text-muted-foreground"
           >
             scratch
           </span>
+          {#if failed}
+            <span class="shrink-0 text-[10px] font-medium text-warning">Failed</span>
+          {/if}
         </a>
       {/each}
     </section>
@@ -186,7 +196,11 @@
 
   {#each machines as machine (machine.machineId)}
     {@const running = cockpit.runningOn(machine.machineId)}
-    {@const blockedCount = running.filter((i) => cockpit.activityOf(i.id) === 'blocked').length}
+    <!-- A session that died while parked keeps its permission in view state; nobody
+         can answer it any more, so it is not something this machine needs you for. -->
+    {@const blockedCount = running.filter(
+      (i) => i.status !== 'error' && cockpit.activityOf(i.id) === 'blocked'
+    ).length}
     {@const stored = cockpit.catalogOf(machine.machineId)}
     {@const open = !collapsed[machine.machineId]}
     {@const expanded = !!showAll[machine.machineId]}
@@ -238,25 +252,35 @@
               </span>
               {#each running as instance (instance.id)}
                 {@const activity = cockpit.activityOf(instance.id)}
+                {@const failed = instance.status === 'error'}
                 {@const current = isCurrent(`/session/${instance.id}`)}
                 <a
                   href="/session/{instance.id}"
                   aria-current={current ? 'page' : undefined}
                   class="flex min-h-7 items-center gap-2 rounded-md px-1.5 py-1 text-[13px] transition-colors hover:bg-accent
-                    {current ? 'bg-accent' : activity === 'blocked' ? 'bg-warning/10' : ''}"
+                    {current
+                    ? 'bg-accent'
+                    : failed || activity === 'blocked'
+                      ? 'bg-warning/10'
+                      : ''}"
                   in:slide={rowIn}
                   out:slide={rowOut}
                 >
-                  <ActivityDot {activity} size={1.5} />
+                  {#if failed}
+                    <span class="size-1.5 shrink-0 rounded-full bg-warning"></span>
+                  {:else}
+                    <ActivityDot {activity} size={1.5} />
+                  {/if}
                   <span class="truncate font-mono text-foreground/90 {current ? 'font-medium' : ''}">
                     {leaf(instance.cwd)}
                   </span>
                   <span
-                    class="ml-auto shrink-0 text-[10px] tabular-nums {activity === 'blocked'
+                    class="ml-auto shrink-0 text-[10px] tabular-nums {failed ||
+                    activity === 'blocked'
                       ? 'font-medium text-warning'
                       : 'text-muted-foreground/70'}"
                   >
-                    {ACTIVITY_LABEL[activity]}
+                    {failed ? 'Failed' : ACTIVITY_LABEL[activity]}
                   </span>
                 </a>
               {/each}

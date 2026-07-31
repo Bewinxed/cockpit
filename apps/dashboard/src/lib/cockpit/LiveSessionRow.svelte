@@ -11,6 +11,8 @@
 
   const activity = $derived(cockpit.activityOf(instance.id));
   const tool = $derived(cockpit.currentToolOf(instance.id));
+  const failed = $derived(instance.status === 'error');
+  const label = $derived(failed ? 'Failed' : ACTIVITY_LABEL[activity]);
 
   // The label swaps only when the session's state actually changes — a row that
   // simply appears with the page has nothing to announce.
@@ -23,26 +25,31 @@
   class="flex flex-col gap-0.5 rounded-lg border px-3 py-2 text-sm
     transition-[background-color,box-shadow,translate] duration-150 ease-out
     hover:-translate-y-px hover:bg-accent hover:shadow-md motion-reduce:hover:translate-y-0
-    {activity === 'blocked' ? 'bg-warning/10' : 'bg-card'}
+    {failed || activity === 'blocked' ? 'bg-warning/10' : 'bg-card'}
     {instance.kind === 'scratch' ? 'border-dashed border-muted-foreground/30' : 'border-border'}"
 >
   <span class="flex items-center gap-3">
-    <ActivityDot {activity} />
+    {#if failed}
+      <span class="size-2 shrink-0 rounded-full bg-warning"></span>
+    {:else}
+      <ActivityDot {activity} />
+    {/if}
     <span class="truncate font-mono">{instance.cwd || '—'}</span>
     {#if instance.kind === 'scratch'}
       <span class="shrink-0 rounded-sm bg-accent px-1 text-[10px] tracking-wide">scratch</span>
     {/if}
     <span
-      class="ml-auto inline-grid shrink-0 justify-items-end text-xs {activity === 'blocked'
+      class="ml-auto inline-grid shrink-0 justify-items-end text-xs {failed ||
+      activity === 'blocked'
         ? 'font-medium text-warning'
         : 'text-muted-foreground'}"
     >
-      {#key activity}
+      {#key label}
         <span
           class="col-start-1 row-start-1"
           in:fly={{ y: 5, duration: painted ? 180 : 0, easing: quintOut }}
           out:fly={{ y: -5, duration: painted ? 140 : 0, easing: quintOut }}
-        >{ACTIVITY_LABEL[activity]}</span>
+        >{label}</span>
       {/key}
     </span>
   </span>
