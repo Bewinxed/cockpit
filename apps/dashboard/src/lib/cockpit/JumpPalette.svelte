@@ -3,9 +3,9 @@
    * Cmd+K: everything the client already knows about, in one list you can type
    * at. It reads the store and nothing else — no endpoint exists for this.
    */
-  import { onMount } from 'svelte';
   import { fade, scale } from 'svelte/transition';
   import { quintOut } from 'svelte/easing';
+  import { Dialog } from 'bits-ui';
   import { browser } from '$app/environment';
   import { goto } from '$app/navigation';
   import { ACTIVITY_LABEL } from './activity';
@@ -83,6 +83,9 @@
     return true;
   }
 
+  // The parent unmounts us on `onClose`, so the close runs through bits first
+  // and only hands back once the exit transition has finished.
+  let open = $state(true);
   let query = $state('');
   let selected = $state(0);
 
@@ -99,7 +102,6 @@
   // clamped rather than tracked — an index past the end would silently do nothing.
   const active = $derived(results.length === 0 ? -1 : Math.min(selected, results.length - 1));
 
-  let field = $state<HTMLInputElement | null>(null);
   let rows: HTMLButtonElement[] = [];
 
   $effect(() => {
@@ -111,27 +113,13 @@
   const enter = still ? 0 : 200;
   const exit = still ? 0 : 150;
 
-  onMount(() => {
-    const previouslyFocused = document.activeElement;
-    field?.focus();
-    return () => {
-      if (previouslyFocused instanceof HTMLElement && previouslyFocused.isConnected) {
-        previouslyFocused.focus();
-      }
-    };
-  });
-
-  async function open(entry: Entry) {
-    onClose();
+  async function jump(entry: Entry) {
+    open = false;
     await goto(entry.href);
   }
 
   function onKeydown(event: KeyboardEvent) {
     switch (event.key) {
-      case 'Escape':
-        event.preventDefault();
-        onClose();
-        return;
       case 'ArrowDown':
         event.preventDefault();
         selected = results.length === 0 ? 0 : (active + 1) % results.length;
@@ -143,82 +131,86 @@
       case 'Enter': {
         event.preventDefault();
         const entry = results[active];
-        if (entry) void open(entry);
+        if (entry) void jump(entry);
         return;
       }
-      case 'Tab':
-        // The field is the only tab stop, which is the whole trap: rows are
-        // reached with the arrows, and focus cannot leave the dialog.
-        event.preventDefault();
-        field?.focus();
     }
   }
 </script>
 
-<!-- svelte-ignore a11y_no_static_element_interactions -->
-<!-- svelte-ignore a11y_click_events_have_key_events -->
-<div
-  class="fixed inset-0 z-50 flex items-start justify-center bg-black/50 px-4 pt-[15vh] backdrop-blur-sm"
-  in:fade={{ duration: enter }}
-  out:fade={{ duration: exit }}
-  onclick={(event) => event.target === event.currentTarget && onClose()}
->
-  <div
-    role="dialog"
-    aria-modal="true"
-    aria-label="Jump to"
-    tabindex="-1"
-    class="flex max-h-[60vh] w-full max-w-xl flex-col overflow-hidden rounded-xl border border-border bg-card shadow-lg"
-    in:scale={{ duration: enter, start: 0.96, easing: quintOut }}
-    out:scale={{ duration: exit, start: 0.96, easing: quintOut }}
-    onkeydown={onKeydown}
-  >
-    <input
-      bind:this={field}
-      bind:value={query}
-      placeholder="Jump to a project, machine, or session…"
-      class="border-b border-border bg-transparent px-4 py-3 text-base text-foreground placeholder:text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset sm:text-sm"
-      role="combobox"
-      aria-label="Jump to"
-      aria-autocomplete="list"
-      aria-expanded="true"
-      aria-controls="jump-results"
-      aria-activedescendant={active >= 0 ? `jump-result-${active}` : undefined}
-      oninput={() => (selected = 0)}
-    />
-
-    <div id="jump-results" role="listbox" aria-label="Results" class="overflow-y-auto p-2">
-      {#each results as entry, index (entry.id)}
-        {#if index === 0 || results[index - 1].group !== entry.group}
-          <p class="px-2.5 pt-2 pb-1 text-[11px] font-medium tracking-wider text-muted-foreground uppercase">
-            {entry.group}
-          </p>
+<Dialog.Root bind:open onOpenChangeComplete={(isOpen) => !isOpen && onClose()}>
+  <Dialog.Portal>
+    <Dialog.Overlay forceMount>
+      {#snippet child({ props, open: isOpen })}
+        {#if isOpen}
+          <div
+            {...props}
+            class="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm"
+            in:fade={{ duration: enter }}
+            out:fade={{ duration: exit }}
+          ></div>
         {/if}
-        <button
-          bind:this={rows[index]}
-          type="button"
-          tabindex="-1"
-          role="option"
-          id="jump-result-{index}"
-          aria-selected={index === active}
-          class="flex w-full items-baseline gap-3 rounded-md px-2.5 py-2 text-left transition-colors hover:bg-accent
-            {index === active ? 'bg-accent' : ''}"
-          onclick={() => open(entry)}
-        >
-          <span class="truncate text-sm text-foreground">{entry.label}</span>
-          <span class="ml-auto truncate font-mono text-[11px] text-muted-foreground">
-            {entry.detail}
-          </span>
-        </button>
-      {:else}
-        <p class="px-2.5 py-3 text-sm text-muted-foreground">Nothing matches that.</p>
-      {/each}
-    </div>
+      {/snippet}
+    </Dialog.Overlay>
 
-    <div class="flex gap-4 border-t border-border px-4 py-2 text-[11px] text-muted-foreground">
-      <span><kbd class="rounded bg-accent px-1">↑↓</kbd> navigate</span>
-      <span><kbd class="rounded bg-accent px-1">↵</kbd> open</span>
-      <span><kbd class="rounded bg-accent px-1">esc</kbd> close</span>
-    </div>
-  </div>
-</div>
+    <Dialog.Content forceMount aria-label="Jump to" onkeydown={onKeydown}>
+      {#snippet child({ props, open: isOpen })}
+        {#if isOpen}
+          <div
+            {...props}
+            class="fixed top-[15vh] left-1/2 z-50 flex max-h-[60vh] w-[calc(100%-2rem)] max-w-xl -translate-x-1/2 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-lg"
+            in:scale={{ duration: enter, start: 0.96, easing: quintOut }}
+            out:scale={{ duration: exit, start: 0.96, easing: quintOut }}
+          >
+            <input
+              bind:value={query}
+              placeholder="Jump to a project, machine, or session…"
+              class="border-b border-border bg-transparent px-4 py-3 text-base text-foreground placeholder:text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset sm:text-sm"
+              role="combobox"
+              aria-label="Jump to"
+              aria-autocomplete="list"
+              aria-expanded="true"
+              aria-controls="jump-results"
+              aria-activedescendant={active >= 0 ? `jump-result-${active}` : undefined}
+              oninput={() => (selected = 0)}
+            />
+
+            <div id="jump-results" role="listbox" aria-label="Results" class="overflow-y-auto p-2">
+              {#each results as entry, index (entry.id)}
+                {#if index === 0 || results[index - 1].group !== entry.group}
+                  <p class="px-2.5 pt-2 pb-1 text-[11px] font-medium tracking-wider text-muted-foreground uppercase">
+                    {entry.group}
+                  </p>
+                {/if}
+                <button
+                  bind:this={rows[index]}
+                  type="button"
+                  tabindex="-1"
+                  role="option"
+                  id="jump-result-{index}"
+                  aria-selected={index === active}
+                  class="flex w-full items-baseline gap-3 rounded-md px-2.5 py-2 text-left transition-colors hover:bg-accent
+                    {index === active ? 'bg-accent' : ''}"
+                  onclick={() => jump(entry)}
+                >
+                  <span class="truncate text-sm text-foreground">{entry.label}</span>
+                  <span class="ml-auto truncate font-mono text-[11px] text-muted-foreground">
+                    {entry.detail}
+                  </span>
+                </button>
+              {:else}
+                <p class="px-2.5 py-3 text-sm text-muted-foreground">Nothing matches that.</p>
+              {/each}
+            </div>
+
+            <div class="flex gap-4 border-t border-border px-4 py-2 text-[11px] text-muted-foreground">
+              <span><kbd class="rounded bg-accent px-1">↑↓</kbd> navigate</span>
+              <span><kbd class="rounded bg-accent px-1">↵</kbd> open</span>
+              <span><kbd class="rounded bg-accent px-1">esc</kbd> close</span>
+            </div>
+          </div>
+        {/if}
+      {/snippet}
+    </Dialog.Content>
+  </Dialog.Portal>
+</Dialog.Root>

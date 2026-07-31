@@ -21,8 +21,7 @@
 		AlertTriangle,
 	} from '@lucide/svelte';
 	import Markdown from '@humanspeak/svelte-markdown';
-	import { slide } from 'svelte/transition';
-	import { quintOut } from 'svelte/easing';
+	import * as Collapsible from '$lib/components/ui/collapsible';
 	import { PROSE } from '$lib/prose';
 	import { formatTimestamp } from '$lib/utils/time';
 	import type { Message } from '$lib/cockpit/types';
@@ -143,8 +142,6 @@
 	let manualExpansion = $state<boolean | null>(null);
 	// isExpanded: use manual override if set, otherwise auto-expand for diff tools
 	const isExpanded = $derived(manualExpansion ?? hasDiff);
-
-	const panelId = $props.id();
 
 	function toggleExpanded() {
 		// When user manually toggles, override the auto-expansion
@@ -400,182 +397,172 @@
 			{#if message.type === 'tool.use' || message.type === 'tool.result'}
 				<!-- Tool message - collapsible card -->
 				<div class="w-full bg-card border border-border rounded-xl overflow-hidden shadow-sm">
-					<button
-						type="button"
-						class="w-full px-3 py-2.5 text-left cursor-pointer hover:bg-muted/50 transition-colors flex items-center gap-2"
-						aria-expanded={isExpanded}
-						aria-controls={panelId}
-						onclick={toggleExpanded}
-					>
-						<ChevronRight
-							class="w-4 h-4 text-muted-foreground shrink-0 transition-transform duration-200 ease-out {isExpanded
-								? 'rotate-90'
-								: ''}"
-						/>
-						<span class="font-medium text-foreground text-sm">
-							{toolInfo?.name || 'Tool'}
-						</span>
-						<!-- Status indicator -->
-						{#if toolInfo?.status === 'pending'}
-							<LoaderCircle class="w-4 h-4 text-warning animate-spin ml-auto" />
-						{:else if toolInfo?.status === 'error'}
-							<CircleX class="w-4 h-4 text-destructive ml-auto" />
-						{:else}
-							<CircleCheck class="w-4 h-4 text-success ml-auto" />
-						{/if}
-					</button>
+					<Collapsible.Root open={isExpanded} onOpenChange={toggleExpanded}>
+						<Collapsible.Trigger class="w-full text-left">
+							<div
+								class="w-full px-3 py-2.5 text-left cursor-pointer hover:bg-muted/50 transition-colors flex items-center gap-2"
+							>
+								<ChevronRight
+									class="w-4 h-4 text-muted-foreground shrink-0 transition-transform duration-200 ease-out {isExpanded
+										? 'rotate-90'
+										: ''}"
+								/>
+								<span class="font-medium text-foreground text-sm">
+									{toolInfo?.name || 'Tool'}
+								</span>
+								<!-- Status indicator -->
+								{#if toolInfo?.status === 'pending'}
+									<LoaderCircle class="w-4 h-4 text-warning animate-spin ml-auto" />
+								{:else if toolInfo?.status === 'error'}
+									<CircleX class="w-4 h-4 text-destructive ml-auto" />
+								{:else}
+									<CircleCheck class="w-4 h-4 text-success ml-auto" />
+								{/if}
+							</div>
+						</Collapsible.Trigger>
 
-					{#if isExpanded}
-						{@const tool = toolInfo}
-						{@const diffInfo = getDiffInfo(
-							tool?.input as Record<string, unknown> | undefined,
-							tool?.name
-						)}
-						<div
-							id={panelId}
-							class="p-3 pt-0 space-y-3 border-t border-border"
-							in:slide={{ duration: 250, easing: quintOut }}
-							out:slide={{ duration: 180, easing: quintOut }}
-						>
-							<!-- Input: Show diff for file modification tools, JSON for others -->
-							{#if isFileDiffTool(tool?.name) && diffInfo}
-								{@const totalLines =
-									diffInfo.oldContent.split('\n').length + diffInfo.newContent.split('\n').length}
-								{@const needsExpansion = totalLines > 8}
-								<div
-									class="relative overflow-hidden rounded-lg mt-3"
-									class:max-h-[150px]={needsExpansion && !diffFullyExpanded}
-								>
-									<DiffView
-										filePath={diffInfo.filePath}
-										oldContent={diffInfo.oldContent}
-										newContent={diffInfo.newContent}
-									/>
-									{#if needsExpansion && !diffFullyExpanded}
+						<Collapsible.Content>
+							{@const tool = toolInfo}
+							{@const diffInfo = getDiffInfo(
+								tool?.input as Record<string, unknown> | undefined,
+								tool?.name
+							)}
+							<div class="p-3 pt-0 space-y-3 border-t border-border">
+								<!-- Input: Show diff for file modification tools, JSON for others -->
+								{#if isFileDiffTool(tool?.name) && diffInfo}
+									{@const totalLines =
+										diffInfo.oldContent.split('\n').length + diffInfo.newContent.split('\n').length}
+									{@const needsExpansion = totalLines > 8}
+									<div
+										class="relative overflow-hidden rounded-lg mt-3"
+										class:max-h-[150px]={needsExpansion && !diffFullyExpanded}
+									>
+										<DiffView
+											filePath={diffInfo.filePath}
+											oldContent={diffInfo.oldContent}
+											newContent={diffInfo.newContent}
+										/>
+										{#if needsExpansion && !diffFullyExpanded}
+											<button
+												type="button"
+												aria-label="Show full diff"
+												class="absolute bottom-0 left-0 right-0 h-[60px] flex items-center justify-center cursor-pointer z-10 bg-gradient-to-b from-transparent via-card/85 to-card/95"
+												onclick={() => (diffFullyExpanded = true)}
+											>
+												<ChevronDown
+													class="w-6 h-6 p-1 text-muted-foreground bg-muted border border-border rounded-full shadow-sm hover:text-foreground hover:translate-y-0.5 transition-[color,translate] duration-150 ease-out"
+												/>
+											</button>
+										{/if}
+									</div>
+									{#if needsExpansion && diffFullyExpanded}
 										<button
-											type="button"
-											aria-label="Show full diff"
-											class="absolute bottom-0 left-0 right-0 h-[60px] flex items-center justify-center cursor-pointer z-10 bg-gradient-to-b from-transparent via-card/85 to-card/95"
-											onclick={() => (diffFullyExpanded = true)}
+											class="flex items-center justify-center gap-1.5 w-full py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+											onclick={() => (diffFullyExpanded = false)}
 										>
-											<ChevronDown
-												class="w-6 h-6 p-1 text-muted-foreground bg-muted border border-border rounded-full shadow-sm hover:text-foreground hover:translate-y-0.5 transition-[color,translate] duration-150 ease-out"
-											/>
+											<ChevronUp class="w-3.5 h-3.5" />
+											<span>Collapse</span>
 										</button>
 									{/if}
-								</div>
-								{#if needsExpansion && diffFullyExpanded}
-									<button
-										class="flex items-center justify-center gap-1.5 w-full py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-										onclick={() => (diffFullyExpanded = false)}
-									>
-										<ChevronUp class="w-3.5 h-3.5" />
-										<span>Collapse</span>
-									</button>
+								{:else}
+									<div class="bg-muted/50 rounded-lg p-3 font-mono text-xs overflow-x-auto mt-3">
+										<div class="text-muted-foreground text-[10px] uppercase tracking-wide mb-1.5 font-medium">
+											Input
+										</div>
+										<pre class="whitespace-pre-wrap break-all text-muted-foreground">{JSON.stringify(
+												tool?.input,
+												null,
+												2
+											)}</pre>
+									</div>
 								{/if}
-							{:else}
-								<div class="bg-muted/50 rounded-lg p-3 font-mono text-xs overflow-x-auto mt-3">
-									<div class="text-muted-foreground text-[10px] uppercase tracking-wide mb-1.5 font-medium">
-										Input
-									</div>
-									<pre class="whitespace-pre-wrap break-all text-muted-foreground">{JSON.stringify(
-											tool?.input,
-											null,
-											2
-										)}</pre>
-								</div>
-							{/if}
 
-							<!-- Result (if available) -->
-							{#if tool?.result !== undefined && tool?.result !== null}
-								<div
-									class="rounded-lg p-3 font-mono text-xs overflow-x-auto {tool?.status === 'error'
-										? 'bg-destructive/5 border border-destructive/20'
-										: 'bg-success/5 border border-success/20'}"
-								>
+								<!-- Result (if available) -->
+								{#if tool?.result !== undefined && tool?.result !== null}
 									<div
-										class="text-[10px] uppercase tracking-wide mb-1.5 font-medium {tool?.status ===
-										'error'
-											? 'text-destructive'
-											: 'text-success'}"
+										class="rounded-lg p-3 font-mono text-xs overflow-x-auto {tool?.status === 'error'
+											? 'bg-destructive/5 border border-destructive/20'
+											: 'bg-success/5 border border-success/20'}"
 									>
-										{tool?.status === 'error' ? 'Error' : 'Result'}
+										<div
+											class="text-[10px] uppercase tracking-wide mb-1.5 font-medium {tool?.status ===
+											'error'
+												? 'text-destructive'
+												: 'text-success'}"
+										>
+											{tool?.status === 'error' ? 'Error' : 'Result'}
+										</div>
+										<pre class="whitespace-pre-wrap break-all text-muted-foreground">{typeof tool.result ===
+										'string'
+											? tool.result
+											: JSON.stringify(tool.result, null, 2)}</pre>
 									</div>
-									<pre class="whitespace-pre-wrap break-all text-muted-foreground">{typeof tool.result ===
-									'string'
-										? tool.result
-										: JSON.stringify(tool.result, null, 2)}</pre>
-								</div>
-							{/if}
-						</div>
-					{/if}
+								{/if}
+							</div>
+						</Collapsible.Content>
+					</Collapsible.Root>
 				</div>
 			{:else if message.type === 'system.hook_response'}
 				<!-- Hook response - collapsible card -->
 				<div class="w-full bg-card border border-border rounded-xl overflow-hidden shadow-sm">
-					<button
-						type="button"
-						class="w-full px-3 py-2.5 text-left cursor-pointer hover:bg-muted/50 transition-colors flex items-center gap-2"
-						aria-expanded={isExpanded}
-						aria-controls={panelId}
-						onclick={toggleExpanded}
-					>
-						<ChevronRight
-							class="w-4 h-4 text-muted-foreground shrink-0 transition-transform duration-200 ease-out {isExpanded
-								? 'rotate-90'
-								: ''}"
-						/>
-						<span class="font-medium text-foreground text-sm">
-							{hookInfo?.name || 'Hook'}
-						</span>
-						<!-- Exit code indicator -->
-						{#if hookInfo?.exitCode === 0}
-							<CircleCheck class="w-4 h-4 text-success ml-auto" />
-						{:else}
-							<CircleX class="w-4 h-4 text-destructive ml-auto" />
-						{/if}
-						<span class="text-xs text-muted-foreground font-mono">
-							exit {hookInfo?.exitCode}
-						</span>
-					</button>
+					<Collapsible.Root open={isExpanded} onOpenChange={toggleExpanded}>
+						<Collapsible.Trigger class="w-full text-left">
+							<div
+								class="w-full px-3 py-2.5 text-left cursor-pointer hover:bg-muted/50 transition-colors flex items-center gap-2"
+							>
+								<ChevronRight
+									class="w-4 h-4 text-muted-foreground shrink-0 transition-transform duration-200 ease-out {isExpanded
+										? 'rotate-90'
+										: ''}"
+								/>
+								<span class="font-medium text-foreground text-sm">
+									{hookInfo?.name || 'Hook'}
+								</span>
+								<!-- Exit code indicator -->
+								{#if hookInfo?.exitCode === 0}
+									<CircleCheck class="w-4 h-4 text-success ml-auto" />
+								{:else}
+									<CircleX class="w-4 h-4 text-destructive ml-auto" />
+								{/if}
+								<span class="text-xs text-muted-foreground font-mono">
+									exit {hookInfo?.exitCode}
+								</span>
+							</div>
+						</Collapsible.Trigger>
 
-					{#if isExpanded}
-						{@const hook = hookInfo}
-						<div
-							id={panelId}
-							class="p-3 pt-0 space-y-3 border-t border-border"
-							in:slide={{ duration: 250, easing: quintOut }}
-							out:slide={{ duration: 180, easing: quintOut }}
-						>
-							<!-- stdout -->
-							{#if hook?.stdout}
-								<div
-									class="bg-success/5 border border-success/20 rounded-lg p-3 font-mono text-xs overflow-x-auto mt-3"
-								>
+						<Collapsible.Content>
+							{@const hook = hookInfo}
+							<div class="p-3 pt-0 space-y-3 border-t border-border">
+								<!-- stdout -->
+								{#if hook?.stdout}
 									<div
-										class="text-success text-[10px] uppercase tracking-wide mb-1.5 font-medium"
+										class="bg-success/5 border border-success/20 rounded-lg p-3 font-mono text-xs overflow-x-auto mt-3"
 									>
-										stdout
+										<div
+											class="text-success text-[10px] uppercase tracking-wide mb-1.5 font-medium"
+										>
+											stdout
+										</div>
+										<pre class="whitespace-pre-wrap break-all text-muted-foreground">{hook.stdout}</pre>
 									</div>
-									<pre class="whitespace-pre-wrap break-all text-muted-foreground">{hook.stdout}</pre>
-								</div>
-							{/if}
+								{/if}
 
-							<!-- stderr -->
-							{#if hook?.stderr}
-								<div
-									class="bg-destructive/5 border border-destructive/20 rounded-lg p-3 font-mono text-xs overflow-x-auto"
-								>
+								<!-- stderr -->
+								{#if hook?.stderr}
 									<div
-										class="text-destructive text-[10px] uppercase tracking-wide mb-1.5 font-medium"
+										class="bg-destructive/5 border border-destructive/20 rounded-lg p-3 font-mono text-xs overflow-x-auto"
 									>
-										stderr
+										<div
+											class="text-destructive text-[10px] uppercase tracking-wide mb-1.5 font-medium"
+										>
+											stderr
+										</div>
+										<pre class="whitespace-pre-wrap break-all text-muted-foreground">{hook.stderr}</pre>
 									</div>
-									<pre class="whitespace-pre-wrap break-all text-muted-foreground">{hook.stderr}</pre>
-								</div>
-							{/if}
-						</div>
-					{/if}
+								{/if}
+							</div>
+						</Collapsible.Content>
+					</Collapsible.Root>
 				</div>
 			{:else if message.type === 'ui.command_output'}
 				<!-- Command output (like /help) - rendered with markdown and terminal styling -->
@@ -699,7 +686,7 @@
 						</div>
 					</div>
 				{:else}
-					<div class="{config.bubble} relative">
+					<div class="{config.bubble} relative max-w-full min-w-0">
 						<div class="{PROSE} {message.type === 'user' ? 'prose-invert' : ''}">
 							<Markdown source={message.content} />
 						</div>

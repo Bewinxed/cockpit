@@ -1,7 +1,8 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
+  import { onDestroy } from 'svelte';
   import { fade, scale } from 'svelte/transition';
   import { quintOut } from 'svelte/easing';
+  import { Dialog } from 'bits-ui';
   import { FileDiff, parseDiffFromFile, type FileContents } from '@pierre/diffs';
   import { X, Columns2, TextAlignStart } from '@lucide/svelte';
   import { Button } from '$lib/components/ui/button';
@@ -15,8 +16,10 @@
   }
 
   let { filePath, oldContent, newContent, onClose }: Props = $props();
+  // The parent unmounts us on `onClose`, so the close runs through bits first
+  // and only hands back once the exit transition has finished.
+  let open = $state(true);
   let container = $state<HTMLDivElement | null>(null);
-  let panel = $state<HTMLDivElement | null>(null);
   let diffInstance: FileDiff | null = null;
   let diffStyle = $state<'unified' | 'split'>('unified');
 
@@ -106,46 +109,6 @@
     });
   }
 
-  onMount(() => {
-    const previouslyFocused = document.activeElement;
-
-    renderDiff();
-    panel?.focus();
-
-    // Handle escape key and keep Tab inside the dialog
-    function handleKeydown(e: KeyboardEvent) {
-      if (e.key === 'Escape') {
-        onClose();
-        return;
-      }
-
-      if (e.key !== 'Tab' || !panel) return;
-
-      const focusable = panel.querySelectorAll<HTMLElement>(
-        'button, [href], input, [tabindex]:not([tabindex="-1"])'
-      );
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (!first || !last) return;
-
-      if (e.shiftKey && (document.activeElement === first || document.activeElement === panel)) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    }
-    window.addEventListener('keydown', handleKeydown);
-
-    return () => {
-      window.removeEventListener('keydown', handleKeydown);
-      if (previouslyFocused instanceof HTMLElement && previouslyFocused.isConnected) {
-        previouslyFocused.focus();
-      }
-    };
-  });
-
   onDestroy(() => {
     if (diffInstance) {
       diffInstance.cleanUp();
@@ -159,12 +122,6 @@
       renderDiff();
     }
   });
-
-  function handleBackdropClick(e: MouseEvent) {
-    if (e.target === e.currentTarget) {
-      onClose();
-    }
-  }
 
   // Calculate stats
   const stats = $derived(() => {
@@ -185,98 +142,108 @@
   });
 </script>
 
-<!-- svelte-ignore a11y_no_static_element_interactions -->
-<!-- svelte-ignore a11y_click_events_have_key_events -->
-<div
-  class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
-  in:fade={{ duration: 200 }}
-  out:fade={{ duration: 150 }}
-  onclick={handleBackdropClick}
->
-  <div
-    bind:this={panel}
-    role="dialog"
-    aria-modal="true"
-    aria-label={`Diff: ${filePath}`}
-    tabindex="-1"
-    class="relative w-[95vw] h-[90vh] max-w-7xl bg-background rounded-xl shadow-2xl border border-border flex flex-col overflow-hidden"
-    in:scale={{ duration: 200, start: 0.96, easing: quintOut }}
-    out:scale={{ duration: 150, start: 0.96, easing: quintOut }}
-  >
-    <!-- Header -->
-    <div class="flex items-center justify-between px-4 py-3 border-b border-border bg-card">
-      <div class="flex items-center gap-3 min-w-0">
-        <div class="flex items-center gap-2 min-w-0">
-          <span class="font-mono text-sm text-foreground truncate">{filePath}</span>
-          <CopyButton
-            text={filePath}
-            variant="ghost"
-            size="icon-sm"
-            class="h-6 w-6"
-          />
-        </div>
-        <div class="flex items-center gap-2 text-xs">
-          <span class="text-success">+{stats().additions}</span>
-          <span class="text-error">-{stats().deletions}</span>
-        </div>
-      </div>
+<Dialog.Root bind:open onOpenChangeComplete={(isOpen) => !isOpen && onClose()}>
+  <Dialog.Portal>
+    <Dialog.Overlay forceMount>
+      {#snippet child({ props, open: isOpen })}
+        {#if isOpen}
+          <div
+            {...props}
+            class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm"
+            in:fade={{ duration: 200 }}
+            out:fade={{ duration: 150 }}
+          ></div>
+        {/if}
+      {/snippet}
+    </Dialog.Overlay>
 
-      <div class="flex items-center gap-2">
-        <!-- Diff style toggle -->
-        <div
-          class="flex items-center bg-muted rounded-lg p-0.5 border border-border"
-          role="group"
-          aria-label="Diff layout"
-        >
-          <Button
-            variant={diffStyle === 'unified' ? 'outline' : 'ghost'}
-            size="sm"
-            onclick={() => diffStyle = 'unified'}
-            class="h-7 rounded-[14px] text-xs {diffStyle === 'unified'
-              ? 'bg-background border-border shadow-sm'
-              : ''}"
-            aria-pressed={diffStyle === 'unified'}
-            title="Unified view"
+    <Dialog.Content forceMount aria-label={`Diff: ${filePath}`}>
+      {#snippet child({ props, open: isOpen })}
+        {#if isOpen}
+          <div
+            {...props}
+            class="fixed top-1/2 left-1/2 z-50 w-[95vw] h-[90vh] max-w-7xl -translate-x-1/2 -translate-y-1/2 bg-background rounded-xl shadow-2xl border border-border flex flex-col overflow-hidden"
+            in:scale={{ duration: 200, start: 0.96, easing: quintOut }}
+            out:scale={{ duration: 150, start: 0.96, easing: quintOut }}
           >
-            <TextAlignStart class="w-3.5 h-3.5" />
-            <span>Unified</span>
-          </Button>
-          <Button
-            variant={diffStyle === 'split' ? 'outline' : 'ghost'}
-            size="sm"
-            onclick={() => diffStyle = 'split'}
-            class="h-7 rounded-[14px] text-xs {diffStyle === 'split'
-              ? 'bg-background border-border shadow-sm'
-              : ''}"
-            aria-pressed={diffStyle === 'split'}
-            title="Split view"
-          >
-            <Columns2 class="w-3.5 h-3.5" />
-            <span>Split</span>
-          </Button>
-        </div>
+            <!-- Header -->
+            <div class="flex items-center justify-between px-4 py-3 border-b border-border bg-card">
+              <div class="flex items-center gap-3 min-w-0">
+                <div class="flex items-center gap-2 min-w-0">
+                  <span class="font-mono text-sm text-foreground truncate">{filePath}</span>
+                  <CopyButton
+                    text={filePath}
+                    variant="ghost"
+                    size="icon-sm"
+                    class="h-6 w-6"
+                  />
+                </div>
+                <div class="flex items-center gap-2 text-xs">
+                  <span class="text-success">+{stats().additions}</span>
+                  <span class="text-error">-{stats().deletions}</span>
+                </div>
+              </div>
 
-        <!-- Close button -->
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          onclick={onClose}
-          title="Close (Esc)"
-          aria-label="Close diff modal"
-        >
-          <X class="size-5" />
-        </Button>
-      </div>
-    </div>
+              <div class="flex items-center gap-2">
+                <!-- Diff style toggle -->
+                <div
+                  class="flex items-center bg-muted rounded-lg p-0.5 border border-border"
+                  role="group"
+                  aria-label="Diff layout"
+                >
+                  <Button
+                    variant={diffStyle === 'unified' ? 'outline' : 'ghost'}
+                    size="sm"
+                    onclick={() => diffStyle = 'unified'}
+                    class="h-7 rounded-[14px] text-xs {diffStyle === 'unified'
+                      ? 'bg-background border-border shadow-sm'
+                      : ''}"
+                    aria-pressed={diffStyle === 'unified'}
+                    title="Unified view"
+                  >
+                    <TextAlignStart class="w-3.5 h-3.5" />
+                    <span>Unified</span>
+                  </Button>
+                  <Button
+                    variant={diffStyle === 'split' ? 'outline' : 'ghost'}
+                    size="sm"
+                    onclick={() => diffStyle = 'split'}
+                    class="h-7 rounded-[14px] text-xs {diffStyle === 'split'
+                      ? 'bg-background border-border shadow-sm'
+                      : ''}"
+                    aria-pressed={diffStyle === 'split'}
+                    title="Split view"
+                  >
+                    <Columns2 class="w-3.5 h-3.5" />
+                    <span>Split</span>
+                  </Button>
+                </div>
 
-    <!-- Diff content -->
-    <div class="flex-1 overflow-auto">
-      {#key diffStyle}
-        <div bind:this={container} class="diff-modal-content"></div>
-      {/key}
-    </div>
-  </div>
-</div>
+                <!-- Close button -->
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  onclick={() => (open = false)}
+                  title="Close (Esc)"
+                  aria-label="Close diff modal"
+                >
+                  <X class="size-5" />
+                </Button>
+              </div>
+            </div>
+
+            <!-- Diff content -->
+            <div class="flex-1 overflow-auto">
+              {#key diffStyle}
+                <div bind:this={container} class="diff-modal-content"></div>
+              {/key}
+            </div>
+          </div>
+        {/if}
+      {/snippet}
+    </Dialog.Content>
+  </Dialog.Portal>
+</Dialog.Root>
 
 <style>
   /* @pierre/diffs renders into a shadowRoot, so it can only be themed through
