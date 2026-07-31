@@ -1,7 +1,9 @@
 <script lang="ts">
   import { IconAgent, IconSubagent, IconTools } from '$lib/icons';
   import { onMount, tick, untrack } from 'svelte';
-  import { fly } from 'svelte/transition';
+  import Markdown from '@humanspeak/svelte-markdown';
+import { PROSE } from '$lib/prose';
+import { fly } from 'svelte/transition';
   import { quintOut } from 'svelte/easing';
   import { Virtualizer } from 'virtua/svelte';
   import type { VirtualizerHandle } from 'virtua/svelte';
@@ -676,9 +678,13 @@
                   <IconAgent class="size-[18px] text-muted-foreground" />
                 </div>
                 <div
-                  class="max-w-[85%] min-w-0 rounded-2xl rounded-bl-sm border border-border bg-card px-4 py-3 text-sm leading-relaxed break-words whitespace-pre-wrap text-card-foreground shadow-sm"
+                  class="max-w-[85%] min-w-0 rounded-2xl rounded-bl-sm border border-border bg-card px-4 py-3 text-sm leading-relaxed break-words text-card-foreground shadow-sm"
                 >
-                  {session.streaming}
+                  <!-- The stream renders as markdown too — raw asterisks mid-turn
+                       read as a bug, and long resumed turns stream for minutes. -->
+                  <div class={PROSE}>
+                    <Markdown source={session.streaming} options={{ breaks: true }} />
+                  </div>
                 </div>
               </div>
             {/if}
