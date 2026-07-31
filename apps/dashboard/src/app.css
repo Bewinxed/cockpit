@@ -66,15 +66,17 @@
   --input: oklch(0.93 0.007 106.5);
   --ring: oklch(0.737 0.021 106.9);
 
-  /* Semantic */
-  --success: #879A39;
-  --success-foreground: #FFFCF0;
-  --warning: #D0A215;
-  --warning-foreground: #1C1B1A;
-  --info: #4385BE;
-  --info-foreground: #FFFCF0;
-  --error: #D14D41;
-  --error-foreground: #FFFCF0;
+  /* Status, in the theme's own idiom: oklch, tuned per appearance, following
+     the light→dark move shadcn makes on --destructive (lighter, less chroma).
+     --error is destructive under another name; keep them identical. */
+  --success: oklch(0.596 0.145 130);
+  --success-foreground: oklch(0.988 0.003 106.5);
+  --warning: oklch(0.72 0.16 85);
+  --warning-foreground: oklch(0.153 0.006 107.1);
+  --info: oklch(0.58 0.16 250);
+  --info-foreground: oklch(0.988 0.003 106.5);
+  --error: oklch(0.577 0.245 27.325);
+  --error-foreground: oklch(0.988 0.003 106.5);
 
   /* Sidebar */
   --sidebar: oklch(0.988 0.003 106.5);
@@ -125,15 +127,16 @@
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.58 0.031 107.3);
 
-  /* Semantic */
-  --success: #879A39;
-  --success-foreground: #100F0F;
-  --warning: #D0A215;
-  --warning-foreground: #100F0F;
-  --info: #4385BE;
-  --info-foreground: #100F0F;
-  --error: #D14D41;
-  --error-foreground: #FFFCF0;
+  /* Status, dark: lighter and less saturated than the light values, which is
+     the same move --destructive makes between the two appearances. */
+  --success: oklch(0.72 0.13 130);
+  --success-foreground: oklch(0.153 0.006 107.1);
+  --warning: oklch(0.82 0.14 85);
+  --warning-foreground: oklch(0.153 0.006 107.1);
+  --info: oklch(0.71 0.14 250);
+  --info-foreground: oklch(0.153 0.006 107.1);
+  --error: oklch(0.704 0.191 22.216);
+  --error-foreground: oklch(0.153 0.006 107.1);
 
   /* Sidebar */
   --sidebar: oklch(0.228 0.013 107.4);
