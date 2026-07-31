@@ -57,6 +57,14 @@ export interface SpawnPayload {
    */
   scratch?: { worktree?: boolean; baseCwd?: string };
   /**
+   * Start from a repository instead of a directory that is already there: the
+   * agent clones `repo` — `owner/name`, or any URL git understands — into a
+   * subdirectory of `baseDir` and runs the session in the clone. It works the
+   * target directory out for itself, so `cwd` is only where the dashboard
+   * expects the clone to land.
+   */
+  bootstrap?: { repo: string; baseDir: string };
+  /**
    * Correlates the `control_result` frame the agent answers the spawn with, once
    * the session is in place. A relaunch — the same `instanceId` spawned again,
    * for an option only a new process can take — is what needs the answer: the
@@ -65,6 +73,36 @@ export interface SpawnPayload {
    */
   requestId?: string;
 }
+
+/** One repository a machine can {@link SpawnPayload.bootstrap} from. */
+export interface RepoInfo {
+  nameWithOwner: string;
+  visibility: 'PUBLIC' | 'PRIVATE' | 'INTERNAL';
+  updatedAt: string;
+  description: string;
+}
+
+/**
+ * What the machine-scoped `listRepos` control answers with. The GitHub CLI is
+ * the machine's own credential store — cockpit never holds a token — so a
+ * machine without `gh`, or with a `gh` nobody has logged into, answers with
+ * something the user can act on rather than failing.
+ */
+export type ReposResult = RepoInfo[] | { error: 'gh-missing' | 'gh-unauthenticated' };
+
+/**
+ * `owner/name`, however the repository was written — bare, HTTPS URL, or SSH
+ * remote. Both ends of a {@link SpawnPayload.bootstrap} read a reference through
+ * this: it is how the dashboard can say where the clone will land, and how the
+ * agent recognises a clone that is already there.
+ */
+export const repoPath = (repo: string): string =>
+  repo
+    .trim()
+    .replace(/\/+$/, '')
+    .replace(/^[a-z][a-z0-9+.-]*:\/\/[^/]+\//i, '')
+    .replace(/^[^/]+@[^:]+:/, '')
+    .replace(/\.git$/, '');
 
 /** `send`: one turn of input for a live session's prompt stream. */
 export interface SendPayload {
@@ -90,7 +128,8 @@ export interface StopPayload {
  * Without `instanceId` the call is machine-scoped and `method` names one of the
  * SDK's module-level session functions instead (`listSessions`,
  * `getSessionInfo`, `getSessionMessages`, `renameSession`, `deleteSession`) —
- * the session catalog is readable with nothing running on the machine.
+ * the session catalog is readable with nothing running on the machine — or
+ * `listRepos`, which the agent answers itself with {@link ReposResult}.
  */
 export interface ControlPayload {
   instanceId?: string;

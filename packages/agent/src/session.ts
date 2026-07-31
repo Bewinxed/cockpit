@@ -16,11 +16,13 @@ import type {
   Envelope,
   FramePayload,
   FsPayload,
+  RepoInfo,
+  ReposResult,
   SendPayload,
   SpawnPayload,
   StopPayload,
 } from '@cockpit/core';
-import { COCKPIT_SCRATCH_TAG, RESOLVE_PERMISSION } from '@cockpit/core';
+import { COCKPIT_SCRATCH_TAG, repoPath, RESOLVE_PERMISSION } from '@cockpit/core';
 import { Effect } from 'effect';
 import { stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
@@ -156,9 +158,54 @@ interface Quest {
 /** A `Query` method or SDK session function reached by name through `control`. */
 type ControlMethod = (...args: unknown[]) => unknown;
 
+/** How many repositories the bootstrap picker asks a machine for. */
+const REPO_LIST_LIMIT = 100;
+
+/** The end of a failed command's stderr: enough to name the cause, not a wall of it. */
+const STDERR_TAIL_LINES = 4;
+
+const stderrTail = (stderr: string): string =>
+  stderr.trim().split('\n').slice(-STDERR_TAIL_LINES).join('\n');
+
+/** Whether the GitHub CLI is here at all — its absence is an answer, not a failure. */
+const ghAvailable = async (): Promise<boolean> =>
+  (await Bun.$`gh --version`.quiet().nothrow()).exitCode === 0;
+
 /**
- * The SDK's session catalog: module-level functions, not `Query` methods, so a
- * machine-scoped `control` reaches them with nothing running on this machine.
+ * The repositories `gh` can see from this machine. Whoever is logged in there
+ * decides what that is — the private ones included, which is the point of
+ * asking the machine rather than GitHub.
+ */
+const listRepos = async (): Promise<ReposResult> => {
+  if (!(await ghAvailable())) return { error: 'gh-missing' };
+  const auth = await Bun.$`gh auth status`.quiet().nothrow();
+  if (auth.exitCode !== 0) return { error: 'gh-unauthenticated' };
+
+  const listed =
+    await Bun.$`gh repo list --json nameWithOwner,visibility,updatedAt,description --limit ${REPO_LIST_LIMIT}`
+      .quiet()
+      .nothrow();
+  if (listed.exitCode !== 0) {
+    throw new Error(`gh repo list failed: ${stderrTail(listed.stderr.toString())}`);
+  }
+  return listed.json() as RepoInfo[];
+};
+
+/** The same repository, under whichever of its names, is the same repository. */
+const repoIdentity = (repo: string): string => repoPath(repo).toLowerCase();
+
+/** What a clone of it is called on disk — git's own default. */
+const repoLeaf = (repo: string): string => repoPath(repo).split('/').pop() ?? '';
+
+/** A reference git can clone on its own, without `gh` resolving it first. */
+const isRepoUrl = (repo: string): boolean =>
+  /^[a-z][a-z0-9+.-]*:\/\//i.test(repo.trim()) || /^[^/]+@[^:]+:/.test(repo.trim());
+
+/**
+ * What a machine-scoped `control` reaches: the SDK's session catalog — module-level
+ * functions rather than `Query` methods, so it is readable with nothing running on
+ * this machine — and the machine's repositories, for a session that starts by
+ * cloning one.
  */
 const SESSION_FUNCTIONS = {
   listSessions,
@@ -167,6 +214,7 @@ const SESSION_FUNCTIONS = {
   renameSession,
   tagSession,
   deleteSession,
+  listRepos,
 } as Record<string, ControlMethod | undefined>;
 
 /**
@@ -245,10 +293,11 @@ export class SessionSupervisor {
     options,
     permissionMode,
     scratch,
+    bootstrap,
     requestId: ack,
   }: SpawnPayload): Promise<void> {
     try {
-      let workdir = expandHome(cwd);
+      let workdir = bootstrap ? await this.#clone(bootstrap) : expandHome(cwd);
       // Checked here rather than left to the SDK: a query() started in a missing
       // directory fails as "binary exists but failed to launch", which names
       // neither the directory nor the reason.
@@ -453,6 +502,47 @@ export class SessionSupervisor {
         this.sink({ kind: 'control_result', instanceId, requestId, ok: false, error: message });
       else this.sink({ kind: 'error', instanceId, verb: 'stop', message });
     }
+  }
+
+  /**
+   * The checkout a bootstrap session works in, cloned before the session exists:
+   * a clone that fails is then a session that never started — a failure card
+   * naming what git said, rather than a first turn spent finding out.
+   *
+   * Cloning the same repository into the same place twice is a no-op, so a
+   * session started again from a bootstrap keeps working in what the first one
+   * cloned. Anything else already sitting at the target belongs to the user, and
+   * is left exactly where it is.
+   */
+  async #clone({ repo, baseDir }: NonNullable<SpawnPayload['bootstrap']>): Promise<string> {
+    const parent = expandHome(baseDir).replace(/(?!^)\/+$/, '');
+    const target = `${parent}/${repoLeaf(repo)}`;
+
+    if (await isDirectory(target)) {
+      const origin = await Bun.$`git -C ${target} remote get-url origin`.quiet().nothrow();
+      if (origin.exitCode !== 0 || repoIdentity(origin.text()) !== repoIdentity(repo)) {
+        throw new Error(`bootstrap target exists and is not the requested repo: ${target}`);
+      }
+      return target;
+    }
+
+    // `gh` is what resolves `owner/name` and what carries the credentials for a
+    // private repository; without it only a URL can be cloned, by git alone.
+    const gh = await ghAvailable();
+    if (!gh && !isRepoUrl(repo)) {
+      throw new Error(
+        `cloning ${repo} needs the GitHub CLI, and gh is not installed on this machine`
+      );
+    }
+
+    await Bun.$`mkdir -p ${parent}`.quiet();
+    const cloned = gh
+      ? await Bun.$`gh repo clone ${repo} ${target} -- --single-branch`.quiet().nothrow()
+      : await Bun.$`git clone --single-branch ${repo} ${target}`.quiet().nothrow();
+    if (cloned.exitCode !== 0) {
+      throw new Error(`could not clone ${repo}: ${stderrTail(cloned.stderr.toString())}`);
+    }
+    return target;
   }
 
   /**
