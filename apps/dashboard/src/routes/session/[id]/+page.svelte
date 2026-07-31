@@ -351,14 +351,14 @@ import { fly } from 'svelte/transition';
    */
   const canRelaunch = $derived(Boolean(session?.sessionId));
 
-  /** Bypass throws the current turn away, so it asks once before it does. */
-  let confirmingBypass = $state(false);
-
+  // Choosing bypass IS the decision (user's call, 2026-08-01): the relaunch
+  // fires at once — the settle keeps the transcript coherent and the
+  // continuation message picks the interrupted work back up.
   function chooseMode(value: string) {
     const mode = value as PermissionMode;
     if (mode === permissionMode) return;
     if (mode === 'bypassPermissions') {
-      confirmingBypass = true;
+      void relaunchInBypass();
       return;
     }
     void handlePermissionMode(mode);
@@ -366,7 +366,6 @@ import { fly } from 'svelte/transition';
 
   async function relaunchInBypass() {
     if (!session) return;
-    confirmingBypass = false;
     error = null;
     try {
       await relaunchSession(viewId, session.machineId, 'bypassPermissions');
@@ -434,8 +433,6 @@ import { fly } from 'svelte/transition';
     'shrink-0 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40';
   const destructive =
     'shrink-0 rounded-md border border-error bg-error px-2 py-1 text-xs text-error-foreground transition-colors hover:bg-error/90 focus-visible:ring-2 focus-visible:ring-ring';
-  const dangerous =
-    'shrink-0 rounded-md border border-warning px-2 py-1 text-xs font-medium text-warning transition-colors hover:bg-warning/10 focus-visible:ring-2 focus-visible:ring-ring';
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
@@ -500,18 +497,7 @@ import { fly } from 'svelte/transition';
     </div>
 
     {#if !browsing}
-      {#if confirmingBypass}
-        <span class="hidden shrink-0 text-xs text-muted-foreground lg:inline">
-          Relaunches the session with all permissions granted. The current turn stops.
-        </span>
-        <button type="button" class={action} onclick={() => (confirmingBypass = false)}>
-          Cancel
-        </button>
-        <button type="button" class={dangerous} onclick={relaunchInBypass}>
-          Relaunch in bypass
-        </button>
-      {:else}
-        <Select.Root type="single" value={permissionMode} onValueChange={chooseMode}>
+      <Select.Root type="single" value={permissionMode} onValueChange={chooseMode}>
           <Select.Trigger
             aria-label="Permission mode"
             title="How this session answers tool permissions"
@@ -545,9 +531,8 @@ import { fly } from 'svelte/transition';
                 </span>
               </Select.Item>
             {/each}
-          </Select.Content>
-        </Select.Root>
-      {/if}
+        </Select.Content>
+      </Select.Root>
       <button
         type="button"
         class={action}
