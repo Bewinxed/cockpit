@@ -28,6 +28,7 @@ export default defineConfig({
     exclude: ['@xyflow/svelte'],
   },
   ssr: {
-    noExternal: ['@xyflow/svelte'],
+    // Both ship raw .svelte sources; dev SSR must compile them, not require them.
+    noExternal: ['@xyflow/svelte', 'virtua'],
   },
 });
