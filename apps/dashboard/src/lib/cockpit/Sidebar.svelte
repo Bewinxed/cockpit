@@ -50,6 +50,18 @@
   /** Machines whose catalog is shown past `RECENT` — a glance, not a preference. */
   let showAll = $state<Record<string, boolean>>({});
 
+  // Row transitions animate live comings and goings, not the initial WS backfill:
+  // data lands right after mount, and a rail that assembles itself on every page
+  // load reads as noise. Zero-duration until the first snapshot has painted.
+  let settled = $state(false);
+  $effect(() => {
+    if (machines.length > 0 && !settled) {
+      requestAnimationFrame(() => (settled = true));
+    }
+  });
+  const rowIn = $derived({ duration: settled ? 250 : 0, easing: quintOut });
+  const rowOut = $derived({ duration: settled ? 180 : 0, easing: quintOut });
+
   const isCurrent = (href: string) => page.url.pathname + page.url.search === href;
   const leaf = (cwd: string) => cwd.split('/').pop() || cwd;
 </script>
@@ -61,6 +73,8 @@
     aria-current={isCurrent(href) ? 'page' : undefined}
     class="flex items-start gap-1.5 rounded-md px-1.5 py-1 transition-colors hover:bg-accent
       {isCurrent(href) ? 'bg-accent' : ''}"
+    in:slide={rowIn}
+    out:slide={rowOut}
   >
     <History size={12} class="mt-0.5 shrink-0 text-muted-foreground" />
     <span class="flex min-w-0 flex-1 flex-col">
@@ -128,6 +142,8 @@
             {isCurrent(`/session/${instance.id}`)
             ? 'bg-accent text-foreground'
             : 'text-muted-foreground'}"
+          in:slide={rowIn}
+          out:slide={rowOut}
         >
           <ActivityDot {activity} size={1.5} />
           <span class="truncate font-mono">{leaf(instance.cwd)}</span>
@@ -161,7 +177,9 @@
         >
           <ChevronRight
             size={12}
-            class="shrink-0 text-muted-foreground transition-transform {open ? 'rotate-90' : ''}"
+            class="shrink-0 text-muted-foreground transition-transform duration-200 ease-out {open
+              ? 'rotate-90'
+              : ''}"
           />
           <Server size={12} class="shrink-0 text-muted-foreground" />
           <span class="truncate text-xs font-medium">{machine.hostname}</span>
@@ -186,6 +204,8 @@
         <div
           id="machine-{machine.machineId}"
           class="ml-4 flex flex-col border-l border-border/60 pl-1"
+          in:slide={{ duration: 250, easing: quintOut }}
+          out:slide={{ duration: 180, easing: quintOut }}
         >
           {#if running.length > 0}
             <span class="px-1.5 py-1 text-xs tracking-wide text-muted-foreground uppercase">
@@ -200,6 +220,8 @@
                   {isCurrent(`/session/${instance.id}`)
                   ? 'bg-accent text-foreground'
                   : 'text-muted-foreground'}"
+                in:slide={rowIn}
+                out:slide={rowOut}
               >
                 <ActivityDot {activity} size={1.5} />
                 <span class="truncate font-mono">{leaf(instance.cwd)}</span>
