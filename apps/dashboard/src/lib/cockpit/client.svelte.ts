@@ -612,12 +612,20 @@ export function forkSession({
   return created.instanceId;
 }
 
-export function sendText(instanceId: string, machineId: string, text: string): void {
-  const payload: SendPayload = { instanceId, message: userMessage(text) };
+/** What a turn carries besides its typed text — pastes turned into chips, images. */
+export type SendExtras = Pick<SendPayload, 'attachments' | 'images'>;
+
+export function sendText(
+  instanceId: string,
+  machineId: string,
+  text: string,
+  extras: SendExtras = {}
+): void {
+  const payload: SendPayload = { instanceId, message: userMessage(text), ...extras };
   send({ verb: 'send', machineId, instanceId, payload });
 
   const target = session(instanceId);
-  target.messages.push(localUserMessage(instanceId, text));
+  target.messages.push(localUserMessage(instanceId, text, extras));
   target.busy = true;
 }
 

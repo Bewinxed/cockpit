@@ -5,7 +5,7 @@
  * The SDK's own types are the input contract (tunnelled through `@cockpit/core`),
  * so nothing here re-models them.
  */
-import type { SDKAssistantMessage, SDKMessage, SessionMessage } from '@cockpit/core';
+import type { SDKAssistantMessage, SDKMessage, SendPayload, SessionMessage } from '@cockpit/core';
 import type { SubagentState } from '$lib/utils/flow-types';
 import { getToolGlance } from '$lib/utils/tool-display';
 import type { Message, MessageMetadata, MessageType } from './types';
@@ -231,7 +231,7 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
       // human's at all, which nothing echoes either.
       const text = transcriptUserText(sdk.message);
       if (text && (agentId || systemNote(text))) {
-        mapping.messages.push({ ...base, ...userBody(text) });
+        mapping.messages.push({ ...base, ...userBody(text, transcriptUserImages(sdk.message)) });
       }
       if (typeof content === 'string') break;
       for (const block of content) {
@@ -438,13 +438,37 @@ function transcriptUserText(message: unknown): string | null {
 }
 
 /**
+ * The images a user turn carried. A stored transcript keeps them whole, base64
+ * data and all, so the bubble can show what was actually sent; a block sourced
+ * from a URL has nothing to inline and is left for the placeholder to name.
+ */
+function transcriptUserImages(message: unknown): MessageMetadata['images'] {
+  const content = (message as { content?: unknown } | null)?.content;
+  if (!Array.isArray(content)) return undefined;
+  const images = content
+    .filter((block: unknown) => (block as { type?: string })?.type === 'image')
+    .map((block: unknown) => {
+      const source = (block as { source?: { media_type?: string; data?: string } }).source;
+      const mediaType = source?.media_type ?? 'image/png';
+      return {
+        mediaType,
+        dataUri: source?.data ? `data:${mediaType};base64,${source.data}` : undefined,
+      };
+    });
+  return images.length ? images : undefined;
+}
+
+/**
  * What a user-role message renders as. Both the live and the stored path build
  * their user messages from this, so the harness's own voice is never mistaken
  * for the human's on one of them.
  */
-function userBody(text: string): Pick<Message, 'type' | 'content' | 'metadata'> {
+function userBody(
+  text: string,
+  images?: MessageMetadata['images']
+): Pick<Message, 'type' | 'content' | 'metadata'> {
   const note = systemNote(text);
-  if (!note) return { type: 'user', content: text };
+  if (!note) return { type: 'user', content: text, metadata: images ? { images } : undefined };
   return {
     type: 'ui.system_note',
     content: text,
@@ -489,14 +513,20 @@ export interface Transcript {
 }
 
 /**
- * The text of an entry that opens a main-loop turn, and null for everything else
- * — including the user-role entries that carry nothing but a tool result. Only
- * one of these can begin a chunk: anywhere else a slice would open mid-turn,
- * with results arriving for a `tool.use` that is on the other side of the cut.
+ * What an entry that opens a main-loop turn said, and null for everything else —
+ * including the user-role entries that carry nothing but a tool result. Only one
+ * of these can begin a chunk: anywhere else a slice would open mid-turn, with
+ * results arriving for a `tool.use` that is on the other side of the cut. A turn
+ * that was nothing but an image still opened one.
  */
-function turnStartText(entry: SessionMessage): string | null {
+function turnStart(
+  entry: SessionMessage
+): { text: string; images?: MessageMetadata['images'] } | null {
   if (entry.type !== 'user' || entry.parent_tool_use_id) return null;
-  return transcriptUserText(entry.message);
+  const text = transcriptUserText(entry.message);
+  const images = transcriptUserImages(entry.message);
+  if (text === null && !images) return null;
+  return { text: text ?? '', images };
 }
 
 /**
@@ -537,7 +567,7 @@ function spannedByToolCalls(transcript: SessionMessage[]): Int32Array {
 export function turnBoundaries(transcript: SessionMessage[], size: number): number[] {
   if (transcript.length <= size) return [0];
   const spanned = spannedByToolCalls(transcript);
-  const cuttable = (index: number) => !spanned[index] && turnStartText(transcript[index]) !== null;
+  const cuttable = (index: number) => !spanned[index] && turnStart(transcript[index]) !== null;
 
   const boundaries = [0];
   for (let cursor = size; cursor < transcript.length; cursor += size) {
@@ -562,12 +592,12 @@ export function mapTranscript(instanceId: string, transcript: SessionMessage[]):
   for (const entry of transcript) {
     if (entry.type === 'system') continue;
 
-    const opening = turnStartText(entry);
-    if (opening !== null) {
+    const opening = turnStart(entry);
+    if (opening) {
       messages.push({
         id: entry.uuid,
         instanceId,
-        ...userBody(opening),
+        ...userBody(opening.text, opening.images),
         timestamp: new Date(),
         sdkUuid: entry.uuid,
       });
@@ -594,13 +624,29 @@ export function mapTranscript(instanceId: string, transcript: SessionMessage[]):
 }
 
 /** The message optimistically shown for text the user just sent. */
-export function localUserMessage(instanceId: string, text: string): Message {
+export function localUserMessage(
+  instanceId: string,
+  text: string,
+  { attachments, images }: Pick<SendPayload, 'attachments' | 'images'> = {}
+): Message {
+  const carried = Boolean(attachments?.length || images?.length);
   return {
     id: crypto.randomUUID(),
     instanceId,
     type: 'user',
     content: text,
     timestamp: new Date(),
+    // Thumbnails come from the same base64 that went out: nothing comes back to
+    // build them from, since the live path never echoes the user's own turn.
+    metadata: carried
+      ? {
+          attachments: attachments?.map(({ name, content }) => ({ name, chars: content.length })),
+          images: images?.map(({ mediaType, data }) => ({
+            mediaType,
+            dataUri: `data:${mediaType};base64,${data}`,
+          })),
+        }
+      : undefined,
   };
 }
 

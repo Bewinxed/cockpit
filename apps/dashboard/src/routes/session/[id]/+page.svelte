@@ -34,6 +34,7 @@
     setPermissionMode,
     stopSession,
   } from '$lib/cockpit/client.svelte';
+  import type { SendExtras } from '$lib/cockpit/client.svelte';
   import { PERMISSION_MODES, permissionModeLabel } from '$lib/cockpit/permission-modes';
   import * as Select from '$lib/components/ui/select';
   import { sessionFailedMessage } from '$lib/cockpit/frames';
@@ -283,9 +284,9 @@
     session?.messages.reduce((cost, message) => message.metadata?.totalCost ?? cost, 0) ?? 0
   );
 
-  function handleSend(text: string) {
+  function handleSend(text: string, extras: SendExtras) {
     if (!session) return;
-    sendText(viewId, session.machineId, text);
+    sendText(viewId, session.machineId, text, extras);
   }
 
   function handleInterrupt() {
