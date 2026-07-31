@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { COCKPIT_ENV, COCKPIT_HUB_PORT, COCKPIT_MDNS_TYPE } from '@cockpit/core';
 import { Bonjour, type Service } from 'bonjour-service';
 import { CONFIG_PATH, readConfig, writeConfig } from './config';
@@ -105,9 +106,24 @@ interface TailscaleNode {
  * the list alongside the peers because a hub can be bound to its tailnet address
  * alone, which no localhost probe would reach.
  */
+/**
+ * The macOS app ships its CLI inside the bundle and only symlinks it into the
+ * PATH if the user asks, so a Mac on the tailnet reads as "no tailscale" unless
+ * these are tried — found the hard way, from a Mac that was plainly on the net.
+ */
+const TAILSCALE_BINARIES = [
+  '/Applications/Tailscale.app/Contents/MacOS/Tailscale',
+  '/usr/local/bin/tailscale',
+  '/opt/homebrew/bin/tailscale',
+];
+
+const tailscaleBinary = (): string | undefined =>
+  Bun.which('tailscale') ?? TAILSCALE_BINARIES.find((path) => existsSync(path));
+
 const tailscaleCandidates = async (port: number): Promise<{ ip: string; host: string }[]> => {
-  if (!Bun.which('tailscale')) return [];
-  const status = await Bun.$`tailscale status --json`
+  const binary = tailscaleBinary();
+  if (!binary) return [];
+  const status = await Bun.$`${binary} status --json`
     .quiet()
     .json()
     .catch(() => undefined);
