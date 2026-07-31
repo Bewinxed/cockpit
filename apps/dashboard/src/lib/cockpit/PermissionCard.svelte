@@ -1,5 +1,7 @@
 <script lang="ts">
-  import { Check, ChevronDown, ChevronRight, Shield, X } from '@lucide/svelte';
+  import { scale, slide } from 'svelte/transition';
+  import { quintOut } from 'svelte/easing';
+  import { Check, ChevronRight, Shield, X } from '@lucide/svelte';
   import type { PermissionResult } from '@cockpit/core';
   import type { PendingPermission } from './client.svelte';
   import { permissionSummary } from './permission-summary';
@@ -12,6 +14,22 @@
   let { request, onResolve }: Props = $props();
 
   let isExpanded = $state(false);
+  /**
+   * The answer travels browser → hub → agent before the card is dropped, so the
+   * card says it heard you the moment you click rather than sitting inert.
+   */
+  let resolved = $state<'allow' | 'deny' | null>(null);
+
+  function resolve(answer: 'allow' | 'deny') {
+    if (resolved) return;
+    resolved = answer;
+    onResolve(
+      request.requestId,
+      answer === 'allow'
+        ? { behavior: 'allow', updatedInput: request.input }
+        : { behavior: 'deny', message: 'User denied permission' }
+    );
+  }
 
   const summary = $derived(permissionSummary(request.toolName, request.input));
   // The summary is cut to one line, so the details have to carry the whole thing —
@@ -34,10 +52,15 @@
         <div class="flex items-center gap-1.5 shrink-0 -mt-0.5">
           <button
             type="button"
-            class="size-7 rounded-md flex items-center justify-center text-muted-foreground
-                   hover:text-error hover:bg-error/10 transition-colors"
-            onclick={() =>
-              onResolve(request.requestId, { behavior: 'deny', message: 'User denied permission' })}
+            disabled={!!resolved}
+            class="size-7 rounded-md flex items-center justify-center
+                   transition-[color,background-color,opacity] duration-200 ease-out
+                   {resolved === 'deny'
+              ? 'bg-error/10 text-error'
+              : resolved
+                ? 'text-muted-foreground opacity-0'
+                : 'text-muted-foreground hover:text-error hover:bg-error/10'}"
+            onclick={() => resolve('deny')}
             aria-label="Deny"
             title="Deny"
           >
@@ -45,14 +68,23 @@
           </button>
           <button
             type="button"
+            disabled={!!resolved}
             class="size-7 rounded-md flex items-center justify-center
-                   bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
-            onclick={() =>
-              onResolve(request.requestId, { behavior: 'allow', updatedInput: request.input })}
+                   transition-[color,background-color,opacity] duration-200 ease-out
+                   {resolved === 'allow'
+              ? 'bg-success text-success-foreground'
+              : resolved
+                ? 'bg-primary text-primary-foreground opacity-0'
+                : 'bg-primary text-primary-foreground hover:bg-primary/90'}"
+            onclick={() => resolve('allow')}
             aria-label="Allow once"
             title="Allow once"
           >
-            <Check size={14} />
+            {#key resolved}
+              <span in:scale={{ duration: resolved ? 260 : 0, start: 0.25, easing: quintOut }}>
+                <Check size={14} />
+              </span>
+            {/key}
           </button>
         </div>
       </div>
@@ -65,16 +97,20 @@
         aria-controls={detailsId}
         onclick={() => (isExpanded = !isExpanded)}
       >
-        {#if isExpanded}
-          <ChevronDown size={14} />
-        {:else}
-          <ChevronRight size={14} />
-        {/if}
+        <ChevronRight
+          size={14}
+          class="transition-transform duration-200 ease-out {isExpanded ? 'rotate-90' : ''}"
+        />
         <span>Details</span>
       </button>
 
       {#if isExpanded}
-        <div id={detailsId} class="bg-muted rounded p-2 mt-1 text-xs flex flex-col gap-2">
+        <div
+          id={detailsId}
+          class="bg-muted rounded p-2 mt-1 text-xs flex flex-col gap-2"
+          in:slide={{ duration: 250, easing: quintOut }}
+          out:slide={{ duration: 180, easing: quintOut }}
+        >
           {#if command}
             <div class="flex gap-2">
               <span class="font-medium text-muted-foreground shrink-0">Command:</span>

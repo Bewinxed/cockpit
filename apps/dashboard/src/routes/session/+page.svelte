@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { onMount, tick } from 'svelte';
+  import { fly } from 'svelte/transition';
+  import { quintOut } from 'svelte/easing';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { ChevronRight, ShieldAlert } from '@lucide/svelte';
@@ -29,8 +32,32 @@
   const stale = $derived(cockpit.staleInstances);
   let showStale = $state(false);
 
+  // Machines arrive over the socket a beat after the page does, so the staggered
+  // entrance window stays open briefly; anything that connects later just appears.
+  let entering = $state(true);
+  onMount(() => {
+    const timer = setTimeout(() => (entering = false), 800);
+    return () => clearTimeout(timer);
+  });
+
   let machineSelect = $state<HTMLSelectElement | null>(null);
   let cwdInput = $state<HTMLInputElement | null>(null);
+
+  /** The field the last submit tripped over — drives its border and one shake. */
+  let invalid = $state<'machine' | 'cwd' | null>(null);
+
+  // Cleared first so the class comes off and back on, which is what replays the
+  // shake when the same field fails twice in a row.
+  async function flag(field: 'machine' | 'cwd') {
+    invalid = null;
+    await tick();
+    invalid = field;
+  }
+
+  function clearInvalid() {
+    invalid = null;
+    error = null;
+  }
 
   async function start(event: SubmitEvent) {
     event.preventDefault();
@@ -38,14 +65,17 @@
     // The button stays live and says what is missing — a dead button explains nothing.
     if (!machineId) {
       error = 'Choose a machine to run this session on.';
+      await flag('machine');
       machineSelect?.focus();
       return;
     }
     if (!cwd.trim()) {
       error = 'Enter the directory this session should work in.';
+      await flag('cwd');
       cwdInput?.focus();
       return;
     }
+    invalid = null;
     try {
       const instanceId = spawnSession({
         machineId,
@@ -124,7 +154,10 @@
           <select
             bind:this={machineSelect}
             bind:value={machineId}
-            class="rounded-md border border-border bg-background px-2 py-1.5 text-base text-foreground sm:text-sm"
+            class="rounded-md border bg-background px-2 py-1.5 text-base text-foreground transition-colors duration-200 ease-out motion-reduce:animate-none sm:text-sm
+              {invalid === 'machine' ? 'border-error' : 'border-border'}"
+            class:animate-shake={invalid === 'machine'}
+            onchange={clearInvalid}
           >
             {#each cockpit.onlineMachines as machine (machine.machineId)}
               <option value={machine.machineId}>{machine.hostname} · {machine.os}</option>
@@ -140,7 +173,10 @@
             bind:this={cwdInput}
             bind:value={cwd}
             placeholder="/home/you/project"
-            class="rounded-md border border-border bg-background px-2 py-1.5 font-mono text-base text-foreground placeholder:text-muted-foreground sm:text-sm"
+            class="rounded-md border bg-background px-2 py-1.5 font-mono text-base text-foreground transition-colors duration-200 ease-out placeholder:text-muted-foreground motion-reduce:animate-none sm:text-sm
+              {invalid === 'cwd' ? 'border-error' : 'border-border'}"
+            class:animate-shake={invalid === 'cwd'}
+            oninput={clearInvalid}
           />
         </label>
 
@@ -200,10 +236,18 @@
       </form>
     </section>
 
-    {#each cockpit.machines as machine (machine.machineId)}
+    {#each cockpit.machines as machine, index (machine.machineId)}
       {@const running = cockpit.runningOn(machine.machineId)}
       {@const stored = cockpit.catalogOf(machine.machineId)}
-      <section class="flex flex-col gap-2">
+      <section
+        class="flex flex-col gap-2"
+        in:fly={{
+          y: 8,
+          duration: entering ? 260 : 0,
+          delay: entering ? index * 70 : 0,
+          easing: quintOut,
+        }}
+      >
         <h2 class="flex items-center gap-2 text-sm font-medium">
           <span
             class="size-2 rounded-full {machine.status === 'online'

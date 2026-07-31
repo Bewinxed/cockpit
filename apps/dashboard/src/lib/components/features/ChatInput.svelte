@@ -71,6 +71,9 @@
 
   const paletteOpen = $derived(showPalette && filteredCommands.length > 0);
 
+  /** The send button becomes the stop control mid-turn, so it stays one slot. */
+  const stopping = $derived(streaming && !!onInterrupt);
+
   // Auto-resize textarea
   function handleInput(e: Event) {
     const target = e.target as HTMLTextAreaElement;
@@ -180,13 +183,13 @@
                 transition-colors"
     >
       {#if attachmentOpen && attachment}
-        <div transition:slide={{ duration: 300, easing: quintOut }}>
+        <div in:slide={{ duration: 300, easing: quintOut }} out:slide={{ duration: 200, easing: quintOut }}>
           {@render attachment()}
         </div>
       {/if}
 
       {#if paletteOpen}
-        <div transition:slide={{ duration: 250, easing: quintOut }}>
+        <div in:slide={{ duration: 250, easing: quintOut }} out:slide={{ duration: 180, easing: quintOut }}>
           <CommandPalette
             {commands}
             filter={message}
@@ -223,41 +226,26 @@
         onkeydown={handleKeydown}
       ></textarea>
 
-      {#if streaming && onInterrupt}
-        <button
-          type="button"
-          class="shrink-0 size-7 m-1.5 rounded-md
-                 bg-destructive/10 text-destructive
-                 flex items-center justify-center
-                 hover:bg-destructive/20
-                 active:scale-95
-                 transition-all"
-          title="Stop (Ctrl+Enter)"
-          aria-label="Stop response"
-          onclick={() => onInterrupt?.()}
-        >
-          <Square size={14} />
-        </button>
-      {/if}
-
       <button
-        type="submit"
-        disabled={disabled || loading || !message.trim()}
+        type={stopping ? 'button' : 'submit'}
+        disabled={!stopping && (disabled || loading || !message.trim())}
         class="shrink-0 size-7 m-1.5 rounded-md
-               bg-primary text-primary-foreground
                flex items-center justify-center
-               hover:bg-primary/90
-               active:scale-95
+               active:scale-[0.96]
                disabled:opacity-30 disabled:cursor-not-allowed
-               transition-all"
-        title="Send message"
-        aria-label={loading ? 'Sending message' : 'Send message'}
+               transition-[color,background-color,opacity,scale] duration-150 ease-out
+               {stopping
+          ? 'bg-destructive/10 text-destructive hover:bg-destructive/20'
+          : 'bg-primary text-primary-foreground hover:bg-primary/90'}"
+        title={stopping ? 'Stop (Ctrl+Enter)' : 'Send message'}
+        aria-label={stopping ? 'Stop response' : loading ? 'Sending message' : 'Send message'}
+        onclick={stopping ? () => onInterrupt?.() : undefined}
       >
-        {#if loading}
-          <LoaderCircle class="size-3.5 animate-spin" />
-        {:else}
-          <Send size={14} />
-        {/if}
+        <span class="icon-swap">
+          <span data-active={stopping}><Square size={14} /></span>
+          <span data-active={!stopping && loading}><LoaderCircle class="size-3.5 animate-spin" /></span>
+          <span data-active={!stopping && !loading}><Send size={14} /></span>
+        </span>
       </button>
       </div>
     </div>

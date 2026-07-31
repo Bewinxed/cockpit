@@ -21,6 +21,8 @@
 		AlertTriangle,
 	} from '@lucide/svelte';
 	import Markdown from '@humanspeak/svelte-markdown';
+	import { slide } from 'svelte/transition';
+	import { quintOut } from 'svelte/easing';
 	import { PROSE } from '$lib/prose';
 	import { formatTimestamp } from '$lib/utils/time';
 	import type { Message } from '$lib/cockpit/types';
@@ -385,11 +387,7 @@
 			<div
 				class="shrink-0 size-9 rounded-xl {config.iconBg} flex items-center justify-center mt-0.5"
 			>
-				{#if message.type === 'assistant'}
-					<Bot size={18} color="var(--muted-foreground)" class="!flex leading-[0]" />
-				{:else}
-					<config.icon class="size-[18px] {config.iconColor}" />
-				{/if}
+				<config.icon class="size-[18px] {config.iconColor}" />
 			</div>
 		{/if}
 
@@ -409,15 +407,11 @@
 						aria-controls={panelId}
 						onclick={toggleExpanded}
 					>
-						{#if isExpanded}
-							<ChevronDown
-								class="w-4 h-4 text-muted-foreground shrink-0 transition-transform"
-							/>
-						{:else}
-							<ChevronRight
-								class="w-4 h-4 text-muted-foreground shrink-0 transition-transform"
-							/>
-						{/if}
+						<ChevronRight
+							class="w-4 h-4 text-muted-foreground shrink-0 transition-transform duration-200 ease-out {isExpanded
+								? 'rotate-90'
+								: ''}"
+						/>
 						<span class="font-medium text-foreground text-sm">
 							{toolInfo?.name || 'Tool'}
 						</span>
@@ -437,7 +431,12 @@
 							tool?.input as Record<string, unknown> | undefined,
 							tool?.name
 						)}
-						<div id={panelId} class="p-3 pt-0 space-y-3 border-t border-border">
+						<div
+							id={panelId}
+							class="p-3 pt-0 space-y-3 border-t border-border"
+							in:slide={{ duration: 250, easing: quintOut }}
+							out:slide={{ duration: 180, easing: quintOut }}
+						>
 							<!-- Input: Show diff for file modification tools, JSON for others -->
 							{#if isFileDiffTool(tool?.name) && diffInfo}
 								{@const totalLines =
@@ -460,7 +459,7 @@
 											onclick={() => (diffFullyExpanded = true)}
 										>
 											<ChevronDown
-												class="w-6 h-6 p-1 text-muted-foreground bg-muted border border-border rounded-full shadow-sm hover:text-foreground hover:translate-y-0.5 transition-all"
+												class="w-6 h-6 p-1 text-muted-foreground bg-muted border border-border rounded-full shadow-sm hover:text-foreground hover:translate-y-0.5 transition-[color,translate] duration-150 ease-out"
 											/>
 										</button>
 									{/if}
@@ -521,15 +520,11 @@
 						aria-controls={panelId}
 						onclick={toggleExpanded}
 					>
-						{#if isExpanded}
-							<ChevronDown
-								class="w-4 h-4 text-muted-foreground shrink-0 transition-transform"
-							/>
-						{:else}
-							<ChevronRight
-								class="w-4 h-4 text-muted-foreground shrink-0 transition-transform"
-							/>
-						{/if}
+						<ChevronRight
+							class="w-4 h-4 text-muted-foreground shrink-0 transition-transform duration-200 ease-out {isExpanded
+								? 'rotate-90'
+								: ''}"
+						/>
 						<span class="font-medium text-foreground text-sm">
 							{hookInfo?.name || 'Hook'}
 						</span>
@@ -546,7 +541,12 @@
 
 					{#if isExpanded}
 						{@const hook = hookInfo}
-						<div id={panelId} class="p-3 pt-0 space-y-3 border-t border-border">
+						<div
+							id={panelId}
+							class="p-3 pt-0 space-y-3 border-t border-border"
+							in:slide={{ duration: 250, easing: quintOut }}
+							out:slide={{ duration: 180, easing: quintOut }}
+						>
 							<!-- stdout -->
 							{#if hook?.stdout}
 								<div

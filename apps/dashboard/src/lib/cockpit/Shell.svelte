@@ -1,6 +1,8 @@
 <script lang="ts">
   /** The whole chrome: wordmark, hub status, machine rail, and the route. */
   import type { Snippet } from 'svelte';
+  import { fly, scale } from 'svelte/transition';
+  import { quintOut } from 'svelte/easing';
   import { PanelLeft, Search, ShieldAlert } from '@lucide/svelte';
   import { afterNavigate } from '$app/navigation';
   import ThemeSwitcher from '$lib/components/ui/ThemeSwitcher.svelte';
@@ -83,7 +85,20 @@
       title="{blocked} session{blocked === 1 ? '' : 's'} awaiting approval"
     >
       <ShieldAlert size={12} />
-      {blocked}
+      <!-- The count is the app's "what needs me" heartbeat: it pops when it
+           crosses zero, and the digit re-enters when it changes. -->
+      {#if blocked > 0}
+        <span
+          in:scale={{ duration: 260, start: 0.5, easing: quintOut }}
+          out:scale={{ duration: 180, start: 0.75, easing: quintOut }}
+        >
+          {#key blocked}
+            <span class="inline-block" in:fly={{ y: 4, duration: 150, easing: quintOut }}>
+              {blocked}
+            </span>
+          {/key}
+        </span>
+      {/if}
     </a>
     <span class="flex min-h-6 items-center gap-1.5 text-[11px] text-muted-foreground">
       <span class="size-1.5 rounded-full {dot}"></span>

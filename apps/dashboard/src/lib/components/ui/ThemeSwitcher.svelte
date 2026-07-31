@@ -3,19 +3,13 @@
   import { Sun, Moon } from '@lucide/svelte';
   import { Button } from '$lib/components/ui/button';
 
-  const themeIcons = {
-    light: Sun,
-    dark: Moon,
-    system: Sun, // Use Sun as fallback for system
-  };
-
   const themeLabels = {
     light: 'Light mode',
     dark: 'Dark mode',
     system: 'System',
   };
 
-  const Icon = $derived(themeIcons[theme.current] || Sun);
+  const isDark = $derived(theme.current === 'dark');
   const label = $derived(themeLabels[theme.current] || 'Light mode');
 </script>
 
@@ -26,5 +20,8 @@
   title={label}
   aria-label={label}
 >
-  <Icon class="size-4" />
+  <span class="icon-swap size-4">
+    <span data-active={isDark}><Moon class="size-4" /></span>
+    <span data-active={!isDark}><Sun class="size-4" /></span>
+  </span>
 </Button>

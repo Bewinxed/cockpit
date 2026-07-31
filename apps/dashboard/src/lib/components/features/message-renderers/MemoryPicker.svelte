@@ -182,7 +182,7 @@
 								onclick={handleMemorySave}
 								disabled={memorySaving}
 								class="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium
-                       hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-all group"
+                       hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-[background-color,opacity] duration-150 ease-out group"
 							>
 								{#if memorySaving}
 									<LoaderCircle class="w-4 h-4 animate-spin" />

@@ -196,6 +196,34 @@
   --shadow-lg: var(--shadow-lg);
 }
 
+@theme {
+  /* One-shot "that is wrong" nudge. Per-stop easing so each leg of the swing
+     follows its own curve; the %-stops are 80/60/80/60ms of the 280ms total. */
+  --animate-shake: shake 280ms linear;
+
+  @keyframes shake {
+    0% {
+      transform: translateX(0);
+      animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    28.57% {
+      transform: translateX(6px);
+      animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    57.14% {
+      transform: translateX(-6px);
+      animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    78.57% {
+      transform: translateX(4px);
+      animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    100% {
+      transform: translateX(0);
+    }
+  }
+}
+
 @layer base {
   * {
     @apply border-border;
@@ -228,6 +256,35 @@ button.text-destructive-foreground { color: var(--destructive-foreground); }
   @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring;
   @apply disabled:cursor-not-allowed disabled:opacity-50;
   @apply transition-shadow;
+}
+
+/* Two icons sharing one slot. Both stay in the DOM and cross-fade, so the
+   outgoing icon animates out too — mark the visible one `data-active="true"`. */
+.icon-swap {
+  display: inline-grid;
+  place-items: center;
+}
+
+.icon-swap > * {
+  display: inline-flex;
+  grid-area: 1 / 1;
+  transition:
+    opacity var(--icon-swap-dur, 300ms) cubic-bezier(0.2, 0, 0, 1),
+    scale var(--icon-swap-dur, 300ms) cubic-bezier(0.2, 0, 0, 1),
+    filter var(--icon-swap-dur, 300ms) cubic-bezier(0.2, 0, 0, 1);
+}
+
+.icon-swap > [data-active='true'] {
+  opacity: 1;
+  scale: 1;
+  filter: blur(0);
+}
+
+.icon-swap > [data-active='false'] {
+  opacity: 0;
+  scale: 0.25;
+  filter: blur(4px);
+  pointer-events: none;
 }
 
 /* ========================================

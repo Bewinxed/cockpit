@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { ChevronRight, Brain } from '@lucide/svelte';
 	import { slide } from 'svelte/transition';
+	import { quintOut } from 'svelte/easing';
 	import type { MessageRendererProps } from './types';
 
 	let { message }: MessageRendererProps = $props();
@@ -48,7 +49,8 @@
 					class="mt-2 text-sm text-muted-foreground font-mono whitespace-pre-wrap pl-6 {isRedacted
 						? 'italic'
 						: ''}"
-					transition:slide={{ duration: 200 }}
+					in:slide={{ duration: 250, easing: quintOut }}
+					out:slide={{ duration: 180, easing: quintOut }}
 				>
 					{#if isRedacted}
 						<span class="text-muted-foreground/60"

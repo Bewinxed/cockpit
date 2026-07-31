@@ -410,7 +410,7 @@
 		{#each question.options as option, optIdx (option.label)}
 			{#if readOnly}
 				<div
-					class="w-full text-left px-3 py-2.5 rounded-lg transition-all flex items-start gap-3 border
+					class="w-full text-left px-3 py-2.5 rounded-lg transition-[background-color,border-color,box-shadow] duration-150 ease-out flex items-start gap-3 border
 						{isOptionSelected(qIdx, option.label)
 						? 'bg-primary/10 border-primary/40 shadow-sm'
 						: 'bg-background/50 border-transparent'}"
@@ -422,7 +422,7 @@
 					type="button"
 					role={question.multiSelect ? 'checkbox' : 'radio'}
 					aria-checked={isOptionSelected(qIdx, option.label)}
-					class="w-full text-left px-3 py-2.5 rounded-lg transition-all flex items-start gap-3 border cursor-pointer
+					class="w-full text-left px-3 py-2.5 rounded-lg transition-[background-color,border-color,box-shadow] duration-150 ease-out flex items-start gap-3 border cursor-pointer
 						{isOptionSelected(qIdx, option.label)
 						? 'bg-primary/10 border-primary/40 shadow-sm'
 						: 'bg-background/50 border-transparent hover:border-border hover:bg-accent/50'}"
@@ -435,7 +435,7 @@
 
 		<!-- Other option -->
 		<div
-			class="w-full text-left px-3 py-2.5 rounded-lg transition-all border
+			class="w-full text-left px-3 py-2.5 rounded-lg transition-[background-color,border-color] duration-150 ease-out border
 			{otherSelected.get(qIdx)
 				? 'bg-primary/10 border-primary/40'
 				: 'bg-background/50 border-transparent'}
@@ -542,7 +542,7 @@
 							{#each questions as question, qIdx (qIdx)}
 								<button
 									type="button"
-									class="flex-1 px-3 py-2.5 text-sm font-medium transition-all relative
+									class="flex-1 px-3 py-2.5 text-sm font-medium transition-colors duration-150 ease-out relative
 										{activeTab === qIdx
 											? 'text-primary bg-card/50'
 											: 'text-muted-foreground hover:text-foreground hover:bg-accent/30'}"
@@ -610,7 +610,7 @@
 								onclick={handleSubmit}
 								disabled={!canSubmit() || isSubmitting}
 								class="flex items-center gap-1.5 px-4 py-1.5 bg-primary text-primary-foreground rounded-md text-sm font-medium
-									hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+									hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-[background-color,opacity] duration-150 ease-out"
 							>
 								{#if isSubmitting}
 									<div
@@ -682,7 +682,7 @@
 									{#each questions as question, qIdx (qIdx)}
 										<button
 											type="button"
-											class="flex-1 px-3 py-2 text-xs font-medium transition-all relative
+											class="flex-1 px-3 py-2 text-xs font-medium transition-colors duration-150 ease-out relative
 												{activeTab === qIdx
 													? 'text-primary bg-card/50'
 													: 'text-muted-foreground hover:text-foreground'}"

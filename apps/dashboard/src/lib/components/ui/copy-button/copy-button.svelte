@@ -5,14 +5,13 @@
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import CopyIcon from '@lucide/svelte/icons/copy';
 	import XIcon from '@lucide/svelte/icons/x';
-	import { scale } from 'svelte/transition';
 	import type { CopyButtonProps } from './types';
 
 	let {
 		ref = $bindable(null),
 		text,
 		icon,
-		animationDuration = 500,
+		animationDuration = 300,
 		variant = 'ghost',
 		size: sizeProp = 'icon',
 		onCopy,
@@ -26,6 +25,14 @@
 	const size = $derived(sizeProp === 'icon' && children ? 'default' : sizeProp);
 
 	const clipboard = new UseClipboard();
+
+	const label = $derived(
+		clipboard.status === 'success'
+			? 'Copied'
+			: clipboard.status === 'failure'
+				? 'Failed to copy'
+				: 'Copy'
+	);
 </script>
 
 <Button
@@ -43,25 +50,17 @@
 		onCopy?.(status);
 	}}
 >
-	{#if clipboard.status === 'success'}
-		<div in:scale={{ duration: animationDuration, start: 0.85 }}>
-			<CheckIcon tabindex={-1} />
-			<span class="sr-only">Copied</span>
-		</div>
-	{:else if clipboard.status === 'failure'}
-		<div in:scale={{ duration: animationDuration, start: 0.85 }}>
-			<XIcon tabindex={-1} />
-			<span class="sr-only">Failed to copy</span>
-		</div>
-	{:else}
-		<div in:scale={{ duration: animationDuration, start: 0.85 }}>
+	<span class="icon-swap" style="--icon-swap-dur: {animationDuration}ms">
+		<span data-active={clipboard.status === 'success'}><CheckIcon tabindex={-1} /></span>
+		<span data-active={clipboard.status === 'failure'}><XIcon tabindex={-1} /></span>
+		<span data-active={clipboard.status === undefined}>
 			{#if icon}
 				{@render icon()}
 			{:else}
 				<CopyIcon tabindex={-1} />
 			{/if}
-			<span class="sr-only">Copy</span>
-		</div>
-	{/if}
+		</span>
+	</span>
+	<span class="sr-only">{label}</span>
 	{@render children?.()}
 </Button>

@@ -1,5 +1,7 @@
 <script lang="ts">
-  import { untrack } from 'svelte';
+  import { onMount, untrack } from 'svelte';
+  import { fly } from 'svelte/transition';
+  import { quintOut } from 'svelte/easing';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import type { PermissionResult } from '@cockpit/core';
@@ -126,8 +128,14 @@
 
   let view = $state<'chat' | 'flow'>('chat');
 
+  // Nothing animates on arrival: the pane slide and the state-word swap are for
+  // changes the reader caused or needs to notice, not for the page showing up.
+  let painted = $state(false);
+  onMount(() => void (painted = true));
+
   /** The tool in flight, named in the header's live region while it runs. */
   const runningTool = $derived(session?.currentTool ? ` · ${session.currentTool.name}` : '');
+  const activity = $derived(cockpit.activityOf(viewId));
 
   const branches = $derived(new Map(Object.entries(subagents)));
   const totalCostUsd = $derived(
@@ -227,7 +235,19 @@
           ? 'loading'
           : `${session?.messages.length ?? 0} messages`}
       {:else}
-        {ACTIVITY_LABEL[cockpit.activityOf(viewId)]}{runningTool} · hub {cockpit.status}
+        <!-- The word swaps in place; the dot beside the session is the static cue.
+             One inline run, so the separator's leading space survives. -->
+        <span>
+          <span class="inline-grid">
+            {#key activity}
+              <span
+                class="col-start-1 row-start-1"
+                in:fly={{ y: 5, duration: painted ? 180 : 0, easing: quintOut }}
+                out:fly={{ y: -5, duration: painted ? 140 : 0, easing: quintOut }}
+              >{ACTIVITY_LABEL[activity]}</span>
+            {/key}
+          </span>{runningTool} · hub {cockpit.status}
+        </span>
       {/if}
     </span>
 
@@ -242,7 +262,7 @@
           role="tab"
           aria-selected={view === mode}
           aria-controls="session-view-panel"
-          class="rounded px-2 py-0.5 text-xs capitalize transition-colors focus-visible:ring-2 focus-visible:ring-ring {view ===
+          class="rounded-[10px] px-2 py-0.5 text-xs capitalize transition-colors focus-visible:ring-2 focus-visible:ring-ring {view ===
           mode
             ? 'bg-accent text-foreground'
             : 'text-muted-foreground hover:text-foreground'}"
@@ -292,73 +312,90 @@
     {/if}
   </header>
 
-  {#if view === 'flow'}
-    <div class="min-h-0 flex-1" id="session-view-panel" role="tabpanel">
-      <FlowView
-        instanceId={viewId}
-        messages={session?.messages ?? []}
-        subagents={branches}
-        streamingToolId={session?.currentTool?.toolId}
-        {totalCostUsd}
-        onJump={() => (view = 'chat')}
-      />
-    </div>
-  {:else}
-    <div class="relative min-h-0 flex-1" id="session-view-panel" role="tabpanel">
+  <!-- Two panes of one screen: they slide past each other rather than cutting,
+       so the toggle reads as moving sideways instead of reloading. -->
+  <div class="relative min-h-0 flex-1" id="session-view-panel" role="tabpanel">
+    {#if view === 'flow'}
       <div
-        bind:this={scroller}
-        onscroll={trackScroll}
-        class="h-full space-y-4 overflow-y-auto px-4 py-4"
+        class="absolute inset-0"
+        in:fly={{ x: 10, duration: painted ? 200 : 0, easing: quintOut }}
+        out:fly={{ x: 10, duration: painted ? 150 : 0, easing: quintOut }}
       >
-        <div class="mx-auto flex max-w-3xl flex-col gap-4">
-          {#each groups as group (group.kind === 'single' ? group.message.id : `${group.kind}-${group.index}`)}
-            {#if group.kind === 'tools'}
-              <ToolGroup tools={group.messages} />
-            {:else if group.kind === 'subagent'}
-              <SubagentBranch branch={group.branch} spawn={group.spawn} />
-            {:else}
-              <ChatMessage message={group.message} instanceId={viewId} />
-            {/if}
-          {/each}
-
-          {#if session?.loading}
-            <p class="text-sm text-muted-foreground">Reading transcript…</p>
-          {:else if groups.length === 0 && !session?.streaming}
-            <p class="text-sm text-muted-foreground">
-              {browsing
-                ? 'This session recorded no messages.'
-                : 'Nothing said yet — send a message below to start.'}
-            </p>
-          {/if}
-
-          {#if session?.streaming}
-            <div class="flex justify-start">
-              <div
-                class="max-w-[85%] rounded-2xl rounded-bl-sm border border-border bg-card px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap text-card-foreground shadow-sm"
-              >
-                {session.streaming}
-              </div>
-            </div>
-          {/if}
-        </div>
+        <FlowView
+          instanceId={viewId}
+          messages={session?.messages ?? []}
+          subagents={branches}
+          streamingToolId={session?.currentTool?.toolId}
+          {totalCostUsd}
+          onJump={() => (view = 'chat')}
+        />
       </div>
-
-      {#if unseen}
-        <button
-          type="button"
-          class="absolute right-4 bottom-4 rounded-full border border-border bg-card px-3 py-1.5 text-xs text-foreground shadow-md transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
-          onclick={jumpToLatest}
+    {:else}
+      <div
+        class="absolute inset-0"
+        in:fly={{ x: -10, duration: painted ? 200 : 0, easing: quintOut }}
+        out:fly={{ x: -10, duration: painted ? 150 : 0, easing: quintOut }}
+      >
+        <div
+          bind:this={scroller}
+          onscroll={trackScroll}
+          class="h-full space-y-4 overflow-y-auto px-4 py-4"
         >
-          Jump to latest
-        </button>
-      {/if}
-    </div>
-  {/if}
+          <div class="mx-auto flex max-w-3xl flex-col gap-4">
+            {#each groups as group (group.kind === 'single' ? group.message.id : `${group.kind}-${group.index}`)}
+              {#if group.kind === 'tools'}
+                <ToolGroup tools={group.messages} />
+              {:else if group.kind === 'subagent'}
+                <SubagentBranch branch={group.branch} spawn={group.spawn} />
+              {:else}
+                <ChatMessage message={group.message} instanceId={viewId} />
+              {/if}
+            {/each}
+
+            {#if session?.loading}
+              <p class="text-sm text-muted-foreground">Reading transcript…</p>
+            {:else if groups.length === 0 && !session?.streaming}
+              <p class="text-sm text-muted-foreground">
+                {browsing
+                  ? 'This session recorded no messages.'
+                  : 'Nothing said yet — send a message below to start.'}
+              </p>
+            {/if}
+
+            {#if session?.streaming}
+              <div class="flex justify-start">
+                <div
+                  class="max-w-[85%] rounded-2xl rounded-bl-sm border border-border bg-card px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap text-card-foreground shadow-sm"
+                >
+                  {session.streaming}
+                </div>
+              </div>
+            {/if}
+          </div>
+        </div>
+
+        {#if unseen}
+          <button
+            type="button"
+            class="absolute right-4 bottom-4 rounded-full border border-border bg-card px-3 py-1.5 text-xs text-foreground shadow-md transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
+            onclick={jumpToLatest}
+          >
+            Jump to latest
+          </button>
+        {/if}
+      </div>
+    {/if}
+  </div>
 
   <div class="border-t border-border px-4 py-3">
     <div class="mx-auto flex max-w-3xl flex-col gap-2">
       {#if error}
-        <p class="text-xs text-error" role="alert">{error}</p>
+        <!-- Keyed so a second failure shakes again instead of sitting there. -->
+        {#key error}
+          <p class="animate-shake text-xs text-error motion-reduce:animate-none" role="alert">
+            {error}
+          </p>
+        {/key}
       {/if}
       {#if browsing}
         <div class="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3">

@@ -106,7 +106,10 @@
     rows[active]?.scrollIntoView({ block: 'nearest' });
   });
 
-  const duration = browser && window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 160;
+  const still = browser && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  /** Leaving is softer than arriving — the reader's attention is already elsewhere. */
+  const enter = still ? 0 : 200;
+  const exit = still ? 0 : 150;
 
   onMount(() => {
     const previouslyFocused = document.activeElement;
@@ -156,7 +159,8 @@
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <div
   class="fixed inset-0 z-50 flex items-start justify-center bg-black/50 px-4 pt-[15vh] backdrop-blur-sm"
-  transition:fade={{ duration }}
+  in:fade={{ duration: enter }}
+  out:fade={{ duration: exit }}
   onclick={(event) => event.target === event.currentTarget && onClose()}
 >
   <div
@@ -165,7 +169,8 @@
     aria-label="Jump to"
     tabindex="-1"
     class="flex max-h-[60vh] w-full max-w-xl flex-col overflow-hidden rounded-xl border border-border bg-card shadow-lg"
-    transition:scale={{ duration, start: 0.97, easing: quintOut }}
+    in:scale={{ duration: enter, start: 0.96, easing: quintOut }}
+    out:scale={{ duration: exit, start: 0.96, easing: quintOut }}
     onkeydown={onKeydown}
   >
     <input

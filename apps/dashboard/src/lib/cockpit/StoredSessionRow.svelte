@@ -9,7 +9,9 @@
 
 <a
   href={transcriptHref(machineId, info)}
-  class="flex flex-col rounded-lg border border-border px-3 py-2 transition-colors hover:bg-accent"
+  class="flex flex-col rounded-lg border border-border px-3 py-2
+    transition-[background-color,box-shadow,translate] duration-150 ease-out
+    hover:-translate-y-px hover:bg-accent hover:shadow-md motion-reduce:hover:translate-y-0"
 >
   <span class="flex items-baseline gap-3">
     <span class="truncate text-sm">{sessionTitle(info)}</span>

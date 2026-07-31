@@ -28,11 +28,10 @@
 
   let itemRefs: HTMLButtonElement[] = [];
 
-  // Scroll selected item into view when index changes
+  // Scroll selected item into view when index changes. Instant, not smooth:
+  // held arrow keys outrun a tween and the list lags behind the highlight.
   $effect(() => {
-    if (itemRefs[selectedIndex]) {
-      itemRefs[selectedIndex].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-    }
+    itemRefs[selectedIndex]?.scrollIntoView({ block: 'nearest' });
   });
 
   // Filter commands based on input

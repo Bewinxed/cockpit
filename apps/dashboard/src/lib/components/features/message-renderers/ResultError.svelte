@@ -8,6 +8,7 @@
 		CircleAlert
 	} from '@lucide/svelte';
 	import { slide } from 'svelte/transition';
+	import { quintOut } from 'svelte/easing';
 	import type { MessageRendererProps } from './types';
 
 	let { message }: MessageRendererProps = $props();
@@ -141,7 +142,8 @@
 						<div
 							id={detailsId}
 							class="mt-2 space-y-2"
-							transition:slide={{ duration: 200 }}
+							in:slide={{ duration: 250, easing: quintOut }}
+							out:slide={{ duration: 180, easing: quintOut }}
 						>
 							{#each errors as error, i (i)}
 								<div class="text-xs font-mono text-muted-foreground bg-muted/50 rounded px-2 py-1.5 whitespace-pre-wrap">

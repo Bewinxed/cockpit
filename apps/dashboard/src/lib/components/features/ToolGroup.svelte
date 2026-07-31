@@ -5,7 +5,10 @@
 	import DiffView from './DiffView.svelte';
 	import DiffModal from './DiffModal.svelte';
 	import { getToolGlance, getResultGlimpse } from '$lib/utils/tool-display';
+	import { untrack } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
+	import { scale } from 'svelte/transition';
+	import { quintOut } from 'svelte/easing';
 
 	interface Props {
 		tools: Message[];
@@ -19,6 +22,10 @@
 	// Check if all tools are complete
 	const hasErrors = $derived(tools.some(t => t.metadata?.toolStatus === 'error'));
 	const pendingCount = $derived(tools.filter(t => t.metadata?.toolStatus === 'pending').length);
+
+	// A group read back from a stored transcript arrives already finished — only a
+	// run that lands while you are watching earns the completion pop.
+	const startedPending = untrack(() => tools.some(t => t.metadata?.toolStatus === 'pending'));
 
 	// Get icon for tool type
 	function getToolIcon(toolName: string | undefined) {
@@ -91,7 +98,9 @@
 				<CircleX class="w-4 h-4 text-destructive" />
 				<span class="text-xs text-destructive">Error</span>
 			{:else}
-				<CircleCheck class="w-4 h-4 text-success" />
+				<span in:scale={{ duration: startedPending ? 260 : 0, start: 0.25, easing: quintOut }}>
+					<CircleCheck class="w-4 h-4 text-success" />
+				</span>
 				<span class="text-xs text-success">Complete</span>
 			{/if}
 		</div>
@@ -201,12 +210,12 @@
 	</div>
 </div>
 
-<!-- Diff Modal -->
+<!-- Diff Modal — the data outlives the close so the panel can animate out. -->
 {#if diffModalOpen && diffModalData}
 	<DiffModal
 		filePath={diffModalData.filePath}
 		oldContent={diffModalData.oldContent}
 		newContent={diffModalData.newContent}
-		onClose={() => { diffModalOpen = false; diffModalData = null; }}
+		onClose={() => (diffModalOpen = false)}
 	/>
 {/if}

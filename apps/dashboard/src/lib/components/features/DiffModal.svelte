@@ -1,5 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
+  import { fade, scale } from 'svelte/transition';
+  import { quintOut } from 'svelte/easing';
   import { FileDiff, parseDiffFromFile, type FileContents } from '@pierre/diffs';
   import { X, Columns2, TextAlignStart } from '@lucide/svelte';
   import { Button } from '$lib/components/ui/button';
@@ -186,7 +188,9 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <div
-  class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in"
+  class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+  in:fade={{ duration: 200 }}
+  out:fade={{ duration: 150 }}
   onclick={handleBackdropClick}
 >
   <div
@@ -195,7 +199,9 @@
     aria-modal="true"
     aria-label={`Diff: ${filePath}`}
     tabindex="-1"
-    class="relative w-[95vw] h-[90vh] max-w-7xl bg-background rounded-xl shadow-2xl border border-border flex flex-col overflow-hidden animate-scale-in"
+    class="relative w-[95vw] h-[90vh] max-w-7xl bg-background rounded-xl shadow-2xl border border-border flex flex-col overflow-hidden"
+    in:scale={{ duration: 200, start: 0.96, easing: quintOut }}
+    out:scale={{ duration: 150, start: 0.96, easing: quintOut }}
   >
     <!-- Header -->
     <div class="flex items-center justify-between px-4 py-3 border-b border-border bg-card">
@@ -226,7 +232,9 @@
             variant={diffStyle === 'unified' ? 'outline' : 'ghost'}
             size="sm"
             onclick={() => diffStyle = 'unified'}
-            class="h-7 text-xs {diffStyle === 'unified' ? 'bg-background border-border shadow-sm' : ''}"
+            class="h-7 rounded-[14px] text-xs {diffStyle === 'unified'
+              ? 'bg-background border-border shadow-sm'
+              : ''}"
             aria-pressed={diffStyle === 'unified'}
             title="Unified view"
           >
@@ -237,7 +245,9 @@
             variant={diffStyle === 'split' ? 'outline' : 'ghost'}
             size="sm"
             onclick={() => diffStyle = 'split'}
-            class="h-7 text-xs {diffStyle === 'split' ? 'bg-background border-border shadow-sm' : ''}"
+            class="h-7 rounded-[14px] text-xs {diffStyle === 'split'
+              ? 'bg-background border-border shadow-sm'
+              : ''}"
             aria-pressed={diffStyle === 'split'}
             title="Split view"
           >
@@ -269,30 +279,6 @@
 </div>
 
 <style>
-  @keyframes fade-in {
-    from { opacity: 0; }
-    to { opacity: 1; }
-  }
-
-  @keyframes scale-in {
-    from {
-      opacity: 0;
-      transform: scale(0.95);
-    }
-    to {
-      opacity: 1;
-      transform: scale(1);
-    }
-  }
-
-  .animate-fade-in {
-    animation: fade-in 0.15s ease-out;
-  }
-
-  .animate-scale-in {
-    animation: scale-in 0.2s ease-out;
-  }
-
   /* @pierre/diffs renders into a shadowRoot, so it can only be themed through
      the inherited custom properties it documents in its core stylesheet. */
   .diff-modal-content {
