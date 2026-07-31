@@ -2,7 +2,11 @@
 	import { Streamdown, theme as streamdownTheme, type Theme } from 'svelte-streamdown';
 	import { PROSE } from '$lib/prose';
 
-	let { source, invert = false }: { source: string; invert?: boolean } = $props();
+	let {
+		source,
+		invert = false,
+		streaming = false,
+	}: { source: string; invert?: boolean; streaming?: boolean } = $props();
 
 	// Streamdown's stock themes hardcode a Tailwind palette (bg-gray-100,
 	// text-blue-600, marker:hidden) that would out-shout PROSE. Blank every
@@ -54,4 +58,5 @@
 	theme={PLAIN}
 	mergeTheme={false}
 	controls={{ code: false, mermaid: false, table: false }}
+	static={!streaming}
 />
