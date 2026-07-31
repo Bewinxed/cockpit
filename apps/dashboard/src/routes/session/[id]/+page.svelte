@@ -59,6 +59,10 @@
   /** Whether the reader is parked at the live edge — measured before every growth. */
   let atBottom = $state(true);
   let unseen = $state(false);
+  /** Absolute deadline while a user-toggled disclosure is animating — the pin
+   *  must not chase growth the reader asked for. Re-armed from real geometry
+   *  once the animation settles. */
+  let followHold = 0;
 
   function trackScroll() {
     if (!scroller) return;
@@ -77,14 +81,28 @@
   // pinned frame by frame, and never fights an in-flight height animation.
   $effect(() => {
     if (!scroller) return;
-    const column = scroller.firstElementChild;
+    const node = scroller;
+    const column = node.firstElementChild;
     if (!column) return;
     const follow = new ResizeObserver(() => {
       if (!scroller) return;
+      if (performance.now() < followHold) return;
       if (atBottom) scroller.scrollTop = scroller.scrollHeight;
     });
+    const noteToggle = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (!target.closest('[data-slot="collapsible-trigger"], [aria-expanded]')) return;
+      followHold = performance.now() + 400; // grid animation is 250ms; slack for layout
+      // Where the toggle left the reader decides whether following resumes:
+      // a small panel keeps them at the edge, a tall one parks them on it.
+      setTimeout(trackScroll, 420);
+    };
     follow.observe(column);
-    return () => follow.disconnect();
+    node.addEventListener('click', noteToggle, true);
+    return () => {
+      follow.disconnect();
+      node.removeEventListener('click', noteToggle, true);
+    };
   });
 
   // Chasing the bottom while the user is reading further up yanks the transcript
