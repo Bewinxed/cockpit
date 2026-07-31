@@ -8,7 +8,10 @@
   import PermissionCard from '$lib/cockpit/PermissionCard.svelte';
   import {
     cockpit,
+    discardSession,
+    forkSession,
     interrupt,
+    keepSession,
     openSession,
     openTranscript,
     resolvePermission,
@@ -123,12 +126,58 @@
     });
     await goto(`/session/${instanceId}`);
   }
+
+  /** The SDK session this view can branch from: the stored one, or the live one's. */
+  const forkable = $derived(browsing ? viewId : (session?.sessionId ?? null));
+
+  async function handleFork() {
+    if (!session || !forkable) return;
+    const instanceId = forkSession({
+      machineId: browsing ?? session.machineId,
+      cwd: browsing ? browsingCwd : session.cwd,
+      sessionId: forkable,
+      history: session.messages,
+    });
+    await goto(`/session/${instanceId}`);
+  }
+
+  async function handleDiscard() {
+    if (!session) return;
+    error = null;
+    try {
+      await discardSession(viewId, session.machineId);
+      await goto('/session');
+    } catch (err) {
+      error = err instanceof Error ? err.message : String(err);
+    }
+  }
+
+  async function handleKeep() {
+    error = null;
+    try {
+      await keepSession(viewId);
+    } catch (err) {
+      error = err instanceof Error ? err.message : String(err);
+    }
+  }
+
+  let error = $state<string | null>(null);
+
+  const action =
+    'shrink-0 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40';
 </script>
 
 <div class="flex h-full flex-1 flex-col overflow-hidden">
   <header class="flex items-center gap-3 border-b border-border px-4 py-2">
     <a href="/session" class="text-sm text-muted-foreground hover:text-foreground">Sessions</a>
     <span class="truncate font-mono text-sm">{session?.cwd || viewId}</span>
+    {#if session?.scratch}
+      <span
+        class="shrink-0 rounded-sm border border-dashed border-border px-1.5 py-0.5 text-[10px] tracking-wide text-muted-foreground uppercase"
+      >
+        side quest
+      </span>
+    {/if}
     <span class="ml-auto shrink-0 text-xs text-muted-foreground">
       {#if browsing}
         transcript · {session?.loading ? 'loading' : `${session?.messages.length ?? 0} messages`}
@@ -154,11 +203,25 @@
     {#if !browsing}
       <button
         type="button"
-        class="rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-        onclick={() => session && stopSession(viewId, session.machineId)}
+        class={action}
+        disabled={!forkable}
+        title="Branch a side quest off this session"
+        onclick={handleFork}
       >
-        Stop
+        Fork
       </button>
+      {#if session?.scratch}
+        <button type="button" class={action} onclick={handleKeep}>Keep</button>
+        <button type="button" class={action} onclick={handleDiscard}>Discard</button>
+      {:else}
+        <button
+          type="button"
+          class={action}
+          onclick={() => session && stopSession(viewId, session.machineId)}
+        >
+          Stop
+        </button>
+      {/if}
     {/if}
   </header>
 
@@ -204,7 +267,10 @@
   {/if}
 
   <div class="border-t border-border px-4 py-3">
-    <div class="mx-auto max-w-3xl">
+    <div class="mx-auto flex max-w-3xl flex-col gap-2">
+      {#if error}
+        <p class="text-xs text-error">{error}</p>
+      {/if}
       {#if browsing}
         <div class="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3">
           <span class="text-sm text-muted-foreground">
@@ -212,7 +278,15 @@
           </span>
           <button
             type="button"
-            class="ml-auto rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-40"
+            class="ml-auto {action}"
+            disabled={session?.loading || cockpit.status !== 'connected'}
+            onclick={handleFork}
+          >
+            Fork
+          </button>
+          <button
+            type="button"
+            class="rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-40"
             disabled={session?.loading || cockpit.status !== 'connected'}
             onclick={handleResume}
           >
@@ -220,6 +294,12 @@
           </button>
         </div>
       {:else}
+        {#if session?.ephemeral}
+          <p class="text-xs text-muted-foreground">
+            Session is ephemeral — future turns continue live only, nothing is written to session
+            storage.
+          </p>
+        {/if}
         <ChatInput
           onSend={handleSend}
           onInterrupt={handleInterrupt}

@@ -41,6 +41,12 @@ export interface SpawnPayload {
   instanceId: string;
   cwd: string;
   options?: Options;
+  /**
+   * A side quest (NEW.md §1): throwaway work. `worktree` runs the session in a
+   * detached git worktree of `baseCwd` (the spawn's `cwd` when absent) so the
+   * experiment cannot touch the checkout the mainline session is using.
+   */
+  scratch?: { worktree?: boolean; baseCwd?: string };
 }
 
 /** `send`: one turn of input for a live session's prompt stream. */
@@ -52,6 +58,10 @@ export interface SendPayload {
 /** `stop`: interrupt and close a live session. */
 export interface StopPayload {
   instanceId: string;
+  /** Also tear down what the spawn created for a side quest — its git worktree. */
+  discard?: boolean;
+  /** Correlates the `control_result` frame a discard's teardown answers with. */
+  requestId?: string;
 }
 
 /**

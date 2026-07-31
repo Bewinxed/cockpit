@@ -21,6 +21,8 @@ import type { Activity } from './activity';
 import { activityOf } from './activity';
 import type { Message } from './types';
 import {
+  CONTROL_TIMEOUT_MS,
+  DISCARD_TIMEOUT_MS,
   SESSION_CATALOG_LIMIT,
   WS_RECONNECT_BASE_DELAY,
   WS_RECONNECT_MAX_ATTEMPTS,
@@ -55,7 +57,13 @@ export interface InstanceRow {
   cwd: string;
   status: string;
   sessionId: string | null;
+  /** `scratch` for a side quest; absent from a hub that predates the column. */
+  kind?: string;
 }
+
+/** Stopped and discarded sessions are history — the rails only show live ones. */
+const isLive = (row: InstanceRow): boolean =>
+  row.status !== 'stopped' && row.status !== 'discarded';
 
 export interface PendingPermission {
   requestId: string;
@@ -97,6 +105,10 @@ export interface SessionState {
   loading: boolean;
   /** The `system.init` banner is re-emitted every turn; render it once. */
   initialized: boolean;
+  /** A side quest (NEW.md §1) — kept visually apart until it is kept or discarded. */
+  scratch: boolean;
+  /** Spawned with `persistSession: false`: the SDK is writing no transcript for it. */
+  ephemeral: boolean;
 }
 
 const state = $state({
@@ -179,6 +191,8 @@ function session(instanceId: string): SessionState {
     lastActivityAt: null,
     loading: false,
     initialized: false,
+    scratch: false,
+    ephemeral: false,
   };
   state.sessions[instanceId] = created;
   // Read it back: the literal above is the raw target, and `$state` writes land
@@ -199,6 +213,10 @@ function hydrate(target: SessionState): void {
   target.machineId = known.machineId;
   target.cwd = known.cwd;
   target.sessionId = known.sessionId;
+  // The row records the kind, not the SDK option behind it — every side quest
+  // this app spawns is ephemeral, so the row answers for both after a reload.
+  target.scratch = known.kind === 'scratch';
+  target.ephemeral = target.scratch;
 }
 
 /** Opens a session's view state — the route's half of arriving at `/session/[id]`. */
@@ -425,14 +443,21 @@ function userMessage(text: string): SendPayload['message'] {
 }
 
 /** Spawns a session on `machineId` and registers the view it streams into. */
-function start(machineId: string, cwd: string, options: Options): SessionState {
+function start(
+  machineId: string,
+  cwd: string,
+  options: Options,
+  scratch?: SpawnPayload['scratch']
+): SessionState {
   const instanceId = crypto.randomUUID();
-  const payload: SpawnPayload = { instanceId, cwd, options };
+  const payload: SpawnPayload = { instanceId, cwd, options, scratch };
   send({ verb: 'spawn', machineId, instanceId, payload });
 
   const created = session(instanceId);
   created.machineId = machineId;
   created.cwd = cwd;
+  created.ephemeral = options.persistSession === false;
+  created.scratch = created.ephemeral || Boolean(scratch);
   return created;
 }
 
@@ -442,13 +467,15 @@ export function spawnSession({
   cwd,
   prompt,
   options = {},
+  scratch,
 }: {
   machineId: string;
   cwd: string;
   prompt?: string;
   options?: Options;
+  scratch?: SpawnPayload['scratch'];
 }): string {
-  const created = start(machineId, cwd, options);
+  const created = start(machineId, cwd, options, scratch);
   if (prompt?.trim()) sendText(created.instanceId, machineId, prompt.trim());
   void refresh();
   return created.instanceId;
@@ -478,6 +505,32 @@ export function resumeSession({
   return created.instanceId;
 }
 
+/**
+ * Branches a side quest off a session (NEW.md §1): the same context, a new SDK
+ * session, and nothing written to disk — a fork exists to be thrown away. The
+ * transcript on screen is seeded so the branch reads on from where it left.
+ */
+export function forkSession({
+  machineId,
+  cwd,
+  sessionId,
+  history = [],
+}: {
+  machineId: string;
+  cwd: string;
+  sessionId: string;
+  history?: Message[];
+}): string {
+  const created = start(machineId, cwd, {
+    resume: sessionId,
+    forkSession: true,
+    persistSession: false,
+  });
+  created.messages = history.map((message) => ({ ...message, instanceId: created.instanceId }));
+  void refresh();
+  return created.instanceId;
+}
+
 export function sendText(instanceId: string, machineId: string, text: string): void {
   const payload: SendPayload = { instanceId, message: userMessage(text) };
   send({ verb: 'send', machineId, instanceId, payload });
@@ -491,13 +544,51 @@ export function stopSession(instanceId: string, machineId: string): void {
   const payload: StopPayload = { instanceId };
   send({ verb: 'stop', machineId, instanceId, payload });
 
+  settleStopped(instanceId);
+  void refresh();
+}
+
+/**
+ * Throws a side quest away: the session stops and the agent tears down whatever
+ * the spawn created for it. Resolves once the agent confirms the teardown, so a
+ * worktree that could not be removed is reported rather than silently left.
+ */
+export async function discardSession(instanceId: string, machineId: string): Promise<void> {
+  const requestId = crypto.randomUUID();
+  const payload: StopPayload = { instanceId, discard: true, requestId };
+  settleStopped(instanceId);
+
+  try {
+    await ask<void>(requestId, 'discard', DISCARD_TIMEOUT_MS, () =>
+      send({ verb: 'stop', machineId, instanceId, requestId, payload })
+    );
+  } finally {
+    delete state.sessions[instanceId];
+    await refresh();
+  }
+}
+
+/** Promotes a side quest to mainline work — the UI stops setting it apart. */
+export async function keepSession(instanceId: string): Promise<void> {
+  const response = await fetch(`/api/instances/${instanceId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ kind: 'mainline' }),
+  });
+  if (!response.ok) throw new Error(`could not keep session: ${response.status}`);
+
+  session(instanceId).scratch = false;
+  await refresh();
+}
+
+/** The view state a session leaves behind once it is no longer running. */
+function settleStopped(instanceId: string): void {
   const target = session(instanceId);
   target.busy = false;
   target.currentTool = null;
   // The agent denies whatever was parked as it tears the session down, so these
   // answer to nobody — leaving them would pin a dead session to the fleet rail.
   target.pending = [];
-  void refresh();
 }
 
 function control(instanceId: string, machineId: string, method: string, args: unknown[]): void {
@@ -514,15 +605,27 @@ export async function machineControl<T>(
   machineId: string,
   method: string,
   args: unknown[] = [],
-  replyTimeoutMs = 15000
+  replyTimeoutMs = CONTROL_TIMEOUT_MS
 ): Promise<T> {
   await waitForOpen();
   const requestId = crypto.randomUUID();
   const payload: ControlPayload = { requestId, method, args };
+  return ask<T>(requestId, method, replyTimeoutMs, () =>
+    send({ verb: 'control', machineId, requestId, payload })
+  );
+}
+
+/** Sends something the agent answers by `requestId`, and waits for that answer. */
+function ask<T>(
+  requestId: string,
+  label: string,
+  timeoutMs: number,
+  dispatch: () => void
+): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => {
-      if (inflight.delete(requestId)) reject(new Error(`${method} timed out`));
-    }, replyTimeoutMs);
+      if (inflight.delete(requestId)) reject(new Error(`${label} timed out`));
+    }, timeoutMs);
     inflight.set(requestId, {
       resolve: (result) => {
         clearTimeout(timer);
@@ -534,7 +637,7 @@ export async function machineControl<T>(
       },
     });
     try {
-      send({ verb: 'control', machineId, requestId, payload });
+      dispatch();
     } catch (error) {
       clearTimeout(timer);
       inflight.delete(requestId);
@@ -620,7 +723,7 @@ export function resolvePermission(
  */
 function blockedRequests(): BlockedRequest[] {
   const stopped = new Set(
-    state.instances.filter((row) => row.status === 'stopped').map((row) => row.id)
+    state.instances.filter((row) => !isLive(row)).map((row) => row.id)
   );
 
   const rows: BlockedRequest[] = [];
@@ -654,11 +757,17 @@ export const cockpit = {
     return state.instances;
   },
   get runningInstances() {
-    return state.instances.filter((instance) => instance.status !== 'stopped');
+    return state.instances.filter(isLive);
   },
-  /** Live sessions on one machine — what the sidebar groups under it. */
+  /** Live mainline sessions on one machine — what the sidebar groups under it. */
   runningOn: (machineId: string): InstanceRow[] =>
-    state.instances.filter((row) => row.machineId === machineId && row.status !== 'stopped'),
+    state.instances.filter(
+      (row) => row.machineId === machineId && isLive(row) && row.kind !== 'scratch'
+    ),
+  /** Live side quests across the fleet — kept in their own section, not per machine. */
+  get scratchInstances(): InstanceRow[] {
+    return state.instances.filter((row) => isLive(row) && row.kind === 'scratch');
+  },
   /** Stored sessions on one machine, as `listSessions` returned them. */
   catalogOf: (machineId: string): SDKSessionInfo[] => state.catalog[machineId] ?? [],
   session: (instanceId: string): SessionState | null => state.sessions[instanceId] ?? null,

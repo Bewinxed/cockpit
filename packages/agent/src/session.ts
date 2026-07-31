@@ -73,6 +73,16 @@ interface Session {
   readonly pump: Promise<void>;
 }
 
+/** The checkout a side quest ran in, kept until the quest is discarded. */
+interface Worktree {
+  path: string;
+  /** The repository root the worktree was added from — where it is removed from too. */
+  root: string;
+}
+
+/** Where a side quest's worktrees live, relative to the repo they branch off. */
+const WORKTREE_DIR = '.cockpit-worktrees';
+
 /** A `Query` method or SDK session function reached by name through `control`. */
 type ControlMethod = (...args: unknown[]) => unknown;
 
@@ -94,6 +104,10 @@ const SESSION_FUNCTIONS = {
  */
 export class SessionSupervisor {
   readonly #sessions = new Map<string, Session>();
+  /** Outlives its session: a discard can arrive after the query already ended. */
+  readonly #worktrees = new Map<string, Worktree>();
+  /** One chain per instance, so envelopes about it are handled in arrival order. */
+  readonly #queues = new Map<string, Promise<void>>();
 
   /**
    * Re-pointed at each hub connection. Frames produced while the hub is away are
@@ -102,10 +116,21 @@ export class SessionSupervisor {
    */
   sink: FrameSink = () => {};
 
-  /** Fire-and-forget: the socket callback has nowhere to put a rejection. */
+  /**
+   * Fire-and-forget: the socket callback has nowhere to put a rejection. Queued
+   * per instance because a `send` that overtakes the `spawn` it follows finds no
+   * session, and a spawn is slow whenever it has a worktree to cut first.
+   */
   dispatch(envelope: Envelope): void {
-    this.#route(envelope).catch((error: unknown) => {
-      warn(`${envelope.verb} failed: ${error}`);
+    const key = envelope.instanceId ?? '';
+    const queue = (this.#queues.get(key) ?? Promise.resolve())
+      .then(() => this.#route(envelope))
+      .catch((error: unknown) => {
+        warn(`${envelope.verb} failed: ${error}`);
+      });
+    this.#queues.set(key, queue);
+    void queue.then(() => {
+      if (this.#queues.get(key) === queue) this.#queues.delete(key);
     });
   }
 
@@ -129,7 +154,22 @@ export class SessionSupervisor {
     }
   }
 
-  async #spawn({ instanceId, cwd, options }: SpawnPayload): Promise<void> {
+  async #spawn({ instanceId, cwd, options, scratch }: SpawnPayload): Promise<void> {
+    let workdir = cwd;
+    if (scratch?.worktree) {
+      try {
+        workdir = await this.#addWorktree(instanceId, scratch.baseCwd ?? cwd);
+      } catch (error) {
+        this.sink({
+          kind: 'error',
+          instanceId,
+          verb: 'spawn',
+          message: error instanceof Error ? error.message : String(error),
+        });
+        return;
+      }
+    }
+
     const input = new InputStream();
     const permissions = new Map<string, (result: PermissionResult) => void>();
 
@@ -142,7 +182,7 @@ export class SessionSupervisor {
         forwardSubagentText: true,
         agentProgressSummaries: true,
         ...options,
-        cwd,
+        cwd: workdir,
         includePartialMessages: true,
         canUseTool: (toolName, toolInput, { requestId, suggestions }) =>
           new Promise<PermissionResult>((resolve) => {
@@ -179,21 +219,71 @@ export class SessionSupervisor {
     this.#session(instanceId).input.push(message);
   }
 
-  async #stop({ instanceId }: StopPayload): Promise<void> {
+  async #stop({ instanceId, discard, requestId }: StopPayload): Promise<void> {
     const session = this.#sessions.get(instanceId);
-    if (!session) return;
-    this.#sessions.delete(instanceId);
+    if (session) {
+      this.#sessions.delete(instanceId);
 
-    session.input.end();
-    // Unblock anything parked on a permission prompt, or the loop never ends.
-    for (const resolve of session.permissions.values()) {
-      resolve({ behavior: 'deny', message: 'session stopped' });
+      session.input.end();
+      // Unblock anything parked on a permission prompt, or the loop never ends.
+      for (const resolve of session.permissions.values()) {
+        resolve({ behavior: 'deny', message: 'session stopped' });
+      }
+      session.permissions.clear();
+
+      await session.handle.interrupt().catch(() => {});
+      session.handle.close();
+      await session.pump;
     }
-    session.permissions.clear();
+    if (!discard) return;
 
-    await session.handle.interrupt().catch(() => {});
-    session.handle.close();
-    await session.pump;
+    // Discarding is answered like a control call: the dashboard that asked waits
+    // on `requestId` to learn whether the worktree really went away.
+    try {
+      await this.#removeWorktree(instanceId);
+      if (requestId) this.sink({ kind: 'control_result', instanceId, requestId, ok: true });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (requestId)
+        this.sink({ kind: 'control_result', instanceId, requestId, ok: false, error: message });
+      else this.sink({ kind: 'error', instanceId, verb: 'stop', message });
+    }
+  }
+
+  /**
+   * A detached worktree of `baseCwd` for a side quest to work in — detached so a
+   * scratch session can never move the branch the mainline session is sitting on.
+   */
+  async #addWorktree(instanceId: string, baseCwd: string): Promise<string> {
+    const repository = await Bun.$`git -C ${baseCwd} rev-parse --show-toplevel`.quiet().nothrow();
+    if (repository.exitCode !== 0) {
+      throw new Error(`a worktree side quest needs a git repository, and ${baseCwd} is not one`);
+    }
+
+    const root = repository.text().trim();
+    const path = `${root}/${WORKTREE_DIR}/${instanceId.slice(0, 8)}`;
+    await Bun.$`mkdir -p ${`${root}/${WORKTREE_DIR}`}`.quiet();
+    const added = await Bun.$`git -C ${root} worktree add ${path} --detach`.quiet().nothrow();
+    if (added.exitCode !== 0) {
+      throw new Error(`git worktree add failed: ${added.stderr.toString().trim()}`);
+    }
+
+    this.#worktrees.set(instanceId, { path, root });
+    return path;
+  }
+
+  /** Throws away a side quest's checkout; a session that had none is a no-op. */
+  async #removeWorktree(instanceId: string): Promise<void> {
+    const worktree = this.#worktrees.get(instanceId);
+    if (!worktree) return;
+    this.#worktrees.delete(instanceId);
+
+    const removed =
+      await Bun.$`git -C ${worktree.root} worktree remove --force ${worktree.path}`.quiet().nothrow();
+    if (removed.exitCode !== 0) {
+      throw new Error(`git worktree remove failed: ${removed.stderr.toString().trim()}`);
+    }
+    await Bun.$`git -C ${worktree.root} worktree prune`.quiet().nothrow();
   }
 
   async #control({ instanceId, requestId, method, args = [] }: ControlPayload): Promise<void> {

@@ -33,9 +33,11 @@ export const instances = sqliteTable('instances', {
   /** SDK session id, absent until the first init frame arrives. */
   sessionId: text('session_id'),
   cwd: text('cwd').notNull(),
+  /** `scratch`: a side quest (NEW.md §1), shown apart from mainline work. */
+  kind: text('kind').$type<'mainline' | 'scratch'>().notNull().default('mainline'),
   /** `unknown`: the agent socket dropped, so the hub can no longer see the session. */
   status: text('status')
-    .$type<'starting' | 'running' | 'stopped' | 'unknown'>()
+    .$type<'starting' | 'running' | 'stopped' | 'discarded' | 'unknown'>()
     .notNull()
     .default('starting'),
   createdAt: timestamp('created_at').notNull().$defaultFn(() => new Date()),

@@ -1,0 +1,1 @@
+ALTER TABLE `instances` ADD `kind` text DEFAULT 'mainline' NOT NULL;

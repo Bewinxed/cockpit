@@ -12,8 +12,12 @@
   const machines = $derived(
     [...cockpit.machines].sort((a, b) => a.hostname.localeCompare(b.hostname))
   );
+  // One list for the whole fleet: a side quest is a thing in flight, not a thing
+  // that belongs to a machine, and it is the rail's most perishable content.
+  const sideQuests = $derived(cockpit.scratchInstances);
 
   const isCurrent = (href: string) => page.url.pathname + page.url.search === href;
+  const leaf = (cwd: string) => cwd.split('/').pop() || cwd;
 </script>
 
 <nav class="flex w-64 shrink-0 flex-col overflow-y-auto border-r border-border bg-card/40">
@@ -28,6 +32,30 @@
       + New
     </a>
   </div>
+
+  {#if sideQuests.length > 0}
+    <section class="flex flex-col gap-1 px-2 pb-2">
+      <span class="px-1 text-[11px] font-medium tracking-wider text-muted-foreground uppercase">
+        Side quests
+      </span>
+      {#each sideQuests as instance (instance.id)}
+        {@const activity = cockpit.activityOf(instance.id)}
+        <a
+          href="/session/{instance.id}"
+          class="flex items-center gap-2 rounded-md border border-dashed border-border px-2 py-1 text-xs transition-colors hover:bg-accent
+            {isCurrent(`/session/${instance.id}`)
+            ? 'bg-accent text-foreground'
+            : 'text-muted-foreground'}"
+        >
+          <ActivityDot {activity} size={1.5} />
+          <span class="truncate font-mono">{leaf(instance.cwd)}</span>
+          <span class="ml-auto shrink-0 rounded-sm bg-accent px-1 text-[10px] tracking-wide">
+            scratch
+          </span>
+        </a>
+      {/each}
+    </section>
+  {/if}
 
   {#each machines as machine (machine.machineId)}
     {@const running = cockpit.runningOn(machine.machineId)}
@@ -60,7 +88,7 @@
             : 'text-muted-foreground'}"
         >
           <ActivityDot {activity} size={1.5} />
-          <span class="truncate font-mono">{instance.cwd.split('/').pop() || instance.cwd}</span>
+          <span class="truncate font-mono">{leaf(instance.cwd)}</span>
           <span class="ml-auto shrink-0 text-[11px] {activity === 'blocked' ? 'text-warning' : ''}">
             {activity}
           </span>

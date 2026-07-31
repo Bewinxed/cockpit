@@ -1,8 +1,8 @@
 import type { Envelope, Verb } from '@cockpit/core';
-import { Elysia } from 'elysia';
+import { Elysia, t } from 'elysia';
 import { websocket } from 'elysia/websocket';
 import { HUB_VERSION } from './config';
-import type { DbShape } from './db';
+import type { DbShape, InstanceKind } from './db';
 import type { PendingShape } from './pending';
 import type { HubSocket, RegistryShape } from './registry';
 
@@ -38,8 +38,8 @@ const failure = (
 
 /**
  * The hub routes on envelope fields and is otherwise payload-opaque (NEW.md
- * §6); `hostname`/`os` on register, `cwd` and `options.resume` on spawn and
- * `kind` on a frame are the whole set of sanctioned peeks.
+ * §6); `hostname`/`os` on register, `cwd`/`options.resume`/`scratch` on spawn,
+ * `discard` on stop and `kind` on a frame are the whole set of sanctioned peeks.
  */
 const peek = (payload: unknown, key: string): string | undefined => {
   if (typeof payload !== 'object' || payload === null) return undefined;
@@ -52,6 +52,23 @@ const peekResume = (payload: unknown): string | undefined => {
   if (typeof payload !== 'object' || payload === null) return undefined;
   return peek((payload as Record<string, unknown>).options, 'resume');
 };
+
+/** A spawn asking for scratch isolation, or for a session the SDK never stores. */
+const peekKind = (payload: unknown): InstanceKind => {
+  if (typeof payload !== 'object' || payload === null) return 'mainline';
+  const { scratch, options } = payload as { scratch?: unknown; options?: unknown };
+  const ephemeral =
+    typeof options === 'object' &&
+    options !== null &&
+    (options as { persistSession?: unknown }).persistSession === false;
+  return scratch || ephemeral ? 'scratch' : 'mainline';
+};
+
+/** `stop { discard: true }`: the side quest is being thrown away, not paused. */
+const peekDiscard = (payload: unknown): boolean =>
+  typeof payload === 'object' &&
+  payload !== null &&
+  (payload as { discard?: unknown }).discard === true;
 
 export const createServer = ({ registry, db, pending }: HubServices) => {
   /** Relays a dashboard envelope to its machine; reports back if nobody is home. */
@@ -70,6 +87,11 @@ export const createServer = ({ registry, db, pending }: HubServices) => {
     .get('/health', () => ({ ok: true, version: HUB_VERSION }))
     .get('/api/agents', () => db.listAgents())
     .get('/api/instances', () => db.listInstances())
+    .patch(
+      '/api/instances/:id',
+      { body: t.Object({ kind: t.Union([t.Literal('mainline'), t.Literal('scratch')]) }) },
+      ({ params, body }) => db.setInstanceKind(params.id, body.kind)
+    )
     .get('/api/pending', () => pending.list())
     .ws('/ws', {
       message(ws, message) {
@@ -134,13 +156,17 @@ export const createServer = ({ registry, db, pending }: HubServices) => {
                 machineId: message.machineId,
                 cwd: peek(message.payload, 'cwd') ?? '',
                 sessionId: peekResume(message.payload),
+                kind: peekKind(message.payload),
               });
             break;
           case 'send':
             forward(message, ws);
             break;
           case 'stop':
-            if (forward(message, ws) && message.instanceId) db.stopInstance(message.instanceId);
+            if (forward(message, ws) && message.instanceId) {
+              if (peekDiscard(message.payload)) db.discardInstance(message.instanceId);
+              else db.stopInstance(message.instanceId);
+            }
             break;
           case 'control':
             if (forward(message, ws) && message.requestId) {

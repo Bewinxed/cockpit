@@ -10,6 +10,8 @@
   let machineId = $state('');
   let cwd = $state('');
   let prompt = $state('');
+  let sideQuest = $state(false);
+  let worktree = $state(false);
   let error = $state<string | null>(null);
 
   // Default to the first machine that comes online.
@@ -23,7 +25,13 @@
     event.preventDefault();
     error = null;
     try {
-      const instanceId = spawnSession({ machineId, cwd: cwd.trim(), prompt });
+      const instanceId = spawnSession({
+        machineId,
+        cwd: cwd.trim(),
+        prompt,
+        options: sideQuest ? { persistSession: false } : {},
+        scratch: sideQuest && worktree ? { worktree: true, baseCwd: cwd.trim() } : undefined,
+      });
       await goto(`/session/${instanceId}`);
     } catch (err) {
       error = err instanceof Error ? err.message : String(err);
@@ -102,6 +110,18 @@
             class="resize-y rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground placeholder:text-muted-foreground"
           ></textarea>
         </label>
+
+        <label class="flex items-center gap-2 text-xs text-muted-foreground">
+          <input type="checkbox" bind:checked={sideQuest} class="accent-primary" />
+          Side quest — ephemeral, nothing written to session storage
+        </label>
+
+        {#if sideQuest}
+          <label class="flex items-center gap-2 pl-5 text-xs text-muted-foreground">
+            <input type="checkbox" bind:checked={worktree} class="accent-primary" />
+            in a git worktree of this directory
+          </label>
+        {/if}
 
         <div class="flex items-center gap-3">
           <button

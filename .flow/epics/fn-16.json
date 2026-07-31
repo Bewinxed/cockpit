@@ -7,7 +7,7 @@
   "plan_review_status": "unknown",
   "plan_reviewed_at": null,
   "spec_path": ".flow/specs/fn-16.md",
-  "status": "open",
+  "status": "done",
   "title": "Phase 3 \u2014 observability: fleet view, activity states, subagent tree",
-  "updated_at": "2026-07-31T00:42:19.274945Z"
+  "updated_at": "2026-07-31T01:03:10.152557Z"
 }

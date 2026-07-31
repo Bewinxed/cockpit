@@ -8,6 +8,8 @@ import { agents, instances } from './schema';
 /** Shipped with the package so a fresh boot never needs a drizzle-kit step. */
 const MIGRATIONS_DIR = Bun.fileURLToPath(new URL('../../drizzle', import.meta.url));
 
+export type InstanceKind = (typeof instances.$inferSelect)['kind'];
+
 export interface DbShape {
   readonly upsertAgent: (agent: { machineId: string; hostname: string; os: string }) => void;
   readonly touchAgent: (machineId: string) => void;
@@ -17,8 +19,13 @@ export interface DbShape {
     machineId: string;
     cwd: string;
     sessionId?: string;
+    kind: InstanceKind;
   }) => void;
   readonly stopInstance: (id: string) => void;
+  /** A side quest thrown away: stopped, and gone from every live listing. */
+  readonly discardInstance: (id: string) => void;
+  /** "Keep": a side quest that earned its place stops being treated as scratch. */
+  readonly setInstanceKind: (id: string, kind: InstanceKind) => typeof instances.$inferSelect | undefined;
   /** The agent socket dropped: its sessions may outlive it, the hub cannot tell. */
   readonly markInstancesUnknown: (machineId: string) => void;
   readonly listAgents: () => (typeof agents.$inferSelect)[];
@@ -54,16 +61,25 @@ const make = (path: string): DbShape => {
         .where(eq(agents.machineId, machineId))
         .run();
     },
-    openInstance: ({ id, machineId, cwd, sessionId }) => {
+    openInstance: ({ id, machineId, cwd, sessionId, kind }) => {
       const now = new Date();
       db.insert(instances)
-        .values({ id, machineId, cwd, sessionId, status: 'running', createdAt: now, updatedAt: now })
+        .values({
+          id,
+          machineId,
+          cwd,
+          sessionId,
+          kind,
+          status: 'running',
+          createdAt: now,
+          updatedAt: now,
+        })
         .onConflictDoUpdate({
           target: instances.id,
           // A respawn that names no session keeps whatever session the row already had.
           set: sessionId
-            ? { cwd, sessionId, status: 'running', updatedAt: now }
-            : { cwd, status: 'running', updatedAt: now },
+            ? { cwd, sessionId, kind, status: 'running', updatedAt: now }
+            : { cwd, kind, status: 'running', updatedAt: now },
         })
         .run();
     },
@@ -73,6 +89,19 @@ const make = (path: string): DbShape => {
         .where(eq(instances.id, id))
         .run();
     },
+    discardInstance: (id) => {
+      db.update(instances)
+        .set({ status: 'discarded', updatedAt: new Date() })
+        .where(eq(instances.id, id))
+        .run();
+    },
+    setInstanceKind: (id, kind) =>
+      db
+        .update(instances)
+        .set({ kind, updatedAt: new Date() })
+        .where(eq(instances.id, id))
+        .returning()
+        .get(),
     markInstancesUnknown: (machineId) => {
       db.update(instances)
         .set({ status: 'unknown', updatedAt: new Date() })
