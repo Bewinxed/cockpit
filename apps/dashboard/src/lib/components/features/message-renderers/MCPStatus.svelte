@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Circle, Server, ChevronRight } from '@lucide/svelte';
+	import { IconDot, IconServer, IconChevronRight } from '$lib/icons';
 	import * as Collapsible from '$lib/components/ui/collapsible';
 
 	interface MCPServer {
@@ -71,7 +71,7 @@
 		class="inline-flex min-h-6 items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium {getStatusColor(server.status)}"
 		title="{server.name}: {statusLabel(server.status)}"
 	>
-		<Circle class="size-1.5 fill-current {getDotColor(server.status)}" aria-hidden="true" />
+		<IconDot class="size-1.5 fill-current {getDotColor(server.status)}" aria-hidden="true" />
 		<span class="truncate max-w-[120px]">{server.name}</span>
 		<span class="sr-only">{statusLabel(server.status)}</span>
 	</span>
@@ -80,7 +80,7 @@
 {#if servers.length > 0}
 	<div class="mcp-status mt-3 pt-3 border-t border-border/50">
 		<div class="flex items-center gap-2 text-xs text-muted-foreground mb-2">
-			<Server class="size-3" />
+			<IconServer class="size-3" />
 			<span class="font-medium">MCP servers ({servers.length})</span>
 			{#if problemServers.length > 0}
 				<span class="text-warning text-[10px]">({problemServers.length} need attention)</span>
@@ -113,7 +113,7 @@
 					<Collapsible.Trigger
 						class="mt-2 flex min-h-6 items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors focus-visible:ring-2 focus-visible:ring-ring"
 					>
-						<ChevronRight class="size-3 rotate-90" />
+						<IconChevronRight class="size-3 rotate-90" />
 						<span>Show less</span>
 					</Collapsible.Trigger>
 				{/if}

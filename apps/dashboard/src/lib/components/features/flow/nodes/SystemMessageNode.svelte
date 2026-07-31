@@ -1,6 +1,6 @@
 <script lang="ts">
+  import { IconInfo, IconWarningTriangle, IconSettings, IconDatabase, IconTerminal } from '$lib/icons';
   import { Handle, Position, useStore } from '@xyflow/svelte';
-  import { Info, AlertTriangle, Settings, Database, TerminalSquare } from '@lucide/svelte';
   import type { Message } from '$lib/cockpit/types';
 
   // Props passed by SvelteFlow
@@ -35,12 +35,12 @@
   // Icon based on subtype
   const IconComponent = $derived.by(() => {
     switch (subtype) {
-      case 'init': return Settings;
-      case 'compact_boundary': return Database;
-      case 'terminal_setup_info': return TerminalSquare;
-      case 'status': return Info;
-      case 'error': return AlertTriangle;
-      default: return Info;
+      case 'init': return IconSettings;
+      case 'compact_boundary': return IconDatabase;
+      case 'terminal_setup_info': return IconTerminal;
+      case 'status': return IconInfo;
+      case 'error': return IconWarningTriangle;
+      default: return IconInfo;
     }
   });
 

@@ -1,8 +1,8 @@
 <script lang="ts">
+  import { IconSpinner, IconSend, IconStop } from '$lib/icons';
   import type { Snippet } from 'svelte';
   import { slide } from 'svelte/transition';
   import { quintOut } from 'svelte/easing';
-  import { LoaderCircle, Send, Square } from '@lucide/svelte';
   import CommandPalette from './CommandPalette.svelte';
 
   interface AvailableCommand {
@@ -242,9 +242,9 @@
         onclick={stopping ? () => onInterrupt?.() : undefined}
       >
         <span class="icon-swap">
-          <span data-active={stopping}><Square size={14} /></span>
-          <span data-active={!stopping && loading}><LoaderCircle class="size-3.5 animate-spin" /></span>
-          <span data-active={!stopping && !loading}><Send size={14} /></span>
+          <span data-active={stopping}><IconStop class="size-3.5" /></span>
+          <span data-active={!stopping && loading}><IconSpinner class="size-3.5 animate-spin" /></span>
+          <span data-active={!stopping && !loading}><IconSend class="size-3.5" /></span>
         </span>
       </button>
       </div>

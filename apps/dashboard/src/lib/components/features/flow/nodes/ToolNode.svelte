@@ -1,6 +1,6 @@
 <script lang="ts">
+  import { IconTools, IconCheck, IconClose, IconSpinner, IconDocument, IconTerminal, IconSearch, IconFolderOpen, IconPen } from '$lib/icons';
   import { Handle, Position, useStore } from '@xyflow/svelte';
-  import { Wrench, Check, X, Loader2, FileText, Terminal, Search, FolderOpen, Pencil } from '@lucide/svelte';
   import { getToolGlance, getToolStatus, getResultGlimpse } from '$lib/utils/tool-display';
   import * as Collapsible from '$lib/components/ui/collapsible';
   import type { Message } from '$lib/cockpit/types';
@@ -43,14 +43,14 @@
   // Get tool icon based on name
   const ToolIcon = $derived.by(() => {
     switch (toolName.toLowerCase()) {
-      case 'read': return FileText;
+      case 'read': return IconDocument;
       case 'write':
-      case 'edit': return Pencil;
-      case 'bash': return Terminal;
+      case 'edit': return IconPen;
+      case 'bash': return IconTerminal;
       case 'grep':
-      case 'glob': return Search;
-      case 'ls': return FolderOpen;
-      default: return Wrench;
+      case 'glob': return IconSearch;
+      case 'ls': return IconFolderOpen;
+      default: return IconTools;
     }
   });
 
@@ -65,11 +65,11 @@
   });
 
   const StatusIcon = $derived.by(() => {
-    if (isStreaming) return Loader2;
+    if (isStreaming) return IconSpinner;
     switch (toolStatus) {
-      case 'success': return Check;
-      case 'error': return X;
-      default: return Loader2;
+      case 'success': return IconCheck;
+      case 'error': return IconClose;
+      default: return IconSpinner;
     }
   });
 

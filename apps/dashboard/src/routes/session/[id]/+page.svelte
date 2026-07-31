@@ -1,10 +1,10 @@
 <script lang="ts">
+  import { IconAgent, IconSubagent, IconTools } from '$lib/icons';
   import { onMount, untrack } from 'svelte';
   import { fly } from 'svelte/transition';
   import { quintOut } from 'svelte/easing';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
-  import { Bot, GitBranch, Wrench } from '@lucide/svelte';
   import type { PermissionResult } from '@cockpit/core';
   import { ChatInput, ChatMessage, SubagentBranch, ToolGroup } from '$lib/components/features';
   import { FlowView } from '$lib/components/features/flow';
@@ -349,7 +349,7 @@
                   <div
                     class="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl border border-border bg-secondary"
                   >
-                    <Wrench class="size-[18px] text-muted-foreground" />
+                    <IconTools class="size-[18px] text-muted-foreground" />
                   </div>
                   <div class="w-full max-w-[85%] min-w-0">
                     <ToolGroup tools={group.messages} />
@@ -360,7 +360,7 @@
                   <div
                     class="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl border border-border bg-secondary"
                   >
-                    <GitBranch class="size-[18px] text-muted-foreground" />
+                    <IconSubagent class="size-[18px] text-muted-foreground" />
                   </div>
                   <div class="w-full max-w-[85%] min-w-0">
                     <SubagentBranch branch={group.branch} spawn={group.spawn} />
@@ -386,7 +386,7 @@
                 <div
                   class="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl border border-border bg-secondary"
                 >
-                  <Bot class="size-[18px] text-muted-foreground" />
+                  <IconAgent class="size-[18px] text-muted-foreground" />
                 </div>
                 <div
                   class="max-w-[85%] min-w-0 rounded-2xl rounded-bl-sm border border-border bg-card px-4 py-3 text-sm leading-relaxed break-words whitespace-pre-wrap text-card-foreground shadow-sm"

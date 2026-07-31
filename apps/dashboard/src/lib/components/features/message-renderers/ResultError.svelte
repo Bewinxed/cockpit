@@ -1,12 +1,12 @@
 <script lang="ts">
 	import {
-		TriangleAlert,
-		DollarSign,
-		RotateCcw,
-		Settings,
-		ChevronRight,
-		CircleAlert
-	} from '@lucide/svelte';
+		IconWarningTriangle,
+		IconDollar,
+		IconReset,
+		IconSettings,
+		IconChevronRight,
+		IconAlert
+	} from '$lib/icons';
 	import * as Collapsible from '$lib/components/ui/collapsible';
 	import type { MessageRendererProps } from './types';
 
@@ -25,7 +25,7 @@
 	const numTurns = $derived(message.metadata?.numTurns as number | undefined);
 
 	const errorConfig: Record<ErrorSubtype, {
-		icon: typeof TriangleAlert;
+		icon: typeof IconWarningTriangle;
 		iconColor: string;
 		borderColor: string;
 		bgColor: string;
@@ -34,7 +34,7 @@
 		action: string;
 	}> = {
 		error_max_turns: {
-			icon: RotateCcw,
+			icon: IconReset,
 			iconColor: 'text-warning',
 			borderColor: 'border-warning/40',
 			bgColor: 'bg-warning/5',
@@ -43,7 +43,7 @@
 			action: 'Start a new session or increase the turn limit'
 		},
 		error_max_budget_usd: {
-			icon: DollarSign,
+			icon: IconDollar,
 			iconColor: 'text-error',
 			borderColor: 'border-error/40',
 			bgColor: 'bg-error/5',
@@ -52,7 +52,7 @@
 			action: 'Increase the budget in session settings'
 		},
 		error_during_execution: {
-			icon: TriangleAlert,
+			icon: IconWarningTriangle,
 			iconColor: 'text-error',
 			borderColor: 'border-error/40',
 			bgColor: 'bg-error/5',
@@ -61,7 +61,7 @@
 			action: 'Review the error details and try again'
 		},
 		error_max_structured_output_retries: {
-			icon: Settings,
+			icon: IconSettings,
 			iconColor: 'text-warning',
 			borderColor: 'border-warning/40',
 			bgColor: 'bg-warning/5',
@@ -98,13 +98,13 @@
 				<div class="flex items-center gap-4 text-xs text-muted-foreground">
 					{#if totalCost !== undefined}
 						<span class="flex items-center gap-1">
-							<DollarSign class="size-3" />
+							<IconDollar class="size-3" />
 							<span>Cost: ${totalCost.toFixed(4)}</span>
 						</span>
 					{/if}
 					{#if numTurns !== undefined}
 						<span class="flex items-center gap-1">
-							<RotateCcw class="size-3" />
+							<IconReset class="size-3" />
 							<span>Turns: {numTurns}</span>
 						</span>
 					{/if}
@@ -113,7 +113,7 @@
 
 			<!-- Action suggestion -->
 			<div class="flex items-center gap-2 text-xs text-muted-foreground">
-				<CircleAlert class="size-3 shrink-0" />
+				<IconAlert class="size-3 shrink-0" />
 				<span>{config.action}</span>
 			</div>
 
@@ -124,7 +124,7 @@
 						<Collapsible.Trigger
 							class="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
 						>
-							<ChevronRight
+							<IconChevronRight
 								class="size-3 shrink-0 transition-transform duration-200 {showDetails
 									? 'rotate-90'
 									: ''}"

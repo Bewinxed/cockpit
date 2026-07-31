@@ -1,6 +1,6 @@
 <script lang="ts">
+  import { IconAgent, IconSparkles, IconSpinner } from '$lib/icons';
   import { Handle, Position, useStore } from '@xyflow/svelte';
-  import { Bot, Sparkles, LoaderCircle } from '@lucide/svelte';
   import Markdown from '@humanspeak/svelte-markdown';
   import type { Message } from '$lib/cockpit/types';
 
@@ -54,23 +54,23 @@
   {#if zoomLevel === 'overview'}
     <div class="flex items-center justify-center gap-2">
       <div class="rounded-full bg-primary/20 p-2">
-        <Sparkles class="h-4 w-4 text-primary" />
+        <IconSparkles class="h-4 w-4 text-primary" />
       </div>
       {#if isStreaming}
-        <LoaderCircle class="h-3 w-3 text-primary animate-spin" />
+        <IconSpinner class="h-3 w-3 text-primary animate-spin" />
       {/if}
     </div>
   {:else if zoomLevel === 'summary'}
     <div class="flex items-center gap-2">
-      <Bot class="h-4 w-4 text-primary shrink-0" />
+      <IconAgent class="h-4 w-4 text-primary shrink-0" />
       <span class="text-sm truncate text-foreground">{firstLine}{firstLine.length >= 80 ? '...' : ''}</span>
       {#if isStreaming}
-        <LoaderCircle class="h-3 w-3 text-primary animate-spin ml-auto shrink-0" />
+        <IconSpinner class="h-3 w-3 text-primary animate-spin ml-auto shrink-0" />
       {/if}
     </div>
   {:else}
     <div class="flex items-start gap-2">
-      <Bot class="h-4 w-4 text-primary shrink-0 mt-0.5" />
+      <IconAgent class="h-4 w-4 text-primary shrink-0 mt-0.5" />
       <div class="flex-1 min-w-0">
         <div class="flex items-center gap-2 mb-1">
           <span class="text-xs text-muted-foreground">Claude</span>

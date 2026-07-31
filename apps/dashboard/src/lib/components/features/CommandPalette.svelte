@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Command, Zap, Settings, FileCode } from '@lucide/svelte';
+  import { IconCommand, IconSkill, IconSettings, IconCodeFile } from '$lib/icons';
 
   interface AvailableCommand {
     name: string;
@@ -47,15 +47,15 @@
   function getCommandIcon(type: AvailableCommand['type']) {
     switch (type) {
       case 'builtin':
-        return Command;
+        return IconCommand;
       case 'custom':
-        return FileCode;
+        return IconCodeFile;
       case 'skill':
-        return Zap;
+        return IconSkill;
       case 'mcp':
-        return Settings;
+        return IconSettings;
       default:
-        return Command;
+        return IconCommand;
     }
   }
 

@@ -1,25 +1,25 @@
 <script lang="ts">
 	import {
-		User,
-		Wrench,
-		FileText,
-		CircleAlert,
-		ChevronDown,
-		ChevronRight,
-		ChevronUp,
-		LoaderCircle,
-		CircleCheck,
-		CircleX,
-		Settings,
-		Terminal,
-		CircleQuestionMark,
-		Pencil,
-		Check,
-		Bot,
-		RotateCcw,
-		Download,
-		AlertTriangle,
-	} from '@lucide/svelte';
+		IconUser,
+		IconTools,
+		IconDocument,
+		IconAlert,
+		IconChevronDown,
+		IconChevronRight,
+		IconChevronUp,
+		IconSpinner,
+		IconSuccess,
+		IconError,
+		IconSettings,
+		IconTerminal,
+		IconHelp,
+		IconPen,
+		IconCheck,
+		IconAgent,
+		IconReset,
+		IconDownload,
+		IconWarningTriangle
+	} from '$lib/icons';
 	import Markdown from '@humanspeak/svelte-markdown';
 	import * as Collapsible from '$lib/components/ui/collapsible';
 	import { PROSE } from '$lib/prose';
@@ -278,7 +278,7 @@
 			align: 'justify-end',
 			bubble:
 				'relative px-4 py-3 text-sm leading-relaxed rounded-2xl rounded-br-sm bg-primary text-primary-foreground shadow-sm',
-			icon: User,
+			icon: IconUser,
 			iconBg: 'bg-primary',
 			iconColor: 'text-primary-foreground'
 		},
@@ -286,21 +286,21 @@
 			align: 'justify-start',
 			bubble:
 				'relative px-4 py-3 text-sm leading-relaxed rounded-2xl rounded-bl-sm bg-card text-card-foreground border border-border shadow-sm',
-			icon: Bot,
+			icon: IconAgent,
 			iconBg: 'bg-secondary border border-border',
 			iconColor: 'text-muted-foreground'
 		},
 		'tool.use': {
 			align: 'justify-start',
 			bubble: 'px-3 py-2.5 text-sm rounded-xl bg-card border border-border shadow-sm',
-			icon: Wrench,
+			icon: IconTools,
 			iconBg: 'bg-warning/10',
 			iconColor: 'text-warning'
 		},
 		'tool.result': {
 			align: 'justify-start',
 			bubble: 'px-3 py-2.5 text-sm rounded-xl bg-card border border-border shadow-sm',
-			icon: FileText,
+			icon: IconDocument,
 			iconBg: 'bg-success/10',
 			iconColor: 'text-success'
 		},
@@ -308,7 +308,7 @@
 			align: 'justify-start',
 			bubble:
 				'relative px-4 py-3 text-sm leading-relaxed rounded-2xl rounded-bl-sm bg-destructive/10 text-destructive border border-destructive/30 shadow-sm',
-			icon: CircleAlert,
+			icon: IconAlert,
 			iconBg: 'bg-destructive/10',
 			iconColor: 'text-destructive'
 		},
@@ -316,7 +316,7 @@
 			align: 'justify-start',
 			bubble:
 				'relative px-4 py-3 text-sm leading-relaxed rounded-2xl rounded-bl-sm bg-warning/10 text-warning border border-warning/30 shadow-sm',
-			icon: AlertTriangle,
+			icon: IconWarningTriangle,
 			iconBg: 'bg-warning/10',
 			iconColor: 'text-warning'
 		},
@@ -324,14 +324,14 @@
 			align: 'justify-center',
 			bubble:
 				'inline-flex items-center gap-2 px-4 py-1.5 text-xs text-muted-foreground bg-muted/50 rounded-full border border-border',
-			icon: Settings,
+			icon: IconSettings,
 			iconBg: 'bg-accent',
 			iconColor: 'text-muted-foreground'
 		},
 		'system.hook_response': {
 			align: 'justify-start',
 			bubble: 'px-3 py-2.5 text-sm rounded-xl bg-card border border-border shadow-sm',
-			icon: Terminal,
+			icon: IconTerminal,
 			iconBg: 'bg-info/10',
 			iconColor: 'text-info'
 		},
@@ -339,28 +339,28 @@
 			align: 'justify-start',
 			bubble:
 				'relative px-4 py-3 text-sm leading-relaxed rounded-2xl rounded-bl-sm bg-card text-card-foreground border border-border shadow-sm',
-			icon: Terminal,
+			icon: IconTerminal,
 			iconBg: 'bg-accent',
 			iconColor: 'text-muted-foreground'
 		},
 		'ui.system_note': {
 			align: 'justify-start',
 			bubble: '',
-			icon: Settings,
+			icon: IconSettings,
 			iconBg: 'bg-muted',
 			iconColor: 'text-muted-foreground'
 		},
 		'ui.help_menu': {
 			align: 'justify-start',
 			bubble: '',
-			icon: CircleQuestionMark,
+			icon: IconHelp,
 			iconBg: 'bg-primary/10',
 			iconColor: 'text-primary'
 		},
 		thinking: {
 			align: 'justify-start',
 			bubble: 'px-3 py-2.5 text-sm rounded-xl bg-muted/50 border border-border shadow-sm',
-			icon: Bot,
+			icon: IconAgent,
 			iconBg: 'bg-accent',
 			iconColor: 'text-muted-foreground'
 		},
@@ -368,7 +368,7 @@
 			align: 'justify-start',
 			bubble:
 				'relative px-4 py-3 text-sm leading-relaxed rounded-2xl rounded-bl-sm bg-destructive/10 text-destructive border border-destructive/30 shadow-sm',
-			icon: CircleAlert,
+			icon: IconAlert,
 			iconBg: 'bg-destructive/10',
 			iconColor: 'text-destructive'
 		}
@@ -409,7 +409,7 @@
 							<div
 								class="w-full px-3 py-2.5 text-left cursor-pointer hover:bg-muted/50 transition-colors flex items-center gap-2"
 							>
-								<ChevronRight
+								<IconChevronRight
 									class="w-4 h-4 text-muted-foreground shrink-0 transition-transform duration-200 ease-out {isExpanded
 										? 'rotate-90'
 										: ''}"
@@ -419,11 +419,11 @@
 								</span>
 								<!-- Status indicator -->
 								{#if toolInfo?.status === 'pending'}
-									<LoaderCircle class="w-4 h-4 text-warning animate-spin ml-auto" />
+									<IconSpinner class="w-4 h-4 text-warning animate-spin ml-auto" />
 								{:else if toolInfo?.status === 'error'}
-									<CircleX class="w-4 h-4 text-destructive ml-auto" />
+									<IconError class="w-4 h-4 text-destructive ml-auto" />
 								{:else}
-									<CircleCheck class="w-4 h-4 text-success ml-auto" />
+									<IconSuccess class="w-4 h-4 text-success ml-auto" />
 								{/if}
 							</div>
 						</Collapsible.Trigger>
@@ -456,7 +456,7 @@
 												class="absolute bottom-0 left-0 right-0 h-[60px] flex items-center justify-center cursor-pointer z-10 bg-gradient-to-b from-transparent via-card/85 to-card/95"
 												onclick={() => (diffFullyExpanded = true)}
 											>
-												<ChevronDown
+												<IconChevronDown
 													class="w-6 h-6 p-1 text-muted-foreground bg-muted border border-border rounded-full shadow-sm hover:text-foreground hover:translate-y-0.5 transition-[color,translate] duration-150 ease-out"
 												/>
 											</button>
@@ -467,7 +467,7 @@
 											class="flex items-center justify-center gap-1.5 w-full py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
 											onclick={() => (diffFullyExpanded = false)}
 										>
-											<ChevronUp class="w-3.5 h-3.5" />
+											<IconChevronUp class="w-3.5 h-3.5" />
 											<span>Collapse</span>
 										</button>
 									{/if}
@@ -517,7 +517,7 @@
 							<div
 								class="w-full px-3 py-2.5 text-left cursor-pointer hover:bg-muted/50 transition-colors flex items-center gap-2"
 							>
-								<ChevronRight
+								<IconChevronRight
 									class="w-4 h-4 text-muted-foreground shrink-0 transition-transform duration-200 ease-out {isExpanded
 										? 'rotate-90'
 										: ''}"
@@ -527,9 +527,9 @@
 								</span>
 								<!-- Exit code indicator -->
 								{#if hookInfo?.exitCode === 0}
-									<CircleCheck class="w-4 h-4 text-success ml-auto" />
+									<IconSuccess class="w-4 h-4 text-success ml-auto" />
 								{:else}
-									<CircleX class="w-4 h-4 text-destructive ml-auto" />
+									<IconError class="w-4 h-4 text-destructive ml-auto" />
 								{/if}
 								<span class="text-xs text-muted-foreground font-mono">
 									exit {hookInfo?.exitCode}
@@ -579,7 +579,7 @@
 							<div
 								class="w-full px-3 py-2.5 text-left hover:bg-muted/50 transition-colors flex items-center gap-2"
 							>
-								<ChevronRight
+								<IconChevronRight
 									class="w-4 h-4 text-muted-foreground shrink-0 transition-transform duration-200 ease-out {isExpanded
 										? 'rotate-90'
 										: ''}"
@@ -609,7 +609,7 @@
 						<div
 							class="flex items-center gap-1.5 text-xs text-muted-foreground mb-2 pb-2 border-b border-border"
 						>
-							<Terminal class="w-3 h-3" />
+							<IconTerminal class="w-3 h-3" />
 							<code class="font-mono">{message.metadata.command}</code>
 						</div>
 					{/if}
@@ -630,7 +630,7 @@
 				<!-- Session error with recovery actions -->
 				<div class="{config.bubble} flex flex-col gap-3">
 					<div class="flex items-start gap-2">
-						<AlertTriangle class="w-4 h-4 shrink-0 mt-0.5" />
+						<IconWarningTriangle class="w-4 h-4 shrink-0 mt-0.5" />
 						<div class="flex flex-col gap-1">
 							<span class="font-medium">Session not found</span>
 							<span class="text-xs opacity-80">{message.content}</span>
@@ -646,9 +646,9 @@
 									disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
 							>
 								{#if resettingSession}
-									<LoaderCircle class="w-3 h-3 animate-spin" />
+									<IconSpinner class="w-3 h-3 animate-spin" />
 								{:else}
-									<RotateCcw class="w-3 h-3" />
+									<IconReset class="w-3 h-3" />
 								{/if}
 								Start fresh session
 							</button>
@@ -659,7 +659,7 @@
 								class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md
 									border border-current/20 hover:bg-current/5 transition-colors"
 							>
-								<Download class="w-3 h-3" />
+								<IconDownload class="w-3 h-3" />
 								Download transcript
 							</button>
 						{/if}
@@ -669,7 +669,7 @@
 				<!-- Simple system message - subtle banner -->
 				<div class="flex flex-col max-w-md">
 					<div class="{config.bubble}">
-						<Settings class="w-3 h-3" />
+						<IconSettings class="w-3 h-3" />
 						<span>{message.content}</span>
 					</div>
 					{#if message.metadata?.subtype === 'init' && message.metadata?.mcpServers?.length}
@@ -711,9 +711,9 @@
                            hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
 									>
 										{#if editLoading}
-											<LoaderCircle class="w-3.5 h-3.5 animate-spin" />
+											<IconSpinner class="w-3.5 h-3.5 animate-spin" />
 										{:else}
-											<Check class="w-3.5 h-3.5" />
+											<IconCheck class="w-3.5 h-3.5" />
 										{/if}
 										<span>Submit</span>
 									</button>
@@ -739,7 +739,7 @@
 									aria-label="Edit message"
 									title="Edit message and restart from here"
 								>
-									<Pencil class="w-3.5 h-3.5 text-muted-foreground" />
+									<IconPen class="w-3.5 h-3.5 text-muted-foreground" />
 								</button>
 							{/if}
 							<!-- Copy button -->
@@ -769,7 +769,7 @@
 			<div
 				class="shrink-0 size-9 rounded-xl {config.iconBg} flex items-center justify-center mt-0.5"
 			>
-				<User class="size-[18px] {config.iconColor}" />
+				<IconUser class="size-[18px] {config.iconColor}" />
 			</div>
 		{/if}
 	</div>

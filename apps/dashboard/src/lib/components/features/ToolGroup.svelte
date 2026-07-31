@@ -1,6 +1,6 @@
 <script lang="ts">
+	import { IconChevronRight, IconSpinner, IconSuccess, IconError, IconDocument, IconTerminal, IconCode, IconSearch, IconFolderOpen, IconPen, IconGlobe, IconTools } from '$lib/icons';
 	import * as Collapsible from '$lib/components/ui/collapsible';
-	import { ChevronRight, LoaderCircle, CircleCheck, CircleX, FileText, Terminal, Code, Search, FolderOpen, Pencil, Globe, Wrench } from '@lucide/svelte';
 	import type { Message } from '$lib/cockpit/types';
 	import DiffView from './DiffView.svelte';
 	import DiffModal from './DiffModal.svelte';
@@ -29,16 +29,16 @@
 
 	// Get icon for tool type
 	function getToolIcon(toolName: string | undefined) {
-		if (!toolName) return Wrench;
+		if (!toolName) return IconTools;
 		const name = toolName.toLowerCase();
-		if (name.includes('read') || name.includes('file')) return FileText;
-		if (name.includes('edit') || name.includes('write')) return Pencil;
-		if (name.includes('bash') || name.includes('terminal') || name.includes('shell')) return Terminal;
-		if (name.includes('glob') || name.includes('find')) return FolderOpen;
-		if (name.includes('grep') || name.includes('search')) return Search;
-		if (name.includes('web') || name.includes('fetch')) return Globe;
-		if (name.includes('code')) return Code;
-		return Wrench;
+		if (name.includes('read') || name.includes('file')) return IconDocument;
+		if (name.includes('edit') || name.includes('write')) return IconPen;
+		if (name.includes('bash') || name.includes('terminal') || name.includes('shell')) return IconTerminal;
+		if (name.includes('glob') || name.includes('find')) return IconFolderOpen;
+		if (name.includes('grep') || name.includes('search')) return IconSearch;
+		if (name.includes('web') || name.includes('fetch')) return IconGlobe;
+		if (name.includes('code')) return IconCode;
+		return IconTools;
 	}
 
 	// Check if tool is a file diff tool
@@ -91,14 +91,14 @@
 		</span>
 		<div class="ml-auto flex items-center gap-1.5">
 			{#if pendingCount > 0}
-				<LoaderCircle class="w-4 h-4 text-warning animate-spin" />
+				<IconSpinner class="w-4 h-4 text-warning animate-spin" />
 				<span class="text-xs text-muted-foreground">{pendingCount} running</span>
 			{:else if hasErrors}
-				<CircleX class="w-4 h-4 text-destructive" />
+				<IconError class="w-4 h-4 text-destructive" />
 				<span class="text-xs text-destructive">Error</span>
 			{:else}
 				<span in:scale={{ duration: startedPending ? 260 : 0, start: 0.25, easing: quintOut }}>
-					<CircleCheck class="w-4 h-4 text-success" />
+					<IconSuccess class="w-4 h-4 text-success" />
 				</span>
 				<span class="text-xs text-success">Complete</span>
 			{/if}
@@ -123,7 +123,7 @@
 				<Collapsible.Trigger class="w-full text-left">
 					<div class="px-3 py-2.5 hover:bg-muted/30 transition-colors flex items-start gap-2 group cursor-pointer">
 						<!-- Expand chevron -->
-						<ChevronRight class="w-4 h-4 text-muted-foreground mt-0.5 shrink-0 transition-transform duration-200 {isOpen ? 'rotate-90' : ''}" />
+						<IconChevronRight class="w-4 h-4 text-muted-foreground mt-0.5 shrink-0 transition-transform duration-200 {isOpen ? 'rotate-90' : ''}" />
 
 						<!-- Tool icon -->
 						<div class="shrink-0 w-6 h-6 rounded-md flex items-center justify-center
@@ -151,11 +151,11 @@
 						<!-- Status badge -->
 						<div class="shrink-0">
 							{#if status === 'pending'}
-								<LoaderCircle class="w-4 h-4 text-warning animate-spin" />
+								<IconSpinner class="w-4 h-4 text-warning animate-spin" />
 							{:else if status === 'error'}
-								<CircleX class="w-4 h-4 text-destructive" />
+								<IconError class="w-4 h-4 text-destructive" />
 							{:else}
-								<CircleCheck class="w-4 h-4 text-success" />
+								<IconSuccess class="w-4 h-4 text-success" />
 							{/if}
 						</div>
 					</div>

@@ -1,7 +1,7 @@
 <script lang="ts">
+  import { IconCheck, IconChevronRight, IconShield, IconClose } from '$lib/icons';
   import { scale } from 'svelte/transition';
   import { quintOut } from 'svelte/easing';
-  import { Check, ChevronRight, Shield, X } from '@lucide/svelte';
   import * as Collapsible from '$lib/components/ui/collapsible';
   import type { PermissionResult } from '@cockpit/core';
   import type { PendingPermission } from './client.svelte';
@@ -43,7 +43,7 @@
 <div class="bg-warning/10 p-3" role="alert">
   <div class="flex gap-2 items-start">
     <div class="text-warning shrink-0 mt-0.5">
-      <Shield size={18} />
+      <IconShield class="size-[18px]" />
     </div>
     <div class="flex-1 min-w-0">
       <div class="flex items-start justify-between gap-3">
@@ -63,7 +63,7 @@
             aria-label="Deny"
             title="Deny"
           >
-            <X size={14} />
+            <IconClose class="size-3.5" />
           </button>
           <button
             type="button"
@@ -81,7 +81,7 @@
           >
             {#key resolved}
               <span in:scale={{ duration: resolved ? 260 : 0, start: 0.25, easing: quintOut }}>
-                <Check size={14} />
+                <IconCheck class="size-3.5" />
               </span>
             {/key}
           </button>
@@ -93,9 +93,8 @@
         <Collapsible.Trigger
           class="flex items-center gap-1 bg-transparent border-none py-1 text-muted-foreground text-xs cursor-pointer mt-1.5 hover:text-foreground"
         >
-          <ChevronRight
-            size={14}
-            class="transition-transform duration-200 ease-out {isExpanded ? 'rotate-90' : ''}"
+          <IconChevronRight
+            class="size-3.5 transition-transform duration-200 ease-out {isExpanded ? 'rotate-90' : ''}"
           />
           <span>Details</span>
         </Collapsible.Trigger>

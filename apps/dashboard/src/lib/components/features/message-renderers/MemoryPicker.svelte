@@ -1,14 +1,14 @@
 <script lang="ts">
 	import {
-		BookOpen,
-		FolderOpen,
-		House,
-		ArrowRight,
-		CircleAlert,
-		LoaderCircle,
-		Check,
-		CircleX
-	} from '@lucide/svelte';
+		IconBook,
+		IconFolderOpen,
+		IconHome,
+		IconArrowRight,
+		IconAlert,
+		IconSpinner,
+		IconCheck,
+		IconError
+	} from '$lib/icons';
 	import type { MessageRendererProps } from './types';
 
 	let {
@@ -116,7 +116,7 @@
 						<div
 							class="w-10 h-10 rounded-lg bg-warning/10 flex items-center justify-center shrink-0"
 						>
-							<BookOpen class="w-5 h-5 text-warning" />
+							<IconBook class="w-5 h-5 text-warning" />
 						</div>
 						<div class="flex-1">
 							<h3 class="font-sans font-semibold text-foreground text-lg leading-tight">
@@ -135,13 +135,13 @@
 					{#if message.metadata?.loading}
 						<!-- Loading state -->
 						<div class="flex items-center justify-center py-6">
-							<LoaderCircle class="w-5 h-5 animate-spin text-muted-foreground" />
+							<IconSpinner class="w-5 h-5 animate-spin text-muted-foreground" />
 							<span class="ml-2 text-sm text-muted-foreground">Loading memory...</span>
 						</div>
 					{:else if message.metadata?.error}
 						<!-- Error state -->
 						<div class="flex items-center gap-2 text-sm text-error bg-error/10 rounded-md px-3 py-2">
-							<CircleAlert class="w-4 h-4 shrink-0" />
+							<IconAlert class="w-4 h-4 shrink-0" />
 							<span>{message.metadata.error}</span>
 						</div>
 					{:else if isMemoryEditing}
@@ -149,12 +149,12 @@
 						<div class="space-y-3" role="group" aria-label="Memory editor">
 							<div class="flex items-center gap-2 text-xs text-muted-foreground">
 								{#if message.metadata?.selectedMemoryType === 'project'}
-									<FolderOpen class="w-3.5 h-3.5" />
+									<IconFolderOpen class="w-3.5 h-3.5" />
 									<code class="font-mono bg-muted px-1.5 py-0.5 rounded"
 										>{message.metadata?.memoryPath || './CLAUDE.md'}</code
 									>
 								{:else}
-									<House class="w-3.5 h-3.5" />
+									<IconHome class="w-3.5 h-3.5" />
 									<code class="font-mono bg-muted px-1.5 py-0.5 rounded">~/.claude/CLAUDE.md</code>
 								{/if}
 							</div>
@@ -185,10 +185,10 @@
                        hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-[background-color,opacity] duration-150 ease-out group"
 							>
 								{#if memorySaving}
-									<LoaderCircle class="w-4 h-4 animate-spin" />
+									<IconSpinner class="w-4 h-4 animate-spin" />
 									<span>Saving...</span>
 								{:else}
-									<Check class="w-4 h-4" />
+									<IconCheck class="w-4 h-4" />
 									<span>Save</span>
 								{/if}
 							</button>
@@ -222,7 +222,7 @@
 								<div
 									class="shrink-0 w-6 h-6 rounded bg-warning/10 flex items-center justify-center mt-0.5"
 								>
-									<FolderOpen class="w-3.5 h-3.5 text-warning" />
+									<IconFolderOpen class="w-3.5 h-3.5 text-warning" />
 								</div>
 								<div class="flex-1 min-w-0">
 									<div class="flex items-center gap-2">
@@ -235,7 +235,7 @@
 										Checked in at <code class="px-1 py-0.5 bg-muted rounded">./CLAUDE.md</code>
 									</p>
 								</div>
-								<ArrowRight
+								<IconArrowRight
 									class="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity mt-1"
 								/>
 							</button>
@@ -253,7 +253,7 @@
 								<div
 									class="shrink-0 w-6 h-6 rounded bg-warning/10 flex items-center justify-center mt-0.5"
 								>
-									<House class="w-3.5 h-3.5 text-warning" />
+									<IconHome class="w-3.5 h-3.5 text-warning" />
 								</div>
 								<div class="flex-1 min-w-0">
 									<div class="flex items-center gap-2">
@@ -266,7 +266,7 @@
 										Saved in <code class="px-1 py-0.5 bg-muted rounded">~/.claude/CLAUDE.md</code>
 									</p>
 								</div>
-								<ArrowRight
+								<IconArrowRight
 									class="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity mt-1"
 								/>
 							</button>
@@ -289,7 +289,7 @@
 			<div
 				class="inline-flex items-center gap-2 px-3 py-1.5 bg-accent/50 border border-dotted border-border rounded-lg text-sm group"
 			>
-				<BookOpen class="w-3.5 h-3.5 text-muted-foreground" />
+				<IconBook class="w-3.5 h-3.5 text-muted-foreground" />
 				<span class="text-muted-foreground">Memory</span>
 				{#if message.metadata?.selectedMemoryType}
 					<span class="text-muted-foreground text-xs capitalize"
@@ -303,7 +303,7 @@
 						title="Dismiss"
 						aria-label="Dismiss"
 					>
-						<CircleX class="w-3.5 h-3.5 text-muted-foreground hover:text-muted-foreground" />
+						<IconError class="w-3.5 h-3.5 text-muted-foreground hover:text-muted-foreground" />
 					</button>
 				{/if}
 			</div>

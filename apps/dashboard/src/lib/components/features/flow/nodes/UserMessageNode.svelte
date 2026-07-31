@@ -1,6 +1,6 @@
 <script lang="ts">
+  import { IconUser } from '$lib/icons';
   import { Handle, Position, useStore } from '@xyflow/svelte';
-  import { User } from '@lucide/svelte';
   import type { Message } from '$lib/cockpit/types';
 
   // Props passed by SvelteFlow
@@ -38,17 +38,17 @@
   {#if zoomLevel === 'overview'}
     <div class="flex items-center justify-center">
       <div class="rounded-full bg-info/20 p-2">
-        <User class="h-4 w-4 text-info" />
+        <IconUser class="h-4 w-4 text-info" />
       </div>
     </div>
   {:else if zoomLevel === 'summary'}
     <div class="flex items-center gap-2">
-      <User class="h-4 w-4 text-info shrink-0" />
+      <IconUser class="h-4 w-4 text-info shrink-0" />
       <span class="text-sm truncate text-foreground">{displayContent.split('\n')[0]}</span>
     </div>
   {:else}
     <div class="flex items-start gap-2">
-      <User class="h-4 w-4 text-info shrink-0 mt-0.5" />
+      <IconUser class="h-4 w-4 text-info shrink-0 mt-0.5" />
       <div class="flex-1 min-w-0">
         <div class="text-xs text-muted-foreground mb-1">You</div>
         <div class="text-sm text-foreground whitespace-pre-wrap break-words">{displayContent}</div>

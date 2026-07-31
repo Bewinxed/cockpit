@@ -1,7 +1,7 @@
 <script lang="ts">
+  import { IconMaximize, IconAlert, IconSpinner } from '$lib/icons';
   import { onMount, onDestroy } from 'svelte';
   import { FileDiff, type FileContents } from '@pierre/diffs';
-  import { Maximize2, CircleAlert, LoaderCircle } from '@lucide/svelte';
   import { Button } from '$lib/components/ui/button';
   import DiffModal from './DiffModal.svelte';
 
@@ -131,18 +131,18 @@
       title="Expand diff (full view)"
       disabled={loading || !!error}
     >
-      <Maximize2 class="w-3.5 h-3.5" />
+      <IconMaximize class="w-3.5 h-3.5" />
     </Button>
   </div>
 
   {#if loading}
     <div class="flex items-center justify-center gap-2 p-8 text-sm text-muted-foreground">
-      <LoaderCircle class="w-5 h-5 animate-spin" />
+      <IconSpinner class="w-5 h-5 animate-spin" />
       <span>Loading diff...</span>
     </div>
   {:else if error}
     <div class="flex items-center justify-center gap-2 p-8 text-sm text-error">
-      <CircleAlert class="w-5 h-5" />
+      <IconAlert class="w-5 h-5" />
       <span>{error}</span>
     </div>
   {/if}

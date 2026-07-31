@@ -1,6 +1,6 @@
 <script lang="ts">
+  import { IconSun, IconMoon } from '$lib/icons';
   import { theme, toggleTheme } from '$lib/theme.svelte';
-  import { Sun, Moon } from '@lucide/svelte';
   import { Button } from '$lib/components/ui/button';
 
   const themeLabels = {
@@ -21,7 +21,7 @@
   aria-label={label}
 >
   <span class="icon-swap size-4">
-    <span data-active={isDark}><Moon class="size-4" /></span>
-    <span data-active={!isDark}><Sun class="size-4" /></span>
+    <span data-active={isDark}><IconMoon class="size-4" /></span>
+    <span data-active={!isDark}><IconSun class="size-4" /></span>
   </span>
 </Button>

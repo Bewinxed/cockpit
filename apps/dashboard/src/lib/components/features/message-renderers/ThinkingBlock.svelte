@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { ChevronRight, Brain } from '@lucide/svelte';
+	import { IconChevronRight, IconThinking } from '$lib/icons';
 	import * as Collapsible from '$lib/components/ui/collapsible';
 	import type { MessageRendererProps } from './types';
 
@@ -25,12 +25,12 @@
 				<Collapsible.Trigger
 					class="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors w-full text-left"
 				>
-					<ChevronRight
+					<IconChevronRight
 						class="size-4 shrink-0 transition-transform duration-200 {expanded
 							? 'rotate-90'
 							: ''}"
 					/>
-					<Brain class="size-4 shrink-0 text-muted-foreground" />
+					<IconThinking class="size-4 shrink-0 text-muted-foreground" />
 					<span class="font-medium text-muted-foreground">Thinking</span>
 					{#if !expanded}
 						<span class="text-xs opacity-60 truncate max-w-[300px]">{summary}</span>

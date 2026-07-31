@@ -1,6 +1,6 @@
 <script lang="ts">
+	import { IconCheck } from '$lib/icons';
 	import { Select as SelectPrimitive } from 'bits-ui';
-	import { Check } from '@lucide/svelte';
 	import type { Snippet } from 'svelte';
 	import { cn } from '$lib/utils.js';
 
@@ -25,7 +25,7 @@
 		<!-- The tick keeps its slot when unselected so the rows do not shift. -->
 		<span class="flex size-3.5 shrink-0 items-center justify-center">
 			{#if selected}
-				<Check size={14} />
+				<IconCheck class="size-3.5" />
 			{/if}
 		</span>
 		{@render content?.()}

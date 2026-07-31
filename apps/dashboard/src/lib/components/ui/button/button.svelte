@@ -1,4 +1,5 @@
 <script lang="ts" module>
+	import { IconSpinner } from '$lib/icons';
 	import type { WithChildren, WithoutChildren } from 'bits-ui';
 	import type { HTMLAnchorAttributes, HTMLButtonAttributes } from 'svelte/elements';
 	import { type VariantProps, tv } from 'tailwind-variants';
@@ -64,7 +65,6 @@
 
 <script lang="ts">
 	import { cn } from '$lib/utils.js';
-	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
 
 	let {
 		ref = $bindable(null),
@@ -115,7 +115,7 @@
 >
 	{#if type !== undefined && loading}
 		<div class="flex animate-spin place-items-center justify-center">
-			<LoaderCircleIcon class="size-4" />
+			<IconSpinner class="size-4" />
 		</div>
 		<span class="sr-only">Loading</span>
 	{/if}

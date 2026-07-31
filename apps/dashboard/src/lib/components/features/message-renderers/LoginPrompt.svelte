@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { KeyRound, ExternalLink, ArrowRight, CircleAlert, LoaderCircle, CircleX } from '@lucide/svelte';
+	import { IconKey, IconExternal, IconArrowRight, IconAlert, IconSpinner, IconError } from '$lib/icons';
 	import type { MessageRendererProps } from './types';
 
 	let {
@@ -53,7 +53,7 @@
 						<div
 							class="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0"
 						>
-							<KeyRound class="w-5 h-5 text-primary" />
+							<IconKey class="w-5 h-5 text-primary" />
 						</div>
 						<div>
 							<h3 class="font-sans font-semibold text-foreground text-lg leading-tight">
@@ -84,7 +84,7 @@
 								class="flex items-center gap-2 px-4 py-2.5 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors text-sm font-medium group w-fit"
 							>
 								<span>Open Anthropic login</span>
-								<ExternalLink
+								<IconExternal
 									class="w-4 h-4 opacity-70 group-hover:opacity-100 transition-opacity"
 								/>
 							</a>
@@ -131,7 +131,7 @@
 							role="alert"
 							class="flex items-center gap-2 text-sm text-error bg-error/10 rounded-md px-3 py-2"
 						>
-							<CircleAlert class="w-4 h-4 shrink-0" />
+							<IconAlert class="w-4 h-4 shrink-0" />
 							<span>{loginError}</span>
 						</div>
 					{/if}
@@ -145,11 +145,11 @@
                      hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-[background-color,opacity] duration-150 ease-out group"
 						>
 							{#if loginLoading}
-								<LoaderCircle class="w-4 h-4 animate-spin" />
+								<IconSpinner class="w-4 h-4 animate-spin" />
 								<span>Logging in...</span>
 							{:else}
 								<span>Complete login</span>
-								<ArrowRight
+								<IconArrowRight
 									class="w-4 h-4 opacity-70 group-hover:translate-x-0.5 transition-transform"
 								/>
 							{/if}
@@ -169,7 +169,7 @@
 			<div
 				class="inline-flex items-center gap-2 px-3 py-1.5 bg-accent/50 border border-dotted border-border rounded-lg text-sm group"
 			>
-				<KeyRound class="w-3.5 h-3.5 text-muted-foreground" />
+				<IconKey class="w-3.5 h-3.5 text-muted-foreground" />
 				<span class="text-muted-foreground">Login attempted</span>
 				<span class="text-muted-foreground font-mono text-xs">•••••••#•••</span>
 				{#if onDismissMessage}
@@ -179,7 +179,7 @@
 						title="Dismiss"
 						aria-label="Dismiss"
 					>
-						<CircleX class="w-3.5 h-3.5 text-muted-foreground hover:text-muted-foreground" />
+						<IconError class="w-3.5 h-3.5 text-muted-foreground hover:text-muted-foreground" />
 					</button>
 				{/if}
 			</div>

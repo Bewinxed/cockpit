@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Copy, RotateCcw, GitBranch, MessageSquare, type Icon } from '@lucide/svelte';
+  import { IconCopy, IconReset, IconSubagent, IconChat } from '$lib/icons';
   import { onMount } from 'svelte';
   import { CONTEXT_MENU_CLICK_DELAY } from '$lib/utils/flow-constants';
   import type { ContextMenuAction } from '$lib/utils/flow-types';
@@ -7,7 +7,7 @@
   interface MenuItem {
     id: ContextMenuAction;
     label: string;
-    icon: typeof Icon;
+    icon: typeof IconCopy;
     description: string;
   }
 
@@ -48,10 +48,10 @@
   });
 
   const menuItems: MenuItem[] = [
-    { id: 'copy', label: 'Copy content', icon: Copy, description: 'Copy message content to clipboard' },
-    { id: 'rewind', label: 'Rewind to here', icon: RotateCcw, description: 'Rewind conversation to this point' },
-    { id: 'branch', label: 'Branch from here', icon: GitBranch, description: 'Create a new branch from this message' },
-    { id: 'jump', label: 'Jump to chat view', icon: MessageSquare, description: 'Switch to chat view' },
+    { id: 'copy', label: 'Copy content', icon: IconCopy, description: 'Copy message content to clipboard' },
+    { id: 'rewind', label: 'Rewind to here', icon: IconReset, description: 'Rewind conversation to this point' },
+    { id: 'branch', label: 'Branch from here', icon: IconSubagent, description: 'Create a new branch from this message' },
+    { id: 'jump', label: 'Jump to chat view', icon: IconChat, description: 'Switch to chat view' },
   ];
 </script>
 

@@ -1,9 +1,9 @@
 <script lang="ts">
   /** The whole chrome: wordmark, hub status, machine rail, and the route. */
+  import { IconSidebar, IconSearch, IconShield } from '$lib/icons';
   import type { Snippet } from 'svelte';
   import { fly, scale } from 'svelte/transition';
   import { quintOut } from 'svelte/easing';
-  import { PanelLeft, Search, ShieldAlert } from '@lucide/svelte';
   import { afterNavigate } from '$app/navigation';
   import ThemeSwitcher from '$lib/components/ui/ThemeSwitcher.svelte';
   import { cockpit } from './client.svelte';
@@ -64,7 +64,7 @@
       aria-expanded={rail}
       onclick={() => (rail = !rail)}
     >
-      <PanelLeft size={14} />
+      <IconSidebar class="size-3.5" />
     </button>
     <a href="/session" class="font-mono text-sm font-semibold tracking-tight">COCKPIT</a>
     <button
@@ -73,7 +73,7 @@
       title="Jump to a project, machine, or session (Cmd/Ctrl + K)"
       onclick={() => (palette = true)}
     >
-      <Search size={12} />
+      <IconSearch class="size-3" />
       Jump
     </button>
     <a
@@ -84,7 +84,7 @@
         : 'text-muted-foreground/50 hover:text-muted-foreground'}"
       title="{blocked} session{blocked === 1 ? '' : 's'} awaiting approval"
     >
-      <ShieldAlert size={12} />
+      <IconShield class="size-3" />
       <!-- The count is the app's "what needs me" heartbeat: it pops when it
            crosses zero, and the digit re-enters when it changes. -->
       {#if blocked > 0}

@@ -1,10 +1,8 @@
 <script lang="ts">
+	import { IconCheck, IconCopy, IconClose } from '$lib/icons';
 	import { Button } from '$lib/components/ui/button';
 	import { UseClipboard } from '$lib/hooks/use-clipboard.svelte';
 	import { cn } from '$lib/utils.js';
-	import CheckIcon from '@lucide/svelte/icons/check';
-	import CopyIcon from '@lucide/svelte/icons/copy';
-	import XIcon from '@lucide/svelte/icons/x';
 	import type { CopyButtonProps } from './types';
 
 	let {
@@ -51,13 +49,13 @@
 	}}
 >
 	<span class="icon-swap" style="--icon-swap-dur: {animationDuration}ms">
-		<span data-active={clipboard.status === 'success'}><CheckIcon tabindex={-1} /></span>
-		<span data-active={clipboard.status === 'failure'}><XIcon tabindex={-1} /></span>
+		<span data-active={clipboard.status === 'success'}><IconCheck tabindex={-1} /></span>
+		<span data-active={clipboard.status === 'failure'}><IconClose tabindex={-1} /></span>
 		<span data-active={clipboard.status === undefined}>
 			{#if icon}
 				{@render icon()}
 			{:else}
-				<CopyIcon tabindex={-1} />
+				<IconCopy tabindex={-1} />
 			{/if}
 		</span>
 	</span>

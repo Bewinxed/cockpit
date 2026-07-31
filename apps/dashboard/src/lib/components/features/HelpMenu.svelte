@@ -1,6 +1,6 @@
 <script lang="ts">
+  import { IconChevronRight } from '$lib/icons';
   import { Tabs } from 'bits-ui';
-  import { ChevronRight } from '@lucide/svelte';
   import { fly } from 'svelte/transition';
   import { quintOut } from 'svelte/easing';
   import { buttonVariants } from '$lib/components/ui/button';
@@ -205,7 +205,7 @@
             <div class="space-y-1">
               {#each customCommands as cmd (cmd.name)}
                 <div class="flex items-start gap-2 group">
-                  <ChevronRight class="w-3 h-3 text-muted-foreground mt-1 shrink-0" />
+                  <IconChevronRight class="w-3 h-3 text-muted-foreground mt-1 shrink-0" />
                   <span class="text-success font-medium">{cmd.name}</span>
                   {#if cmd.description}
                     <span class="text-muted-foreground">-</span>

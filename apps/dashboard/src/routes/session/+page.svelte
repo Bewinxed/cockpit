@@ -1,10 +1,10 @@
 <script lang="ts">
+  import { IconChevronRight, IconShield } from '$lib/icons';
   import { onMount, tick } from 'svelte';
   import { fly } from 'svelte/transition';
   import { quintOut } from 'svelte/easing';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
-  import { ChevronRight, ShieldAlert } from '@lucide/svelte';
   import { cockpit, createProject, spawnSession } from '$lib/cockpit/client.svelte';
   import LiveSessionRow from '$lib/cockpit/LiveSessionRow.svelte';
   import StoredSessionRow from '$lib/cockpit/StoredSessionRow.svelte';
@@ -129,7 +129,7 @@
         <h2
           class="flex items-center gap-2 border-b border-warning/20 px-4 py-2 text-xs font-medium tracking-wider text-warning uppercase"
         >
-          <ShieldAlert size={14} />
+          <IconShield class="size-3.5" />
           Needs attention
           <span class="ml-auto font-mono text-[11px] normal-case">
             {cockpit.blocked.length}
@@ -326,7 +326,7 @@
           <Collapsible.Trigger
             class="flex min-h-6 items-center gap-2 text-left text-[11px] font-medium tracking-wider text-muted-foreground uppercase transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
           >
-            <ChevronRight size={12} class="transition-transform {showStale ? 'rotate-90' : ''}" />
+            <IconChevronRight class="size-3 transition-transform {showStale ? 'rotate-90' : ''}" />
             Stale
             <span class="font-mono normal-case">{stale.length}</span>
           </Collapsible.Trigger>

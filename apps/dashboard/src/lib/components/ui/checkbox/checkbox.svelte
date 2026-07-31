@@ -1,6 +1,6 @@
 <script lang="ts">
+	import { IconCheck } from '$lib/icons';
 	import { Checkbox as CheckboxPrimitive } from 'bits-ui';
-	import { Check } from '@lucide/svelte';
 	import { scale } from 'svelte/transition';
 	import { quintOut } from 'svelte/easing';
 	import { cn } from '$lib/utils.js';
@@ -26,7 +26,7 @@
 	{#snippet children({ checked: isChecked })}
 		{#if isChecked}
 			<span in:scale={{ start: 0.25, duration: 200, easing: quintOut }}>
-				<Check size={12} class="text-primary-foreground" />
+				<IconCheck class="size-3 text-primary-foreground" />
 			</span>
 		{/if}
 	{/snippet}

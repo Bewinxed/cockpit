@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Cpu, Check, ArrowRight, CircleAlert, LoaderCircle, CircleX } from '@lucide/svelte';
+	import { IconCpu, IconCheck, IconArrowRight, IconAlert, IconSpinner, IconError } from '$lib/icons';
 	import type { MessageMetadata } from '$lib/cockpit/types';
 	import type { MessageRendererProps } from './types';
 
@@ -83,7 +83,7 @@
 						<div
 							class="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0"
 						>
-							<Cpu class="w-5 h-5 text-primary" />
+							<IconCpu class="w-5 h-5 text-primary" />
 						</div>
 						<div>
 							<h3 class="font-sans font-semibold text-foreground text-lg leading-tight">
@@ -96,12 +96,12 @@
 					<!-- Model list -->
 					{#if message.metadata?.loading}
 						<div class="flex items-center justify-center py-6">
-							<LoaderCircle class="w-5 h-5 animate-spin text-muted-foreground" />
+							<IconSpinner class="w-5 h-5 animate-spin text-muted-foreground" />
 							<span class="ml-2 text-sm text-muted-foreground">Loading models...</span>
 						</div>
 					{:else if message.metadata?.error}
 						<div class="flex items-center gap-2 text-sm text-error bg-error/10 rounded-md px-3 py-2">
-							<CircleAlert class="w-4 h-4 shrink-0" />
+							<IconAlert class="w-4 h-4 shrink-0" />
 							<span>{message.metadata.error}</span>
 						</div>
 					{:else if models.length === 0}
@@ -129,7 +129,7 @@
 								>
 									<div class="shrink-0 w-5 h-5 mt-0.5">
 										{#if selectedModel === model.value}
-											<Check class="w-5 h-5 text-primary" />
+											<IconCheck class="w-5 h-5 text-primary" />
 										{/if}
 									</div>
 									<div class="flex-1 min-w-0">
@@ -157,7 +157,7 @@
 					<!-- Error -->
 					{#if modelError}
 						<div class="flex items-center gap-2 text-sm text-error bg-error/10 rounded-md px-3 py-2">
-							<CircleAlert class="w-4 h-4 shrink-0" />
+							<IconAlert class="w-4 h-4 shrink-0" />
 							<span>{modelError}</span>
 						</div>
 					{/if}
@@ -171,11 +171,11 @@
                      hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-[background-color,opacity] duration-150 ease-out group"
 						>
 							{#if modelLoading}
-								<LoaderCircle class="w-4 h-4 animate-spin" />
+								<IconSpinner class="w-4 h-4 animate-spin" />
 								<span>Applying...</span>
 							{:else}
 								<span>Apply</span>
-								<ArrowRight
+								<IconArrowRight
 									class="w-4 h-4 opacity-70 group-hover:translate-x-0.5 transition-transform"
 								/>
 							{/if}
@@ -195,7 +195,7 @@
 			<div
 				class="inline-flex items-center gap-2 px-3 py-1.5 bg-accent/50 border border-dotted border-border rounded-lg text-sm group"
 			>
-				<Cpu class="w-3.5 h-3.5 text-muted-foreground" />
+				<IconCpu class="w-3.5 h-3.5 text-muted-foreground" />
 				<span class="text-muted-foreground">Model selection</span>
 				{#if message.metadata?.selectedModel}
 					<span class="text-muted-foreground text-xs">{message.metadata.selectedModel}</span>
@@ -207,7 +207,7 @@
 						title="Dismiss"
 						aria-label="Dismiss"
 					>
-						<CircleX class="w-3.5 h-3.5 text-muted-foreground hover:text-muted-foreground" />
+						<IconError class="w-3.5 h-3.5 text-muted-foreground hover:text-muted-foreground" />
 					</button>
 				{/if}
 			</div>

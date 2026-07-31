@@ -1,0 +1,18 @@
+{
+  "assignee": "bewinxed@gmail.com",
+  "claim_note": "",
+  "claimed_at": "2026-07-31T11:14:18.141144Z",
+  "created_at": "2026-07-31T11:14:18.007091Z",
+  "depends_on": [],
+  "epic": "fn-22",
+  "evidence": {
+    "gates": "svelte-check 0/0; eslint clean",
+    "note": "browser verification in post-icons pass before commit"
+  },
+  "id": "fn-22.1",
+  "priority": null,
+  "spec_path": ".flow/tasks/fn-22.1.md",
+  "status": "done",
+  "title": "Urgency-correct session attention states",
+  "updated_at": "2026-07-31T11:19:31.584486Z"
+}

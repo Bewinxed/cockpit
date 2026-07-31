@@ -1,6 +1,6 @@
 <script lang="ts">
+	import { IconChevronDown } from '$lib/icons';
 	import { Select as SelectPrimitive } from 'bits-ui';
-	import { ChevronDown } from '@lucide/svelte';
 	import type { Snippet } from 'svelte';
 	import { cn } from '$lib/utils.js';
 
@@ -22,8 +22,7 @@
 	{...restProps}
 >
 	{@render children?.()}
-	<ChevronDown
-		size={14}
-		class="shrink-0 text-muted-foreground transition-transform duration-200 ease-out group-data-[state=open]:rotate-180"
+	<IconChevronDown
+		class="size-3.5 shrink-0 text-muted-foreground transition-transform duration-200 ease-out group-data-[state=open]:rotate-180"
 	/>
 </SelectPrimitive.Trigger>

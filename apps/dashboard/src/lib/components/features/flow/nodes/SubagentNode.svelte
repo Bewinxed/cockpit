@@ -1,6 +1,6 @@
 <script lang="ts">
+  import { IconSkill, IconSpinner, IconSuccess, IconError, IconChevronRight, IconChevronDown, IconLayers, IconTools } from '$lib/icons';
   import { Handle, Position, useStore, useSvelteFlow } from '@xyflow/svelte';
-  import { Zap, LoaderCircle, CircleCheck, CircleX, ChevronRight, ChevronDown, Layers, Wrench } from '@lucide/svelte';
   import * as Collapsible from '$lib/components/ui/collapsible';
   import type { Message } from '$lib/cockpit/types';
   import type { SubagentState } from '$lib/utils/flow-types';
@@ -85,9 +85,9 @@
   // Status styling helpers
   function getStatusIcon(status: string) {
     switch (status) {
-      case 'complete': return CircleCheck;
-      case 'error': return CircleX;
-      default: return LoaderCircle;
+      case 'complete': return IconSuccess;
+      case 'error': return IconError;
+      default: return IconSpinner;
     }
   }
 
@@ -241,7 +241,7 @@
         class="rounded-full p-2"
         style="background: color-mix(in oklab, {branchColor} 15%, transparent)"
       >
-        <Zap class="h-4 w-4" style="color: {branchColor}" />
+        <IconSkill class="h-4 w-4" style="color: {branchColor}" />
       </div>
       <div
         class="w-2 h-2 rounded-full {getStatusColor(groupStatus) === 'text-success'
@@ -257,14 +257,14 @@
     <div class="space-y-1">
       {#if isParallel}
         <div class="flex items-center gap-1 text-xs text-muted-foreground mb-1">
-          <Layers class="h-3 w-3" />
+          <IconLayers class="h-3 w-3" />
           <span>{allSubagents.length} parallel agents</span>
         </div>
       {/if}
       {#each allSubagents as subagent (subagent.toolUseId)}
         {@const SubIcon = getStatusIcon(subagent.status)}
         <div class="flex items-center gap-2">
-          <Zap class="h-3 w-3 shrink-0" style="color: {branchColor}" />
+          <IconSkill class="h-3 w-3 shrink-0" style="color: {branchColor}" />
           <span class="text-sm font-medium truncate">{subagent.subagentType}</span>
           {#if subagent.messages?.length}
             <span class="text-xs bg-muted px-1 py-0.5 rounded">{subagent.messages.length}</span>
@@ -278,7 +278,7 @@
     <div class="space-y-3">
       {#if isParallel}
         <div class="flex items-center gap-2 pb-2 border-b border-border">
-          <Layers class="h-4 w-4 text-muted-foreground" />
+          <IconLayers class="h-4 w-4 text-muted-foreground" />
           <span class="text-sm font-medium">{allSubagents.length} Parallel Agents</span>
           <span class="text-xs text-muted-foreground ml-auto">{totalToolCount} tools total</span>
         </div>
@@ -293,7 +293,7 @@
         <div class="space-y-2 {i > 0 ? 'pt-2 border-t border-border/50' : ''}">
           <!-- Header -->
           <div class="flex items-center gap-2">
-            <Zap class="h-4 w-4 shrink-0" style="color: {branchColor}" />
+            <IconSkill class="h-4 w-4 shrink-0" style="color: {branchColor}" />
             <span class="text-sm font-medium">{subagent.subagentType}</span>
             <SubIcon class="h-4 w-4 ml-auto {getStatusColor(subagent.status)} {subagent.status === 'running' ? 'animate-spin' : ''}" />
           </div>
@@ -336,10 +336,10 @@
                 onclick={(e: MouseEvent) => e.stopPropagation()}
               >
                 {#if isExpanded}
-                  <ChevronDown class="h-3 w-3" />
+                  <IconChevronDown class="h-3 w-3" />
                   <span>Hide details</span>
                 {:else}
-                  <ChevronRight class="h-3 w-3" />
+                  <IconChevronRight class="h-3 w-3" />
                   <span>Show {toolMessages.length} tools{childSubagents.length > 0 ? `, ${childSubagents.length} nested` : ''}</span>
                 {/if}
               </Collapsible.Trigger>
@@ -349,7 +349,7 @@
                 <div class="border-t border-border/50 pt-2 space-y-1">
                   {#each toolMessages as tool (tool.metadata?.toolId)}
                     <div class="flex items-center gap-2 text-xs py-1 px-2 rounded bg-muted/50">
-                      <Wrench class="h-3 w-3 {getToolStatusColor(tool)} shrink-0" />
+                      <IconTools class="h-3 w-3 {getToolStatusColor(tool)} shrink-0" />
                       <span class="font-medium">{tool.metadata?.toolName || 'Tool'}</span>
                       <span class="text-muted-foreground truncate">
                         {getToolGlance(tool.metadata?.toolInput as Record<string, unknown>) || ''}
@@ -359,7 +359,7 @@
 
                   {#each childSubagents as child (child.toolUseId)}
                     <div class="flex items-center gap-2 text-xs py-1 px-2 rounded bg-info/10 border-l-2 border-info">
-                      <Zap class="h-3 w-3 text-info shrink-0" />
+                      <IconSkill class="h-3 w-3 text-info shrink-0" />
                       <span class="font-medium">{child.subagentType}</span>
                       <span class="text-muted-foreground">{statusLabel(child.status)}</span>
                       {#if child.messages.length > 0}
@@ -383,7 +383,7 @@
 
       {#if depth >= 3}
         <div class="flex items-center gap-1 text-xs text-muted-foreground pt-2 border-t border-border">
-          <Layers class="h-3 w-3" />
+          <IconLayers class="h-3 w-3" />
           <span>+{depth - 2} nested levels</span>
         </div>
       {/if}

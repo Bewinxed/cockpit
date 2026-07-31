@@ -4,10 +4,10 @@
    * what is happening — read from the repo's own files and flowctl, never from a
    * store of cockpit's own.
    */
+  import { IconChevronRight } from '$lib/icons';
   import { untrack } from 'svelte';
   import { goto } from '$app/navigation';
   import Markdown from '@humanspeak/svelte-markdown';
-  import { ChevronRight } from '@lucide/svelte';
   import { PROSE } from '$lib/prose';
   import * as Collapsible from '$lib/components/ui/collapsible';
   import { cockpit, deleteProject, machineFs, spawnSession } from '$lib/cockpit/client.svelte';
@@ -240,9 +240,8 @@
                 <Collapsible.Trigger
                   class="flex w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
                 >
-                  <ChevronRight
-                    size={12}
-                    class="shrink-0 text-muted-foreground transition-transform {expanded[epic.id]
+                  <IconChevronRight
+                    class="size-3 shrink-0 text-muted-foreground transition-transform {expanded[epic.id]
                       ? 'rotate-90'
                       : ''}"
                   />

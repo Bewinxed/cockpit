@@ -4,7 +4,7 @@
    * the reader opens on purpose (NEW.md §1). Collapsed it answers "what is it
    * doing"; expanded it is the same renderers the main thread uses.
    */
-  import { ChevronRight, CircleCheck, CircleX, LoaderCircle, Zap } from '@lucide/svelte';
+  import { IconChevronRight, IconSuccess, IconError, IconSpinner, IconSkill } from '$lib/icons';
   import * as Collapsible from '$lib/components/ui/collapsible';
   import { branchActivity } from '$lib/cockpit/frames';
   import type { Message } from '$lib/cockpit/types';
@@ -57,7 +57,7 @@
   <Collapsible.Root {open} onOpenChange={() => (open = !open)}>
     <Collapsible.Trigger class="w-full text-left">
       <div class="flex cursor-pointer items-start gap-2 px-3 py-2.5 transition-colors hover:bg-muted/30">
-        <ChevronRight
+        <IconChevronRight
           class="mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform duration-200 {open
             ? 'rotate-90'
             : ''}"
@@ -67,7 +67,7 @@
           class="flex size-6 shrink-0 items-center justify-center rounded-md
             {branch.status === 'error' ? 'bg-destructive/10' : running ? 'bg-primary/10' : 'bg-success/10'}"
         >
-          <Zap
+          <IconSkill
             class="size-3.5 {branch.status === 'error'
               ? 'text-destructive'
               : running
@@ -95,11 +95,11 @@
             </span>
           {/if}
           {#if branch.status === 'error'}
-            <CircleX class="size-4 text-destructive" />
+            <IconError class="size-4 text-destructive" />
           {:else if running}
-            <LoaderCircle class="size-4 animate-spin text-primary" />
+            <IconSpinner class="size-4 animate-spin text-primary" />
           {:else}
-            <CircleCheck class="size-4 text-success" />
+            <IconSuccess class="size-4 text-success" />
           {/if}
         </div>
       </div>

@@ -1,10 +1,10 @@
 <script lang="ts">
+  import { IconClose, IconColumns, IconAlignLeft } from '$lib/icons';
   import { onDestroy } from 'svelte';
   import { fade, scale } from 'svelte/transition';
   import { quintOut } from 'svelte/easing';
   import { Dialog } from 'bits-ui';
   import { FileDiff, parseDiffFromFile, type FileContents } from '@pierre/diffs';
-  import { X, Columns2, TextAlignStart } from '@lucide/svelte';
   import { Button } from '$lib/components/ui/button';
   import { CopyButton } from '$lib/components/ui/copy-button';
 
@@ -201,7 +201,7 @@
                     aria-pressed={diffStyle === 'unified'}
                     title="Unified view"
                   >
-                    <TextAlignStart class="w-3.5 h-3.5" />
+                    <IconAlignLeft class="w-3.5 h-3.5" />
                     <span>Unified</span>
                   </Button>
                   <Button
@@ -214,7 +214,7 @@
                     aria-pressed={diffStyle === 'split'}
                     title="Split view"
                   >
-                    <Columns2 class="w-3.5 h-3.5" />
+                    <IconColumns class="w-3.5 h-3.5" />
                     <span>Split</span>
                   </Button>
                 </div>
@@ -227,7 +227,7 @@
                   title="Close (Esc)"
                   aria-label="Close diff modal"
                 >
-                  <X class="size-5" />
+                  <IconClose class="size-5" />
                 </Button>
               </div>
             </div>

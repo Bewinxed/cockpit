@@ -1,7 +1,7 @@
 <script lang="ts">
   /** Walks a machine's filesystem over the `fs` verb so a cwd can be picked, not typed. */
+  import { IconArrowUp, IconFolder, IconSpinner } from '$lib/icons';
   import type { FsEntry, SDKSessionInfo } from '@cockpit/core';
-  import { ArrowUp, Folder, LoaderCircle } from '@lucide/svelte';
   import * as Collapsible from '$lib/components/ui/collapsible';
   import { cockpit, machineFs } from '$lib/cockpit/client.svelte';
 
@@ -99,7 +99,7 @@
   <Collapsible.Trigger
     class="flex items-center gap-1.5 self-start text-xs text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
   >
-    <Folder size={14} />
+    <IconFolder class="size-3.5" />
     Browse
   </Collapsible.Trigger>
 
@@ -113,7 +113,7 @@
           disabled={!parent}
           onclick={() => parent && go(parent)}
         >
-          <ArrowUp size={14} />
+          <IconArrowUp class="size-3.5" />
         </button>
         <span class="truncate font-mono text-xs text-muted-foreground" title={path}>{path}</span>
       </div>
@@ -121,7 +121,7 @@
       <div class="max-h-56 overflow-y-auto">
         {#if loading}
           <span class="flex items-center gap-2 px-2 py-1 text-xs text-muted-foreground">
-            <LoaderCircle size={14} class="animate-spin" />
+            <IconSpinner class="size-3.5 animate-spin" />
             Reading directory…
           </span>
         {:else if error}
@@ -133,7 +133,7 @@
               class="flex w-full items-center gap-2 rounded px-2 py-1 text-left font-mono text-[13px] transition-colors hover:bg-accent"
               onclick={() => go(join(path, dir.name))}
             >
-              <Folder size={14} class="shrink-0 text-muted-foreground" />
+              <IconFolder class="size-3.5 shrink-0 text-muted-foreground" />
               <span class="truncate">{dir.name}</span>
             </button>
           {:else}

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { CircleHelp, Check, ListChecks, Send, X, PenLine, ChevronDown, ChevronRight } from '@lucide/svelte';
+	import { IconHelp, IconCheck, IconChecklist, IconSend, IconClose, IconPenLine, IconChevronDown, IconChevronRight } from '$lib/icons';
 	import * as Collapsible from '$lib/components/ui/collapsible';
 	import type { MessageMetadata } from '$lib/cockpit/types';
 	import type { MessageRendererProps } from './types';
@@ -349,7 +349,7 @@
 			: 'border-muted-foreground/30'}"
 	>
 		{#if isOptionSelected(qIdx, option.label)}
-			<Check class="w-3 h-3 text-primary-foreground" />
+			<IconCheck class="w-3 h-3 text-primary-foreground" />
 		{/if}
 	</div>
 
@@ -379,9 +379,9 @@
 			class="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0"
 		>
 			{#if question.multiSelect}
-				<ListChecks class="w-4 h-4 text-primary" />
+				<IconChecklist class="w-4 h-4 text-primary" />
 			{:else}
-				<CircleHelp class="w-4 h-4 text-primary" />
+				<IconHelp class="w-4 h-4 text-primary" />
 			{/if}
 		</div>
 		<div class="flex-1 min-w-0">
@@ -448,11 +448,11 @@
 							? 'sm'
 							: 'full'} border-2 border-primary bg-primary flex items-center justify-center"
 					>
-						<Check class="w-3 h-3 text-primary-foreground" />
+						<IconCheck class="w-3 h-3 text-primary-foreground" />
 					</div>
 					<div class="flex-1 min-w-0">
 						<div class="flex items-center gap-2 mb-2">
-							<PenLine class="w-3.5 h-3.5 text-muted-foreground" />
+							<IconPenLine class="w-3.5 h-3.5 text-muted-foreground" />
 							<span class="text-xs text-muted-foreground">Custom answer</span>
 							{#if !readOnly}
 								<button
@@ -464,7 +464,7 @@
 										otherSelected = new Map(otherSelected);
 									}}
 								>
-									<X class="w-3.5 h-3.5 text-muted-foreground" />
+									<IconClose class="w-3.5 h-3.5 text-muted-foreground" />
 								</button>
 							{/if}
 						</div>
@@ -551,7 +551,7 @@
 									<div class="flex items-center justify-center gap-2">
 										<span class="truncate max-w-[100px]">{question.header}</span>
 										{#if isQuestionAnswered(qIdx)}
-											<Check class="w-3.5 h-3.5 text-success shrink-0" />
+											<IconCheck class="w-3.5 h-3.5 text-success shrink-0" />
 										{/if}
 									</div>
 									{#if activeTab === qIdx}
@@ -577,7 +577,7 @@
 						<div
 							class="mx-4 mb-3 flex items-center gap-2 text-sm text-destructive bg-destructive/10 rounded-md px-3 py-2"
 						>
-							<X class="w-4 h-4 shrink-0" />
+							<IconClose class="w-4 h-4 shrink-0" />
 							<span>{submitError}</span>
 						</div>
 					{/if}
@@ -618,7 +618,7 @@
 									></div>
 									<span>Sending...</span>
 								{:else}
-									<Send class="w-3.5 h-3.5" />
+									<IconSend class="w-3.5 h-3.5" />
 									<span>Submit</span>
 								{/if}
 							</button>
@@ -636,9 +636,9 @@
 							<Collapsible.Trigger class="flex items-center gap-2 flex-1 text-left">
 								<div class="flex items-center gap-1 text-muted-foreground">
 									{#if isExpanded}
-										<ChevronDown class="w-4 h-4" />
+										<IconChevronDown class="w-4 h-4" />
 									{:else}
-										<ChevronRight class="w-4 h-4" />
+										<IconChevronRight class="w-4 h-4" />
 									{/if}
 								</div>
 								<div class="flex flex-wrap gap-2 flex-1">
@@ -660,7 +660,7 @@
 									title="Dismiss"
 									aria-label="Dismiss"
 								>
-									<X class="w-3.5 h-3.5 text-muted-foreground" />
+									<IconClose class="w-3.5 h-3.5 text-muted-foreground" />
 								</button>
 							{/if}
 						</div>
@@ -682,7 +682,7 @@
 											>
 												<div class="flex items-center justify-center gap-1.5">
 													<span class="truncate max-w-[80px]">{question.header}</span>
-													<Check class="w-3 h-3 text-success shrink-0" />
+													<IconCheck class="w-3 h-3 text-success shrink-0" />
 												</div>
 												{#if activeTab === qIdx}
 													<div class="absolute bottom-0 left-0 right-0 h-0.5 bg-primary/50"></div>
@@ -706,7 +706,7 @@
 						<div
 							class="inline-flex items-center gap-2 px-3 py-1.5 bg-accent/50 border border-border/50 rounded-full text-sm"
 						>
-							<CircleHelp class="w-3.5 h-3.5 text-muted-foreground" />
+							<IconHelp class="w-3.5 h-3.5 text-muted-foreground" />
 							<span class="text-muted-foreground">Question answered</span>
 						</div>
 						{#if onDismissMessage}
@@ -716,7 +716,7 @@
 								title="Dismiss"
 								aria-label="Dismiss"
 							>
-								<X class="w-3.5 h-3.5 text-muted-foreground" />
+								<IconClose class="w-3.5 h-3.5 text-muted-foreground" />
 							</button>
 						{/if}
 					</div>
