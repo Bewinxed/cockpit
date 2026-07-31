@@ -1,0 +1,16 @@
+{
+  "assignee": null,
+  "claim_note": "",
+  "claimed_at": null,
+  "created_at": "2026-07-31T01:27:13.837214Z",
+  "depends_on": [
+    "fn-18.1"
+  ],
+  "epic": "fn-18",
+  "id": "fn-18.2",
+  "priority": 2,
+  "spec_path": ".flow/tasks/fn-18.2.md",
+  "status": "todo",
+  "title": "E2E: open cockpit-as-project \u2014 what is this / what's the plan / what's happening, no terminal (done-criterion)",
+  "updated_at": "2026-07-31T01:27:13.837226Z"
+}

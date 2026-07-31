@@ -7,7 +7,7 @@
   "plan_review_status": "unknown",
   "plan_reviewed_at": null,
   "spec_path": ".flow/specs/fn-17.md",
-  "status": "open",
+  "status": "done",
   "title": "Phase 4 \u2014 side quests: fork, ephemeral + worktree spawns, keep/discard",
-  "updated_at": "2026-07-31T01:02:52.248634Z"
+  "updated_at": "2026-07-31T01:27:13.627674Z"
 }
