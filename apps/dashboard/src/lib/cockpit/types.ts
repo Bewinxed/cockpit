@@ -10,6 +10,7 @@ import type {
   SDKStatus,
   SDKSystemMessage,
 } from '@cockpit/core';
+import type { SubagentState } from '$lib/utils/flow-types';
 
 export type JsonPrimitive = string | number | boolean | null;
 export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
@@ -113,3 +114,13 @@ export interface MessageMetadata {
   noteKind?: string;
   noteTitle?: string;
 }
+
+/**
+ * One row of the session view: consecutive tool calls collapse into a group, a
+ * Task call becomes the branch it spawned, everything else stands alone. Shared
+ * because the transcript renders these and the in-app search reads them.
+ */
+export type TranscriptGroup =
+  | { kind: 'single'; message: Message; index: number }
+  | { kind: 'tools'; messages: Message[]; index: number }
+  | { kind: 'subagent'; branch: SubagentState; spawn: Message; index: number };

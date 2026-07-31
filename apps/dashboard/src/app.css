@@ -287,6 +287,31 @@ button.text-destructive-foreground { color: var(--destructive-foreground); }
   pointer-events: none;
 }
 
+/* A search jump lands the reader somewhere they were not looking, so the group
+   it landed on says so and then gets out of the way. */
+.transcript-flash > * {
+  animation: transcript-flash 1.2s ease-out;
+}
+
+@keyframes transcript-flash {
+  0%, 40% {
+    box-shadow: 0 0 0 2px var(--color-warning);
+    border-radius: 12px;
+  }
+  100% {
+    box-shadow: 0 0 0 2px transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Held rather than faded — the class is pulled after 1.2s either way. */
+  .transcript-flash > * {
+    animation: none;
+    box-shadow: 0 0 0 2px var(--color-warning);
+    border-radius: 12px;
+  }
+}
+
 /* ========================================
    View Transitions
    ======================================== */

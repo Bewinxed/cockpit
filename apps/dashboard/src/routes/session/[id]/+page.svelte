@@ -8,7 +8,13 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import type { PermissionResult } from '@cockpit/core';
-  import { ChatInput, ChatMessage, SubagentBranch, ToolGroup } from '$lib/components/features';
+  import {
+    ChatInput,
+    ChatMessage,
+    SubagentBranch,
+    ToolGroup,
+    TranscriptSearch,
+  } from '$lib/components/features';
   import { FlowView } from '$lib/components/features/flow';
   import PermissionCard from '$lib/cockpit/PermissionCard.svelte';
   import { ACTIVITY_LABEL } from '$lib/cockpit/activity';
@@ -26,7 +32,7 @@
     sendText,
     stopSession,
   } from '$lib/cockpit/client.svelte';
-  import type { Message } from '$lib/cockpit/types';
+  import type { Message, TranscriptGroup } from '$lib/cockpit/types';
   import type { SubagentState } from '$lib/utils/flow-types';
 
   const viewId = $derived(page.params.id ?? '');
@@ -132,11 +138,6 @@
     if (!untrack(() => atBottom)) unseen = true;
   });
 
-  type Group =
-    | { kind: 'single'; message: Message; index: number }
-    | { kind: 'tools'; messages: Message[]; index: number }
-    | { kind: 'subagent'; branch: SubagentState; spawn: Message; index: number };
-
   const isTool = (message: Message) => message.type === 'tool.use' || message.type === 'tool.result';
 
   const subagents = $derived(session?.subagents ?? {});
@@ -150,9 +151,9 @@
   // Consecutive tool calls collapse into one ToolGroup, as MessageList does; a
   // Task call becomes its branch card instead, so the subagent it spawned reads
   // as one line until the user opens it.
-  const groups = $derived.by((): Group[] => {
+  const groups = $derived.by((): TranscriptGroup[] => {
     const messages = session?.messages ?? [];
-    const result: Group[] = [];
+    const result: TranscriptGroup[] = [];
     let i = 0;
     while (i < messages.length) {
       const branch = branchOf(messages[i]);
@@ -180,7 +181,7 @@
   // Keyed by what a group holds rather than where it sits: hydrating a long
   // transcript prepends older turns to the front, and a key that moved with the
   // index would remount every group below it and lose its measured height.
-  const groupKey = (group: Group): string => {
+  const groupKey = (group: TranscriptGroup): string => {
     if (group.kind === 'single') return group.message.id ?? `single-${group.index}`;
     if (group.kind === 'subagent') return `subagent-${group.branch.toolUseId}`;
     return `tools-${group.messages[0].id ?? group.index}`;
@@ -206,6 +207,38 @@
   });
 
   let view = $state<'chat' | 'flow'>('chat');
+
+  let searchOpen = $state(false);
+  let search = $state<ReturnType<typeof TranscriptSearch> | null>(null);
+  let dock = $state<HTMLDivElement | null>(null);
+  /** The group a search jump landed on, ringed until the reader has found it. */
+  let flashKey = $state<string | null>(null);
+  let flashTimer: ReturnType<typeof setTimeout>;
+
+  // Find belongs to the transcript, so it only takes the key over the chat pane —
+  // and unlike Cmd+K it takes it mid-typing too, as the native find would.
+  function handleKeydown(event: KeyboardEvent) {
+    if (event.key !== 'f' || !(event.metaKey || event.ctrlKey) || view !== 'chat') return;
+    event.preventDefault();
+    if (searchOpen) search?.focus();
+    else searchOpen = true;
+  }
+
+  // Matches live wherever the transcript put them, which is usually off screen
+  // and behind the live edge: hold the pin off long enough for virtua to settle
+  // on the target, or following would snap the reader straight back down.
+  function jumpToMatch(groupIndex: number) {
+    followHold = performance.now() + 600;
+    vlist?.scrollToIndex(groupIndex, { align: 'center' });
+    clearTimeout(flashTimer);
+    flashKey = groupKey(groups[groupIndex]);
+    flashTimer = setTimeout(() => (flashKey = null), 1200);
+  }
+
+  function closeSearch() {
+    searchOpen = false;
+    (dock?.querySelector('textarea') ?? scroller)?.focus();
+  }
 
   // Nothing animates on arrival: the pane slide and the state-word swap are for
   // changes the reader caused or needs to notice, not for the page showing up.
@@ -296,6 +329,8 @@
   const destructive =
     'shrink-0 rounded-md border border-error bg-error px-2 py-1 text-xs text-error-foreground transition-colors hover:bg-error/90 focus-visible:ring-2 focus-visible:ring-ring';
 </script>
+
+<svelte:window onkeydown={handleKeydown} />
 
 <div class="flex h-full flex-1 flex-col overflow-hidden">
   <header class="flex items-center gap-3 border-b border-border px-4 py-2">
@@ -422,7 +457,8 @@
         <div
           bind:this={scroller}
           onscroll={trackScroll}
-          class="h-full space-y-4 overflow-y-auto overflow-x-hidden px-4 pt-4 pb-44 [overflow-anchor:none]"
+          tabindex="-1"
+          class="h-full space-y-4 overflow-y-auto overflow-x-hidden px-4 pt-4 pb-44 [overflow-anchor:none] focus:outline-none"
         >
           <div class="mx-auto max-w-4xl">
             <!-- Mounted once the scroller exists: virtua reads scrollRef once, on
@@ -438,7 +474,7 @@
                 shift={session?.hydrating ?? false}
               >
                 {#snippet children(group)}
-                  <div class="pb-4">
+                  <div class="pb-4 {groupKey(group) === flashKey ? 'transcript-flash' : ''}">
                     {#if group.kind === 'tools'}
                       <div class="flex justify-start gap-3">
                         <div
@@ -496,6 +532,10 @@
           </div>
         </div>
 
+        {#if searchOpen}
+          <TranscriptSearch bind:this={search} {groups} onJump={jumpToMatch} onClose={closeSearch} />
+        {/if}
+
         {#if unseen}
           <button
             type="button"
@@ -518,7 +558,7 @@
     </div>
 
     <div class="pointer-events-none absolute inset-x-0 bottom-0 px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-      <div class="pointer-events-auto mx-auto flex max-w-4xl flex-col gap-2">
+      <div bind:this={dock} class="pointer-events-auto mx-auto flex max-w-4xl flex-col gap-2">
       {#if error}
         <!-- Keyed so a second failure shakes again instead of sitting there. -->
         {#key error}
