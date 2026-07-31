@@ -4,7 +4,7 @@
   import type { Message } from '$lib/cockpit/types';
 
   // Props passed by SvelteFlow
-  let { id, data } = $props<{
+  let { data } = $props<{
     id: string;
     data: {
       message?: Message;
@@ -32,23 +32,23 @@
   );
 </script>
 
-<Handle type="target" position={Position.Top} class="!bg-blue-500" />
+<Handle type="target" position={Position.Top} class="!bg-info" />
 
-<div class="user-message-node rounded-lg border-l-4 border-blue-500 bg-card p-3 w-[320px]">
+<div class="user-message-node rounded-lg border-l-4 border-info bg-card p-3 w-[320px]">
   {#if zoomLevel === 'overview'}
     <div class="flex items-center justify-center">
-      <div class="rounded-full bg-blue-500/20 p-2">
-        <User class="h-4 w-4 text-blue-500" />
+      <div class="rounded-full bg-info/20 p-2">
+        <User class="h-4 w-4 text-info" />
       </div>
     </div>
   {:else if zoomLevel === 'summary'}
     <div class="flex items-center gap-2">
-      <User class="h-4 w-4 text-blue-500 shrink-0" />
+      <User class="h-4 w-4 text-info shrink-0" />
       <span class="text-sm truncate text-foreground">{displayContent.split('\n')[0]}</span>
     </div>
   {:else}
     <div class="flex items-start gap-2">
-      <User class="h-4 w-4 text-blue-500 shrink-0 mt-0.5" />
+      <User class="h-4 w-4 text-info shrink-0 mt-0.5" />
       <div class="flex-1 min-w-0">
         <div class="text-xs text-muted-foreground mb-1">You</div>
         <div class="text-sm text-foreground whitespace-pre-wrap break-words">{displayContent}</div>
@@ -60,4 +60,4 @@
   {/if}
 </div>
 
-<Handle type="source" position={Position.Bottom} class="!bg-blue-500" />
+<Handle type="source" position={Position.Bottom} class="!bg-info" />

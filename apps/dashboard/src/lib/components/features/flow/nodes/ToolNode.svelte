@@ -5,7 +5,7 @@
   import type { Message } from '$lib/cockpit/types';
 
   // Props passed by SvelteFlow
-  let { id, data } = $props<{
+  let { data } = $props<{
     id: string;
     data: {
       messages?: Message[];
@@ -34,6 +34,13 @@
   const toolCount = $derived(data?.messages?.length || 1);
   const isStreaming = $derived(data?.isStreaming || toolStatus === 'pending');
 
+  /** The dot is the only status cue at overview zoom, so it says the word too. */
+  const statusLabel = $derived(
+    isStreaming ? 'Running' : toolStatus === 'success' ? 'Done' : toolStatus === 'error' ? 'Failed' : 'Pending'
+  );
+
+  const resultId = $props.id();
+
   // Get tool icon based on name
   const ToolIcon = $derived.by(() => {
     switch (toolName.toLowerCase()) {
@@ -50,11 +57,11 @@
 
   // Status styling
   const statusClass = $derived.by(() => {
-    if (isStreaming) return 'border-amber-500 animate-pulse';
+    if (isStreaming) return 'border-warning animate-pulse';
     switch (toolStatus) {
-      case 'success': return 'border-green-500';
-      case 'error': return 'border-red-500';
-      default: return 'border-amber-500';
+      case 'success': return 'border-success';
+      case 'error': return 'border-error';
+      default: return 'border-warning';
     }
   });
 
@@ -68,11 +75,11 @@
   });
 
   const statusColor = $derived.by(() => {
-    if (isStreaming) return 'text-amber-500';
+    if (isStreaming) return 'text-warning';
     switch (toolStatus) {
-      case 'success': return 'text-green-500';
-      case 'error': return 'text-red-500';
-      default: return 'text-amber-500';
+      case 'success': return 'text-success';
+      case 'error': return 'text-error';
+      default: return 'text-warning';
     }
   });
 
@@ -93,22 +100,29 @@
   );
 </script>
 
-<Handle type="target" position={Position.Top} class="!bg-amber-500" />
+<Handle type="target" position={Position.Top} class="!bg-warning" />
 
 <div class="tool-node rounded-lg border-l-4 {statusClass} bg-card p-3 w-[320px]">
   {#if zoomLevel === 'overview'}
     <div class="flex items-center justify-center gap-2">
-      <div class="rounded-full bg-amber-500/20 p-2">
-        <ToolIcon class="h-4 w-4 text-amber-500" />
+      <div class="rounded-full bg-warning/20 p-2">
+        <ToolIcon class="h-4 w-4 text-warning" />
       </div>
-      <div class="w-2 h-2 rounded-full {statusColor === 'text-green-500' ? 'bg-green-500' : statusColor === 'text-red-500' ? 'bg-red-500' : 'bg-amber-500'}"></div>
+      <div
+        class="w-2 h-2 rounded-full {statusColor === 'text-success'
+          ? 'bg-success'
+          : statusColor === 'text-error'
+            ? 'bg-error'
+            : 'bg-warning'}"
+        title={statusLabel}
+      ></div>
       {#if toolCount > 1}
         <span class="text-xs bg-muted px-1.5 py-0.5 rounded">{toolCount}</span>
       {/if}
     </div>
   {:else if zoomLevel === 'summary'}
     <div class="flex items-center gap-2">
-      <ToolIcon class="h-4 w-4 text-amber-500 shrink-0" />
+      <ToolIcon class="h-4 w-4 text-warning shrink-0" />
       <span class="text-sm font-medium">{toolName}</span>
       {#if glance}
         <span class="text-xs text-muted-foreground truncate">{glance}</span>
@@ -118,7 +132,7 @@
   {:else}
     <div class="space-y-2">
       <div class="flex items-center gap-2">
-        <ToolIcon class="h-4 w-4 text-amber-500 shrink-0" />
+        <ToolIcon class="h-4 w-4 text-warning shrink-0" />
         <span class="text-sm font-medium">{toolName}</span>
         <StatusIcon class="h-4 w-4 ml-auto {statusColor} {isStreaming ? 'animate-spin' : ''}" />
       </div>
@@ -135,16 +149,22 @@
 
       {#if resultPreview && !isStreaming}
         <button
-          class="w-full text-left"
+          type="button"
+          class="w-full text-left focus-visible:ring-2 focus-visible:ring-ring"
+          aria-expanded={expanded}
+          aria-controls={resultId}
           onclick={() => expanded = !expanded}
         >
           <div class="text-xs text-muted-foreground mb-1">Result {expanded ? '(collapse)' : '(expand)'}</div>
           {#if expanded}
-            <div class="text-xs font-mono bg-muted/50 px-2 py-1 rounded max-h-40 overflow-y-auto whitespace-pre-wrap">
+            <div
+              id={resultId}
+              class="text-xs font-mono bg-muted/50 px-2 py-1 rounded max-h-40 overflow-y-auto whitespace-pre-wrap"
+            >
               {primaryTool?.metadata?.toolResult}
             </div>
           {:else}
-            <div class="text-xs font-mono bg-muted/50 px-2 py-1 rounded truncate">
+            <div id={resultId} class="text-xs font-mono bg-muted/50 px-2 py-1 rounded truncate">
               {resultPreview}
             </div>
           {/if}
@@ -154,4 +174,4 @@
   {/if}
 </div>
 
-<Handle type="source" position={Position.Bottom} class="!bg-amber-500" />
+<Handle type="source" position={Position.Bottom} class="!bg-warning" />

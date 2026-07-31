@@ -6,6 +6,8 @@
 	let { message }: MessageRendererProps = $props();
 	let expanded = $state(false);
 
+	const panelId = $props.id();
+
 	const thinking = $derived(message.metadata?.thinking || message.content || '');
 	const isRedacted = $derived(message.metadata?.isRedactedThinking === true);
 
@@ -24,6 +26,8 @@
 			<button
 				type="button"
 				class="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors w-full text-left"
+				aria-expanded={expanded}
+				aria-controls={panelId}
 				onclick={() => (expanded = !expanded)}
 			>
 				<ChevronRight
@@ -40,6 +44,7 @@
 
 			{#if expanded}
 				<div
+					id={panelId}
 					class="mt-2 text-sm text-muted-foreground font-mono whitespace-pre-wrap pl-6 {isRedacted
 						? 'italic'
 						: ''}"

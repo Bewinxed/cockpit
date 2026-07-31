@@ -126,6 +126,7 @@
 
 	// Expandable state for answered questions
 	let isExpanded = $state(false);
+	const answeredId = $props.id();
 
 	// Initialize selections when questions change (for active state)
 	$effect(() => {
@@ -634,6 +635,8 @@
 						<button
 							type="button"
 							class="flex items-center gap-2 flex-1 text-left"
+							aria-expanded={isExpanded}
+							aria-controls={answeredId}
 							onclick={() => isExpanded = !isExpanded}
 						>
 							<div class="flex items-center gap-1 text-muted-foreground">
@@ -669,7 +672,10 @@
 
 					<!-- Expanded view: Show full question UI (read-only) -->
 					{#if isExpanded}
-						<div class="mt-3 border border-border/50 rounded-xl bg-card/30 overflow-hidden">
+						<div
+							id={answeredId}
+							class="mt-3 border border-border/50 rounded-xl bg-card/30 overflow-hidden"
+						>
 							{#if questions.length > 1}
 								<!-- Multi-question: Tab navigation (read-only) -->
 								<div class="flex border-b border-border/50 bg-muted/10">

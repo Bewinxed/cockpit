@@ -20,19 +20,38 @@
   let activeTab = $state<Tab>('general');
 
   const tabs: Tab[] = ['general', 'commands', 'custom-commands'];
+  const tabLabels: Record<Tab, string> = {
+    general: 'General',
+    commands: 'Commands',
+    'custom-commands': 'Custom commands',
+  };
 
-  function nextTab() {
-    const currentIndex = tabs.indexOf(activeTab);
-    activeTab = tabs[(currentIndex + 1) % tabs.length];
+  let tabRefs = $state<Record<Tab, HTMLElement | null>>({
+    general: null,
+    commands: null,
+    'custom-commands': null,
+  });
+
+  // Roving focus over the tablist (APG): the arrows move the selection, Tab
+  // still leaves the tablist for the panel below it.
+  function moveTab(step: number) {
+    const next = tabs[(tabs.indexOf(activeTab) + step + tabs.length) % tabs.length];
+    activeTab = next;
+    tabRefs[next]?.focus();
+  }
+
+  function handleTabKeydown(e: KeyboardEvent) {
+    if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      moveTab(1);
+    } else if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      moveTab(-1);
+    }
   }
 
   function handleKeydown(e: KeyboardEvent) {
-    if (e.key === 'Tab') {
-      e.preventDefault();
-      nextTab();
-    } else if (e.key === 'Escape') {
-      onClose?.();
-    }
+    if (e.key === 'Escape') onClose?.();
   }
 
   // Filter commands by type
@@ -65,32 +84,45 @@
   <!-- Header with tabs -->
   <div class="flex items-center gap-4 px-4 py-2 bg-accent border-b border-border">
     <span class="text-foreground font-semibold">Claude Code v{version}</span>
-    <div class="flex items-center gap-1 text-muted-foreground">
+    <div class="flex items-center gap-1 text-muted-foreground" role="tablist" aria-label="Help sections">
       {#each tabs as tab, i (tab)}
         <Button
-          variant={activeTab === tab ? 'secondary' : 'ghost'}
+          bind:ref={tabRefs[tab]}
+          role="tab"
+          id="help-tab-{tab}"
+          aria-selected={activeTab === tab}
+          aria-controls="help-panel-{tab}"
+          tabindex={activeTab === tab ? 0 : -1}
+          variant={activeTab === tab ? 'outline' : 'ghost'}
           size="sm"
           class="h-6 px-2 text-xs"
+          onkeydown={handleTabKeydown}
           onclick={() => activeTab = tab}
         >
-          {tab}
+          {tabLabels[tab]}
         </Button>
         {#if i < tabs.length - 1}
           <span class="text-muted-foreground/50">|</span>
         {/if}
       {/each}
     </div>
-    <span class="text-muted-foreground text-xs ml-auto">(tab to cycle)</span>
+    <span class="text-muted-foreground text-xs ml-auto">(← → to cycle)</span>
   </div>
 
   <!-- Content -->
   <div class="p-4 min-h-[200px]">
     {#if activeTab === 'general'}
       <!-- Shortcuts section -->
-      <div class="space-y-4">
+      <div
+        id="help-panel-general"
+        role="tabpanel"
+        aria-labelledby="help-tab-general"
+        tabindex="-1"
+        class="space-y-4"
+      >
         <h3 class="text-muted-foreground text-xs uppercase tracking-wide">Shortcuts</h3>
 
-        <div class="grid grid-cols-2 gap-x-8 gap-y-1">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-1">
           <!-- Left column: prefix shortcuts -->
           <div class="space-y-1">
             {#each shortcuts as shortcut (shortcut.key)}
@@ -120,7 +152,13 @@
 
     {:else if activeTab === 'commands'}
       <!-- Built-in commands list -->
-      <div class="space-y-3">
+      <div
+        id="help-panel-commands"
+        role="tabpanel"
+        aria-labelledby="help-tab-commands"
+        tabindex="-1"
+        class="space-y-3"
+      >
         <h3 class="text-muted-foreground text-xs uppercase tracking-wide">Built-in Commands</h3>
 
         <div class="space-y-1">
@@ -141,7 +179,7 @@
             <div class="space-y-1">
               {#each skillCommands as cmd (cmd.name)}
                 <div class="flex items-start gap-2 group">
-                  <span class="text-secondary font-medium">{cmd.name}</span>
+                  <span class="text-primary font-medium">{cmd.name}</span>
                   {#if cmd.description}
                     <span class="text-muted-foreground">-</span>
                     <span class="text-muted-foreground">{cmd.description}</span>
@@ -172,7 +210,13 @@
 
     {:else if activeTab === 'custom-commands'}
       <!-- Custom commands list -->
-      <div class="space-y-3">
+      <div
+        id="help-panel-custom-commands"
+        role="tabpanel"
+        aria-labelledby="help-tab-custom-commands"
+        tabindex="-1"
+        class="space-y-3"
+      >
         <h3 class="text-muted-foreground text-xs uppercase tracking-wide">Custom Commands</h3>
 
         {#if customCommands.length === 0}
@@ -205,7 +249,12 @@
 
   <!-- Footer -->
   <div class="px-4 py-2 border-t border-border bg-accent/50 text-xs text-muted-foreground flex items-center justify-between">
-    <span>Press <kbd class="px-1 py-0.5 bg-card border border-border rounded text-[10px]">Tab</kbd> to switch tabs</span>
+    <span>
+      Press
+      <kbd class="px-1 py-0.5 bg-card border border-border rounded text-[10px]">←</kbd>
+      <kbd class="px-1 py-0.5 bg-card border border-border rounded text-[10px]">→</kbd>
+      to switch tabs
+    </span>
     <span>Press <kbd class="px-1 py-0.5 bg-card border border-border rounded text-[10px]">Esc</kbd> to close</span>
   </div>
 </div>

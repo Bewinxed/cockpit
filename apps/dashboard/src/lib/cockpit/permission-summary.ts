@@ -9,8 +9,10 @@ export function permissionSummary(toolName: string, input: Record<string, unknow
     case 'Write':
     case 'Read':
       return `${toolName} ${input.file_path ?? 'unknown'}`;
-    case 'Bash':
-      return `Run: ${String(input.command ?? '').slice(0, 80)}`;
+    case 'Bash': {
+      const command = String(input.command ?? '');
+      return `Run: ${command.length > 80 ? `${command.slice(0, 79)}…` : command}`;
+    }
     case 'Glob':
     case 'Grep':
       return `${toolName} ${input.pattern ?? 'unknown'}`;

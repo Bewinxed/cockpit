@@ -6,6 +6,7 @@
   import { ChatInput, ChatMessage, SubagentBranch, ToolGroup } from '$lib/components/features';
   import { FlowView } from '$lib/components/features/flow';
   import PermissionCard from '$lib/cockpit/PermissionCard.svelte';
+  import { ACTIVITY_LABEL } from '$lib/cockpit/activity';
   import {
     backfillSession,
     cockpit,
@@ -52,11 +53,30 @@
   });
 
   let scroller = $state<HTMLDivElement | null>(null);
+  /** Whether the reader is parked at the live edge — measured before every growth. */
+  let atBottom = $state(true);
+  let unseen = $state(false);
 
+  function trackScroll() {
+    if (!scroller) return;
+    atBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 80;
+    if (atBottom) unseen = false;
+  }
+
+  function jumpToLatest() {
+    if (!scroller) return;
+    scroller.scrollTop = scroller.scrollHeight;
+    unseen = false;
+  }
+
+  // Chasing the bottom while the user is reading further up yanks the transcript
+  // out from under them — only follow when they were already at the live edge.
   $effect(() => {
     const count = session?.messages.length ?? 0;
     const streaming = session?.streaming ?? '';
-    if (scroller && (count || streaming)) scroller.scrollTop = scroller.scrollHeight;
+    if (!scroller || (!count && !streaming)) return;
+    if (untrack(() => atBottom)) scroller.scrollTop = scroller.scrollHeight;
+    else unseen = true;
   });
 
   type Group =
@@ -106,6 +126,9 @@
 
   let view = $state<'chat' | 'flow'>('chat');
 
+  /** The tool in flight, named in the header's live region while it runs. */
+  const runningTool = $derived(session?.currentTool ? ` · ${session.currentTool.name}` : '');
+
   const branches = $derived(new Map(Object.entries(subagents)));
   const totalCostUsd = $derived(
     session?.messages.reduce((cost, message) => message.metadata?.totalCost ?? cost, 0) ?? 0
@@ -151,9 +174,13 @@
     await goto(`/session/${instanceId}`);
   }
 
+  /** Discard throws work away, so it asks once before it does. */
+  let confirmingDiscard = $state(false);
+
   async function handleDiscard() {
     if (!session) return;
     error = null;
+    confirmingDiscard = false;
     try {
       await discardSession(viewId, session.machineId);
       await goto('/session');
@@ -174,13 +201,15 @@
   let error = $state<string | null>(null);
 
   const action =
-    'shrink-0 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40';
+    'shrink-0 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40';
+  const destructive =
+    'shrink-0 rounded-md border border-error bg-error px-2 py-1 text-xs text-error-foreground transition-colors hover:bg-error/90 focus-visible:ring-2 focus-visible:ring-ring';
 </script>
 
 <div class="flex h-full flex-1 flex-col overflow-hidden">
   <header class="flex items-center gap-3 border-b border-border px-4 py-2">
     <a href="/session" class="text-sm text-muted-foreground hover:text-foreground">Sessions</a>
-    <span class="truncate font-mono text-sm">{session?.cwd || viewId}</span>
+    <h1 class="truncate font-mono text-sm font-normal">{session?.cwd || viewId}</h1>
     {#if session?.scratch}
       <span
         class="shrink-0 rounded-sm border border-dashed border-muted-foreground/40 px-1.5 py-0.5 text-[10px] tracking-wide text-muted-foreground uppercase"
@@ -188,19 +217,33 @@
         side quest
       </span>
     {/if}
-    <span class="ml-auto shrink-0 text-xs text-muted-foreground">
+    <span
+      class="ml-auto flex min-h-6 shrink-0 items-center text-xs text-muted-foreground"
+      role="status"
+      aria-live="polite"
+    >
       {#if browsing}
-        transcript · {session?.loading ? 'loading' : `${session?.messages.length ?? 0} messages`}
+        Transcript · {session?.loading
+          ? 'loading'
+          : `${session?.messages.length ?? 0} messages`}
       {:else}
-        {cockpit.activityOf(viewId)} · hub {cockpit.status}
+        {ACTIVITY_LABEL[cockpit.activityOf(viewId)]}{runningTool} · hub {cockpit.status}
       {/if}
     </span>
 
-    <div class="flex shrink-0 items-center gap-0.5 rounded-md border border-border p-0.5">
+    <div
+      class="flex shrink-0 items-center gap-0.5 rounded-md border border-border p-0.5"
+      role="tablist"
+      aria-label="Session view"
+    >
       {#each ['chat', 'flow'] as const as mode (mode)}
         <button
           type="button"
-          class="rounded px-2 py-0.5 text-xs capitalize transition-colors {view === mode
+          role="tab"
+          aria-selected={view === mode}
+          aria-controls="session-view-panel"
+          class="rounded px-2 py-0.5 text-xs capitalize transition-colors focus-visible:ring-2 focus-visible:ring-ring {view ===
+          mode
             ? 'bg-accent text-foreground'
             : 'text-muted-foreground hover:text-foreground'}"
           onclick={() => (view = mode)}
@@ -221,8 +264,22 @@
         Fork
       </button>
       {#if session?.scratch}
-        <button type="button" class={action} onclick={handleKeep}>Keep</button>
-        <button type="button" class={action} onclick={handleDiscard}>Discard</button>
+        {#if confirmingDiscard}
+          <span class="hidden shrink-0 text-xs text-muted-foreground lg:inline">
+            Deletes this quest's worktree and closes the session.
+          </span>
+          <button type="button" class={action} onclick={() => (confirmingDiscard = false)}>
+            Cancel
+          </button>
+          <button type="button" class={destructive} onclick={handleDiscard}>
+            Discard side quest
+          </button>
+        {:else}
+          <button type="button" class={action} onclick={handleKeep}>Keep</button>
+          <button type="button" class={action} onclick={() => (confirmingDiscard = true)}>
+            Discard…
+          </button>
+        {/if}
       {:else}
         <button
           type="button"
@@ -236,7 +293,7 @@
   </header>
 
   {#if view === 'flow'}
-    <div class="min-h-0 flex-1">
+    <div class="min-h-0 flex-1" id="session-view-panel" role="tabpanel">
       <FlowView
         instanceId={viewId}
         messages={session?.messages ?? []}
@@ -247,45 +304,61 @@
       />
     </div>
   {:else}
-    <div bind:this={scroller} class="flex-1 space-y-4 overflow-y-auto px-4 py-4">
-      <div class="mx-auto flex max-w-3xl flex-col gap-4">
-        {#each groups as group (group.kind === 'single' ? group.message.id : `${group.kind}-${group.index}`)}
-          {#if group.kind === 'tools'}
-            <ToolGroup tools={group.messages} />
-          {:else if group.kind === 'subagent'}
-            <SubagentBranch branch={group.branch} spawn={group.spawn} />
-          {:else}
-            <ChatMessage message={group.message} instanceId={viewId} />
+    <div class="relative min-h-0 flex-1" id="session-view-panel" role="tabpanel">
+      <div
+        bind:this={scroller}
+        onscroll={trackScroll}
+        class="h-full space-y-4 overflow-y-auto px-4 py-4"
+      >
+        <div class="mx-auto flex max-w-3xl flex-col gap-4">
+          {#each groups as group (group.kind === 'single' ? group.message.id : `${group.kind}-${group.index}`)}
+            {#if group.kind === 'tools'}
+              <ToolGroup tools={group.messages} />
+            {:else if group.kind === 'subagent'}
+              <SubagentBranch branch={group.branch} spawn={group.spawn} />
+            {:else}
+              <ChatMessage message={group.message} instanceId={viewId} />
+            {/if}
+          {/each}
+
+          {#if session?.loading}
+            <p class="text-sm text-muted-foreground">Reading transcript…</p>
+          {:else if groups.length === 0 && !session?.streaming}
+            <p class="text-sm text-muted-foreground">
+              {browsing
+                ? 'This session recorded no messages.'
+                : 'Nothing said yet — send a message below to start.'}
+            </p>
           {/if}
-        {/each}
 
-        {#if session?.loading}
-          <p class="text-sm text-muted-foreground">Reading transcript…</p>
-        {:else if groups.length === 0 && !session?.streaming}
-          <p class="text-sm text-muted-foreground">
-            {browsing
-              ? 'This session recorded no messages.'
-              : 'Nothing said yet — send a message below to start.'}
-          </p>
-        {/if}
-
-        {#if session?.streaming}
-          <div class="flex justify-start">
-            <div
-              class="max-w-[85%] rounded-2xl rounded-bl-sm border border-border bg-card px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap text-card-foreground shadow-sm"
-            >
-              {session.streaming}
+          {#if session?.streaming}
+            <div class="flex justify-start">
+              <div
+                class="max-w-[85%] rounded-2xl rounded-bl-sm border border-border bg-card px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap text-card-foreground shadow-sm"
+              >
+                {session.streaming}
+              </div>
             </div>
-          </div>
-        {/if}
+          {/if}
+        </div>
       </div>
+
+      {#if unseen}
+        <button
+          type="button"
+          class="absolute right-4 bottom-4 rounded-full border border-border bg-card px-3 py-1.5 text-xs text-foreground shadow-md transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
+          onclick={jumpToLatest}
+        >
+          Jump to latest
+        </button>
+      {/if}
     </div>
   {/if}
 
   <div class="border-t border-border px-4 py-3">
     <div class="mx-auto flex max-w-3xl flex-col gap-2">
       {#if error}
-        <p class="text-xs text-error">{error}</p>
+        <p class="text-xs text-error" role="alert">{error}</p>
       {/if}
       {#if browsing}
         <div class="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3">

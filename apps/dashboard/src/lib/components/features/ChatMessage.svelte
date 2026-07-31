@@ -142,6 +142,8 @@
 	// isExpanded: use manual override if set, otherwise auto-expand for diff tools
 	const isExpanded = $derived(manualExpansion ?? hasDiff);
 
+	const panelId = $props.id();
+
 	function toggleExpanded() {
 		// When user manually toggles, override the auto-expansion
 		manualExpansion = !isExpanded;
@@ -401,7 +403,10 @@
 				<!-- Tool message - collapsible card -->
 				<div class="w-full bg-card border border-border rounded-xl overflow-hidden shadow-sm">
 					<button
+						type="button"
 						class="w-full px-3 py-2.5 text-left cursor-pointer hover:bg-muted/50 transition-colors flex items-center gap-2"
+						aria-expanded={isExpanded}
+						aria-controls={panelId}
 						onclick={toggleExpanded}
 					>
 						{#if isExpanded}
@@ -432,7 +437,7 @@
 							tool?.input as Record<string, unknown> | undefined,
 							tool?.name
 						)}
-						<div class="p-3 pt-0 space-y-3 border-t border-border">
+						<div id={panelId} class="p-3 pt-0 space-y-3 border-t border-border">
 							<!-- Input: Show diff for file modification tools, JSON for others -->
 							{#if isFileDiffTool(tool?.name) && diffInfo}
 								{@const totalLines =
@@ -510,7 +515,10 @@
 				<!-- Hook response - collapsible card -->
 				<div class="w-full bg-card border border-border rounded-xl overflow-hidden shadow-sm">
 					<button
+						type="button"
 						class="w-full px-3 py-2.5 text-left cursor-pointer hover:bg-muted/50 transition-colors flex items-center gap-2"
+						aria-expanded={isExpanded}
+						aria-controls={panelId}
 						onclick={toggleExpanded}
 					>
 						{#if isExpanded}
@@ -538,7 +546,7 @@
 
 					{#if isExpanded}
 						{@const hook = hookInfo}
-						<div class="p-3 pt-0 space-y-3 border-t border-border">
+						<div id={panelId} class="p-3 pt-0 space-y-3 border-t border-border">
 							<!-- stdout -->
 							{#if hook?.stdout}
 								<div
@@ -652,7 +660,7 @@
 					<div class="w-full max-w-[85%]">
 						<div class="bg-card border border-primary/30 rounded-lg p-3 space-y-3">
 							<textarea
-								class="w-full min-h-[80px] px-3 py-2 bg-background border border-border rounded-lg text-sm
+								class="w-full min-h-[80px] px-3 py-2 bg-background border border-border rounded-lg text-base sm:text-sm
                        placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20
                        resize-y transition-colors"
 								aria-label="Edited message"

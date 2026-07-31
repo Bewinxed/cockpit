@@ -1,6 +1,6 @@
 <script lang="ts">
   /** One session's state, in the one glance the fleet view is built around. */
-  import type { Activity } from './activity';
+  import { ACTIVITY_LABEL, type Activity } from './activity';
 
   interface Props {
     activity: Activity;
@@ -21,5 +21,5 @@
 
 <span
   class="shrink-0 rounded-full {size === 2 ? 'size-2' : 'size-1.5'} {tone}"
-  title={activity}
+  title={ACTIVITY_LABEL[activity]}
 ></span>

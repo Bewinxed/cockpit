@@ -1,10 +1,10 @@
 <script lang="ts">
   import { Handle, Position, useStore } from '@xyflow/svelte';
-  import { Info, AlertTriangle, CheckCircle, Settings, Database, TerminalSquare } from '@lucide/svelte';
+  import { Info, AlertTriangle, Settings, Database, TerminalSquare } from '@lucide/svelte';
   import type { Message } from '$lib/cockpit/types';
 
   // Props passed by SvelteFlow
-  let { id, data } = $props<{
+  let { data } = $props<{
     id: string;
     data: {
       message?: Message;
@@ -47,14 +47,14 @@
   // Color based on subtype
   const iconColor = $derived.by(() => {
     switch (subtype) {
-      case 'error': return 'text-red-500';
-      case 'init': return 'text-green-500';
+      case 'error': return 'text-error';
+      case 'init': return 'text-success';
       default: return 'text-muted-foreground';
     }
   });
 </script>
 
-<Handle type="target" position={Position.Top} class="!bg-gray-400" />
+<Handle type="target" position={Position.Top} class="!bg-muted-foreground" />
 
 <div class="system-message-node rounded-lg border border-border bg-muted/50 p-2 w-[320px]">
   {#if zoomLevel === 'overview'}
@@ -64,13 +64,13 @@
   {:else if zoomLevel === 'summary'}
     <div class="flex items-center gap-2">
       <IconComponent class="h-4 w-4 {iconColor} shrink-0" />
-      <span class="text-xs text-muted-foreground capitalize truncate">{subtype.replace('_', ' ')}</span>
+      <span class="text-xs text-muted-foreground capitalize truncate">{subtype.replaceAll('_', ' ')}</span>
     </div>
   {:else}
     <div class="flex items-start gap-2">
       <IconComponent class="h-4 w-4 {iconColor} shrink-0 mt-0.5" />
       <div class="flex-1 min-w-0">
-        <div class="text-xs text-muted-foreground capitalize mb-1">{subtype.replace('_', ' ')}</div>
+        <div class="text-xs text-muted-foreground capitalize mb-1">{subtype.replaceAll('_', ' ')}</div>
         <div class="text-xs text-foreground/80 whitespace-pre-wrap break-words">
           {displayContent}
         </div>
@@ -79,4 +79,4 @@
   {/if}
 </div>
 
-<Handle type="source" position={Position.Bottom} class="!bg-gray-400" />
+<Handle type="source" position={Position.Bottom} class="!bg-muted-foreground" />

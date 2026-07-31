@@ -135,18 +135,18 @@ export const CONTEXT_MENU_CLICK_DELAY = 10;
 
 /** CSS variable names for branch colors - use with var() in styles */
 export const BRANCH_COLOR_VARS = [
-  '--color-blue-500',
-  '--color-green-500',
-  '--color-purple-500',
-  '--color-amber-500',
+  '--color-info',
+  '--color-success',
+  '--color-primary',
+  '--color-warning',
 ] as const;
 
-/** Fallback branch colors if CSS variables not available */
+/** Branch colors as inline-style values, so a branch reads in either theme. */
 export const BRANCH_COLORS_FALLBACK = [
-  '#3b82f6', // blue
-  '#22c55e', // green
-  '#a855f7', // purple
-  '#f59e0b', // amber
+  'var(--color-info)',
+  'var(--color-success)',
+  'var(--color-primary)',
+  'var(--color-warning)',
 ] as const;
 
 // ============================================================

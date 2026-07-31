@@ -13,6 +13,8 @@
 	let { message }: MessageRendererProps = $props();
 	let showDetails = $state(false);
 
+	const detailsId = $props.id();
+
 	type ErrorSubtype =
 		| 'error_max_turns'
 		| 'error_during_execution'
@@ -123,6 +125,8 @@
 					<button
 						type="button"
 						class="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
+						aria-expanded={showDetails}
+						aria-controls={detailsId}
 						onclick={() => (showDetails = !showDetails)}
 					>
 						<ChevronRight
@@ -135,6 +139,7 @@
 
 					{#if showDetails}
 						<div
+							id={detailsId}
 							class="mt-2 space-y-2"
 							transition:slide={{ duration: 200 }}
 						>

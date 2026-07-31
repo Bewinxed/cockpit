@@ -198,7 +198,7 @@ function teardown(): void {
   socket.onerror = null;
   socket.close();
   globalThis.__cockpitSocket = null;
-  abandonInflight('connection closed');
+  abandonInflight('The connection to the hub closed before that finished.');
 }
 
 function session(instanceId: string): SessionState {
@@ -313,13 +313,13 @@ function handleFrame(frame: FramePayload): void {
     const answered = settle(frame.requestId, (waiter) =>
       frame.ok
         ? waiter.resolve(frame.result)
-        : waiter.reject(new Error(frame.error ?? 'control call failed'))
+        : waiter.reject(new Error(frame.error ?? 'The machine could not carry out that request.'))
     );
     if (answered) return;
     // Fire-and-forget controls (interrupt, permission replies) still report failure.
     if (!frame.ok && frame.instanceId) {
       session(frame.instanceId).messages.push(
-        errorMessage(frame.instanceId, frame.error ?? 'control call failed')
+        errorMessage(frame.instanceId, frame.error ?? 'The machine could not carry out that request.')
       );
     }
     return;
@@ -366,6 +366,14 @@ function handleFrame(frame: FramePayload): void {
       if (mapping.endsTurn) {
         target.busy = false;
         target.currentTool = null;
+      } else if (
+        mapping.delta ||
+        mapping.currentTool ||
+        mapping.messages.some((message) => message.type === 'assistant')
+      ) {
+        // A tab that joined after the turn started never sent anything, so nothing
+        // ever set `busy` — the frames themselves are the evidence it is working.
+        target.busy = true;
       }
       break;
     }
@@ -389,7 +397,7 @@ function handleFrame(frame: FramePayload): void {
 function send(envelope: Envelope): void {
   const socket = globalThis.__cockpitSocket;
   if (!socket || socket.readyState !== WebSocket.OPEN) {
-    throw new Error('not connected to the hub');
+    throw new Error('Not connected to the hub. Check that it is running, then try again.');
   }
   socket.send(JSON.stringify(envelope));
 }
@@ -432,7 +440,7 @@ function connect(): void {
 
   socket.onclose = () => {
     state.status = 'disconnected';
-    abandonInflight('connection lost');
+    abandonInflight('The connection to the hub dropped before that finished.');
     if (!globalThis.__cockpitDisposing) scheduleReconnect();
   };
 
@@ -465,7 +473,9 @@ function waitForOpen(timeoutMs = 5000): Promise<void> {
     const poll = () => {
       const current = globalThis.__cockpitSocket;
       if (current && current.readyState === WebSocket.OPEN) return resolve();
-      if (Date.now() > deadline) return reject(new Error('hub connection timed out'));
+      if (Date.now() > deadline) {
+        return reject(new Error('Could not reach the hub. Check that it is running, then try again.'));
+      }
       setTimeout(poll, 100);
     };
     poll();
@@ -616,7 +626,9 @@ export async function keepSession(instanceId: string): Promise<void> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ kind: 'mainline' }),
   });
-  if (!response.ok) throw new Error(`could not keep session: ${response.status}`);
+  if (!response.ok) {
+    throw new Error(`Could not keep this session — the hub answered ${response.status}. Try again.`);
+  }
 
   session(instanceId).scratch = false;
   await refresh();
@@ -685,7 +697,9 @@ export async function createProject(project: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(project),
   });
-  if (!response.ok) throw new Error(`could not save project: ${response.status}`);
+  if (!response.ok) {
+    throw new Error(`Could not save this project — the hub answered ${response.status}. Try again.`);
+  }
   const created = (await response.json()) as ProjectRow;
   await refresh();
   return created;
@@ -694,7 +708,9 @@ export async function createProject(project: {
 /** Forgets the project; the sessions started from it stay, just unattached. */
 export async function deleteProject(id: string): Promise<void> {
   const response = await fetch(`/api/projects/${id}`, { method: 'DELETE' });
-  if (!response.ok) throw new Error(`could not delete project: ${response.status}`);
+  if (!response.ok) {
+    throw new Error(`Could not forget this project — the hub answered ${response.status}. Try again.`);
+  }
   await refresh();
 }
 
@@ -707,7 +723,9 @@ function ask<T>(
 ): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => {
-      if (inflight.delete(requestId)) reject(new Error(`${label} timed out`));
+      if (inflight.delete(requestId)) {
+        reject(new Error(`${label} got no answer in time. The machine may be offline.`));
+      }
     }, timeoutMs);
     inflight.set(requestId, {
       resolve: (result) => {

@@ -157,36 +157,44 @@
       </button>
     </header>
 
-    <div class="flex min-h-0 flex-1">
-      <nav class="flex w-52 shrink-0 flex-col overflow-y-auto border-r border-border py-2">
+    <div class="flex min-h-0 flex-1 flex-col md:flex-row">
+      <nav
+        class="flex shrink-0 flex-col overflow-y-auto border-b border-border py-2 md:w-52 md:border-r md:border-b-0"
+        aria-label="Project docs"
+      >
         <span
           class="px-3 pb-1 text-[11px] font-medium tracking-wider text-muted-foreground uppercase"
         >
           Docs
         </span>
-        {#each docs as doc (doc.path)}
-          <button
-            type="button"
-            class="truncate px-3 py-1 text-left font-mono text-xs transition-colors hover:bg-accent
-              {open?.path === doc.path ? 'bg-accent text-foreground' : 'text-muted-foreground'}"
-            onclick={() => openDoc(doc)}
-          >
-            {doc.name}
-          </button>
-        {:else}
-          <p class="px-3 py-1 text-[11px] text-muted-foreground">
-            {docsError ?? 'No markdown yet. Add a README.md at the top of the checkout and it shows up here.'}
-          </p>
-        {/each}
+        <div class="flex overflow-x-auto md:flex-col" role="tablist" aria-label="Docs">
+          {#each docs as doc (doc.path)}
+            <button
+              type="button"
+              role="tab"
+              aria-selected={open?.path === doc.path}
+              aria-controls="project-doc-panel"
+              class="shrink-0 truncate px-3 py-1 text-left font-mono text-xs transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring md:shrink
+                {open?.path === doc.path ? 'bg-accent text-foreground' : 'text-muted-foreground'}"
+              onclick={() => openDoc(doc)}
+            >
+              {doc.name}
+            </button>
+          {:else}
+            <p class="px-3 py-1 text-[11px] text-muted-foreground">
+              {docsError ?? 'No markdown yet. Add a README.md at the top of the checkout and it shows up here.'}
+            </p>
+          {/each}
+        </div>
       </nav>
 
       <div class="flex min-w-0 flex-1 flex-col gap-6 overflow-y-auto p-4">
         {#if open}
-          <section class="rounded-xl border border-border bg-card">
+          <section id="project-doc-panel" role="tabpanel" class="rounded-xl border border-border bg-card">
             <header class="flex items-center gap-3 border-b border-border px-4 py-2">
               <span class="truncate font-mono text-xs text-muted-foreground">{open.name}</span>
               {#if docError}
-                <span class="truncate text-xs text-error">{docError}</span>
+                <span class="truncate text-xs text-error" role="alert">{docError}</span>
               {/if}
               {#if draft === null}
                 <button type="button" class="{action} ml-auto" onclick={() => (draft = content)}>
@@ -211,7 +219,7 @@
               <textarea
                 bind:value={draft}
                 spellcheck="false"
-                class="h-[60vh] w-full resize-none bg-transparent px-4 py-3 font-mono text-xs text-foreground focus:outline-none"
+                class="h-[60vh] w-full resize-none bg-transparent px-4 py-3 font-mono text-base text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset sm:text-xs"
               ></textarea>
             {/if}
           </section>
@@ -226,7 +234,9 @@
             <div class="rounded-lg border border-border bg-card">
               <button
                 type="button"
-                class="flex w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-accent"
+                class="flex w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
+                aria-expanded={!!expanded[epic.id]}
+                aria-controls="epic-{epic.id}"
                 onclick={() => (expanded[epic.id] = !expanded[epic.id])}
               >
                 <ChevronRight
@@ -250,7 +260,7 @@
                 </span>
               </button>
               {#if expanded[epic.id]}
-                <ul class="border-t border-border">
+                <ul id="epic-{epic.id}" class="border-t border-border">
                   {#each epic.tasks as task (task.id)}
                     <li class="flex items-baseline gap-3 px-3 py-1.5">
                       <span class="shrink-0 font-mono text-[11px] text-muted-foreground">

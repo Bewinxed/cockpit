@@ -8,6 +8,7 @@
   import { quintOut } from 'svelte/easing';
   import { browser } from '$app/environment';
   import { goto } from '$app/navigation';
+  import { ACTIVITY_LABEL } from './activity';
   import { cockpit } from './client.svelte';
   import { sessionTitle, transcriptHref } from './links';
 
@@ -51,7 +52,7 @@
         id: `live:${instance.id}`,
         group: 'Running sessions',
         label: leaf(instance.cwd) || instance.id,
-        detail: `${instance.cwd || '—'} · ${cockpit.activityOf(instance.id)}`,
+        detail: `${instance.cwd || '—'} · ${ACTIVITY_LABEL[cockpit.activityOf(instance.id)]}`,
         href: `/session/${instance.id}`,
       });
     }
@@ -171,7 +172,7 @@
       bind:this={field}
       bind:value={query}
       placeholder="Jump to a project, machine, or session…"
-      class="border-b border-border bg-transparent px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
+      class="border-b border-border bg-transparent px-4 py-3 text-base text-foreground placeholder:text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset sm:text-sm"
       role="combobox"
       aria-label="Jump to"
       aria-autocomplete="list"

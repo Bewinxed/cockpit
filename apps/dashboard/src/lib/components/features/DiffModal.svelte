@@ -217,22 +217,28 @@
 
       <div class="flex items-center gap-2">
         <!-- Diff style toggle -->
-        <div class="flex items-center bg-muted rounded-lg p-0.5 border border-border">
+        <div
+          class="flex items-center bg-muted rounded-lg p-0.5 border border-border"
+          role="group"
+          aria-label="Diff layout"
+        >
           <Button
-            variant={diffStyle === 'unified' ? 'secondary' : 'ghost'}
+            variant={diffStyle === 'unified' ? 'outline' : 'ghost'}
             size="sm"
             onclick={() => diffStyle = 'unified'}
-            class="h-7 text-xs"
+            class="h-7 text-xs {diffStyle === 'unified' ? 'bg-background border-border shadow-sm' : ''}"
+            aria-pressed={diffStyle === 'unified'}
             title="Unified view"
           >
             <TextAlignStart class="w-3.5 h-3.5" />
             <span>Unified</span>
           </Button>
           <Button
-            variant={diffStyle === 'split' ? 'secondary' : 'ghost'}
+            variant={diffStyle === 'split' ? 'outline' : 'ghost'}
             size="sm"
             onclick={() => diffStyle = 'split'}
-            class="h-7 text-xs"
+            class="h-7 text-xs {diffStyle === 'split' ? 'bg-background border-border shadow-sm' : ''}"
+            aria-pressed={diffStyle === 'split'}
             title="Split view"
           >
             <Columns2 class="w-3.5 h-3.5" />

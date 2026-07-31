@@ -14,9 +14,16 @@
   let isExpanded = $state(false);
 
   const summary = $derived(permissionSummary(request.toolName, request.input));
+  // The summary is cut to one line, so the details have to carry the whole thing —
+  // reading it out of the JSON dump is not reviewing it.
+  const command = $derived(
+    typeof request.input.command === 'string' ? request.input.command : null
+  );
+
+  const detailsId = $props.id();
 </script>
 
-<div class="bg-warning/10 p-3">
+<div class="bg-warning/10 p-3" role="alert">
   <div class="flex gap-2 items-start">
     <div class="text-warning shrink-0 mt-0.5">
       <Shield size={18} />
@@ -54,6 +61,8 @@
       <button
         type="button"
         class="flex items-center gap-1 bg-transparent border-none py-1 text-muted-foreground text-xs cursor-pointer mt-1.5 hover:text-foreground"
+        aria-expanded={isExpanded}
+        aria-controls={detailsId}
         onclick={() => (isExpanded = !isExpanded)}
       >
         {#if isExpanded}
@@ -65,13 +74,21 @@
       </button>
 
       {#if isExpanded}
-        <div class="bg-muted rounded p-2 mt-1 text-xs flex gap-2">
-          <span class="font-medium text-muted-foreground shrink-0">Input:</span>
-          <pre class="bg-background/50 px-2 py-1 rounded font-mono text-xs whitespace-pre-wrap break-all max-h-[200px] overflow-auto m-0 flex-1">{JSON.stringify(
-              request.input,
-              null,
-              2
-            )}</pre>
+        <div id={detailsId} class="bg-muted rounded p-2 mt-1 text-xs flex flex-col gap-2">
+          {#if command}
+            <div class="flex gap-2">
+              <span class="font-medium text-muted-foreground shrink-0">Command:</span>
+              <pre class="bg-background/50 px-2 py-1 rounded font-mono text-xs whitespace-pre-wrap break-all max-h-[200px] overflow-auto m-0 flex-1">{command}</pre>
+            </div>
+          {/if}
+          <div class="flex gap-2">
+            <span class="font-medium text-muted-foreground shrink-0">Input:</span>
+            <pre class="bg-background/50 px-2 py-1 rounded font-mono text-xs whitespace-pre-wrap break-all max-h-[200px] overflow-auto m-0 flex-1">{JSON.stringify(
+                request.input,
+                null,
+                2
+              )}</pre>
+          </div>
         </div>
       {/if}
     </div>

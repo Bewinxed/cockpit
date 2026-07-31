@@ -29,9 +29,23 @@
   const stale = $derived(cockpit.staleInstances);
   let showStale = $state(false);
 
+  let machineSelect = $state<HTMLSelectElement | null>(null);
+  let cwdInput = $state<HTMLInputElement | null>(null);
+
   async function start(event: SubmitEvent) {
     event.preventDefault();
     error = null;
+    // The button stays live and says what is missing — a dead button explains nothing.
+    if (!machineId) {
+      error = 'Choose a machine to run this session on.';
+      machineSelect?.focus();
+      return;
+    }
+    if (!cwd.trim()) {
+      error = 'Enter the directory this session should work in.';
+      cwdInput?.focus();
+      return;
+    }
     try {
       const instanceId = spawnSession({
         machineId,
@@ -108,8 +122,9 @@
         <label class="flex flex-col gap-1 text-xs text-muted-foreground">
           Machine
           <select
+            bind:this={machineSelect}
             bind:value={machineId}
-            class="rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground"
+            class="rounded-md border border-border bg-background px-2 py-1.5 text-base text-foreground sm:text-sm"
           >
             {#each cockpit.onlineMachines as machine (machine.machineId)}
               <option value={machine.machineId}>{machine.hostname} · {machine.os}</option>
@@ -122,19 +137,23 @@
         <label class="flex flex-col gap-1 text-xs text-muted-foreground">
           Working directory
           <input
+            bind:this={cwdInput}
             bind:value={cwd}
             placeholder="/home/you/project"
-            class="rounded-md border border-border bg-background px-2 py-1.5 font-mono text-sm text-foreground placeholder:text-muted-foreground"
+            class="rounded-md border border-border bg-background px-2 py-1.5 font-mono text-base text-foreground placeholder:text-muted-foreground sm:text-sm"
           />
         </label>
 
         {#if cwd.trim()}
-          <div class="flex items-center gap-2">
-            <input
-              bind:value={projectName}
-              placeholder={leaf(cwd.trim())}
-              class="w-40 rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground placeholder:text-muted-foreground"
-            />
+          <div class="flex items-end gap-2">
+            <label class="flex flex-col gap-1 text-xs text-muted-foreground">
+              Project name
+              <input
+                bind:value={projectName}
+                placeholder={leaf(cwd.trim())}
+                class="w-40 rounded-md border border-border bg-background px-2 py-1 text-base text-foreground placeholder:text-muted-foreground sm:text-xs"
+              />
+            </label>
             <button
               type="button"
               class="rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40"
@@ -151,7 +170,7 @@
           <textarea
             bind:value={prompt}
             rows={2}
-            class="resize-y rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground placeholder:text-muted-foreground"
+            class="resize-y rounded-md border border-border bg-background px-2 py-1.5 text-base text-foreground placeholder:text-muted-foreground sm:text-sm"
           ></textarea>
         </label>
 
@@ -170,13 +189,12 @@
         <div class="flex items-center gap-3">
           <button
             type="submit"
-            disabled={!machineId || !cwd.trim()}
-            class="rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-40"
+            class="rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-ring"
           >
             Start session
           </button>
           {#if error}
-            <span class="text-xs text-error">{error}</span>
+            <span class="text-xs text-error" role="alert">{error}</span>
           {/if}
         </div>
       </form>
@@ -191,6 +209,7 @@
             class="size-2 rounded-full {machine.status === 'online'
               ? 'bg-success'
               : 'bg-muted-foreground'}"
+            title={machine.status === 'online' ? 'Online' : 'Offline'}
           ></span>
           {machine.hostname}
           <span class="text-xs font-normal text-muted-foreground">{machine.os}</span>
@@ -227,7 +246,9 @@
       <section class="flex flex-col gap-2">
         <button
           type="button"
-          class="flex items-center gap-2 text-left text-[11px] font-medium tracking-wider text-muted-foreground uppercase transition-colors hover:text-foreground"
+          class="flex min-h-6 items-center gap-2 text-left text-[11px] font-medium tracking-wider text-muted-foreground uppercase transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+          aria-expanded={showStale}
+          aria-controls="stale-instances"
           onclick={() => (showStale = !showStale)}
         >
           <ChevronRight size={12} class="transition-transform {showStale ? 'rotate-90' : ''}" />
@@ -235,18 +256,20 @@
           <span class="font-mono normal-case">{stale.length}</span>
         </button>
         {#if showStale}
-          <p class="text-xs text-muted-foreground">
-            The daemon running these went away. They may still be alive on their machine — the hub
-            cannot tell, so it stops counting them as live.
-          </p>
-          {#each stale as instance (instance.id)}
-            <span
-              class="flex items-baseline gap-3 rounded-lg border border-dashed border-muted-foreground/30 px-3 py-2 text-xs text-muted-foreground"
-            >
-              <span class="truncate font-mono">{instance.cwd || '—'}</span>
-              <span class="ml-auto shrink-0 font-mono">{instance.machineId}</span>
-            </span>
-          {/each}
+          <div id="stale-instances" class="flex flex-col gap-2">
+            <p class="text-xs text-muted-foreground">
+              The daemon running these went away. They may still be alive on their machine — the hub
+              cannot tell, so it stops counting them as live.
+            </p>
+            {#each stale as instance (instance.id)}
+              <span
+                class="flex items-baseline gap-3 rounded-lg border border-dashed border-muted-foreground/30 px-3 py-2 text-xs text-muted-foreground"
+              >
+                <span class="truncate font-mono">{instance.cwd || '—'}</span>
+                <span class="ml-auto shrink-0 font-mono">{instance.machineId}</span>
+              </span>
+            {/each}
+          </div>
         {/if}
       </section>
     {/if}

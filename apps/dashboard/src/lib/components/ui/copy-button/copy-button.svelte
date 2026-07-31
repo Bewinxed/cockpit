@@ -17,7 +17,7 @@
 		size: sizeProp = 'icon',
 		onCopy,
 		class: className,
-		tabindex = -1,
+		tabindex = 0,
 		children,
 		...rest
 	}: CopyButtonProps = $props();

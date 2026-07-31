@@ -15,6 +15,8 @@
 
 	// Collapse if more than threshold servers (start collapsed for many servers)
 	let expanded = $state(false);
+
+	const listId = $props.id();
 	const shouldCollapse = $derived(servers.length > collapsedThreshold);
 
 	// Separate servers by status for priority display
@@ -25,6 +27,16 @@
 	const displayServers = $derived([...problemServers, ...connectedServers]);
 	const visibleServers = $derived(expanded ? displayServers : displayServers.slice(0, collapsedThreshold));
 	const hiddenCount = $derived(displayServers.length - visibleServers.length);
+
+	/** Wire vocabulary reads as wire vocabulary — the chip says it in words. */
+	const STATUS_LABEL: Record<string, string> = {
+		connected: 'Connected',
+		'needs-auth': 'Needs auth',
+		error: 'Error',
+		pending: 'Starting'
+	};
+
+	const statusLabel = (status: string) => STATUS_LABEL[status] ?? status;
 
 	function getStatusColor(status: string) {
 		switch (status) {
@@ -63,21 +75,24 @@
 			{/if}
 		</div>
 
-		<div class="flex flex-wrap gap-1.5">
+		<div id={listId} class="flex flex-wrap gap-1.5">
 			{#each visibleServers as server (server.name)}
 				<span
-					class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium {getStatusColor(server.status)}"
-					title="{server.name}: {server.status}"
+					class="inline-flex min-h-6 items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium {getStatusColor(server.status)}"
+					title="{server.name}: {statusLabel(server.status)}"
 				>
-					<Circle class="size-1.5 fill-current {getDotColor(server.status)}" />
+					<Circle class="size-1.5 fill-current {getDotColor(server.status)}" aria-hidden="true" />
 					<span class="truncate max-w-[120px]">{server.name}</span>
+					<span class="sr-only">{statusLabel(server.status)}</span>
 				</span>
 			{/each}
 
 			{#if shouldCollapse && hiddenCount > 0}
 				<button
 					type="button"
-					class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-muted text-muted-foreground hover:bg-accent transition-colors"
+					class="inline-flex min-h-6 items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-muted text-muted-foreground hover:bg-accent transition-colors focus-visible:ring-2 focus-visible:ring-ring"
+					aria-expanded={expanded}
+					aria-controls={listId}
 					onclick={() => (expanded = !expanded)}
 				>
 					<span>+{hiddenCount} more</span>
@@ -88,7 +103,9 @@
 		{#if shouldCollapse && expanded}
 			<button
 				type="button"
-				class="mt-2 text-[11px] text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+				class="mt-2 flex min-h-6 items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors focus-visible:ring-2 focus-visible:ring-ring"
+				aria-expanded={expanded}
+				aria-controls={listId}
 				onclick={() => (expanded = false)}
 			>
 				<ChevronRight class="size-3 rotate-90" />

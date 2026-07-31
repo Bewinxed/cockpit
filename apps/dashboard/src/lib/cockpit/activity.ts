@@ -13,3 +13,10 @@ export function activityOf(session: { pending: readonly unknown[]; busy: boolean
   if (session.pending.length > 0) return 'blocked';
   return session.busy ? 'working' : 'idle';
 }
+
+/** The word each state is shown as — the enum is wire vocabulary, not copy. */
+export const ACTIVITY_LABEL: Record<Activity, string> = {
+  working: 'Working',
+  blocked: 'Blocked',
+  idle: 'Idle',
+};

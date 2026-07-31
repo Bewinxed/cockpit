@@ -5,6 +5,7 @@
    */
   import { page } from '$app/state';
   import { formatDistanceToNow } from '$lib/utils/time';
+  import { ACTIVITY_LABEL } from './activity';
   import ActivityDot from './ActivityDot.svelte';
   import { cockpit, loadCatalog } from './client.svelte';
   import { sessionTitle, transcriptHref } from './links';
@@ -20,7 +21,10 @@
   const leaf = (cwd: string) => cwd.split('/').pop() || cwd;
 </script>
 
-<nav class="flex w-64 shrink-0 flex-col overflow-y-auto border-r border-border bg-card/40">
+<nav
+  class="flex w-64 shrink-0 flex-col overflow-y-auto border-r border-border bg-sidebar"
+  aria-label="Machines and sessions"
+>
   <div class="flex items-center justify-end px-3 py-2">
     <a
       href="/session"
@@ -38,6 +42,7 @@
       {#each cockpit.projects as project (project.id)}
         <a
           href="/project/{project.id}"
+          aria-current={isCurrent(`/project/${project.id}`) ? 'page' : undefined}
           class="flex flex-col rounded-md px-2 py-1 transition-colors hover:bg-accent
             {isCurrent(`/project/${project.id}`) ? 'bg-accent' : ''}"
         >
@@ -57,6 +62,7 @@
         {@const activity = cockpit.activityOf(instance.id)}
         <a
           href="/session/{instance.id}"
+          aria-current={isCurrent(`/session/${instance.id}`) ? 'page' : undefined}
           class="flex items-center gap-2 rounded-md border border-dashed border-muted-foreground/30 px-2 py-1 text-xs transition-colors hover:bg-accent
             {isCurrent(`/session/${instance.id}`)
             ? 'bg-accent text-foreground'
@@ -87,11 +93,12 @@
           class="size-1.5 shrink-0 rounded-full {machine.status === 'online'
             ? 'bg-success'
             : 'bg-muted-foreground'}"
+          title={machine.status === 'online' ? 'Online' : 'Offline'}
         ></span>
         <span class="truncate text-xs font-medium">{machine.hostname}</span>
         <button
           type="button"
-          class="ml-auto text-[11px] text-muted-foreground transition-colors hover:text-foreground"
+          class="ml-auto min-h-6 text-[11px] text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
           onclick={() => loadCatalog(machine.machineId)}
           title="Reload sessions"
         >
@@ -103,6 +110,7 @@
         {@const activity = cockpit.activityOf(instance.id)}
         <a
           href="/session/{instance.id}"
+          aria-current={isCurrent(`/session/${instance.id}`) ? 'page' : undefined}
           class="flex items-center gap-2 px-3 py-1 text-xs transition-colors hover:bg-accent
             {isCurrent(`/session/${instance.id}`)
             ? 'bg-accent text-foreground'
@@ -111,7 +119,7 @@
           <ActivityDot {activity} size={1.5} />
           <span class="truncate font-mono">{leaf(instance.cwd)}</span>
           <span class="ml-auto shrink-0 text-[11px] {activity === 'blocked' ? 'text-warning' : ''}">
-            {activity}
+            {ACTIVITY_LABEL[activity]}
           </span>
         </a>
       {/each}
@@ -120,6 +128,7 @@
         {@const href = transcriptHref(machine.machineId, info)}
         <a
           {href}
+          aria-current={isCurrent(href) ? 'page' : undefined}
           class="flex flex-col px-3 py-1 transition-colors hover:bg-accent {isCurrent(href)
             ? 'bg-accent'
             : ''}"

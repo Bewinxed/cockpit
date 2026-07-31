@@ -22,7 +22,6 @@
       subagents?: SubagentState[];
       depth?: number;
       branchColor?: string;
-      instanceId?: string;
     };
   }
 
@@ -74,6 +73,16 @@
     allSubagents.reduce((sum, s) => sum + (s.messages?.length || 0), 0)
   );
 
+  /** The dot is the only status cue at overview zoom, so it says the word too. */
+  const STATUS_LABEL: Record<string, string> = {
+    starting: 'Starting',
+    running: 'Running',
+    complete: 'Complete',
+    error: 'Error'
+  };
+
+  const statusLabel = (status: string) => STATUS_LABEL[status] ?? status;
+
   // Status styling helpers
   function getStatusIcon(status: string) {
     switch (status) {
@@ -85,19 +94,19 @@
 
   function getStatusColor(status: string): string {
     switch (status) {
-      case 'complete': return 'text-green-500';
-      case 'error': return 'text-red-500';
-      case 'running': return 'text-cyan-500';
+      case 'complete': return 'text-success';
+      case 'error': return 'text-error';
+      case 'running': return 'text-info';
       default: return 'text-muted-foreground';
     }
   }
 
   function getBorderClass(status: string): string {
     switch (status) {
-      case 'complete': return 'border-green-500';
-      case 'error': return 'border-red-500';
-      case 'running': return 'border-cyan-500 animate-pulse';
-      default: return 'border-cyan-500';
+      case 'complete': return 'border-success';
+      case 'error': return 'border-error';
+      case 'running': return 'border-info animate-pulse';
+      default: return 'border-info';
     }
   }
 
@@ -150,20 +159,39 @@
   }
 
   // Click to zoom into branch (when in detail view)
+  const zoomable = $derived(zoomLevel !== 'detail');
+
   function handleClick() {
-    if (zoomLevel !== 'detail') {
-      // In overview/summary, click zooms to node
-      fitView({ nodes: [{ id }], duration: 300 });
-    }
+    if (zoomable) fitView({ nodes: [{ id }], duration: 300 });
   }
+
+  function handleKeydown(event: KeyboardEvent) {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    handleClick();
+  }
+
+  // Spread, not attributes: at detail zoom the click does nothing, and a node
+  // that announces itself as a button with nothing behind it is worse than none.
+  const zoomAction = $derived(
+    zoomable
+      ? {
+          role: 'button' as const,
+          tabindex: 0,
+          'aria-label': 'Zoom to this subagent branch',
+          onclick: handleClick,
+          onkeydown: handleKeydown,
+        }
+      : {}
+  );
 
   // Get tool icon color based on status
   function getToolStatusColor(msg: Message): string {
     const status = getToolStatus(msg.metadata);
     switch (status) {
-      case 'success': return 'text-green-500';
-      case 'error': return 'text-red-500';
-      default: return 'text-amber-500';
+      case 'success': return 'text-success';
+      case 'error': return 'text-error';
+      default: return 'text-warning';
     }
   }
 
@@ -198,15 +226,12 @@
 
 <Handle type="target" position={Position.Top} style="background: {branchColor}" />
 
-<!-- Use tick to force elapsed time updates -->
-{#key tick}
 <div
-  class="subagent-node rounded-lg border-l-4 {getBorderClass(groupStatus)} bg-card p-3 w-[320px] cursor-pointer hover:bg-accent/50 transition-colors"
+  class="subagent-node rounded-lg border-l-4 {getBorderClass(groupStatus)} bg-card p-3 w-[320px] transition-colors {zoomable
+    ? 'cursor-pointer hover:bg-accent/50 focus-visible:ring-2 focus-visible:ring-ring'
+    : ''}"
   style="border-left-color: {branchColor}"
-  onclick={handleClick}
-  role="button"
-  tabindex="0"
-  onkeydown={(e) => e.key === 'Enter' && handleClick()}
+  {...zoomAction}
 >
   {#if zoomLevel === 'overview'}
     <!-- Overview: just icons -->
@@ -214,10 +239,20 @@
       {#if isParallel}
         <span class="text-xs font-medium text-muted-foreground">{allSubagents.length}×</span>
       {/if}
-      <div class="rounded-full p-2" style="background: {branchColor}20">
+      <div
+        class="rounded-full p-2"
+        style="background: color-mix(in oklab, {branchColor} 15%, transparent)"
+      >
         <Zap class="h-4 w-4" style="color: {branchColor}" />
       </div>
-      <div class="w-2 h-2 rounded-full {getStatusColor(groupStatus) === 'text-green-500' ? 'bg-green-500' : getStatusColor(groupStatus) === 'text-red-500' ? 'bg-red-500' : 'bg-cyan-500'}"></div>
+      <div
+        class="w-2 h-2 rounded-full {getStatusColor(groupStatus) === 'text-success'
+          ? 'bg-success'
+          : getStatusColor(groupStatus) === 'text-error'
+            ? 'bg-error'
+            : 'bg-info'}"
+        title={statusLabel(groupStatus)}
+      ></div>
     </div>
   {:else if zoomLevel === 'summary'}
     <!-- Summary: one line per subagent -->
@@ -267,9 +302,10 @@
 
           <!-- Status line -->
           <div class="flex items-center gap-2 text-xs text-muted-foreground">
-            <span class="capitalize">{subagent.status}</span>
+            <span>{statusLabel(subagent.status)}</span>
             <span>|</span>
-            <span>{formatElapsed(subagent)}</span>
+            <!-- Only the clock re-renders on a tick; the node around it does not. -->
+            <span>{#key tick}{formatElapsed(subagent)}{/key}</span>
             {#if subagent.messages?.length}
               <span>|</span>
               <span>{subagent.messages.length} tools</span>
@@ -285,7 +321,7 @@
 
           <!-- Current action -->
           {#if getCurrentAction(subagent)}
-            <div class="text-xs text-cyan-500">
+            <div class="text-xs text-info">
               → {getCurrentAction(subagent)}
             </div>
           {/if}
@@ -293,7 +329,10 @@
           <!-- Expand/collapse -->
           {#if toolMessages.length > 0 || childSubagents.length > 0}
             <button
-              class="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors w-full"
+              type="button"
+              class="flex w-full items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+              aria-expanded={isExpanded}
+              aria-controls="subagent-tools-{subagent.toolUseId}"
               onclick={(e) => toggleExpanded(subagent.toolUseId, e)}
             >
               {#if isExpanded}
@@ -308,7 +347,11 @@
 
           <!-- Expanded content -->
           {#if isExpanded}
-            <div class="border-t border-border/50 pt-2 space-y-1" transition:slide={{ duration: SLIDE_DURATION }}>
+            <div
+              id="subagent-tools-{subagent.toolUseId}"
+              class="border-t border-border/50 pt-2 space-y-1"
+              transition:slide={{ duration: SLIDE_DURATION }}
+            >
               {#each toolMessages as tool (tool.metadata?.toolId)}
                 <div class="flex items-center gap-2 text-xs py-1 px-2 rounded bg-muted/50">
                   <Wrench class="h-3 w-3 {getToolStatusColor(tool)} shrink-0" />
@@ -320,10 +363,10 @@
               {/each}
 
               {#each childSubagents as child (child.toolUseId)}
-                <div class="flex items-center gap-2 text-xs py-1 px-2 rounded bg-cyan-500/10 border-l-2 border-cyan-500">
-                  <Zap class="h-3 w-3 text-cyan-500 shrink-0" />
+                <div class="flex items-center gap-2 text-xs py-1 px-2 rounded bg-info/10 border-l-2 border-info">
+                  <Zap class="h-3 w-3 text-info shrink-0" />
                   <span class="font-medium">{child.subagentType}</span>
-                  <span class="text-muted-foreground capitalize">{child.status}</span>
+                  <span class="text-muted-foreground">{statusLabel(child.status)}</span>
                   {#if child.messages.length > 0}
                     <span class="text-xs bg-muted px-1 rounded">{child.messages.length}</span>
                   {/if}
@@ -350,6 +393,5 @@
     </div>
   {/if}
 </div>
-{/key}
 
 <Handle type="source" position={Position.Bottom} style="background: {branchColor}" />

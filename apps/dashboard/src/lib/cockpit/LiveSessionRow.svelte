@@ -1,5 +1,6 @@
 <script lang="ts">
   /** One live session, as the session index and a project home both list it. */
+  import { ACTIVITY_LABEL } from './activity';
   import ActivityDot from './ActivityDot.svelte';
   import { cockpit, type InstanceRow } from './client.svelte';
 
@@ -20,7 +21,7 @@
     {#if instance.kind === 'scratch'}
       <span class="shrink-0 rounded-sm bg-accent px-1 text-[10px] tracking-wide">scratch</span>
     {/if}
-    <span class="ml-auto shrink-0 text-xs text-muted-foreground">{activity}</span>
+    <span class="ml-auto shrink-0 text-xs text-muted-foreground">{ACTIVITY_LABEL[activity]}</span>
   </span>
   {#if activity === 'working' && tool}
     <span class="flex items-baseline gap-2 pl-5 text-xs text-muted-foreground">

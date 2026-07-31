@@ -203,7 +203,7 @@
 					{:else}
 						<!-- Selection phase -->
 						<div
-							class="space-y-2 outline-none"
+							class="space-y-2 outline-none focus-visible:ring-2 focus-visible:ring-ring"
 							tabindex="-1"
 							use:autofocus
 							role="group"
@@ -217,6 +217,7 @@
 									: 'border-border hover:border-warning/50 hover:bg-warning/5'}"
 								onclick={() => onMemorySelect?.('project')}
 								onmouseenter={() => (selectedMemoryOption = 'project')}
+								onfocus={() => (selectedMemoryOption = 'project')}
 							>
 								<div
 									class="shrink-0 w-6 h-6 rounded bg-warning/10 flex items-center justify-center mt-0.5"
@@ -247,6 +248,7 @@
 									: 'border-border hover:border-warning/50 hover:bg-warning/5'}"
 								onclick={() => onMemorySelect?.('user')}
 								onmouseenter={() => (selectedMemoryOption = 'user')}
+								onfocus={() => (selectedMemoryOption = 'user')}
 							>
 								<div
 									class="shrink-0 w-6 h-6 rounded bg-warning/10 flex items-center justify-center mt-0.5"

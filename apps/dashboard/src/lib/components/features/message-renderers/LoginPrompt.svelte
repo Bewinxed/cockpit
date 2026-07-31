@@ -15,6 +15,8 @@
 	let loginLoading = $state(false);
 	let loginError = $state<string | null>(null);
 
+	const errorId = $props.id();
+
 	async function handleLoginSubmit() {
 		if (!loginCode.trim() || !onLoginSubmit) return;
 		loginLoading = true;
@@ -106,9 +108,11 @@
 								bind:value={loginCode}
 								placeholder="Paste code here..."
 								aria-label="Authorization code"
+								aria-invalid={loginError ? 'true' : undefined}
+								aria-describedby={loginError ? errorId : undefined}
 								disabled={loginLoading}
 								onkeydown={handleCodeKeydown}
-								class="w-full px-4 py-2.5 bg-background border border-border rounded-md text-sm font-mono
+								class="w-full px-4 py-2.5 bg-background border border-border rounded-md text-base sm:text-sm font-mono
                        placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20
                        disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
 							/>
@@ -122,7 +126,11 @@
 
 					<!-- Error -->
 					{#if loginError}
-						<div class="flex items-center gap-2 text-sm text-error bg-error/10 rounded-md px-3 py-2">
+						<div
+							id={errorId}
+							role="alert"
+							class="flex items-center gap-2 text-sm text-error bg-error/10 rounded-md px-3 py-2"
+						>
 							<CircleAlert class="w-4 h-4 shrink-0" />
 							<span>{loginError}</span>
 						</div>
