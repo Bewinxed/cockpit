@@ -26,11 +26,6 @@
     { "path": "./packages/core" },
     { "path": "./packages/hub" },
     { "path": "./packages/agent" },
-    { "path": "./packages/legacy-core" },
-    { "path": "./packages/db" },
-    { "path": "./packages/hub-server" },
-    { "path": "./packages/agent-service" },
-    { "path": "./packages/auth" },
-    { "path": "./packages/mcp-task-tracker" }
+    { "path": "./packages/auth" }
   ]
 }

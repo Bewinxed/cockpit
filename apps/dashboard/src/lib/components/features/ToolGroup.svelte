@@ -1,6 +1,6 @@
 <script lang="ts">
 	import * as Collapsible from '$lib/components/ui/collapsible';
-	import { ChevronRight, LoaderCircle, CircleCheck, CircleX, FileText, Terminal, Code, Search, FolderOpen, Pencil, Globe, Wrench } from 'lucide-svelte';
+	import { ChevronRight, LoaderCircle, CircleCheck, CircleX, FileText, Terminal, Code, Search, FolderOpen, Pencil, Globe, Wrench } from '@lucide/svelte';
 	import type { Message } from '$lib/cockpit/types';
 	import DiffView from './DiffView.svelte';
 	import DiffModal from './DiffModal.svelte';

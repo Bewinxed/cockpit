@@ -2,7 +2,7 @@
   import type { Snippet } from 'svelte';
   import { slide } from 'svelte/transition';
   import { quintOut } from 'svelte/easing';
-  import { LoaderCircle, Send, Square } from 'lucide-svelte';
+  import { LoaderCircle, Send, Square } from '@lucide/svelte';
   import CommandPalette from './CommandPalette.svelte';
 
   interface AvailableCommand {

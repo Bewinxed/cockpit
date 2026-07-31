@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { FileDiff, type FileContents } from '@pierre/diffs';
-  import { Maximize2, CircleAlert, LoaderCircle } from 'lucide-svelte';
+  import { Maximize2, CircleAlert, LoaderCircle } from '@lucide/svelte';
   import { Button } from '$lib/components/ui/button';
   import DiffModal from './DiffModal.svelte';
 

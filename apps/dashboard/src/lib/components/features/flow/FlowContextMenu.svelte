@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Copy, RotateCcw, GitBranch, MessageSquare, type Icon } from 'lucide-svelte';
+  import { Copy, RotateCcw, GitBranch, MessageSquare, type Icon } from '@lucide/svelte';
   import { onMount } from 'svelte';
   import { CONTEXT_MENU_CLICK_DELAY } from '$lib/utils/flow-constants';
   import type { ContextMenuAction } from '$lib/utils/flow-types';

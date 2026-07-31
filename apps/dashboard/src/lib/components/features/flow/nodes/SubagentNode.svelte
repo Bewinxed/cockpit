@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Handle, Position, useStore, useSvelteFlow } from '@xyflow/svelte';
-  import { Zap, LoaderCircle, CircleCheck, CircleX, ChevronRight, ChevronDown, Layers, Wrench } from 'lucide-svelte';
+  import { Zap, LoaderCircle, CircleCheck, CircleX, ChevronRight, ChevronDown, Layers, Wrench } from '@lucide/svelte';
   import { slide } from 'svelte/transition';
   import type { Message } from '$lib/cockpit/types';
   import type { SubagentState } from '$lib/utils/flow-types';

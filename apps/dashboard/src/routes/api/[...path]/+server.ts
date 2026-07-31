@@ -1,6 +1,6 @@
 import type { RequestHandler } from './$types';
 
-const HUB_URL = process.env.HUB_URL || 'http://localhost:3456';
+const HUB_URL = process.env.COCKPIT_HUB_URL || 'http://localhost:3456';
 
 /**
  * Proxy all API requests to the hub server

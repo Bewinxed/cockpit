@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Handle, Position, useStore } from '@xyflow/svelte';
-  import { Info, AlertTriangle, CheckCircle, Settings, Database, TerminalSquare } from 'lucide-svelte';
+  import { Info, AlertTriangle, CheckCircle, Settings, Database, TerminalSquare } from '@lucide/svelte';
   import type { Message } from '$lib/cockpit/types';
 
   // Props passed by SvelteFlow

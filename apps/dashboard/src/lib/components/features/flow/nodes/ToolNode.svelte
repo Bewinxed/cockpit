@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Handle, Position, useStore } from '@xyflow/svelte';
-  import { Wrench, Check, X, Loader2, FileText, Terminal, Search, FolderOpen, Pencil } from 'lucide-svelte';
+  import { Wrench, Check, X, Loader2, FileText, Terminal, Search, FolderOpen, Pencil } from '@lucide/svelte';
   import { getToolGlance, getToolStatus, getResultGlimpse } from '$lib/utils/tool-display';
   import type { Message } from '$lib/cockpit/types';
 

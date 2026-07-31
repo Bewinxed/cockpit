@@ -1,1 +1,0 @@
-ALTER TABLE `agents` ADD `default_cwd` text;

@@ -1,1 +1,0 @@
-ALTER TABLE `instances` ADD `view_mode` text DEFAULT 'flow';

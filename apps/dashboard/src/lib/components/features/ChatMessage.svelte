@@ -19,7 +19,7 @@
 		RotateCcw,
 		Download,
 		AlertTriangle,
-	} from 'lucide-svelte';
+	} from '@lucide/svelte';
 	import Markdown from '@humanspeak/svelte-markdown';
 	import { formatTimestamp } from '$lib/utils/time';
 	import type { Message } from '$lib/cockpit/types';

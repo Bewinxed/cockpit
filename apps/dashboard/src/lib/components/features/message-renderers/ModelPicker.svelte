@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Cpu, Check, ArrowRight, CircleAlert, LoaderCircle, CircleX } from 'lucide-svelte';
+	import { Cpu, Check, ArrowRight, CircleAlert, LoaderCircle, CircleX } from '@lucide/svelte';
 	import type { MessageMetadata } from '$lib/cockpit/types';
 	import type { MessageRendererProps } from './types';
 

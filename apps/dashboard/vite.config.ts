@@ -12,7 +12,7 @@ export default defineConfig({
     proxy: {
       // Proxy WebSocket connections to the hub server
       '/ws': {
-        target: process.env.HUB_URL || 'http://localhost:3456',
+        target: process.env.COCKPIT_HUB_URL || 'http://localhost:3456',
         ws: true,
         changeOrigin: true,
       },

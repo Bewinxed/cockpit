@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Handle, Position, useStore } from '@xyflow/svelte';
-  import { User } from 'lucide-svelte';
+  import { User } from '@lucide/svelte';
   import type { Message } from '$lib/cockpit/types';
 
   // Props passed by SvelteFlow

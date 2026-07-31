@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Circle, Server, ChevronRight } from 'lucide-svelte';
+	import { Circle, Server, ChevronRight } from '@lucide/svelte';
 
 	interface MCPServer {
 		name: string;

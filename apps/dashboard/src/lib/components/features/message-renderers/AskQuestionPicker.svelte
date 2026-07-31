@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { CircleHelp, Check, ListChecks, Send, X, PenLine, ChevronDown, ChevronRight } from 'lucide-svelte';
+	import { CircleHelp, Check, ListChecks, Send, X, PenLine, ChevronDown, ChevronRight } from '@lucide/svelte';
 	import type { MessageMetadata } from '$lib/cockpit/types';
 	import type { MessageRendererProps } from './types';
 

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Scissors } from 'lucide-svelte';
+	import { Scissors } from '@lucide/svelte';
 	import type { MessageRendererProps } from './types';
 
 	let { message }: MessageRendererProps = $props();

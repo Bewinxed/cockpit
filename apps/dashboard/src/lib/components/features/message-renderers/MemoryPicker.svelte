@@ -8,7 +8,7 @@
 		LoaderCircle,
 		Check,
 		CircleX
-	} from 'lucide-svelte';
+	} from '@lucide/svelte';
 	import type { MessageRendererProps } from './types';
 
 	let {

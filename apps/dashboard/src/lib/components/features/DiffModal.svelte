@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { FileDiff, parseDiffFromFile, type FileContents } from '@pierre/diffs';
-  import { X, Columns2, TextAlignStart } from 'lucide-svelte';
+  import { X, Columns2, TextAlignStart } from '@lucide/svelte';
   import { Button } from '$lib/components/ui/button';
   import { CopyButton } from '$lib/components/ui/copy-button';
 

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { ChevronRight, Brain } from 'lucide-svelte';
+	import { ChevronRight, Brain } from '@lucide/svelte';
 	import { slide } from 'svelte/transition';
 	import type { MessageRendererProps } from './types';
 

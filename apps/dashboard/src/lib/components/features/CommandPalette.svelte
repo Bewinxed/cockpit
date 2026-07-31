@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Command, Zap, Settings, FileCode } from 'lucide-svelte';
+  import { Command, Zap, Settings, FileCode } from '@lucide/svelte';
 
   interface AvailableCommand {
     name: string;

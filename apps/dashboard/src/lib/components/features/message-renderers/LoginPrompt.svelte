@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { KeyRound, ExternalLink, ArrowRight, CircleAlert, LoaderCircle, CircleX } from 'lucide-svelte';
+	import { KeyRound, ExternalLink, ArrowRight, CircleAlert, LoaderCircle, CircleX } from '@lucide/svelte';
 	import type { MessageRendererProps } from './types';
 
 	let {

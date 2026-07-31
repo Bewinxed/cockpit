@@ -6,7 +6,7 @@
 		Settings,
 		ChevronRight,
 		CircleAlert
-	} from 'lucide-svelte';
+	} from '@lucide/svelte';
 	import { slide } from 'svelte/transition';
 	import type { MessageRendererProps } from './types';
 

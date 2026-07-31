@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Handle, Position, useStore } from '@xyflow/svelte';
-  import { Bot, Sparkles, LoaderCircle } from 'lucide-svelte';
+  import { Bot, Sparkles, LoaderCircle } from '@lucide/svelte';
   import Markdown from '@humanspeak/svelte-markdown';
   import type { Message } from '$lib/cockpit/types';
 

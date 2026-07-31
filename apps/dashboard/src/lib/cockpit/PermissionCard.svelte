@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Check, ChevronDown, ChevronRight, Shield, X } from 'lucide-svelte';
+  import { Check, ChevronDown, ChevronRight, Shield, X } from '@lucide/svelte';
   import type { PermissionResult } from '@cockpit/core';
   import type { PendingPermission } from './client.svelte';
 
