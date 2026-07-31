@@ -322,7 +322,7 @@
               aria-selected={source === option.value}
               class="rounded-[10px] px-2 py-0.5 text-xs transition-colors focus-visible:ring-2 focus-visible:ring-ring {source ===
               option.value
-                ? 'bg-accent text-foreground'
+                ? 'bg-accent text-accent-foreground'
                 : 'text-muted-foreground hover:text-foreground'}"
               onclick={() => chooseSource(option.value)}
             >
@@ -381,7 +381,7 @@
                   {#each matches as row (row.nameWithOwner)}
                     <button
                       type="button"
-                      class="flex w-full flex-col gap-0.5 px-2 py-1.5 text-left transition-colors hover:bg-accent"
+                      class="flex w-full flex-col gap-0.5 px-2 py-1.5 text-left transition-colors hover:bg-accent hover:text-accent-foreground"
                       onmousedown={(event) => event.preventDefault()}
                       onclick={() => chooseRepo(row)}
                     >
@@ -452,7 +452,7 @@
             </label>
             <button
               type="button"
-              class="rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40"
+              class="rounded-md border border-border px-2 py-1 text-xs transition-colors hover:bg-accent hover:text-accent-foreground hover:text-foreground disabled:opacity-40"
               disabled={!machineId || saving}
               onclick={saveProject}
             >
@@ -489,7 +489,7 @@
         <div class="flex items-center gap-3">
           <button
             type="submit"
-            class="rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-ring"
+            class="rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground transition-colors hover:bg-primary/90 hover:text-primary-foreground focus-visible:ring-2 focus-visible:ring-ring"
           >
             Start session
           </button>

@@ -83,17 +83,17 @@
           in:slide={rowIn}
           out:slide={rowOut}
         >
-          <IconHistory class="mt-0.5 shrink-0 text-muted-foreground/70" />
+          <IconHistory class="mt-0.5 shrink-0 opacity-70" />
           <span class="flex min-w-0 flex-1 flex-col">
             <span class="flex items-baseline gap-2">
               <span class="truncate text-[13px] leading-5">{sessionTitle(info)}</span>
-              <span class="ml-auto shrink-0 text-[10px] text-muted-foreground/60 tabular-nums">
+              <span class="ml-auto shrink-0 text-[10px] opacity-60 tabular-nums">
                 {formatDistanceToNow(new Date(info.lastModified))}
               </span>
             </span>
             {#if info.cwd}
               <span
-                class="truncate font-mono text-[11px] leading-4 text-muted-foreground/70"
+                class="truncate font-mono text-[11px] leading-4 opacity-70"
                 title={info.cwd}
               >
                 {leaf(info.cwd)}
@@ -138,7 +138,7 @@
                     <span class="flex min-w-0 flex-1 flex-col">
                       <span class="truncate text-[13px] leading-5">{project.name}</span>
                       <span
-                        class="truncate font-mono text-[11px] leading-4 text-muted-foreground/70"
+                        class="truncate font-mono text-[11px] leading-4 opacity-70"
                       >
                         {project.cwd}
                       </span>
@@ -164,7 +164,7 @@
               <Sidebar.MenuButton
                 isActive={current}
                 class="min-h-7 gap-2 border border-dashed border-muted-foreground/30 px-2 py-1 text-[13px]
-                  {current ? '' : failed ? 'bg-warning/10 text-muted-foreground' : 'text-muted-foreground'}"
+                  {current ? '' : failed ? 'bg-warning/10' : ''}"
               >
                 {#snippet child({ props })}
                   <a
@@ -181,7 +181,7 @@
                     {/if}
                     <span class="truncate font-mono">{leaf(instance.cwd)}</span>
                     <span
-                      class="ml-auto shrink-0 rounded-sm bg-accent px-1 py-px text-[10px] tracking-wide text-muted-foreground"
+                      class="ml-auto shrink-0 rounded-sm bg-accent text-accent-foreground px-1 py-px text-[10px] tracking-wide"
                     >
                       scratch
                     </span>
@@ -235,7 +235,7 @@
                       : 'bg-muted-foreground'}"
                     title={machine.status === 'online' ? 'Online' : 'Offline'}
                   ></span>
-                  <span class="shrink-0 text-[10px] text-muted-foreground/60">{os.label}</span>
+                  <span class="shrink-0 text-[10px] opacity-60">{os.label}</span>
                 </Collapsible.Trigger>
               {/snippet}
             </Sidebar.GroupLabel>
@@ -248,8 +248,7 @@
               </span>
             {/if}
             <button
-              type="button"
-              class="shrink-0 rounded p-1 text-muted-foreground/60 transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+              type="button" class="shrink-0 rounded p-1 opacity-60 transition-colors hover:opacity-100 focus-visible:ring-2 focus-visible:ring-ring"
               onclick={() => loadCatalog(machine.machineId)}
               title="Reload sessions"
               aria-label="Reload sessions on {machineLabel(machine.hostname)}"
@@ -288,14 +287,14 @@
                             {:else}
                               <ActivityDot {activity} size={1.5} />
                             {/if}
-                            <span class="truncate font-mono text-foreground/90">
+                            <span class="truncate font-mono">
                               {leaf(instance.cwd)}
                             </span>
                             <span
                               class="ml-auto shrink-0 text-[10px] tabular-nums {failed ||
                               activity === 'blocked'
                                 ? 'font-medium text-warning'
-                                : 'text-muted-foreground/70'}"
+                                : 'opacity-70'}"
                             >
                               {failed ? 'Failed' : ACTIVITY_LABEL[activity]}
                             </span>
@@ -333,7 +332,7 @@
                       </Sidebar.Menu>
                     </Collapsible.Content>
                     <Collapsible.Trigger
-                      class="flex min-h-6 items-center px-1.5 py-1 text-left text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                      class="flex min-h-6 items-center px-1.5 py-1 text-left text-[11px] font-medium text-muted-foreground transition-colors  focus-visible:ring-2 focus-visible:ring-ring"
                     >
                       {expanded ? 'Show fewer' : `Show all ${stored.length}`}
                     </Collapsible.Trigger>
@@ -342,7 +341,7 @@
               {/if}
 
               {#if running.length === 0 && stored.length === 0}
-                <p class="px-1.5 py-1 text-[11px] text-muted-foreground/70">No sessions.</p>
+                <p class="px-1.5 py-1 text-[11px] opacity-70">No sessions.</p>
               {/if}
             </div>
           </Collapsible.Content>
@@ -351,7 +350,7 @@
     {:else}
       <p class="px-4 py-2 text-[13px] text-muted-foreground">
         No machines connected.
-        <a href="/session" class="underline transition-colors hover:text-foreground">
+        <a href="/session" class="underline transition-colors ">
           How to connect one
         </a>
       </p>

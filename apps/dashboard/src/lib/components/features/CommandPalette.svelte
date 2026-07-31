@@ -77,7 +77,7 @@
   function getTypeColor(type: AvailableCommand['type']) {
     switch (type) {
       case 'builtin':
-        return 'bg-primary/20 text-primary';
+        return 'bg-primary text-primary-foreground/20 text-primary';
       case 'custom':
         return 'bg-success/20 text-success';
       case 'skill':
@@ -107,7 +107,7 @@
           id="{optionIdPrefix}-{index}"
           aria-selected={index === selectedIndex}
           class="w-full px-2.5 py-2 flex items-center gap-3 rounded-md hover:bg-accent transition-colors text-left
-                 {index === selectedIndex ? 'bg-accent' : ''}"
+                 {index === selectedIndex ? 'bg-accent text-accent-foreground' : ''}"
           onclick={() => onSelect(command)}
         >
           <Icon class="w-4 h-4 text-muted-foreground shrink-0" />
@@ -128,8 +128,8 @@
       {/each}
     </div>
     <div class="p-2 border-t border-border text-xs text-muted-foreground flex gap-4">
-      <span><kbd class="px-1 bg-accent rounded">↑↓</kbd> navigate</span>
-      <span><kbd class="px-1 bg-accent rounded">↵</kbd> select</span>
-      <span><kbd class="px-1 bg-accent rounded">esc</kbd> close</span>
+      <span><kbd class="px-1 bg-accent text-accent-foreground rounded">↑↓</kbd> navigate</span>
+      <span><kbd class="px-1 bg-accent text-accent-foreground rounded">↵</kbd> select</span>
+      <span><kbd class="px-1 bg-accent text-accent-foreground rounded">esc</kbd> close</span>
     </div>
   </div>

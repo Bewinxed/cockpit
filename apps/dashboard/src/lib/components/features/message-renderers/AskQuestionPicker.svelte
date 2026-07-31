@@ -346,7 +346,7 @@
 			? 'sm'
 			: 'full'} border-2 flex items-center justify-center transition-colors
 		{isOptionSelected(qIdx, option.label)
-			? 'border-primary bg-primary'
+			? 'border-primary bg-primary text-primary-foreground'
 			: 'border-muted-foreground/30'}"
 	>
 		{#if isOptionSelected(qIdx, option.label)}
@@ -377,7 +377,7 @@
 	<!-- Question header -->
 	<div class="flex items-start gap-3 mb-3">
 		<div
-			class="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0"
+			class="w-8 h-8 rounded-lg bg-primary/10 text-primary-foreground flex items-center justify-center shrink-0"
 		>
 			{#if question.multiSelect}
 				<IconChecklist class="w-4 h-4 text-primary" />
@@ -388,7 +388,7 @@
 		<div class="flex-1 min-w-0">
 			<div class="flex items-center gap-2 mb-1">
 				<span
-					class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-primary/15 text-primary uppercase tracking-wider"
+					class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-primary/15 text-primary-foreground text-primary uppercase tracking-wider"
 				>
 					{question.header}
 				</span>
@@ -413,7 +413,7 @@
 				<div
 					class="w-full text-left px-3 py-2.5 rounded-lg transition-[background-color,border-color,box-shadow] duration-150 ease-out flex items-start gap-3 border
 						{isOptionSelected(qIdx, option.label)
-						? 'bg-primary/10 border-primary/40 shadow-sm'
+						? 'bg-primary text-primary-foreground/10 border-primary/40 shadow-sm'
 						: 'bg-background/50 border-transparent'}"
 				>
 					{@render optionBody(question, qIdx, option, optIdx, showShortcuts)}
@@ -425,8 +425,8 @@
 					aria-checked={isOptionSelected(qIdx, option.label)}
 					class="w-full text-left px-3 py-2.5 rounded-lg transition-[background-color,border-color,box-shadow] duration-150 ease-out flex items-start gap-3 border cursor-pointer
 						{isOptionSelected(qIdx, option.label)
-						? 'bg-primary/10 border-primary/40 shadow-sm'
-						: 'bg-background/50 border-transparent hover:border-border hover:bg-accent/50'}"
+						? 'bg-primary text-primary-foreground/10 border-primary/40 shadow-sm'
+						: 'bg-background/50 border-transparent hover:border-border hover:bg-accent hover:text-accent-foreground/50'}"
 					onclick={() => toggleOption(qIdx, option.label)}
 				>
 					{@render optionBody(question, qIdx, option, optIdx, showShortcuts)}
@@ -438,9 +438,9 @@
 		<div
 			class="w-full text-left px-3 py-2.5 rounded-lg transition-[background-color,border-color] duration-150 ease-out border
 			{otherSelected.get(qIdx)
-				? 'bg-primary/10 border-primary/40'
+				? 'bg-primary text-primary-foreground/10 border-primary/40'
 				: 'bg-background/50 border-transparent'}
-			{!readOnly && !otherSelected.get(qIdx) ? 'hover:border-border hover:bg-accent/50' : ''}"
+			{!readOnly && !otherSelected.get(qIdx) ? 'hover:border-border hover:bg-accent hover:text-accent-foreground/50' : ''}"
 		>
 			{#if otherSelected.get(qIdx)}
 				<div class="flex items-start gap-3">
@@ -458,7 +458,7 @@
 							{#if !readOnly}
 								<button
 									type="button"
-									class="ml-auto p-0.5 rounded hover:bg-accent"
+									class="ml-auto p-0.5 rounded hover:bg-accent hover:text-accent-foreground"
 										aria-label="Clear custom answer"
 									onclick={() => {
 										otherSelected.set(qIdx, false);
@@ -546,7 +546,7 @@
 									class="flex-1 px-3 py-2.5 text-sm font-medium transition-colors duration-150 ease-out relative
 										{activeTab === qIdx
 											? 'text-primary bg-card/50'
-											: 'text-muted-foreground hover:text-foreground hover:bg-accent/30'}"
+											: 'hover:text-foreground hover:bg-accent hover:text-accent-foreground/30'}"
 									onclick={() => activeTab = qIdx}
 								>
 									<div class="flex items-center justify-center gap-2">
@@ -556,7 +556,7 @@
 										{/if}
 									</div>
 									{#if activeTab === qIdx}
-										<div class="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"></div>
+										<div class="absolute bottom-0 left-0 right-0 h-0.5 bg-primary text-primary-foreground"></div>
 									{/if}
 								</button>
 							{/each}
@@ -576,7 +576,7 @@
 					<!-- Error -->
 					{#if submitError}
 						<div
-							class="mx-4 mb-3 flex items-center gap-2 text-sm text-destructive bg-destructive/10 rounded-md px-3 py-2"
+							class="mx-4 mb-3 flex items-center gap-2 text-sm text-destructive bg-destructive/10 text-destructive-foreground rounded-md px-3 py-2"
 						>
 							<IconClose class="w-4 h-4 shrink-0" />
 							<span>{submitError}</span>
@@ -611,7 +611,7 @@
 								onclick={handleSubmit}
 								disabled={!canSubmit() || isSubmitting}
 								class="flex items-center gap-1.5 px-4 py-1.5 bg-primary text-primary-foreground rounded-md text-sm font-medium
-									hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-[background-color,opacity] duration-150 ease-out"
+									hover:bg-primary/90 hover:text-primary-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-[background-color,opacity] duration-150 ease-out"
 							>
 								{#if isSubmitting}
 									<div
@@ -645,7 +645,7 @@
 								<div class="flex flex-wrap gap-2 flex-1">
 									{#each answeredSummary || [] as { header, answer }, idx (idx)}
 										<div
-											class="inline-flex items-center gap-2 px-3 py-1.5 bg-accent/50 border border-border/50 rounded-full text-sm"
+											class="inline-flex items-center gap-2 px-3 py-1.5 bg-accent/50 text-accent-foreground border border-border/50 rounded-full text-sm"
 										>
 											<span class="text-[10px] font-semibold text-primary uppercase">{header}</span>
 											<span class="text-muted-foreground">→</span>
@@ -657,7 +657,7 @@
 							{#if onDismissMessage}
 								<button
 									onclick={() => onDismissMessage?.()}
-									class="p-1 rounded-full hover:bg-accent transition-colors opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100"
+									class="p-1 rounded-full hover:bg-accent hover:text-accent-foreground transition-colors opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100"
 									title="Dismiss"
 									aria-label="Dismiss"
 								>
@@ -686,7 +686,7 @@
 													<IconCheck class="w-3 h-3 text-success shrink-0" />
 												</div>
 												{#if activeTab === qIdx}
-													<div class="absolute bottom-0 left-0 right-0 h-0.5 bg-primary/50"></div>
+													<div class="absolute bottom-0 left-0 right-0 h-0.5 bg-primary/50 text-primary-foreground"></div>
 												{/if}
 											</button>
 										{/each}
@@ -705,7 +705,7 @@
 				{:else}
 					<div class="flex items-center gap-2">
 						<div
-							class="inline-flex items-center gap-2 px-3 py-1.5 bg-accent/50 border border-border/50 rounded-full text-sm"
+							class="inline-flex items-center gap-2 px-3 py-1.5 bg-accent/50 text-accent-foreground border border-border/50 rounded-full text-sm"
 						>
 							<IconHelp class="w-3.5 h-3.5 text-muted-foreground" />
 							<span class="text-muted-foreground">Question answered</span>
@@ -713,7 +713,7 @@
 						{#if onDismissMessage}
 							<button
 								onclick={onDismissMessage}
-								class="p-1 rounded-full hover:bg-accent transition-colors opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100"
+								class="p-1 rounded-full hover:bg-accent hover:text-accent-foreground transition-colors opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100"
 								title="Dismiss"
 								aria-label="Dismiss"
 							>

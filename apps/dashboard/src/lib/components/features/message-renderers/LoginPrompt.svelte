@@ -51,7 +51,7 @@
 					<!-- Header -->
 					<div class="flex items-start gap-3">
 						<div
-							class="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0"
+							class="w-10 h-10 rounded-lg bg-primary/10 text-primary-foreground flex items-center justify-center shrink-0"
 						>
 							<IconKey class="w-5 h-5 text-primary" />
 						</div>
@@ -81,7 +81,7 @@
 								href={message.metadata.authUrl}
 								target="_blank"
 								rel="noopener noreferrer"
-								class="flex items-center gap-2 px-4 py-2.5 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors text-sm font-medium group w-fit"
+								class="flex items-center gap-2 px-4 py-2.5 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 hover:text-primary-foreground transition-colors text-sm font-medium group w-fit"
 							>
 								<span>Open Anthropic login</span>
 								<IconExternal
@@ -142,7 +142,7 @@
 							onclick={handleLoginSubmit}
 							disabled={!loginCode.trim() || loginLoading}
 							class="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium
-                     hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-[background-color,opacity] duration-150 ease-out group"
+                     hover:bg-primary/90 hover:text-primary-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-[background-color,opacity] duration-150 ease-out group"
 						>
 							{#if loginLoading}
 								<IconSpinner class="w-4 h-4 animate-spin" />
@@ -167,7 +167,7 @@
 		{:else}
 			<!-- Inactive: Show compact dismissible version -->
 			<div
-				class="inline-flex items-center gap-2 px-3 py-1.5 bg-accent/50 border border-dotted border-border rounded-lg text-sm group"
+				class="inline-flex items-center gap-2 px-3 py-1.5 bg-accent/50 text-accent-foreground border border-dotted border-border rounded-lg text-sm group"
 			>
 				<IconKey class="w-3.5 h-3.5 text-muted-foreground" />
 				<span class="text-muted-foreground">Login attempted</span>
@@ -175,7 +175,7 @@
 				{#if onDismissMessage}
 					<button
 						onclick={onDismissMessage}
-						class="ml-1 p-0.5 rounded hover:bg-accent transition-colors opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100"
+						class="ml-1 p-0.5 rounded hover:bg-accent hover:text-accent-foreground transition-colors opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100"
 						title="Dismiss"
 						aria-label="Dismiss"
 					>

@@ -53,7 +53,7 @@
 <div class="assistant-message-node rounded-lg border-l-4 {isStreaming ? 'border-primary animate-pulse' : 'border-primary'} bg-card p-3 w-[320px]">
   {#if zoomLevel === 'overview'}
     <div class="flex items-center justify-center gap-2">
-      <div class="rounded-full bg-primary/20 p-2">
+      <div class="rounded-full bg-primary/20 text-primary-foreground p-2">
         <IconSparkles class="h-4 w-4 text-primary" />
       </div>
       {#if isStreaming}
@@ -75,13 +75,13 @@
         <div class="flex items-center gap-2 mb-1">
           <span class="text-xs text-muted-foreground">Claude</span>
           {#if model}
-            <span class="text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary">{model}</span>
+            <span class="text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary-foreground text-primary">{model}</span>
           {/if}
         </div>
         <div class="text-sm">
           <Markdown source={displayContent} />
           {#if isStreaming}
-            <span class="inline-block w-0.5 h-4 bg-primary ml-0.5 animate-pulse"></span>
+            <span class="inline-block w-0.5 h-4 bg-primary text-primary-foreground ml-0.5 animate-pulse"></span>
           {/if}
         </div>
         {#if timestamp && !isStreaming}

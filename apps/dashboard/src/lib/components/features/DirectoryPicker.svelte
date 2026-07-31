@@ -108,7 +108,7 @@
       <div class="flex items-center gap-2">
         <button
           type="button"
-          class="rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40"
+          class="rounded p-1 transition-colors hover:bg-accent hover:text-accent-foreground hover:text-foreground disabled:opacity-40"
           aria-label="Parent directory"
           disabled={!parent}
           onclick={() => parent && go(parent)}
@@ -130,7 +130,7 @@
           {#each dirs as dir (dir.name)}
             <button
               type="button"
-              class="flex w-full items-center gap-2 rounded px-2 py-1 text-left font-mono text-[13px] transition-colors hover:bg-accent"
+              class="flex w-full items-center gap-2 rounded px-2 py-1 text-left font-mono text-[13px] transition-colors hover:bg-accent hover:text-accent-foreground"
               onclick={() => go(join(path, dir.name))}
             >
               <IconFolder class="size-3.5 shrink-0 text-muted-foreground" />
@@ -145,7 +145,7 @@
       <div class="flex justify-end">
         <button
           type="button"
-          class="rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 active:scale-[0.96]"
+          class="rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 hover:text-primary-foreground active:scale-[0.96]"
           onclick={use}
         >
           Use this directory

@@ -182,7 +182,7 @@
 								onclick={handleMemorySave}
 								disabled={memorySaving}
 								class="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium
-                       hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-[background-color,opacity] duration-150 ease-out group"
+                       hover:bg-primary/90 hover:text-primary-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-[background-color,opacity] duration-150 ease-out group"
 							>
 								{#if memorySaving}
 									<IconSpinner class="w-4 h-4 animate-spin" />
@@ -227,7 +227,7 @@
 								<div class="flex-1 min-w-0">
 									<div class="flex items-center gap-2">
 										<span class="font-medium text-foreground text-sm">Project memory</span>
-										<span class="text-[10px] px-1.5 py-0.5 rounded bg-accent text-muted-foreground"
+										<span class="text-[10px] px-1.5 py-0.5 rounded bg-accent text-accent-foreground"
 											>1</span
 										>
 									</div>
@@ -258,7 +258,7 @@
 								<div class="flex-1 min-w-0">
 									<div class="flex items-center gap-2">
 										<span class="font-medium text-foreground text-sm">User memory</span>
-										<span class="text-[10px] px-1.5 py-0.5 rounded bg-accent text-muted-foreground"
+										<span class="text-[10px] px-1.5 py-0.5 rounded bg-accent text-accent-foreground"
 											>2</span
 										>
 									</div>
@@ -287,7 +287,7 @@
 		{:else}
 			<!-- Inactive: Show compact version -->
 			<div
-				class="inline-flex items-center gap-2 px-3 py-1.5 bg-accent/50 border border-dotted border-border rounded-lg text-sm group"
+				class="inline-flex items-center gap-2 px-3 py-1.5 bg-accent/50 text-accent-foreground border border-dotted border-border rounded-lg text-sm group"
 			>
 				<IconBook class="w-3.5 h-3.5 text-muted-foreground" />
 				<span class="text-muted-foreground">Memory</span>
@@ -299,7 +299,7 @@
 				{#if onDismissMessage}
 					<button
 						onclick={onDismissMessage}
-						class="ml-1 p-0.5 rounded hover:bg-accent transition-colors opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100"
+						class="ml-1 p-0.5 rounded hover:bg-accent hover:text-accent-foreground transition-colors opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100"
 						title="Dismiss"
 						aria-label="Dismiss"
 					>

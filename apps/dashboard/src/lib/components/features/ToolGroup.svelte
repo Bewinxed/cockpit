@@ -127,7 +127,7 @@
 
 						<!-- Tool icon -->
 						<div class="shrink-0 w-6 h-6 rounded-md flex items-center justify-center
-							{status === 'pending' ? 'bg-warning/10' : status === 'error' ? 'bg-destructive/10' : 'bg-success/10'}">
+							{status === 'pending' ? 'bg-warning/10' : status === 'error' ? 'bg-destructive text-destructive-foreground/10' : 'bg-success/10'}">
 							<ToolIcon class="w-3.5 h-3.5 {status === 'pending' ? 'text-warning' : status === 'error' ? 'text-destructive' : 'text-success'}" />
 						</div>
 
@@ -176,7 +176,7 @@
 									</div>
 									<div class="border-t border-border bg-muted/30 px-2 py-1.5 flex justify-end">
 										<button
-											class="px-3 py-1 text-xs bg-muted hover:bg-accent border border-border rounded-md text-muted-foreground hover:text-foreground transition-colors"
+											class="px-3 py-1 text-xs bg-muted hover:bg-accent hover:text-accent-foreground border border-border rounded-md hover:text-foreground transition-colors"
 											onclick={(e: MouseEvent) => { e.stopPropagation(); openDiffModal(toolId, diffInfo.filePath, diffInfo.oldContent, diffInfo.newContent); }}
 										>
 											Open in modal
@@ -193,7 +193,7 @@
 							<!-- Result section -->
 							{#if result !== undefined && result !== null}
 								<div class="rounded-lg p-3 font-mono text-xs overflow-auto max-h-[300px]
-									{status === 'error' ? 'bg-destructive/5 border border-destructive/20' : 'bg-success/5 border border-success/20'}">
+									{status === 'error' ? 'bg-destructive text-destructive-foreground/5 border border-destructive/20' : 'bg-success/5 border border-success/20'}">
 									<div class="text-[10px] uppercase tracking-wide mb-2 font-medium font-sans
 										{status === 'error' ? 'text-destructive' : 'text-success'}">
 										{status === 'error' ? 'Error' : 'Result'}

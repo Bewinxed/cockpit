@@ -36,7 +36,7 @@
     'h-6 px-2 text-xs',
     'data-[state=active]:bg-background data-[state=active]:border data-[state=active]:shadow-2xs',
     // Outranks the flat active background, the way `outline`'s hover outranked its own.
-    'data-[state=active]:hover:bg-accent',
+    'data-[state=active]:hover:bg-accent data-[state=active]:hover:text-accent-foreground',
     'dark:data-[state=active]:border-input dark:data-[state=active]:bg-input/30 dark:data-[state=active]:hover:bg-input/50'
   );
 
@@ -77,7 +77,7 @@
   class="font-mono text-sm bg-background border border-border rounded-lg overflow-hidden"
 >
   <!-- Header with tabs -->
-  <div class="flex items-center gap-4 px-4 py-2 bg-accent border-b border-border">
+  <div class="flex items-center gap-4 px-4 py-2 bg-accent text-accent-foreground border-b border-border">
     <span class="text-foreground font-semibold">Claude Code v{version}</span>
     <Tabs.List class="flex items-center gap-1 text-muted-foreground" aria-label="Help sections">
       {#each tabs as tab, i (tab)}
@@ -195,10 +195,10 @@
             <div class="text-muted-foreground py-4">
               <p>No custom commands defined.</p>
               <p class="mt-2 text-xs">
-                Create custom commands by adding <code class="bg-accent px-1 rounded">.md</code> files to:
+                Create custom commands by adding <code class="bg-accent text-accent-foreground px-1 rounded">.md</code> files to:
               </p>
               <p class="text-xs mt-1">
-                <code class="bg-accent px-1 rounded">.claude/commands/</code>
+                <code class="bg-accent text-accent-foreground px-1 rounded">.claude/commands/</code>
               </p>
             </div>
           {:else}
@@ -221,7 +221,7 @@
   </div>
 
   <!-- Footer -->
-  <div class="px-4 py-2 border-t border-border bg-accent/50 text-xs text-muted-foreground flex items-center justify-between">
+  <div class="px-4 py-2 border-t border-border bg-accent/50 text-accent-foreground text-xs flex items-center justify-between">
     <span>
       Press
       <kbd class="px-1 py-0.5 bg-card border border-border rounded text-[10px]">←</kbd>

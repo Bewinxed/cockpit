@@ -190,7 +190,7 @@
                   id="jump-result-{index}"
                   aria-selected={index === active}
                   class="flex w-full items-baseline gap-3 rounded-md px-2.5 py-2 text-left transition-colors hover:bg-accent
-                    {index === active ? 'bg-accent' : ''}"
+                    {index === active ? 'bg-accent text-accent-foreground' : ''}"
                   onclick={() => jump(entry)}
                 >
                   <span class="truncate text-sm text-foreground">{entry.label}</span>
@@ -204,9 +204,9 @@
             </div>
 
             <div class="flex gap-4 border-t border-border px-4 py-2 text-[11px] text-muted-foreground">
-              <span><kbd class="rounded bg-accent px-1">↑↓</kbd> navigate</span>
-              <span><kbd class="rounded bg-accent px-1">↵</kbd> open</span>
-              <span><kbd class="rounded bg-accent px-1">esc</kbd> close</span>
+              <span><kbd class="rounded bg-accent text-accent-foreground px-1">↑↓</kbd> navigate</span>
+              <span><kbd class="rounded bg-accent text-accent-foreground px-1">↵</kbd> open</span>
+              <span><kbd class="rounded bg-accent text-accent-foreground px-1">esc</kbd> close</span>
             </div>
           </div>
         {/if}

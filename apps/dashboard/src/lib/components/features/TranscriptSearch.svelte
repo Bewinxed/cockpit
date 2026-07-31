@@ -90,7 +90,7 @@
   }
 
   const control =
-    'flex min-h-6 shrink-0 items-center rounded px-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-30';
+    'flex min-h-6 shrink-0 items-center rounded px-1 transition-colors hover:bg-accent hover:text-accent-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-30';
 </script>
 
 <div

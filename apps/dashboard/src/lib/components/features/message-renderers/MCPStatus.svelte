@@ -95,7 +95,7 @@
 
 				{#if shouldCollapse && !expanded}
 					<Collapsible.Trigger
-						class="inline-flex min-h-6 items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-muted text-muted-foreground hover:bg-accent transition-colors focus-visible:ring-2 focus-visible:ring-ring"
+						class="inline-flex min-h-6 items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-muted hover:bg-accent hover:text-accent-foreground transition-colors focus-visible:ring-2 focus-visible:ring-ring"
 					>
 						<span>+{hiddenCount} more</span>
 					</Collapsible.Trigger>

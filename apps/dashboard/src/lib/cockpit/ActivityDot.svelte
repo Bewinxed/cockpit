@@ -13,7 +13,7 @@
   const tone = $derived(
     {
       blocked: 'bg-warning',
-      working: 'bg-primary animate-pulse motion-reduce:animate-none',
+      working: 'bg-primary text-primary-foreground animate-pulse motion-reduce:animate-none',
       idle: 'bg-muted-foreground/40',
     }[activity]
   );

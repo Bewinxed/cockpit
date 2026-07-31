@@ -117,7 +117,7 @@
   >
     <button
       type="button"
-      class="rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring md:hidden"
+      class="rounded p-1 transition-colors hover:bg-accent hover:text-accent-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring md:hidden"
       aria-label="Machines and sessions"
       aria-expanded={rail}
       onclick={() => (rail = !rail)}
@@ -127,7 +127,7 @@
     <a href="/session" class="font-mono text-sm font-semibold tracking-tight">COCKPIT</a>
     <button
       type="button"
-      class="ml-auto flex min-h-6 items-center gap-1.5 rounded px-1.5 py-0.5 text-[11px] text-muted-foreground/60 transition-colors hover:bg-accent hover:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
+      class="ml-auto flex min-h-6 items-center gap-1.5 rounded px-1.5 py-0.5 text-[11px] transition-colors hover:bg-accent hover:text-accent-foreground hover:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
       title="Jump to a project, machine, or session (Cmd/Ctrl + K)"
       onclick={() => (palette = true)}
     >

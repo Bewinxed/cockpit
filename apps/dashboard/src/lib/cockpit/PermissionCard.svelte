@@ -82,7 +82,7 @@
               ? 'bg-success text-success-foreground'
               : resolved
                 ? 'bg-primary text-primary-foreground opacity-0'
-                : 'bg-primary text-primary-foreground hover:bg-primary/90'}"
+                : 'bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground/90'}"
             onclick={() => answer('allow')}
             aria-label="Allow once"
             title="Allow once"

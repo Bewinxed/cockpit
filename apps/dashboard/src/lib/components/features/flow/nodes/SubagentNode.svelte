@@ -226,7 +226,7 @@
 
 <div
   class="subagent-node rounded-lg border-l-4 {getBorderClass(groupStatus)} bg-card p-3 w-[320px] transition-colors {zoomable
-    ? 'cursor-pointer hover:bg-accent/50 focus-visible:ring-2 focus-visible:ring-ring'
+    ? 'cursor-pointer hover:bg-accent hover:text-accent-foreground/50 focus-visible:ring-2 focus-visible:ring-ring'
     : ''}"
   style="border-left-color: {branchColor}"
   {...zoomAction}

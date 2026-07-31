@@ -279,7 +279,7 @@
 			bubble:
 				'relative px-4 py-3 text-sm leading-relaxed rounded-2xl rounded-br-sm bg-primary text-primary-foreground shadow-sm',
 			icon: IconUser,
-			iconBg: 'bg-primary',
+			iconBg: 'bg-primary text-primary-foreground',
 			iconColor: 'text-primary-foreground'
 		},
 		assistant: {
@@ -307,9 +307,9 @@
 		'ui.error': {
 			align: 'justify-start',
 			bubble:
-				'relative px-4 py-3 text-sm leading-relaxed rounded-2xl rounded-bl-sm bg-destructive/10 text-destructive border border-destructive/30 shadow-sm',
+				'relative px-4 py-3 text-sm leading-relaxed rounded-2xl rounded-bl-sm bg-destructive text-destructive-foreground/10 text-destructive border border-destructive/30 shadow-sm',
 			icon: IconAlert,
-			iconBg: 'bg-destructive/10',
+			iconBg: 'bg-destructive text-destructive-foreground/10',
 			iconColor: 'text-destructive'
 		},
 		'ui.session_error': {
@@ -325,7 +325,7 @@
 			bubble:
 				'inline-flex items-center gap-2 px-4 py-1.5 text-xs text-muted-foreground bg-muted/50 rounded-full border border-border',
 			icon: IconSettings,
-			iconBg: 'bg-accent',
+			iconBg: 'bg-accent text-accent-foreground',
 			iconColor: 'text-muted-foreground'
 		},
 		'system.hook_response': {
@@ -340,7 +340,7 @@
 			bubble:
 				'relative px-4 py-3 text-sm leading-relaxed rounded-2xl rounded-bl-sm bg-card text-card-foreground border border-border shadow-sm',
 			icon: IconTerminal,
-			iconBg: 'bg-accent',
+			iconBg: 'bg-accent text-accent-foreground',
 			iconColor: 'text-muted-foreground'
 		},
 		'ui.system_note': {
@@ -354,22 +354,22 @@
 			align: 'justify-start',
 			bubble: '',
 			icon: IconHelp,
-			iconBg: 'bg-primary/10',
+			iconBg: 'bg-primary text-primary-foreground/10',
 			iconColor: 'text-primary'
 		},
 		thinking: {
 			align: 'justify-start',
 			bubble: 'px-3 py-2.5 text-sm rounded-xl bg-muted/50 border border-border shadow-sm',
 			icon: IconAgent,
-			iconBg: 'bg-accent',
+			iconBg: 'bg-accent text-accent-foreground',
 			iconColor: 'text-muted-foreground'
 		},
 		'result.error': {
 			align: 'justify-start',
 			bubble:
-				'relative px-4 py-3 text-sm leading-relaxed rounded-2xl rounded-bl-sm bg-destructive/10 text-destructive border border-destructive/30 shadow-sm',
+				'relative px-4 py-3 text-sm leading-relaxed rounded-2xl rounded-bl-sm bg-destructive text-destructive-foreground/10 text-destructive border border-destructive/30 shadow-sm',
 			icon: IconAlert,
-			iconBg: 'bg-destructive/10',
+			iconBg: 'bg-destructive text-destructive-foreground/10',
 			iconColor: 'text-destructive'
 		}
 	};
@@ -501,7 +501,7 @@
 								{#if tool?.result !== undefined && tool?.result !== null}
 									<div
 										class="rounded-lg p-3 font-mono text-xs overflow-x-auto {tool?.status === 'error'
-											? 'bg-destructive/5 border border-destructive/20'
+											? 'bg-destructive text-destructive-foreground/5 border border-destructive/20'
 											: 'bg-success/5 border border-success/20'}"
 									>
 										<div
@@ -570,7 +570,7 @@
 								<!-- stderr -->
 								{#if hook?.stderr}
 									<div
-										class="bg-destructive/5 border border-destructive/20 rounded-lg p-3 font-mono text-xs overflow-x-auto"
+										class="bg-destructive/5 text-destructive-foreground border border-destructive/20 rounded-lg p-3 font-mono text-xs overflow-x-auto"
 									>
 										<div
 											class="text-destructive text-[10px] uppercase tracking-wide mb-1.5 font-medium"
@@ -654,7 +654,7 @@
 								onclick={async () => { resettingSession = true; try { await onResetSession?.(); } finally { resettingSession = false; } }}
 								disabled={resettingSession}
 								class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md
-									bg-primary text-primary-foreground hover:bg-primary/90
+									bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground
 									disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
 							>
 								{#if resettingSession}
@@ -721,7 +721,7 @@
 										onclick={submitEdit}
 										disabled={!editContent.trim() || editLoading}
 										class="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground rounded-md text-sm font-medium
-                           hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                           hover:bg-primary/90 hover:text-primary-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
 									>
 										{#if editLoading}
 											<IconSpinner class="w-3.5 h-3.5 animate-spin" />
@@ -802,7 +802,7 @@
 							{#if message.type === 'user' && canEdit && onEditMessage}
 								<!-- Edit button for user messages -->
 								<button
-									class="p-1.5 rounded-md bg-card border border-border shadow-sm hover:bg-accent focus-visible:opacity-100"
+									class="p-1.5 rounded-md bg-card border border-border shadow-sm hover:bg-accent hover:text-accent-foreground focus-visible:opacity-100"
 									onclick={startEditing}
 									aria-label="Edit message"
 									title="Edit message and restart from here"
@@ -815,7 +815,7 @@
 								text={message.content}
 								variant="ghost"
 								size="icon-sm"
-								class="p-1.5 h-auto w-auto rounded-md bg-card border border-border shadow-sm hover:bg-accent [&_svg]:w-3.5 [&_svg]:h-3.5 [&_svg]:text-muted-foreground"
+								class="p-1.5 h-auto w-auto rounded-md bg-card border border-border shadow-sm hover:bg-accent hover:text-accent-foreground [&_svg]:w-3.5 [&_svg]:h-3.5 [&_svg]:text-muted-foreground"
 							/>
 						</div>
 					</div>

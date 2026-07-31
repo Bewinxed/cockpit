@@ -435,7 +435,7 @@
   let error = $state<string | null>(null);
 
   const action =
-    'shrink-0 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40';
+    'shrink-0 rounded-md border border-border px-2 py-1 text-xs transition-colors hover:bg-accent hover:text-accent-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40';
   const destructive =
     'shrink-0 rounded-md border border-error bg-error px-2 py-1 text-xs text-error-foreground transition-colors hover:bg-error/90 focus-visible:ring-2 focus-visible:ring-ring';
 </script>
@@ -492,7 +492,7 @@
           aria-controls="session-view-panel"
           class="rounded-[10px] px-2 py-0.5 text-xs capitalize transition-colors focus-visible:ring-2 focus-visible:ring-ring {view ===
           mode
-            ? 'bg-accent text-foreground'
+            ? 'bg-accent text-accent-foreground'
             : 'text-muted-foreground hover:text-foreground'}"
           onclick={() => (view = mode)}
         >
@@ -687,7 +687,7 @@
         {#if unseen}
           <button
             type="button"
-            class="absolute right-4 bottom-4 rounded-full border border-border bg-card px-3 py-1.5 text-xs text-foreground shadow-md transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
+            class="absolute right-4 bottom-4 rounded-full border border-border bg-card px-3 py-1.5 text-xs shadow-md transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring"
             onclick={jumpToLatest}
           >
             Jump to latest
@@ -730,7 +730,7 @@
           </button>
           <button
             type="button"
-            class="rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-40"
+            class="rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground transition-colors hover:bg-primary/90 hover:text-primary-foreground disabled:opacity-40"
             disabled={!wholeTranscript || cockpit.status !== 'connected'}
             onclick={handleResume}
           >

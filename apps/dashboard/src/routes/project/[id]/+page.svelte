@@ -124,7 +124,7 @@
   }
 
   const action =
-    'shrink-0 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40';
+    'shrink-0 rounded-md border border-border px-2 py-1 text-xs transition-colors hover:bg-accent hover:text-accent-foreground hover:text-foreground disabled:opacity-40';
 </script>
 
 {#if !project}
@@ -150,7 +150,7 @@
       <button type="button" class={action} onclick={() => startSession(true)}>Side quest</button>
       <button
         type="button"
-        class="shrink-0 rounded-md bg-primary px-3 py-1 text-xs text-primary-foreground transition-colors hover:bg-primary/90"
+        class="shrink-0 rounded-md bg-primary px-3 py-1 text-xs text-primary-foreground transition-colors hover:bg-primary/90 hover:text-primary-foreground"
         onclick={() => startSession(false)}
       >
         New session
@@ -175,7 +175,7 @@
               aria-selected={open?.path === doc.path}
               aria-controls="project-doc-panel"
               class="shrink-0 truncate px-3 py-1 text-left font-mono text-xs transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring md:shrink
-                {open?.path === doc.path ? 'bg-accent text-foreground' : 'text-muted-foreground'}"
+                {open?.path === doc.path ? 'bg-accent text-accent-foreground' : 'text-muted-foreground'}"
               onclick={() => openDoc(doc)}
             >
               {doc.name}
@@ -235,7 +235,7 @@
                 onOpenChange={() => (expanded[epic.id] = !expanded[epic.id])}
               >
                 <Collapsible.Trigger
-                  class="flex w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
+                  class="flex w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <IconChevronRight
                     class="size-3 shrink-0 text-muted-foreground transition-transform {expanded[epic.id]
@@ -247,7 +247,7 @@
                   <span class="ml-auto flex shrink-0 items-center gap-2">
                     <span class="h-1 w-16 overflow-hidden rounded-full bg-border">
                       <span
-                        class="block h-full {epic.status === 'done' ? 'bg-success' : 'bg-primary'}"
+                        class="block h-full {epic.status === 'done' ? 'bg-success' : 'bg-primary text-primary-foreground'}"
                         style="width: {total === 0 ? 0 : (epic.done / total) * 100}%"
                       ></span>
                     </span>
