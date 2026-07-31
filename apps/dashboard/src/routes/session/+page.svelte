@@ -1,12 +1,13 @@
 <script lang="ts">
-  import { IconChevronRight, IconShield } from '$lib/icons';
+  import { IconChevronRight, IconShield, IconSpinner } from '$lib/icons';
   import { onMount, tick } from 'svelte';
   import { fly } from 'svelte/transition';
   import { quintOut } from 'svelte/easing';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
-  import type { PermissionMode } from '@cockpit/core';
-  import { cockpit, createProject, spawnSession } from '$lib/cockpit/client.svelte';
+  import type { PermissionMode, RepoInfo, ReposResult } from '@cockpit/core';
+  import { repoPath } from '@cockpit/core';
+  import { cockpit, createProject, machineControl, spawnSession } from '$lib/cockpit/client.svelte';
   import LiveSessionRow from '$lib/cockpit/LiveSessionRow.svelte';
   import StoredSessionRow from '$lib/cockpit/StoredSessionRow.svelte';
   import { PERMISSION_MODES, permissionModeLabel } from '$lib/cockpit/permission-modes';
@@ -16,8 +17,18 @@
   import * as Collapsible from '$lib/components/ui/collapsible';
   import * as Select from '$lib/components/ui/select';
 
+  /** Where the session works: a directory that is already there, or a fresh clone. */
+  const SOURCES = [
+    { value: 'directory', label: 'Directory' },
+    { value: 'repo', label: 'GitHub repo' },
+  ] as const;
+
+  type Source = (typeof SOURCES)[number]['value'];
+
   let machineId = $state('');
+  let source = $state<Source>('directory');
   let cwd = $state('');
+  let repo = $state('');
   let prompt = $state('');
   let permissionMode = $state<PermissionMode>('default');
   let sideQuest = $state(false);
@@ -49,17 +60,18 @@
 
   let machineTrigger = $state<HTMLElement | null>(null);
   let cwdInput = $state<HTMLInputElement | null>(null);
+  let repoInput = $state<HTMLInputElement | null>(null);
 
   const machineLabel = $derived(
     cockpit.onlineMachines.find((machine) => machine.machineId === machineId)
   );
 
   /** The field the last submit tripped over — drives its border and one shake. */
-  let invalid = $state<'machine' | 'cwd' | null>(null);
+  let invalid = $state<'machine' | 'cwd' | 'repo' | null>(null);
 
   // Cleared first so the class comes off and back on, which is what replays the
   // shake when the same field fails twice in a row.
-  async function flag(field: 'machine' | 'cwd') {
+  async function flag(field: 'machine' | 'cwd' | 'repo') {
     invalid = null;
     await tick();
     invalid = field;
@@ -68,6 +80,77 @@
   function clearInvalid() {
     invalid = null;
     error = null;
+  }
+
+  let repoOpen = $state(false);
+  let repos = $state<RepoInfo[]>([]);
+  let reposLoading = $state(false);
+  /** Why the list has nothing to offer, when it has nothing to offer. */
+  let repoNotice = $state<
+    { kind: 'gh-missing' | 'gh-unauthenticated' } | { kind: 'failed'; message: string } | null
+  >(null);
+
+  /** Listing repositories shells out to `gh` on the machine, so it is read once. */
+  const repoCache = new Map<string, ReposResult>();
+
+  const matches = $derived(
+    repos.filter((row) => row.nameWithOwner.toLowerCase().includes(repo.trim().toLowerCase()))
+  );
+
+  /** Where the clone lands — the agent works the same directory out for itself. */
+  const cloneInto = $derived.by(() => {
+    const name = repoPath(repo).split('/').pop();
+    if (!name) return '';
+    return `${(cwd.trim() || '~').replace(/(?!^)\/+$/, '')}/${name}`;
+  });
+
+  /** The directory the session will run in, whichever way it was arrived at. */
+  const workdir = $derived(source === 'repo' ? cloneInto : cwd.trim());
+
+  function adoptRepos(result: ReposResult) {
+    if (Array.isArray(result)) repos = result;
+    else repoNotice = { kind: result.error };
+  }
+
+  async function openRepos() {
+    repoOpen = true;
+    if (!machineId) return;
+    repos = [];
+    repoNotice = null;
+
+    const cached = repoCache.get(machineId);
+    if (cached) {
+      adoptRepos(cached);
+      return;
+    }
+
+    const asked = machineId;
+    reposLoading = true;
+    try {
+      const result = await machineControl<ReposResult>(machineId, 'listRepos');
+      repoCache.set(asked, result);
+      // The machine was switched while gh was answering; that list is not this one.
+      if (machineId !== asked) return;
+      adoptRepos(result);
+    } catch (err) {
+      if (machineId !== asked) return;
+      repoNotice = { kind: 'failed', message: err instanceof Error ? err.message : String(err) };
+    } finally {
+      reposLoading = false;
+    }
+  }
+
+  function chooseRepo(row: RepoInfo) {
+    repo = row.nameWithOwner;
+    repoOpen = false;
+    clearInvalid();
+  }
+
+  /** A clone needs somewhere to land, and home is the one directory every machine has. */
+  function chooseSource(next: Source) {
+    source = next;
+    if (next === 'repo' && !cwd.trim()) cwd = '~';
+    clearInvalid();
   }
 
   async function start(event: SubmitEvent) {
@@ -80,8 +163,17 @@
       machineTrigger?.focus();
       return;
     }
+    if (source === 'repo' && !repo.trim()) {
+      error = 'Choose a repository, or paste the URL of one.';
+      await flag('repo');
+      repoInput?.focus();
+      return;
+    }
     if (!cwd.trim()) {
-      error = 'Enter the directory this session should work in.';
+      error =
+        source === 'repo'
+          ? 'Enter the directory to clone into.'
+          : 'Enter the directory this session should work in.';
       await flag('cwd');
       cwdInput?.focus();
       return;
@@ -90,10 +182,11 @@
     try {
       const instanceId = spawnSession({
         machineId,
-        cwd: cwd.trim(),
+        cwd: workdir,
         prompt,
         permissionMode,
-        scratch: sideQuest ? { worktree, baseCwd: cwd.trim() } : undefined,
+        scratch: sideQuest ? { worktree, baseCwd: workdir } : undefined,
+        bootstrap: source === 'repo' ? { repo: repo.trim(), baseDir: cwd.trim() } : undefined,
       });
       await goto(`/session/${instanceId}`);
     } catch (err) {
@@ -108,8 +201,8 @@
     try {
       const project = await createProject({
         machineId,
-        cwd: cwd.trim(),
-        name: projectName.trim() || leaf(cwd.trim()),
+        cwd: workdir,
+        name: projectName.trim() || leaf(workdir),
       });
       await goto(`/project/${project.id}`);
     } catch (err) {
@@ -215,12 +308,116 @@
           </Select.Root>
         </div>
 
+        <div
+          class="flex items-center gap-0.5 self-start rounded-md border border-border p-0.5"
+          role="tablist"
+          aria-label="Where this session works"
+        >
+          {#each SOURCES as option (option.value)}
+            <button
+              type="button"
+              role="tab"
+              aria-selected={source === option.value}
+              class="rounded-[10px] px-2 py-0.5 text-xs transition-colors focus-visible:ring-2 focus-visible:ring-ring {source ===
+              option.value
+                ? 'bg-accent text-foreground'
+                : 'text-muted-foreground hover:text-foreground'}"
+              onclick={() => chooseSource(option.value)}
+            >
+              {option.label}
+            </button>
+          {/each}
+        </div>
+
+        {#if source === 'repo'}
+          <div class="relative flex flex-col gap-1 text-xs text-muted-foreground">
+            <label for="repo">Repository</label>
+            <input
+              id="repo"
+              bind:this={repoInput}
+              bind:value={repo}
+              placeholder="owner/name, or a clone URL"
+              autocomplete="off"
+              spellcheck="false"
+              class="rounded-md border bg-background px-2 py-1.5 font-mono text-base text-foreground transition-colors duration-200 ease-out placeholder:text-muted-foreground motion-reduce:animate-none sm:text-sm
+                {invalid === 'repo' ? 'border-error' : 'border-border'}"
+              class:animate-shake={invalid === 'repo'}
+              onfocus={openRepos}
+              oninput={() => {
+                repoOpen = true;
+                clearInvalid();
+              }}
+              onblur={() => (repoOpen = false)}
+              onkeydown={(event) => {
+                if (event.key === 'Escape') repoOpen = false;
+              }}
+            />
+
+            {#if repoOpen}
+              <div
+                class="absolute top-full right-0 left-0 z-10 mt-1 max-h-56 overflow-y-auto rounded-md border border-border bg-popover shadow-md"
+              >
+                {#if reposLoading}
+                  <span class="flex items-center gap-2 px-2 py-1.5 text-xs text-muted-foreground">
+                    <IconSpinner class="size-3.5 animate-spin" />
+                    Reading repositories…
+                  </span>
+                {:else if repoNotice}
+                  <span class="block border-l-2 border-warning px-2 py-1.5 text-[11px] text-warning">
+                    {#if repoNotice.kind === 'failed'}
+                      {repoNotice.message}
+                    {:else if repoNotice.kind === 'gh-missing'}
+                      The GitHub CLI is not installed on {machineLabel?.hostname ?? 'that machine'}.
+                      Install <code class="font-mono">gh</code> there, or paste a clone URL.
+                    {:else}
+                      Run <code class="font-mono">gh auth login</code>
+                      on {machineLabel?.hostname ?? 'that machine'} to list its repositories, or paste
+                      a clone URL.
+                    {/if}
+                  </span>
+                {:else}
+                  {#each matches as row (row.nameWithOwner)}
+                    <button
+                      type="button"
+                      class="flex w-full flex-col gap-0.5 px-2 py-1.5 text-left transition-colors hover:bg-accent"
+                      onmousedown={(event) => event.preventDefault()}
+                      onclick={() => chooseRepo(row)}
+                    >
+                      <span class="flex w-full items-center gap-2">
+                        <span class="truncate font-mono text-[13px] text-foreground">
+                          {row.nameWithOwner}
+                        </span>
+                        {#if row.visibility === 'PRIVATE'}
+                          <span
+                            class="shrink-0 rounded bg-muted px-1 py-px text-[10px] text-muted-foreground"
+                          >
+                            private
+                          </span>
+                        {/if}
+                      </span>
+                      {#if row.description}
+                        <span class="w-full truncate text-[11px] text-muted-foreground">
+                          {row.description}
+                        </span>
+                      {/if}
+                    </button>
+                  {:else}
+                    <span class="block px-2 py-1.5 text-[11px] text-muted-foreground">
+                      No repository by that name here — it is cloned as you wrote it.
+                    </span>
+                  {/each}
+                {/if}
+              </div>
+            {/if}
+          </div>
+        {/if}
+
         <label class="flex flex-col gap-1 text-xs text-muted-foreground">
-          Working directory
+          {source === 'repo' ? 'Clone into' : 'Working directory'}
           <input
             bind:this={cwdInput}
             bind:value={cwd}
-            placeholder="/home/you/project"
+            placeholder={source === 'repo' ? '~' : '/home/you/project'}
             class="rounded-md border bg-background px-2 py-1.5 font-mono text-base text-foreground transition-colors duration-200 ease-out placeholder:text-muted-foreground motion-reduce:animate-none sm:text-sm
               {invalid === 'cwd' ? 'border-error' : 'border-border'}"
             class:animate-shake={invalid === 'cwd'}
@@ -237,13 +434,17 @@
           }}
         />
 
-        {#if cwd.trim()}
+        {#if source === 'repo' && cloneInto}
+          <span class="font-mono text-[11px] text-muted-foreground/70">{cloneInto}</span>
+        {/if}
+
+        {#if workdir}
           <div class="flex items-end gap-2">
             <label class="flex flex-col gap-1 text-xs text-muted-foreground">
               Project name
               <input
                 bind:value={projectName}
-                placeholder={leaf(cwd.trim())}
+                placeholder={leaf(workdir)}
                 class="w-40 rounded-md border border-border bg-background px-2 py-1 text-base text-foreground placeholder:text-muted-foreground sm:text-xs"
               />
             </label>

@@ -544,6 +544,7 @@ export function spawnSession({
   options = {},
   permissionMode,
   scratch,
+  bootstrap,
   projectId,
 }: {
   machineId: string;
@@ -552,9 +553,10 @@ export function spawnSession({
   options?: Options;
   permissionMode?: PermissionMode;
   scratch?: SpawnPayload['scratch'];
+  bootstrap?: SpawnPayload['bootstrap'];
   projectId?: string;
 }): string {
-  const created = start({ machineId, cwd, options, permissionMode, scratch, projectId });
+  const created = start({ machineId, cwd, options, permissionMode, scratch, bootstrap, projectId });
   if (prompt?.trim()) sendText(created.instanceId, machineId, prompt.trim());
   void refresh();
   return created.instanceId;
