@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { IconAgent, IconSubagent, IconTools } from '$lib/icons';
-  import { onMount, untrack } from 'svelte';
+  import { IconAgent, IconSpinner, IconSubagent, IconTools } from '$lib/icons';
+  import { onMount, tick, untrack } from 'svelte';
   import { fly } from 'svelte/transition';
   import { quintOut } from 'svelte/easing';
   import { goto } from '$app/navigation';
@@ -40,6 +40,7 @@
     const cwd = browsingCwd;
     const id = viewId;
     untrack(() => {
+      windowSize = WINDOW;
       if (machineId) void openTranscript({ viewId: id, machineId, sessionId: id, cwd });
       else openSession(id);
     });
@@ -55,7 +56,13 @@
     untrack(() => void backfillSession(id));
   });
 
+  /** How many trailing groups mount. A transcript can be thousands of groups;
+   *  the viewport shows ten. History unfolds in pages, newest stay live. */
+  const WINDOW = 40;
+  let windowSize = $state(WINDOW);
+
   let scroller = $state<HTMLDivElement | null>(null);
+  let historySentinel = $state<HTMLDivElement | null>(null);
   /** Whether the reader is parked at the live edge — measured before every growth. */
   let atBottom = $state(true);
   let unseen = $state(false);
@@ -157,6 +164,45 @@
       result.push({ kind: 'tools', messages: tools, index: start });
     }
     return result;
+  });
+
+  const hiddenCount = $derived(Math.max(0, groups.length - windowSize));
+  const visibleGroups = $derived(hiddenCount > 0 ? groups.slice(hiddenCount) : groups);
+
+  let expandingHistory = false;
+
+  // History prepends above the viewport, so the reader is put back on the line
+  // they were reading rather than wherever the taller column left them.
+  async function showEarlier() {
+    if (!scroller || expandingHistory || hiddenCount === 0) return;
+    expandingHistory = true;
+    // The pin must not chase the bottom while history mounts above the fold.
+    followHold = Number.MAX_SAFE_INTEGER;
+    try {
+      const before = scroller.scrollHeight;
+      windowSize += 80;
+      await tick();
+      scroller.scrollTop += scroller.scrollHeight - before;
+    } finally {
+      followHold = performance.now() + 100; // let layout settle, then re-arm
+      expandingHistory = false;
+      setTimeout(trackScroll, 120);
+    }
+  }
+
+  // The next page loads as the sentinel nears the top of the viewport, so
+  // scrolling up through a long transcript never stops at a button.
+  $effect(() => {
+    const node = historySentinel;
+    if (!node || !scroller) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) void showEarlier();
+      },
+      { root: scroller, rootMargin: '600px 0px 0px 0px' }
+    );
+    io.observe(node);
+    return () => io.disconnect();
   });
 
   let view = $state<'chat' | 'flow'>('chat');
@@ -375,7 +421,17 @@
           class="h-full space-y-4 overflow-y-auto overflow-x-hidden px-4 pt-4 pb-44 [overflow-anchor:none]"
         >
           <div class="mx-auto flex max-w-4xl flex-col gap-4">
-            {#each groups as group (group.kind === 'single' ? group.message.id : `${group.kind}-${group.index}`)}
+            {#if hiddenCount > 0}
+              <div
+                bind:this={historySentinel}
+                class="flex min-h-7 items-center justify-center gap-1.5 text-xs text-muted-foreground"
+              >
+                <IconSpinner class="size-3.5 animate-spin" />
+                Loading earlier messages…
+              </div>
+            {/if}
+
+            {#each visibleGroups as group (group.kind === 'single' ? group.message.id : `${group.kind}-${group.index}`)}
               {#if group.kind === 'tools'}
                 <div class="flex justify-start gap-3">
                   <div
