@@ -9,6 +9,9 @@
   import LiveSessionRow from '$lib/cockpit/LiveSessionRow.svelte';
   import StoredSessionRow from '$lib/cockpit/StoredSessionRow.svelte';
   import { permissionSummary } from '$lib/cockpit/permission-summary';
+  import DirectoryPicker from '$lib/components/features/DirectoryPicker.svelte';
+  import { Checkbox } from '$lib/components/ui/checkbox';
+  import * as Select from '$lib/components/ui/select';
 
   let machineId = $state('');
   let cwd = $state('');
@@ -40,8 +43,12 @@
     return () => clearTimeout(timer);
   });
 
-  let machineSelect = $state<HTMLSelectElement | null>(null);
+  let machineTrigger = $state<HTMLElement | null>(null);
   let cwdInput = $state<HTMLInputElement | null>(null);
+
+  const machineLabel = $derived(
+    cockpit.onlineMachines.find((machine) => machine.machineId === machineId)
+  );
 
   /** The field the last submit tripped over — drives its border and one shake. */
   let invalid = $state<'machine' | 'cwd' | null>(null);
@@ -66,7 +73,7 @@
     if (!machineId) {
       error = 'Choose a machine to run this session on.';
       await flag('machine');
-      machineSelect?.focus();
+      machineTrigger?.focus();
       return;
     }
     if (!cwd.trim()) {
@@ -149,23 +156,32 @@
     <section class="rounded-xl border border-border bg-card p-4">
       <h2 class="mb-3 text-sm font-medium">New session</h2>
       <form class="flex flex-col gap-3" onsubmit={start}>
-        <label class="flex flex-col gap-1 text-xs text-muted-foreground">
-          Machine
-          <select
-            bind:this={machineSelect}
-            bind:value={machineId}
-            class="rounded-md border bg-background px-2 py-1.5 text-base text-foreground transition-colors duration-200 ease-out motion-reduce:animate-none sm:text-sm
-              {invalid === 'machine' ? 'border-error' : 'border-border'}"
-            class:animate-shake={invalid === 'machine'}
-            onchange={clearInvalid}
-          >
-            {#each cockpit.onlineMachines as machine (machine.machineId)}
-              <option value={machine.machineId}>{machine.hostname} · {machine.os}</option>
-            {:else}
-              <option value="">No machines online</option>
-            {/each}
-          </select>
-        </label>
+        <div class="flex flex-col gap-1 text-xs text-muted-foreground">
+          <span id="machine-label">Machine</span>
+          <Select.Root type="single" bind:value={machineId} onValueChange={clearInvalid}>
+            <Select.Trigger
+              bind:ref={machineTrigger}
+              aria-labelledby="machine-label"
+              class="text-foreground motion-reduce:animate-none
+                {invalid === 'machine' ? 'animate-shake border-error' : ''}"
+            >
+              {machineLabel ? `${machineLabel.hostname} · ${machineLabel.os}` : 'No machines online'}
+            </Select.Trigger>
+            <Select.Content>
+              {#each cockpit.onlineMachines as machine (machine.machineId)}
+                <Select.Item
+                  value={machine.machineId}
+                  label="{machine.hostname} · {machine.os}"
+                  class="text-foreground"
+                >
+                  {machine.hostname} · {machine.os}
+                </Select.Item>
+              {:else}
+                <span class="block px-2 py-1.5 text-sm">No machines online</span>
+              {/each}
+            </Select.Content>
+          </Select.Root>
+        </div>
 
         <label class="flex flex-col gap-1 text-xs text-muted-foreground">
           Working directory
@@ -179,6 +195,15 @@
             oninput={clearInvalid}
           />
         </label>
+
+        <DirectoryPicker
+          {machineId}
+          value={cwd}
+          onSelect={(path) => {
+            cwd = path;
+            clearInvalid();
+          }}
+        />
 
         {#if cwd.trim()}
           <div class="flex items-end gap-2">
@@ -210,16 +235,20 @@
           ></textarea>
         </label>
 
-        <label class="flex items-center gap-2 text-xs text-muted-foreground">
-          <input type="checkbox" bind:checked={sideQuest} class="accent-primary" />
-          Side quest — ephemeral, nothing written to session storage
-        </label>
+        <div class="flex items-center gap-2 text-xs text-muted-foreground">
+          <Checkbox id="side-quest" bind:checked={sideQuest} />
+          <label for="side-quest" class="cursor-pointer">
+            Side quest — ephemeral, nothing written to session storage
+          </label>
+        </div>
 
         {#if sideQuest}
-          <label class="flex items-center gap-2 pl-5 text-xs text-muted-foreground">
-            <input type="checkbox" bind:checked={worktree} class="accent-primary" />
-            in a git worktree of this directory
-          </label>
+          <div class="flex items-center gap-2 pl-5 text-xs text-muted-foreground">
+            <Checkbox id="worktree" bind:checked={worktree} />
+            <label for="worktree" class="cursor-pointer">
+              in a git worktree of this directory
+            </label>
+          </div>
         {/if}
 
         <div class="flex items-center gap-3">
