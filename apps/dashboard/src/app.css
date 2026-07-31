@@ -295,11 +295,11 @@ button.text-destructive-foreground { color: var(--destructive-foreground); }
    are quicker than entries. Chrome (header, sidebar) holds still in its own
    named groups. */
 ::view-transition-old(root) {
-  animation: 150ms cubic-bezier(0.22, 1, 0.36, 1) both vt-out;
+  animation: 120ms cubic-bezier(0.22, 1, 0.36, 1) both vt-out;
 }
 
 ::view-transition-new(root) {
-  animation: 200ms cubic-bezier(0.22, 1, 0.36, 1) both vt-in;
+  animation: 160ms cubic-bezier(0.22, 1, 0.36, 1) both vt-in;
 }
 
 @keyframes vt-out {
