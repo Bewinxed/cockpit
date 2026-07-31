@@ -39,6 +39,7 @@ import { fly } from 'svelte/transition';
     stopSession,
   } from '$lib/cockpit/client.svelte';
   import { isTyping } from '$lib/utils/typing';
+  import type { SendExtras } from '$lib/cockpit/client.svelte';
   import { PERMISSION_MODES, permissionModeLabel } from '$lib/cockpit/permission-modes';
   import * as Select from '$lib/components/ui/select';
   import { sessionFailedMessage } from '$lib/cockpit/frames';
@@ -315,9 +316,9 @@ import { fly } from 'svelte/transition';
     session?.messages.reduce((cost, message) => message.metadata?.totalCost ?? cost, 0) ?? 0
   );
 
-  function handleSend(text: string) {
+  function handleSend(text: string, extras: SendExtras) {
     if (!session) return;
-    void sendOrRevive(viewId, session.machineId, text);
+    void sendOrRevive(viewId, session.machineId, text, extras);
   }
 
   function handleInterrupt() {

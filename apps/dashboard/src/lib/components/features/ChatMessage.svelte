@@ -18,6 +18,7 @@
 		IconAgent,
 		IconReset,
 		IconDownload,
+		IconGallery,
 		IconWarningTriangle
 	} from '$lib/icons';
 	import Markdown from '@humanspeak/svelte-markdown';
@@ -378,6 +379,19 @@
 		messageConfig[message.type as keyof typeof messageConfig] ||
 		(message.type.startsWith('system.') ? messageConfig.system : messageConfig.assistant)
 	);
+
+	/** Past this, a single turn crowds out everything the session said after it. */
+	const HUGE_MESSAGE_CHARS = 1500;
+	const HUGE_MESSAGE_HEAD = 300;
+
+	const isUser = $derived(message.type === 'user');
+	const bubbleImages = $derived(isUser ? (message.metadata?.images ?? []) : []);
+	const bubbleAttachments = $derived(isUser ? (message.metadata?.attachments ?? []) : []);
+	const isHuge = $derived(isUser && message.content.length > HUGE_MESSAGE_CHARS);
+	const messageHead = $derived(message.content.slice(0, HUGE_MESSAGE_HEAD));
+	const messageRest = $derived(message.content.slice(HUGE_MESSAGE_HEAD));
+
+	let fullMessageOpen = $state(false);
 </script>
 
 <!-- If there's a specialized renderer, use it -->
@@ -725,9 +739,70 @@
 					</div>
 				{:else}
 					<div class="{config.bubble} relative max-w-full min-w-0">
-						<div class="{PROSE} {message.type === 'user' ? 'prose-invert' : ''}">
-							<Markdown source={message.content} />
-						</div>
+						{#if bubbleImages.length > 0}
+							<div class="flex flex-wrap gap-2 mb-2">
+								{#each bubbleImages as image, index (index)}
+									{#if image.dataUri}
+										<img
+											src={image.dataUri}
+											alt="Attachment"
+											class="max-h-40 rounded-lg outline outline-1 outline-[oklch(0_0_0/0.1)] dark:outline-[oklch(1_0_0/0.1)]"
+										/>
+									{:else}
+										<!-- A stored turn that named an image the transcript no longer carries -->
+										<span
+											class="inline-flex items-center gap-1.5 rounded-lg border border-current/20 px-2 py-1 text-xs opacity-80"
+										>
+											<IconGallery class="size-3.5" />
+											{image.mediaType.replace('image/', '')} image
+										</span>
+									{/if}
+								{/each}
+							</div>
+						{/if}
+
+						{#if bubbleAttachments.length > 0}
+							<div class="flex flex-wrap gap-1.5 mb-2">
+								{#each bubbleAttachments as attachment, index (index)}
+									<span
+										class="inline-flex items-center gap-1.5 rounded-md border border-current/20 px-2 py-1 text-xs opacity-80"
+									>
+										<IconDocument class="size-3.5" />
+										{attachment.name}
+										<span class="tabular-nums">{attachment.chars.toLocaleString()} chars</span>
+									</span>
+								{/each}
+							</div>
+						{/if}
+
+						{#if isHuge}
+							<Collapsible.Root bind:open={fullMessageOpen}>
+								<div class="{PROSE} prose-invert">
+									<Markdown source={fullMessageOpen ? messageHead : `${messageHead}…`} />
+								</div>
+								<Collapsible.Content>
+									<div class="{PROSE} prose-invert">
+										<Markdown source={messageRest} />
+									</div>
+								</Collapsible.Content>
+								<Collapsible.Trigger
+									class="mt-2 flex items-center gap-1.5 text-xs opacity-70 transition-opacity hover:opacity-100"
+								>
+									<IconChevronRight
+										class="w-3.5 h-3.5 transition-transform duration-200 ease-out {fullMessageOpen
+											? 'rotate-90'
+											: ''}"
+									/>
+									{fullMessageOpen
+										? 'Show less'
+										: `Show full message (${message.content.length.toLocaleString()} chars)`}
+								</Collapsible.Trigger>
+							</Collapsible.Root>
+						{:else}
+							<div class="{PROSE} {message.type === 'user' ? 'prose-invert' : ''}">
+								<Markdown source={message.content} />
+							</div>
+						{/if}
 
 						<!-- Action buttons -->
 						<div

@@ -50,6 +50,40 @@ const isDirectory = async (path: string): Promise<boolean> => {
   return info?.isDirectory() ?? false;
 };
 
+/** The blocks a user turn is made of, taken from the SDK rather than re-modelled. */
+type ContentBlock = Extract<SDKUserMessage['message']['content'], unknown[]>[number];
+type Base64Source = Extract<Extract<ContentBlock, { type: 'image' }>['source'], { type: 'base64' }>;
+
+/**
+ * A turn's images and pasted text folded into the message the SDK iterates.
+ * Images lead, so the model has seen them by the time it reads what was said
+ * about them, and each paste is tagged: a wall of text arriving mid-sentence
+ * reads as the user's own words otherwise. A turn carrying neither stays the
+ * plain string it came as.
+ */
+function withExtras(
+  message: SDKUserMessage,
+  attachments: SendPayload['attachments'],
+  images: SendPayload['images']
+): SDKUserMessage {
+  if (!attachments?.length && !images?.length) return message;
+
+  const typed = typeof message.message.content === 'string' ? message.message.content : '';
+  const pasted = (attachments ?? [])
+    .map(({ name, content }) => `\n\n<pasted-text name="${name}">\n${content}\n</pasted-text>`)
+    .join('');
+
+  const content: ContentBlock[] = [
+    ...(images ?? []).map(({ mediaType, data }) => ({
+      type: 'image' as const,
+      source: { type: 'base64' as const, media_type: mediaType as Base64Source['media_type'], data },
+    })),
+    { type: 'text' as const, text: typed + pasted },
+  ];
+
+  return { ...message, message: { ...message.message, content } };
+}
+
 /**
  * The prompt `query()` iterates. Staying unresolved between turns is the whole
  * point: it is what keeps one session alive across many `send`s.
@@ -457,10 +491,10 @@ export class SessionSupervisor {
     });
   }
 
-  async #send({ instanceId, message }: SendPayload): Promise<void> {
+  async #send({ instanceId, message, attachments, images }: SendPayload): Promise<void> {
     const session = this.#session(instanceId);
     session.turn.start();
-    session.input.push(message);
+    session.input.push(withExtras(message, attachments, images));
   }
 
   /**

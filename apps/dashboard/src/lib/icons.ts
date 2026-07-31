@@ -34,6 +34,8 @@ export { default as IconCode } from '~icons/solar/code-2-linear';
 export { default as IconCodeFile } from '~icons/solar/code-file-linear';
 export { default as IconTerminal } from '~icons/solar/code-square-linear';
 export { default as IconDocument } from '~icons/solar/document-text-linear';
+export { default as IconAttach } from '~icons/solar/paperclip-linear';
+export { default as IconGallery } from '~icons/solar/gallery-linear';
 export { default as IconCopy } from '~icons/solar/copy-linear';
 export { default as IconPen } from '~icons/solar/pen-2-linear';
 export { default as IconPenLine } from '~icons/solar/pen-new-square-linear';

@@ -116,6 +116,11 @@ export interface MessageMetadata {
   // Harness-injected user-role content (task notifications, reminders, compaction)
   noteKind?: string;
   noteTitle?: string;
+  // What a user turn carried besides its typed text
+  /** Pastes the input turned into chips; the text itself went to the model, not here. */
+  attachments?: Array<{ name: string; chars: number }>;
+  /** A stored transcript can name an image it no longer carries, hence the optional uri. */
+  images?: Array<{ mediaType: string; dataUri?: string }>;
 }
 
 /**

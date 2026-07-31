@@ -108,6 +108,14 @@ export const repoPath = (repo: string): string =>
 export interface SendPayload {
   instanceId: string;
   message: SDKUserMessage;
+  /**
+   * Text the user pasted rather than typed, kept out of `message` so the agent
+   * can fold it into the turn as quoted material the model won't mistake for
+   * the sentence around it.
+   */
+  attachments?: { kind: 'text'; name: string; content: string }[];
+  /** Images the turn carries: base64, with no `data:` URI prefix. */
+  images?: { mediaType: string; data: string }[];
 }
 
 /** `stop`: interrupt and close a live session. */
