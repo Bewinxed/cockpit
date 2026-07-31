@@ -65,6 +65,8 @@ export interface InstanceRow {
   projectId?: string | null;
   /** `scratch` for a side quest; absent from a hub that predates the column. */
   kind?: string;
+  /** What killed the session, on a row the agent reported as `error`. */
+  lastError?: string | null;
 }
 
 /** A project the hub knows about (`GET /api/projects`). */

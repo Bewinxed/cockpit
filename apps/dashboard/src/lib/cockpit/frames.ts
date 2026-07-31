@@ -615,6 +615,18 @@ export function errorMessage(instanceId: string, text: string): Message {
   };
 }
 
+/** A session that died before it said anything — the registry row is all there is. */
+export function sessionFailedMessage(instanceId: string, reason: string): Message {
+  return {
+    id: `${instanceId}:failed`,
+    instanceId,
+    type: 'ui.session_error',
+    content: reason,
+    timestamp: new Date(),
+    metadata: { errorTitle: 'Session failed to start' },
+  };
+}
+
 /** Folds a tool result into the `tool.use` it answers. */
 export function applyToolResult(messages: Message[], { toolId, result, isError }: ToolResult): void {
   const target = messages.find((m) => m.type === 'tool.use' && m.metadata?.toolId === toolId);

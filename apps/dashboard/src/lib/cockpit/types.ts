@@ -67,6 +67,9 @@ export interface MessageMetadata {
   exitCode?: SDKHookResponseMessage['exit_code'];
   stdout?: SDKHookResponseMessage['stdout'];
   stderr?: SDKHookResponseMessage['stderr'];
+  // Session error
+  /** The `ui.session_error` card's heading; a missing session when unset. */
+  errorTitle?: string;
   // Login prompt
   authUrl?: string;
   oauthState?: string;

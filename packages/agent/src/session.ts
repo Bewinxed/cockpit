@@ -20,12 +20,29 @@ import type {
 } from '@cockpit/core';
 import { RESOLVE_PERMISSION } from '@cockpit/core';
 import { Effect } from 'effect';
+import { stat } from 'node:fs/promises';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { runFs } from './fs';
 
 export type FrameSink = (frame: FramePayload) => void;
 
 const warn = (message: string): void => {
   Effect.runFork(Effect.logWarning(message));
+};
+
+/**
+ * `~` is the shell's, not a path: spawning in a literal `~` puts the SDK in a
+ * directory that does not exist, which it reports as a launch failure.
+ */
+const expandHome = (path: string): string => {
+  if (path === '~') return homedir();
+  return path.startsWith('~/') ? join(homedir(), path.slice(2)) : path;
+};
+
+const isDirectory = async (path: string): Promise<boolean> => {
+  const info = await stat(path).catch(() => null);
+  return info?.isDirectory() ?? false;
 };
 
 /**
@@ -164,52 +181,52 @@ export class SessionSupervisor {
   }
 
   async #spawn({ instanceId, cwd, options, scratch }: SpawnPayload): Promise<void> {
-    let workdir = cwd;
-    if (scratch?.worktree) {
-      try {
-        workdir = await this.#addWorktree(instanceId, scratch.baseCwd ?? cwd);
-      } catch (error) {
-        this.sink({
-          kind: 'error',
-          instanceId,
-          verb: 'spawn',
-          message: error instanceof Error ? error.message : String(error),
-        });
-        return;
+    try {
+      let workdir = expandHome(cwd);
+      // Checked here rather than left to the SDK: a query() started in a missing
+      // directory fails as "binary exists but failed to launch", which names
+      // neither the directory nor the reason.
+      if (!(await isDirectory(workdir))) {
+        throw new Error(`working directory does not exist: ${workdir}`);
       }
+      if (scratch?.worktree) {
+        workdir = await this.#addWorktree(instanceId, expandHome(scratch.baseCwd ?? cwd));
+      }
+
+      const input = new InputStream();
+      const permissions = new Map<string, (result: PermissionResult) => void>();
+
+      const handle = query({
+        prompt: input,
+        options: {
+          // Subagent observability is the product's first promise (NEW.md §1), so
+          // the full nested conversation and its progress summaries are on unless
+          // the spawn payload deliberately turns them off.
+          forwardSubagentText: true,
+          agentProgressSummaries: true,
+          ...options,
+          cwd: workdir,
+          includePartialMessages: true,
+          canUseTool: (toolName, toolInput, { requestId, suggestions }) =>
+            new Promise<PermissionResult>((resolve) => {
+              permissions.set(requestId, resolve);
+              this.sink({
+                kind: 'permission_request',
+                instanceId,
+                requestId,
+                toolName,
+                input: toolInput,
+                suggestions,
+              });
+            }),
+        },
+      });
+
+      const session: Session = { handle, input, permissions, pump: this.#pump(instanceId, handle) };
+      this.#sessions.set(instanceId, session);
+    } catch (error) {
+      this.#fail(instanceId, error);
     }
-
-    const input = new InputStream();
-    const permissions = new Map<string, (result: PermissionResult) => void>();
-
-    const handle = query({
-      prompt: input,
-      options: {
-        // Subagent observability is the product's first promise (NEW.md §1), so
-        // the full nested conversation and its progress summaries are on unless
-        // the spawn payload deliberately turns them off.
-        forwardSubagentText: true,
-        agentProgressSummaries: true,
-        ...options,
-        cwd: workdir,
-        includePartialMessages: true,
-        canUseTool: (toolName, toolInput, { requestId, suggestions }) =>
-          new Promise<PermissionResult>((resolve) => {
-            permissions.set(requestId, resolve);
-            this.sink({
-              kind: 'permission_request',
-              instanceId,
-              requestId,
-              toolName,
-              input: toolInput,
-              suggestions,
-            });
-          }),
-      },
-    });
-
-    const session: Session = { handle, input, permissions, pump: this.#pump(instanceId, handle) };
-    this.#sessions.set(instanceId, session);
   }
 
   async #pump(instanceId: string, handle: Query): Promise<void> {
@@ -219,9 +236,26 @@ export class SessionSupervisor {
       }
     } catch (error) {
       warn(`session ${instanceId} pump stopped: ${error}`);
+      // A deliberate stop drops the session before it closes the handle, so an
+      // error after that is the teardown, not a session that died on its own.
+      if (this.#sessions.has(instanceId)) this.#fail(instanceId, error);
     } finally {
       this.#sessions.delete(instanceId);
     }
+  }
+
+  /**
+   * A session that never started, or stopped without being asked to. The frame
+   * is what a live dashboard renders; the hub reads the same one to mark the
+   * instance dead, so a tab that opens later still learns why.
+   */
+  #fail(instanceId: string, error: unknown): void {
+    this.sink({
+      kind: 'error',
+      instanceId,
+      verb: 'spawn',
+      message: error instanceof Error ? error.message : String(error),
+    });
   }
 
   async #send({ instanceId, message }: SendPayload): Promise<void> {

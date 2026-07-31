@@ -26,12 +26,18 @@ export interface DbShape {
     kind: InstanceKind;
   }) => void;
   readonly stopInstance: (id: string) => void;
+  /** The agent reported the session dead: what killed it, kept for late readers. */
+  readonly failInstance: (id: string, error: string) => void;
   /** A side quest thrown away: stopped, and gone from every live listing. */
   readonly discardInstance: (id: string) => void;
   /** "Keep": a side quest that earned its place stops being treated as scratch. */
   readonly setInstanceKind: (id: string, kind: InstanceKind) => typeof instances.$inferSelect | undefined;
-  /** The SDK session an `init` frame named, so the row can be read back from. */
-  readonly noteInstanceSession: (id: string, sessionId: string) => void;
+  /**
+   * The SDK session an `init` frame named, so the row can be read back from —
+   * with the directory it really opened in, which is the agent's word on where
+   * the spawn's `cwd` resolved to.
+   */
+  readonly noteInstanceSession: (id: string, sessionId: string, cwd?: string) => void;
   /**
    * Marks every running instance on the machine that `liveIds` does not name as
    * unknown: those belong to a daemon that is gone, and the hub cannot tell
@@ -100,6 +106,7 @@ const make = (path: string): DbShape => {
             cwd,
             kind,
             status: 'running',
+            lastError: null,
             updatedAt: now,
             ...(sessionId ? { sessionId } : {}),
             ...(projectId ? { projectId } : {}),
@@ -111,6 +118,14 @@ const make = (path: string): DbShape => {
       db.update(instances)
         .set({ status: 'stopped', updatedAt: new Date() })
         .where(eq(instances.id, id))
+        .run();
+    },
+    failInstance: (id, error) => {
+      // A side quest that was thrown away stays thrown away: its teardown can
+      // fail long after the session did, and it is not coming back as a row.
+      db.update(instances)
+        .set({ status: 'error', lastError: error, updatedAt: new Date() })
+        .where(and(eq(instances.id, id), ne(instances.status, 'discarded')))
         .run();
     },
     discardInstance: (id) => {
@@ -126,9 +141,9 @@ const make = (path: string): DbShape => {
         .where(eq(instances.id, id))
         .returning()
         .get(),
-    noteInstanceSession: (id, sessionId) => {
+    noteInstanceSession: (id, sessionId, cwd) => {
       db.update(instances)
-        .set({ sessionId, updatedAt: new Date() })
+        .set({ sessionId, updatedAt: new Date(), ...(cwd ? { cwd } : {}) })
         .where(eq(instances.id, id))
         .run();
     },

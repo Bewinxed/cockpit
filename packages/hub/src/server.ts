@@ -72,16 +72,19 @@ const peekInstances = (payload: unknown): string[] => {
 };
 
 /**
- * The SDK session an `init` frame announces. Recording it is what lets a
- * dashboard that joins a live session late read its transcript back.
+ * What an `init` frame announces: the SDK session, which is what lets a
+ * dashboard that joins a live session late read its transcript back, and the
+ * directory the agent really opened it in — the spawn's `cwd` after the agent
+ * expanded it.
  */
-const peekSessionId = (payload: unknown): string | undefined => {
+const peekInit = (payload: unknown): { sessionId: string; cwd?: string } | undefined => {
   if (typeof payload !== 'object' || payload === null) return undefined;
   const message = (payload as { message?: unknown }).message;
   if (typeof message !== 'object' || message === null) return undefined;
   const sdk = message as Record<string, unknown>;
   if (sdk.type !== 'system' || sdk.subtype !== 'init') return undefined;
-  return typeof sdk.session_id === 'string' ? sdk.session_id : undefined;
+  if (typeof sdk.session_id !== 'string') return undefined;
+  return { sessionId: sdk.session_id, cwd: typeof sdk.cwd === 'string' ? sdk.cwd : undefined };
 };
 
 /** `stop { discard: true }`: the side quest is being thrown away, not paused. */
@@ -150,8 +153,16 @@ export const createServer = ({ registry, db, pending }: HubServices) => {
             if (message.requestId && kind === 'permission_request')
               pending.remember(message.requestId, message);
             if (kind === 'sdk' && message.instanceId) {
-              const sessionId = peekSessionId(message.payload);
-              if (sessionId) db.noteInstanceSession(message.instanceId, sessionId);
+              const init = peekInit(message.payload);
+              if (init) db.noteInstanceSession(message.instanceId, init.sessionId, init.cwd);
+            }
+            // An agent only frames an error about a session that failed to start
+            // or died on its own, so the row records it for whoever looks later.
+            if (kind === 'error' && message.instanceId) {
+              db.failInstance(
+                message.instanceId,
+                peek(message.payload, 'message') ?? 'the session failed'
+              );
             }
             // A control's reply belongs to the dashboard that asked; the rest is fan-out.
             const requester =

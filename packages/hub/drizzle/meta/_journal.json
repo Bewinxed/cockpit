@@ -15,6 +15,13 @@
       "when": 1785460186965,
       "tag": "0001_milky_ender_wiggin",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1785527124845,
+      "tag": "0002_warm_malcolm_colcord",
+      "breakpoints": true
     }
   ]
 }

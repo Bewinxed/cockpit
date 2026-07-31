@@ -632,10 +632,11 @@
 					<div class="flex items-start gap-2">
 						<IconWarningTriangle class="w-4 h-4 shrink-0 mt-0.5" />
 						<div class="flex flex-col gap-1">
-							<span class="font-medium">Session not found</span>
+							<span class="font-medium">{message.metadata?.errorTitle ?? 'Session not found'}</span>
 							<span class="text-xs opacity-80">{message.content}</span>
 						</div>
 					</div>
+					{#if onResetSession || onDownloadTranscript}
 					<div class="flex items-center gap-2 pt-1 border-t border-current/10">
 						{#if onResetSession}
 							<button
@@ -664,6 +665,7 @@
 							</button>
 						{/if}
 					</div>
+					{/if}
 				</div>
 			{:else if message.type.startsWith('system.')}
 				<!-- Simple system message - subtle banner -->

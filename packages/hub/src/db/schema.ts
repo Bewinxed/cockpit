@@ -37,9 +37,11 @@ export const instances = sqliteTable('instances', {
   kind: text('kind').$type<'mainline' | 'scratch'>().notNull().default('mainline'),
   /** `unknown`: the agent socket dropped, so the hub can no longer see the session. */
   status: text('status')
-    .$type<'starting' | 'running' | 'stopped' | 'discarded' | 'unknown'>()
+    .$type<'starting' | 'running' | 'stopped' | 'discarded' | 'unknown' | 'error'>()
     .notNull()
     .default('starting'),
+  /** Why the session died, for a dashboard that was not watching when it did. */
+  lastError: text('last_error'),
   createdAt: timestamp('created_at').notNull().$defaultFn(() => new Date()),
   updatedAt: timestamp('updated_at').notNull().$defaultFn(() => new Date()),
 });
