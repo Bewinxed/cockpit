@@ -291,11 +291,28 @@ button.text-destructive-foreground { color: var(--destructive-foreground); }
    View Transitions
    ======================================== */
 
-/* Default crossfade for old/new page snapshots */
-::view-transition-old(root),
+/* Route transitions: the page cross-fades with a soft upward drift; exits
+   are quicker than entries. Chrome (header, sidebar) holds still in its own
+   named groups. */
+::view-transition-old(root) {
+  animation: 150ms cubic-bezier(0.22, 1, 0.36, 1) both vt-out;
+}
+
 ::view-transition-new(root) {
-  animation-duration: 200ms;
-  animation-timing-function: ease-in-out;
+  animation: 200ms cubic-bezier(0.22, 1, 0.36, 1) both vt-in;
+}
+
+@keyframes vt-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes vt-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
 }
 
 /* Instance card → header morphing transition */

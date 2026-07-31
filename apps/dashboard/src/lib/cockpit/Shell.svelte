@@ -56,7 +56,12 @@
   >
     Skip to content
   </a>
-  <header class="flex h-10 shrink-0 items-center gap-3 border-b border-border px-3">
+  <!-- The chrome sits in its own view-transition groups so it holds still
+       while the route below it cross-fades. -->
+  <header
+    class="flex h-10 shrink-0 items-center gap-3 border-b border-border px-3"
+    style="view-transition-name: app-header"
+  >
     <button
       type="button"
       class="rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring md:hidden"
@@ -108,7 +113,7 @@
   </header>
 
   <div class="flex min-h-0 flex-1">
-    <div class="hidden md:flex">
+    <div class="hidden md:flex" style="view-transition-name: app-rail">
       <Sidebar />
     </div>
     <main id="main" class="flex min-w-0 flex-1 flex-col overflow-hidden">
