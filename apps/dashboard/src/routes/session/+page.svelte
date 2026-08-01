@@ -18,6 +18,8 @@
   import { cockpit, createProject, machineControl, spawnSession } from '$lib/cockpit/client.svelte';
   import LiveSessionRow from '$lib/cockpit/LiveSessionRow.svelte';
   import MachineMenu from '$lib/cockpit/MachineMenu.svelte';
+  import ModelCombobox from '$lib/cockpit/ModelCombobox.svelte';
+  import { MODEL_DEFAULT } from '$lib/cockpit/models.svelte';
   import StoredSessionRow from '$lib/cockpit/StoredSessionRow.svelte';
   import { PERMISSION_MODES, permissionModeLabel } from '$lib/cockpit/permission-modes';
   import { permissionSummary } from '$lib/cockpit/permission-summary';
@@ -42,6 +44,8 @@
   let repo = $state('');
   let prompt = $state('');
   let permissionMode = $state<PermissionMode>('default');
+  /** Empty is a choice: the spawn leaves `model` out and the SDK picks. */
+  let model = $state(MODEL_DEFAULT);
   let sideQuest = $state(false);
   let worktree = $state(false);
   let projectName = $state('');
@@ -198,6 +202,7 @@
         cwd: workdir,
         prompt,
         permissionMode,
+        model: model || undefined,
         scratch: sideQuest ? { worktree, baseCwd: workdir } : undefined,
         bootstrap: source === 'repo' ? { repo: repo.trim(), baseDir: cwd.trim() } : undefined,
       });
@@ -320,6 +325,19 @@
               {/each}
             </Select.Content>
           </Select.Root>
+        </div>
+
+        <div class="flex flex-col gap-1 text-xs text-muted-foreground">
+          <span>Model</span>
+          <ModelCombobox
+            value={model}
+            onchoose={(chosen) => {
+              model = chosen;
+            }}
+            showDefault
+            size="default"
+            class="w-full text-foreground"
+          />
         </div>
 
         <ToggleGroup.Root

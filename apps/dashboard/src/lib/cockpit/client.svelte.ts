@@ -395,6 +395,12 @@ function handleFrame(frame: FramePayload): void {
           if (target.initialized) continue;
           target.initialized = true;
         }
+        // An id the SDK took but could not honour: the init that opened this
+        // turn still names what was asked for, so the picker follows this
+        // instead rather than going on claiming a model that is not answering.
+        if (message.type === 'system.model_fallback') {
+          target.model = message.metadata?.model ?? target.model;
+        }
         // The settle that precedes a relaunch ends the old turn with an error
         // result the reader asked for — a quiet note, not a red card.
         if (target.relaunching && message.type === 'result.error') {
@@ -554,6 +560,9 @@ function start({ machineId, ...spawn }: Omit<SpawnPayload, 'instanceId'> & { mac
   created.machineId = machineId;
   created.cwd = spawn.cwd;
   created.permissionMode = spawn.permissionMode ?? 'default';
+  // What the form chose, so the header shows it during the wait for the first
+  // init — which then corrects it to whatever the SDK resolved it to.
+  created.model = spawn.model ?? null;
   created.scratch = Boolean(spawn.scratch);
   return created;
 }
@@ -565,6 +574,7 @@ export function spawnSession({
   prompt,
   options = {},
   permissionMode,
+  model,
   scratch,
   bootstrap,
   projectId,
@@ -574,11 +584,21 @@ export function spawnSession({
   prompt?: string;
   options?: Options;
   permissionMode?: PermissionMode;
+  model?: string;
   scratch?: SpawnPayload['scratch'];
   bootstrap?: SpawnPayload['bootstrap'];
   projectId?: string;
 }): string {
-  const created = start({ machineId, cwd, options, permissionMode, scratch, bootstrap, projectId });
+  const created = start({
+    machineId,
+    cwd,
+    options,
+    permissionMode,
+    model,
+    scratch,
+    bootstrap,
+    projectId,
+  });
   if (prompt?.trim()) sendText(created.instanceId, machineId, prompt.trim());
   void refresh();
   return created.instanceId;
@@ -716,7 +736,6 @@ export async function discardSession(instanceId: string, machineId: string): Pro
     delete state.sessions[instanceId];
     // The view this session's chunks were being prepended to is gone with it.
     hydrations.delete(instanceId);
-    modelLists.delete(instanceId);
     await refresh();
   }
 }
@@ -1061,25 +1080,18 @@ export async function setPermissionMode(
   }
 }
 
-/** What a machine answered `supportedModels` with, by instance — asked once. */
-const modelLists = new Map<string, ModelInfo[]>();
-
 /**
- * The models this session's machine will accept. `supportedModels` is a `Query`
- * method, so it is only answerable while the session is up; the list does not
- * change under a running session, and it is read the first time it is asked for.
+ * The models this session offers. `supportedModels` is a `Query` method, so it
+ * is only answerable while the session is up — the answer is the same account's
+ * either way, so `models.svelte.ts` asks once through whoever is running and
+ * keeps it for the whole app.
  */
 export async function loadModels(instanceId: string, machineId: string): Promise<ModelInfo[]> {
-  const cached = modelLists.get(instanceId);
-  if (cached) return cached;
-
   const requestId = crypto.randomUUID();
   const payload: ControlPayload = { instanceId, requestId, method: 'supportedModels', args: [] };
-  const models = await ask<ModelInfo[]>(requestId, 'supportedModels', CONTROL_TIMEOUT_MS, () =>
+  return ask<ModelInfo[]>(requestId, 'supportedModels', CONTROL_TIMEOUT_MS, () =>
     send({ verb: 'control', machineId, instanceId, requestId, payload })
   );
-  modelLists.set(instanceId, models);
-  return models;
 }
 
 /**

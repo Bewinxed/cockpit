@@ -91,6 +91,21 @@ const QUIET = new Set([
   'rate_limit_event',
 ]);
 
+/**
+ * `model_fallback`: Claude Code took a model id it could not honour — every id
+ * is accepted, and only the turn that follows says so — and names the one that
+ * answered instead. The SDK does not type this message, so it is recognised by
+ * its shape rather than by narrowing a union it is not in.
+ */
+const modelFallback = (sdk: {
+  subtype: string;
+}): { content: string; model: string } | null => {
+  const frame = sdk as { subtype: string; content?: unknown; fallback_model?: unknown };
+  if (frame.subtype !== 'model_fallback') return null;
+  if (typeof frame.content !== 'string' || typeof frame.fallback_model !== 'string') return null;
+  return { content: frame.content, model: frame.fallback_model };
+};
+
 const empty = (): FrameMapping => ({
   messages: [],
   toolResults: [],
@@ -271,6 +286,16 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
     }
 
     case 'system': {
+      const fallback = modelFallback(sdk);
+      if (fallback) {
+        mapping.messages.push(
+          systemLine(base, 'system.model_fallback', fallback.content, {
+            subtype: 'model_fallback',
+            model: fallback.model,
+          })
+        );
+        break;
+      }
       switch (sdk.subtype) {
         case 'init':
           mapping.messages.push(

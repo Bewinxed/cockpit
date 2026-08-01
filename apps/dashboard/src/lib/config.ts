@@ -16,6 +16,9 @@ export const CONTROL_TIMEOUT_MS = 15000;
 /** Discarding a side quest removes a git worktree, which is slower disk work. */
 export const DISCARD_TIMEOUT_MS = 30000;
 
+/** `claude update` downloads a release, so it gets far longer than a control call. */
+export const UPDATE_TIMEOUT_MS = 180000;
+
 /** Up to this many entries, a stored transcript is mapped in one pass. */
 export const TRANSCRIPT_CHUNK_THRESHOLD = 300;
 
