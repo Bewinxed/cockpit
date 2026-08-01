@@ -493,9 +493,11 @@
       {#snippet child({ props })}
         <Button
           {...props}
-          variant={opts.variant ?? 'outline'}
+          variant={opts.variant === 'destructive' ? 'outline' : (opts.variant ?? 'outline')}
           size="sm"
-          class="text-xs"
+          class="text-xs {opts.variant === 'destructive'
+            ? 'text-destructive hover:bg-destructive/10 hover:text-destructive'
+            : ''}"
           disabled={opts.disabled}
           aria-label={opts.label}
           onclick={opts.onclick}
