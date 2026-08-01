@@ -20,7 +20,7 @@ import type {
   SpawnPayload,
   StopPayload,
 } from '@cockpit/core';
-import { COCKPIT_SCRATCH_TAG, RESOLVE_PERMISSION } from '@cockpit/core';
+import { COCKPIT_SCRATCH_TAG, RESOLVE_PERMISSION, RESTART_RESUMABLE } from '@cockpit/core';
 import type { SubagentState } from '$lib/utils/flow-types';
 import type { Activity } from './activity';
 import { activityOf } from './activity';
@@ -76,6 +76,23 @@ const isListed = (row: InstanceRow): boolean => isLive(row) || row.status === 'e
  * on its machine — the hub cannot tell — so it is kept, but never as a live row.
  */
 const isStale = (row: InstanceRow): boolean => row.status === 'unknown';
+
+/**
+ * A session whose process is gone but whose conversation is not: sleeping, not
+ * failed. Exactly the rows {@link ensureAlive} can bring back — dead, with an
+ * SDK session to resume from — narrowed to the ones that did not die of
+ * something: a daemon restart, or nothing said at all. A bad cwd, a pump that
+ * crashed, a clone that failed all leave a reason of their own, and a reason of
+ * its own is what a real failure has.
+ */
+export const isResumable = (row: InstanceRow): boolean =>
+  (row.status === 'error' || row.status === 'stopped') &&
+  Boolean(row.sessionId) &&
+  (!row.lastError || row.lastError === RESTART_RESUMABLE);
+
+/** A session that died of something, and is not coming back by being opened. */
+export const isFailed = (row: InstanceRow): boolean =>
+  row.status === 'error' && !isResumable(row);
 
 /** A side quest's worktree sits under the project's checkout, so it counts as in it. */
 const under = (root: string, path: string): boolean =>

@@ -20,3 +20,13 @@ export const ACTIVITY_LABEL: Record<Activity, string> = {
   blocked: 'Needs you',
   idle: 'Idle',
 };
+
+/**
+ * The fourth word the rails use, and deliberately not an {@link Activity}: a
+ * session that has lost its process reports no activity at all, so a resumable
+ * row (`isResumable`) says this instead of claiming to be idle.
+ */
+export const SLEEPING_LABEL = 'Sleeping';
+
+/** Why that is not a failure, wherever a sleeping row can carry a tooltip. */
+export const SLEEPING_HINT = 'Sleeping — it resumes when you open or message it.';
