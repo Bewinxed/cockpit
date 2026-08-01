@@ -121,17 +121,15 @@
     if (atBottom) unseen = false;
   }
 
-  // Virtua keeps re-applying scrollToIndex while the items it landed on are
-  // still being measured, so it beats a raw write to an estimated scrollHeight.
-  // It only knows its own items, though — a streaming reply renders after the
-  // list, and the last group's end is not the end of the column.
+  // Always the raw write. `scrollToIndex(last, 'end')` parks on the end of the
+  // last virtualised group, and everything rendered after the list — the
+  // streaming reply, the local echo, the permission stack — then sits below the
+  // fold, which is the whole bug: the gap grew by one message height per turn
+  // and never closed. scrollHeight is the true bottom of the real layout, and
+  // the ResizeObserver re-applies it as virtua's estimates settle.
   function pinToLatest() {
     if (!scroller) return;
-    if (vlist && groups.length && !session?.streaming) {
-      vlist.scrollToIndex(groups.length - 1, { align: 'end' });
-    } else {
-      scroller.scrollTop = scroller.scrollHeight;
-    }
+    scroller.scrollTop = scroller.scrollHeight;
   }
 
   function jumpToLatest() {
@@ -170,11 +168,23 @@
 
   // Chasing the bottom while the user is reading further up yanks the transcript
   // out from under them — so growth behind their scroll position is flagged instead.
+  //
+  // This also pins. The ResizeObserver above is the smooth path, frame by frame,
+  // but its delivery rides the rendering lifecycle and simply stops in a
+  // throttled or backgrounded tab — measured: the column grew 240px and the
+  // observer fired zero times, so the transcript stopped following. Content
+  // changes are a signal that always arrives, so they pin too; both write the
+  // same value, which makes the duplication harmless.
   $effect(() => {
     const count = session?.messages.length ?? 0;
     const streaming = session?.streaming ?? '';
     if (!count && !streaming) return;
-    if (!untrack(() => atBottom)) unseen = true;
+    if (!untrack(() => atBottom)) {
+      unseen = true;
+      return;
+    }
+    if (performance.now() < followHold) return;
+    void tick().then(pinToLatest);
   });
 
   const isTool = (message: Message) => message.type === 'tool.use' || message.type === 'tool.result';
