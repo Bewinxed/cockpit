@@ -65,7 +65,7 @@
 
         <div
           class="flex size-6 shrink-0 items-center justify-center rounded-md
-            {branch.status === 'error' ? 'bg-destructive text-destructive-foreground/10' : running ? 'bg-primary text-primary-foreground/10' : 'bg-success/10'}"
+            {branch.status === 'error' ? 'bg-destructive/10 text-destructive' : running ? 'bg-primary/10 text-primary' : 'bg-success/10'}"
         >
           <IconSkill
             class="size-3.5 {branch.status === 'error'

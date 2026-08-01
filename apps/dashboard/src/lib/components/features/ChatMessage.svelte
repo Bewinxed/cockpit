@@ -307,9 +307,9 @@
 		'ui.error': {
 			align: 'justify-start',
 			bubble:
-				'relative px-4 py-3 text-sm leading-relaxed rounded-2xl rounded-bl-sm bg-destructive text-destructive-foreground/10 text-destructive border border-destructive/30 shadow-sm',
+				'relative px-4 py-3 text-sm leading-relaxed rounded-2xl rounded-bl-sm bg-destructive/10 text-destructive border border-destructive/30 shadow-sm',
 			icon: IconAlert,
-			iconBg: 'bg-destructive text-destructive-foreground/10',
+			iconBg: 'bg-destructive/10 text-destructive',
 			iconColor: 'text-destructive'
 		},
 		'ui.session_error': {
@@ -354,7 +354,7 @@
 			align: 'justify-start',
 			bubble: '',
 			icon: IconHelp,
-			iconBg: 'bg-primary text-primary-foreground/10',
+			iconBg: 'bg-primary/10 text-primary',
 			iconColor: 'text-primary'
 		},
 		thinking: {
@@ -367,9 +367,9 @@
 		'result.error': {
 			align: 'justify-start',
 			bubble:
-				'relative px-4 py-3 text-sm leading-relaxed rounded-2xl rounded-bl-sm bg-destructive text-destructive-foreground/10 text-destructive border border-destructive/30 shadow-sm',
+				'relative px-4 py-3 text-sm leading-relaxed rounded-2xl rounded-bl-sm bg-destructive/10 text-destructive border border-destructive/30 shadow-sm',
 			icon: IconAlert,
-			iconBg: 'bg-destructive text-destructive-foreground/10',
+			iconBg: 'bg-destructive/10 text-destructive',
 			iconColor: 'text-destructive'
 		}
 	};
@@ -501,7 +501,7 @@
 								{#if tool?.result !== undefined && tool?.result !== null}
 									<div
 										class="rounded-lg p-3 font-mono text-xs overflow-x-auto {tool?.status === 'error'
-											? 'bg-destructive text-destructive-foreground/5 border border-destructive/20'
+											? 'bg-destructive/5 text-destructive border border-destructive/20'
 											: 'bg-success/5 border border-success/20'}"
 									>
 										<div

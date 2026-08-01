@@ -127,7 +127,7 @@
 
 						<!-- Tool icon -->
 						<div class="shrink-0 w-6 h-6 rounded-md flex items-center justify-center
-							{status === 'pending' ? 'bg-warning/10' : status === 'error' ? 'bg-destructive text-destructive-foreground/10' : 'bg-success/10'}">
+							{status === 'pending' ? 'bg-warning/10' : status === 'error' ? 'bg-destructive/10 text-destructive' : 'bg-success/10'}">
 							<ToolIcon class="w-3.5 h-3.5 {status === 'pending' ? 'text-warning' : status === 'error' ? 'text-destructive' : 'text-success'}" />
 						</div>
 
@@ -193,7 +193,7 @@
 							<!-- Result section -->
 							{#if result !== undefined && result !== null}
 								<div class="rounded-lg p-3 font-mono text-xs overflow-auto max-h-[300px]
-									{status === 'error' ? 'bg-destructive text-destructive-foreground/5 border border-destructive/20' : 'bg-success/5 border border-success/20'}">
+									{status === 'error' ? 'bg-destructive/5 text-destructive border border-destructive/20' : 'bg-success/5 border border-success/20'}">
 									<div class="text-xs uppercase tracking-wide mb-2 font-medium font-sans
 										{status === 'error' ? 'text-destructive' : 'text-success'}">
 										{status === 'error' ? 'Error' : 'Result'}

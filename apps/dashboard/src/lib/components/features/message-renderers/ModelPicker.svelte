@@ -123,7 +123,7 @@
 									bind:this={optionEls[i]}
 									class="w-full text-left px-3 py-2.5 rounded-lg transition-colors flex items-start gap-3
                     {selectedModel === model.value
-										? 'bg-primary text-primary-foreground/10 border border-primary/30'
+										? 'bg-primary/10 text-primary border border-primary/30'
 										: 'hover:bg-accent hover:text-accent-foreground border border-transparent'}"
 									onclick={() => (selectedModel = model.value)}
 								>

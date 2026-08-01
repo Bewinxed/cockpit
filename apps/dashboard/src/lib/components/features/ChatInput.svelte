@@ -448,8 +448,8 @@
                  disabled:opacity-30 disabled:cursor-not-allowed
                  transition-[color,background-color,opacity,scale] duration-150 ease-out
                  {stopping
-            ? 'bg-destructive text-destructive-foreground/10 text-destructive hover:bg-destructive hover:text-destructive-foreground/20'
-            : 'bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground/90'}"
+            ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90'
+            : 'bg-primary text-primary-foreground hover:bg-primary/90'}"
           title={stopping ? 'Stop (Ctrl+Enter)' : 'Send message'}
           aria-label={stopping ? 'Stop response' : loading ? 'Sending message' : 'Send message'}
           onclick={stopping ? () => onInterrupt?.() : undefined}

@@ -413,7 +413,7 @@
 				<div
 					class="w-full text-left px-3 py-2.5 rounded-lg transition-[background-color,border-color,box-shadow] duration-150 ease-out flex items-start gap-3 border
 						{isOptionSelected(qIdx, option.label)
-						? 'bg-primary text-primary-foreground/10 border-primary/40 shadow-sm'
+						? 'bg-primary/10 text-primary border-primary/40 shadow-sm'
 						: 'bg-background/50 border-transparent'}"
 				>
 					{@render optionBody(question, qIdx, option, optIdx, showShortcuts)}
@@ -425,7 +425,7 @@
 					aria-checked={isOptionSelected(qIdx, option.label)}
 					class="w-full text-left px-3 py-2.5 rounded-lg transition-[background-color,border-color,box-shadow] duration-150 ease-out flex items-start gap-3 border cursor-pointer
 						{isOptionSelected(qIdx, option.label)
-						? 'bg-primary text-primary-foreground/10 border-primary/40 shadow-sm'
+						? 'bg-primary/10 text-primary border-primary/40 shadow-sm'
 						: 'bg-background/50 border-transparent hover:border-border hover:bg-accent hover:text-accent-foreground/50'}"
 					onclick={() => toggleOption(qIdx, option.label)}
 				>
@@ -438,7 +438,7 @@
 		<div
 			class="w-full text-left px-3 py-2.5 rounded-lg transition-[background-color,border-color] duration-150 ease-out border
 			{otherSelected.get(qIdx)
-				? 'bg-primary text-primary-foreground/10 border-primary/40'
+				? 'bg-primary/10 text-primary border-primary/40'
 				: 'bg-background/50 border-transparent'}
 			{!readOnly && !otherSelected.get(qIdx) ? 'hover:border-border hover:bg-accent hover:text-accent-foreground/50' : ''}"
 		>

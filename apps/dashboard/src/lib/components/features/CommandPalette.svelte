@@ -77,7 +77,7 @@
   function getTypeColor(type: AvailableCommand['type']) {
     switch (type) {
       case 'builtin':
-        return 'bg-primary text-primary-foreground/20 text-primary';
+        return 'bg-primary/20 text-primary';
       case 'custom':
         return 'bg-success/20 text-success';
       case 'skill':
