@@ -1,5 +1,18 @@
 <script lang="ts">
-  import { IconAgent, IconSubagent, IconTools } from '$lib/icons';
+  import {
+    IconAgent,
+    IconArrowDown,
+    IconChat,
+    IconCheck,
+    IconFlow,
+    IconFork,
+    IconPlay,
+    IconStop,
+    IconSubagent,
+    IconTools,
+    IconTrash,
+  } from '$lib/icons';
+  import type { Component } from 'svelte';
   import { onMount, tick, untrack } from 'svelte';
   import { Markdown } from '$lib/components/ui/markdown';
   import { smoothText } from '$lib/utils/smooth-text.svelte';
@@ -9,7 +22,7 @@
   import type { VirtualizerHandle } from 'virtua/svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
-  import type { PermissionMode, PermissionResult } from '@cockpit/core';
+  import type { ModelInfo, PermissionMode, PermissionResult } from '@cockpit/core';
   import {
     ChatInput,
     ChatMessage,
@@ -28,6 +41,7 @@
     forkSession,
     interrupt,
     keepSession,
+    loadModels,
     openSession,
     openTranscript,
     permissionAnswer,
@@ -35,13 +49,19 @@
     resolvePermission,
     resumeSession,
     sendOrRevive,
+    setModel,
     setPermissionMode,
     stopSession,
   } from '$lib/cockpit/client.svelte';
   import { isTyping } from '$lib/utils/typing';
   import type { SendExtras } from '$lib/cockpit/client.svelte';
   import { PERMISSION_MODES, permissionModeLabel } from '$lib/cockpit/permission-modes';
+  import * as AlertDialog from '$lib/components/ui/alert-dialog';
+  import { Button, type ButtonVariant } from '$lib/components/ui/button';
+  import * as ButtonGroup from '$lib/components/ui/button-group';
   import * as Select from '$lib/components/ui/select';
+  import * as ToggleGroup from '$lib/components/ui/toggle-group';
+  import * as Tooltip from '$lib/components/ui/tooltip';
   import { sessionFailedMessage } from '$lib/cockpit/frames';
   import type { Message, TranscriptGroup } from '$lib/cockpit/types';
   import type { SubagentState } from '$lib/utils/flow-types';
@@ -434,13 +454,105 @@
 
   let error = $state<string | null>(null);
 
-  const action =
-    'shrink-0 rounded-md border border-border px-2 py-1 text-xs transition-colors hover:bg-accent hover:text-accent-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40';
-  const destructive =
-    'shrink-0 rounded-md border border-error bg-error px-2 py-1 text-xs text-error-foreground transition-colors hover:bg-error/90 focus-visible:ring-2 focus-visible:ring-ring';
+  /** A single toggle group answers with `''` when its active item is clicked again. */
+  function chooseView(value: string) {
+    if (value === 'chat' || value === 'flow') view = value;
+  }
+
+  // Which models this machine offers is only answerable while the session is up,
+  // and it does not change under one — so it is read the first time the picker is
+  // opened, and the store keeps it for as long as the session lives.
+  let models = $state<ModelInfo[]>([]);
+  let modelsLoading = $state(false);
+  let modelsError = $state<string | null>(null);
+
+  async function openModels(open: boolean) {
+    if (!open || !session || models.length > 0 || modelsLoading) return;
+    modelsLoading = true;
+    modelsError = null;
+    try {
+      models = await loadModels(viewId, session.machineId);
+    } catch (err) {
+      modelsError = err instanceof Error ? err.message : String(err);
+    } finally {
+      modelsLoading = false;
+    }
+  }
+
+  const currentModel = $derived(session?.model ?? '');
+
+  // An init frame names the wire model (`claude-fable-5`); the row that offers it
+  // is keyed by its alias (`claude-fable-5[1m]`). Matching on both is what keeps
+  // the tick on the row the session is actually running.
+  const currentRow = $derived(
+    models.find((row) => row.value === currentModel || row.resolvedModel === currentModel)
+  );
+  const modelName = $derived(currentRow?.displayName ?? currentModel);
+  const selectedModel = $derived(currentRow?.value ?? currentModel);
+
+  async function chooseModel(value: string) {
+    if (!session || value === selectedModel) return;
+    error = null;
+    try {
+      await setModel(viewId, session.machineId, value);
+    } catch (err) {
+      error = err instanceof Error ? err.message : String(err);
+    }
+  }
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
+
+<!-- One shape for every session verb: an icon that survives a narrow header, a
+     name that drops out with it, and a tooltip that is the only place the name
+     is guaranteed to be. -->
+{#snippet verb(opts: {
+  label: string;
+  tip: string;
+  icon: Component;
+  onclick: () => void;
+  disabled?: boolean;
+  variant?: ButtonVariant;
+})}
+  {@const Icon = opts.icon}
+  <Tooltip.Root>
+    <Tooltip.Trigger>
+      {#snippet child({ props })}
+        <Button
+          {...props}
+          variant={opts.variant ?? 'outline'}
+          size="sm"
+          class="text-xs"
+          disabled={opts.disabled}
+          aria-label={opts.label}
+          onclick={opts.onclick}
+        >
+          <Icon />
+          <span class="hidden lg:inline">{opts.label}</span>
+        </Button>
+      {/snippet}
+    </Tooltip.Trigger>
+    <Tooltip.Content>{opts.tip}</Tooltip.Content>
+  </Tooltip.Root>
+{/snippet}
+
+<AlertDialog.Root bind:open={confirmingDiscard}>
+  <AlertDialog.Content>
+    <AlertDialog.Header>
+      <AlertDialog.Title>Discard this side quest?</AlertDialog.Title>
+      <AlertDialog.Description>
+        The session stops, and whatever the spawn created for it — its worktree, its transcript —
+        goes with it, for good.
+      </AlertDialog.Description>
+    </AlertDialog.Header>
+    <AlertDialog.Footer>
+      <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
+      <AlertDialog.Action variant="destructive" onclick={handleDiscard}>
+        Discard side quest
+      </AlertDialog.Action>
+    </AlertDialog.Footer>
+  </AlertDialog.Content>
+</AlertDialog.Root>
 
 <div class="flex h-full flex-1 flex-col overflow-hidden">
   <header class="flex items-center gap-3 border-b border-border px-4 py-2">
@@ -479,35 +591,34 @@
       {/if}
     </span>
 
-    <div
-      class="flex shrink-0 items-center gap-0.5 rounded-md border border-border p-0.5"
-      role="tablist"
+    <ToggleGroup.Root
+      type="single"
+      variant="outline"
+      size="sm"
+      value={view}
+      onValueChange={chooseView}
+      class="shrink-0"
       aria-label="Session view"
     >
-      {#each ['chat', 'flow'] as const as mode (mode)}
-        <button
-          type="button"
-          role="tab"
-          aria-selected={view === mode}
-          aria-controls="session-view-panel"
-          class="rounded-[10px] px-2 py-0.5 text-xs capitalize transition-colors focus-visible:ring-2 focus-visible:ring-ring {view ===
-          mode
-            ? 'bg-accent text-accent-foreground'
-            : 'text-muted-foreground hover:text-foreground'}"
-          onclick={() => (view = mode)}
-        >
-          {mode}
-        </button>
-      {/each}
-    </div>
+      <ToggleGroup.Item value="chat" aria-controls="session-view-panel" aria-label="Chat">
+        <IconChat />
+        <span class="hidden sm:inline">Chat</span>
+      </ToggleGroup.Item>
+      <ToggleGroup.Item value="flow" aria-controls="session-view-panel" aria-label="Flow">
+        <IconFlow />
+        <span class="hidden sm:inline">Flow</span>
+      </ToggleGroup.Item>
+    </ToggleGroup.Root>
 
     {#if !browsing}
-      <Select.Root type="single" value={permissionMode} onValueChange={chooseMode}>
+      <!-- How the session is configured: two pickers, read as one control. -->
+      <ButtonGroup.Root class="shrink-0">
+        <Select.Root type="single" value={permissionMode} onValueChange={chooseMode}>
           <Select.Trigger
             size="sm"
             aria-label="Permission mode"
             title="How this session answers tool permissions"
-            class="shrink-0 text-xs {permissionMode === 'bypassPermissions'
+            class="text-xs {permissionMode === 'bypassPermissions'
               ? 'font-medium text-warning'
               : 'text-muted-foreground'}"
           >
@@ -536,49 +647,95 @@
                 </span>
               </Select.Item>
             {/each}
-        </Select.Content>
-      </Select.Root>
-      <button
-        type="button"
-        class={action}
-        disabled={!forkable || !wholeTranscript}
-        title="Branch a side quest off this session"
-        onclick={handleFork}
-      >
-        Fork
-      </button>
-      {#if session?.scratch}
-        {#if confirmingDiscard}
-          <span class="hidden shrink-0 text-xs text-muted-foreground lg:inline">
-            Deletes this quest's worktree and its transcript, for good.
-          </span>
-          <button type="button" class={action} onclick={() => (confirmingDiscard = false)}>
-            Cancel
-          </button>
-          <button type="button" class={destructive} onclick={handleDiscard}>
-            Discard side quest
-          </button>
-        {:else}
-          <button type="button" class={action} onclick={handleKeep}>Keep</button>
-          <button type="button" class={action} onclick={() => (confirmingDiscard = true)}>
-            Discard…
-          </button>
-        {/if}
-      {:else}
-        <button
-          type="button"
-          class={action}
-          onclick={() => session && stopSession(viewId, session.machineId)}
+          </Select.Content>
+        </Select.Root>
+
+        <Select.Root
+          type="single"
+          value={selectedModel}
+          onValueChange={chooseModel}
+          onOpenChange={openModels}
         >
-          Stop
-        </button>
-      {/if}
+          <Select.Trigger
+            size="sm"
+            aria-label="Model"
+            title={currentModel || 'Which model answers the next turn'}
+            class="text-xs text-muted-foreground"
+          >
+            {modelName || 'Model'}
+          </Select.Trigger>
+          <Select.Content>
+            {#each models as option (option.value)}
+              <Select.Item
+                value={option.value}
+                label={option.displayName}
+                title={option.value}
+                class="text-foreground"
+              >
+                <span class="flex flex-col">
+                  <span>{option.displayName}</span>
+                  <span class="text-xs text-muted-foreground">{option.description}</span>
+                </span>
+              </Select.Item>
+            {:else}
+              <!-- Nothing to switch to: say what is running, and why that is all. -->
+              <Select.Item
+                value={selectedModel}
+                label={modelName}
+                disabled
+                title={modelsLoading
+                  ? 'Reading the models this machine offers…'
+                  : (modelsError ??
+                    'This machine could not list its models — the session keeps the one it started on.')}
+                class="text-foreground opacity-40"
+              >
+                {modelsLoading ? 'Reading models…' : modelName || 'No models listed'}
+              </Select.Item>
+            {/each}
+          </Select.Content>
+        </Select.Root>
+      </ButtonGroup.Root>
+
+      <!-- What you can do to the session itself. -->
+      <ButtonGroup.Root class="shrink-0">
+        {@render verb({
+          label: 'Fork',
+          tip: 'Branch a side quest off this session',
+          icon: IconFork,
+          onclick: handleFork,
+          disabled: !forkable || !wholeTranscript,
+        })}
+        {#if session?.scratch}
+          {@render verb({
+            label: 'Keep',
+            tip: 'Promote this side quest to mainline work',
+            icon: IconCheck,
+            onclick: handleKeep,
+          })}
+          {@render verb({
+            label: 'Discard',
+            tip: "Delete this quest's worktree and its transcript, for good",
+            icon: IconTrash,
+            onclick: () => (confirmingDiscard = true),
+            variant: 'destructive',
+          })}
+        {:else}
+          {@render verb({
+            label: 'Stop',
+            tip: 'End this session',
+            icon: IconStop,
+            onclick: () => session && stopSession(viewId, session.machineId),
+          })}
+        {/if}
+      </ButtonGroup.Root>
     {/if}
   </header>
 
   <!-- Two panes of one screen: they slide past each other rather than cutting,
        so the toggle reads as moving sideways instead of reloading. -->
-  <div class="relative min-h-0 flex-1" id="session-view-panel" role="tabpanel">
+  <!-- Named so the view toggle can point at what it swaps; the toggle is a group
+       of two, not a tablist, so the panel does not claim the matching role. -->
+  <div class="relative min-h-0 flex-1" id="session-view-panel">
     {#if view === 'flow'}
       <div
         class="absolute inset-0"
@@ -685,13 +842,15 @@
         {/if}
 
         {#if unseen}
-          <button
-            type="button"
-            class="absolute right-4 bottom-4 rounded-full border border-border bg-card px-3 py-1.5 text-xs shadow-md transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring"
+          <Button
+            variant="outline"
+            size="sm"
+            class="absolute right-4 bottom-4 bg-card text-xs shadow-md"
             onclick={jumpToLatest}
           >
+            <IconArrowDown />
             Jump to latest
-          </button>
+          </Button>
         {/if}
       </div>
     {/if}
@@ -720,22 +879,25 @@
           <span class="text-sm text-muted-foreground">
             Read-only transcript of a stored session.
           </span>
-          <button
-            type="button"
-            class="ml-auto {action}"
-            disabled={!wholeTranscript || cockpit.status !== 'connected'}
-            onclick={handleFork}
-          >
-            Fork
-          </button>
-          <button
-            type="button"
-            class="rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground transition-colors hover:bg-primary/90 hover:text-primary-foreground disabled:opacity-40"
-            disabled={!wholeTranscript || cockpit.status !== 'connected'}
-            onclick={handleResume}
-          >
-            Resume session
-          </button>
+          <!-- The two ways on from a stored transcript, in the order they read:
+               branch it, or pick it back up. -->
+          <ButtonGroup.Root class="ml-auto">
+            <Button
+              variant="outline"
+              disabled={!wholeTranscript || cockpit.status !== 'connected'}
+              onclick={handleFork}
+            >
+              <IconFork />
+              Fork
+            </Button>
+            <Button
+              disabled={!wholeTranscript || cockpit.status !== 'connected'}
+              onclick={handleResume}
+            >
+              <IconPlay />
+              Resume session
+            </Button>
+          </ButtonGroup.Root>
         </div>
       {:else}
         {#if session?.relaunching}

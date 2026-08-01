@@ -1,5 +1,13 @@
 <script lang="ts">
-  import { IconChevronRight, IconShield, IconSpinner } from '$lib/icons';
+  import {
+    IconChevronRight,
+    IconFolder,
+    IconFolderOpen,
+    IconPlay,
+    IconRepo,
+    IconShield,
+    IconSpinner,
+  } from '$lib/icons';
   import { onMount, tick } from 'svelte';
   import { fly } from 'svelte/transition';
   import { quintOut } from 'svelte/easing';
@@ -9,18 +17,21 @@
   import { repoPath } from '@cockpit/core';
   import { cockpit, createProject, machineControl, spawnSession } from '$lib/cockpit/client.svelte';
   import LiveSessionRow from '$lib/cockpit/LiveSessionRow.svelte';
+  import MachineMenu from '$lib/cockpit/MachineMenu.svelte';
   import StoredSessionRow from '$lib/cockpit/StoredSessionRow.svelte';
   import { PERMISSION_MODES, permissionModeLabel } from '$lib/cockpit/permission-modes';
   import { permissionSummary } from '$lib/cockpit/permission-summary';
   import DirectoryPicker from '$lib/components/features/DirectoryPicker.svelte';
+  import { Button } from '$lib/components/ui/button';
   import { Checkbox } from '$lib/components/ui/checkbox';
   import * as Collapsible from '$lib/components/ui/collapsible';
   import * as Select from '$lib/components/ui/select';
+  import * as ToggleGroup from '$lib/components/ui/toggle-group';
 
   /** Where the session works: a directory that is already there, or a fresh clone. */
   const SOURCES = [
-    { value: 'directory', label: 'Directory' },
-    { value: 'repo', label: 'GitHub repo' },
+    { value: 'directory', label: 'Directory', icon: IconFolder },
+    { value: 'repo', label: 'GitHub repo', icon: IconRepo },
   ] as const;
 
   type Source = (typeof SOURCES)[number]['value'];
@@ -147,7 +158,9 @@
   }
 
   /** A clone needs somewhere to land, and home is the one directory every machine has. */
-  function chooseSource(next: Source) {
+  function chooseSource(next: string) {
+    // A single toggle group answers with `''` when its active item is clicked again.
+    if (next !== 'directory' && next !== 'repo') return;
     source = next;
     if (next === 'repo' && !cwd.trim()) cwd = '~';
     clearInvalid();
@@ -310,26 +323,23 @@
           </Select.Root>
         </div>
 
-        <div
-          class="flex items-center gap-0.5 self-start rounded-md border border-border p-0.5"
-          role="tablist"
+        <ToggleGroup.Root
+          type="single"
+          variant="outline"
+          size="sm"
+          value={source}
+          onValueChange={chooseSource}
+          class="self-start"
           aria-label="Where this session works"
         >
           {#each SOURCES as option (option.value)}
-            <button
-              type="button"
-              role="tab"
-              aria-selected={source === option.value}
-              class="rounded-[10px] px-2 py-0.5 text-xs transition-colors focus-visible:ring-2 focus-visible:ring-ring {source ===
-              option.value
-                ? 'bg-accent text-accent-foreground'
-                : 'text-muted-foreground hover:text-foreground'}"
-              onclick={() => chooseSource(option.value)}
-            >
+            {@const Icon = option.icon}
+            <ToggleGroup.Item value={option.value}>
+              <Icon />
               {option.label}
-            </button>
+            </ToggleGroup.Item>
           {/each}
-        </div>
+        </ToggleGroup.Root>
 
         {#if source === 'repo'}
           <div class="relative flex flex-col gap-1 text-xs text-muted-foreground">
@@ -450,14 +460,16 @@
                 class="w-40 rounded-md border border-border bg-background px-2 py-1 text-base text-foreground placeholder:text-muted-foreground sm:text-xs"
               />
             </label>
-            <button
-              type="button"
-              class="rounded-md border border-border px-2 py-1 text-xs transition-colors hover:bg-accent hover:text-accent-foreground hover:text-foreground disabled:opacity-40"
+            <Button
+              variant="outline"
+              size="sm"
+              class="text-xs"
               disabled={!machineId || saving}
               onclick={saveProject}
             >
+              <IconFolderOpen />
               Save as project
-            </button>
+            </Button>
           </div>
         {/if}
 
@@ -487,12 +499,10 @@
         {/if}
 
         <div class="flex items-center gap-3">
-          <button
-            type="submit"
-            class="rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground transition-colors hover:bg-primary/90 hover:text-primary-foreground focus-visible:ring-2 focus-visible:ring-ring"
-          >
+          <Button type="submit">
+            <IconPlay />
             Start session
-          </button>
+          </Button>
           {#if error}
             <span class="text-xs text-error" role="alert">{error}</span>
           {/if}
@@ -512,19 +522,21 @@
           easing: quintOut,
         }}
       >
-        <h2 class="flex items-center gap-2 text-sm font-medium">
-          <span
-            class="size-2 rounded-full {machine.status === 'online'
-              ? 'bg-success'
-              : 'bg-muted-foreground'}"
-            title={machine.status === 'online' ? 'Online' : 'Offline'}
-          ></span>
-          {machine.hostname}
-          <span class="text-xs font-normal text-muted-foreground">{machine.os}</span>
-          <span class="ml-auto font-mono text-xs font-normal text-muted-foreground">
-            {machine.machineId}
-          </span>
-        </h2>
+        <MachineMenu {machine}>
+          <h2 class="flex items-center gap-2 text-sm font-medium">
+            <span
+              class="size-2 rounded-full {machine.status === 'online'
+                ? 'bg-success'
+                : 'bg-muted-foreground'}"
+              title={machine.status === 'online' ? 'Online' : 'Offline'}
+            ></span>
+            {machine.hostname}
+            <span class="text-xs font-normal text-muted-foreground">{machine.os}</span>
+            <span class="ml-auto font-mono text-xs font-normal text-muted-foreground">
+              {machine.machineId}
+            </span>
+          </h2>
+        </MachineMenu>
 
         {#each running as instance (instance.id)}
           <LiveSessionRow {instance} />

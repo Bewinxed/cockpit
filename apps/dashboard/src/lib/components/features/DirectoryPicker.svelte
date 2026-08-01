@@ -1,7 +1,8 @@
 <script lang="ts">
   /** Walks a machine's filesystem over the `fs` verb so a cwd can be picked, not typed. */
-  import { IconArrowUp, IconFolder, IconSpinner } from '$lib/icons';
+  import { IconArrowUp, IconCheck, IconFolder, IconSpinner } from '$lib/icons';
   import type { FsEntry, SDKSessionInfo } from '@cockpit/core';
+  import { Button } from '$lib/components/ui/button';
   import * as Collapsible from '$lib/components/ui/collapsible';
   import { cockpit, machineFs } from '$lib/cockpit/client.svelte';
 
@@ -106,15 +107,15 @@
   <Collapsible.Content>
     <div class="mt-2 flex flex-col gap-2 border-t border-border pt-2">
       <div class="flex items-center gap-2">
-        <button
-          type="button"
-          class="rounded p-1 transition-colors hover:bg-accent hover:text-accent-foreground hover:text-foreground disabled:opacity-40"
+        <Button
+          variant="ghost"
+          size="icon-xs"
           aria-label="Parent directory"
           disabled={!parent}
           onclick={() => parent && go(parent)}
         >
-          <IconArrowUp class="size-3.5" />
-        </button>
+          <IconArrowUp />
+        </Button>
         <span class="truncate font-mono text-xs text-muted-foreground" title={path}>{path}</span>
       </div>
 
@@ -128,14 +129,15 @@
           <span class="block px-2 py-1 text-xs text-destructive">{error}</span>
         {:else}
           {#each dirs as dir (dir.name)}
-            <button
-              type="button"
-              class="flex w-full items-center gap-2 rounded px-2 py-1 text-left font-mono text-[13px] transition-colors hover:bg-accent hover:text-accent-foreground"
+            <Button
+              variant="ghost"
+              size="sm"
+              class="w-full justify-start font-mono text-[13px] font-normal"
               onclick={() => go(join(path, dir.name))}
             >
-              <IconFolder class="size-3.5 shrink-0 text-muted-foreground" />
+              <IconFolder class="shrink-0 opacity-70" />
               <span class="truncate">{dir.name}</span>
-            </button>
+            </Button>
           {:else}
             <span class="block px-2 py-1 text-xs text-muted-foreground">No subdirectories.</span>
           {/each}
@@ -143,13 +145,10 @@
       </div>
 
       <div class="flex justify-end">
-        <button
-          type="button"
-          class="rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 hover:text-primary-foreground active:scale-[0.96]"
-          onclick={use}
-        >
+        <Button size="xs" onclick={use}>
+          <IconCheck />
           Use this directory
-        </button>
+        </Button>
       </div>
     </div>
   </Collapsible.Content>

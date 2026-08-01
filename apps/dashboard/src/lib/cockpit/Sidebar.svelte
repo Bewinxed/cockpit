@@ -1,5 +1,5 @@
 <script module lang="ts">
-  import { IconChevronRight, IconFolder, IconHistory, IconPlus, IconSpinner } from '$lib/icons';
+  import { IconChevronRight, IconFolder, IconHistory, IconPlus, IconRefresh } from '$lib/icons';
   import { browser } from '$app/environment';
 
   const STORAGE_KEY = 'cockpit-sidebar';
@@ -38,6 +38,9 @@
   import { ACTIVITY_LABEL } from './activity';
   import ActivityDot from './ActivityDot.svelte';
   import { cockpit, loadCatalog } from './client.svelte';
+  import LiveSessionMenu from './LiveSessionMenu.svelte';
+  import MachineMenu from './MachineMenu.svelte';
+  import StoredSessionMenu from './StoredSessionMenu.svelte';
   import { sessionTitle, transcriptHref } from './links';
   import { machineLabel, machineOs } from './machine';
 
@@ -74,35 +77,34 @@
   {@const href = transcriptHref(machineId, info)}
   {@const current = isCurrent(href)}
   <Sidebar.MenuItem>
-    <Sidebar.MenuButton isActive={current} class="h-auto items-start px-1.5 py-1">
-      {#snippet child({ props })}
-        <a
-          {...props}
-          {href}
-          aria-current={current ? 'page' : undefined}
-          in:slide={rowIn}
-          out:slide={rowOut}
-        >
-          <IconHistory class="mt-0.5 shrink-0 opacity-70" />
-          <span class="flex min-w-0 flex-1 flex-col">
-            <span class="flex items-baseline gap-2">
-              <span class="truncate text-[13px] leading-5">{sessionTitle(info)}</span>
-              <span class="ml-auto shrink-0 text-xs opacity-60 tabular-nums">
-                {formatDistanceToNow(new Date(info.lastModified))}
+    <StoredSessionMenu {machineId} {info}>
+      <Sidebar.MenuButton isActive={current} class="h-auto items-start px-1.5 py-1">
+        {#snippet child({ props })}
+          <a
+            {...props}
+            {href}
+            aria-current={current ? 'page' : undefined}
+            in:slide={rowIn}
+            out:slide={rowOut}
+          >
+            <IconHistory class="mt-0.5 shrink-0 opacity-70" />
+            <span class="flex min-w-0 flex-1 flex-col">
+              <span class="flex items-baseline gap-2">
+                <span class="truncate text-[13px] leading-5">{sessionTitle(info)}</span>
+                <span class="ml-auto shrink-0 text-xs opacity-60 tabular-nums">
+                  {formatDistanceToNow(new Date(info.lastModified))}
+                </span>
               </span>
+              {#if info.cwd}
+                <span class="truncate font-mono text-xs leading-4 opacity-70" title={info.cwd}>
+                  {leaf(info.cwd)}
+                </span>
+              {/if}
             </span>
-            {#if info.cwd}
-              <span
-                class="truncate font-mono text-xs leading-4 opacity-70"
-                title={info.cwd}
-              >
-                {leaf(info.cwd)}
-              </span>
-            {/if}
-          </span>
-        </a>
-      {/snippet}
-    </Sidebar.MenuButton>
+          </a>
+        {/snippet}
+      </Sidebar.MenuButton>
+    </StoredSessionMenu>
   </Sidebar.MenuItem>
 {/snippet}
 
@@ -161,36 +163,38 @@
             {@const failed = instance.status === 'error'}
             {@const current = isCurrent(`/session/${instance.id}`)}
             <Sidebar.MenuItem>
-              <Sidebar.MenuButton
-                isActive={current}
-                class="min-h-7 gap-2 border border-dashed border-muted-foreground/30 px-2 py-1 text-[13px]
-                  {current ? '' : failed ? 'bg-warning/10' : ''}"
-              >
-                {#snippet child({ props })}
-                  <a
-                    {...props}
-                    href="/session/{instance.id}"
-                    aria-current={current ? 'page' : undefined}
-                    in:slide={rowIn}
-                    out:slide={rowOut}
-                  >
-                    {#if failed}
-                      <span class="size-1.5 shrink-0 rounded-full bg-warning"></span>
-                    {:else}
-                      <ActivityDot {activity} size={1.5} />
-                    {/if}
-                    <span class="truncate font-mono">{leaf(instance.cwd)}</span>
-                    <span
-                      class="ml-auto shrink-0 rounded-sm bg-accent text-accent-foreground px-1 py-px text-xs tracking-wide"
+              <LiveSessionMenu {instance}>
+                <Sidebar.MenuButton
+                  isActive={current}
+                  class="min-h-7 gap-2 border border-dashed border-muted-foreground/30 px-2 py-1 text-[13px]
+                    {current ? '' : failed ? 'bg-warning/10' : ''}"
+                >
+                  {#snippet child({ props })}
+                    <a
+                      {...props}
+                      href="/session/{instance.id}"
+                      aria-current={current ? 'page' : undefined}
+                      in:slide={rowIn}
+                      out:slide={rowOut}
                     >
-                      scratch
-                    </span>
-                    {#if failed}
-                      <span class="shrink-0 text-xs font-medium text-warning">Failed</span>
-                    {/if}
-                  </a>
-                {/snippet}
-              </Sidebar.MenuButton>
+                      {#if failed}
+                        <span class="size-1.5 shrink-0 rounded-full bg-warning"></span>
+                      {:else}
+                        <ActivityDot {activity} size={1.5} />
+                      {/if}
+                      <span class="truncate font-mono">{leaf(instance.cwd)}</span>
+                      <span
+                        class="ml-auto shrink-0 rounded-sm bg-accent px-1 py-px text-xs tracking-wide text-accent-foreground"
+                      >
+                        scratch
+                      </span>
+                      {#if failed}
+                        <span class="shrink-0 text-xs font-medium text-warning">Failed</span>
+                      {/if}
+                    </a>
+                  {/snippet}
+                </Sidebar.MenuButton>
+              </LiveSessionMenu>
             </Sidebar.MenuItem>
           {/each}
         </Sidebar.Menu>
@@ -214,48 +218,52 @@
       {@const os = machineOs(machine.os)}
       <Sidebar.Group class="py-0">
         <Collapsible.Root {open} onOpenChange={() => toggleMachine(machine.machineId)}>
-          <header class="flex items-center">
-            <Sidebar.GroupLabel
-              class="h-auto min-w-0 flex-1 gap-1.5 px-2 py-1 text-sidebar-foreground hover:bg-sidebar-accent"
-            >
-              {#snippet child({ props })}
-                <Collapsible.Trigger {...props} title="{machine.hostname} · {machine.os}">
-                  <IconChevronRight
-                    class="size-3 shrink-0 text-muted-foreground transition-transform duration-200 ease-out {open
-                      ? 'rotate-90'
-                      : ''}"
-                  />
-                  <os.Icon class="size-3.5 shrink-0 text-muted-foreground" />
-                  <span class="min-w-0 truncate text-[13px] font-medium">
-                    {machineLabel(machine.hostname)}
-                  </span>
-                  <span
-                    class="size-1.5 shrink-0 rounded-full {machine.status === 'online'
-                      ? 'bg-success'
-                      : 'bg-muted-foreground'}"
-                    title={machine.status === 'online' ? 'Online' : 'Offline'}
-                  ></span>
-                  <span class="shrink-0 text-xs opacity-60">{os.label}</span>
-                </Collapsible.Trigger>
-              {/snippet}
-            </Sidebar.GroupLabel>
-            <!-- Outside the content, so folding a machine away cannot hide what it is waiting on. -->
-            {#if blockedCount > 0}
-              <span
-                class="shrink-0 rounded-full bg-warning/15 px-1.5 text-xs font-medium text-warning tabular-nums"
+          <MachineMenu {machine}>
+            <header class="flex items-center">
+              <Sidebar.GroupLabel
+                class="h-auto min-w-0 flex-1 gap-1.5 px-2 py-1 text-sidebar-foreground hover:bg-sidebar-accent"
               >
-                {blockedCount} needs you
-              </span>
-            {/if}
-            <button
-              type="button" class="shrink-0 rounded p-1 opacity-60 transition-colors hover:opacity-100 focus-visible:ring-2 focus-visible:ring-ring"
-              onclick={() => loadCatalog(machine.machineId)}
-              title="Reload sessions"
-              aria-label="Reload sessions on {machineLabel(machine.hostname)}"
-            >
-              <IconSpinner class="size-3.5" />
-            </button>
-          </header>
+                {#snippet child({ props })}
+                  <Collapsible.Trigger {...props} title="{machine.hostname} · {machine.os}">
+                    <IconChevronRight
+                      class="size-3 shrink-0 text-muted-foreground transition-transform duration-200 ease-out {open
+                        ? 'rotate-90'
+                        : ''}"
+                    />
+                    <os.Icon class="size-3.5 shrink-0 text-muted-foreground" />
+                    <span class="min-w-0 truncate text-[13px] font-medium">
+                      {machineLabel(machine.hostname)}
+                    </span>
+                    <span
+                      class="size-1.5 shrink-0 rounded-full {machine.status === 'online'
+                        ? 'bg-success'
+                        : 'bg-muted-foreground'}"
+                      title={machine.status === 'online' ? 'Online' : 'Offline'}
+                    ></span>
+                    <span class="shrink-0 text-xs opacity-60">{os.label}</span>
+                  </Collapsible.Trigger>
+                {/snippet}
+              </Sidebar.GroupLabel>
+              <!-- Outside the content, so folding a machine away cannot hide what it is waiting on. -->
+              {#if blockedCount > 0}
+                <span
+                  class="shrink-0 rounded-full bg-warning/15 px-1.5 text-xs font-medium text-warning tabular-nums"
+                >
+                  {blockedCount} needs you
+                </span>
+              {/if}
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                class="shrink-0 opacity-60 hover:opacity-100"
+                onclick={() => loadCatalog(machine.machineId)}
+                title="Reload sessions"
+                aria-label="Reload sessions on {machineLabel(machine.hostname)}"
+              >
+                <IconRefresh />
+              </Button>
+            </header>
+          </MachineMenu>
 
           <Collapsible.Content>
             <div class="ml-4 border-l border-border/60 pl-1">
@@ -269,38 +277,40 @@
                     {@const failed = instance.status === 'error'}
                     {@const current = isCurrent(`/session/${instance.id}`)}
                     <Sidebar.MenuItem>
-                      <Sidebar.MenuButton
-                        isActive={current}
-                        class="min-h-7 gap-2 px-1.5 py-1 text-[13px]
-                          {!current && (failed || activity === 'blocked') ? 'bg-warning/10' : ''}"
-                      >
-                        {#snippet child({ props })}
-                          <a
-                            {...props}
-                            href="/session/{instance.id}"
-                            aria-current={current ? 'page' : undefined}
-                            in:slide={rowIn}
-                            out:slide={rowOut}
-                          >
-                            {#if failed}
-                              <span class="size-1.5 shrink-0 rounded-full bg-warning"></span>
-                            {:else}
-                              <ActivityDot {activity} size={1.5} />
-                            {/if}
-                            <span class="truncate font-mono">
-                              {leaf(instance.cwd)}
-                            </span>
-                            <span
-                              class="ml-auto shrink-0 text-xs tabular-nums {failed ||
-                              activity === 'blocked'
-                                ? 'font-medium text-warning'
-                                : 'opacity-70'}"
+                      <LiveSessionMenu {instance}>
+                        <Sidebar.MenuButton
+                          isActive={current}
+                          class="min-h-7 gap-2 px-1.5 py-1 text-[13px]
+                            {!current && (failed || activity === 'blocked') ? 'bg-warning/10' : ''}"
+                        >
+                          {#snippet child({ props })}
+                            <a
+                              {...props}
+                              href="/session/{instance.id}"
+                              aria-current={current ? 'page' : undefined}
+                              in:slide={rowIn}
+                              out:slide={rowOut}
                             >
-                              {failed ? 'Failed' : ACTIVITY_LABEL[activity]}
-                            </span>
-                          </a>
-                        {/snippet}
-                      </Sidebar.MenuButton>
+                              {#if failed}
+                                <span class="size-1.5 shrink-0 rounded-full bg-warning"></span>
+                              {:else}
+                                <ActivityDot {activity} size={1.5} />
+                              {/if}
+                              <span class="truncate font-mono">
+                                {leaf(instance.cwd)}
+                              </span>
+                              <span
+                                class="ml-auto shrink-0 text-xs tabular-nums {failed ||
+                                activity === 'blocked'
+                                  ? 'font-medium text-warning'
+                                  : 'opacity-70'}"
+                              >
+                                {failed ? 'Failed' : ACTIVITY_LABEL[activity]}
+                              </span>
+                            </a>
+                          {/snippet}
+                        </Sidebar.MenuButton>
+                      </LiveSessionMenu>
                     </Sidebar.MenuItem>
                   {/each}
                 </Sidebar.Menu>

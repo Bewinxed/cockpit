@@ -3,16 +3,13 @@
    * Cmd+K: everything the client already knows about, in one list you can type
    * at. It reads the store and nothing else — no endpoint exists for this.
    */
-  import { fade, scale } from 'svelte/transition';
-  import { quintOut } from 'svelte/easing';
-  import { Dialog } from 'bits-ui';
-  import { browser } from '$app/environment';
   import { goto } from '$app/navigation';
+  import * as Command from '$lib/components/ui/command';
   import { ACTIVITY_LABEL } from './activity';
   import { cockpit } from './client.svelte';
   import { sessionTitle, transcriptHref } from './links';
 
-  let { onClose }: { onClose: () => void } = $props();
+  let { open = $bindable(false) }: { open?: boolean } = $props();
 
   interface Entry {
     id: string;
@@ -26,6 +23,9 @@
 
   /** How many stored sessions per machine are worth carrying into the palette. */
   const RECENT_PER_MACHINE = 8;
+
+  /** The kinds, in the order they are worth scanning; also the headings. */
+  const GROUPS = ['Projects', 'Machines', 'Running sessions', 'Recent sessions'];
 
   const entries = $derived.by((): Entry[] => {
     const rows: Entry[] = [];
@@ -72,6 +72,15 @@
     return rows;
   });
 
+  // What a row is found under is the ranking: a machine and the sessions running
+  // on it match the same words, and the heading is what tells them apart. Command
+  // drops a group once nothing under it survives the filter.
+  const grouped = $derived(
+    GROUPS.map((name) => ({ name, rows: entries.filter((entry) => entry.group === name) })).filter(
+      (group) => group.rows.length > 0
+    )
+  );
+
   /** Subsequence match, so `cokp` still finds `cockpit`. */
   function matches(haystack: string, needle: string): boolean {
     let at = 0;
@@ -83,134 +92,53 @@
     return true;
   }
 
-  // The parent unmounts us on `onClose`, so the close runs through bits first
-  // and only hands back once the exit transition has finished.
-  let open = $state(true);
-  let query = $state('');
-  let selected = $state(0);
-
-  // Filtered, never re-sorted: the natural order is what keeps the groups whole.
-  const results = $derived.by((): Entry[] => {
-    const needle = query.trim().toLowerCase();
-    if (!needle) return entries;
-    return entries.filter((entry) =>
-      matches(`${entry.label} ${entry.detail}`.toLowerCase(), needle)
-    );
-  });
-
-  // The list moves under the cursor as sessions come and go, so the highlight is
-  // clamped rather than tracked — an index past the end would silently do nothing.
-  const active = $derived(results.length === 0 ? -1 : Math.min(selected, results.length - 1));
-
-  let rows: HTMLButtonElement[] = [];
-
-  $effect(() => {
-    rows[active]?.scrollIntoView({ block: 'nearest' });
-  });
-
-  const still = browser && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  /** Leaving is softer than arriving — the reader's attention is already elsewhere. */
-  const enter = still ? 0 : 200;
-  const exit = still ? 0 : 150;
+  // Command scores every item itself; this is the rule the palette has always
+  // used, read over the label and its context rather than the row's key.
+  function score(value: string, search: string, keywords?: string[]): number {
+    const haystack = (keywords?.join(' ') ?? value).toLowerCase();
+    return matches(haystack, search.trim().toLowerCase()) ? 1 : 0;
+  }
 
   async function jump(entry: Entry) {
     open = false;
     await goto(entry.href);
   }
-
-  function onKeydown(event: KeyboardEvent) {
-    switch (event.key) {
-      case 'ArrowDown':
-        event.preventDefault();
-        selected = results.length === 0 ? 0 : (active + 1) % results.length;
-        return;
-      case 'ArrowUp':
-        event.preventDefault();
-        selected = results.length === 0 ? 0 : (active - 1 + results.length) % results.length;
-        return;
-      case 'Enter': {
-        event.preventDefault();
-        const entry = results[active];
-        if (entry) void jump(entry);
-        return;
-      }
-    }
-  }
 </script>
 
-<Dialog.Root bind:open onOpenChangeComplete={(isOpen) => !isOpen && onClose()}>
-  <Dialog.Portal>
-    <Dialog.Overlay forceMount>
-      {#snippet child({ props, open: isOpen })}
-        {#if isOpen}
-          <div
-            {...props}
-            class="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm"
-            in:fade={{ duration: enter }}
-            out:fade={{ duration: exit }}
-          ></div>
-        {/if}
-      {/snippet}
-    </Dialog.Overlay>
+<Command.Dialog
+  bind:open
+  filter={score}
+  loop
+  title="Jump to"
+  description="Jump to a project, machine, or session"
+  class="sm:max-w-xl"
+>
+  <Command.Input placeholder="Jump to a project, machine, or session…" />
 
-    <Dialog.Content forceMount aria-label="Jump to" onkeydown={onKeydown}>
-      {#snippet child({ props, open: isOpen })}
-        {#if isOpen}
-          <div
-            {...props}
-            class="fixed top-[15vh] left-1/2 z-50 flex max-h-[60vh] w-[calc(100%-2rem)] max-w-xl -translate-x-1/2 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-lg"
-            in:scale={{ duration: enter, start: 0.96, easing: quintOut }}
-            out:scale={{ duration: exit, start: 0.96, easing: quintOut }}
+  <Command.List class="max-h-[60vh]">
+    <Command.Empty>Nothing matches that.</Command.Empty>
+
+    {#each grouped as group (group.name)}
+      <Command.Group heading={group.name}>
+        {#each group.rows as entry (entry.id)}
+          <Command.Item
+            value={entry.id}
+            keywords={[entry.label, entry.detail]}
+            onSelect={() => jump(entry)}
           >
-            <input
-              bind:value={query}
-              placeholder="Jump to a project, machine, or session…"
-              class="border-b border-border bg-transparent px-4 py-3 text-base text-foreground placeholder:text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset sm:text-sm"
-              role="combobox"
-              aria-label="Jump to"
-              aria-autocomplete="list"
-              aria-expanded="true"
-              aria-controls="jump-results"
-              aria-activedescendant={active >= 0 ? `jump-result-${active}` : undefined}
-              oninput={() => (selected = 0)}
-            />
+            <span class="truncate">{entry.label}</span>
+            <span class="ml-auto truncate font-mono text-xs text-muted-foreground">
+              {entry.detail}
+            </span>
+          </Command.Item>
+        {/each}
+      </Command.Group>
+    {/each}
+  </Command.List>
 
-            <div id="jump-results" role="listbox" aria-label="Results" class="overflow-y-auto p-2">
-              {#each results as entry, index (entry.id)}
-                {#if index === 0 || results[index - 1].group !== entry.group}
-                  <p class="px-2.5 pt-2 pb-1 text-xs font-medium tracking-wider text-muted-foreground uppercase">
-                    {entry.group}
-                  </p>
-                {/if}
-                <button
-                  bind:this={rows[index]}
-                  type="button"
-                  tabindex="-1"
-                  role="option"
-                  id="jump-result-{index}"
-                  aria-selected={index === active}
-                  class="flex w-full items-baseline gap-3 rounded-md px-2.5 py-2 text-left transition-colors hover:bg-accent
-                    {index === active ? 'bg-accent text-accent-foreground' : ''}"
-                  onclick={() => jump(entry)}
-                >
-                  <span class="truncate text-sm text-foreground">{entry.label}</span>
-                  <span class="ml-auto truncate font-mono text-xs text-muted-foreground">
-                    {entry.detail}
-                  </span>
-                </button>
-              {:else}
-                <p class="px-2.5 py-3 text-sm text-muted-foreground">Nothing matches that.</p>
-              {/each}
-            </div>
-
-            <div class="flex gap-4 border-t border-border px-4 py-2 text-xs text-muted-foreground">
-              <span><kbd class="rounded bg-accent text-accent-foreground px-1">↑↓</kbd> navigate</span>
-              <span><kbd class="rounded bg-accent text-accent-foreground px-1">↵</kbd> open</span>
-              <span><kbd class="rounded bg-accent text-accent-foreground px-1">esc</kbd> close</span>
-            </div>
-          </div>
-        {/if}
-      {/snippet}
-    </Dialog.Content>
-  </Dialog.Portal>
-</Dialog.Root>
+  <div class="flex gap-4 border-t border-border px-4 py-2 text-xs text-muted-foreground">
+    <span><kbd class="rounded bg-accent px-1 text-accent-foreground">↑↓</kbd> navigate</span>
+    <span><kbd class="rounded bg-accent px-1 text-accent-foreground">↵</kbd> open</span>
+    <span><kbd class="rounded bg-accent px-1 text-accent-foreground">esc</kbd> close</span>
+  </div>
+</Command.Dialog>

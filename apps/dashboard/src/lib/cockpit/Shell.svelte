@@ -6,6 +6,7 @@
   import { quintOut } from 'svelte/easing';
   import { afterNavigate } from '$app/navigation';
   import { browser } from '$app/environment';
+  import { Button } from '$lib/components/ui/button';
   import * as SidebarPrimitive from '$lib/components/ui/sidebar';
   import ThemeSwitcher from '$lib/components/ui/ThemeSwitcher.svelte';
   import { cockpit } from './client.svelte';
@@ -98,9 +99,7 @@
 
 <svelte:window onkeydown={handleKeydown} />
 
-{#if palette}
-  <JumpPalette onClose={() => (palette = false)} />
-{/if}
+<JumpPalette bind:open={palette} />
 
 <div class="flex h-dvh flex-col overflow-hidden bg-background text-foreground">
   <a
@@ -115,25 +114,27 @@
     class="flex h-10 shrink-0 items-center gap-3 border-b border-border px-3"
     style="view-transition-name: app-header"
   >
-    <button
-      type="button"
-      class="rounded p-1 transition-colors hover:bg-accent hover:text-accent-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring md:hidden"
+    <Button
+      variant="ghost"
+      size="icon-xs"
+      class="md:hidden"
       aria-label="Machines and sessions"
       aria-expanded={rail}
       onclick={() => (rail = !rail)}
     >
-      <IconSidebar class="size-3.5" />
-    </button>
+      <IconSidebar />
+    </Button>
     <a href="/session" class="font-mono text-sm font-semibold tracking-tight">COCKPIT</a>
-    <button
-      type="button"
-      class="ml-auto flex min-h-6 items-center gap-1.5 rounded px-1.5 py-0.5 text-xs transition-colors hover:bg-accent hover:text-accent-foreground hover:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
+    <Button
+      variant="ghost"
+      size="xs"
+      class="ml-auto"
       title="Jump to a project, machine, or session (Cmd/Ctrl + K)"
       onclick={() => (palette = true)}
     >
-      <IconSearch class="size-3" />
+      <IconSearch />
       Jump
-    </button>
+    </Button>
     <a
       href="/session"
       class="flex min-h-6 items-center gap-1.5 rounded px-1.5 py-0.5 text-xs transition-colors {blocked >

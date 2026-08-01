@@ -8,6 +8,7 @@ import type {
   FramePayload,
   FsPayload,
   InstanceRow,
+  ModelInfo,
   Options,
   PermissionMode,
   PermissionResult,
@@ -140,6 +141,12 @@ export interface SessionState {
    * it back, so a session another tab started reads as `default` here.
    */
   permissionMode: PermissionMode;
+  /**
+   * Which model answers the next turn: named by every `system.init`, moved
+   * optimistically by a switch and corrected by the init the next turn opens
+   * with. `null` until the session has started and said what it is running.
+   */
+  model: string | null;
   /** Started again in place for a mode it could not switch into; ends at the next init. */
   relaunching: boolean;
   /** A side quest (NEW.md §1) — kept visually apart until it is kept or discarded. */
@@ -236,6 +243,7 @@ function session(instanceId: string): SessionState {
     hydrating: false,
     initialized: false,
     permissionMode: 'default',
+    model: null,
     relaunching: false,
     scratch: false,
   };
@@ -379,6 +387,9 @@ function handleFrame(frame: FramePayload): void {
       for (const message of mapping.messages) {
         if (message.type === 'system.init') {
           target.sessionId = message.metadata?.sessionId ?? target.sessionId;
+          // Re-emitted every turn, so this is also what confirms a switch — or
+          // puts the picker back if the agent ignored one.
+          target.model = message.metadata?.model ?? target.model;
           // The process behind a relaunch is up: this is the frame it opens with.
           target.relaunching = false;
           if (target.initialized) continue;
@@ -705,6 +716,7 @@ export async function discardSession(instanceId: string, machineId: string): Pro
     delete state.sessions[instanceId];
     // The view this session's chunks were being prepended to is gone with it.
     hydrations.delete(instanceId);
+    modelLists.delete(instanceId);
     await refresh();
   }
 }
@@ -1045,6 +1057,53 @@ export async function setPermissionMode(
     );
   } catch (error) {
     target.permissionMode = previous;
+    throw error;
+  }
+}
+
+/** What a machine answered `supportedModels` with, by instance — asked once. */
+const modelLists = new Map<string, ModelInfo[]>();
+
+/**
+ * The models this session's machine will accept. `supportedModels` is a `Query`
+ * method, so it is only answerable while the session is up; the list does not
+ * change under a running session, and it is read the first time it is asked for.
+ */
+export async function loadModels(instanceId: string, machineId: string): Promise<ModelInfo[]> {
+  const cached = modelLists.get(instanceId);
+  if (cached) return cached;
+
+  const requestId = crypto.randomUUID();
+  const payload: ControlPayload = { instanceId, requestId, method: 'supportedModels', args: [] };
+  const models = await ask<ModelInfo[]>(requestId, 'supportedModels', CONTROL_TIMEOUT_MS, () =>
+    send({ verb: 'control', machineId, instanceId, requestId, payload })
+  );
+  modelLists.set(instanceId, models);
+  return models;
+}
+
+/**
+ * Points the session at another model from the next turn on. Awaited like the
+ * permission mode and for the same reason: the header already shows the choice,
+ * so a machine that refuses has to be able to put it back.
+ */
+export async function setModel(
+  instanceId: string,
+  machineId: string,
+  model: string
+): Promise<void> {
+  const target = session(instanceId);
+  const previous = target.model;
+  target.model = model;
+
+  const requestId = crypto.randomUUID();
+  const payload: ControlPayload = { instanceId, requestId, method: 'setModel', args: [model] };
+  try {
+    await ask<void>(requestId, 'setModel', CONTROL_TIMEOUT_MS, () =>
+      send({ verb: 'control', machineId, instanceId, requestId, payload })
+    );
+  } catch (error) {
+    target.model = previous;
     throw error;
   }
 }
