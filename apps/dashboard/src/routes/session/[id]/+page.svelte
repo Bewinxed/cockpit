@@ -22,7 +22,7 @@
   import type { VirtualizerHandle } from 'virtua/svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
-  import type { ModelInfo, PermissionMode, PermissionResult } from '@cockpit/core';
+  import type { PermissionMode, PermissionResult } from '@cockpit/core';
   import {
     ChatInput,
     ChatMessage,
@@ -31,6 +31,7 @@
     TranscriptSearch,
   } from '$lib/components/features';
   import { FlowView } from '$lib/components/features/flow';
+  import ModelCombobox from '$lib/cockpit/ModelCombobox.svelte';
   import PermissionStack from '$lib/cockpit/PermissionStack.svelte';
   import { ACTIVITY_LABEL } from '$lib/cockpit/activity';
   import type { PendingPermission, PermissionAnswer } from '$lib/cockpit/client.svelte';
@@ -41,7 +42,6 @@
     forkSession,
     interrupt,
     keepSession,
-    loadModels,
     openSession,
     openTranscript,
     permissionAnswer,
@@ -459,39 +459,12 @@
     if (value === 'chat' || value === 'flow') view = value;
   }
 
-  // Which models this machine offers is only answerable while the session is up,
-  // and it does not change under one — so it is read the first time the picker is
-  // opened, and the store keeps it for as long as the session lives.
-  let models = $state<ModelInfo[]>([]);
-  let modelsLoading = $state(false);
-  let modelsError = $state<string | null>(null);
-
-  async function openModels(open: boolean) {
-    if (!open || !session || models.length > 0 || modelsLoading) return;
-    modelsLoading = true;
-    modelsError = null;
-    try {
-      models = await loadModels(viewId, session.machineId);
-    } catch (err) {
-      modelsError = err instanceof Error ? err.message : String(err);
-    } finally {
-      modelsLoading = false;
-    }
-  }
-
   const currentModel = $derived(session?.model ?? '');
 
-  // An init frame names the wire model (`claude-fable-5`); the row that offers it
-  // is keyed by its alias (`claude-fable-5[1m]`). Matching on both is what keeps
-  // the tick on the row the session is actually running.
-  const currentRow = $derived(
-    models.find((row) => row.value === currentModel || row.resolvedModel === currentModel)
-  );
-  const modelName = $derived(currentRow?.displayName ?? currentModel);
-  const selectedModel = $derived(currentRow?.value ?? currentModel);
-
+  // `setModel` moves the header first and puts it back if the machine refuses,
+  // so the only thing left here is to say what the refusal was.
   async function chooseModel(value: string) {
-    if (!session || value === selectedModel) return;
+    if (!session) return;
     error = null;
     try {
       await setModel(viewId, session.machineId, value);
@@ -650,50 +623,11 @@
           </Select.Content>
         </Select.Root>
 
-        <Select.Root
-          type="single"
-          value={selectedModel}
-          onValueChange={chooseModel}
-          onOpenChange={openModels}
-        >
-          <Select.Trigger
-            size="sm"
-            aria-label="Model"
-            title={currentModel || 'Which model answers the next turn'}
-            class="text-xs text-muted-foreground"
-          >
-            {modelName || 'Model'}
-          </Select.Trigger>
-          <Select.Content>
-            {#each models as option (option.value)}
-              <Select.Item
-                value={option.value}
-                label={option.displayName}
-                title={option.value}
-                class="text-foreground"
-              >
-                <span class="flex flex-col">
-                  <span>{option.displayName}</span>
-                  <span class="text-xs text-muted-foreground">{option.description}</span>
-                </span>
-              </Select.Item>
-            {:else}
-              <!-- Nothing to switch to: say what is running, and why that is all. -->
-              <Select.Item
-                value={selectedModel}
-                label={modelName}
-                disabled
-                title={modelsLoading
-                  ? 'Reading the models this machine offers…'
-                  : (modelsError ??
-                    'This machine could not list its models — the session keeps the one it started on.')}
-                class="text-foreground opacity-40"
-              >
-                {modelsLoading ? 'Reading models…' : modelName || 'No models listed'}
-              </Select.Item>
-            {/each}
-          </Select.Content>
-        </Select.Root>
+        <ModelCombobox
+          value={currentModel}
+          onchoose={chooseModel}
+          class="text-xs text-muted-foreground"
+        />
       </ButtonGroup.Root>
 
       <!-- What you can do to the session itself. -->

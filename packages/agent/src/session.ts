@@ -195,11 +195,11 @@ type ControlMethod = (...args: unknown[]) => unknown;
 /** How many repositories the bootstrap picker asks a machine for. */
 const REPO_LIST_LIMIT = 100;
 
-/** The end of a failed command's stderr: enough to name the cause, not a wall of it. */
-const STDERR_TAIL_LINES = 4;
+/** The end of a command's output: enough to name what happened, not a wall of it. */
+const TAIL_LINES = 4;
 
-const stderrTail = (stderr: string): string =>
-  stderr.trim().split('\n').slice(-STDERR_TAIL_LINES).join('\n');
+const tail = (output: string): string =>
+  output.trim().split('\n').slice(-TAIL_LINES).join('\n');
 
 /** Whether the GitHub CLI is here at all — its absence is an answer, not a failure. */
 const ghAvailable = async (): Promise<boolean> =>
@@ -220,9 +220,23 @@ const listRepos = async (): Promise<ReposResult> => {
       .quiet()
       .nothrow();
   if (listed.exitCode !== 0) {
-    throw new Error(`gh repo list failed: ${stderrTail(listed.stderr.toString())}`);
+    throw new Error(`gh repo list failed: ${tail(listed.stderr.toString())}`);
   }
   return listed.json() as RepoInfo[];
+};
+
+/**
+ * Updates the Claude Code the machine's sessions run on, and answers with what
+ * it said about the version it landed on. Sessions already running keep the CLI
+ * they launched with, so this only ever changes what the next spawn gets.
+ */
+const updateClaudeCode = async (): Promise<string> => {
+  const updated = await Bun.$`claude update`.quiet().nothrow();
+  const said = tail(updated.stdout.toString()) || tail(updated.stderr.toString());
+  if (updated.exitCode !== 0) {
+    throw new Error(said || `claude update exited ${updated.exitCode}`);
+  }
+  return said;
 };
 
 /** The same repository, under whichever of its names, is the same repository. */
@@ -238,8 +252,8 @@ const isRepoUrl = (repo: string): boolean =>
 /**
  * What a machine-scoped `control` reaches: the SDK's session catalog — module-level
  * functions rather than `Query` methods, so it is readable with nothing running on
- * this machine — and the machine's repositories, for a session that starts by
- * cloning one.
+ * this machine — the machine's repositories, for a session that starts by
+ * cloning one, and its Claude Code install.
  */
 const SESSION_FUNCTIONS = {
   listSessions,
@@ -249,6 +263,7 @@ const SESSION_FUNCTIONS = {
   tagSession,
   deleteSession,
   listRepos,
+  updateClaudeCode,
 } as Record<string, ControlMethod | undefined>;
 
 /**
@@ -326,6 +341,7 @@ export class SessionSupervisor {
     cwd,
     options,
     permissionMode,
+    model,
     scratch,
     bootstrap,
     requestId: ack,
@@ -375,6 +391,7 @@ export class SessionSupervisor {
           agentProgressSummaries: true,
           ...options,
           ...(permissionMode && { permissionMode }),
+          ...(model && { model }),
           // The SDK will not bypass permissions unless it is asked twice over.
           ...(permissionMode === 'bypassPermissions' && {
             allowDangerouslySkipPermissions: true,
@@ -574,7 +591,7 @@ export class SessionSupervisor {
       ? await Bun.$`gh repo clone ${repo} ${target} -- --single-branch`.quiet().nothrow()
       : await Bun.$`git clone --single-branch ${repo} ${target}`.quiet().nothrow();
     if (cloned.exitCode !== 0) {
-      throw new Error(`could not clone ${repo}: ${stderrTail(cloned.stderr.toString())}`);
+      throw new Error(`could not clone ${repo}: ${tail(cloned.stderr.toString())}`);
     }
     return target;
   }

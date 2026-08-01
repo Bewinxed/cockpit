@@ -48,6 +48,13 @@ export interface SpawnPayload {
    * still change afterwards, with a `setPermissionMode` {@link ControlPayload}.
    */
   permissionMode?: PermissionMode;
+  /**
+   * Which model answers, from the session's first turn. Hoisted for the same
+   * reason as `permissionMode` — the user chooses it on the form and keeps
+   * changing it afterwards, with a `setModel` {@link ControlPayload}. Absent
+   * leaves the choice to the SDK, which is what most sessions want.
+   */
+  model?: string;
   /** The project this session was started from, when it was started from one. */
   projectId?: string;
   /**
