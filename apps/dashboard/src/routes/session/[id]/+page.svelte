@@ -513,7 +513,9 @@
           onclick={opts.onclick}
         >
           <Icon />
-          <span class="hidden lg:inline">{opts.label}</span>
+          <!-- The name is in the tooltip and the aria-label, so the label is the
+               first thing to go when the bar runs out of room. -->
+          <span class="hidden 2xl:inline">{opts.label}</span>
         </Button>
       {/snippet}
     </Tooltip.Trigger>
@@ -540,9 +542,16 @@
 </AlertDialog.Root>
 
 <div class="flex h-full flex-1 flex-col overflow-hidden">
-  <header class="flex items-center gap-3 border-b border-border px-4 py-2">
-    <a href="/session" class="text-sm text-muted-foreground hover:text-foreground">Sessions</a>
-    <h1 class="truncate font-mono text-sm font-normal">{session?.cwd || viewId}</h1>
+  <!-- The controls are the fixed cost; the path is what gives way. Without
+       min-w-0 the flex items refuse to shrink below their content and the
+       right-hand group is pushed off the window instead. -->
+  <header class="flex min-w-0 items-center gap-3 border-b border-border px-4 py-2">
+    <a href="/session" class="hidden shrink-0 text-sm text-muted-foreground hover:text-foreground sm:inline"
+      >Sessions</a
+    >
+    <h1 class="min-w-0 flex-1 truncate font-mono text-sm font-normal" title={session?.cwd || viewId}>
+      {session?.cwd || viewId}
+    </h1>
     {#if session?.scratch}
       <span
         class="shrink-0 rounded-sm border border-dashed border-muted-foreground/40 px-1.5 py-0.5 text-xs tracking-wide text-muted-foreground uppercase"
