@@ -1,7 +1,8 @@
-import type { Envelope } from '@cockpit/core';
+import type { AuthState, Envelope } from '@cockpit/core';
 import { COCKPIT_ENV, COCKPIT_HUB_PORT } from '@cockpit/core';
 import { Data, Duration, Effect, Fiber, Schedule } from 'effect';
 import { arch, hostname, platform } from 'node:os';
+import { probeAuth } from './auth';
 import { machineId } from './machine-id';
 import { SessionSupervisor } from './session';
 
@@ -13,6 +14,13 @@ interface MachineIdentity {
   machineId: string;
   hostname: string;
   os: string;
+  /**
+   * Whether this daemon can reach Claude Code's credentials. It travels with the
+   * identity because it is a fact about the machine, not about a session, and
+   * because a machine that cannot start one should not sit in the fleet looking
+   * ready to.
+   */
+  auth: AuthState;
 }
 
 /**
@@ -107,30 +115,41 @@ const attach = (supervisor: SessionSupervisor, identity: MachineIdentity, url: s
     return yield* closed(socket, url);
   });
 
-/** Runs until interrupted: connect, register, heartbeat, reconnect on loss. */
-export const startDaemon = Effect.gen(function* () {
-  const url = process.env[COCKPIT_ENV.hubUrl] ?? DEFAULT_HUB_URL;
-  const identity: MachineIdentity = {
-    machineId: yield* Effect.promise(() => machineId()),
-    hostname: hostname(),
-    os: `${platform()}-${arch()}`,
-  };
+/**
+ * Runs until interrupted: connect, register, heartbeat, reconnect on loss.
+ *
+ * `auth` is what the caller already found out — `cockpit up` probes before it
+ * gets here, because it may still be able to fix it. A daemon started any other
+ * way asks for itself.
+ */
+export const startDaemon = (auth?: AuthState) =>
+  Effect.gen(function* () {
+    const url = process.env[COCKPIT_ENV.hubUrl] ?? DEFAULT_HUB_URL;
+    const identity: MachineIdentity = {
+      machineId: yield* Effect.promise(() => machineId()),
+      hostname: hostname(),
+      os: `${platform()}-${arch()}`,
+      auth: auth ?? (yield* Effect.promise(() => probeAuth())),
+    };
+    if (identity.auth !== 'authenticated') {
+      yield* Effect.logWarning(`Claude Code credentials are ${identity.auth} on this machine`);
+    }
 
-  // Outlives any one connection: a hub restart must not kill running sessions.
-  const supervisor = yield* Effect.acquireRelease(
-    Effect.sync(() => new SessionSupervisor()),
-    (running) =>
-      Effect.logInfo(`draining ${running.instanceIds.length} session(s)`).pipe(
-        Effect.andThen(Effect.promise(() => running.shutdown()))
-      )
-  );
+    // Outlives any one connection: a hub restart must not kill running sessions.
+    const supervisor = yield* Effect.acquireRelease(
+      Effect.sync(() => new SessionSupervisor()),
+      (running) =>
+        Effect.logInfo(`draining ${running.instanceIds.length} session(s)`).pipe(
+          Effect.andThen(Effect.promise(() => running.shutdown()))
+        )
+    );
 
-  yield* Effect.logInfo(`cockpit agent ${identity.machineId} connecting to ${url}`);
-  yield* Effect.scoped(attach(supervisor, identity, url)).pipe(
-    Effect.tapError((error) => Effect.logWarning(`${error.reason} — reconnecting`)),
-    Effect.retry(reconnect)
-  );
-}).pipe(Effect.scoped);
+    yield* Effect.logInfo(`cockpit agent ${identity.machineId} connecting to ${url}`);
+    yield* Effect.scoped(attach(supervisor, identity, url)).pipe(
+      Effect.tapError((error) => Effect.logWarning(`${error.reason} — reconnecting`)),
+      Effect.retry(reconnect)
+    );
+  }).pipe(Effect.scoped);
 
 /**
  * Runs {@link startDaemon} until the process is signalled — how a daemon
@@ -139,8 +158,8 @@ export const startDaemon = Effect.gen(function* () {
  * between turns instead of mid-tool. A second signal arrives with the handler
  * already gone, and kills the daemon the usual way.
  */
-export const runDaemon = (): void => {
-  const daemon = Effect.runFork(startDaemon);
+export const runDaemon = (auth?: AuthState): void => {
+  const daemon = Effect.runFork(startDaemon(auth));
   const drain = (signal: NodeJS.Signals): void => {
     process.off(signal, drain);
     void Effect.runPromise(Fiber.interrupt(daemon)).then(() => process.exit(0));

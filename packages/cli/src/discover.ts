@@ -148,7 +148,7 @@ export const discoverHub = async ({ hub, log }: DiscoverOptions = {}): Promise<H
   const port = Number(process.env[COCKPIT_ENV.hubPort] ?? COCKPIT_HUB_PORT);
 
   const settle = async (httpUrl: string, source: HubSource): Promise<Hub> => {
-    await writeConfig(httpUrl);
+    await writeConfig({ hubUrl: httpUrl });
     return { httpUrl, wsUrl: toWsUrl(httpUrl), source };
   };
 
@@ -168,8 +168,9 @@ export const discoverHub = async ({ hub, log }: DiscoverOptions = {}): Promise<H
   }
 
   // 2. The hub found last time is the hub most runs want, so it costs one probe.
+  // A config written by `login` before any hub was known has an empty one.
   const cached = await readConfig();
-  if (cached) {
+  if (cached?.hubUrl) {
     note(`[2/5] cached ${cached.hubUrl} (${CONFIG_PATH}): probing`);
     if (await probe(cached.hubUrl)) {
       note(`[2/5] cached hub answered`);

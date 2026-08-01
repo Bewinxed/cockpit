@@ -42,7 +42,7 @@
   import MachineMenu from './MachineMenu.svelte';
   import StoredSessionMenu from './StoredSessionMenu.svelte';
   import { sessionTitle, transcriptHref } from './links';
-  import { machineLabel, machineOs } from './machine';
+  import { machineLabel, machineOs, signInWarning } from './machine';
 
   /** Enough of a machine's catalog to recognise it by; the rest is behind a click. */
   const RECENT = 6;
@@ -216,6 +216,7 @@
       {@const open = !collapsed[machine.machineId]}
       {@const expanded = !!showAll[machine.machineId]}
       {@const os = machineOs(machine.os)}
+      {@const needsSignIn = signInWarning(machine)}
       <Sidebar.Group class="py-0">
         <Collapsible.Root {open} onOpenChange={() => toggleMachine(machine.machineId)}>
           <MachineMenu {machine}>
@@ -234,17 +235,30 @@
                     <span class="min-w-0 truncate text-[13px] font-medium">
                       {machineLabel(machine.hostname)}
                     </span>
+                    <!-- A machine that cannot start a session is not ready, however
+                         connected it is, so it never gets to wear the green dot. -->
                     <span
-                      class="size-1.5 shrink-0 rounded-full {machine.status === 'online'
-                        ? 'bg-success'
-                        : 'bg-muted-foreground'}"
-                      title={machine.status === 'online' ? 'Online' : 'Offline'}
+                      class="size-1.5 shrink-0 rounded-full {machine.status !== 'online'
+                        ? 'bg-muted-foreground'
+                        : needsSignIn
+                          ? 'bg-warning'
+                          : 'bg-success'}"
+                      title={machine.status !== 'online'
+                        ? 'Offline'
+                        : needsSignIn
+                          ? 'Online, but not signed in'
+                          : 'Online'}
                     ></span>
                     <span class="shrink-0 text-xs opacity-60">{os.label}</span>
                   </Collapsible.Trigger>
                 {/snippet}
               </Sidebar.GroupLabel>
               <!-- Outside the content, so folding a machine away cannot hide what it is waiting on. -->
+              {#if needsSignIn}
+                <span class="shrink-0 text-xs font-medium text-warning" title={needsSignIn}>
+                  Needs sign-in
+                </span>
+              {/if}
               {#if blockedCount > 0}
                 <span
                   class="shrink-0 rounded-full bg-warning/15 px-1.5 text-xs font-medium text-warning tabular-nums"

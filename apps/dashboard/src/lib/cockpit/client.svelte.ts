@@ -3,6 +3,7 @@
  * it returns folded into per-instance UI state (NEW.md §6).
  */
 import type {
+  AgentRow,
   ControlPayload,
   Envelope,
   FramePayload,
@@ -48,14 +49,8 @@ import {
 
 export type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'error';
 
-/** A machine from the hub registry (`GET /api/agents`). */
-export interface Machine {
-  machineId: string;
-  hostname: string;
-  os: string;
-  status: string;
-  lastSeenAt: string;
-}
+/** A machine from the hub registry (`GET /api/agents`, and `instances` frames). */
+export type Machine = AgentRow;
 
 /** A session the hub knows about (`GET /api/instances`, and `instances` frames). */
 export type { InstanceRow };
@@ -331,6 +326,9 @@ function settle(requestId: string | undefined, answer: (waiter: Waiter) => void)
 
 function handleFrame(frame: FramePayload): void {
   if (frame.kind === 'instances') {
+    // The machines ride along so a daemon registering — the moment its auth
+    // state is decided — reaches the rail without a re-fetch.
+    state.machines = frame.agents;
     adoptInstances(frame.instances);
     return;
   }

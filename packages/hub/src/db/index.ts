@@ -13,8 +13,15 @@ export type InstanceKind = (typeof instances.$inferSelect)['kind'];
 /** How long a session that stopped moving stays in the listings the rails read. */
 const STALE_AFTER_MS = 24 * 60 * 60 * 1000;
 
+export type AgentAuth = (typeof agents.$inferSelect)['auth'];
+
 export interface DbShape {
-  readonly upsertAgent: (agent: { machineId: string; hostname: string; os: string }) => void;
+  readonly upsertAgent: (agent: {
+    machineId: string;
+    hostname: string;
+    os: string;
+    auth: AgentAuth;
+  }) => void;
   readonly touchAgent: (machineId: string) => void;
   readonly markAgentOffline: (machineId: string) => void;
   readonly openInstance: (instance: {
@@ -64,13 +71,13 @@ const make = (path: string): DbShape => {
   migrate(db, { migrationsFolder: MIGRATIONS_DIR });
 
   return {
-    upsertAgent: ({ machineId, hostname, os }) => {
+    upsertAgent: ({ machineId, hostname, os, auth }) => {
       const lastSeenAt = new Date();
       db.insert(agents)
-        .values({ machineId, hostname, os, status: 'online', lastSeenAt })
+        .values({ machineId, hostname, os, auth, status: 'online', lastSeenAt })
         .onConflictDoUpdate({
           target: agents.machineId,
-          set: { hostname, os, status: 'online', lastSeenAt },
+          set: { hostname, os, auth, status: 'online', lastSeenAt },
         })
         .run();
     },

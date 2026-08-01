@@ -1,4 +1,5 @@
 /** How a machine names itself vs. how the rail should say it out loud. */
+import type { AgentRow } from '@cockpit/core';
 import { IconLaptop, IconMonitor, IconServer, IconWindow } from '$lib/icons';
 
 /** mDNS and router suffixes: they say "same network", which the rail already implies. */
@@ -27,5 +28,21 @@ export function machineOs(os: string) {
       return { label: 'Windows', arch, Icon: IconWindow };
     default:
       return { label: 'Unknown', arch, Icon: IconServer };
+  }
+}
+
+/**
+ * Why a machine cannot start a session, in the words the person looking at the
+ * rail needs — which is the remedy, on which machine, and for the macOS case why
+ * signing in again is not it. Undefined when there is nothing to say.
+ */
+export function signInWarning(machine: AgentRow): string | undefined {
+  switch (machine.auth) {
+    case 'unreadable-credentials':
+      return `${machineLabel(machine.hostname)} has Claude Code credentials it cannot read: they are in the login keychain, and its agent is running outside the desktop session. Signing in again will not help. On that machine, run \`cockpit service install\` — a LaunchAgent can read the keychain — or \`cockpit login\` for a token.`;
+    case 'unauthenticated':
+      return `Nobody is signed in to Claude Code on ${machineLabel(machine.hostname)}, so sessions there will answer "Not logged in". Run \`cockpit login\` on that machine.`;
+    default:
+      return undefined;
   }
 }

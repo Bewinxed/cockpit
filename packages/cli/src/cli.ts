@@ -1,7 +1,10 @@
 #!/usr/bin/env bun
+import type { AgentRow, AuthState } from '@cockpit/core';
 import { COCKPIT_ENV, COCKPIT_HUB_PORT } from '@cockpit/core';
-import { CONFIG_PATH } from './config';
+import { CONFIG_PATH, readConfig } from './config';
 import { discoverHub, type Hub } from './discover';
+import { clearToken, login, LoginError, saveToken } from './login';
+import { isServiceAction, service, ServiceError, SERVICE_ACTIONS } from './service';
 
 /** Reported by `--version`; keep in sync with package.json. */
 const CLI_VERSION = '0.1.0';
@@ -12,12 +15,28 @@ Usage
   cockpit up [--hub <url>] [--verbose]      run the agent daemon on this machine
   cockpit hub [--verbose]                   run the hub here
   cockpit status [--hub <url>] [--verbose]  print the hub it found, and the fleet
+  cockpit service <${SERVICE_ACTIONS.join('|')}>  run the daemon as a per-user service
+  cockpit login [--token <token>]           give this machine a Claude Code token
+  cockpit logout                            forget it
 
 Options
-  --hub <url>   hub to use, as http://host:port or ws://host:port/ws
-  --verbose     narrate the discovery ladder
-  --help        this
-  --version     print the version
+  --hub <url>     hub to use, as http://host:port or ws://host:port/ws
+  --token <token> a \`claude setup-token\` token, for \`login\` without a terminal
+  --follow, -f    keep printing, for \`service logs\`
+  --verbose       narrate the discovery ladder
+  --help          this
+  --version       print the version
+
+Signing in
+  The daemon runs Claude Code as you, so it needs the credentials you logged in
+  with. Run it as a service — \`cockpit service install\` — and on macOS it
+  inherits your desktop session and reads them from the login keychain, which is
+  the whole fix. A daemon started over SSH cannot: the keychain refuses a process
+  with no GUI session, and every turn comes back "Not logged in".
+
+  Where that is not possible — a headless box — \`cockpit login\` mints a token
+  instead, kept in ${CONFIG_PATH} at mode 0600 and exported to the daemon as
+  CLAUDE_CODE_OAUTH_TOKEN, which skips the keychain entirely.
 
 Finding the hub, in order — the first that answers wins
   1. --hub, then ${COCKPIT_ENV.hubUrl}
@@ -44,7 +63,11 @@ see what each step tried.`;
 
 interface Args {
   command?: string;
+  /** The verb after the command, for the one command that takes one: `service`. */
+  action?: string;
   hub?: string;
+  token?: string;
+  follow: boolean;
   verbose: boolean;
   help: boolean;
   version: boolean;
@@ -53,13 +76,21 @@ interface Args {
 class UsageError extends Error {}
 
 const parseArgs = (argv: string[]): Args => {
-  const args: Args = { verbose: false, help: false, version: false };
+  const args: Args = { follow: false, verbose: false, help: false, version: false };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index] as string;
     switch (arg) {
       case '--hub':
         args.hub = argv[++index];
         if (!args.hub) throw new UsageError('--hub needs a URL');
+        break;
+      case '--token':
+        args.token = argv[++index];
+        if (!args.token) throw new UsageError('--token needs a token');
+        break;
+      case '--follow':
+      case '-f':
+        args.follow = true;
         break;
       case '--verbose':
       case '-v':
@@ -74,8 +105,9 @@ const parseArgs = (argv: string[]): Args => {
         break;
       default:
         if (arg.startsWith('-')) throw new UsageError(`unknown option ${arg}`);
-        if (args.command) throw new UsageError(`unexpected argument ${arg}`);
-        args.command = arg;
+        if (!args.command) args.command = arg;
+        else if (!args.action) args.action = arg;
+        else throw new UsageError(`unexpected argument ${arg}`);
     }
   }
   return args;
@@ -85,15 +117,6 @@ const note = (line: string): void => console.error(line);
 
 const resolve = async (args: Args): Promise<Hub | undefined> =>
   discoverHub({ hub: args.hub, log: args.verbose ? note : undefined });
-
-/** One row of the hub's `/api/agents`, which is all the fleet listing needs. */
-interface AgentRow {
-  machineId: string;
-  hostname: string;
-  os: string;
-  status: string;
-  lastSeenAt: string | number | null;
-}
 
 const seen = (at: AgentRow['lastSeenAt']): string => {
   if (!at) return 'never';
@@ -111,11 +134,12 @@ const printFleet = (agents: AgentRow[]): void => {
   const rows = agents.map((agent) => [
     agent.hostname,
     agent.status,
+    agent.auth === 'authenticated' ? 'yes' : agent.auth === 'unknown' ? '?' : 'NO',
     agent.os,
     seen(agent.lastSeenAt),
     agent.machineId,
   ]);
-  const headers = ['MACHINE', 'STATUS', 'OS', 'LAST SEEN', 'ID'];
+  const headers = ['MACHINE', 'STATUS', 'SIGNED IN', 'OS', 'LAST SEEN', 'ID'];
   const widths = headers.map((header, column) =>
     Math.max(header.length, ...rows.map((row) => (row[column] as string).length))
   );
@@ -148,6 +172,64 @@ const status = async (args: Args): Promise<number> => {
   return 0;
 };
 
+/**
+ * Hands the daemon the stored token, unless the environment already names one —
+ * whoever set that meant it. Returns whether the SDK will find a token; the
+ * value itself is never logged, framed, or written anywhere but the config.
+ */
+const applyToken = async (): Promise<boolean> => {
+  if (process.env.CLAUDE_CODE_OAUTH_TOKEN) return true;
+  const token = (await readConfig())?.claudeToken;
+  if (!token) return false;
+  process.env.CLAUDE_CODE_OAUTH_TOKEN = token;
+  return true;
+};
+
+/**
+ * What a machine that cannot reach its credentials should be told, and how it
+ * differs by why. The macOS case is the one worth spelling out: the credentials
+ * are there and correct, so "log in again" is the one thing that will not work.
+ */
+const authNote = (state: Exclude<AuthState, 'authenticated'>): string =>
+  state === 'unreadable-credentials'
+    ? `cockpit: this machine has Claude Code credentials, but this process cannot read them.
+They live in your login keychain, and the keychain only opens for a process
+inside your desktop session — a daemon started over SSH is not one, so sessions
+will start and then answer "Not logged in". Logging in again will not change it.`
+    : `cockpit: nobody is signed in to Claude Code on this machine, so sessions will
+start and then answer "Not logged in".`;
+
+/**
+ * Asked before registering, because a machine that cannot start a session should
+ * say so rather than sit in the fleet looking ready. With a terminal this offers
+ * the fix; without one it prints it and carries on — a daemon under launchd or
+ * systemd has nobody to ask, and blocking on stdin there is a hang, not a prompt.
+ */
+const preflight = async (): Promise<AuthState> => {
+  // Loaded here rather than at the top so `status` never pays for the agent SDK.
+  const { probeAuth } = await import('@cockpit/agent');
+  const state = await probeAuth();
+  if (state === 'authenticated') return state;
+
+  console.error(authNote(state));
+
+  if (!process.stdin.isTTY) {
+    console.error(`
+Fix it from this machine with \`cockpit login\`, or run the daemon as a service
+— \`cockpit service install\` — which on macOS is enough on its own. Starting
+anyway; the fleet will show this machine as needing sign-in.`);
+    return state;
+  }
+
+  const answer = prompt('\nRun `claude setup-token` now to fix it? [Y/n]')?.trim().toLowerCase();
+  if (answer && answer !== 'y' && answer !== 'yes') return state;
+
+  await login();
+  // The token the flow produced is loaded like any other, so `up` continues with
+  // exactly what a later start would have.
+  return (await applyToken()) ? 'authenticated' : state;
+};
+
 const up = async (args: Args): Promise<number> => {
   const hub = await resolve(args);
   if (!hub) {
@@ -156,11 +238,24 @@ const up = async (args: Args): Promise<number> => {
   }
   console.log(`cockpit: hub ${hub.httpUrl} (found by ${hub.source})`);
 
+  await applyToken();
+  const auth = await preflight();
+  if (process.stdin.isTTY) {
+    console.log('cockpit: `cockpit service install` runs this in the background instead.');
+  }
+
   // The daemon reads its hub from the environment, so this is the handoff.
   process.env[COCKPIT_ENV.hubUrl] = hub.wsUrl;
-  // Loaded here rather than at the top so `status` never pays for the agent SDK.
   const { runDaemon } = await import('@cockpit/agent');
-  runDaemon();
+  runDaemon(auth);
+  return 0;
+};
+
+const runService = async (args: Args): Promise<number> => {
+  if (!isServiceAction(args.action)) {
+    throw new UsageError(`cockpit service needs one of: ${SERVICE_ACTIONS.join(', ')}`);
+  }
+  await service(args.action, { follow: args.follow, note: (line) => console.log(line) });
   return 0;
 };
 
@@ -188,6 +283,20 @@ const run = async (argv: string[]): Promise<number> => {
       return hub();
     case 'status':
       return status(args);
+    case 'service':
+      return runService(args);
+    case 'login':
+      if (args.token) await saveToken(args.token);
+      else await login();
+      console.log(`cockpit: token saved to ${CONFIG_PATH}. Restart the daemon to use it.`);
+      return 0;
+    case 'logout':
+      console.log(
+        (await clearToken())
+          ? `cockpit: token cleared from ${CONFIG_PATH}.`
+          : 'cockpit: no token was stored.'
+      );
+      return 0;
     default:
       throw new UsageError(`unknown command ${args.command}`);
   }
@@ -197,6 +306,10 @@ const code = await run(Bun.argv.slice(2)).catch((error: unknown) => {
   if (error instanceof UsageError) {
     console.error(`cockpit: ${error.message}\n\nRun \`cockpit --help\`.`);
     return 2;
+  }
+  if (error instanceof LoginError || error instanceof ServiceError) {
+    console.error(`cockpit: ${error.message}`);
+    return 1;
   }
   throw error;
 });
