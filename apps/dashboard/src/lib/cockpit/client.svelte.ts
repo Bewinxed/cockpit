@@ -676,12 +676,13 @@ export function sendText(
  * The daemon respawns the same instance with `resume`, then the text goes
  * through as usual — the reader never has to know the process died.
  */
-export async function sendOrRevive(
-  instanceId: string,
-  machineId: string,
-  text: string,
-  extras?: SendExtras
-): Promise<void> {
+/**
+ * Brings a dead-but-resumable session back before anything is asked of it.
+ * A process can die between one action and the next — a daemon restart, a
+ * crash — and the reader should not have to know which of their actions
+ * happens to revive it. Returns once the session can take work again.
+ */
+export async function ensureAlive(instanceId: string, machineId: string): Promise<void> {
   const target = session(instanceId);
   const row = state.instances.find((candidate) => candidate.id === instanceId);
   const dead = row && (row.status === 'error' || row.status === 'stopped');
@@ -705,6 +706,15 @@ export async function sendOrRevive(
     }
     void refresh();
   }
+}
+
+export async function sendOrRevive(
+  instanceId: string,
+  machineId: string,
+  text: string,
+  extras?: SendExtras
+): Promise<void> {
+  await ensureAlive(instanceId, machineId);
   sendText(instanceId, machineId, text, extras);
 }
 
@@ -1057,6 +1067,9 @@ export async function setPermissionMode(
   machineId: string,
   mode: PermissionMode
 ): Promise<void> {
+  // Switching a setting on a session whose process died must not fail:
+  // revive it first, then apply.
+  await ensureAlive(instanceId, machineId);
   const target = session(instanceId);
   const previous = target.permissionMode;
   target.permissionMode = mode;
@@ -1102,6 +1115,9 @@ export async function setModel(
   machineId: string,
   model: string
 ): Promise<void> {
+  // Switching a setting on a session whose process died must not fail:
+  // revive it first, then apply.
+  await ensureAlive(instanceId, machineId);
   const target = session(instanceId);
   const previous = target.model;
   target.model = model;
