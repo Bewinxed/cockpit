@@ -32,6 +32,7 @@
   } from '$lib/components/features';
   import { FlowView } from '$lib/components/features/flow';
   import ModelCombobox from '$lib/cockpit/ModelCombobox.svelte';
+  import ActivityDot from '$lib/cockpit/ActivityDot.svelte';
   import PermissionStack from '$lib/cockpit/PermissionStack.svelte';
   import { ACTIVITY_LABEL } from '$lib/cockpit/activity';
   import type { PendingPermission, PermissionAnswer } from '$lib/cockpit/client.svelte';
@@ -560,10 +561,15 @@
       </span>
     {/if}
     <span
-      class="ml-auto flex min-h-6 shrink-0 items-center text-xs text-muted-foreground"
+      class="ml-auto flex min-h-6 shrink-0 items-center gap-1.5 text-xs text-muted-foreground"
       role="status"
       aria-live="polite"
     >
+      {#if !browsing}
+        <!-- The state carries a colour of its own, so the dot says it before the
+             word is read: pinging amber when the session is waiting on you. -->
+        <ActivityDot {activity} size={1.5} />
+      {/if}
       {#if browsing}
         Transcript · {session?.loading
           ? 'loading'
@@ -580,7 +586,7 @@
                 out:fly={{ y: -5, duration: painted ? 140 : 0, easing: quintOut }}
               >{ACTIVITY_LABEL[activity]}</span>
             {/key}
-          </span>{runningTool} · hub {cockpit.status}
+          </span>{runningTool}
         </span>
       {/if}
     </span>
