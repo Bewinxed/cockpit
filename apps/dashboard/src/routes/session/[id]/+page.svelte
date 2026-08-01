@@ -636,8 +636,7 @@
                 disabled={locked}
                 title={locked
                   ? 'This session has not started yet — try again in a moment'
-                  : option.description}
-                class="text-foreground {locked ? 'opacity-40' : ''}"
+                  : option.description} class={locked ? 'opacity-40' : ''}
               >
                 <span class="flex flex-col">
                   <span class={option.value === 'bypassPermissions' ? 'text-warning' : ''}>
@@ -670,7 +669,6 @@
                 value={option.value}
                 label={option.displayName}
                 title={option.value}
-                class="text-foreground"
               >
                 <span class="flex flex-col">
                   <span>{option.displayName}</span>
@@ -686,8 +684,7 @@
                 title={modelsLoading
                   ? 'Reading the models this machine offers…'
                   : (modelsError ??
-                    'This machine could not list its models — the session keeps the one it started on.')}
-                class="text-foreground opacity-40"
+                    'This machine could not list its models — the session keeps the one it started on.')} class="opacity-40"
               >
                 {modelsLoading ? 'Reading models…' : modelName || 'No models listed'}
               </Select.Item>

@@ -282,7 +282,6 @@
                 <Select.Item
                   value={machine.machineId}
                   label="{machine.hostname} · {machine.os}"
-                  class="text-foreground"
                 >
                   {machine.hostname} · {machine.os}
                 </Select.Item>
@@ -310,7 +309,7 @@
             </Select.Trigger>
             <Select.Content>
               {#each PERMISSION_MODES as mode (mode.value)}
-                <Select.Item value={mode.value} label={mode.label} class="text-foreground">
+                <Select.Item value={mode.value} label={mode.label}>
                   <span class="flex flex-col">
                     <span class={mode.value === 'bypassPermissions' ? 'text-warning' : ''}>
                       {mode.label}
