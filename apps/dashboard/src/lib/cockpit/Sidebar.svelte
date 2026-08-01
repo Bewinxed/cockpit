@@ -288,8 +288,11 @@
           <Collapsible.Content>
             <div class="ml-4 border-l border-border/60 pl-1">
               {#if running.length > 0}
+                <!-- "Live" over a sleeping row contradicts itself, and the rows
+                     that are not live are exactly the ones needing a heading
+                     that explains them. -->
                 <Sidebar.GroupLabel class="h-auto px-1.5 pt-2 pb-0.5">
-                  Live
+                  {running.every((instance) => isResumable(instance)) ? 'Not running' : 'Live'}
                 </Sidebar.GroupLabel>
                 <Sidebar.Menu>
                   {#each running as instance (instance.id)}

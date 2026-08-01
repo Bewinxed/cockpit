@@ -67,11 +67,12 @@ export interface DbShape {
    * that could not read its catalog names none, and every row it left behind
    * keeps the benefit of the doubt.
    */
+  /** Returns the instances it settled, so their parked questions can be dropped. */
   readonly settleInstances: (
     machineId: string,
     liveIds: string[],
     resumable?: string[]
-  ) => void;
+  ) => string[];
   readonly listAgents: () => (typeof agents.$inferSelect)[];
   readonly listInstances: () => (typeof instances.$inferSelect)[];
   readonly listProjects: () => (typeof projects.$inferSelect)[];
@@ -224,6 +225,7 @@ const make = (path: string): DbShape => {
           .where(eq(instances.id, row.id))
           .run();
       }
+      return orphans.map((row) => row.id);
     },
     listAgents: () => db.select().from(agents).all(),
     // A discarded side quest is gone for good, and a row that has not moved in a

@@ -326,11 +326,22 @@
   }
 
   /**
+   * Questions parked by a process that has since died cannot be answered — the
+   * reply reaches a daemon with no such session, which is the "no session <id>"
+   * the reader used to get for clicking Approve. A dead session shows none.
+   */
+  const answerable = $derived.by((): PendingPermission[] => {
+    const row = cockpit.instances.find((instance) => instance.id === viewId);
+    const alive = !row || row.status === 'running' || row.status === 'starting';
+    return alive ? (session?.pending ?? []) : [];
+  });
+
+  /**
    * The permission the stack shows on top is the one the keyboard answers: the
    * card the eye is on, and the only one that shows the hints.
    */
   function answerPending(event: KeyboardEvent) {
-    const request = session?.pending[0];
+    const request = answerable[0];
     if (!request || event.metaKey || event.ctrlKey || event.altKey || isTyping()) return;
     const answer = answerFor(event, request);
     if (!answer) return;
@@ -930,10 +941,10 @@
           onInterrupt={handleInterrupt}
           streaming={session?.busy ?? false}
           disabled={cockpit.status !== 'connected' || (session?.relaunching ?? false)}
-          attachmentOpen={(session?.pending.length ?? 0) > 0}
+          attachmentOpen={answerable.length > 0}
         >
           {#snippet attachment()}
-            <PermissionStack requests={session?.pending ?? []} onResolve={handleResolve} />
+            <PermissionStack requests={answerable} onResolve={handleResolve} />
           {/snippet}
         </ChatInput>
       {/if}

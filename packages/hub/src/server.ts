@@ -199,11 +199,17 @@ export const createServer = ({ registry, db, pending }: HubServices) => {
               os: peek(message.payload, 'os') ?? 'unknown',
               auth: peekAuth(message.payload),
             });
-            db.settleInstances(
+            // A question parked by a process that is gone cannot be answered:
+            // the reply would arrive at a daemon with no such session. Drop them
+            // with the sessions they belonged to, or they replay to every
+            // dashboard that connects and fail on click.
+            for (const settled of db.settleInstances(
               message.machineId,
               peekInstances(message.payload),
               peekResumable(message.payload)
-            );
+            )) {
+              pending.forget(settled);
+            }
             publishInstances(message.machineId);
             ws.send(ack(message));
             break;
