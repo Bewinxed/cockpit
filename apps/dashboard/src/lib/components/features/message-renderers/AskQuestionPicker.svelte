@@ -377,7 +377,7 @@
 	<!-- Question header -->
 	<div class="flex items-start gap-3 mb-3">
 		<div
-			class="w-8 h-8 rounded-lg bg-primary/10 text-primary-foreground flex items-center justify-center shrink-0"
+			class="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0"
 		>
 			{#if question.multiSelect}
 				<IconChecklist class="w-4 h-4 text-primary" />
@@ -388,7 +388,7 @@
 		<div class="flex-1 min-w-0">
 			<div class="flex items-center gap-2 mb-1">
 				<span
-					class="text-xs font-semibold px-2 py-0.5 rounded-full bg-primary/15 text-primary-foreground text-primary uppercase tracking-wider"
+					class="text-xs font-semibold px-2 py-0.5 rounded-full bg-primary/15 text-primary text-primary uppercase tracking-wider"
 				>
 					{question.header}
 				</span>
@@ -576,7 +576,7 @@
 					<!-- Error -->
 					{#if submitError}
 						<div
-							class="mx-4 mb-3 flex items-center gap-2 text-sm text-destructive bg-destructive/10 text-destructive-foreground rounded-md px-3 py-2"
+							class="mx-4 mb-3 flex items-center gap-2 text-sm text-destructive bg-destructive/10 text-destructive rounded-md px-3 py-2"
 						>
 							<IconClose class="w-4 h-4 shrink-0" />
 							<span>{submitError}</span>
@@ -611,7 +611,7 @@
 								onclick={handleSubmit}
 								disabled={!canSubmit() || isSubmitting}
 								class="flex items-center gap-1.5 px-4 py-1.5 bg-primary text-primary-foreground rounded-md text-sm font-medium
-									hover:bg-primary/90 hover:text-primary-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-[background-color,opacity] duration-150 ease-out"
+									hover:bg-primary/90 hover:text-primary disabled:opacity-40 disabled:cursor-not-allowed transition-[background-color,opacity] duration-150 ease-out"
 							>
 								{#if isSubmitting}
 									<div
@@ -645,7 +645,7 @@
 								<div class="flex flex-wrap gap-2 flex-1">
 									{#each answeredSummary || [] as { header, answer }, idx (idx)}
 										<div
-											class="inline-flex items-center gap-2 px-3 py-1.5 bg-accent/50 text-accent-foreground border border-border/50 rounded-full text-sm"
+											class="inline-flex items-center gap-2 px-3 py-1.5 bg-accent/50 text-foreground border border-border/50 rounded-full text-sm"
 										>
 											<span class="text-xs font-semibold text-primary uppercase">{header}</span>
 											<span class="text-muted-foreground">→</span>
@@ -686,7 +686,7 @@
 													<IconCheck class="w-3 h-3 text-success shrink-0" />
 												</div>
 												{#if activeTab === qIdx}
-													<div class="absolute bottom-0 left-0 right-0 h-0.5 bg-primary/50 text-primary-foreground"></div>
+													<div class="absolute bottom-0 left-0 right-0 h-0.5 bg-primary/50 text-primary"></div>
 												{/if}
 											</button>
 										{/each}
@@ -705,7 +705,7 @@
 				{:else}
 					<div class="flex items-center gap-2">
 						<div
-							class="inline-flex items-center gap-2 px-3 py-1.5 bg-accent/50 text-accent-foreground border border-border/50 rounded-full text-sm"
+							class="inline-flex items-center gap-2 px-3 py-1.5 bg-accent/50 text-foreground border border-border/50 rounded-full text-sm"
 						>
 							<IconHelp class="w-3.5 h-3.5 text-muted-foreground" />
 							<span class="text-muted-foreground">Question answered</span>

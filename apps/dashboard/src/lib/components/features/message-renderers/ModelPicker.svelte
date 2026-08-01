@@ -81,7 +81,7 @@
 					<!-- Header -->
 					<div class="flex items-start gap-3">
 						<div
-							class="w-10 h-10 rounded-lg bg-primary/10 text-primary-foreground flex items-center justify-center shrink-0"
+							class="w-10 h-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0"
 						>
 							<IconCpu class="w-5 h-5 text-primary" />
 						</div>
@@ -137,7 +137,7 @@
 											<span class="font-medium text-foreground text-sm">{model.displayName}</span>
 											{#if currentModel === model.value}
 												<span
-													class="text-xs px-1.5 py-0.5 rounded bg-primary/15 text-primary-foreground text-primary uppercase tracking-wide"
+													class="text-xs px-1.5 py-0.5 rounded bg-primary/15 text-primary text-primary uppercase tracking-wide"
 													>current</span
 												>
 											{/if}
@@ -168,7 +168,7 @@
 							onclick={handleModelSubmit}
 							disabled={!selectedModel || selectedModel === currentModel || modelLoading}
 							class="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium
-                     hover:bg-primary/90 hover:text-primary-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-[background-color,opacity] duration-150 ease-out group"
+                     hover:bg-primary/90 hover:text-primary disabled:opacity-40 disabled:cursor-not-allowed transition-[background-color,opacity] duration-150 ease-out group"
 						>
 							{#if modelLoading}
 								<IconSpinner class="w-4 h-4 animate-spin" />
@@ -193,7 +193,7 @@
 		{:else}
 			<!-- Inactive: Show compact version -->
 			<div
-				class="inline-flex items-center gap-2 px-3 py-1.5 bg-accent/50 text-accent-foreground border border-dotted border-border rounded-lg text-sm group"
+				class="inline-flex items-center gap-2 px-3 py-1.5 bg-accent/50 text-foreground border border-dotted border-border rounded-lg text-sm group"
 			>
 				<IconCpu class="w-3.5 h-3.5 text-muted-foreground" />
 				<span class="text-muted-foreground">Model selection</span>

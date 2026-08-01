@@ -150,7 +150,7 @@
       <button type="button" class={action} onclick={() => startSession(true)}>Side quest</button>
       <button
         type="button"
-        class="shrink-0 rounded-md bg-primary px-3 py-1 text-xs text-primary-foreground transition-colors hover:bg-primary/90 hover:text-primary-foreground"
+        class="shrink-0 rounded-md bg-primary px-3 py-1 text-xs text-primary-foreground transition-colors hover:bg-primary/90 hover:text-primary"
         onclick={() => startSession(false)}
       >
         New session

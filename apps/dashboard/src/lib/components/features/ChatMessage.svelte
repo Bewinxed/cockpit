@@ -570,7 +570,7 @@
 								<!-- stderr -->
 								{#if hook?.stderr}
 									<div
-										class="bg-destructive/5 text-destructive-foreground border border-destructive/20 rounded-lg p-3 font-mono text-xs overflow-x-auto"
+										class="bg-destructive/5 text-destructive border border-destructive/20 rounded-lg p-3 font-mono text-xs overflow-x-auto"
 									>
 										<div
 											class="text-destructive text-xs uppercase tracking-wide mb-1.5 font-medium"
@@ -654,7 +654,7 @@
 								onclick={async () => { resettingSession = true; try { await onResetSession?.(); } finally { resettingSession = false; } }}
 								disabled={resettingSession}
 								class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md
-									bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground
+									bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary
 									disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
 							>
 								{#if resettingSession}
@@ -721,7 +721,7 @@
 										onclick={submitEdit}
 										disabled={!editContent.trim() || editLoading}
 										class="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground rounded-md text-sm font-medium
-                           hover:bg-primary/90 hover:text-primary-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                           hover:bg-primary/90 hover:text-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
 									>
 										{#if editLoading}
 											<IconSpinner class="w-3.5 h-3.5 animate-spin" />

@@ -182,7 +182,7 @@
 								onclick={handleMemorySave}
 								disabled={memorySaving}
 								class="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium
-                       hover:bg-primary/90 hover:text-primary-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-[background-color,opacity] duration-150 ease-out group"
+                       hover:bg-primary/90 hover:text-primary disabled:opacity-40 disabled:cursor-not-allowed transition-[background-color,opacity] duration-150 ease-out group"
 							>
 								{#if memorySaving}
 									<IconSpinner class="w-4 h-4 animate-spin" />
@@ -287,7 +287,7 @@
 		{:else}
 			<!-- Inactive: Show compact version -->
 			<div
-				class="inline-flex items-center gap-2 px-3 py-1.5 bg-accent/50 text-accent-foreground border border-dotted border-border rounded-lg text-sm group"
+				class="inline-flex items-center gap-2 px-3 py-1.5 bg-accent/50 text-foreground border border-dotted border-border rounded-lg text-sm group"
 			>
 				<IconBook class="w-3.5 h-3.5 text-muted-foreground" />
 				<span class="text-muted-foreground">Memory</span>
