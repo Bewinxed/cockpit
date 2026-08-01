@@ -1,3 +1,4 @@
+import type { AuthState } from '@cockpit/core';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
 const timestamp = (column: string) => integer(column, { mode: 'timestamp_ms' });
@@ -8,6 +9,11 @@ export const agents = sqliteTable('agents', {
   hostname: text('hostname').notNull(),
   os: text('os').notNull(),
   status: text('status').$type<'online' | 'offline'>().notNull().default('offline'),
+  /** What the daemon found about Claude Code's credentials, last time it registered. */
+  auth: text('auth')
+    .$type<AuthState | 'unknown'>()
+    .notNull()
+    .default('unknown'),
   lastSeenAt: timestamp('last_seen_at'),
   createdAt: timestamp('created_at').notNull().$defaultFn(() => new Date()),
 });

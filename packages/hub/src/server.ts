@@ -1,8 +1,8 @@
-import type { Envelope, InstanceRow, Verb } from '@cockpit/core';
+import type { AgentRow, Envelope, InstanceRow, Verb } from '@cockpit/core';
 import { Elysia, t } from 'elysia';
 import { websocket } from 'elysia/websocket';
 import { HUB_VERSION } from './config';
-import type { DbShape, InstanceKind } from './db';
+import type { AgentAuth, DbShape, InstanceKind } from './db';
 import type { PendingShape } from './pending';
 import type { HubSocket, RegistryShape } from './registry';
 
@@ -64,6 +64,19 @@ const peekKind = (payload: unknown): InstanceKind => {
   return scratch || ephemeral ? 'scratch' : 'mainline';
 };
 
+/** The states a daemon is allowed to claim; anything else is a daemon we do not know. */
+const AUTH_STATES: readonly AgentAuth[] = [
+  'authenticated',
+  'unauthenticated',
+  'unreadable-credentials',
+];
+
+/** `register`'s word on whether the machine can reach Claude Code's credentials. */
+const peekAuth = (payload: unknown): AgentAuth => {
+  const claimed = peek(payload, 'auth') as AgentAuth | undefined;
+  return claimed && AUTH_STATES.includes(claimed) ? claimed : 'unknown';
+};
+
 /** `register`'s list of the sessions the daemon still has running. */
 const peekInstances = (payload: unknown): string[] => {
   if (typeof payload !== 'object' || payload === null) return [];
@@ -113,7 +126,12 @@ export const createServer = ({ registry, db, pending }: HubServices) => {
    */
   const publishInstances = (machineId: string): void => {
     const instances: InstanceRow[] = db.listInstances();
-    registry.broadcast({ verb: 'frames', machineId, payload: { kind: 'instances', instances } });
+    const agents: AgentRow[] = db.listAgents();
+    registry.broadcast({
+      verb: 'frames',
+      machineId,
+      payload: { kind: 'instances', instances, agents },
+    });
   };
 
   return new Elysia()
@@ -155,6 +173,7 @@ export const createServer = ({ registry, db, pending }: HubServices) => {
               machineId: message.machineId,
               hostname: peek(message.payload, 'hostname') ?? message.machineId,
               os: peek(message.payload, 'os') ?? 'unknown',
+              auth: peekAuth(message.payload),
             });
             db.settleInstances(message.machineId, peekInstances(message.payload));
             publishInstances(message.machineId);

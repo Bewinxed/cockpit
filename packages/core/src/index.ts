@@ -171,6 +171,33 @@ export interface FsEntry {
 }
 
 /**
+ * Whether a machine's daemon can actually start a Claude Code session.
+ *
+ * `unreadable-credentials` is macOS's own failure and the reason this exists:
+ * Claude Code keeps its credentials in the login keychain, and a daemon running
+ * outside the GUI session is refused the secret — `errSecInteractionNotAllowed`
+ * — even though the item is right there. Nothing looks wrong until every turn
+ * comes back "Not logged in · Please run /login", and logging in again through
+ * the GUI does not help, because the credential was never what was missing.
+ */
+export type AuthState = 'authenticated' | 'unauthenticated' | 'unreadable-credentials';
+
+/**
+ * A machine from the hub's `agents` table — what `GET /api/agents` answers with,
+ * and what rides alongside the sessions in an `instances` frame.
+ */
+export interface AgentRow {
+  machineId: string;
+  hostname: string;
+  os: string;
+  status: string;
+  /** A `Date` inside the hub, the ISO string it serialises to everywhere else. */
+  lastSeenAt: string | number | Date | null;
+  /** `unknown` until a daemon that probes has registered at least once. */
+  auth: AuthState | 'unknown';
+}
+
+/**
  * A session the hub knows about — one row of its `instances` table. The hub is
  * the only writer, so this is the shape both its REST reads and its `instances`
  * frames answer with.
@@ -197,9 +224,14 @@ export type FramePayload =
        * Hub-originated: every session it still lists, pushed whenever one of the
        * rows moves. A dashboard that is already open follows the fleet from
        * these, so opening, failing, settling and discarding need no re-fetch.
+       *
+       * The machines ride along because a daemon registering is the moment its
+       * auth state changes, and a rail that only learns that on reload lies
+       * until you reload it.
        */
       kind: 'instances';
       instances: InstanceRow[];
+      agents: AgentRow[];
     }
   | {
       kind: 'permission_request';

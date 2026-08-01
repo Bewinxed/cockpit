@@ -1,0 +1,1 @@
+ALTER TABLE `agents` ADD `auth` text DEFAULT 'unknown' NOT NULL;
