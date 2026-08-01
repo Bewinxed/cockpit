@@ -267,6 +267,22 @@ const SESSION_FUNCTIONS = {
 } as Record<string, ControlMethod | undefined>;
 
 /**
+ * The SDK sessions this machine could resume — every transcript a
+ * `query({ resume })` would find. Read at register, so the hub can tell a
+ * session that merely lost its process from one whose conversation went with
+ * it. A catalog that will not be read answers with nothing rather than
+ * declaring the machine empty, which would condemn every row it left behind.
+ */
+export const resumableSessions = async (): Promise<string[] | undefined> => {
+  try {
+    return (await listSessions()).map((info) => info.sessionId);
+  } catch (error) {
+    warn(`could not read the session catalog: ${error}`);
+    return undefined;
+  }
+};
+
+/**
  * Owns every live SDK session on this machine and pumps their messages at the
  * hub. Nothing here interprets an SDK message — frames go out verbatim.
  */

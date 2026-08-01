@@ -35,13 +35,19 @@
   import ActivityDot from '$lib/cockpit/ActivityDot.svelte';
   import PermissionStack from '$lib/cockpit/PermissionStack.svelte';
   import { ACTIVITY_LABEL } from '$lib/cockpit/activity';
-  import type { PendingPermission, PermissionAnswer } from '$lib/cockpit/client.svelte';
+  import type {
+    InstanceRow,
+    PendingPermission,
+    PermissionAnswer,
+  } from '$lib/cockpit/client.svelte';
   import {
     backfillSession,
     cockpit,
     discardSession,
+    ensureAlive,
     forkSession,
     interrupt,
+    isResumable,
     keepSession,
     openSession,
     openTranscript,
@@ -206,15 +212,25 @@
    */
   const said = $derived((session?.messages ?? []).filter((message) => message.type !== 'ui.error'));
 
-  // A session that died with nothing to show for it. The row is what explains
-  // it, live or long afterwards. A session merely stopped before it said
-  // anything has nothing to explain — only one that died of something does.
-  const failure = $derived.by((): Message | null => {
+  // The row behind a session with nothing to show for itself. It is what
+  // explains one, live or long afterwards — and which kind of end it came to
+  // decides whether the transcript carries a failure or an offer.
+  const settled = $derived.by((): InstanceRow | null => {
     if (browsing || said.length > 0) return null;
     const row = cockpit.instances.find((instance) => instance.id === viewId);
-    if (!row || (row.status !== 'error' && row.status !== 'stopped') || !row.lastError) return null;
-    return sessionFailedMessage(viewId, row.lastError);
+    return row && (row.status === 'error' || row.status === 'stopped') ? row : null;
   });
+
+  /** Its process is gone, its conversation is not: opening it is what brings it back. */
+  const sleeping = $derived(Boolean(settled && isResumable(settled)));
+
+  // A session merely stopped before it said anything has nothing to explain —
+  // only one that died of something does.
+  const failure = $derived.by((): Message | null =>
+    settled && !sleeping && settled.lastError
+      ? sessionFailedMessage(viewId, settled.lastError)
+      : null
+  );
 
   // Consecutive tool calls collapse into one ToolGroup, as MessageList does; a
   // Task call becomes its branch card instead, so the subagent it spawned reads
@@ -378,7 +394,9 @@
     }
   }
 
-  const permissionMode = $derived(session?.permissionMode ?? 'default');
+  // Null until an `init` or a spawn has said. Nothing stands in for it: showing
+  // the SDK's default would present a guess as this session's own setting.
+  const permissionMode = $derived(session?.permissionMode ?? null);
 
   /**
    * The SDK will not switch a running session into bypass, so choosing it means
@@ -405,6 +423,20 @@
     error = null;
     try {
       await relaunchSession(viewId, session.machineId, 'bypassPermissions');
+    } catch (err) {
+      error = err instanceof Error ? err.message : String(err);
+    }
+  }
+
+  /**
+   * Wakes a sleeping session now instead of on the next thing asked of it —
+   * the same path a message takes, so there is only one way back.
+   */
+  async function handleRevive() {
+    if (!session) return;
+    error = null;
+    try {
+      await ensureAlive(viewId, session.machineId);
     } catch (err) {
       error = err instanceof Error ? err.message : String(err);
     }
@@ -613,16 +645,18 @@
     {#if !browsing}
       <!-- How the session is configured: two pickers, read as one control. -->
       <ButtonGroup.Root class="shrink-0">
-        <Select.Root type="single" value={permissionMode} onValueChange={chooseMode}>
+        <Select.Root type="single" value={permissionMode ?? ''} onValueChange={chooseMode}>
           <Select.Trigger
             size="sm"
-            aria-label="Permission mode"
-            title="How this session answers tool permissions"
+            aria-label={permissionMode ? 'Permission mode' : 'Permission mode, not reported yet'}
+            title={permissionMode
+              ? 'How this session answers tool permissions'
+              : "Read from this session's next turn — it has not said how it answers tool permissions"}
             class="text-xs {permissionMode === 'bypassPermissions'
               ? 'font-medium text-warning'
               : 'text-muted-foreground'}"
           >
-            {permissionModeLabel(permissionMode)}
+            {permissionMode ? permissionModeLabel(permissionMode) : '—'}
           </Select.Trigger>
           <Select.Content>
             {#each PERMISSION_MODES as option (option.value)}
@@ -770,6 +804,27 @@
 
             {#if session?.loading}
               <p class="text-sm text-muted-foreground">Reading transcript…</p>
+            {:else if sleeping}
+              <!-- Not a failure, so nothing here is coloured like one: the work
+                   is intact and one message would bring it back on its own. -->
+              <div
+                class="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card px-4 py-3"
+              >
+                <p class="min-w-0 flex-1 text-sm text-muted-foreground">
+                  This session is sleeping — its process ended, but the conversation was kept.
+                  Send a message, or pick it back up now.
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  class="shrink-0 text-xs"
+                  disabled={cockpit.status !== 'connected' || (session?.relaunching ?? false)}
+                  onclick={handleRevive}
+                >
+                  <IconPlay />
+                  Resume
+                </Button>
+              </div>
             {:else if groups.length === 0 && !session?.streaming}
               <p class="text-sm text-muted-foreground">
                 {browsing
@@ -861,7 +916,9 @@
         </div>
       {:else}
         {#if session?.relaunching}
-          <p class="text-xs text-muted-foreground">Relaunching with new permissions…</p>
+          <!-- Covers both ways the process is replaced: a mode only a new one
+               can take, and a sleeping session being woken. -->
+          <p class="text-xs text-muted-foreground">Picking this session back up…</p>
         {/if}
         {#if session?.scratch}
           <p class="text-xs text-muted-foreground">

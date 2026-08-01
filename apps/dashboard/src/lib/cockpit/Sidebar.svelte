@@ -35,9 +35,9 @@
   import * as Sidebar from '$lib/components/ui/sidebar';
   import type { SDKSessionInfo } from '@cockpit/core';
   import { formatDistanceToNow } from '$lib/utils/time';
-  import { ACTIVITY_LABEL } from './activity';
+  import { ACTIVITY_LABEL, SLEEPING_HINT, SLEEPING_LABEL } from './activity';
   import ActivityDot from './ActivityDot.svelte';
-  import { cockpit, loadCatalog } from './client.svelte';
+  import { cockpit, isFailed, isResumable, loadCatalog } from './client.svelte';
   import LiveSessionMenu from './LiveSessionMenu.svelte';
   import MachineMenu from './MachineMenu.svelte';
   import StoredSessionMenu from './StoredSessionMenu.svelte';
@@ -160,7 +160,8 @@
         <Sidebar.Menu>
           {#each sideQuests as instance (instance.id)}
             {@const activity = cockpit.activityOf(instance.id)}
-            {@const failed = instance.status === 'error'}
+            {@const sleeping = isResumable(instance)}
+            {@const failed = isFailed(instance)}
             {@const current = isCurrent(`/session/${instance.id}`)}
             <Sidebar.MenuItem>
               <LiveSessionMenu {instance}>
@@ -174,11 +175,14 @@
                       {...props}
                       href="/session/{instance.id}"
                       aria-current={current ? 'page' : undefined}
+                      title={sleeping ? SLEEPING_HINT : undefined}
                       in:slide={rowIn}
                       out:slide={rowOut}
                     >
                       {#if failed}
                         <span class="size-1.5 shrink-0 rounded-full bg-warning"></span>
+                      {:else if sleeping}
+                        <span class="size-1.5 shrink-0 rounded-full bg-muted-foreground/40"></span>
                       {:else}
                         <ActivityDot {activity} size={1.5} />
                       {/if}
@@ -190,6 +194,8 @@
                       </span>
                       {#if failed}
                         <span class="shrink-0 text-xs font-medium text-warning">Failed</span>
+                      {:else if sleeping}
+                        <span class="shrink-0 text-xs opacity-70">{SLEEPING_LABEL}</span>
                       {/if}
                     </a>
                   {/snippet}
@@ -288,7 +294,8 @@
                 <Sidebar.Menu>
                   {#each running as instance (instance.id)}
                     {@const activity = cockpit.activityOf(instance.id)}
-                    {@const failed = instance.status === 'error'}
+                    {@const sleeping = isResumable(instance)}
+                    {@const failed = isFailed(instance)}
                     {@const current = isCurrent(`/session/${instance.id}`)}
                     <Sidebar.MenuItem>
                       <LiveSessionMenu {instance}>
@@ -302,11 +309,16 @@
                               {...props}
                               href="/session/{instance.id}"
                               aria-current={current ? 'page' : undefined}
+                              title={sleeping ? SLEEPING_HINT : undefined}
                               in:slide={rowIn}
                               out:slide={rowOut}
                             >
                               {#if failed}
                                 <span class="size-1.5 shrink-0 rounded-full bg-warning"></span>
+                              {:else if sleeping}
+                                <span
+                                  class="size-1.5 shrink-0 rounded-full bg-muted-foreground/40"
+                                ></span>
                               {:else}
                                 <ActivityDot {activity} size={1.5} />
                               {/if}
@@ -319,7 +331,11 @@
                                   ? 'font-medium text-warning'
                                   : 'opacity-70'}"
                               >
-                                {failed ? 'Failed' : ACTIVITY_LABEL[activity]}
+                                {failed
+                                  ? 'Failed'
+                                  : sleeping
+                                    ? SLEEPING_LABEL
+                                    : ACTIVITY_LABEL[activity]}
                               </span>
                             </a>
                           {/snippet}

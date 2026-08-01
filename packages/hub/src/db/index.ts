@@ -1,3 +1,4 @@
+import { RESTART_LOST, RESTART_RESUMABLE } from '@cockpit/core';
 import { Context, Effect, Layer } from 'effect';
 import { and, eq, gt, inArray, ne, notInArray, or } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
@@ -60,7 +61,17 @@ export interface DbShape {
    * whether they outlived it. An empty list means the machine runs nothing.
    */
   readonly reconcileInstances: (machineId: string, liveIds: string[]) => void;
-  readonly settleInstances: (machineId: string, liveIds: string[]) => void;
+  /**
+   * The returning daemon's word on its machine: `liveIds` are the sessions it
+   * still carries, `resumable` the SDK sessions it could pick back up. A daemon
+   * that could not read its catalog names none, and every row it left behind
+   * keeps the benefit of the doubt.
+   */
+  readonly settleInstances: (
+    machineId: string,
+    liveIds: string[],
+    resumable?: string[]
+  ) => void;
   readonly listAgents: () => (typeof agents.$inferSelect)[];
   readonly listInstances: () => (typeof instances.$inferSelect)[];
   readonly listProjects: () => (typeof projects.$inferSelect)[];
@@ -183,15 +194,14 @@ const make = (path: string): DbShape => {
         )
         .run();
     },
-    // The daemon is back and authoritative: a session it no longer carries is
-    // dead — settled as an error so it stays on the board instead of ghosting.
-    settleInstances: (machineId, liveIds) => {
-      db.update(instances)
-        .set({
-          status: 'error',
-          lastError: 'The agent restarted; this session did not survive it.',
-          updatedAt: new Date(),
-        })
+    // The daemon is back and authoritative: a session it no longer carries has
+    // no process any more — settled so it stays on the board instead of
+    // ghosting, and separated at the source into the ones that can come back
+    // and the ones whose transcript went with the process.
+    settleInstances: (machineId, liveIds, resumable) => {
+      const orphans = db
+        .select()
+        .from(instances)
         .where(
           and(
             eq(instances.machineId, machineId),
@@ -199,7 +209,21 @@ const make = (path: string): DbShape => {
             liveIds.length > 0 ? notInArray(instances.id, liveIds) : undefined
           )
         )
-        .run();
+        .all();
+
+      const catalog = resumable && new Set(resumable);
+      const updatedAt = new Date();
+      for (const row of orphans) {
+        const resumes = !catalog || (row.sessionId !== null && catalog.has(row.sessionId));
+        db.update(instances)
+          .set({
+            status: 'error',
+            lastError: resumes ? RESTART_RESUMABLE : RESTART_LOST,
+            updatedAt,
+          })
+          .where(eq(instances.id, row.id))
+          .run();
+      }
     },
     listAgents: () => db.select().from(agents).all(),
     // A discarded side quest is gone for good, and a row that has not moved in a

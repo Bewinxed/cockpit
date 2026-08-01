@@ -43,6 +43,13 @@
   let typed = $state('');
   let triggerRef = $state<HTMLButtonElement | null>(null);
 
+  /**
+   * Where "Default" is not on offer, no model is not a choice anyone made — it
+   * is a session that has not reported one yet, and naming a model would be
+   * inventing its settings. The next `system.init` fills it in.
+   */
+  const unreported = $derived(!value && !showDefault);
+
   const trimmed = $derived(typed.trim());
   /** A typed id nothing on the list already covers — the whole point of the field. */
   const custom = $derived(
@@ -98,11 +105,13 @@
         {size}
         role="combobox"
         aria-expanded={open}
-        aria-label="Model"
-        title={value || 'The model Claude Code picks for itself'}
+        aria-label={unreported ? 'Model, not reported yet' : 'Model'}
+        title={unreported
+          ? "Read from this session's next turn — it has not said which model answers"
+          : value || 'The model Claude Code picks for itself'}
         class="justify-between gap-2 {className}"
       >
-        <span class="truncate">{modelLabel(value)}</span>
+        <span class="truncate">{unreported ? '—' : modelLabel(value)}</span>
         <HugeiconsIcon icon={UnfoldMoreIcon} strokeWidth={2} class="size-4 shrink-0 opacity-50" />
       </Button>
     {/snippet}

@@ -4,7 +4,7 @@ import { Data, Duration, Effect, Fiber, Schedule } from 'effect';
 import { arch, hostname, platform } from 'node:os';
 import { probeAuth } from './auth';
 import { machineId } from './machine-id';
-import { SessionSupervisor } from './session';
+import { resumableSessions, SessionSupervisor } from './session';
 
 const DEFAULT_HUB_URL = `ws://localhost:${COCKPIT_HUB_PORT}/ws`;
 const HEARTBEAT_INTERVAL = Duration.seconds(15);
@@ -30,6 +30,12 @@ interface MachineIdentity {
  */
 export interface RegisterPayload extends MachineIdentity {
   instances: string[];
+  /**
+   * The SDK sessions this machine could resume, so the rows the daemon no
+   * longer carries settle as sleeping or as lost rather than all alike. Absent
+   * when the catalog could not be read.
+   */
+  resumable?: string[];
 }
 
 export class ConnectionLost extends Data.TaggedError('ConnectionLost')<{
@@ -81,7 +87,11 @@ const closed = (socket: WebSocket, url: string) =>
 const attach = (supervisor: SessionSupervisor, identity: MachineIdentity, url: string) =>
   Effect.gen(function* () {
     const socket = yield* connection(url);
-    const payload: RegisterPayload = { ...identity, instances: supervisor.instanceIds };
+    const payload: RegisterPayload = {
+      ...identity,
+      instances: supervisor.instanceIds,
+      resumable: yield* Effect.promise(() => resumableSessions()),
+    };
     send(socket, { verb: 'register', machineId: identity.machineId, payload });
     yield* Effect.logInfo(`registered with ${url}`);
 

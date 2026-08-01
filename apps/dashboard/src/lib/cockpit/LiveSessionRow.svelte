@@ -3,17 +3,20 @@
   import { onMount } from 'svelte';
   import { fly } from 'svelte/transition';
   import { quintOut } from 'svelte/easing';
-  import { ACTIVITY_LABEL } from './activity';
+  import { ACTIVITY_LABEL, SLEEPING_HINT, SLEEPING_LABEL } from './activity';
   import ActivityDot from './ActivityDot.svelte';
-  import { cockpit, type InstanceRow } from './client.svelte';
+  import { cockpit, isFailed, isResumable, type InstanceRow } from './client.svelte';
   import LiveSessionMenu from './LiveSessionMenu.svelte';
 
   let { instance }: { instance: InstanceRow } = $props();
 
   const activity = $derived(cockpit.activityOf(instance.id));
   const tool = $derived(cockpit.currentToolOf(instance.id));
-  const failed = $derived(instance.status === 'error');
-  const label = $derived(failed ? 'Failed' : ACTIVITY_LABEL[activity]);
+  const sleeping = $derived(isResumable(instance));
+  const failed = $derived(isFailed(instance));
+  const label = $derived(
+    failed ? 'Failed' : sleeping ? SLEEPING_LABEL : ACTIVITY_LABEL[activity]
+  );
 
   // The label swaps only when the session's state actually changes — a row that
   // simply appears with the page has nothing to announce.
@@ -24,6 +27,7 @@
 <LiveSessionMenu {instance}>
   <a
     href="/session/{instance.id}"
+    title={sleeping ? SLEEPING_HINT : undefined}
     class="group flex flex-col gap-0.5 rounded-lg border px-3 py-2 text-sm
       transition-[background-color,box-shadow,translate] duration-150 ease-out
       hover:-translate-y-px hover:bg-accent hover:text-accent-foreground hover:shadow-md motion-reduce:hover:translate-y-0
@@ -33,6 +37,8 @@
     <span class="flex items-center gap-3">
       {#if failed}
         <span class="size-2 shrink-0 rounded-full bg-warning"></span>
+      {:else if sleeping}
+        <span class="size-2 shrink-0 rounded-full bg-muted-foreground/40"></span>
       {:else}
         <ActivityDot {activity} />
       {/if}

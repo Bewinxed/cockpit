@@ -86,6 +86,17 @@ const peekInstances = (payload: unknown): string[] => {
 };
 
 /**
+ * And of the SDK sessions it could resume. Absent from a daemon that could not
+ * read its catalog, which is not the same as a machine with nothing to resume.
+ */
+const peekResumable = (payload: unknown): string[] | undefined => {
+  if (typeof payload !== 'object' || payload === null) return undefined;
+  const value = (payload as { resumable?: unknown }).resumable;
+  if (!Array.isArray(value)) return undefined;
+  return value.filter((id): id is string => typeof id === 'string');
+};
+
+/**
  * What an `init` frame announces: the SDK session, which is what lets a
  * dashboard that joins a live session late read its transcript back, and the
  * directory the agent really opened it in — the spawn's `cwd` after the agent
@@ -188,7 +199,11 @@ export const createServer = ({ registry, db, pending }: HubServices) => {
               os: peek(message.payload, 'os') ?? 'unknown',
               auth: peekAuth(message.payload),
             });
-            db.settleInstances(message.machineId, peekInstances(message.payload));
+            db.settleInstances(
+              message.machineId,
+              peekInstances(message.payload),
+              peekResumable(message.payload)
+            );
             publishInstances(message.machineId);
             ws.send(ack(message));
             break;

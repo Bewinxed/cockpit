@@ -230,6 +230,27 @@ export interface InstanceRow {
   lastError?: string | null;
 }
 
+/**
+ * What the hub records on a session whose daemon restarted out from under it.
+ * The process is gone, but the conversation is not: the SDK keeps the
+ * transcript, so spawning the row again with `resume` picks the same session
+ * back up — which is what any action on it does. Both ends name the sentence
+ * from here, because it is what tells a session that is merely asleep from one
+ * that died of something.
+ *
+ * The wording is bleaker than the state it now stands for, and stays that way
+ * on purpose: it is the sentence already sitting in every hub's rows, and it is
+ * a marker rather than copy — a sleeping session is shown as sleeping, never as
+ * this.
+ */
+export const RESTART_RESUMABLE = 'The agent restarted; this session did not survive it.';
+
+/**
+ * And what it records when there is nothing to go back to — the daemon reported
+ * no transcript for the session, so the restart really did end it.
+ */
+export const RESTART_LOST = 'The agent restarted, and this session left nothing to resume from.';
+
 /** `frames`: everything a session produces, flowing agent→hub→dashboard. */
 export type FramePayload =
   | { kind: 'sdk'; instanceId: string; message: SDKMessage }
