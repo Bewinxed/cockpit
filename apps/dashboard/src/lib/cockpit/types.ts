@@ -54,6 +54,8 @@ export interface MessageMetadata {
   subtype?: string;
   command?: string;
   model?: SDKSystemMessage['model'];
+  /** `init` only, and re-reported every turn: what the session answers tools with. */
+  permissionMode?: SDKSystemMessage['permissionMode'];
   cwd?: string;
   tools?: SDKSystemMessage['tools'];
   sessionId?: string;

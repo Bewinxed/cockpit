@@ -219,6 +219,13 @@ export interface InstanceRow {
   projectId?: string | null;
   /** `scratch` for a side quest; absent from a hub that predates the column. */
   kind?: string;
+  /**
+   * How the session answers tool permissions ({@link SpawnPayload.permissionMode})
+   * and which model answers ({@link SpawnPayload.model}), as of its last spawn,
+   * switch or `init`. Null on a session that has never said.
+   */
+  permissionMode?: string | null;
+  model?: string | null;
   /** What killed the session, on a row the agent reported as `error`. */
   lastError?: string | null;
 }

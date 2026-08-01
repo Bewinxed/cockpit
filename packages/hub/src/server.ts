@@ -38,8 +38,9 @@ const failure = (
 
 /**
  * The hub routes on envelope fields and is otherwise payload-opaque (NEW.md
- * §6); `hostname`/`os` on register, `cwd`/`options.resume`/`scratch`/`projectId`
- * on spawn, `discard` on stop and `kind` on a frame are the sanctioned peeks.
+ * §6); `hostname`/`os` on register, `cwd`/`options.resume`/`scratch`/
+ * `projectId`/`permissionMode`/`model` on spawn, `discard` on stop and `kind`
+ * on a frame are the sanctioned peeks.
  */
 const peek = (payload: unknown, key: string): string | undefined => {
   if (typeof payload !== 'object' || payload === null) return undefined;
@@ -141,9 +142,21 @@ export const createServer = ({ registry, db, pending }: HubServices) => {
     .get('/api/instances', () => db.listInstances())
     .patch(
       '/api/instances/:id',
-      { body: t.Object({ kind: t.Union([t.Literal('mainline'), t.Literal('scratch')]) }) },
-      ({ params, body }) => {
-        const row = db.setInstanceKind(params.id, body.kind);
+      {
+        body: t.Object({
+          kind: t.Optional(t.Union([t.Literal('mainline'), t.Literal('scratch')])),
+          // Not narrowed to the modes the SDK names today: the hub stores what
+          // the session reported it is answering with, whatever that grows into.
+          permissionMode: t.Optional(t.String()),
+          model: t.Optional(t.String()),
+        }),
+      },
+      ({ params, body, status }) => {
+        const { kind, permissionMode, model } = body;
+        if (kind === undefined && permissionMode === undefined && model === undefined) {
+          return status(400, 'name a field to change');
+        }
+        const row = db.patchInstance(params.id, { kind, permissionMode, model });
         if (row) publishInstances(row.machineId);
         return row;
       }
@@ -248,6 +261,8 @@ export const createServer = ({ registry, db, pending }: HubServices) => {
                 sessionId: peekResume(message.payload),
                 projectId: peek(message.payload, 'projectId'),
                 kind: peekKind(message.payload),
+                permissionMode: peek(message.payload, 'permissionMode'),
+                model: peek(message.payload, 'model'),
               });
               publishInstances(message.machineId);
             }

@@ -302,6 +302,7 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
             systemLine(base, 'system.init', `Session started · ${sdk.model}`, {
               subtype: 'init',
               model: sdk.model,
+              permissionMode: sdk.permissionMode,
               cwd: sdk.cwd,
               tools: sdk.tools,
               sessionId: sdk.session_id,

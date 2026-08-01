@@ -131,16 +131,12 @@ export interface SessionState {
   /** The `system.init` banner is re-emitted every turn; render it once. */
   initialized: boolean;
   /**
-   * How the session answers tool permissions, as far as this browser knows: set
-   * from what it spawned, moved by a switch the agent confirmed. Nothing reports
-   * it back, so a session another tab started reads as `default` here.
+   * How the session answers tool permissions: named by every `system.init`,
+   * moved optimistically by a switch and corrected by the init the next turn
+   * opens with. `null` until something has said — see {@link adoptSettings}.
    */
-  permissionMode: PermissionMode;
-  /**
-   * Which model answers the next turn: named by every `system.init`, moved
-   * optimistically by a switch and corrected by the init the next turn opens
-   * with. `null` until the session has started and said what it is running.
-   */
+  permissionMode: PermissionMode | null;
+  /** Which model answers the next turn, learnt and corrected the same way. */
   model: string | null;
   /** Started again in place for a mode it could not switch into; ends at the next init. */
   relaunching: boolean;
@@ -237,7 +233,7 @@ function session(instanceId: string): SessionState {
     loading: false,
     hydrating: false,
     initialized: false,
-    permissionMode: 'default',
+    permissionMode: null,
     model: null,
     relaunching: false,
     scratch: false,
@@ -255,13 +251,67 @@ function session(instanceId: string): SessionState {
 
 /** Fills in what the registry knows about a session this browser did not spawn. */
 function hydrate(target: SessionState): void {
-  if (target.machineId) return;
   const known = state.instances.find((row) => row.id === target.instanceId);
   if (!known) return;
+  adoptSettings(target, known);
+  if (target.machineId) return;
   target.machineId = known.machineId;
   target.cwd = known.cwd;
   target.sessionId = known.sessionId;
   target.scratch = known.kind === 'scratch';
+}
+
+/**
+ * Seeds the permission mode and model this view shows from what the hub stored.
+ *
+ * Precedence, highest first: the newest `system.init` — the session's own word,
+ * re-emitted every turn, so it also corrects a setting changed by something that
+ * is not this dashboard; then a switch this browser made and the daemon
+ * confirmed, until that next init; then this row, which is all a view has before
+ * the session's first turn; then the default the header falls back to. The row
+ * therefore only ever fills a blank: it can be older than what the session has
+ * since said, and a broadcast must not walk a live value back to it.
+ */
+function adoptSettings(target: SessionState, row: InstanceRow): void {
+  // Only a spawn, a confirmed switch or an init ever wrote the column, so its
+  // word on a mode is the SDK's — which is wider than the picker's four.
+  if (target.permissionMode === null && row.permissionMode) {
+    target.permissionMode = row.permissionMode as PermissionMode;
+  }
+  if (target.model === null && row.model) target.model = row.model;
+}
+
+/**
+ * Writes back a setting the session has confirmed, so the next cold load starts
+ * from what it is running rather than from what this browser once asked for.
+ * Only what the row does not already say — an init repeats itself every turn.
+ */
+async function persistSettings(
+  instanceId: string,
+  settings: { permissionMode?: PermissionMode; model?: string }
+): Promise<void> {
+  const row = state.instances.find((candidate) => candidate.id === instanceId);
+  if (!row) return;
+
+  const patch: typeof settings = {};
+  if (settings.permissionMode && settings.permissionMode !== row.permissionMode) {
+    patch.permissionMode = settings.permissionMode;
+  }
+  if (settings.model && settings.model !== row.model) patch.model = settings.model;
+  if (Object.keys(patch).length === 0) return;
+
+  try {
+    const response = await fetch(`/api/instances/${instanceId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    });
+    if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+  } catch (error) {
+    // The session is already answering this way; only the row is behind, and
+    // the next init will try again — nothing the reader needs to act on.
+    console.error(`[cockpit] persisting ${instanceId} settings failed:`, error);
+  }
 }
 
 /** Opens a session's view state — the route's half of arriving at `/session/[id]`. */
@@ -385,9 +435,16 @@ function handleFrame(frame: FramePayload): void {
       for (const message of mapping.messages) {
         if (message.type === 'system.init') {
           target.sessionId = message.metadata?.sessionId ?? target.sessionId;
-          // Re-emitted every turn, so this is also what confirms a switch — or
-          // puts the picker back if the agent ignored one.
+          // Re-emitted every turn and the session's own word on both settings,
+          // so this confirms a switch, puts the picker back if the agent ignored
+          // one, and catches a `/model` or `/permissions` run somewhere else.
+          // Harvested before the banner is deduplicated, or only the first would.
           target.model = message.metadata?.model ?? target.model;
+          target.permissionMode = message.metadata?.permissionMode ?? target.permissionMode;
+          void persistSettings(frame.instanceId, {
+            permissionMode: message.metadata?.permissionMode,
+            model: message.metadata?.model,
+          });
           // The process behind a relaunch is up: this is the frame it opens with.
           target.relaunching = false;
           if (target.initialized) continue;
@@ -398,6 +455,7 @@ function handleFrame(frame: FramePayload): void {
         // instead rather than going on claiming a model that is not answering.
         if (message.type === 'system.model_fallback') {
           target.model = message.metadata?.model ?? target.model;
+          void persistSettings(frame.instanceId, { model: message.metadata?.model });
         }
         // The settle that precedes a relaunch ends the old turn with an error
         // result the reader asked for — a quiet note, not a red card.
@@ -557,7 +615,7 @@ function start({ machineId, ...spawn }: Omit<SpawnPayload, 'instanceId'> & { mac
   const created = session(instanceId);
   created.machineId = machineId;
   created.cwd = spawn.cwd;
-  created.permissionMode = spawn.permissionMode ?? 'default';
+  created.permissionMode = spawn.permissionMode ?? null;
   // What the form chose, so the header shows it during the wait for the first
   // init — which then corrects it to whatever the SDK resolved it to.
   created.model = spawn.model ?? null;
@@ -693,7 +751,10 @@ export async function ensureAlive(instanceId: string, machineId: string): Promis
       cwd: target.cwd,
       options: { resume: target.sessionId },
       scratch: target.scratch ? {} : undefined,
-      permissionMode: target.permissionMode,
+      // The new process answers the way the old one did: a revive nobody asked
+      // for is not the moment to hand the session back on other settings.
+      permissionMode: target.permissionMode ?? undefined,
+      model: target.model ?? undefined,
       requestId,
     };
     target.relaunching = true;
@@ -1089,6 +1150,8 @@ export async function setPermissionMode(
     target.permissionMode = previous;
     throw error;
   }
+  // Only once the daemon has taken it: a refused switch never reaches the row.
+  void persistSettings(instanceId, { permissionMode: mode });
 }
 
 /**
@@ -1132,6 +1195,8 @@ export async function setModel(
     target.model = previous;
     throw error;
   }
+  // Only once the daemon has taken it: a refused switch never reaches the row.
+  void persistSettings(instanceId, { model });
 }
 
 /**
@@ -1160,6 +1225,9 @@ export async function relaunchSession(
     // that stayed silent about it would come back as mainline work, untagged.
     scratch: target.scratch ? {} : undefined,
     permissionMode,
+    // Only the mode is being changed, so the model the session was answering on
+    // carries over — the spawn is the row's new word on both.
+    model: target.model ?? undefined,
     requestId,
   };
 

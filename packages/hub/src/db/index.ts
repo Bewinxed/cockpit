@@ -31,14 +31,23 @@ export interface DbShape {
     sessionId?: string;
     projectId?: string;
     kind: InstanceKind;
+    permissionMode?: string;
+    model?: string;
   }) => void;
   readonly stopInstance: (id: string) => void;
   /** The agent reported the session dead: what killed it, kept for late readers. */
   readonly failInstance: (id: string, error: string) => void;
   /** A side quest thrown away: stopped, and gone from every live listing. */
   readonly discardInstance: (id: string) => void;
-  /** "Keep": a side quest that earned its place stops being treated as scratch. */
-  readonly setInstanceKind: (id: string, kind: InstanceKind) => typeof instances.$inferSelect | undefined;
+  /**
+   * The fields a dashboard may move on a live row: "Keep" — a side quest that
+   * earned its place stops being treated as scratch — and the two settings the
+   * user keeps changing on a session that is already running.
+   */
+  readonly patchInstance: (
+    id: string,
+    patch: { kind?: InstanceKind; permissionMode?: string; model?: string }
+  ) => typeof instances.$inferSelect | undefined;
   /**
    * The SDK session an `init` frame named, so the row can be read back from —
    * with the directory it really opened in, which is the agent's word on where
@@ -93,7 +102,7 @@ const make = (path: string): DbShape => {
         .where(eq(agents.machineId, machineId))
         .run();
     },
-    openInstance: ({ id, machineId, cwd, sessionId, projectId, kind }) => {
+    openInstance: ({ id, machineId, cwd, sessionId, projectId, kind, permissionMode, model }) => {
       const now = new Date();
       db.insert(instances)
         .values({
@@ -103,16 +112,22 @@ const make = (path: string): DbShape => {
           sessionId,
           projectId,
           kind,
+          permissionMode,
+          model,
           status: 'running',
           createdAt: now,
           updatedAt: now,
         })
         .onConflictDoUpdate({
           target: instances.id,
-          // A respawn that names no session or project keeps whichever the row had.
+          // A respawn that names no session or project keeps whichever the row
+          // had. Its settings are not kept: a relaunch is how they change, so
+          // the new process's options are the row's, silence included.
           set: {
             cwd,
             kind,
+            permissionMode: permissionMode ?? null,
+            model: model ?? null,
             status: 'running',
             lastError: null,
             updatedAt: now,
@@ -142,10 +157,10 @@ const make = (path: string): DbShape => {
         .where(eq(instances.id, id))
         .run();
     },
-    setInstanceKind: (id, kind) =>
+    patchInstance: (id, patch) =>
       db
         .update(instances)
-        .set({ kind, updatedAt: new Date() })
+        .set({ ...patch, updatedAt: new Date() })
         .where(eq(instances.id, id))
         .returning()
         .get(),

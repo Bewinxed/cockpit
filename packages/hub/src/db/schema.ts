@@ -41,6 +41,14 @@ export const instances = sqliteTable('instances', {
   cwd: text('cwd').notNull(),
   /** `scratch`: a side quest (NEW.md §1), shown apart from mainline work. */
   kind: text('kind').$type<'mainline' | 'scratch'>().notNull().default('mainline'),
+  /**
+   * How the session answers tool permissions, and which model answers: the two
+   * settings the user keeps changing, so a dashboard that was not open when they
+   * chose still shows what the session is really running. Null until a spawn or
+   * a session's own `init` says.
+   */
+  permissionMode: text('permission_mode'),
+  model: text('model'),
   /** `unknown`: the agent socket dropped, so the hub can no longer see the session. */
   status: text('status')
     .$type<'starting' | 'running' | 'stopped' | 'discarded' | 'unknown' | 'error'>()
