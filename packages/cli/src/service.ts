@@ -56,7 +56,22 @@ const command = (): string[] => [process.execPath, Bun.main, 'up'];
  * the hard way on a Mac where `node` was missing from the service's PATH and
  * the Claude Code shim would not start.
  */
-const servicePath = (): string => process.env.PATH ?? '/usr/local/bin:/usr/bin:/bin';
+const servicePath = (): string => {
+  const inherited = (process.env.PATH ?? '').split(':').filter(Boolean);
+  // Installing over SSH inherits a thin PATH with no Homebrew, so a service
+  // installed remotely would lose git, gh and node. Union the usual homes with
+  // whatever the installing shell had, keeping the shell's order first.
+  const usual = [
+    `${homedir()}/.bun/bin`,
+    '/opt/homebrew/bin',
+    '/usr/local/bin',
+    '/usr/bin',
+    '/bin',
+    '/usr/sbin',
+    '/sbin',
+  ];
+  return [...new Set([...inherited, ...usual])].join(':');
+};
 
 const xml = (value: string): string =>
   value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
