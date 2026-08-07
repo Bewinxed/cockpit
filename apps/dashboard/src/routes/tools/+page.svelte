@@ -47,8 +47,11 @@
   let memory = $state<FleetMemoryRow | null>(untrack(() => data.memory));
 
   /** Re-seed from the load when `data` changes on navigation. The identity of
-   *  `data.config` is new on every load, so it doubles as a change token. */
-  let seeded = $state(untrack(() => data.config));
+   *  `data.config` is new on every load, so it doubles as a change token.
+   *  The latch is $state.raw: a plain $state latch would store a proxy of
+   *  `data.config`, the !== check would never settle, and the effect would
+   *  loop forever (state_proxy_equality_mismatch — see NEW.md drift log). */
+  let seeded = $state.raw(untrack(() => data.config));
   $effect(() => {
     if (data.config !== seeded) {
       seeded = data.config;

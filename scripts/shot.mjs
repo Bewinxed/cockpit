@@ -50,6 +50,11 @@ await page.addInitScript(
 
 await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 }).catch(() => {});
 await page.waitForTimeout(wait);
-await page.screenshot({ path: out, fullPage: has('--fullpage') });
+await page
+  .screenshot({ path: out, fullPage: has('--fullpage'), animations: 'disabled', caret: 'hide', timeout: 20000 })
+  .catch(async (e) => {
+    console.error(`retrying after: ${e.message.split('\n')[0]}`);
+    await page.screenshot({ path: out, fullPage: has('--fullpage'), animations: 'disabled', timeout: 20000 });
+  });
 await browser.close();
 console.log(`WROTE ${out} (${w}x${h}${has('--dark') ? ' dark' : ''})`);
