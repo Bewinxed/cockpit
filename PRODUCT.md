@@ -42,6 +42,13 @@ tools relay through Anthropic servers or are single-machine.
 - Projects group sessions by repo folder; project home renders the repo's own
   markdown (files as truth, no separate document store).
 
+## Devices
+
+Three first-class targets (user, 2026-08-07): an ultrawide monitor (use the
+width — multi-pane, never one stretched column), a 16" MacBook (reference
+layout), and an iPhone (true mobile composition: sheets, thumb reach, safe
+areas — not a compressed desktop). Readability is non-negotiable at all three.
+
 ## Capabilities and Constraints
 
 - Stack: SvelteKit 2 + Svelte 5 runes, Tailwind 4, bits-ui/shadcn-svelte kit
@@ -64,6 +71,11 @@ tools relay through Anthropic servers or are single-machine.
   discarded (user, 2026-08-07): treat as anti-reference.
 - TX-02 mono (licensed, files in `apps/dashboard/src/fonts/`) is an asset on
   hand, not a binding commitment.
+- Pinned visual direction (user, 2026-08-07): **"as if Apple designed it"** —
+  macOS pro-app grammar for the web. Reference bar: Xcode, Instruments,
+  Console.app, Activity Monitor. Explicitly rejected: TUI/terminal aesthetics,
+  themed metaphors (radio, aviation, print). Dense, fluid, native-feeling;
+  spring motion; light and dark first-class.
 
 ## Evidence on Hand
 
