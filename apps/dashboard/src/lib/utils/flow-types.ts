@@ -205,7 +205,7 @@ export interface FlowViewProps {
 // Context Menu Types
 // ============================================================
 
-export type ContextMenuAction = 'copy' | 'rewind' | 'branch' | 'jump';
+export type ContextMenuAction = 'copy' | 'jump';
 
 export interface ContextMenuState {
   x: number;

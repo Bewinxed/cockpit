@@ -108,14 +108,14 @@
     }
   }
 
-  const kbd = 'rounded bg-muted px-1 py-0.5 font-mono text-xs text-muted-foreground';
+  const kbd = 'rounded-md bg-muted px-1.5 py-0.5 font-mono text-micro text-muted-foreground shadow-sm border border-border/50';
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
 
-<div class="bg-warning/10 p-3" role="alert">
+<div class="bg-card rounded-xl shadow-sm p-4" role="alert">
   <div class="flex items-start gap-2">
-    <div class="text-warning mt-0.5 shrink-0">
+    <div class="text-primary mt-0.5 shrink-0">
       {#if questions.some((question) => question.multiSelect)}
         <IconChecklist class="size-[18px]" />
       {:else}
@@ -125,7 +125,7 @@
 
     <div class="flex min-w-0 flex-1 flex-col gap-3">
       <div class="flex items-start justify-between gap-3">
-        <div class="text-warning text-sm font-semibold">
+        <div class="text-foreground text-sm font-semibold">
           {questions.length > 1 ? `${questions.length} questions for you` : 'A question for you'}
         </div>
         <div class="-mt-0.5 flex shrink-0 items-center gap-1.5">
@@ -157,7 +157,7 @@
         <div class="flex max-h-[50vh] flex-col gap-2 overflow-y-auto pr-1">
           <div class="flex flex-wrap items-baseline gap-2">
             <span
-              class="bg-warning/15 text-warning rounded-full px-2 py-0.5 text-xs font-semibold tracking-wider uppercase"
+              class="bg-primary/10 text-primary rounded-full px-2 py-0.5 text-xs font-semibold tracking-wider uppercase"
             >
               {question.header}
             </span>
@@ -179,19 +179,19 @@
                 role={question.multiSelect ? 'checkbox' : 'radio'}
                 aria-checked={picked}
                 disabled={sent}
-                class="flex w-full items-start gap-2.5 rounded-md border px-2.5 py-2 text-left
+                class="flex w-full items-start gap-2.5 rounded-xl border px-2.5 py-2 text-left
                        transition-[background-color,border-color] duration-150 ease-out
                        disabled:cursor-not-allowed disabled:opacity-60
                        {picked
-                  ? 'border-warning/50 bg-warning/15 text-warning'
-                  : 'border-border/60 bg-background/60 text-foreground hover:border-warning/40 hover:bg-warning/5'}"
+                  ? 'border-primary/30 bg-primary/10 text-foreground'
+                  : 'border-border bg-card text-foreground hover:bg-accent'}"
                 onclick={() => toggle(index, option.label)}
               >
                 <span
                   class="mt-0.5 flex size-4 shrink-0 items-center justify-center border-2
                          {question.multiSelect ? 'rounded-sm' : 'rounded-full'}
                          {picked
-                    ? 'border-warning bg-warning text-warning-foreground'
+                    ? 'border-primary bg-primary text-primary-foreground'
                     : 'border-muted-foreground/40'}"
                 >
                   {#if picked}
@@ -222,8 +222,8 @@
               disabled={sent}
               aria-label="Answer in your own words"
               placeholder="Or answer in your own words…"
-              class="border-border/60 bg-background/60 text-foreground placeholder:text-muted-foreground
-                     focus:border-warning/50 focus:ring-warning/30 w-full rounded-md border px-2.5 py-2
+              class="border-border bg-card text-foreground placeholder:text-muted-foreground
+                     focus:border-primary/50 focus:ring-primary/20 w-full rounded-xl border px-2.5 py-2
                      text-sm focus:ring-2 focus:outline-none disabled:opacity-60"
               value={custom[index] ?? ''}
               oninput={(event) => type(index, event.currentTarget.value)}
@@ -258,9 +258,9 @@
                   class="size-2 rounded-full transition-[background-color,transform] duration-150 ease-out
                          disabled:opacity-40
                          {index === current
-                    ? 'bg-warning scale-125'
+                    ? 'bg-primary scale-125'
                     : answerOf(index) !== null
-                      ? 'bg-warning/50'
+                      ? 'bg-primary/50'
                       : 'bg-muted-foreground/30 hover:bg-muted-foreground/60'}"
                   onclick={() => (current = index)}
                 ></button>
@@ -283,7 +283,7 @@
           type="button"
           disabled={sent || (complete ? false : answerOf(current) === null)}
           class="bg-primary text-primary-foreground hover:bg-primary/90 flex items-center gap-1.5
-                 rounded-md px-3 py-1.5 text-sm font-medium transition-[background-color,opacity]
+                 rounded-xl px-3 py-1.5 text-sm font-medium transition-[background-color,opacity]
                  duration-150 ease-out disabled:cursor-not-allowed disabled:opacity-40"
           onclick={() => (complete ? submit() : advance())}
         >

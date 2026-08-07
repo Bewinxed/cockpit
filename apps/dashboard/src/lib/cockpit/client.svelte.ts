@@ -1943,6 +1943,10 @@ export const cockpit = {
   get staleInstances(): InstanceRow[] {
     return state.instances.filter(isStale);
   },
+  /** Sessions that died of something: the other half of "what needs me". */
+  get failedInstances(): InstanceRow[] {
+    return state.instances.filter(isFailed);
+  },
   /** Mainline sessions on one machine — what the sidebar groups under it. */
   listedOn,
   /** The ones the hub can still reach: what this machine is doing right now. */

@@ -31,121 +31,133 @@
   }
 
   const summary = $derived(permissionSummary(request.toolName, request.input));
-  // The summary is cut to one line, so the details have to carry the whole thing —
-  // reading it out of the JSON dump is not reviewing it.
   const command = $derived(
     typeof request.input.command === 'string' ? request.input.command : null
   );
-  /** The rule an "always allow" would add, when the SDK suggested one. */
   const rule = $derived(request.suggestions?.length ? suggestedRule(request.suggestions) : null);
 
-  const kbd = 'rounded bg-muted px-1 py-0.5 font-mono text-xs text-muted-foreground';
+  const kbd =
+    'rounded-md bg-muted px-1.5 py-0.5 font-mono text-micro text-muted-foreground shadow-sm border border-border/50';
 </script>
 
-<div class="bg-warning/10 p-3" role="alert">
-  <div class="flex gap-2 items-start">
-    <div class="text-warning shrink-0 mt-0.5">
+<div class="bg-card rounded-xl shadow-sm p-4" role="alert">
+  <div class="flex gap-2.5 items-start">
+    <div class="text-muted-foreground shrink-0 mt-0.5">
       <IconShield class="size-[18px]" />
     </div>
     <div class="flex-1 min-w-0">
-      <div class="flex items-start justify-between gap-3">
-        <div class="font-semibold text-warning text-sm">Permission required</div>
-        <div class="flex items-center gap-1.5 shrink-0 -mt-0.5">
-          {#if shortcuts}
-            <kbd class={kbd}>N</kbd>
-          {/if}
-          <button
-            type="button"
-            disabled={!!resolved}
-            class="size-7 rounded-md flex items-center justify-center
-                   transition-[color,background-color,opacity] duration-200 ease-out
-                   {resolved === 'deny'
-              ? 'bg-error/10 text-error'
-              : resolved
-                ? 'text-muted-foreground opacity-0'
-                : 'text-muted-foreground hover:text-error hover:bg-error/10'}"
-            onclick={() => answer('deny')}
-            aria-label="Deny"
-            title="Deny"
-          >
-            <IconClose class="size-3.5" />
-          </button>
-          {#if shortcuts}
-            <kbd class={kbd}>Y</kbd>
-          {/if}
-          <button
-            type="button"
-            disabled={!!resolved}
-            class="size-7 rounded-md flex items-center justify-center
-                   transition-[color,background-color,opacity] duration-200 ease-out
-                   {resolved === 'allow'
-              ? 'bg-success text-success-foreground'
-              : resolved
-                ? 'bg-primary text-primary-foreground opacity-0'
-                : 'bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground/90'}"
-            onclick={() => answer('allow')}
-            aria-label="Allow once"
-            title="Allow once"
-          >
-            {#key resolved}
-              <span in:scale={{ duration: resolved ? 260 : 0, start: 0.25, easing: quintOut }}>
-                <IconCheck class="size-3.5" />
-              </span>
-            {/key}
-          </button>
-        </div>
-      </div>
-      <div class="text-muted-foreground text-sm mt-0.5 break-words">{summary}</div>
+      <div class="font-semibold text-sm">Permission required</div>
+      <div class="text-caption mt-0.5 break-words">{summary}</div>
 
       <Collapsible.Root open={isExpanded} onOpenChange={() => (isExpanded = !isExpanded)}>
-        <div class="flex items-center gap-3 mt-1.5 min-w-0">
-          <Collapsible.Trigger
-            class="flex items-center gap-1 bg-transparent border-none py-1 text-muted-foreground text-xs cursor-pointer shrink-0 hover:text-foreground"
-          >
-            <IconChevronRight
-              class="size-3.5 transition-transform duration-200 ease-out {isExpanded ? 'rotate-90' : ''}"
-            />
-            <span>Details</span>
-          </Collapsible.Trigger>
-
-          <!-- The SDK's own suggestions, granted verbatim — including where it
-               wants them remembered, which is what the scope in the label says. -->
-          {#if rule}
-            <button
-              type="button"
-              disabled={!!resolved}
-              class="flex items-center gap-1.5 min-w-0 bg-transparent border-none py-1 text-muted-foreground text-xs cursor-pointer
-                     transition-colors hover:text-foreground disabled:opacity-40"
-              title={rule.full}
-              onclick={() => answer('always')}
-            >
-              <span class="truncate">Always allow {rule.short} ({rule.scope})</span>
-              {#if shortcuts}
-                <kbd class="{kbd} shrink-0">⇧Y</kbd>
-              {/if}
-            </button>
-          {/if}
-        </div>
+        <Collapsible.Trigger
+          class="flex items-center gap-1 bg-transparent border-none py-1 mt-1.5 text-muted-foreground text-micro cursor-pointer shrink-0
+                 transition-colors duration-[160ms] ease-[var(--ease-out-expo)] hover:text-foreground"
+        >
+          <IconChevronRight
+            class="size-3.5 transition-transform duration-[160ms] ease-[var(--ease-out-expo)] {isExpanded
+              ? 'rotate-90'
+              : ''}"
+          />
+          <span>Details</span>
+        </Collapsible.Trigger>
 
         <Collapsible.Content>
-          <div class="bg-muted rounded p-2 mt-1 text-xs flex flex-col gap-2">
+          <div class="bg-muted/50 rounded-lg p-3 mt-1 text-micro flex flex-col gap-2.5">
             {#if command}
-              <div class="flex gap-2">
-                <span class="font-medium text-muted-foreground shrink-0">Command:</span>
-                <pre class="bg-background/50 px-2 py-1 rounded font-mono text-xs whitespace-pre-wrap break-all max-h-[200px] overflow-auto m-0 flex-1">{command}</pre>
-              </div>
+              <pre
+                class="bg-background/60 px-3 py-2 rounded-md font-mono text-micro whitespace-pre-wrap break-all max-h-[200px] overflow-auto m-0"
+              >{command}</pre>
+            {:else}
+              {#each Object.entries(request.input) as [key, value]}
+                <div class="flex gap-2">
+                  <span class="font-medium text-muted-foreground shrink-0">{key}:</span>
+                  <span class="break-all"
+                    >{typeof value === 'string' ? value : JSON.stringify(value)}</span
+                  >
+                </div>
+              {/each}
             {/if}
-            <div class="flex gap-2">
-              <span class="font-medium text-muted-foreground shrink-0">Input:</span>
-              <pre class="bg-background/50 px-2 py-1 rounded font-mono text-xs whitespace-pre-wrap break-all max-h-[200px] overflow-auto m-0 flex-1">{JSON.stringify(
-                  request.input,
-                  null,
-                  2
-                )}</pre>
-            </div>
+
+            <details>
+              <summary
+                class="text-muted-foreground text-micro cursor-pointer select-none
+                       transition-colors duration-[160ms] ease-[var(--ease-out-expo)] hover:text-foreground"
+              >
+                Raw
+              </summary>
+              <pre
+                class="bg-background/60 px-3 py-2 rounded-md font-mono text-micro whitespace-pre-wrap break-all max-h-[200px] overflow-auto mt-1.5 m-0"
+              >{JSON.stringify(request.input, null, 2)}</pre>
+            </details>
           </div>
         </Collapsible.Content>
       </Collapsible.Root>
+
+      <div class="flex items-center gap-2 mt-3">
+        {#if shortcuts}
+          <kbd class={kbd}>N</kbd>
+        {/if}
+        <button
+          type="button"
+          disabled={!!resolved}
+          class="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-micro font-medium
+                 transition-[color,background-color,border-color,opacity] duration-[160ms] ease-[var(--ease-out-expo)]
+                 {resolved === 'deny'
+            ? 'bg-error/10 text-error border-error/20'
+            : resolved
+              ? 'opacity-0'
+              : 'text-muted-foreground hover:text-foreground hover:bg-muted'}"
+          onclick={() => answer('deny')}
+          aria-label="Deny"
+        >
+          <IconClose class="size-3.5" />
+          Deny
+        </button>
+
+        <div class="flex-1"></div>
+
+        {#if rule}
+          <button
+            type="button"
+            disabled={!!resolved}
+            class="inline-flex items-center gap-1.5 min-w-0 rounded-lg bg-secondary text-secondary-foreground px-3 py-1.5 text-micro font-medium
+                   transition-[color,background-color,opacity] duration-[160ms] ease-[var(--ease-out-expo)]
+                   hover:bg-secondary/80 disabled:opacity-40"
+            title={rule.full}
+            onclick={() => answer('always')}
+          >
+            <span class="truncate">Always allow {rule.short} ({rule.scope})</span>
+            {#if shortcuts}
+              <kbd class="{kbd} shrink-0">⇧Y</kbd>
+            {/if}
+          </button>
+        {/if}
+
+        {#if shortcuts}
+          <kbd class={kbd}>Y</kbd>
+        {/if}
+        <button
+          type="button"
+          disabled={!!resolved}
+          class="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-micro font-medium
+                 transition-[color,background-color,opacity] duration-[160ms] ease-[var(--ease-out-expo)]
+                 {resolved === 'allow'
+            ? 'bg-success text-success-foreground'
+            : resolved
+              ? 'opacity-0'
+              : 'bg-primary text-primary-foreground hover:bg-primary/90'}"
+          onclick={() => answer('allow')}
+          aria-label="Allow"
+        >
+          {#key resolved}
+            <span in:scale={{ duration: resolved ? 260 : 0, start: 0.25, easing: quintOut }}>
+              <IconCheck class="size-3.5" />
+            </span>
+          {/key}
+          Allow
+        </button>
+      </div>
     </div>
   </div>
 </div>

@@ -28,6 +28,12 @@
     /** Bindable: a parent that replaced the content closes the editor with it. */
     editing?: boolean;
     emptyText?: string;
+    /**
+     * One line about the file, shown in place of the rendered markdown. For a
+     * rail that lists the file where something else is already reading it —
+     * Edit still opens the same editor here.
+     */
+    summary?: string;
     /** Inline facts after the filename — a hash, a size, a time. */
     meta?: Snippet;
     /** Extra header buttons. View mode only: editing has its own two. */
@@ -42,6 +48,7 @@
     save,
     editing = $bindable(false),
     emptyText = 'Nothing here yet.',
+    summary,
     meta,
     actions,
     footer,
@@ -133,6 +140,8 @@
       aria-label={path}
       class="min-h-72 rounded-none border-0 font-mono text-sm focus-visible:ring-inset"
     />
+  {:else if content !== null && summary}
+    <p class="px-4 py-2.5 text-caption">{summary}</p>
   {:else if content !== null}
     <!-- The click is the convenience; the Edit button above is the affordance,
          which is why this needs no key handler of its own. -->

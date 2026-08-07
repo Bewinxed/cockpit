@@ -162,7 +162,7 @@
 				</Collapsible.Trigger>
 
 				<Collapsible.Content>
-					<div class="px-3 pb-3 border-l-2 border-border/50 ml-[22px]">
+					<div class="px-3 pb-3 border-l border-border ml-[22px]">
 						<div class="pl-4 space-y-3 pt-2">
 							<!-- Input section -->
 							{#if isFileDiffTool(toolName) && diffInfo}

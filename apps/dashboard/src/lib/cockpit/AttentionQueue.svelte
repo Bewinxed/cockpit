@@ -1,0 +1,213 @@
+<script lang="ts">
+  /**
+   * Everything in the fleet parked on a human, in one calm list — the Outpost
+   * fleet view's whole answer to "what needs me right now". Two things park on
+   * a person, so two things are here: a permission or a question, which blocks
+   * the turn that asked it, and a session that died of something, which is not
+   * coming back until somebody says so.
+   *
+   * Both are derived rather than tracked, so a queue is never stale: the moment
+   * a session clears its permissions or comes back from a failure, the strip
+   * that named it is gone with it.
+   *
+   * Deliberately unalarming. The status dot already carries the one hue the
+   * fleet uses for "needs you"; the rest of the strip reads like any other row
+   * in the app, so a reader with six sessions waiting on them can scan this
+   * calmly instead of bracing for six red banners.
+   */
+  import { goto } from '$app/navigation';
+  import {
+    cockpit,
+    resolvePermission,
+    permissionAnswer,
+    resumeSession,
+    spawnSession,
+    type BlockedRequest,
+    type InstanceRow,
+    type PermissionAnswer,
+  } from './client.svelte';
+  import type { PermissionMode } from '@cockpit/core';
+  import { permissionSummary } from './permission-summary';
+  import { questionsOf } from './question';
+  import { isTyping } from '$lib/utils/typing';
+  import { machineLabel } from './machine';
+  import { sessionTitle } from './links';
+  import ActivityDot from './ActivityDot.svelte';
+  import { Button } from '$lib/components/ui/button';
+  import { fly, slide } from 'svelte/transition';
+  import { quintOut } from 'svelte/easing';
+
+  const blocked = $derived(cockpit.blocked);
+  const failed = $derived(cockpit.failedInstances);
+  const total = $derived(blocked.length + failed.length);
+
+  /** A request only ever belongs to one session, but the pair is the honest key. */
+  const rowKey = (item: BlockedRequest): string => `${item.instanceId}:${item.request.requestId}`;
+
+  /** Which machine a failed session died on, named the way the rail names it. */
+  function hostOf(row: InstanceRow): string {
+    const machine = cockpit.machines.find((candidate) => candidate.machineId === row.machineId);
+    return machine ? machineLabel(machine.hostname) : row.machineId;
+  }
+
+  /** What the session was about, from the SDK's own title for its transcript. */
+  function titleOf(row: InstanceRow): string {
+    const info = row.sessionId
+      ? cockpit.catalogOf(row.machineId).find((entry) => entry.sessionId === row.sessionId)
+      : undefined;
+    return info ? sessionTitle(info) : 'untitled session';
+  }
+
+  function answer(item: BlockedRequest, kind: PermissionAnswer): void {
+    resolvePermission(
+      item.instanceId,
+      item.machineId,
+      item.request.requestId,
+      permissionAnswer(item.request, kind)
+    );
+  }
+
+  /**
+   * Try the session again. One that got far enough to have an SDK session comes
+   * back on it, conversation and all; one that died before that has nothing to
+   * resume, so it is started again the way it was.
+   */
+  function resume(row: InstanceRow): void {
+    const instanceId = row.sessionId
+      ? resumeSession({ machineId: row.machineId, cwd: row.cwd, sessionId: row.sessionId })
+      : spawnSession({
+          machineId: row.machineId,
+          cwd: row.cwd,
+          projectId: row.projectId ?? undefined,
+          permissionMode: (row.permissionMode ?? undefined) as PermissionMode | undefined,
+          model: row.model ?? undefined,
+          scratch: row.kind === 'scratch' ? {} : undefined,
+        });
+    void goto(`/session/${instanceId}`);
+  }
+
+  /**
+   * The same two-letter pairs the permission card answers to (`y`/`a` allow,
+   * `n`/`d` deny), while the strip beneath them has focus. A question has no
+   * one-key answer — it wants an actual choice made in the session — so it
+   * never gets a shortcut here, and neither does a strip while the reader is
+   * typing somewhere else.
+   */
+  function onKeydown(event: KeyboardEvent, item: BlockedRequest, isQuestion: boolean): void {
+    if (isQuestion || isTyping()) return;
+    const key = event.key.toLowerCase();
+    if (key === 'y' || key === 'a') {
+      event.preventDefault();
+      answer(item, 'allow');
+    } else if (key === 'n' || key === 'd') {
+      event.preventDefault();
+      answer(item, 'deny');
+    }
+  }
+</script>
+
+{#if total > 0}
+  <section
+    class="flex flex-col overflow-hidden rounded-xl bg-card shadow-md"
+    aria-labelledby="attention-queue-heading"
+  >
+    <header class="flex items-center gap-2 px-4 pt-4 pb-2">
+      <h2 id="attention-queue-heading" class="text-body font-medium text-foreground">Needs you</h2>
+      <span
+        class="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-error/15 px-1.5
+               text-micro font-medium text-error tabular-nums"
+        aria-label="{total} {total === 1 ? 'session needs' : 'sessions need'} you"
+      >
+        {total}
+      </span>
+    </header>
+
+    <ul class="flex flex-col">
+      {#each blocked as item (rowKey(item))}
+        {@const isQuestion = Boolean(questionsOf(item.request.toolName, item.request.input))}
+        {@const summary = isQuestion
+          ? 'asked a question'
+          : permissionSummary(item.request.toolName, item.request.input)}
+        <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+        <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+        <li
+          tabindex="0"
+          aria-label="{item.hostname}: {summary}"
+          class="flex flex-wrap items-start gap-x-3 gap-y-2 border-t border-border/60 px-4 py-3
+                 first:border-t-0 transition-colors duration-150 ease-out hover:bg-accent/40
+                 focus-visible:bg-accent/50"
+          onkeydown={(event) => onKeydown(event, item, isQuestion)}
+          in:fly={{ y: -8, duration: 240, easing: quintOut }}
+          out:slide={{ duration: 160, easing: quintOut }}
+        >
+          <span class="mt-1 shrink-0">
+            <ActivityDot activity="blocked" />
+          </span>
+
+          <div class="min-w-0 flex-1">
+            <div class="flex flex-wrap items-baseline gap-x-2">
+              <a
+                href="/session/{item.instanceId}"
+                class="text-body truncate font-medium text-foreground transition-colors hover:text-primary"
+              >
+                {item.hostname}
+              </a>
+              {#if item.cwd}
+                <!-- The path is what tells two blocked sessions on the same
+                     machine apart — TX-02, like every other path in the app. -->
+                <span class="text-caption truncate font-mono">{item.cwd}</span>
+              {/if}
+            </div>
+            <p class="text-body truncate text-muted-foreground">{summary}</p>
+          </div>
+
+          {#if !isQuestion}
+            <!-- A phone gives the actions their own row rather than squeezing
+                 the reason that made them necessary down to three words. -->
+            <div class="flex w-full shrink-0 items-center justify-end gap-1.5 sm:w-auto sm:pt-0.5">
+              <Button size="sm" onclick={() => answer(item, 'allow')}>Allow</Button>
+              <Button size="sm" variant="ghost" onclick={() => answer(item, 'deny')}>Deny</Button>
+              <Button size="sm" variant="ghost" href="/session/{item.instanceId}">Open</Button>
+            </div>
+          {/if}
+        </li>
+      {/each}
+
+      {#each failed as row (row.id)}
+        <li
+          class="flex flex-wrap items-start gap-x-3 gap-y-2 border-t border-border/60 px-4 py-3
+                 first:border-t-0 transition-colors duration-150 ease-out hover:bg-accent/40"
+          in:fly={{ y: -8, duration: 240, easing: quintOut }}
+          out:slide={{ duration: 160, easing: quintOut }}
+        >
+          <!-- Failed asks for nothing, so it does not ping; it is red because
+               nothing else brings it back. -->
+          <span class="mt-1.5 size-2 shrink-0 rounded-full bg-error" title="Failed"></span>
+
+          <div class="min-w-0 flex-1">
+            <div class="flex flex-wrap items-baseline gap-x-2">
+              <a
+                href="/session/{row.id}"
+                class="text-body truncate font-medium text-foreground transition-colors hover:text-primary"
+              >
+                {titleOf(row)}
+              </a>
+              <span class="text-caption truncate">{hostOf(row)}</span>
+              {#if row.cwd}
+                <span class="text-caption truncate font-mono">{row.cwd}</span>
+              {/if}
+            </div>
+            <p class="text-body truncate text-error" title={row.lastError ?? undefined}>
+              {row.lastError || 'Failed without saying why.'}
+            </p>
+          </div>
+
+          <div class="flex w-full shrink-0 items-center justify-end gap-1.5 sm:w-auto sm:pt-0.5">
+            <Button size="sm" variant="ghost" href="/session/{row.id}">Open</Button>
+            <Button size="sm" onclick={() => resume(row)}>Resume</Button>
+          </div>
+        </li>
+      {/each}
+    </ul>
+  </section>
+{/if}

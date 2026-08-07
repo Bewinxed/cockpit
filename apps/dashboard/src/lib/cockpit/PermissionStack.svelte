@@ -27,7 +27,8 @@
 
   let hovered = $state(false);
   let focused = $state(false);
-  const expanded = $derived(hovered || focused);
+  let clicked = $state(false);
+  const expanded = $derived(hovered || focused || clicked);
 
   /** How far behind the top card each sliver sits. Two deep; the chip counts the rest. */
   const DEPTH = [
@@ -61,6 +62,14 @@
 <div
   role="group"
   aria-label="Permissions waiting on you"
+  tabindex="0"
+  onclick={() => (clicked = !clicked)}
+  onkeydown={(e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      clicked = !clicked;
+    }
+  }}
   onmouseenter={() => (hovered = true)}
   onmouseleave={() => (hovered = false)}
   onfocusin={() => (focused = true)}
@@ -76,13 +85,13 @@
       {#if !expanded}
         {#each slivers as depth, level (level)}
           <div
-            class="pointer-events-none absolute inset-x-0 top-4 bottom-0 origin-top rounded-md border border-warning/20 bg-card"
+            class="pointer-events-none absolute inset-x-0 top-4 bottom-0 origin-top bg-card rounded-xl shadow-sm"
             style="transform: translateY(-{depth.offset}px) scale({depth.scale}); opacity: {depth.opacity};"
           ></div>
         {/each}
         {#if rest.length}
           <span
-            class="pointer-events-none absolute top-0 right-2 rounded-full bg-muted px-1.5 py-0.5 text-xs text-muted-foreground"
+            class="pointer-events-none absolute top-0 right-2 rounded-full bg-muted px-1.5 py-0.5 text-micro text-muted-foreground"
           >
             +{rest.length} more
           </span>
@@ -95,7 +104,7 @@
     {#if expanded}
       {#each rest as request (request.requestId)}
         <div
-          class="border-t border-warning/20"
+          class="border-t border-border"
           in:slide={{ duration: duration(250), easing: quintOut }}
           out:slide={{ duration: duration(180), easing: quintOut }}
         >

@@ -7,17 +7,20 @@
     IconFlow,
     IconFork,
     IconPlay,
+    IconSpinner,
     IconStop,
     IconSubagent,
     IconTools,
     IconTrash,
   } from '$lib/icons';
+  import { toast } from 'svelte-sonner';
   import type { Component } from 'svelte';
   import { onMount, tick, untrack } from 'svelte';
   import { Markdown } from '$lib/components/ui/markdown';
   import { smoothText } from '$lib/utils/smooth-text.svelte';
   import { fly } from 'svelte/transition';
   import { quintOut } from 'svelte/easing';
+  import { MediaQuery } from 'svelte/reactivity';
   import { Virtualizer } from 'virtua/svelte';
   import type { VirtualizerHandle } from 'virtua/svelte';
   import { goto } from '$app/navigation';
@@ -44,6 +47,7 @@
   import PermissionStack from '$lib/cockpit/PermissionStack.svelte';
   import { questionsOf } from '$lib/cockpit/question';
   import { ACTIVITY_LABEL } from '$lib/cockpit/activity';
+  import { sessionTitle } from '$lib/cockpit/links';
   import type {
     InstanceRow,
     PendingPermission,
@@ -107,6 +111,28 @@
     });
   });
   const session = $derived(cockpit.session(viewId));
+
+  /** The path this session works in — the header's second fact, and its title's
+   *  fallback where the SDK has not named the transcript yet. */
+  const cwdLabel = $derived(session?.cwd || browsingCwd || viewId);
+
+  /** The last segment of it — which checkout, in the width a phone has. */
+  const leaf = $derived(cwdLabel.split('/').filter(Boolean).pop() ?? cwdLabel);
+
+  /**
+   * What the session is about, not where it runs. A phone has room for exactly
+   * one of the two, so the title leads and the path follows it from `sm` up.
+   */
+  const heading = $derived.by(() => {
+    // Browsing a stored session, the route id *is* the SDK session id.
+    const sessionId = browsing ? viewId : (session?.sessionId ?? null);
+    const machineId = session?.machineId || browsing;
+    const info =
+      sessionId && machineId
+        ? cockpit.catalogOf(machineId).find((row) => row.sessionId === sessionId)
+        : undefined;
+    return info ? sessionTitle(info) : leaf;
+  });
 
   // Frames land in bursts; the preview reveals them at a steady rate so a turn
   // reads as typing rather than as a slideshow. Presentation only — the follow
@@ -417,6 +443,13 @@
   /** The memory dock, beside the chat rather than over it. */
   let memoryOpen = $state(false);
 
+  // Past this width the session has room for three columns, so the rail is
+  // docked rather than summoned: the transcript keeps its measure centred in
+  // what is left instead of floating in half a screen of nothing. Still the
+  // reader's to close — this only sets where each width starts.
+  const roomForRail = new MediaQuery('min-width: 1920px');
+  $effect(() => void (memoryOpen = roomForRail.current));
+
   let searchOpen = $state(false);
   let search = $state<ReturnType<typeof TranscriptSearch> | null>(null);
   let dock = $state<HTMLDivElement | null>(null);
@@ -504,15 +537,43 @@
     session?.messages.reduce((cost, message) => message.metadata?.totalCost ?? cost, 0) ?? 0
   );
 
-  function handleSend(text: string, extras: SendExtras) {
+  /** The draft text restored after a failed send, so the reader does not lose it. */
+  let sendError = $state<string | null>(null);
+  let restoredDraft = $state<string | null>(null);
+  let chatInputRef = $state<ReturnType<typeof ChatInput> | null>(null);
+
+  async function handleSend(text: string, extras: SendExtras) {
     if (!session) return;
-    void sendOrRevive(viewId, session.machineId, text, extras);
+    sendError = null;
+    try {
+      await sendOrRevive(viewId, session.machineId, text, extras);
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      sendError = reason;
+      restoredDraft = text;
+      chatInputRef?.setDraft?.(text);
+      toast.error(`Send failed: ${reason}`);
+    }
+  }
+
+  function retrySend() {
+    if (!restoredDraft) return;
+    const text = restoredDraft;
+    restoredDraft = null;
+    sendError = null;
+    handleSend(text, {});
   }
 
   function handleInterrupt() {
     if (!session) return;
-    interrupt(viewId, session.machineId);
+    try {
+      interrupt(viewId, session.machineId);
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      toast.error(`Interrupt failed: ${reason}`);
+    }
   }
+
 
   /**
    * The rail links to a branch by hash. The transcript is virtualised, so the
@@ -666,6 +727,9 @@
   const cannotAnswer = $derived(
     machine !== null && machine.auth !== 'authenticated' && machine.auth !== 'unknown'
   );
+  const machineOffline = $derived(
+    machine !== null && machine.status !== 'online'
+  );
   let loggingIn = $state(false);
 
   function handleResolve(requestId: string, result: PermissionResult) {
@@ -770,6 +834,7 @@
     confirmingDiscard = false;
     try {
       await discardSession(viewId, session.machineId);
+      workingSet.forget(viewId);
       await goto('/session');
     } catch (err) {
       error = err instanceof Error ? err.message : String(err);
@@ -886,9 +951,19 @@
       enabled: () => answerable.length === 0,
     }}
   >
+    {#if machineOffline && machine}
+      <div
+        role="status"
+        class="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-warning/30 bg-warning/10 px-4 py-2 text-sm"
+        transition:fly={{ y: -6, duration: 180, easing: quintOut }}
+      >
+        <span class="font-medium text-warning">{machine.hostname} is offline</span>
+        <span class="text-warning/80">
+          Messages cannot be delivered until it reconnects.
+        </span>
+      </div>
+    {/if}
     {#if cannotAnswer && machine}
-      <!-- The machine's own report, not a reading of anything it said. Shown
-           before a turn is even sent, because the session cannot answer one. -->
       <div
         role="status"
         class="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-warning/30 bg-warning/10 px-4 py-2 text-sm"
@@ -905,13 +980,36 @@
     <!-- The controls are the fixed cost; the path is what gives way. Without
          min-w-0 the flex items refuse to shrink below their content and the
          right-hand group is pushed off the window instead. -->
+    <!-- A phone's header is all controls and no room; the session says its name
+         on the line above them instead of going unnamed. -->
+    <div class="flex min-w-0 items-baseline gap-2 px-4 pt-2 sm:hidden">
+      <h1 class="min-w-0 truncate text-sm font-medium" title={heading}>{heading}</h1>
+      {#if leaf !== heading}
+        <span class="shrink-0 font-mono text-micro text-muted-foreground">{leaf}</span>
+      {/if}
+    </div>
+
     <header class="flex min-w-0 items-center gap-3 border-b border-border px-4 py-2">
       <a href="/session" class="hidden shrink-0 text-sm text-muted-foreground hover:text-foreground sm:inline"
         >Sessions</a
       >
-      <h1 class="min-w-0 flex-1 truncate font-mono text-sm font-normal" title={session?.cwd || viewId}>
-        {session?.cwd || viewId}
-      </h1>
+      <!-- The verbs, the pickers and the state are this bar's fixed cost, and
+           under `2xl` what is left cannot hold a title and a path without
+           cutting the path's head off — so there the path drops to the title's
+           tooltip and the name gets the whole run. Where both fit, the path
+           takes the width it needs, up to 60% of the run, and the title gives
+           up the rest: a half-path is a wrong answer to "which checkout", a
+           half-sentence is still the sentence. -->
+      <div class="hidden min-w-0 flex-1 items-baseline gap-3 sm:flex">
+        <h1
+          class="min-w-0 flex-1 truncate text-sm font-medium"
+          title={[heading, cwdLabel].join('\n')}
+        >{heading}</h1>
+        <span
+          class="hidden max-w-[60%] shrink-0 truncate font-mono text-micro text-muted-foreground [direction:rtl] 2xl:block"
+          title={cwdLabel}
+        ><bdi>{cwdLabel}</bdi></span>
+      </div>
       {#if session?.scratch}
         <span
           class="shrink-0 rounded-sm border border-dashed border-muted-foreground/40 px-1.5 py-0.5 text-xs tracking-wide text-muted-foreground uppercase"
@@ -926,7 +1024,7 @@
       >
         {#if !browsing}
           <!-- The state carries a colour of its own, so the dot says it before the
-               word is read: pinging amber when the session is waiting on you. -->
+               word is read: pinging red when the session is waiting on you. -->
           <ActivityDot {activity} size={1.5} />
         {/if}
         {#if browsing}
@@ -1081,7 +1179,20 @@
             subagents={branches}
             streamingToolId={session?.currentTool?.toolId}
             {totalCostUsd}
-            onJump={() => (view = 'chat')}
+            onJump={(nodeId) => {
+              view = 'chat';
+              const messages = session?.messages ?? [];
+              const target = messages.find(
+                (m) => m.sdkUuid === nodeId || m.id === nodeId || m.metadata?.toolId === nodeId
+              );
+              if (!target) return;
+              const index = groups.findIndex((g) => {
+                if (g.kind === 'single') return g.message.id === target.id || g.message.sdkUuid === target.sdkUuid;
+                if (g.kind === 'tools') return g.messages.some((m) => m.id === target.id || m.sdkUuid === target.sdkUuid);
+                return false;
+              });
+              if (index >= 0) void tick().then(() => jumpToMatch(index));
+            }}
           />
         </div>
       {:else}
@@ -1097,6 +1208,19 @@
             class="h-full space-y-4 overflow-y-auto overflow-x-hidden px-4 pt-4 pb-44 [overflow-anchor:none] focus:outline-none"
           >
             <div class="mx-auto max-w-4xl">
+              {#if session?.hydrating}
+                <div class="sticky top-0 z-10">
+                  <div class="h-0.5 w-full overflow-hidden bg-muted">
+                    <div class="h-full w-1/3 animate-pulse rounded-full bg-primary/40" style="animation: hydrate-slide 1.2s ease-in-out infinite;"></div>
+                  </div>
+                  <div
+                    class="mx-auto mt-2 w-fit rounded-full bg-card px-3 py-1 text-micro text-muted-foreground shadow-sm"
+                    transition:fly={{ y: -6, duration: 180, easing: quintOut }}
+                  >
+                    Loading earlier turns
+                  </div>
+                </div>
+              {/if}
               <!-- Mounted once the scroller exists: virtua reads scrollRef once, on
                    mount, and silently falls back to its parent element if it is unset. -->
               {#if scroller}
@@ -1147,7 +1271,10 @@
               {/if}
 
               {#if session?.loading}
-                <p class="text-sm text-muted-foreground">Reading transcript…</p>
+                <div class="flex flex-col items-center gap-2 py-8">
+                  <IconSpinner class="size-5 animate-spin text-muted-foreground" />
+                  <p class="text-caption">Reading transcript…</p>
+                </div>
               {:else if sleeping}
                 <!-- Not a failure, so nothing here is coloured like one: the work
                      is intact and one message would bring it back on its own. -->
@@ -1178,19 +1305,8 @@
               {/if}
 
               {#if session?.streaming}
-                <div class="flex justify-start gap-3">
-                  <div
-                    class="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl border border-border bg-secondary"
-                  >
-                    <IconAgent class="size-[18px] text-muted-foreground" />
-                  </div>
-                  <div
-                    class="max-w-[85%] min-w-0 rounded-2xl rounded-bl-sm border border-border bg-card px-4 py-3 text-sm leading-relaxed break-words text-card-foreground shadow-sm"
-                  >
-                    <!-- The stream renders as markdown too — raw asterisks mid-turn
-                         read as a bug, and long resumed turns stream for minutes. -->
-                    <Markdown source={stream.text} />
-                  </div>
+                <div class="max-w-prose text-body leading-relaxed text-foreground break-words">
+                  <Markdown source={stream.text} /><span class="inline-block w-[3px] h-4 rounded-sm bg-primary/60 align-text-bottom animate-pulse"></span>
                 </div>
               {/if}
             </div>
@@ -1201,15 +1317,17 @@
           {/if}
 
           {#if unseen}
-            <Button
-              variant="outline"
-              size="sm"
-              class="absolute right-4 bottom-4 bg-card text-xs shadow-md"
-              onclick={jumpToLatest}
-            >
-              <IconArrowDown />
-              Jump to latest
-            </Button>
+            <div class="absolute inset-x-0 bottom-4 flex justify-center">
+              <Button
+                variant="outline"
+                size="sm"
+                class="rounded-full bg-card px-4 text-xs shadow-lg pressable"
+                onclick={jumpToLatest}
+              >
+                <IconArrowDown />
+                Jump to latest
+              </Button>
+            </div>
           {/if}
         </div>
       {/if}
@@ -1225,8 +1343,31 @@
 
       <div class="pointer-events-none absolute inset-x-0 bottom-0 px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
         <div bind:this={dock} class="pointer-events-auto mx-auto flex max-w-4xl flex-col gap-2">
+        {#if sendError}
+          <div
+            class="flex items-center gap-2 rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive"
+            role="alert"
+            transition:fly={{ y: 4, duration: 180, easing: quintOut }}
+          >
+            <span class="min-w-0 flex-1">Send failed: {sendError}</span>
+            <button
+              type="button"
+              class="shrink-0 rounded-md bg-destructive/10 px-2 py-1 font-medium text-destructive hover:bg-destructive/20 transition-colors"
+              onclick={retrySend}
+            >
+              Retry
+            </button>
+            <button
+              type="button"
+              class="shrink-0 text-destructive/60 hover:text-destructive transition-colors"
+              onclick={() => { sendError = null; restoredDraft = null; }}
+              aria-label="Dismiss"
+            >
+              &times;
+            </button>
+          </div>
+        {/if}
         {#if error}
-          <!-- Keyed so a second failure shakes again instead of sitting there. -->
           {#key error}
             <p class="animate-shake text-xs text-error motion-reduce:animate-none" role="alert">
               {error}
@@ -1270,10 +1411,11 @@
             </p>
           {/if}
           <ChatInput
+            bind:this={chatInputRef}
             onSend={handleSend}
             onInterrupt={handleInterrupt}
             streaming={session?.busy ?? false}
-            disabled={cockpit.status !== 'connected' || (session?.relaunching ?? false)}
+            disabled={cockpit.status !== 'connected' || (session?.relaunching ?? false) || machineOffline}
             attachmentOpen={answerable.length > 0}
             {commands}
             onCommandsNeeded={askCommands}

@@ -10,11 +10,13 @@
 
   let { activity, size = 2 }: Props = $props();
 
+  /* The contract's three status hues, and nothing else reads them: green is a
+     session at rest, amber is one mid-turn, red is one parked on a human. */
   const tone = $derived(
     {
-      blocked: 'bg-warning',
-      working: 'bg-primary text-primary-foreground animate-pulse motion-reduce:animate-none',
-      idle: 'bg-muted-foreground/40',
+      blocked: 'bg-error',
+      working: 'bg-warning animate-pulse motion-reduce:animate-none',
+      idle: 'bg-success',
     }[activity]
   );
 </script>
@@ -23,7 +25,7 @@
   <!-- Blocked is the only state waiting on a human, so it is the loudest one. -->
   {#if activity === 'blocked'}
     <span
-      class="absolute inset-0 rounded-full bg-warning opacity-75 animate-ping motion-reduce:animate-none"
+      class="absolute inset-0 rounded-full bg-error opacity-75 animate-ping motion-reduce:animate-none"
     ></span>
   {/if}
   <span class="absolute inset-0 rounded-full {tone}"></span>

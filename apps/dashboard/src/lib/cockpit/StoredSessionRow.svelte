@@ -5,22 +5,44 @@
   import { sessionTitle, transcriptHref } from './links';
   import StoredSessionMenu from './StoredSessionMenu.svelte';
 
-  let { machineId, info }: { machineId: string; info: SDKSessionInfo } = $props();
+  interface Props {
+    machineId: string;
+    info: SDKSessionInfo;
+    /** The card's own path: a row repeating it adds nothing, so it stays off. */
+    groupCwd?: string;
+  }
+
+  let { machineId, info, groupCwd }: Props = $props();
+
+  const showCwd = $derived(Boolean(info.cwd) && info.cwd !== groupCwd);
 </script>
 
 <StoredSessionMenu {machineId} {info}>
   <a
     href={transcriptHref(machineId, info)}
-    class="flex flex-col rounded-lg border border-border px-3 py-2
-      transition-[background-color,box-shadow,translate] duration-150 ease-out
-      hover:-translate-y-px hover:bg-accent hover:text-accent-foreground hover:shadow-md motion-reduce:hover:translate-y-0"
+    class="flex min-h-9 items-center rounded-lg px-3 py-1.5
+      transition-colors duration-150 ease-out hover:bg-accent hover:text-accent-foreground"
   >
-    <span class="flex items-baseline gap-3">
-      <span class="truncate text-sm">{sessionTitle(info)}</span>
-      <span class="ml-auto shrink-0 text-xs opacity-70">
+    <!-- Full-width band, measured content: the same bargain the live rows make. -->
+    <span class="flex w-full max-w-3xl items-center gap-2.5">
+      <!-- Where a live row carries its state dot, so the two lists a machine card
+           stacks share one title column. -->
+      <span class="size-2 shrink-0" aria-hidden="true"></span>
+      <!-- Stops at a readable measure, as the live rows do, so a runaway title
+           does not crush the path beside it. -->
+      <span class="min-w-0 max-w-lg truncate text-[13px]">{sessionTitle(info)}</span>
+      <!-- Beside the title, as the live rows carry it: it yields three times as
+           readily, and what it keeps it gives up from the left — the leaf is
+           what tells two checkouts apart. -->
+      {#if showCwd}
+        <span
+          class="hidden min-w-24 shrink-[3] truncate font-mono text-micro text-muted-foreground [direction:rtl] sm:block"
+          title={info.cwd}
+        ><bdi>{info.cwd}</bdi></span>
+      {/if}
+      <span class="ml-auto shrink-0 text-micro text-muted-foreground tabular-nums" data-tabular>
         {formatDistanceToNow(new Date(info.lastModified))}
       </span>
     </span>
-    <span class="truncate font-mono text-xs opacity-70">{info.cwd ?? ''}</span>
   </a>
 </StoredSessionMenu>

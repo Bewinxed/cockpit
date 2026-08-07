@@ -86,8 +86,8 @@
   }}
 >
   <Popover.Trigger
-    class="flex h-7 shrink-0 items-center gap-1.5 rounded-md px-1.5
-           text-xs tabular-nums
+    class="flex h-7 shrink-0 items-center gap-1.5 rounded-lg px-1.5
+           text-micro tabular-nums
            hover:bg-muted
            focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring
            transition-[background-color,color] duration-150 ease-out
@@ -125,17 +125,17 @@
     {/if}
   </Popover.Trigger>
 
-  <Popover.Content class="w-72 p-0" align="end" side="top">
+  <Popover.Content class="w-72 rounded-xl shadow-lg p-0" align="end" side="top">
     <div class="flex items-center gap-2 border-b border-border px-3 py-2.5">
       <IconWindow class="size-4 text-muted-foreground" />
       <span class="text-sm font-medium">Context window</span>
       {#if usage}
-        <span class="ml-auto text-xs tabular-nums {TEXT[band]}">{usage.percentage}%</span>
+        <span class="ml-auto text-micro tabular-nums {TEXT[band]}">{usage.percentage}%</span>
       {/if}
     </div>
 
     {#if !usage}
-      <p class="px-3 py-4 text-xs text-muted-foreground">
+      <p class="px-3 py-4 text-micro text-muted-foreground">
         No reading yet. A session has to be running to report what its window holds.
       </p>
     {:else}
@@ -148,14 +148,14 @@
             ></span>
           {/each}
         </div>
-        <p class="mt-2 text-xs tabular-nums text-muted-foreground">
+        <p class="mt-2 text-micro tabular-nums text-muted-foreground">
           {usage.totalTokens.toLocaleString()} of {usage.maxTokens.toLocaleString()} tokens used
         </p>
       </div>
 
       <ul class="max-h-56 overflow-y-auto border-t border-border px-3 py-2">
         {#each usage.categories as category, index (category.name)}
-          <li class="flex items-center gap-2 py-1 text-xs">
+          <li class="flex items-center gap-2 py-1 text-micro">
             <span
               class="size-2 shrink-0 rounded-[2px]"
               style="background-color: {swatch(index)}"
@@ -168,12 +168,12 @@
     {/if}
 
     {#if compacting}
-      <p class="flex items-center gap-2 border-t border-border px-3 py-2 text-xs">
+      <p class="flex items-center gap-2 border-t border-border px-3 py-2 text-micro">
         <IconCompact class="size-3.5 animate-pulse" />
         Compacting now — the session is rewriting its own context.
       </p>
     {:else if compaction}
-      <p class="border-t border-border px-3 py-2 text-xs text-muted-foreground">
+      <p class="border-t border-border px-3 py-2 text-micro text-muted-foreground">
         {#if compaction.result === 'failed'}
           Last compaction failed{compaction.error ? `: ${compaction.error}` : '.'}
         {:else}

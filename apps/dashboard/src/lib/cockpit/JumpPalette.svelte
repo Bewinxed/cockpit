@@ -5,6 +5,7 @@
    */
   import { goto } from '$app/navigation';
   import * as Command from '$lib/components/ui/command';
+  import { Kbd } from '$lib/components/ui/kbd';
   import { ACTIVITY_LABEL } from './activity';
   import { cockpit } from './client.svelte';
   import { sessionTitle, transcriptHref } from './links';
@@ -21,10 +22,8 @@
 
   const leaf = (path: string) => path.split('/').filter(Boolean).pop() ?? path;
 
-  /** How many stored sessions per machine are worth carrying into the palette. */
   const RECENT_PER_MACHINE = 8;
 
-  /** The kinds, in the order they are worth scanning; also the headings. */
   const GROUPS = ['Projects', 'Machines', 'Running sessions', 'Recent sessions'];
 
   const entries = $derived.by((): Entry[] => {
@@ -59,8 +58,6 @@
     for (const machine of cockpit.machines) {
       for (const info of cockpit.catalogOf(machine.machineId).slice(0, RECENT_PER_MACHINE)) {
         rows.push({
-          // Two machines can report the same stored session — they share a home
-          // directory when they are two daemons on one box — so both name the key.
           id: `stored:${machine.machineId}:${info.sessionId}`,
           group: 'Recent sessions',
           label: sessionTitle(info),
@@ -72,16 +69,12 @@
     return rows;
   });
 
-  // What a row is found under is the ranking: a machine and the sessions running
-  // on it match the same words, and the heading is what tells them apart. Command
-  // drops a group once nothing under it survives the filter.
   const grouped = $derived(
     GROUPS.map((name) => ({ name, rows: entries.filter((entry) => entry.group === name) })).filter(
       (group) => group.rows.length > 0
     )
   );
 
-  /** Subsequence match, so `cokp` still finds `cockpit`. */
   function matches(haystack: string, needle: string): boolean {
     let at = 0;
     for (const char of needle) {
@@ -92,8 +85,6 @@
     return true;
   }
 
-  // Command scores every item itself; this is the rule the palette has always
-  // used, read over the label and its context rather than the row's key.
   function score(value: string, search: string, keywords?: string[]): number {
     const haystack = (keywords?.join(' ') ?? value).toLowerCase();
     return matches(haystack, search.trim().toLowerCase()) ? 1 : 0;
@@ -137,8 +128,8 @@
   </Command.List>
 
   <div class="flex gap-4 border-t border-border px-4 py-2 text-xs text-muted-foreground">
-    <span><kbd class="rounded bg-accent px-1 text-accent-foreground">↑↓</kbd> navigate</span>
-    <span><kbd class="rounded bg-accent px-1 text-accent-foreground">↵</kbd> open</span>
-    <span><kbd class="rounded bg-accent px-1 text-accent-foreground">esc</kbd> close</span>
+    <span><Kbd>↑↓</Kbd> navigate</span>
+    <span><Kbd>↵</Kbd> open</span>
+    <span><Kbd>esc</Kbd> close</span>
   </div>
 </Command.Dialog>

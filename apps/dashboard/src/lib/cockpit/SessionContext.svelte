@@ -92,6 +92,15 @@
   /** The `fs` verb's own sentence for a file that is not there. */
   const isMissing = (error: unknown) => message(error).includes('does not exist');
 
+  /**
+   * What a read that never came back says out loud. The exception underneath is
+   * the tunnel's own ("Failed to execute 'json' on 'Response'…") and names
+   * neither the file nor a way out of it, so it stays in the tooltip for
+   * whoever is debugging the wire rather than reading their memory.
+   */
+  const unanswered = (file: string): string =>
+    `This machine did not answer for ${file} — reconnect it and retry.`;
+
   async function readFile(path: string): Promise<{ content: string | null; error: string | null }> {
     try {
       return { content: await machineFs<string>(machineId, 'read', path), error: null };
@@ -145,16 +154,18 @@
 
 {#snippet fact(label: string, value: string, mono: boolean)}
   <div class="flex flex-col gap-0.5">
-    <dt class="text-xs text-muted-foreground">{label}</dt>
-    <dd class="text-sm break-all {mono ? 'font-mono' : ''}">{value}</dd>
+    <dt class="text-caption">{label}</dt>
+    <dd class="text-body break-all {mono ? 'font-mono' : ''}">{value}</dd>
   </div>
 {/snippet}
 
-{#snippet scope(name: string, problem: string | null)}
+{#snippet scope(name: string, file: string, problem: string | null)}
   <span class="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
     <span>{name}</span>
     {#if problem}
-      <span class="min-w-0 truncate text-error" role="alert">{problem}</span>
+      <span class="min-w-0 shrink-0 text-error" role="alert" title="{unanswered(file)} ({problem})">
+        no answer
+      </span>
     {/if}
   </span>
 {/snippet}
@@ -169,8 +180,8 @@
 <Sidebar.Root side="right" collapsible="offcanvas" class="md:absolute md:h-full">
   <Tabs.Root bind:value={tab} class="flex min-h-0 flex-1 flex-col gap-0">
     <!-- The kit's header stacks; this one is a row. -->
-    <Sidebar.Header class="flex-row items-center gap-2 border-b border-border px-4 py-2">
-      <Tabs.List>
+    <Sidebar.Header class="material-chrome flex-row items-center gap-2 border-b border-border px-4 py-2">
+      <Tabs.List class="bg-muted rounded-xl p-1">
         <Tabs.Trigger value="memory">Memory</Tabs.Trigger>
         <Tabs.Trigger value="mcp">MCP</Tabs.Trigger>
         <Tabs.Trigger value="skills">Skills</Tabs.Trigger>
@@ -189,7 +200,7 @@
 
     <Sidebar.Content class="gap-4 p-4">
       <Tabs.Content value="memory" class="flex flex-col gap-4">
-        <p class="text-[13px] text-muted-foreground">
+        <p class="text-caption">
           What Claude Code reads at <span class="font-mono">{cwd}</span> on this machine — user, project,
           then local.
         </p>
@@ -203,11 +214,11 @@
             path="~/.claude/CLAUDE.md"
             content={user}
             emptyText={failed.user
-              ? 'This machine could not be asked for its user memory.'
+              ? unanswered('its user memory')
               : 'No user CLAUDE.md on this machine.'}
           >
             {#snippet meta()}
-              {@render scope('user', failed.user)}
+              {@render scope('user', 'its user memory', failed.user)}
             {/snippet}
             {#snippet actions()}
               <Button variant="ghost" size="xs" href="/tools?tab=memory">Manage</Button>
@@ -218,10 +229,12 @@
             path="CLAUDE.md"
             content={project}
             save={saveProject}
-            emptyText="No CLAUDE.md in this project — click to write one."
+            emptyText={failed.project
+              ? unanswered('CLAUDE.md')
+              : 'No CLAUDE.md in this project — click to write one.'}
           >
             {#snippet meta()}
-              {@render scope('project', failed.project)}
+              {@render scope('project', 'CLAUDE.md', failed.project)}
             {/snippet}
           </MemoryCard>
 
@@ -229,10 +242,12 @@
             path="CLAUDE.local.md"
             content={local}
             save={saveLocal}
-            emptyText="No CLAUDE.local.md — click to write one. Git never sees this file."
+            emptyText={failed.local
+              ? unanswered('CLAUDE.local.md')
+              : 'No CLAUDE.local.md — click to write one. Git never sees this file.'}
           >
             {#snippet meta()}
-              {@render scope('local', failed.local)}
+              {@render scope('local', 'CLAUDE.local.md', failed.local)}
             {/snippet}
           </MemoryCard>
         {/if}
@@ -244,10 +259,10 @@
             <Skeleton class="h-28 w-full shrink-0 rounded-xl" />
           {/each}
         {:else if servers.length === 0}
-          <p class="text-[13px] text-muted-foreground">No MCP servers in this session.</p>
+          <p class="text-caption">No MCP servers in this session.</p>
         {:else}
           {#each servers as server (server.name)}
-            <div class="shrink-0 rounded-xl border border-border p-3">
+            <div class="shrink-0 rounded-xl bg-card p-3 shadow-sm">
               <McpServerDetail {server} {instanceId} {machineId} />
             </div>
           {/each}
@@ -256,16 +271,16 @@
 
       <Tabs.Content value="skills" class="flex flex-col gap-4">
         {#if skills.length === 0}
-          <p class="text-[13px] text-muted-foreground">
+          <p class="text-caption">
             This session has listed no skills yet. The list arrives with the session's own init
             frame, so it fills in on the first turn.
           </p>
         {:else}
-          <p class="text-[13px] text-muted-foreground">
+          <p class="text-caption">
             {skills.length} skill{skills.length === 1 ? '' : 's'} this session can reach, as its
             <span class="font-mono">/</span> menu lists them.
           </p>
-          <ul class="flex flex-col rounded-xl border border-border">
+          <ul class="flex flex-col rounded-xl bg-card shadow-sm">
             {#each skills as skill (skill.name)}
               <li class="flex flex-col gap-0.5 border-t border-border px-3 py-2 first:border-t-0">
                 <span class="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -280,7 +295,7 @@
               </li>
             {/each}
           </ul>
-          <p class="text-xs text-muted-foreground">
+          <p class="text-caption">
             Every machine's own skills are on
             <a class="underline underline-offset-4" href="/tools?tab=skills">the tools page</a>,
             where an unmanaged one can be adopted into the fleet.
@@ -309,9 +324,9 @@
           {/if}
           {#if sessionId}
             <div class="flex flex-col gap-0.5">
-              <dt class="text-xs text-muted-foreground">Session id</dt>
+              <dt class="text-caption">Session id</dt>
               <dd class="flex items-center gap-2">
-                <span class="min-w-0 flex-1 truncate font-mono text-sm">{sessionId}</span>
+                <span class="min-w-0 flex-1 truncate font-mono text-body">{sessionId}</span>
                 <CopyButton
                   text={sessionId}
                   variant="ghost"

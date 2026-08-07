@@ -226,10 +226,9 @@
 <Handle type="target" position={Position.Top} style="background: {branchColor}" />
 
 <div
-  class="subagent-node rounded-lg border-l-4 {getBorderClass(groupStatus)} bg-card p-3 w-[320px] transition-colors {zoomable
+  class="subagent-node rounded-xl shadow-sm bg-card p-3 w-[320px] transition-colors {zoomable
     ? 'cursor-pointer hover:bg-accent hover:text-accent-foreground/50 focus-visible:ring-2 focus-visible:ring-ring'
     : ''}"
-  style="border-left-color: {branchColor}"
   {...zoomAction}
 >
   {#if zoomLevel === 'overview'}
@@ -365,7 +364,8 @@
                   {/each}
 
                   {#each childSubagents as child (child.toolUseId)}
-                    <div class="flex items-center gap-2 text-xs py-1 px-2 rounded bg-info/10 border-l-2 border-info">
+                    <div class="flex items-center gap-2 text-xs py-1 px-2 rounded bg-info/10">
+                      <div class="w-1.5 h-1.5 rounded-full bg-info shrink-0"></div>
                       <IconSkill class="h-3 w-3 text-info shrink-0" />
                       <span class="font-medium">{child.subagentType}</span>
                       <span class="text-muted-foreground">{statusLabel(child.status)}</span>

@@ -3,11 +3,34 @@
   <head>
     <meta charset="utf-8" />
     <link rel="icon" href="%sveltekit.assets%/favicon.png" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Cockpit - Claude Code Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Outpost — mission control for Claude Code</title>
     %sveltekit.head%
   </head>
   <body data-sveltekit-preload-data="hover">
+    <!--
+    THESIS: Outpost answers "what is every agent doing, what needs me" in one
+    glance, then one click deep. It refuses the stacked-form admin page and the
+    stretched single column.
+    OWN-WORLD: Apple x Airbnb. Warm-white canvas (warm charcoal at night),
+    white surfaces floating on soft offset shadows, translucent chrome, one
+    action olive, status tints (idle green / working amber / needs-you red),
+    SF-stack UI type with size-specific tracking, TX-02 strictly for
+    code/paths/data. Depth from elevation, not borders.
+    STORY: the operator glances at the fleet board, sees what is blocked on
+    them, acts with one key or click, drills into a live streaming transcript,
+    spawns sessions into project folders, and leaves. Calm when idle; urgent
+    only where urgency is real.
+    FIRST VIEWPORT: attention strip on top (permissions/questions/blocked),
+    live session board beneath it (state, machine, project, tool, context);
+    sidebar of machines->projects->sessions left; spawn is compact and inline.
+    Ultrawide adds a detail pane beside the board; iPhone recomposes to sheets
+    and a thumb bar, never a shrunken desktop.
+    FORM: user-pinned direction (Apple x Airbnb, 2026-08-07) superseding the
+    rolled candidates; seed keys 7efd1737 / 98204eb5 recorded.
+    FINISH: unreviewed and undocumented is unfinished; this build ends with
+    the finish review, the verdict, and DESIGN.md.
+    -->
     <div style="display: contents">%sveltekit.body%</div>
   </body>
 </html>
