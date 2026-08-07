@@ -1,6 +1,6 @@
 import { query, type AccountInfo, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { AuthState } from '@cockpit/core';
-import { platform } from 'node:os';
+import { homedir, platform } from 'node:os';
 
 /** The keychain item Claude Code keeps its OAuth credentials in on macOS. */
 const KEYCHAIN_SERVICE = 'Claude Code-credentials';
@@ -72,5 +72,54 @@ export const probeAuth = async (): Promise<AuthState> => {
   handle.close();
 
   if (account && credentialed(account)) return 'authenticated';
-  return (await keychainRefused()) ? 'unreadable-credentials' : 'unauthenticated';
+
+  // Absence of evidence is not evidence of absence.
+  //
+  // `accountInfo()` answers `{tokenSource: 'none', apiProvider: 'firstParty'}`
+  // on machines whose sessions work perfectly — measured: a Mac returning
+  // exactly that shape answered a turn seconds later. So an empty answer says
+  // nothing, and reporting `unauthenticated` from it puts "needs sign in" on a
+  // working machine and sends the reader off to fix what is not broken.
+  //
+  // Only a refusal is positive evidence: `errSecInteractionNotAllowed` means
+  // credentials are there and this process cannot reach them. Everything else
+  // gets the benefit of the doubt, because a session that genuinely cannot
+  // answer will say so itself, in the turn, where it is unambiguous.
+  return (await keychainRefused()) ? 'unreadable-credentials' : 'authenticated';
+};
+
+/**
+ * Unlocks this machine's login keychain with the password the reader typed in
+ * the dashboard, then reports what the machine can do afterwards.
+ *
+ * Why this exists at all: on macOS the login keychain is bound to the Aqua
+ * session, and a locked one refuses every read with
+ * `errSecInteractionNotAllowed`. The daemon then reports
+ * `unreadable-credentials` and every turn on that machine answers "Not logged
+ * in" — a fleet tool whose answer to that is "go and open a terminal on the
+ * other machine" has stopped being a fleet tool.
+ *
+ * The password is used and dropped. It is never stored, never logged, and never
+ * travels anywhere but into this one call.
+ */
+export const unlockKeychain = async (password: string): Promise<AuthState> => {
+  if (platform() !== 'darwin') {
+    throw new Error('Only macOS keeps its credentials in a keychain that locks.');
+  }
+  if (!password) throw new Error('The keychain password is required.');
+
+  const keychain = `${homedir()}/Library/Keychains/login.keychain-db`;
+  const unlocked = await Bun.$`security unlock-keychain -p ${password} ${keychain}`
+    .quiet()
+    .nothrow();
+  if (unlocked.exitCode !== 0) {
+    // The tool's own words, minus anything that might echo the password back.
+    const said = unlocked.stderr.toString().trim();
+    throw new Error(
+      said.includes('password')
+        ? 'That password did not unlock the keychain.'
+        : `The keychain refused to unlock: ${said || `exit ${unlocked.exitCode}`}`
+    );
+  }
+  return await probeAuth();
 };

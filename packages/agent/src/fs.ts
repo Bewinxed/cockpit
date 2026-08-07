@@ -5,7 +5,18 @@
  */
 import type { FsEntry, FsPayload } from '@cockpit/core';
 import { readdir } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { homedir } from 'node:os';
+import { join, resolve } from 'node:path';
+
+/**
+ * `~` is the shell's, not a path: anything handed a literal `~` — a spawn's
+ * working directory, a probe for a binary an installer left in a home
+ * directory — is pointed at somewhere that does not exist.
+ */
+export const expandHome = (path: string): string => {
+  if (path === '~') return homedir();
+  return path.startsWith('~/') ? join(homedir(), path.slice(2)) : path;
+};
 
 /** A read past this is a file transfer, which this verb is not for. */
 const MAX_READ_BYTES = 512 * 1024;

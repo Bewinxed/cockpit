@@ -22,27 +22,32 @@ import type {
   SpawnPayload,
   StopPayload,
 } from '@cockpit/core';
-import { COCKPIT_SCRATCH_TAG, repoPath, RESOLVE_PERMISSION } from '@cockpit/core';
+import {
+  AGENT_BUSY,
+  COCKPIT_SCRATCH_TAG,
+  FLEET_STATUS,
+  FLEET_SYNC,
+  MARKETPLACE_CATALOG,
+  READ_MEMORY_FILE,
+  repoPath,
+  RESOLVE_PERMISSION,
+  UPDATE_COCKPIT,
+} from '@cockpit/core';
+import { fleetStatus, marketplaceCatalog, readMemoryFile, syncFleetConfig } from './fleet';
+import { handoffServer } from './handoff';
+import { probeAuth, unlockKeychain } from './auth';
+import { beginLogin, clearCredentials, completeLogin, exportCredentials, importCredentials } from './login';
 import { Effect } from 'effect';
 import { stat } from 'node:fs/promises';
-import { homedir } from 'node:os';
-import { join } from 'node:path';
-import { runFs } from './fs';
+import { expandHome, runFs } from './fs';
+import { installTool, probeTools } from './tools';
+import { updateCheckout, type UpdateOptions } from './update';
 
 /** The frames an agent has to send. The hub's own registry news is not one. */
 export type FrameSink = (frame: Exclude<FramePayload, { kind: 'instances' }>) => void;
 
 const warn = (message: string): void => {
   Effect.runFork(Effect.logWarning(message));
-};
-
-/**
- * `~` is the shell's, not a path: spawning in a literal `~` puts the SDK in a
- * directory that does not exist, which it reports as a launch failure.
- */
-const expandHome = (path: string): string => {
-  if (path === '~') return homedir();
-  return path.startsWith('~/') ? join(homedir(), path.slice(2)) : path;
 };
 
 const isDirectory = async (path: string): Promise<boolean> => {
@@ -264,6 +269,35 @@ const SESSION_FUNCTIONS = {
   deleteSession,
   listRepos,
   updateClaudeCode,
+  // The machine's workflow CLIs (NEW.md §10). Machine-scoped for the same
+  // reason the rest of this block is: a tool is a property of the machine, and
+  // no session has to be running for one to be asked about or installed.
+  listTools: probeTools,
+  installTool,
+  // And the fleet's MCP servers and skill plugins (NEW.md §11), for the same
+  // reason again: what a machine's Claude Code can reach is a property of the
+  // machine, and the sync that converges it runs with nothing else going on.
+  [FLEET_SYNC]: syncFleetConfig,
+  [FLEET_STATUS]: fleetStatus,
+  [MARKETPLACE_CATALOG]: marketplaceCatalog,
+  // The machine's own user CLAUDE.md, for the hub to adopt as the fleet's.
+  [READ_MEMORY_FILE]: readMemoryFile,
+  // Machine-scoped, not session-scoped: a locked keychain is a property of the
+  // machine, and the session that noticed it cannot answer anything until it
+  // is fixed. Reached over the tunnel, which is the point — nobody should have
+  // to open a terminal on the other machine to get their fleet working again.
+  // Logging a machine in from the dashboard is the fix; unlocking its keychain
+  // is the workaround for a machine that is already logged in and cannot reach
+  // what it saved. Both are here, and neither needs a terminal on that machine.
+  beginLogin,
+  completeLogin,
+  // One account, one login: a healthy machine hands its credential to a
+  // stranded one over the tunnel, instead of every machine doing OAuth alone.
+  clearCredentials,
+  exportCredentials,
+  importCredentials,
+  unlockKeychain,
+  probeAuth,
 } as Record<string, ControlMethod | undefined>;
 
 /**
@@ -294,6 +328,26 @@ export class SessionSupervisor {
   readonly #quests = new Map<string, Quest>();
   /** One chain per instance, so envelopes about it are handled in arrival order. */
   readonly #queues = new Map<string, Promise<void>>();
+  /**
+   * The sessions with a turn in flight — from the `send` that starts one until
+   * the `result` frame that ends it. What tells a restart it would be cutting
+   * work in half, and the only thing on the machine that knows.
+   */
+  readonly #busy = new Set<string>();
+
+  /**
+   * The machine-scoped controls that need this daemon rather than this machine;
+   * {@link SESSION_FUNCTIONS} is the rest of them, and needs no instance to
+   * answer from.
+   */
+  readonly #daemonFunctions: Record<string, ControlMethod> = {
+    [AGENT_BUSY]: () => ({ busy: this.#busy.size, instances: [...this.#busy] }),
+    // The busy count is this daemon's own word, folded in after whatever the
+    // caller asked for: an update must not be able to talk itself into
+    // restarting a machine mid-turn.
+    [UPDATE_COCKPIT]: (options) =>
+      updateCheckout({ ...(options as UpdateOptions), busy: this.#busy.size }),
+  };
 
   /**
    * Re-pointed at each hub connection. Frames produced while the hub is away are
@@ -301,6 +355,14 @@ export class SessionSupervisor {
    * `control reinitialize` after it reconnects.
    */
   sink: FrameSink = () => {};
+  /**
+   * Puts an arbitrary envelope on the daemon's hub socket. The frame sink only
+   * carries `frames`, and a hand-off is a `send` addressed at another machine's
+   * session — a different verb with a different destination.
+   */
+  emit: (envelope: Envelope) => void = () => {};
+  /** Re-registers this machine, so a changed auth state reaches the fleet. */
+  reannounce: () => void = () => {};
 
   /**
    * Fire-and-forget: the socket callback has nowhere to put a rejection. Queued
@@ -406,6 +468,16 @@ export class SessionSupervisor {
           forwardSubagentText: true,
           agentProgressSummaries: true,
           ...options,
+          // The fleet, as tools. Merged rather than assigned, so a spawn that
+          // brings its own servers keeps them.
+          mcpServers: {
+            ...(options?.mcpServers ?? {}),
+            outpost: handoffServer({
+              instanceId,
+              cwd: workdir,
+              emit: (envelope) => this.emit(envelope),
+            }),
+          },
           ...(permissionMode && { permissionMode }),
           ...(model && { model }),
           // The SDK will not bypass permissions unless it is asked twice over.
@@ -457,6 +529,7 @@ export class SessionSupervisor {
         }
         if (message.type === 'result') {
           turn.end();
+          this.#busy.delete(instanceId);
           this.#tagQuest(instanceId);
         }
         this.sink({ kind: 'sdk', instanceId, message });
@@ -468,6 +541,10 @@ export class SessionSupervisor {
       if (this.#sessions.has(instanceId)) this.#fail(instanceId, error);
     } finally {
       this.#sessions.delete(instanceId);
+      // However the session ended — stopped, relaunched, or died of something —
+      // it is carrying nothing now, and a machine that says otherwise is one
+      // nothing will ever restart.
+      this.#busy.delete(instanceId);
     }
   }
 
@@ -526,8 +603,33 @@ export class SessionSupervisor {
 
   async #send({ instanceId, message, attachments, images }: SendPayload): Promise<void> {
     const session = this.#session(instanceId);
+    const origin = (message as { origin?: { kind?: string } }).origin;
+    const queued = (message as { shouldQuery?: boolean }).shouldQuery === false;
+
+    // "Queued, so it is picked up at the end of the current turn" is only true
+    // if there *is* a current turn. Handed to a session sitting idle, a queued
+    // message waits for a turn that never comes — it lands in the transcript
+    // and is never answered, which is the one outcome a hand-off must not have.
+    // Busy: stay out of the way. Idle: this is the turn.
+    const wake = queued && !session.turn.busy;
+    // A queued hand-off appends and is answered whenever the session next takes
+    // a turn, so it is not one; the send that wakes an idle session is.
+    if (!queued || wake) this.#busy.add(instanceId);
+    const outgoing = wake
+      ? ({ ...message, shouldQuery: undefined } as typeof message)
+      : message;
+
     session.turn.start();
-    session.input.push(withExtras(message, attachments, images));
+    session.input.push(withExtras(outgoing, attachments, images));
+
+    // A hand-off is queued rather than asked (`shouldQuery: false`), so the SDK
+    // appends it and emits nothing until the session next takes a turn — which
+    // can be hours. The dashboards watching that session would show no sign of
+    // it having arrived, and a hand-off nobody can see land is one nobody
+    // trusts. Echoed as the frame the SDK will not send, so it appears at once.
+    if (origin?.kind === 'peer') {
+      this.sink({ kind: 'sdk', instanceId, message: message as never });
+    }
   }
 
   /**
@@ -693,12 +795,16 @@ export class SessionSupervisor {
   /** No instanceId means the call is about this machine, not about a session. */
   async #call(instanceId: string | undefined, method: string, args: unknown[]): Promise<unknown> {
     if (instanceId === undefined) {
-      const sessionFunction = SESSION_FUNCTIONS[method];
+      const sessionFunction = this.#daemonFunctions[method] ?? SESSION_FUNCTIONS[method];
       if (!sessionFunction) throw new Error(`unknown session function: ${method}`);
       const result = await sessionFunction(...args);
       // Keeping a quest clears its tag through here. Whoever asked has the last
       // word, or the next turn to end would quietly hide the session again.
       if (method === 'tagSession') this.#closeTagging(args[0]);
+      // An unlock changes what this machine can do, and the fleet learned the
+      // old answer at register. Say it again, or the rail keeps showing a
+      // machine that has just been fixed as one that still needs fixing.
+      if (['unlockKeychain', 'completeLogin', 'importCredentials', 'clearCredentials'].includes(method)) this.reannounce();
       return result;
     }
     if (method === RESOLVE_PERMISSION) {

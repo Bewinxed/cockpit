@@ -45,7 +45,15 @@ export async function loadCredentials(): Promise<StoredCredentials | null> {
 export async function saveCredentials(tokens: OAuthTokens): Promise<void> {
   await ensureCredentialsDir();
 
+  // Whatever else is in this file stays in it. Claude Code keeps its MCP OAuth
+  // entries here too, so writing only the account block silently signs the
+  // machine out of every connected MCP server as a side effect of logging in.
+  const existing = await Bun.file(CREDENTIALS_FILE)
+    .json()
+    .catch(() => ({}) as Record<string, unknown>);
+
   const credentials: StoredCredentials = {
+    ...(existing as StoredCredentials),
     claudeAiOauth: {
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,

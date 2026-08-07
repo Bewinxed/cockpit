@@ -4,7 +4,14 @@ import { COCKPIT_ENV, COCKPIT_HUB_PORT } from '@cockpit/core';
 import { CONFIG_PATH, readConfig } from './config';
 import { discoverHub, type Hub } from './discover';
 import { clearToken, login, LoginError, saveToken } from './login';
-import { isServiceAction, service, ServiceError, SERVICE_ACTIONS } from './service';
+import {
+  isServiceAction,
+  isServiceId,
+  service,
+  ServiceError,
+  SERVICE_ACTIONS,
+  SERVICE_IDS,
+} from './service';
 
 /** Reported by `--version`; keep in sync with package.json. */
 const CLI_VERSION = '0.1.0';
@@ -15,13 +22,36 @@ Usage
   cockpit up [--hub <url>] [--verbose]      run the agent daemon on this machine
   cockpit hub [--verbose]                   run the hub here
   cockpit status [--hub <url>] [--verbose]  print the hub it found, and the fleet
-  cockpit service <${SERVICE_ACTIONS.join('|')}>  run the daemon as a per-user service
+  cockpit service <${SERVICE_ACTIONS.join('|')}> [service...]
+                                            run cockpit as per-user services
   cockpit login [--token <token>]           give this machine a Claude Code token
   cockpit logout                            forget it
+
+Services
+  ${SERVICE_IDS.join(', ')} — each its own per-user service, started by systemd or
+  launchd and kept up across reboots. \`install\`, \`uninstall\`, \`restart\` and
+  \`status\` take any of them and act on all three when given none; \`logs\` takes
+  exactly one. A machine nobody points a browser at wants \`agent\` alone.
+
+  \`install --dev\` runs them out of the checkout instead of the build: the hub
+  watches its own source and restarts itself on every edit, which costs nothing
+  because the sessions live in the daemons and reconnect; the dashboard runs
+  vite, which reloads an edited file without restarting at all. The agent is
+  never watched in either mode — it hosts your sessions, and a restart ends
+  whatever turn is in flight. \`status\` reads the mode back out of the unit.
+
+  \`restart agent\` is therefore always deliberate: it asks the hub how many of
+  this machine's sessions are mid-turn and refuses while any are. \`--when-idle\`
+  waits up to five minutes for those turns to finish and then restarts; \`--force\`
+  restarts regardless, and is also the only way through when the hub cannot be
+  reached to answer the question at all.
 
 Options
   --hub <url>     hub to use, as http://host:port or ws://host:port/ws
   --token <token> a \`claude setup-token\` token, for \`login\` without a terminal
+  --dev           for \`service install\`: run from the checkout, watching it
+  --when-idle     for \`service restart\`: wait for this machine's sessions first
+  --force         for \`service restart\`: restart the agent mid-turn anyway
   --follow, -f    keep printing, for \`service logs\`
   --verbose       narrate the discovery ladder
   --help          this
@@ -65,8 +95,13 @@ interface Args {
   command?: string;
   /** The verb after the command, for the one command that takes one: `service`. */
   action?: string;
+  /** Everything after the verb — the services `service` acts on. */
+  rest: string[];
   hub?: string;
   token?: string;
+  dev: boolean;
+  whenIdle: boolean;
+  force: boolean;
   follow: boolean;
   verbose: boolean;
   help: boolean;
@@ -76,7 +111,16 @@ interface Args {
 class UsageError extends Error {}
 
 const parseArgs = (argv: string[]): Args => {
-  const args: Args = { follow: false, verbose: false, help: false, version: false };
+  const args: Args = {
+    rest: [],
+    dev: false,
+    whenIdle: false,
+    force: false,
+    follow: false,
+    verbose: false,
+    help: false,
+    version: false,
+  };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index] as string;
     switch (arg) {
@@ -87,6 +131,15 @@ const parseArgs = (argv: string[]): Args => {
       case '--token':
         args.token = argv[++index];
         if (!args.token) throw new UsageError('--token needs a token');
+        break;
+      case '--dev':
+        args.dev = true;
+        break;
+      case '--when-idle':
+        args.whenIdle = true;
+        break;
+      case '--force':
+        args.force = true;
         break;
       case '--follow':
       case '-f':
@@ -107,7 +160,7 @@ const parseArgs = (argv: string[]): Args => {
         if (arg.startsWith('-')) throw new UsageError(`unknown option ${arg}`);
         if (!args.command) args.command = arg;
         else if (!args.action) args.action = arg;
-        else throw new UsageError(`unexpected argument ${arg}`);
+        else args.rest.push(arg);
     }
   }
   return args;
@@ -255,7 +308,23 @@ const runService = async (args: Args): Promise<number> => {
   if (!isServiceAction(args.action)) {
     throw new UsageError(`cockpit service needs one of: ${SERVICE_ACTIONS.join(', ')}`);
   }
-  await service(args.action, { follow: args.follow, note: (line) => console.log(line) });
+  const named = args.rest.map((id) => {
+    if (!isServiceId(id)) {
+      throw new UsageError(`cockpit service does not know ${id} — one of: ${SERVICE_IDS.join(', ')}`);
+    }
+    return id;
+  });
+  // Naming nothing means the whole stack, which is what someone setting a
+  // machine up wants; `logs` is the exception and says so itself.
+  const ids = named.length > 0 ? named : SERVICE_IDS;
+  await service(args.action, {
+    ids,
+    mode: args.dev ? 'dev' : 'prod',
+    follow: args.follow,
+    whenIdle: args.whenIdle,
+    force: args.force,
+    note: (line) => console.log(line),
+  });
   return 0;
 };
 

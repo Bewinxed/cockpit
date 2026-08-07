@@ -1,13 +1,16 @@
-import type { AuthState, Envelope } from '@cockpit/core';
+import type { AuthState, BuildInfo, Envelope, ToolStatus } from '@cockpit/core';
 import { COCKPIT_ENV, COCKPIT_HUB_PORT } from '@cockpit/core';
 import { Data, Duration, Effect, Fiber, Schedule } from 'effect';
 import { arch, hostname, platform } from 'node:os';
 import { probeAuth } from './auth';
+import { buildInfo } from './build';
 import { machineId } from './machine-id';
 import { resumableSessions, SessionSupervisor } from './session';
+import { probeTools } from './tools';
 
 const DEFAULT_HUB_URL = `ws://localhost:${COCKPIT_HUB_PORT}/ws`;
 const HEARTBEAT_INTERVAL = Duration.seconds(15);
+
 
 /** How the hub identifies this machine in its registry. */
 interface MachineIdentity {
@@ -36,6 +39,18 @@ export interface RegisterPayload extends MachineIdentity {
    * when the catalog could not be read.
    */
   resumable?: string[];
+  /**
+   * What the machine has of the tool catalog (NEW.md §10), so the hub can send
+   * an install for whatever its policy requires and this machine lacks. Absent
+   * from a register that did not probe.
+   */
+  tools?: ToolStatus[];
+  /**
+   * The cockpit this daemon is running (NEW.md §12), so the hub can say which
+   * machines are behind it. Absent from the re-announce, which is about
+   * credentials and has nothing new to say about the build.
+   */
+  build?: BuildInfo;
 }
 
 export class ConnectionLost extends Data.TaggedError('ConnectionLost')<{
@@ -91,9 +106,36 @@ const attach = (supervisor: SessionSupervisor, identity: MachineIdentity, url: s
       ...identity,
       instances: supervisor.instanceIds,
       resumable: yield* Effect.promise(() => resumableSessions()),
+      tools: yield* Effect.promise(() => probeTools()),
+      build: yield* Effect.promise(() => buildInfo()),
     };
     send(socket, { verb: 'register', machineId: identity.machineId, payload });
     yield* Effect.logInfo(`registered with ${url}`);
+
+    // Says this machine over again, with whatever it can do about credentials
+    // now. An unlock changes the answer, and the fleet has to hear it or the
+    // rail keeps reporting a machine that has just been fixed as broken.
+    //
+    // No tool report rides along: an install answers with its own status on the
+    // `control_result` the hub is already waiting for, and a stale report here
+    // would have the hub install a tool it has just watched arrive.
+    supervisor.reannounce = () => {
+      if (socket.readyState !== WebSocket.OPEN) return;
+      void probeAuth().then((auth) => {
+        send(socket, {
+          verb: 'register',
+          machineId: identity.machineId,
+          payload: { ...identity, auth, instances: supervisor.instanceIds },
+        });
+      });
+    };
+
+    // A hand-off leaves as a `send` addressed at the target's machine; the hub
+    // relays it the same way it relays a dashboard's.
+    supervisor.emit = (envelope) => {
+      if (socket.readyState !== WebSocket.OPEN) return;
+      send(socket, { ...envelope, machineId: envelope.machineId || identity.machineId });
+    };
 
     supervisor.sink = (frame) => {
       if (socket.readyState !== WebSocket.OPEN) return;
@@ -121,6 +163,18 @@ const attach = (supervisor: SessionSupervisor, identity: MachineIdentity, url: s
         Schedule.spaced(HEARTBEAT_INTERVAL)
       )
     );
+
+    // No periodic auth re-probe. It cost far more than it was worth:
+    // `probeAuth` starts a real `query()`, which is a Claude Code process that
+    // reads the credentials and may refresh them. Refresh tokens rotate, so a
+    // probe that refreshes invalidates the token every other process on this
+    // machine is holding — measured: 38 live processes against 10 sessions,
+    // with the credentials file rewritten seconds earlier, and sessions dying
+    // of "OAuth session expired and could not be refreshed".
+    //
+    // Auth is read once at start. The authoritative signal was never this
+    // probe anyway: a session that cannot answer says so in its own turn,
+    // where it is unambiguous and costs nothing to learn.
 
     return yield* closed(socket, url);
   });
