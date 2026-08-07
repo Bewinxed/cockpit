@@ -1,22 +1,26 @@
 <script lang="ts">
-  /** The whole chrome: wordmark, hub status, machine rail, and the route. */
-  import { IconSidebar, IconSearch, IconShield } from '$lib/icons';
+  /** The whole chrome: wordmark, hub status, session tabs, and the route. */
+  import { IconSidebar, IconSearch, IconShield, IconHelp } from '$lib/icons';
   import type { Snippet } from 'svelte';
-  import { fly, scale } from 'svelte/transition';
+  import { fly, scale, slide } from 'svelte/transition';
   import { quintOut } from 'svelte/easing';
   import { afterNavigate } from '$app/navigation';
   import { browser } from '$app/environment';
   import { Button } from '$lib/components/ui/button';
+  import { Kbd } from '$lib/components/ui/kbd';
+  import * as Sheet from '$lib/components/ui/sheet';
   import * as SidebarPrimitive from '$lib/components/ui/sidebar';
   import ThemeSwitcher from '$lib/components/ui/ThemeSwitcher.svelte';
-  import { cockpit } from './client.svelte';
+  import { cockpit, reconnectNow } from './client.svelte';
   import JumpPalette from './JumpPalette.svelte';
+  import SessionTabs from './SessionTabs.svelte';
+  import ShortcutSheet from './ShortcutSheet.svelte';
   import Sidebar from './Sidebar.svelte';
 
   let { children }: { children: Snippet } = $props();
 
   let palette = $state(false);
-  /** The rail is a drawer on narrow viewports, where it would eat the transcript. */
+  let shortcuts = $state(false);
   let rail = $state(false);
 
   afterNavigate(() => (rail = false));
@@ -36,7 +40,6 @@
 
   let railWidth = $state(readRailWidth());
 
-  /** Only committed widths are persisted, so a drag in progress writes once. */
   function commitRailWidth(px: number): void {
     railWidth = clampRail(px);
     localStorage.setItem(RAIL_KEY, String(railWidth));
@@ -74,7 +77,6 @@
 
   const TYPING = new Set(['INPUT', 'TEXTAREA', 'SELECT']);
 
-  /** Cmd+K anywhere, except while the user is typing into something. */
   function handleKeydown(event: KeyboardEvent) {
     if (event.key !== 'k' || !(event.metaKey || event.ctrlKey)) return;
     const target = event.target;
@@ -94,13 +96,65 @@
     }[cockpit.status]
   );
 
-  const blocked = $derived(cockpit.blockedCount);
+  const dotLabel = $derived(
+    {
+      connected: 'Connected',
+      connecting: 'Connecting',
+      disconnected: 'Disconnected',
+      error: 'Connection error',
+    }[cockpit.status]
+  );
 
+  const blocked = $derived(cockpit.blockedCount);
+  const disconnected = $derived(cockpit.status !== 'connected');
+
+  /* ---- Reconnect banner countdown ---- */
+  let countdown = $state(0);
+  let bannerVisible = $state(false);
+  let recoveryFlash = $state(false);
+  /** The first connection is not a recovery; the banner only shows after a drop. */
+  let wasConnected = $state(false);
+
+  $effect(() => {
+    if (cockpit.status === 'connected') {
+      if (bannerVisible && wasConnected) {
+        recoveryFlash = true;
+        setTimeout(() => {
+          recoveryFlash = false;
+          bannerVisible = false;
+        }, 1500);
+      } else {
+        bannerVisible = false;
+      }
+      wasConnected = true;
+      return;
+    }
+    if (wasConnected && (cockpit.status === 'disconnected' || cockpit.status === 'error')) {
+      bannerVisible = true;
+      recoveryFlash = false;
+    }
+  });
+
+  $effect(() => {
+    const retryAt = cockpit.retryAt;
+    if (!retryAt || cockpit.status === 'connected') {
+      countdown = 0;
+      return;
+    }
+    const tick = () => {
+      const remaining = Math.max(0, Math.ceil((retryAt - Date.now()) / 1000));
+      countdown = remaining;
+    };
+    tick();
+    const id = setInterval(tick, 250);
+    return () => clearInterval(id);
+  });
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
 
 <JumpPalette bind:open={palette} />
+<ShortcutSheet bind:open={shortcuts} />
 
 <div class="flex h-dvh flex-col overflow-hidden bg-background text-foreground">
   <a
@@ -109,10 +163,9 @@
   >
     Skip to content
   </a>
-  <!-- The chrome sits in its own view-transition groups so it holds still
-       while the route below it cross-fades. -->
+
   <header
-    class="flex h-10 shrink-0 items-center gap-3 border-b border-border px-3"
+    class="material-chrome scroll-edge-b relative z-30 flex h-12 shrink-0 items-center gap-3 px-4"
     style="view-transition-name: app-header"
   >
     <Button
@@ -125,47 +178,81 @@
     >
       <IconSidebar />
     </Button>
-    <a href="/session" class="font-mono text-sm font-semibold tracking-tight">COCKPIT</a>
-    <Button
-      variant="ghost"
-      size="xs"
-      class="ml-auto"
-      title="Jump to a project, machine, or session (Cmd/Ctrl + K)"
-      onclick={() => (palette = true)}
-    >
-      <IconSearch />
-      Jump
-    </Button>
-    <a
-      href="/session"
-      class="flex min-h-6 items-center gap-1.5 rounded px-1.5 py-0.5 text-xs transition-colors {blocked >
-      0
-        ? 'bg-warning/10 text-warning hover:bg-warning/20'
-        : 'text-muted-foreground/50 hover:text-muted-foreground'}"
-      title="{blocked} session{blocked === 1 ? '' : 's'} awaiting approval"
-    >
-      <IconShield class="size-3" />
-      <!-- The count is the app's "what needs me" heartbeat: it pops when it
-           crosses zero, and the digit re-enters when it changes. -->
-      {#if blocked > 0}
-        <span
-          in:scale={{ duration: 260, start: 0.5, easing: quintOut }}
-          out:scale={{ duration: 180, start: 0.75, easing: quintOut }}
-        >
-          {#key blocked}
-            <span class="inline-block" in:fly={{ y: 4, duration: 150, easing: quintOut }}>
-              {blocked}
-            </span>
-          {/key}
-        </span>
-      {/if}
-    </a>
-    <span class="flex min-h-6 items-center gap-1.5 text-xs text-muted-foreground">
-      <span class="size-1.5 rounded-full {dot}"></span>
-      {cockpit.status}
-    </span>
-    <ThemeSwitcher />
+
+    <a href="/session" class="text-title shrink-0 text-[17px]">Outpost</a>
+
+    <SessionTabs />
+
+    <div class="ml-auto flex items-center gap-1.5">
+      <Button
+        variant="ghost"
+        size="xs"
+        title="Jump to a project, machine, or session"
+        onclick={() => (palette = true)}
+      >
+        <IconSearch />
+        <span class="hidden sm:inline">Jump</span>
+        <Kbd class="hidden sm:inline-flex">⌘K</Kbd>
+      </Button>
+
+      <a
+        href="/session"
+        class="flex min-h-6 items-center gap-1.5 rounded-lg px-1.5 py-0.5 text-xs transition-colors {blocked >
+        0
+          ? 'bg-warning/10 text-warning hover:bg-warning/20'
+          : 'text-muted-foreground/50 hover:text-muted-foreground'}"
+        title="{blocked} session{blocked === 1 ? '' : 's'} awaiting approval"
+      >
+        <IconShield class="size-3" />
+        {#if blocked > 0}
+          <span
+            in:scale={{ duration: 260, start: 0.5, easing: quintOut }}
+            out:scale={{ duration: 180, start: 0.75, easing: quintOut }}
+          >
+            {#key blocked}
+              <span class="inline-block" in:fly={{ y: 4, duration: 150, easing: quintOut }}>
+                {blocked}
+              </span>
+            {/key}
+          </span>
+        {/if}
+      </a>
+
+      <span class="flex size-6 items-center justify-center" title={dotLabel}>
+        <span class="size-2 rounded-full {dot}"></span>
+      </span>
+
+      <Button
+        variant="ghost"
+        size="icon-xs"
+        title="Keyboard shortcuts"
+        aria-label="Keyboard shortcuts"
+        onclick={() => (shortcuts = true)}
+      >
+        <IconHelp class="size-4" />
+      </Button>
+
+      <ThemeSwitcher />
+    </div>
   </header>
+
+  <!-- Reconnect banner -->
+  {#if bannerVisible}
+    <div
+      class="relative z-20 flex items-center justify-center gap-3 px-4 py-1.5 text-[13px]
+             {recoveryFlash ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning'}"
+      transition:slide={{ duration: 160, easing: quintOut }}
+    >
+      {#if recoveryFlash}
+        Connected
+      {:else}
+        <span>Hub connection lost{countdown > 0 ? ` — retrying in ${countdown}s` : ' — retrying…'}</span>
+        <Button variant="ghost" size="xs" class="h-6" onclick={reconnectNow}>
+          Reconnect now
+        </Button>
+      {/if}
+    </div>
+  {/if}
 
   <SidebarPrimitive.Provider
     class="min-h-0 flex-1"
@@ -175,11 +262,6 @@
     <div class="hidden md:flex" style="view-transition-name: app-rail">
       <Sidebar />
     </div>
-    <!-- The rail is sized by --sidebar-width rather than a pane library: the
-         min/max here are pixels, and percentage panes would redefine them on
-         every viewport change. -->
-    <!-- A focusable separator is the ARIA window-splitter widget; the rule below
-         only knows the decorative kind. -->
     <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <div
@@ -198,18 +280,12 @@
       {@render children()}
     </main>
 
-    {#if rail}
-      <div class="fixed inset-0 z-40 flex md:hidden">
-        <button
-          type="button"
-          class="absolute inset-0 bg-black/40"
-          aria-label="Close navigation"
-          onclick={() => (rail = false)}
-        ></button>
-        <div class="relative flex max-w-[85vw] shadow-lg">
-          <Sidebar />
-        </div>
-      </div>
-    {/if}
+    <Sheet.Root bind:open={rail}>
+      <Sheet.Content side="left" class="material-panel w-[85vw] max-w-sm p-0" showCloseButton={false}>
+        <Sheet.Title class="sr-only">Navigation</Sheet.Title>
+        <Sheet.Description class="sr-only">Machines and sessions</Sheet.Description>
+        <Sidebar />
+      </Sheet.Content>
+    </Sheet.Root>
   </SidebarPrimitive.Provider>
 </div>
