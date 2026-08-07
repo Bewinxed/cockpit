@@ -34,7 +34,10 @@
 		"@tailwindcss/typography": "^0.5.20",
 		"@tailwindcss/vite": "^4.1.0",
 		"@types/bun": "latest",
+		"embla-carousel-svelte": "^8.6.0",
+		"formsnap": "^2.0.1",
 		"jsrepo": "^3.0.10",
+		"layerchart": "^2.0.0",
 		"mode-watcher": "^1.1.0",
 		"paneforge": "^1.0.2",
 		"shadcn-svelte": "^1.4.2",
@@ -43,9 +46,11 @@
 		"svelte-dnd-action": "0.9.76",
 		"svelte-fast-check": "^0.4.5",
 		"svelte-sonner": "^1.1.0",
+		"sveltekit-superforms": "^2.30.0",
 		"tailwindcss": "^4.1.0",
 		"typescript": "^5.9.3",
 		"unplugin-icons": "^23.0.1",
+		"vaul-svelte": "^1.0.0-next.7",
 		"vite": "^6.3.0"
 	},
 	"overrides": {
