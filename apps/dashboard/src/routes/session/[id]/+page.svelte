@@ -993,12 +993,20 @@
       <a href="/session" class="hidden shrink-0 text-sm text-muted-foreground hover:text-foreground sm:inline"
         >Sessions</a
       >
-      <!-- Title first, path second, and neither starves the other: the same
-           3:2 the board's rows give them. -->
+      <!-- The verbs, the pickers and the state are this bar's fixed cost, and
+           under `2xl` what is left cannot hold a title and a path without
+           cutting the path's head off — so there the path drops to the title's
+           tooltip and the name gets the whole run. Where both fit, the path
+           takes the width it needs, up to 60% of the run, and the title gives
+           up the rest: a half-path is a wrong answer to "which checkout", a
+           half-sentence is still the sentence. -->
       <div class="hidden min-w-0 flex-1 items-baseline gap-3 sm:flex">
-        <h1 class="min-w-0 flex-[3_1_0] truncate text-sm font-medium" title={heading}>{heading}</h1>
+        <h1
+          class="min-w-0 flex-1 truncate text-sm font-medium"
+          title={[heading, cwdLabel].join('\n')}
+        >{heading}</h1>
         <span
-          class="min-w-0 flex-[2_1_0] truncate font-mono text-micro text-muted-foreground [direction:rtl]"
+          class="hidden max-w-[60%] shrink-0 truncate font-mono text-micro text-muted-foreground [direction:rtl] 2xl:block"
           title={cwdLabel}
         ><bdi>{cwdLabel}</bdi></span>
       </div>

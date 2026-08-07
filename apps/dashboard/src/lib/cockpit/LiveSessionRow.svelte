@@ -56,7 +56,10 @@
       transition-colors duration-150 ease-out hover:bg-accent hover:text-accent-foreground
       {failed || activity === 'blocked' ? 'bg-error/10' : ''}"
   >
-    <span class="flex items-center gap-2.5">
+    <!-- The row's band is the card's full width, so the whole strip is the
+         hover target; what it *says* stops at a scannable measure, or an
+         ultrawide track leaves the state word a screen away from the name. -->
+    <span class="flex max-w-3xl items-center gap-2.5">
       {#if failed}
         <span class="size-2 shrink-0 rounded-full bg-error"></span>
       {:else if sleeping}
@@ -67,24 +70,28 @@
       {#if quest}
         <IconSparklesDuo class="size-4 shrink-0 text-muted-foreground" />
       {/if}
-      <span class="min-w-0 flex-[3_1_0] truncate text-[13px]">{title}</span>
+      <!-- `max-w-lg`: a title that runs on — a pasted URL, usually — stops at a
+           readable measure instead of crushing the path beside it. -->
+      <span class="min-w-0 max-w-lg truncate text-[13px]">{title}</span>
       {#if quest}
         <Badge variant="secondary" class="shrink-0 text-micro font-normal">side quest</Badge>
       {/if}
-      <!-- Where it runs, second: the path answers "which checkout", never
-           "which session", so it gives up room to the title first, and what it
-           does keep it gives up from the left — the leaf is what tells two
+      <!-- Where it runs, second — and beside the title rather than in a column
+           of its own: on a wide track a path pinned right sits half a card away
+           from the name it belongs to, and the two stop reading as one row.
+           Under pressure it yields three times as readily as the title, and
+           what it keeps it gives up from the left — the leaf is what tells two
            checkouts apart. -->
       {#if showCwd}
         <span
-          class="hidden min-w-0 flex-[2_1_0] truncate font-mono text-micro text-muted-foreground [direction:rtl] sm:block"
+          class="hidden min-w-24 shrink-[3] truncate font-mono text-micro text-muted-foreground [direction:rtl] sm:block"
           title={instance.cwd}
         ><bdi>{instance.cwd}</bdi></span>
       {/if}
       <!-- The state word keeps its colour until the row goes dark under the
            pointer, where only the surface's own foreground stays legible. -->
       <span
-        class="inline-grid shrink-0 justify-items-end text-micro tabular-nums group-hover:text-accent-foreground {failed ||
+        class="ml-auto inline-grid shrink-0 justify-items-end text-micro tabular-nums group-hover:text-accent-foreground {failed ||
         activity === 'blocked'
           ? 'font-medium text-error'
           : 'text-muted-foreground'}"
@@ -100,7 +107,7 @@
       </span>
     </span>
     {#if activity === 'working' && tool}
-      <span class="flex items-baseline gap-2 pl-[18px] text-micro text-muted-foreground">
+      <span class="flex max-w-3xl items-baseline gap-2 pl-[18px] text-micro text-muted-foreground">
         <span class="shrink-0">{tool.name}</span>
         <span class="truncate font-mono">{tool.glance}</span>
       </span>

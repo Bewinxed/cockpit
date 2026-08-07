@@ -132,6 +132,9 @@
     try {
       await machineFs(project.machineId, 'write', claudePath, text);
       claude = text;
+      // CLAUDE.md is in the docs nav too; the viewer must not go on showing
+      // what the rail just replaced.
+      if (open?.path === claudePath) content = text;
       return true;
     } catch (error) {
       claudeError = message(error);
@@ -473,10 +476,10 @@
           </header>
           <div class="flex flex-col gap-1.5 px-3 pb-3">
             {#each live as instance (instance.id)}
-              <LiveSessionRow {instance} />
+              <LiveSessionRow {instance} groupCwd={project.cwd} />
             {/each}
             {#each storedVisible as info (info.sessionId)}
-              <StoredSessionRow machineId={project.machineId} {info} />
+              <StoredSessionRow machineId={project.machineId} {info} groupCwd={project.cwd} />
             {:else}
               {#if live.length === 0}
                 <p class="px-1 py-2 text-caption">Nothing running, nothing recorded yet.</p>
@@ -495,12 +498,15 @@
           </div>
         </section>
 
-        <!-- CLAUDE.md -->
+        <!-- CLAUDE.md. The file itself reads in the docs viewer beside this,
+             which is where a 360px rail cannot compete — so the rail only says
+             it is there and opens the editor. One reader on screen. -->
         <MemoryCard
           path="CLAUDE.md"
           content={claude}
           bind:editing={claudeEditing}
           save={claudeOnline ? saveClaude : undefined}
+          summary="Project memory — every session started here reads it."
           emptyText={claudeOnline
             ? 'No CLAUDE.md in this project — click to create it.'
             : `No machine online — ${machine ? machineLabel(machine.hostname) : project.machineId} has to be up to read this file.`}
@@ -511,9 +517,11 @@
             {/if}
           {/snippet}
           {#snippet footer()}
-            <p class="border-t border-border px-4 py-2 text-micro text-muted-foreground">
-              This file is the repo's own — commit it to share it. Git is its sync; Outpost does not replicate it.
-            </p>
+            {#if claudeEditing}
+              <p class="border-t border-border px-4 py-2 text-micro text-muted-foreground">
+                This file is the repo's own — commit it to share it. Git is its sync; Outpost does not replicate it.
+              </p>
+            {/if}
           {/snippet}
         </MemoryCard>
 

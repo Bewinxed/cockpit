@@ -13,13 +13,6 @@ const isMarkdown = (entry: FsEntry): boolean =>
 
 const stemOf = (name: string): string => name.replace(/\.mdx?$/i, '').toUpperCase();
 
-/**
- * CLAUDE.md is a doc the reader edits rather than one they browse, and the
- * project home gives it its own card in the rail. Listing it here too put the
- * same file on screen twice, in two editors.
- */
-const isMemory = (entry: FsEntry): boolean => stemOf(entry.name) === 'CLAUDE';
-
 /** What a repo is, then what it plans, then how to work in it — the reading order. */
 function rank(name: string): number {
   const stem = stemOf(name);
@@ -40,7 +33,7 @@ export async function readDocs(machineId: string, cwd: string): Promise<Doc[]> {
   const entries = await machineFs<FsEntry[]>(machineId, 'list', cwd);
 
   const root = entries
-    .filter((entry) => isMarkdown(entry) && !isMemory(entry))
+    .filter(isMarkdown)
     .sort((a, b) => rank(a.name) - rank(b.name) || a.name.localeCompare(b.name))
     .map((entry) => ({ name: entry.name, path: `${cwd}/${entry.name}` }));
 
