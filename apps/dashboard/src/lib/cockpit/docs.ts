@@ -11,14 +11,22 @@ const DOC_DIRS = ['docs', 'doc'];
 const isMarkdown = (entry: FsEntry): boolean =>
   entry.kind === 'file' && /\.mdx?$/i.test(entry.name);
 
+const stemOf = (name: string): string => name.replace(/\.mdx?$/i, '').toUpperCase();
+
+/**
+ * CLAUDE.md is a doc the reader edits rather than one they browse, and the
+ * project home gives it its own card in the rail. Listing it here too put the
+ * same file on screen twice, in two editors.
+ */
+const isMemory = (entry: FsEntry): boolean => stemOf(entry.name) === 'CLAUDE';
+
 /** What a repo is, then what it plans, then how to work in it — the reading order. */
 function rank(name: string): number {
-  const stem = name.replace(/\.mdx?$/i, '').toUpperCase();
+  const stem = stemOf(name);
   if (stem === 'README') return 0;
   if (stem.startsWith('PRD')) return 1;
   if (stem === 'NEW') return 2;
-  if (stem === 'CLAUDE') return 3;
-  return 4;
+  return 3;
 }
 
 /** A markdown file in the project, addressed by its path relative to the cwd. */
@@ -32,7 +40,7 @@ export async function readDocs(machineId: string, cwd: string): Promise<Doc[]> {
   const entries = await machineFs<FsEntry[]>(machineId, 'list', cwd);
 
   const root = entries
-    .filter(isMarkdown)
+    .filter((entry) => isMarkdown(entry) && !isMemory(entry))
     .sort((a, b) => rank(a.name) - rank(b.name) || a.name.localeCompare(b.name))
     .map((entry) => ({ name: entry.name, path: `${cwd}/${entry.name}` }));
 

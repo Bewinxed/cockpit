@@ -5,7 +5,16 @@
   import { sessionTitle, transcriptHref } from './links';
   import StoredSessionMenu from './StoredSessionMenu.svelte';
 
-  let { machineId, info }: { machineId: string; info: SDKSessionInfo } = $props();
+  interface Props {
+    machineId: string;
+    info: SDKSessionInfo;
+    /** The card's own path: a row repeating it adds nothing, so it stays off. */
+    groupCwd?: string;
+  }
+
+  let { machineId, info, groupCwd }: Props = $props();
+
+  const showCwd = $derived(Boolean(info.cwd) && info.cwd !== groupCwd);
 </script>
 
 <StoredSessionMenu {machineId} {info}>
@@ -20,10 +29,12 @@
     <span class="min-w-0 flex-[3_1_0] truncate text-[13px]">{sessionTitle(info)}</span>
     <!-- Second to the title for room, and what it keeps it gives up from the
          left — the leaf is what tells two checkouts apart. -->
-    <span
-      class="hidden min-w-0 flex-[2_1_0] truncate font-mono text-micro text-muted-foreground [direction:rtl] sm:block"
-      title={info.cwd ?? ''}
-    ><bdi>{info.cwd ?? ''}</bdi></span>
+    {#if showCwd}
+      <span
+        class="hidden min-w-0 flex-[2_1_0] truncate font-mono text-micro text-muted-foreground [direction:rtl] sm:block"
+        title={info.cwd}
+      ><bdi>{info.cwd}</bdi></span>
+    {/if}
     <span class="shrink-0 text-micro text-muted-foreground tabular-nums" data-tabular>
       {formatDistanceToNow(new Date(info.lastModified))}
     </span>

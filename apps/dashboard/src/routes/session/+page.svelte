@@ -1,6 +1,7 @@
 <script lang="ts">
   import {
     IconChevronRight,
+    IconFolderDuo,
     IconPlus,
   } from '$lib/icons';
   import { onMount } from 'svelte';
@@ -85,10 +86,14 @@
       {#if cockpit.status !== 'connected'}
         <span class="text-caption">hub {cockpit.status}</span>
       {/if}
+      <!-- Machines, and only machines: the board's cards are projects too, so a
+           bare "2/2" over three of them read as a count of what is on screen. -->
       <span class="text-micro text-muted-foreground">
-        {onlineCount}/{machineCount} machine{machineCount === 1 ? '' : 's'}
+        {onlineCount} of {machineCount} machine{machineCount === 1 ? '' : 's'} online
       </span>
-      <div class="ml-auto">
+      <!-- The thumb bar owns this verb on a phone; two of it on one 390pt
+           screen is the same duplication the rail's pill was. -->
+      <div class="ml-auto hidden sm:block">
         <Button size="sm" class="pressable" onclick={() => openSpawn()}>
           <IconPlus />
           New session
@@ -101,10 +106,17 @@
 
     <!-- Session board: groups -->
     {#if groups.length > 0}
-      <div class="grid grid-cols-1 gap-4 md:grid-cols-[repeat(auto-fill,minmax(480px,1fr))]">
+      <!-- `auto-fit`, not `auto-fill`: an ultrawide fills with empty tracks under
+           `auto-fill` and pins three cards to 480px against a bare half-screen.
+           Collapsed instead, the cards take the width they are given. -->
+      <div
+        class="grid grid-cols-1 gap-4 md:grid-cols-[repeat(auto-fit,minmax(480px,1fr))]
+               2xl:grid-cols-[repeat(auto-fit,minmax(620px,1fr))]"
+      >
         {#each groups as group, index (group.kind === 'project' ? `p-${group.project.id}` : `m-${group.machineId}`)}
           {@const live = group.live}
           {@const stored = group.stored}
+          {@const groupCwd = group.kind === 'project' ? group.project.cwd : undefined}
           {@const storedPreview = stored.slice(0, 5)}
           {@const hasMore = stored.length > 5}
           <section
@@ -116,15 +128,19 @@
               easing: quintOut,
             }}
           >
-            <!-- Group header -->
+            <!-- Group header. A project card reads like a machine card — icon
+                 slot, name, one meta line — so the board has one header to
+                 learn rather than two. -->
             {#if group.kind === 'project'}
+              {@const count = live.length + stored.length}
               <div class="flex items-center gap-3 px-4 py-3">
+                <IconFolderDuo class="size-5 shrink-0 text-muted-foreground" />
                 <div class="min-w-0 flex-1">
                   <span class="text-sm font-semibold">{group.project.name}</span>
                   <span class="block truncate font-mono text-micro text-muted-foreground">{group.project.cwd}</span>
                 </div>
-                <span class="text-micro text-muted-foreground tabular-nums" data-tabular>
-                  {live.length + stored.length}
+                <span class="shrink-0 text-micro text-muted-foreground tabular-nums" data-tabular>
+                  {count} session{count === 1 ? '' : 's'}
                 </span>
                 <button
                   type="button"
@@ -139,6 +155,7 @@
             {:else}
               {@const osInfo = machineOs(group.os)}
               {@const machine = cockpit.machines.find((m) => m.machineId === group.machineId)}
+              {@const count = live.length + stored.length}
               {#if machine}
                 <div class="flex items-center gap-3 px-4 py-3">
                   <MachineMenu {machine}>
@@ -153,8 +170,8 @@
                       </div>
                     </div>
                   </MachineMenu>
-                  <span class="text-micro text-muted-foreground tabular-nums" data-tabular>
-                    {live.length + stored.length}
+                  <span class="shrink-0 text-micro text-muted-foreground tabular-nums" data-tabular>
+                    {count} session{count === 1 ? '' : 's'}
                   </span>
                   <button
                     type="button"
@@ -172,7 +189,7 @@
             <!-- Live sessions -->
             <div class="flex flex-col">
               {#each live as instance (instance.id)}
-                <LiveSessionRow {instance} />
+                <LiveSessionRow {instance} {groupCwd} />
               {:else}
                 {#if stored.length === 0}
                   <p class="px-4 pb-3 text-caption">
@@ -197,6 +214,7 @@
                   <StoredSessionRow
                     machineId={group.kind === 'project' ? group.project.machineId : group.machineId}
                     {info}
+                    {groupCwd}
                   />
                 {/each}
                 {#if hasMore}
@@ -211,6 +229,7 @@
                         <StoredSessionRow
                           machineId={group.kind === 'project' ? group.project.machineId : group.machineId}
                           {info}
+                          {groupCwd}
                         />
                       {/each}
                     </Collapsible.Content>

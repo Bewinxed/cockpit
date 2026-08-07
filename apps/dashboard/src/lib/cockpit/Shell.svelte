@@ -5,6 +5,7 @@
   import { fly, scale, slide } from 'svelte/transition';
   import { quintOut } from 'svelte/easing';
   import { afterNavigate } from '$app/navigation';
+  import { page } from '$app/state';
   import { browser } from '$app/environment';
   import { Button } from '$lib/components/ui/button';
   import { Kbd } from '$lib/components/ui/kbd';
@@ -16,6 +17,7 @@
   import SessionTabs from './SessionTabs.svelte';
   import ShortcutSheet from './ShortcutSheet.svelte';
   import Sidebar from './Sidebar.svelte';
+  import ThumbBar from './ThumbBar.svelte';
 
   let { children }: { children: Snippet } = $props();
 
@@ -108,6 +110,9 @@
   const blocked = $derived(cockpit.blockedCount);
   const disconnected = $derived(cockpit.status !== 'connected');
 
+  /** The two screens a phone lives on; the rest are read, not worked from. */
+  const thumbBar = $derived(page.url.pathname.startsWith('/session'));
+
   /* ---- Reconnect banner countdown ---- */
   let countdown = $state(0);
   let bannerVisible = $state(false);
@@ -199,7 +204,7 @@
         href="/session"
         class="flex min-h-6 items-center gap-1.5 rounded-lg px-1.5 py-0.5 text-xs transition-colors {blocked >
         0
-          ? 'bg-warning/10 text-warning hover:bg-warning/20'
+          ? 'bg-error/10 text-error hover:bg-error/20'
           : 'text-muted-foreground/50 hover:text-muted-foreground'}"
         title="{blocked} session{blocked === 1 ? '' : 's'} awaiting approval"
       >
@@ -288,4 +293,8 @@
       </Sheet.Content>
     </Sheet.Root>
   </SidebarPrimitive.Provider>
+
+  {#if thumbBar}
+    <ThumbBar onjump={() => (palette = true)} />
+  {/if}
 </div>

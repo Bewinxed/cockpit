@@ -62,7 +62,6 @@
     IconPin,
     IconPinFilled,
     IconPinList,
-    IconPlus,
     IconRefresh,
     IconKey,
     IconSparklesDuo,
@@ -334,7 +333,7 @@
   <LiveSessionMenu {instance}>
     <Sidebar.MenuButton
       isActive={current}
-      class="{ROW} {!current && warn ? 'bg-warning/10 text-warning' : ''}"
+      class="{ROW} {!current && warn ? 'bg-error/10 text-error' : ''}"
     >
       {#snippet child({ props })}
         <a
@@ -347,7 +346,7 @@
           out:slide={rowOut}
         >
           {#if failed}
-            <span class="size-1.5 shrink-0 rounded-full bg-warning"></span>
+            <span class="size-1.5 shrink-0 rounded-full bg-error"></span>
           {:else if sleeping}
             <span class="size-1.5 shrink-0 rounded-full bg-muted-foreground/40"></span>
           {:else}
@@ -535,7 +534,7 @@
           {/if}
           {#if blockedCount > 0}
             <span
-              class="shrink-0 rounded-full bg-warning/15 px-1.5 text-xs font-medium text-warning tabular-nums"
+              class="shrink-0 rounded-full bg-error/15 px-1.5 text-xs font-medium text-error tabular-nums"
             >
               {blockedCount} needs you
             </span>
@@ -641,11 +640,10 @@
   bind:ref={railEl}
   onkeydown={rovingKeydown}
 >
+  <!-- No spawn button here: the board's header owns the primary one and every
+       group card has its own "+". A second pill in the rail was the same verb
+       said twice. -->
   <Sidebar.Header class="p-3">
-    <Button href="/session" size="sm" class="justify-start rounded-lg">
-      <IconPlus class="shrink-0" />
-      New session
-    </Button>
     <Sidebar.Menu>
       <Sidebar.MenuItem class={ITEM}>
         {@const current = page.url.pathname === '/tools'}

@@ -39,6 +39,16 @@
   let docsError = $state<string | null>(null);
   let docError = $state<string | null>(null);
   let saving = $state(false);
+
+  /**
+   * 24 lines of `prose-sm`, whose line box is exactly 1.5rem — so the clamp
+   * lands between lines instead of through one. What is left over fades under
+   * the card's edge until "Read more" lifts it.
+   */
+  const COLLAPSED_DOC = 'calc(1.5rem * 24)';
+  let docBody = $state<HTMLElement | null>(null);
+  let expanded = $state(false);
+  let clipped = $state(false);
   let showMore = $state(false);
   let forgetOpen = $state(false);
   let spawnOpen = $state(false);
@@ -75,6 +85,7 @@
     draft = null;
     docError = null;
     content = '';
+    expanded = false;
     try {
       content = await machineFs<string>(project.machineId, 'read', doc.path);
     } catch (error) {
@@ -127,6 +138,15 @@
       return false;
     }
   }
+
+  // Only a document with more to show earns a "Read more"; measured after the
+  // markdown paints, because its height is the whole question.
+  $effect(() => {
+    const element = docBody;
+    void content;
+    void expanded;
+    clipped = element ? element.scrollHeight > element.clientHeight + 4 : false;
+  });
 
   const live = $derived(project ? cockpit.liveIn(project) : []);
   const stored = $derived(project ? cockpit.storedIn(project) : []);
@@ -315,7 +335,7 @@
             {/if}
           </div>
 
-          <div class="hidden md:flex md:min-h-0 md:flex-1 md:gap-4 xl:gap-0">
+          <div class="flex min-h-0 flex-1 gap-4 xl:gap-0">
             <!-- 3-col ultrawide: doc nav list | document | rail -->
             <nav
               class="hidden shrink-0 flex-col overflow-y-auto pr-2 xl:flex xl:w-48"
@@ -349,7 +369,10 @@
 
             <!-- 2-col (768-1919): doc nav is horizontal above reading pane -->
             <div class="flex min-w-0 flex-1 flex-col gap-4">
-              <nav class="flex shrink-0 gap-1 overflow-x-auto xl:hidden" aria-label="Project docs">
+              <nav
+                class="hidden shrink-0 gap-1 overflow-x-auto md:flex xl:hidden"
+                aria-label="Project docs"
+              >
                 <!-- svelte-ignore a11y_no_noninteractive_element_to_interactive_role -->
                 <div
                   class="flex gap-1"
@@ -392,67 +415,51 @@
                         Cancel
                       </Button>
                       <Button variant="outline" size="sm" class="shrink-0" disabled={saving} onclick={save}>
-                        {saving ? 'Saving…' : 'Save'}
+                        {saving ? 'Saving\u2026' : 'Save'}
                       </Button>
                     {/if}
                   </header>
                   {#if draft === null}
-                    <div class="max-h-[60vh] overflow-y-auto border-t border-border px-6 py-4">
-                      <div class="prose prose-sm dark:prose-invert max-w-[72ch]">
-                        <Markdown source={content} />
+                    <!-- Read to a line boundary and stop: the collapsed height is
+                         a whole number of prose lines, and the last one fades out
+                         rather than being sliced through by the card's edge. -->
+                    <div class="relative border-t border-border">
+                      <div
+                        bind:this={docBody}
+                        class="overflow-y-auto px-5 py-4 md:px-6"
+                        style="max-height: {expanded ? '70vh' : COLLAPSED_DOC}"
+                      >
+                        <div class="prose prose-sm dark:prose-invert max-w-[72ch]">
+                          <Markdown source={content} />
+                        </div>
                       </div>
+                      {#if !expanded && clipped}
+                        <div
+                          class="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-b from-transparent to-card"
+                        ></div>
+                      {/if}
                     </div>
+                    {#if clipped || expanded}
+                      <button
+                        type="button"
+                        class="flex min-h-9 w-full items-center justify-center rounded-b-xl text-caption
+                          transition-colors hover:bg-accent hover:text-accent-foreground"
+                        onclick={() => (expanded = !expanded)}
+                      >
+                        {expanded ? 'Show less' : 'Read more'}
+                      </button>
+                    {/if}
                   {:else}
                     <textarea
                       bind:value={draft}
                       spellcheck="false"
-                      class="h-[60vh] w-full resize-none border-t border-border bg-transparent px-6 py-4 font-mono text-sm text-foreground
-                        focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+                      class="h-[60vh] w-full resize-none border-t border-border bg-transparent px-5 py-4 font-mono text-sm text-foreground
+                        focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset md:px-6"
                     ></textarea>
                   {/if}
                 </section>
               {/if}
             </div>
-          </div>
-
-          <!-- Mobile: reading pane only (doc selection by Select above) -->
-          <div class="md:hidden">
-            {#if open}
-              <section class="rounded-xl bg-card shadow-md">
-                <header class="flex items-center gap-3 px-4 py-2.5">
-                  <span class="min-w-0 truncate font-mono text-micro text-muted-foreground">{open.name}</span>
-                  {#if docError}
-                    <span class="truncate text-micro text-error" role="alert">{docError}</span>
-                  {/if}
-                  {#if draft === null}
-                    <Button variant="outline" size="sm" class="ml-auto shrink-0" onclick={() => (draft = content)}>
-                      Edit
-                    </Button>
-                  {:else}
-                    <Button variant="ghost" size="sm" class="ml-auto shrink-0" onclick={() => (draft = null)}>
-                      Cancel
-                    </Button>
-                    <Button variant="outline" size="sm" class="shrink-0" disabled={saving} onclick={save}>
-                      {saving ? 'Saving…' : 'Save'}
-                    </Button>
-                  {/if}
-                </header>
-                {#if draft === null}
-                  <div class="max-h-[60vh] overflow-y-auto border-t border-border px-5 py-4">
-                    <div class="prose prose-sm dark:prose-invert max-w-[72ch]">
-                      <Markdown source={content} />
-                    </div>
-                  </div>
-                {:else}
-                  <textarea
-                    bind:value={draft}
-                    spellcheck="false"
-                    class="h-[60vh] w-full resize-none border-t border-border bg-transparent px-5 py-4 font-mono text-sm text-foreground
-                      focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
-                  ></textarea>
-                {/if}
-              </section>
-            {/if}
           </div>
         {/if}
       </div>

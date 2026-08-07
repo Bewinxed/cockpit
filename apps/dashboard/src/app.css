@@ -148,7 +148,10 @@
   --destructive: oklch(0.66 0.185 25);
   --destructive-foreground: oklch(0.985 0.003 84);
 
-  --border: oklch(1 0 0 / 9%);
+  /* Depth is the surface step and the shadow; at night a 9% hairline read as an
+     outline around every card, so the border recedes to a seam and controls
+     take their edge from `--input` instead. */
+  --border: oklch(1 0 0 / 5%);
   --input: oklch(1 0 0 / 13%);
   --ring: oklch(0.7 0.1 122);
 
@@ -588,17 +591,36 @@
   animation-timing-function: var(--ease-inout-soft);
 }
 
-/* Reduced motion: comprehension keeps its cross-fades, nothing travels. */
+/* Reduced motion: comprehension keeps its cross-fades, nothing travels. What
+   the setting asks for is stillness, not instant swaps — zeroing every duration
+   takes the fades with it. So durations clamp to one quick beat, loops stop,
+   presses stop scaling, and the page transitions swap their travelling
+   keyframes for ones that only fade. */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
-    animation-duration: 0.01ms !important;
+    animation-duration: 120ms !important;
     animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+    transition-duration: 120ms !important;
+  }
+  .pressable:active {
+    transform: none;
+  }
+  ::view-transition-old(root) {
+    animation-name: vt-out !important;
+  }
+  ::view-transition-new(root) {
+    animation-name: vt-fade-in !important;
   }
   ::view-transition-group(*),
   ::view-transition-old(*),
   ::view-transition-new(*) {
-    animation-duration: 0.01ms !important;
+    animation-duration: 120ms !important;
+  }
+}
+
+@keyframes vt-fade-in {
+  from {
+    opacity: 0;
   }
 }
 

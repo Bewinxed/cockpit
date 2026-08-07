@@ -4,10 +4,15 @@
    * one, the name's first letter where nothing does (stdio) or the image never
    * arrived. Connection trouble is a dot on the chip, not a chip of its own —
    * clicking one opens what went wrong and what the server offers.
+   *
+   * Eight of those circles is a toolbar of its own, and the header has verbs
+   * that matter more than any of them. Below `xl` the row folds into a single
+   * counted chip that opens the same list, so the servers cost one slot until
+   * somebody asks for them.
    */
   import type { McpServerStatus } from '@cockpit/core';
   import { flip } from 'svelte/animate';
-  import { fly } from 'svelte/transition';
+  import { fly, slide } from 'svelte/transition';
   import { quintOut } from 'svelte/easing';
   import { toast } from 'svelte-sonner';
   import { Button } from '$lib/components/ui/button';
@@ -35,6 +40,9 @@
   let attempt = $state<Record<string, number>>({});
   /** The server whose details popover is open; one at a time. */
   let detailsFor = $state<string | null>(null);
+  /** The folded chip's list, and the row expanded inside it. */
+  let folded = $state(false);
+  let foldedDetail = $state<string | null>(null);
   /** Servers with a restart or stop in flight, by name. */
   let busy = $state<Record<string, boolean>>({});
   /** Favicons that have painted, for the fade-in. */
@@ -59,6 +67,13 @@
       ? `${server.name} · ${server.status} — ${server.error}`
       : `${server.name} · ${server.status}`;
 
+  /** The loudest thing any of them is doing, for the folded chip's one dot. */
+  const worst = $derived(
+    (['failed', 'needs-auth', 'pending'] as const).find((status) =>
+      servers.some((server) => server.status === status)
+    )
+  );
+
   async function run(name: string, action: () => Promise<void>) {
     busy[name] = true;
     try {
@@ -78,7 +93,7 @@
     run(name, () => setMcpServerEnabled(instanceId, machineId, name, enabled));
 </script>
 
-<span class="flex shrink-0 items-center gap-1" aria-label="MCP servers">
+<span class="hidden shrink-0 items-center gap-1 xl:flex" aria-label="MCP servers">
   {#each shown as server (server.name)}
     {@const host = mcpHost(server)}
     {@const candidates = host ? faviconCandidates(host) : []}
@@ -190,3 +205,57 @@
     </span>
   {/if}
 </span>
+
+<!-- Folded: one chip that counts them and says what they are. -->
+<Popover.Root bind:open={folded}>
+  <Popover.Trigger>
+    {#snippet child({ props })}
+      <Button
+        {...props}
+        variant="outline"
+        size="sm"
+        class="relative shrink-0 gap-1 text-xs xl:hidden"
+        title={servers.map((server) => tip(server)).join('\n')}
+        aria-label="{servers.length} MCP servers"
+      >
+        <span class="tabular-nums" data-tabular>{servers.length}</span>
+        MCP
+        {#if worst}
+          <span
+            class="absolute top-0.5 right-0.5 size-2 rounded-full ring-2 ring-background {CHIP_DOT[
+              worst
+            ]}"
+          ></span>
+        {/if}
+      </Button>
+    {/snippet}
+  </Popover.Trigger>
+
+  <Popover.Content class="w-72 rounded-xl p-1.5 shadow-lg" align="end">
+    <ul class="flex max-h-[60vh] flex-col overflow-y-auto">
+      {#each servers as server (server.name)}
+        {@const open = foldedDetail === server.name}
+        <li class="flex flex-col">
+          <button
+            type="button"
+            class="flex min-h-9 items-center gap-2 rounded-lg px-2 text-left transition-colors
+                   hover:bg-accent hover:text-accent-foreground"
+            aria-expanded={open}
+            onclick={() => (foldedDetail = open ? null : server.name)}
+          >
+            <span
+              class="size-2 shrink-0 rounded-full {CHIP_DOT[server.status] ?? DOT.connected}"
+            ></span>
+            <span class="min-w-0 flex-1 truncate text-sm">{server.name}</span>
+            <span class="shrink-0 text-micro text-muted-foreground">{server.status}</span>
+          </button>
+          {#if open}
+            <div class="px-2 pt-1 pb-2" transition:slide={{ duration: 160, easing: quintOut }}>
+              <McpServerDetail {server} {instanceId} {machineId} />
+            </div>
+          {/if}
+        </li>
+      {/each}
+    </ul>
+  </Popover.Content>
+</Popover.Root>

@@ -92,6 +92,15 @@
   /** The `fs` verb's own sentence for a file that is not there. */
   const isMissing = (error: unknown) => message(error).includes('does not exist');
 
+  /**
+   * What a read that never came back says out loud. The exception underneath is
+   * the tunnel's own ("Failed to execute 'json' on 'Response'…") and names
+   * neither the file nor a way out of it, so it stays in the tooltip for
+   * whoever is debugging the wire rather than reading their memory.
+   */
+  const unanswered = (file: string): string =>
+    `This machine did not answer for ${file} — reconnect it and retry.`;
+
   async function readFile(path: string): Promise<{ content: string | null; error: string | null }> {
     try {
       return { content: await machineFs<string>(machineId, 'read', path), error: null };
@@ -150,11 +159,13 @@
   </div>
 {/snippet}
 
-{#snippet scope(name: string, problem: string | null)}
+{#snippet scope(name: string, file: string, problem: string | null)}
   <span class="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
     <span>{name}</span>
     {#if problem}
-      <span class="min-w-0 truncate text-error" role="alert">{problem}</span>
+      <span class="min-w-0 shrink-0 text-error" role="alert" title="{unanswered(file)} ({problem})">
+        no answer
+      </span>
     {/if}
   </span>
 {/snippet}
@@ -203,11 +214,11 @@
             path="~/.claude/CLAUDE.md"
             content={user}
             emptyText={failed.user
-              ? 'This machine could not be asked for its user memory.'
+              ? unanswered('its user memory')
               : 'No user CLAUDE.md on this machine.'}
           >
             {#snippet meta()}
-              {@render scope('user', failed.user)}
+              {@render scope('user', 'its user memory', failed.user)}
             {/snippet}
             {#snippet actions()}
               <Button variant="ghost" size="xs" href="/tools?tab=memory">Manage</Button>
@@ -218,10 +229,12 @@
             path="CLAUDE.md"
             content={project}
             save={saveProject}
-            emptyText="No CLAUDE.md in this project — click to write one."
+            emptyText={failed.project
+              ? unanswered('CLAUDE.md')
+              : 'No CLAUDE.md in this project — click to write one.'}
           >
             {#snippet meta()}
-              {@render scope('project', failed.project)}
+              {@render scope('project', 'CLAUDE.md', failed.project)}
             {/snippet}
           </MemoryCard>
 
@@ -229,10 +242,12 @@
             path="CLAUDE.local.md"
             content={local}
             save={saveLocal}
-            emptyText="No CLAUDE.local.md — click to write one. Git never sees this file."
+            emptyText={failed.local
+              ? unanswered('CLAUDE.local.md')
+              : 'No CLAUDE.local.md — click to write one. Git never sees this file.'}
           >
             {#snippet meta()}
-              {@render scope('local', failed.local)}
+              {@render scope('local', 'CLAUDE.local.md', failed.local)}
             {/snippet}
           </MemoryCard>
         {/if}

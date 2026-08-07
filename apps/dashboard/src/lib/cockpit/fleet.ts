@@ -364,16 +364,25 @@ export async function saveMemory(content: string, expectedHash?: string): Promis
 }
 
 /** What one machine really has, without adopting it: the read behind Compare. */
-export const peekMemory = (machineId: string): Promise<{ content: string; hash: string } | null> =>
-  send(
-    '/api/fleet/memory/peek',
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ machineId }),
-    },
-    "read this machine's memory"
-  );
+/**
+ * A machine with no user CLAUDE.md is answered with no body at all — a fact,
+ * not a failure. `send` would choke parsing that empty answer as JSON, and the
+ * memory tab would report the fetch's own exception as what the machine said.
+ */
+export async function peekMemory(
+  machineId: string
+): Promise<{ content: string; hash: string } | null> {
+  const response = await fetch('/api/fleet/memory/peek', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ machineId }),
+  });
+  if (!response.ok) {
+    throw new Error(`Could not read this machine's memory — ${await said(response)}.`);
+  }
+  const body = await response.text();
+  return body ? (JSON.parse(body) as { content: string; hash: string }) : null;
+}
 
 /** What the memory used to say, newest first and without the content. */
 export const memoryHistory = (): Promise<FleetMemoryVersion[]> =>

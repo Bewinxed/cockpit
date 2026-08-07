@@ -47,6 +47,7 @@
   import PermissionStack from '$lib/cockpit/PermissionStack.svelte';
   import { questionsOf } from '$lib/cockpit/question';
   import { ACTIVITY_LABEL } from '$lib/cockpit/activity';
+  import { sessionTitle } from '$lib/cockpit/links';
   import type {
     InstanceRow,
     PendingPermission,
@@ -110,6 +111,28 @@
     });
   });
   const session = $derived(cockpit.session(viewId));
+
+  /** The path this session works in — the header's second fact, and its title's
+   *  fallback where the SDK has not named the transcript yet. */
+  const cwdLabel = $derived(session?.cwd || browsingCwd || viewId);
+
+  /** The last segment of it — which checkout, in the width a phone has. */
+  const leaf = $derived(cwdLabel.split('/').filter(Boolean).pop() ?? cwdLabel);
+
+  /**
+   * What the session is about, not where it runs. A phone has room for exactly
+   * one of the two, so the title leads and the path follows it from `sm` up.
+   */
+  const heading = $derived.by(() => {
+    // Browsing a stored session, the route id *is* the SDK session id.
+    const sessionId = browsing ? viewId : (session?.sessionId ?? null);
+    const machineId = session?.machineId || browsing;
+    const info =
+      sessionId && machineId
+        ? cockpit.catalogOf(machineId).find((row) => row.sessionId === sessionId)
+        : undefined;
+    return info ? sessionTitle(info) : leaf;
+  });
 
   // Frames land in bursts; the preview reveals them at a steady rate so a turn
   // reads as typing rather than as a slideshow. Presentation only — the follow
@@ -957,13 +980,28 @@
     <!-- The controls are the fixed cost; the path is what gives way. Without
          min-w-0 the flex items refuse to shrink below their content and the
          right-hand group is pushed off the window instead. -->
+    <!-- A phone's header is all controls and no room; the session says its name
+         on the line above them instead of going unnamed. -->
+    <div class="flex min-w-0 items-baseline gap-2 px-4 pt-2 sm:hidden">
+      <h1 class="min-w-0 truncate text-sm font-medium" title={heading}>{heading}</h1>
+      {#if leaf !== heading}
+        <span class="shrink-0 font-mono text-micro text-muted-foreground">{leaf}</span>
+      {/if}
+    </div>
+
     <header class="flex min-w-0 items-center gap-3 border-b border-border px-4 py-2">
       <a href="/session" class="hidden shrink-0 text-sm text-muted-foreground hover:text-foreground sm:inline"
         >Sessions</a
       >
-      <h1 class="min-w-0 flex-1 truncate font-mono text-sm font-normal" title={session?.cwd || viewId}>
-        {session?.cwd || viewId}
-      </h1>
+      <!-- Title first, path second, and neither starves the other: the same
+           3:2 the board's rows give them. -->
+      <div class="hidden min-w-0 flex-1 items-baseline gap-3 sm:flex">
+        <h1 class="min-w-0 flex-[3_1_0] truncate text-sm font-medium" title={heading}>{heading}</h1>
+        <span
+          class="min-w-0 flex-[2_1_0] truncate font-mono text-micro text-muted-foreground [direction:rtl]"
+          title={cwdLabel}
+        ><bdi>{cwdLabel}</bdi></span>
+      </div>
       {#if session?.scratch}
         <span
           class="shrink-0 rounded-sm border border-dashed border-muted-foreground/40 px-1.5 py-0.5 text-xs tracking-wide text-muted-foreground uppercase"
@@ -978,7 +1016,7 @@
       >
         {#if !browsing}
           <!-- The state carries a colour of its own, so the dot says it before the
-               word is read: pinging amber when the session is waiting on you. -->
+               word is read: pinging red when the session is waiting on you. -->
           <ActivityDot {activity} size={1.5} />
         {/if}
         {#if browsing}

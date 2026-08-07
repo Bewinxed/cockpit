@@ -11,7 +11,16 @@
   import { sessionTitle } from './links';
   import LiveSessionMenu from './LiveSessionMenu.svelte';
 
-  let { instance }: { instance: InstanceRow } = $props();
+  interface Props {
+    instance: InstanceRow;
+    /** The card's own path, where it has one: a row in it repeating that path
+     *  says nothing, so the row keeps quiet and the card speaks for it. */
+    groupCwd?: string;
+  }
+
+  let { instance, groupCwd }: Props = $props();
+
+  const showCwd = $derived(Boolean(instance.cwd) && instance.cwd !== groupCwd);
 
   const activity = $derived(cockpit.activityOf(instance.id));
   const tool = $derived(cockpit.currentToolOf(instance.id));
@@ -45,11 +54,11 @@
     title={sleeping ? SLEEPING_HINT : undefined}
     class="group flex min-h-9 flex-col justify-center gap-0.5 rounded-lg px-3 py-1.5
       transition-colors duration-150 ease-out hover:bg-accent hover:text-accent-foreground
-      {failed || activity === 'blocked' ? 'bg-warning/10' : ''}"
+      {failed || activity === 'blocked' ? 'bg-error/10' : ''}"
   >
     <span class="flex items-center gap-2.5">
       {#if failed}
-        <span class="size-2 shrink-0 rounded-full bg-warning"></span>
+        <span class="size-2 shrink-0 rounded-full bg-error"></span>
       {:else if sleeping}
         <span class="size-2 shrink-0 rounded-full bg-muted-foreground/40"></span>
       {:else}
@@ -66,16 +75,18 @@
            "which session", so it gives up room to the title first, and what it
            does keep it gives up from the left — the leaf is what tells two
            checkouts apart. -->
-      <span
-        class="hidden min-w-0 flex-[2_1_0] truncate font-mono text-micro text-muted-foreground [direction:rtl] sm:block"
-        title={instance.cwd}
-      ><bdi>{instance.cwd || '—'}</bdi></span>
+      {#if showCwd}
+        <span
+          class="hidden min-w-0 flex-[2_1_0] truncate font-mono text-micro text-muted-foreground [direction:rtl] sm:block"
+          title={instance.cwd}
+        ><bdi>{instance.cwd}</bdi></span>
+      {/if}
       <!-- The state word keeps its colour until the row goes dark under the
            pointer, where only the surface's own foreground stays legible. -->
       <span
         class="inline-grid shrink-0 justify-items-end text-micro tabular-nums group-hover:text-accent-foreground {failed ||
         activity === 'blocked'
-          ? 'font-medium text-warning'
+          ? 'font-medium text-error'
           : 'text-muted-foreground'}"
         data-tabular
       >
