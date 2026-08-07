@@ -18,41 +18,35 @@
 	);
 </script>
 
-<div class="flex justify-start gap-3 group">
-	<div class="flex flex-col gap-1 items-start w-full max-w-[85%]">
-		<div class="thinking-block border-l-2 border-border pl-3 py-1 w-full">
-			<Collapsible.Root open={expanded} onOpenChange={() => (expanded = !expanded)}>
-				<Collapsible.Trigger
-					class="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors w-full text-left"
-				>
-					<IconChevronRight
-						class="size-4 shrink-0 transition-transform duration-200 {expanded
-							? 'rotate-90'
-							: ''}"
-					/>
-					<IconThinking class="size-4 shrink-0 text-muted-foreground" />
-					<span class="font-medium text-muted-foreground">Thinking</span>
-					{#if !expanded}
-						<span class="text-xs opacity-60 truncate max-w-[300px]">{summary}</span>
-					{/if}
-				</Collapsible.Trigger>
+<Collapsible.Root open={expanded} onOpenChange={() => (expanded = !expanded)}>
+	<Collapsible.Trigger
+		class="flex items-center gap-1.5 text-xs text-muted-foreground/70 hover:text-muted-foreground transition-colors w-full text-left"
+	>
+		<IconChevronRight
+			class="size-3 shrink-0 transition-transform duration-200 {expanded
+				? 'rotate-90'
+				: ''}"
+		/>
+		<IconThinking class="size-3 shrink-0" />
+		<span>Thinking</span>
+		{#if !expanded}
+			<span class="opacity-60 truncate max-w-[300px]">{summary}</span>
+		{/if}
+	</Collapsible.Trigger>
 
-				<Collapsible.Content>
-					<div
-						class="mt-2 text-sm text-muted-foreground font-mono whitespace-pre-wrap pl-6 {isRedacted
-							? 'italic'
-							: ''}"
-					>
-						{#if isRedacted}
-							<span class="text-muted-foreground/60"
-								>The reasoning for this response has been redacted.</span
-							>
-						{:else}
-							{thinking}
-						{/if}
-					</div>
-				</Collapsible.Content>
-			</Collapsible.Root>
+	<Collapsible.Content>
+		<div
+			class="mt-2 text-sm text-muted-foreground font-mono whitespace-pre-wrap pl-[18px] {isRedacted
+				? 'italic'
+				: ''}"
+		>
+			{#if isRedacted}
+				<span class="text-muted-foreground/60"
+					>The reasoning for this response has been redacted.</span
+				>
+			{:else}
+				{thinking}
+			{/if}
 		</div>
-	</div>
-</div>
+	</Collapsible.Content>
+</Collapsible.Root>

@@ -461,6 +461,17 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
             })
           );
           break;
+        case 'hook_response':
+          mapping.messages.push(
+            systemLine(base, `system.hook_response`, sdk.subtype.replace(/_/g, ' '), {
+              subtype: 'hook_response',
+              hookName: sdk.hook_name,
+              exitCode: sdk.exit_code,
+              stdout: sdk.stdout,
+              stderr: sdk.stderr,
+            })
+          );
+          break;
         default:
           if (!QUIET.has(sdk.subtype)) {
             mapping.messages.push(

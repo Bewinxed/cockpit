@@ -7,6 +7,7 @@
    */
   import type { McpServerStatus } from '@cockpit/core';
   import { Button } from '$lib/components/ui/button';
+  import { toast } from 'svelte-sonner';
   import { restartMcpServer, setMcpServerEnabled } from './client.svelte';
   import { faviconCandidates, mcpHost } from './mcp';
 
@@ -43,6 +44,9 @@
       await action();
     } catch (error) {
       console.error(`[cockpit] ${server.name} did not answer:`, error);
+      toast.error(`${server.name} did not respond`, {
+        description: error instanceof Error ? error.message : String(error),
+      });
     } finally {
       busy = false;
     }
@@ -87,7 +91,7 @@
 
   {#if server.error}
     <p
-      class="mt-2 max-h-24 overflow-y-auto rounded bg-destructive/10 p-2 font-mono text-xs text-destructive"
+      class="mt-2 max-h-24 overflow-y-auto rounded-xl bg-destructive/10 p-2.5 font-mono text-micro text-destructive"
     >
       {server.error}
     </p>
@@ -97,22 +101,22 @@
     <p class="mt-2 text-xs font-medium text-muted-foreground">{server.tools.length} tools</p>
     <ul class="mt-1 max-h-40 overflow-y-auto">
       {#each server.tools as tool (tool.name)}
-        <li class="truncate font-mono text-xs leading-5" title={tool.description}>{tool.name}</li>
+        <li class="truncate font-mono text-micro leading-5" title={tool.description}>{tool.name}</li>
       {/each}
     </ul>
   {/if}
 
   <!-- A phone has no right-click, so the menu's verbs sit here too. -->
   <div class="mt-3 flex gap-1.5">
-    <Button variant="ghost" size="sm" class="text-xs" disabled={busy} onclick={restart}>
+    <Button variant="ghost" size="sm" class="rounded-lg text-xs" disabled={busy} onclick={restart}>
       Restart
     </Button>
     {#if server.status === 'disabled'}
-      <Button variant="ghost" size="sm" class="text-xs" disabled={busy} onclick={() => setEnabled(true)}>
+      <Button variant="ghost" size="sm" class="rounded-lg text-xs" disabled={busy} onclick={() => setEnabled(true)}>
         Start
       </Button>
     {:else}
-      <Button variant="ghost" size="sm" class="text-xs" disabled={busy} onclick={() => setEnabled(false)}>
+      <Button variant="ghost" size="sm" class="rounded-lg text-xs" disabled={busy} onclick={() => setEnabled(false)}>
         Stop
       </Button>
     {/if}

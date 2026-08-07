@@ -9,6 +9,7 @@
   import { flip } from 'svelte/animate';
   import { fly } from 'svelte/transition';
   import { quintOut } from 'svelte/easing';
+  import { toast } from 'svelte-sonner';
   import { Button } from '$lib/components/ui/button';
   import * as ContextMenu from '$lib/components/ui/context-menu';
   import * as Popover from '$lib/components/ui/popover';
@@ -64,6 +65,9 @@
       await action();
     } catch (error) {
       console.error(`[cockpit] ${name} did not answer:`, error);
+      toast.error(`${name} did not respond`, {
+        description: error instanceof Error ? error.message : String(error),
+      });
     } finally {
       busy[name] = false;
     }
@@ -144,7 +148,7 @@
               {/snippet}
             </Popover.Trigger>
 
-            <Popover.Content class="w-64 p-3" align="end">
+            <Popover.Content class="w-64 rounded-xl p-3 shadow-lg" align="end">
               <McpServerDetail {server} {instanceId} {machineId} />
             </Popover.Content>
           </Popover.Root>

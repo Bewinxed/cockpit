@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { IconCopy, IconReset, IconSubagent, IconChat } from '$lib/icons';
+  import { IconCopy, IconChat } from '$lib/icons';
   import { onMount } from 'svelte';
   import { CONTEXT_MENU_CLICK_DELAY } from '$lib/utils/flow-constants';
   import type { ContextMenuAction } from '$lib/utils/flow-types';
@@ -49,8 +49,6 @@
 
   const menuItems: MenuItem[] = [
     { id: 'copy', label: 'Copy content', icon: IconCopy, description: 'Copy message content to clipboard' },
-    { id: 'rewind', label: 'Rewind to here', icon: IconReset, description: 'Rewind conversation to this point' },
-    { id: 'branch', label: 'Branch from here', icon: IconSubagent, description: 'Create a new branch from this message' },
     { id: 'jump', label: 'Jump to chat view', icon: IconChat, description: 'Switch to chat view' },
   ];
 </script>
@@ -59,7 +57,7 @@
   bind:this={menuRef}
   role="menu"
   aria-label="Node actions"
-  class="fixed z-50 min-w-[180px] rounded-md border border-border bg-popover p-1 shadow-lg animate-in fade-in-0 zoom-in-95"
+  class="fixed z-50 min-w-[180px] rounded-xl border border-border bg-popover p-1 shadow-xl material-panel animate-in fade-in-0 zoom-in-95"
   style="left: {x}px; top: {y}px;"
 >
   {#each menuItems as item (item.id)}

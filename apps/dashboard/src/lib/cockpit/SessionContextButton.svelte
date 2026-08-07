@@ -17,9 +17,9 @@
 </script>
 
 <Button
-  variant={open ? 'secondary' : 'outline'}
+  variant="ghost"
   size="icon-sm"
-  class="shrink-0"
+  class="shrink-0 rounded-lg shadow-sm {open ? 'bg-primary/10 text-primary' : ''}"
   aria-pressed={open}
   aria-label="Session context"
   title="The CLAUDE.md files, MCP servers and facts of this session"

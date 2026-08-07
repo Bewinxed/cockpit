@@ -7,11 +7,13 @@
     IconFlow,
     IconFork,
     IconPlay,
+    IconSpinner,
     IconStop,
     IconSubagent,
     IconTools,
     IconTrash,
   } from '$lib/icons';
+  import { toast } from 'svelte-sonner';
   import type { Component } from 'svelte';
   import { onMount, tick, untrack } from 'svelte';
   import { Markdown } from '$lib/components/ui/markdown';
@@ -504,15 +506,43 @@
     session?.messages.reduce((cost, message) => message.metadata?.totalCost ?? cost, 0) ?? 0
   );
 
-  function handleSend(text: string, extras: SendExtras) {
+  /** The draft text restored after a failed send, so the reader does not lose it. */
+  let sendError = $state<string | null>(null);
+  let restoredDraft = $state<string | null>(null);
+  let chatInputRef = $state<ReturnType<typeof ChatInput> | null>(null);
+
+  async function handleSend(text: string, extras: SendExtras) {
     if (!session) return;
-    void sendOrRevive(viewId, session.machineId, text, extras);
+    sendError = null;
+    try {
+      await sendOrRevive(viewId, session.machineId, text, extras);
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      sendError = reason;
+      restoredDraft = text;
+      chatInputRef?.setDraft?.(text);
+      toast.error(`Send failed: ${reason}`);
+    }
+  }
+
+  function retrySend() {
+    if (!restoredDraft) return;
+    const text = restoredDraft;
+    restoredDraft = null;
+    sendError = null;
+    handleSend(text, {});
   }
 
   function handleInterrupt() {
     if (!session) return;
-    interrupt(viewId, session.machineId);
+    try {
+      interrupt(viewId, session.machineId);
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      toast.error(`Interrupt failed: ${reason}`);
+    }
   }
+
 
   /**
    * The rail links to a branch by hash. The transcript is virtualised, so the
@@ -666,6 +696,9 @@
   const cannotAnswer = $derived(
     machine !== null && machine.auth !== 'authenticated' && machine.auth !== 'unknown'
   );
+  const machineOffline = $derived(
+    machine !== null && machine.status !== 'online'
+  );
   let loggingIn = $state(false);
 
   function handleResolve(requestId: string, result: PermissionResult) {
@@ -770,6 +803,7 @@
     confirmingDiscard = false;
     try {
       await discardSession(viewId, session.machineId);
+      workingSet.forget(viewId);
       await goto('/session');
     } catch (err) {
       error = err instanceof Error ? err.message : String(err);
@@ -886,9 +920,19 @@
       enabled: () => answerable.length === 0,
     }}
   >
+    {#if machineOffline && machine}
+      <div
+        role="status"
+        class="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-warning/30 bg-warning/10 px-4 py-2 text-sm"
+        transition:fly={{ y: -6, duration: 180, easing: quintOut }}
+      >
+        <span class="font-medium text-warning">{machine.hostname} is offline</span>
+        <span class="text-warning/80">
+          Messages cannot be delivered until it reconnects.
+        </span>
+      </div>
+    {/if}
     {#if cannotAnswer && machine}
-      <!-- The machine's own report, not a reading of anything it said. Shown
-           before a turn is even sent, because the session cannot answer one. -->
       <div
         role="status"
         class="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-warning/30 bg-warning/10 px-4 py-2 text-sm"
@@ -1081,7 +1125,20 @@
             subagents={branches}
             streamingToolId={session?.currentTool?.toolId}
             {totalCostUsd}
-            onJump={() => (view = 'chat')}
+            onJump={(nodeId) => {
+              view = 'chat';
+              const messages = session?.messages ?? [];
+              const target = messages.find(
+                (m) => m.sdkUuid === nodeId || m.id === nodeId || m.metadata?.toolId === nodeId
+              );
+              if (!target) return;
+              const index = groups.findIndex((g) => {
+                if (g.kind === 'single') return g.message.id === target.id || g.message.sdkUuid === target.sdkUuid;
+                if (g.kind === 'tools') return g.messages.some((m) => m.id === target.id || m.sdkUuid === target.sdkUuid);
+                return false;
+              });
+              if (index >= 0) void tick().then(() => jumpToMatch(index));
+            }}
           />
         </div>
       {:else}
@@ -1097,6 +1154,19 @@
             class="h-full space-y-4 overflow-y-auto overflow-x-hidden px-4 pt-4 pb-44 [overflow-anchor:none] focus:outline-none"
           >
             <div class="mx-auto max-w-4xl">
+              {#if session?.hydrating}
+                <div class="sticky top-0 z-10">
+                  <div class="h-0.5 w-full overflow-hidden bg-muted">
+                    <div class="h-full w-1/3 animate-pulse rounded-full bg-primary/40" style="animation: hydrate-slide 1.2s ease-in-out infinite;"></div>
+                  </div>
+                  <div
+                    class="mx-auto mt-2 w-fit rounded-full bg-card px-3 py-1 text-micro text-muted-foreground shadow-sm"
+                    transition:fly={{ y: -6, duration: 180, easing: quintOut }}
+                  >
+                    Loading earlier turns
+                  </div>
+                </div>
+              {/if}
               <!-- Mounted once the scroller exists: virtua reads scrollRef once, on
                    mount, and silently falls back to its parent element if it is unset. -->
               {#if scroller}
@@ -1147,7 +1217,10 @@
               {/if}
 
               {#if session?.loading}
-                <p class="text-sm text-muted-foreground">Reading transcript…</p>
+                <div class="flex flex-col items-center gap-2 py-8">
+                  <IconSpinner class="size-5 animate-spin text-muted-foreground" />
+                  <p class="text-caption">Reading transcript…</p>
+                </div>
               {:else if sleeping}
                 <!-- Not a failure, so nothing here is coloured like one: the work
                      is intact and one message would bring it back on its own. -->
@@ -1178,19 +1251,8 @@
               {/if}
 
               {#if session?.streaming}
-                <div class="flex justify-start gap-3">
-                  <div
-                    class="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl border border-border bg-secondary"
-                  >
-                    <IconAgent class="size-[18px] text-muted-foreground" />
-                  </div>
-                  <div
-                    class="max-w-[85%] min-w-0 rounded-2xl rounded-bl-sm border border-border bg-card px-4 py-3 text-sm leading-relaxed break-words text-card-foreground shadow-sm"
-                  >
-                    <!-- The stream renders as markdown too — raw asterisks mid-turn
-                         read as a bug, and long resumed turns stream for minutes. -->
-                    <Markdown source={stream.text} />
-                  </div>
+                <div class="max-w-prose text-body leading-relaxed text-foreground break-words">
+                  <Markdown source={stream.text} /><span class="inline-block w-[3px] h-4 rounded-sm bg-primary/60 align-text-bottom animate-pulse"></span>
                 </div>
               {/if}
             </div>
@@ -1201,15 +1263,17 @@
           {/if}
 
           {#if unseen}
-            <Button
-              variant="outline"
-              size="sm"
-              class="absolute right-4 bottom-4 bg-card text-xs shadow-md"
-              onclick={jumpToLatest}
-            >
-              <IconArrowDown />
-              Jump to latest
-            </Button>
+            <div class="absolute inset-x-0 bottom-4 flex justify-center">
+              <Button
+                variant="outline"
+                size="sm"
+                class="rounded-full bg-card px-4 text-xs shadow-lg pressable"
+                onclick={jumpToLatest}
+              >
+                <IconArrowDown />
+                Jump to latest
+              </Button>
+            </div>
           {/if}
         </div>
       {/if}
@@ -1225,8 +1289,31 @@
 
       <div class="pointer-events-none absolute inset-x-0 bottom-0 px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
         <div bind:this={dock} class="pointer-events-auto mx-auto flex max-w-4xl flex-col gap-2">
+        {#if sendError}
+          <div
+            class="flex items-center gap-2 rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive"
+            role="alert"
+            transition:fly={{ y: 4, duration: 180, easing: quintOut }}
+          >
+            <span class="min-w-0 flex-1">Send failed: {sendError}</span>
+            <button
+              type="button"
+              class="shrink-0 rounded-md bg-destructive/10 px-2 py-1 font-medium text-destructive hover:bg-destructive/20 transition-colors"
+              onclick={retrySend}
+            >
+              Retry
+            </button>
+            <button
+              type="button"
+              class="shrink-0 text-destructive/60 hover:text-destructive transition-colors"
+              onclick={() => { sendError = null; restoredDraft = null; }}
+              aria-label="Dismiss"
+            >
+              &times;
+            </button>
+          </div>
+        {/if}
         {#if error}
-          <!-- Keyed so a second failure shakes again instead of sitting there. -->
           {#key error}
             <p class="animate-shake text-xs text-error motion-reduce:animate-none" role="alert">
               {error}
@@ -1270,10 +1357,11 @@
             </p>
           {/if}
           <ChatInput
+            bind:this={chatInputRef}
             onSend={handleSend}
             onInterrupt={handleInterrupt}
             streaming={session?.busy ?? false}
-            disabled={cockpit.status !== 'connected' || (session?.relaunching ?? false)}
+            disabled={cockpit.status !== 'connected' || (session?.relaunching ?? false) || machineOffline}
             attachmentOpen={answerable.length > 0}
             {commands}
             onCommandsNeeded={askCommands}

@@ -194,7 +194,7 @@
     </Collapsible.Trigger>
 
     <Collapsible.Content>
-      <div class="ml-[22px] space-y-3 border-t border-l-2 border-border/50 py-3 pr-3 pl-4">
+      <div class="ml-[22px] space-y-3 border-t border-l border-border py-3 pr-3 pl-4">
         {#each groups as group (group.kind === 'tools' ? `tools-${group.at}` : group.message.id)}
           {#if group.kind === 'tools'}
             <ToolGroup tools={group.messages} />

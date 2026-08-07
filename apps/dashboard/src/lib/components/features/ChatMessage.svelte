@@ -278,7 +278,7 @@
 		user: {
 			align: 'justify-end',
 			bubble:
-				'relative px-4 py-3 text-sm leading-relaxed rounded-2xl rounded-br-sm bg-primary text-primary-foreground shadow-sm',
+				'relative px-4 py-3 text-sm leading-relaxed rounded-xl bg-primary/8 text-foreground',
 			icon: IconUser,
 			iconBg: 'bg-primary text-primary-foreground',
 			iconColor: 'text-primary-foreground'
@@ -286,7 +286,7 @@
 		assistant: {
 			align: 'justify-start',
 			bubble:
-				'relative px-4 py-3 text-sm leading-relaxed rounded-2xl rounded-bl-sm bg-card text-card-foreground border border-border shadow-sm',
+				'relative max-w-prose text-sm leading-relaxed text-foreground break-words',
 			icon: IconAgent,
 			iconBg: 'bg-secondary border border-border',
 			iconColor: 'text-muted-foreground'
@@ -308,7 +308,7 @@
 		'ui.error': {
 			align: 'justify-start',
 			bubble:
-				'relative px-4 py-3 text-sm leading-relaxed rounded-2xl rounded-bl-sm bg-destructive/10 text-destructive border border-destructive/30 shadow-sm',
+				'relative px-4 py-3 text-sm leading-relaxed rounded-xl bg-destructive/10 text-destructive border border-destructive/30 shadow-sm',
 			icon: IconAlert,
 			iconBg: 'bg-destructive/10 text-destructive',
 			iconColor: 'text-destructive'
@@ -316,7 +316,7 @@
 		'ui.session_error': {
 			align: 'justify-start',
 			bubble:
-				'relative px-4 py-3 text-sm leading-relaxed rounded-2xl rounded-bl-sm bg-warning/10 text-warning border border-warning/30 shadow-sm',
+				'relative px-4 py-3 text-sm leading-relaxed rounded-xl bg-warning/10 text-warning border border-warning/30 shadow-sm',
 			icon: IconWarningTriangle,
 			iconBg: 'bg-warning/10',
 			iconColor: 'text-warning'
@@ -324,7 +324,7 @@
 		system: {
 			align: 'justify-center',
 			bubble:
-				'inline-flex items-center gap-2 px-4 py-1.5 text-xs text-muted-foreground bg-muted/50 rounded-full border border-border',
+				'inline-flex items-center gap-2 px-4 py-1.5 text-xs text-muted-foreground bg-muted/50 rounded-full',
 			icon: IconSettings,
 			iconBg: 'bg-accent text-accent-foreground',
 			iconColor: 'text-muted-foreground'
@@ -368,7 +368,7 @@
 		'result.error': {
 			align: 'justify-start',
 			bubble:
-				'relative px-4 py-3 text-sm leading-relaxed rounded-2xl rounded-bl-sm bg-destructive/10 text-destructive border border-destructive/30 shadow-sm',
+				'relative px-4 py-3 text-sm leading-relaxed rounded-xl bg-destructive/10 text-destructive border border-destructive/30 shadow-sm',
 			icon: IconAlert,
 			iconBg: 'bg-destructive/10 text-destructive',
 			iconColor: 'text-destructive'
@@ -400,7 +400,7 @@
 {:else}
 	<!-- Default rendering logic -->
 	<div class="flex {config.align} gap-3 group">
-		{#if message.type !== 'user' && !message.type.startsWith('system.') && message.type !== 'ui.help_menu'}
+		{#if message.type !== 'user' && message.type !== 'assistant' && !message.type.startsWith('system.') && message.type !== 'ui.help_menu'}
 			<!-- Avatar -->
 			<div
 				class="shrink-0 size-9 rounded-xl {config.iconBg} flex items-center justify-center mt-0.5"
@@ -834,9 +834,9 @@
 
 						{#if isHuge}
 							<Collapsible.Root bind:open={fullMessageOpen}>
-								<Markdown source={fullMessageOpen ? messageHead : `${messageHead}…`} invert />
+								<Markdown source={fullMessageOpen ? messageHead : `${messageHead}…`} />
 								<Collapsible.Content>
-									<Markdown source={messageRest} invert />
+									<Markdown source={messageRest} />
 								</Collapsible.Content>
 								<Collapsible.Trigger
 									class="mt-2 flex items-center gap-1.5 text-xs opacity-70 transition-opacity hover:opacity-100"
@@ -852,7 +852,7 @@
 								</Collapsible.Trigger>
 							</Collapsible.Root>
 						{:else}
-							<Markdown source={message.content} invert={message.type === 'user'} />
+							<Markdown source={message.content} />
 						{/if}
 
 						<!-- Action buttons -->

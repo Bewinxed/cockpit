@@ -417,6 +417,15 @@
       }
     }
   }
+
+  /** Restores text the user typed after a failed send. */
+  export function setDraft(text: string) {
+    message = text;
+    if (textareaRef) {
+      textareaRef.style.height = 'auto';
+      textareaRef.style.height = Math.min(textareaRef.scrollHeight, 200) + 'px';
+    }
+  }
 </script>
 
 <div>

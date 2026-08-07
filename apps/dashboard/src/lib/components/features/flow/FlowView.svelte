@@ -130,12 +130,6 @@
         }
         break;
       }
-      case 'rewind':
-        // TODO: Implement rewind - will need to call instance API
-        break;
-      case 'branch':
-        // TODO: Implement branch - will need to call instance API
-        break;
       case 'jump':
         onJump?.(nodeId);
         break;
