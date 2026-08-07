@@ -7,6 +7,7 @@
  */
 import {
   MARKETPLACE_CATALOG,
+  type ConfigInspection,
   type FleetConfig,
   type FleetMarketplace,
   type FleetMcpConfig,
@@ -292,6 +293,37 @@ export const saveSkill = (
   body: { source: string; enabled?: boolean }
 ): Promise<SkillWriteResult> =>
   put(`/api/fleet/skills/${encodeURIComponent(name)}`, body, `save ${name}`);
+
+/**
+ * What a machine really has, fleet or not (NEW.md §11), and what a session in
+ * `cwd` would see. Asked on demand and never stored: it is the machine's own
+ * word at the moment of asking.
+ */
+export const inspectMachine = (machineId: string, cwd?: string): Promise<ConfigInspection> =>
+  send(
+    `/api/agents/${encodeURIComponent(machineId)}/inspect`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(cwd ? { cwd } : {}),
+    },
+    'read what this machine has'
+  );
+
+/**
+ * A skill somebody wrote on one machine, taken into the fleet: the hub reads
+ * its files off that machine and stores them like any it fetched itself.
+ */
+export const adoptSkill = (
+  name: string,
+  machineId: string,
+  cwd?: string
+): Promise<FleetSkillMeta> =>
+  put(
+    `/api/fleet/skills/${encodeURIComponent(name)}`,
+    { fromMachine: machineId, ...(cwd ? { cwd } : {}) },
+    `adopt ${name}`
+  );
 
 /** Resolves the same source again — for a skill whose repo has moved on. */
 export const refreshSkill = (name: string): Promise<FleetSkillMeta> =>

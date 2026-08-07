@@ -283,7 +283,7 @@ const walk = async (dir: string, prefix = ''): Promise<Found[]> => {
 };
 
 /** Sorted `path\0content` pairs, so the same skill hashes the same everywhere. */
-const hashFiles = (files: SkillFile[]): string => {
+export const hashFiles = (files: SkillFile[]): string => {
   const hasher = new Bun.CryptoHasher('sha256');
   for (const file of [...files].sort((a, b) => a.path.localeCompare(b.path))) {
     hasher.update(`${file.path}\0`);

@@ -27,13 +27,22 @@ import {
   COCKPIT_SCRATCH_TAG,
   FLEET_STATUS,
   FLEET_SYNC,
+  INSPECT_CONFIG,
   MARKETPLACE_CATALOG,
   READ_MEMORY_FILE,
+  READ_SKILL_FILES,
   repoPath,
   RESOLVE_PERMISSION,
   UPDATE_COCKPIT,
 } from '@cockpit/core';
-import { fleetStatus, marketplaceCatalog, readMemoryFile, syncFleetConfig } from './fleet';
+import {
+  fleetStatus,
+  inspectConfig,
+  marketplaceCatalog,
+  readMemoryFile,
+  readSkillFiles,
+  syncFleetConfig,
+} from './fleet';
 import { handoffServer } from './handoff';
 import { probeAuth, unlockKeychain } from './auth';
 import { beginLogin, clearCredentials, completeLogin, exportCredentials, importCredentials } from './login';
@@ -282,6 +291,10 @@ const SESSION_FUNCTIONS = {
   [MARKETPLACE_CATALOG]: marketplaceCatalog,
   // The machine's own user CLAUDE.md, for the hub to adopt as the fleet's.
   [READ_MEMORY_FILE]: readMemoryFile,
+  // And what the machine really has, fleet or not: the other half of §11, which
+  // is what lets a reader adopt a skill or a server they set up by hand.
+  [INSPECT_CONFIG]: inspectConfig,
+  [READ_SKILL_FILES]: readSkillFiles,
   // Machine-scoped, not session-scoped: a locked keychain is a property of the
   // machine, and the session that noticed it cannot answer anything until it
   // is fixed. Reached over the tunnel, which is the point — nobody should have

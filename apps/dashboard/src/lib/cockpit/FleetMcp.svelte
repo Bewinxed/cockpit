@@ -15,6 +15,7 @@
   import type { Machine } from './client.svelte';
   import { describeMcp, isRemoteMcp, removeMcpServer, saveMcpServer, syncFleet } from './fleet';
   import FleetStatusStrip from './FleetStatusStrip.svelte';
+  import MachineInventory from './MachineInventory.svelte';
   import McpServerDialog from './McpServerDialog.svelte';
 
   let {
@@ -201,6 +202,12 @@
       </li>
     {/each}
   </ul>
+{/if}
+
+<!-- Outside the list's own branches: a fleet with no servers yet is exactly
+     when what the machines already have is worth reading. -->
+{#if !error}
+  <MachineInventory {machines} kind="mcp" taken={servers.map((row) => row.name)} onserver={saved} />
 {/if}
 
 <McpServerDialog

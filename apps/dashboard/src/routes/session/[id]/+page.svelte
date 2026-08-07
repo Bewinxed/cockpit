@@ -1314,6 +1314,7 @@
       machineId={session.machineId}
       cwd={session.cwd}
       servers={session.mcp ?? null}
+      {commands}
       model={session.model}
       permissionMode={session.permissionMode}
       sessionId={session.sessionId}

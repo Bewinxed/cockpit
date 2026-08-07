@@ -223,8 +223,11 @@ mirror when the machine is offline).
 Auth: none on the hub surface for now (explicit user decision — Tailscale
 network is the trust boundary). Don't add auth scaffolding.
 
-Naming: the product is **Cockpit** everywhere — package scope `@cockpit/*`,
-env vars `COCKPIT_*`, one hub port default **3456**. The agentdeck/cockpit
+Naming: the product is **Outpost** (renamed from Cockpit, user decision
+2026-08-07): UI copy/wordmark first; internal identifiers (`@cockpit/*`,
+`COCKPIT_*`) migrate in a coordinated pass because the daemon restart it
+forces is gated on idle sessions. Package scope `@cockpit/*`, env vars
+`COCKPIT_*`, one hub port default **3456** until that pass. The agentdeck/cockpit
 split-brain (env vars `AGENTDECK_HUB_URL` vs `COCKPIT_HUB_URL`, ports
 3456/4000/3000/3847 in different files) was a real bug class in the old code.
 

@@ -27,6 +27,7 @@
     saveSkill,
   } from './fleet';
   import FleetStatusStrip from './FleetStatusStrip.svelte';
+  import MachineInventory from './MachineInventory.svelte';
   import MarketplaceDialog from './MarketplaceDialog.svelte';
   import SkillDialog from './SkillDialog.svelte';
 
@@ -542,6 +543,13 @@
     Either way, a skill is in every session's <span class="font-mono">/</span> menu on that machine
     once the machine has it.
   </p>
+
+  <MachineInventory
+    {machines}
+    kind="skills"
+    taken={skills.map((row) => row.name)}
+    onskill={landed}
+  />
 {/if}
 
 <MarketplaceDialog

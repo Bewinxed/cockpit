@@ -9,6 +9,7 @@ import type {
   FramePayload,
   InstanceRow,
   PermissionMode,
+  SkillFile,
   SpawnPayload,
   ToolState,
   ToolStatus,
@@ -18,7 +19,9 @@ import {
   AGENT_BUSY,
   FLEET_STATUS,
   FLEET_SYNC,
+  INSPECT_CONFIG,
   READ_MEMORY_FILE,
+  READ_SKILL_FILES,
   TOOL_CATALOG,
   toolSpec,
   UPDATE_COCKPIT,
@@ -30,7 +33,7 @@ import { HUB_VERSION } from './config';
 import type { AgentAuth, DbShape, InstanceKind } from './db';
 import type { PendingShape } from './pending';
 import type { HubSocket, RegistryShape } from './registry';
-import { resolveSkill } from './skills';
+import { hashFiles, resolveSkill } from './skills';
 
 /** The frame a forwarded `control` comes back as, whoever asked for it. */
 type ControlResult = Extract<FramePayload, { kind: 'control_result' }>;
@@ -576,6 +579,20 @@ export const createServer = ({ registry, db, pending }: HubServices) => {
         return answer.result;
       }
     )
+    // What a machine really has, fleet or not (NEW.md §11) — and what a session
+    // in `cwd` would see. Nothing is stored: this is the machine's own word at
+    // the moment it was asked, and a stale copy of it would be worse than none.
+    .post(
+      '/api/agents/:machineId/inspect',
+      { body: t.Object({ cwd: t.Optional(t.String()) }) },
+      async ({ params, body, status }) => {
+        const answer = await callAgent(params.machineId, INSPECT_CONFIG, [body.cwd], READ_TIMEOUT_MS);
+        if (answer === 'offline') return status(404, `machine ${params.machineId} is not connected`);
+        if (answer === 'timeout') return status(504, `machine ${params.machineId} did not answer`);
+        if (!answer.ok) return status(500, answer.error ?? 'the machine could not read its config');
+        return answer.result;
+      }
+    )
     .get('/api/instances', () => db.listInstances())
     .patch(
       '/api/instances/:id',
@@ -707,11 +724,50 @@ export const createServer = ({ registry, db, pending }: HubServices) => {
     // downloads it, and the machines are handed the files (NEW.md §11). A source
     // that would not resolve is still stored — the row is where the dashboard
     // reads why, and the ambiguous case answers with what it could have meant.
+    //
+    // `fromMachine` is the other way in: a skill somebody wrote on one machine,
+    // read off it and stored like any fetched one, so it reaches the rest.
     .put(
       '/api/fleet/skills/:name',
-      { body: t.Object({ source: t.String(), enabled: t.Optional(t.Boolean()) }) },
+      {
+        body: t.Object({
+          source: t.Optional(t.String()),
+          enabled: t.Optional(t.Boolean()),
+          fromMachine: t.Optional(t.String()),
+          /** The checkout a project-scoped skill was discovered in. */
+          cwd: t.Optional(t.String()),
+        }),
+      },
       async ({ params, body, status }) => {
         if (!SKILL_NAME.test(params.name)) return status(400, `${params.name} is not a usable skill name`);
+
+        if (body.fromMachine) {
+          const answer = await callAgent(
+            body.fromMachine,
+            READ_SKILL_FILES,
+            [params.name, body.cwd],
+            READ_TIMEOUT_MS
+          );
+          if (answer === 'offline') {
+            return status(404, `machine ${body.fromMachine} is not connected`);
+          }
+          if (answer === 'timeout') return status(504, `machine ${body.fromMachine} did not answer`);
+          if (!answer.ok) return status(400, answer.error ?? 'the machine could not read the skill');
+
+          const files = answer.result as SkillFile[];
+          const skill = db.putSkill({
+            name: params.name,
+            source: `machine:${body.fromMachine}`,
+            enabled: body.enabled,
+            hash: hashFiles(files),
+            bytes: files.reduce((total, file) => total + Buffer.byteLength(file.contentBase64, 'base64'), 0),
+            files,
+          });
+          fanOutFleet();
+          return skill;
+        }
+
+        if (!body.source) return status(400, 'name a source, or the machine to adopt it from');
 
         const resolved = await resolveSkill(body.source);
         const skill = db.putSkill({
@@ -733,6 +789,28 @@ export const createServer = ({ registry, db, pending }: HubServices) => {
     .post('/api/fleet/skills/:name/refresh', async ({ params, status }) => {
       const stored = db.listSkills().find((skill) => skill.name === params.name);
       if (!stored) return status(404, `no skill ${params.name}`);
+
+      // An adopted skill's source is the machine it came off, so that is where
+      // "the same source, again" reads from.
+      if (stored.source.startsWith('machine:')) {
+        const machineId = stored.source.slice('machine:'.length);
+        const answer = await callAgent(machineId, READ_SKILL_FILES, [stored.name], READ_TIMEOUT_MS);
+        if (answer === 'offline') return status(404, `machine ${machineId} is not connected`);
+        if (answer === 'timeout') return status(504, `machine ${machineId} did not answer`);
+        if (!answer.ok) return status(400, answer.error ?? 'the machine could not read the skill');
+
+        const files = answer.result as SkillFile[];
+        const skill = db.putSkill({
+          name: stored.name,
+          source: stored.source,
+          enabled: stored.enabled,
+          hash: hashFiles(files),
+          bytes: files.reduce((total, file) => total + Buffer.byteLength(file.contentBase64, 'base64'), 0),
+          files,
+        });
+        if (skill.hash !== stored.hash) fanOutFleet();
+        return skill;
+      }
 
       const resolved = await resolveSkill(stored.source);
       const skill = db.putSkill({

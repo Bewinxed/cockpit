@@ -9,8 +9,9 @@
    * chat shrinks into — so the files are read on the rising edge of open rather
    * than on mount. The servers and the facts are the page's own live state.
    */
-  import type { McpServerStatus, PermissionMode } from '@cockpit/core';
+  import type { AvailableCommand, McpServerStatus, PermissionMode } from '@cockpit/core';
   import { IconClose } from '$lib/icons';
+  import { Badge } from '$lib/components/ui/badge';
   import { Button } from '$lib/components/ui/button';
   import { CopyButton } from '$lib/components/ui/copy-button';
   import * as Sidebar from '$lib/components/ui/sidebar';
@@ -33,6 +34,8 @@
     cwd: string;
     /** The session's live MCP status; null until the session has reported it. */
     servers: McpServerStatus[] | null;
+    /** Its `/` menu, off the init frame — which is where its skills are named. */
+    commands: AvailableCommand[];
     model: string | null;
     permissionMode: PermissionMode | null;
     sessionId: string | null;
@@ -48,6 +51,7 @@
     machineId,
     cwd,
     servers,
+    commands,
     model,
     permissionMode,
     sessionId,
@@ -58,6 +62,8 @@
   }: Props = $props();
 
   const sidebar = useSidebar();
+  /** The skills this very session listed, as its `/` menu classifies them. */
+  const skills = $derived(commands.filter((command) => command.type === 'skill'));
   /** Bound to the kit's tabs, which own the value; a union would not bind to it. */
   let tab = $state('memory');
 
@@ -167,6 +173,7 @@
       <Tabs.List>
         <Tabs.Trigger value="memory">Memory</Tabs.Trigger>
         <Tabs.Trigger value="mcp">MCP</Tabs.Trigger>
+        <Tabs.Trigger value="skills">Skills</Tabs.Trigger>
         <Tabs.Trigger value="info">Info</Tabs.Trigger>
       </Tabs.List>
       <Button
@@ -246,6 +253,41 @@
           {/each}
         {/if}
       </Tabs.Content>
+
+      <Tabs.Content value="skills" class="flex flex-col gap-4">
+        {#if skills.length === 0}
+          <p class="text-[13px] text-muted-foreground">
+            This session has listed no skills yet. The list arrives with the session's own init
+            frame, so it fills in on the first turn.
+          </p>
+        {:else}
+          <p class="text-[13px] text-muted-foreground">
+            {skills.length} skill{skills.length === 1 ? '' : 's'} this session can reach, as its
+            <span class="font-mono">/</span> menu lists them.
+          </p>
+          <ul class="flex flex-col rounded-xl border border-border">
+            {#each skills as skill (skill.name)}
+              <li class="flex flex-col gap-0.5 border-t border-border px-3 py-2 first:border-t-0">
+                <span class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <span class="truncate font-mono text-[13px]">{skill.name}</span>
+                  {#if skill.source}
+                    <Badge variant="outline">{skill.source}</Badge>
+                  {/if}
+                </span>
+                {#if skill.description}
+                  <span class="line-clamp-2 text-xs text-muted-foreground">{skill.description}</span>
+                {/if}
+              </li>
+            {/each}
+          </ul>
+          <p class="text-xs text-muted-foreground">
+            Every machine's own skills are on
+            <a class="underline underline-offset-4" href="/tools?tab=skills">the tools page</a>,
+            where an unmanaged one can be adopted into the fleet.
+          </p>
+        {/if}
+      </Tabs.Content>
+
 
       <Tabs.Content value="info" class="flex flex-col gap-4">
         <dl class="flex shrink-0 flex-col gap-3">

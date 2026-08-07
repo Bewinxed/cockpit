@@ -9,16 +9,21 @@
  * outlives every sync this daemon runs.
  */
 import type {
+  ConfigInspection,
+  DiscoveredMcp,
+  DiscoveredSkill,
   FleetConfig,
   FleetItemState,
   FleetMcpConfig,
   FleetMcpServer,
   FleetMemory,
+  FleetScope,
   FleetSkillPayload,
   FleetSyncReport,
   MarketplacePluginInfo,
+  SkillFile,
 } from '@cockpit/core';
-import { rename, rm, stat } from 'node:fs/promises';
+import { readdir, rename, rm, stat } from 'node:fs/promises';
 import { platform } from 'node:os';
 import { isAbsolute, join } from 'node:path';
 import { expandHome } from './fs';
@@ -232,7 +237,8 @@ const isLinked = async (name: string): Promise<boolean> =>
   (await readJson<Record<string, unknown>>(KNOWN_MARKETPLACES))?.[name] !== undefined;
 
 interface InstalledPlugins {
-  plugins?: Record<string, { scope?: string }[]>;
+  /** Plugin id → one entry per scope it is installed at, with its unpacked copy. */
+  plugins?: Record<string, { scope?: string; installPath?: string }[]>;
 }
 
 /** Whether the CLI lists the plugin at the scope this daemon installs at. */
@@ -574,6 +580,219 @@ export const readMemoryFile = async (): Promise<{ content: string; hash: string 
   if (!(await file.exists())) return null;
   const content = await file.text();
   return { content, hash: hashText(content) };
+};
+
+/**
+ * Discovery (NEW.md §11). Everything above answers "what did cockpit do here";
+ * everything below answers the question that was missing — what this machine
+ * really has, whoever put it there. Read-only, all of it: an unmanaged server or
+ * a skill somebody wrote by hand is exactly what a reader wants to see, and
+ * exactly what nothing here may touch.
+ */
+
+/** MCP server names by scope, nearest first: what a session in `cwd` resolves. */
+interface McpScope {
+  scope: FleetScope;
+  servers: Record<string, unknown>;
+}
+
+/**
+ * The three scopes into one list. Claude Code's own precedence is
+ * local > project > user, so a name defined twice is reported twice — the
+ * nearer one plainly, the further one saying which scope took it.
+ */
+export function mergeMcp(scopes: McpScope[], managed: readonly string[]): DiscoveredMcp[] {
+  const found: DiscoveredMcp[] = [];
+  for (const [index, { scope, servers }] of scopes.entries()) {
+    for (const [name, config] of Object.entries(servers)) {
+      const nearer = scopes.slice(0, index).find((other) => other.servers[name] !== undefined);
+      found.push({
+        name,
+        scope,
+        config: config as FleetMcpConfig,
+        // Cockpit only ever writes the user scope, so only that one can be ours.
+        managed: scope === 'user' && managed.includes(name),
+        ...(nearer ? { shadowedBy: nearer.scope } : {}),
+      });
+    }
+  }
+  return found;
+}
+
+/**
+ * A skill's own description, out of the SKILL.md front matter Claude Code
+ * reads. Long ones are written as YAML block scalars (`description: >-` and the
+ * text indented under it), which a read of the key's own line answers with the
+ * marker instead of a sentence.
+ */
+export function skillDescription(source: string): string | undefined {
+  if (!source.startsWith('---')) return undefined;
+  const end = source.indexOf('\n---', 3);
+  const front = (end === -1 ? source : source.slice(0, end)).split('\n');
+  const at = front.findIndex((row) => row.startsWith('description:'));
+  if (at === -1) return undefined;
+
+  const value = front[at].slice('description:'.length).trim();
+  if (!/^[|>][-+]?$/.test(value)) return value.replace(/^["']|["']$/g, '') || undefined;
+
+  const block: string[] = [];
+  for (const row of front.slice(at + 1)) {
+    if (row.trim() !== '' && !/^\s/.test(row)) break;
+    block.push(row.trim());
+  }
+  return block.join(' ').trim() || undefined;
+}
+
+/** Where an installed plugin's skills live, by the name a session calls them. */
+export function pluginSkillRoots(installed: InstalledPlugins): { plugin: string; root: string }[] {
+  const roots: { plugin: string; root: string }[] = [];
+  for (const [id, entries] of Object.entries(installed.plugins ?? {})) {
+    for (const entry of entries) {
+      // The CLI keeps the unpacked copy's path per install; a plugin's skills
+      // are a `skills/` directory inside it, which is what `/` lists as
+      // `<plugin>:<skill>`.
+      if (!entry.installPath) continue;
+      roots.push({ plugin: id.split('@')[0], root: join(entry.installPath, 'skills') });
+    }
+  }
+  return roots;
+}
+
+/**
+ * Every directory under `root` that is a skill, named as a session names it —
+ * the directory holding the SKILL.md, whatever it is filed under.
+ *
+ * Two layouts this met on real machines, both of which the naive read missed:
+ * `~/.claude/skills/<name>` is usually a *symlink* into `~/.agents/skills`,
+ * which a dirent calls a link rather than a directory; and a plugin may file
+ * its skills under categories (`skills/engineering/<name>/SKILL.md`), which is
+ * a layout detail — `/` still lists the skill by its own directory's name.
+ */
+export async function skillsIn(
+  root: string,
+  scope: DiscoveredSkill['scope'],
+  prefix = '',
+  depth = 2
+): Promise<DiscoveredSkill[]> {
+  const entries = await readdir(root, { withFileTypes: true }).catch(() => []);
+  const found: DiscoveredSkill[] = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;
+    const path = join(root, entry.name);
+    const file = Bun.file(join(path, 'SKILL.md'));
+    if (await file.exists()) {
+      const description = skillDescription(await file.text());
+      found.push({
+        name: `${prefix}${entry.name}`,
+        scope,
+        path,
+        managed: false,
+        ...(description ? { description } : {}),
+      });
+      continue;
+    }
+    if (depth > 1) found.push(...(await skillsIn(path, scope, prefix, depth - 1)));
+  }
+  return found;
+}
+
+/** Every skill on this machine, in the order Claude Code would resolve them. */
+const discoverSkills = async (cwd: string | undefined, managed: Sidecar): Promise<DiscoveredSkill[]> => {
+  const installed = (await readJson<InstalledPlugins>(INSTALLED_PLUGINS)) ?? {};
+  const plugins = await Promise.all(
+    pluginSkillRoots(installed).map(({ plugin, root }) => skillsIn(root, 'plugin', `${plugin}:`))
+  );
+  const project = cwd ? await skillsIn(join(cwd, '.claude', 'skills'), 'project') : [];
+  const user = await skillsIn(SKILLS_DIR, 'user');
+  return [
+    ...project,
+    ...user.map((skill) => ({ ...skill, managed: managed.skills[skill.name] !== undefined })),
+    ...plugins.flat(),
+  ];
+};
+
+/**
+ * What this machine really has, and what a session started in `cwd` would see.
+ * Nothing is written and nothing is compared against the fleet: the hub reads
+ * its own rows, and this is the other half — the machine's own word.
+ */
+export const inspectConfig = async (cwd?: string): Promise<ConfigInspection> => {
+  const managed = await readSidecar();
+  const file = await readClaudeJson();
+  const root = file.ok ? file.root : {};
+
+  const projects = (root.projects as Record<string, { mcpServers?: Record<string, unknown> }>) ?? {};
+  const local = cwd ? (projects[cwd]?.mcpServers ?? {}) : {};
+  const project = cwd
+    ? ((await readJson<{ mcpServers?: Record<string, unknown> }>(join(cwd, '.mcp.json')))
+        ?.mcpServers ?? {})
+    : {};
+
+  const installed = (await readJson<InstalledPlugins>(INSTALLED_PLUGINS)) ?? {};
+  const linked = (await readJson<Record<string, unknown>>(KNOWN_MARKETPLACES)) ?? {};
+
+  const memoryHash = await memoryFileHash();
+  const memoryFile = Bun.file(MEMORY_PATH);
+
+  return {
+    ...(cwd ? { cwd } : {}),
+    mcp: mergeMcp(
+      [
+        { scope: 'local', servers: local },
+        { scope: 'project', servers: project },
+        { scope: 'user', servers: mcpServersOf(root) },
+      ],
+      managed.mcp
+    ),
+    skills: await discoverSkills(cwd, managed),
+    plugins: Object.entries(installed.plugins ?? {})
+      .filter(([, entries]) => entries.some((entry) => entry.scope === 'user'))
+      .map(([id]) => id),
+    marketplaces: Object.keys(linked),
+    memory: memoryHash
+      ? { hash: memoryHash, bytes: memoryFile.size, managed: managed.memory === memoryHash }
+      : null,
+    at: Date.now(),
+  };
+};
+
+/** Past this a skill is not a skill any more, and adoption says so rather than trying. */
+const SKILL_BYTES_CAP = 2 * 1024 * 1024;
+
+/** Every file under a directory, relative to it. Symlinks are not followed. */
+const filesUnder = async (root: string, prefix = ''): Promise<string[]> => {
+  const entries = await readdir(root, { withFileTypes: true }).catch(() => []);
+  const paths: string[] = [];
+  for (const entry of entries) {
+    const relative = `${prefix}${entry.name}`;
+    if (entry.isDirectory()) paths.push(...(await filesUnder(join(root, entry.name), `${relative}/`)));
+    else if (entry.isFile()) paths.push(relative);
+  }
+  return paths;
+};
+
+/**
+ * The files of a skill that is already on this machine, so the hub can adopt it
+ * into the fleet and hand it to every other machine. Named as
+ * {@link inspectConfig} named it, plugin skills included.
+ */
+export const readSkillFiles = async (name: string, cwd?: string): Promise<SkillFile[]> => {
+  const skill = (await discoverSkills(cwd, await readSidecar())).find((one) => one.name === name);
+  if (!skill) throw new Error(`no skill ${name} on this machine`);
+
+  const files: SkillFile[] = [];
+  let bytes = 0;
+  for (const path of await filesUnder(skill.path)) {
+    const content = new Uint8Array(await Bun.file(join(skill.path, path)).arrayBuffer());
+    bytes += content.byteLength;
+    if (bytes > SKILL_BYTES_CAP) {
+      throw new Error(
+        `${name} is over ${SKILL_BYTES_CAP / 1024 / 1024} MB — too big to carry to every machine`
+      );
+    }
+    files.push({ path, contentBase64: Buffer.from(content).toString('base64') });
+  }
+  return files;
 };
 
 /** What a linked marketplace's own manifest lists. */
