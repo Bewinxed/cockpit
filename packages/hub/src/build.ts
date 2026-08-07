@@ -1,0 +1,36 @@
+/**
+ * What this hub was built from (NEW.md §12) — the same three facts a daemon
+ * reports about itself, so a machine that is behind can be told apart from a hub
+ * that is. Read here rather than shared with the agent: the hub does not depend
+ * on the daemon, and this is thirty lines of git.
+ */
+import type { BuildInfo } from '@cockpit/core';
+import { resolve } from 'node:path';
+import { HUB_VERSION } from './config';
+
+/** The checkout this hub runs out of — up from `packages/hub/src`. */
+const REPO_ROOT = resolve(Bun.fileURLToPath(new URL('../../..', import.meta.url)));
+
+/** When this process started, which is what "the build a hub is on" means. */
+const STARTED_AT = Date.now();
+
+/** What git said, or nothing: a checkout that is not a git one is not a failure. */
+const git = async (args: string[]): Promise<string | undefined> => {
+  const ran = await Bun.$`git -C ${REPO_ROOT} ${args}`.quiet().nothrow();
+  return ran.exitCode === 0 ? ran.stdout.toString().trim() : undefined;
+};
+
+const read = async (): Promise<BuildInfo> => {
+  const commit = await git(['rev-parse', '--short', 'HEAD']);
+  const status = commit ? await git(['status', '--porcelain']) : undefined;
+  return {
+    version: HUB_VERSION,
+    ...(commit ? { commit, dirty: Boolean(status) } : {}),
+    startedAt: STARTED_AT,
+  };
+};
+
+let reported: Promise<BuildInfo> | undefined;
+
+/** Read once and kept: a running hub is whatever it started as. */
+export const buildInfo = (): Promise<BuildInfo> => (reported ??= read());

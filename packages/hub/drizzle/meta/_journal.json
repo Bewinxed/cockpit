@@ -36,6 +36,48 @@
       "when": 1785573921343,
       "tag": "0004_glorious_patch",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1786042249529,
+      "tag": "0005_gigantic_korvac",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1786050988511,
+      "tag": "0006_fantastic_guardian",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1786059785907,
+      "tag": "0007_solid_firestar",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1786101298997,
+      "tag": "0008_smart_miss_america",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1786103708505,
+      "tag": "0009_breezy_alex_power",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1786105540031,
+      "tag": "0010_brown_dakota_north",
+      "breakpoints": true
     }
   ]
 }

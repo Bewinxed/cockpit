@@ -5,9 +5,18 @@ import type {
   SDKMessage,
   SDKUserMessage,
 } from '@anthropic-ai/claude-agent-sdk';
+import type { AskUserQuestionInput } from '@anthropic-ai/claude-agent-sdk/sdk-tools';
+import type { FleetSyncReport } from './fleet';
+import type { ToolStatus } from './tools';
 
 // The SDK is the type system: consumers tunnel these types, never re-model them.
 export type * from '@anthropic-ai/claude-agent-sdk';
+
+// The workflow-tool catalog and its status/policy shapes (NEW.md §10).
+export * from './tools';
+
+// Fleet MCP + skills desired state, sync reports, and the `/` menu (NEW.md §11).
+export * from './fleet';
 
 /** The whole agent↔hub↔dashboard protocol. Adding a verb is a design decision. */
 export type Verb =
@@ -157,6 +166,33 @@ export interface ControlPayload {
 export const RESOLVE_PERMISSION = 'resolvePermission';
 
 /**
+ * The tool that asks the reader rather than the machine. Its permission request
+ * *is* the question, so it settles through {@link RESOLVE_PERMISSION} like any
+ * other: the choices arrive as the request's `input`, and the answer goes back
+ * as `updatedInput`.
+ *
+ * Not through the SDK's dialog channel, which looks like it should carry this
+ * and does not: `onUserDialog` is only reached for `mcp_url_elicitation`,
+ * `refusal_fallback_prompt` and `fable_overage_consent_prompt` — measured
+ * against the CLI 2.1.220 that SDK 0.3.220 ships, which hands every other
+ * dialog kind, `permission_ask_user_question` included, its own default answer
+ * without asking the host. Declaring the kind does not change that.
+ */
+export const ASK_USER_QUESTION = 'AskUserQuestion';
+
+/** One question of an {@link ASK_USER_QUESTION} call, as the SDK schemas it. */
+export type UserQuestion = AskUserQuestionInput['questions'][number];
+
+/**
+ * What the tool reads the reader's choices back out of: the question's own text
+ * mapped to the labels chosen, an array only where the question asked for
+ * `multiSelect`. The SDK does not type this one — a call whose `updatedInput`
+ * carries no `answers` comes back to the model as "The user did not answer the
+ * questions."
+ */
+export type UserAnswers = Record<string, string | string[]>;
+
+/**
  * `fs`: the machine's files, for the cwd picker and light markdown editing
  * (NEW.md §6) — not a file transfer. `list` answers with {@link FsEntry}[],
  * `read` with the file's text, `write` with the byte count it wrote. Like a
@@ -202,7 +238,73 @@ export interface AgentRow {
   lastSeenAt: string | number | Date | null;
   /** `unknown` until a daemon that probes has registered at least once. */
   auth: AuthState | 'unknown';
+  /**
+   * Last-known workflow-tool status by tool id (NEW.md §10) — what the daemon
+   * reported at register or after an install, plus the `installing` the hub
+   * writes while one is in flight. Absent from a hub that predates the column.
+   */
+  tools?: Record<string, ToolStatus>;
+  /**
+   * Last-known fleet-config sync report (NEW.md §11) — what the machine said
+   * the last time it converged on the hub's MCP servers and plugins. Absent
+   * from a hub that predates the column.
+   */
+  fleet?: FleetSyncReport;
+  /**
+   * The cockpit build this machine's daemon is running (NEW.md §12). The fleet
+   * is edited while it runs, so a machine quietly a month behind is the normal
+   * failure — this is what lets a rail say so instead of the user finding out
+   * through a protocol error.
+   */
+  build?: BuildInfo;
 }
+
+/** What a daemon reports about the checkout it was started from. */
+export interface BuildInfo {
+  /** `@cockpit/agent`'s package version. */
+  version: string;
+  /** Short git SHA, when the checkout is a git one. */
+  commit?: string;
+  /** Whether that checkout has uncommitted changes — a dev machine, mid-edit. */
+  dirty?: boolean;
+  /** When this daemon started, ms epoch. */
+  startedAt: number;
+}
+
+/**
+ * What an {@link UPDATE_COCKPIT} run did. Every field is what actually
+ * happened, not what was asked for: an update that could not restart the
+ * agent still says so rather than reporting success.
+ */
+export interface UpdateReport {
+  from?: string;
+  to?: string;
+  /** The tail of what git said — 'Already up to date.' included. */
+  pulled: string;
+  installed: boolean;
+  built: boolean;
+  /** Service ids actually restarted. */
+  restarted: string[];
+  /** Why something asked for did not happen. */
+  skipped?: string;
+}
+
+/**
+ * Turns the machine's checkout into the current one: `git pull`, install,
+ * rebuild the dashboard, restart the hub and dashboard services. The agent
+ * restarts itself only when asked and only when it is idle — it is hosting
+ * the sessions that would be interrupted.
+ *
+ * `args: [{ restartAgent?: boolean; force?: boolean }]`
+ */
+export const UPDATE_COCKPIT = 'updateCockpit';
+
+/**
+ * Whether this machine's daemon is in the middle of anything — how a restart
+ * waits for a good moment instead of cutting a turn in half.
+ * Answers `{ busy: number; instances: string[] }`.
+ */
+export const AGENT_BUSY = 'agentBusy';
 
 /**
  * A session the hub knows about — one row of its `instances` table. The hub is
