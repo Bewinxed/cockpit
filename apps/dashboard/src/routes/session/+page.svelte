@@ -133,7 +133,9 @@
                  learn rather than two. -->
             {#if group.kind === 'project'}
               {@const count = live.length + stored.length}
-              <div class="flex items-center gap-3 px-4 py-3">
+              <!-- Header shares the rows' max-w-3xl measure: one right edge
+                   per card at ultrawide, not two (finish-review finding). -->
+              <div class="flex max-w-3xl items-center gap-3 px-4 py-3">
                 <IconFolderDuo class="size-5 shrink-0 text-muted-foreground" />
                 <div class="min-w-0 flex-1">
                   <span class="text-sm font-semibold">{group.project.name}</span>
@@ -157,7 +159,7 @@
               {@const machine = cockpit.machines.find((m) => m.machineId === group.machineId)}
               {@const count = live.length + stored.length}
               {#if machine}
-                <div class="flex items-center gap-3 px-4 py-3">
+                <div class="flex max-w-3xl items-center gap-3 px-4 py-3">
                   <MachineMenu {machine}>
                     <div class="flex min-w-0 flex-1 items-center gap-3">
                       {#if osInfo.Icon}
