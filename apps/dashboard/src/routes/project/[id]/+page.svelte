@@ -2,22 +2,29 @@
   /**
    * The project home (NEW.md §1, north star 4): what this is and what is
    * happening — read from the repo's own files, never from a store of
-   * cockpit's own.
+   * Outpost's own.
    */
   import { untrack } from 'svelte';
   import { goto } from '$app/navigation';
   import { Markdown } from '$lib/components/ui/markdown';
+  import * as AlertDialog from '$lib/components/ui/alert-dialog';
+  import * as Popover from '$lib/components/ui/popover';
+  import * as Select from '$lib/components/ui/select';
+  import { Button } from '$lib/components/ui/button';
+  import { Input } from '$lib/components/ui/input';
   import MemoryCard from '$lib/components/features/MemoryCard.svelte';
   import { cockpit, deleteProject, machineFs, spawnSession } from '$lib/cockpit/client.svelte';
   import type { ProjectRow } from '$lib/cockpit/client.svelte';
   import { readDocs, type Doc } from '$lib/cockpit/docs';
+  import { spawnPrefs, rememberSpawn } from '$lib/cockpit/spawnPrefs.svelte';
+  import { machineLabel, machineOs } from '$lib/cockpit/machine';
   import LiveSessionRow from '$lib/cockpit/LiveSessionRow.svelte';
   import StoredSessionRow from '$lib/cockpit/StoredSessionRow.svelte';
+  import MachineInventory from '$lib/cockpit/MachineInventory.svelte';
   import type { PageData } from './$types';
 
   let { data }: { data: PageData } = $props();
 
-  // The load's copy is what SSR renders; the socket's is what stays current.
   const project = $derived<ProjectRow | null>(
     (data.project && cockpit.project(data.project.id)) ?? data.project
   );
@@ -28,15 +35,17 @@
   let docs = $state<Doc[]>([]);
   let open = $state<Doc | null>(null);
   let content = $state('');
-  /** Non-null while editing: the textarea's text, unsaved. */
   let draft = $state<string | null>(null);
   let docsError = $state<string | null>(null);
   let docError = $state<string | null>(null);
   let saving = $state(false);
+  let showMore = $state(false);
+  let forgetOpen = $state(false);
+  let spawnOpen = $state(false);
+  let spawnPrompt = $state('');
 
   const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
-  // Not reactive: it only guards the effect below from reloading on every frame.
   let loadedFor = '';
 
   $effect(() => {
@@ -88,17 +97,11 @@
     }
   }
 
-  /**
-   * The project's own CLAUDE.md, on the machine the sessions start on. Read and
-   * written through the same `fs` verb as the docs: git syncs this file, not
-   * cockpit — the fleet memory on /tools is the one cockpit replicates.
-   */
   let claude = $state<string | null>(null);
   let claudeEditing = $state(false);
   let claudeError = $state<string | null>(null);
 
   const claudePath = $derived(project ? `${project.cwd}/CLAUDE.md` : '');
-  /** A machine that is not up cannot answer for its files, so the card is a read. */
   const claudeOnline = $derived(machine?.status === 'online');
 
   async function loadClaude(target: ProjectRow) {
@@ -108,8 +111,6 @@
     try {
       claude = await machineFs<string>(target.machineId, 'read', `${target.cwd}/CLAUDE.md`);
     } catch (error) {
-      // A project with no CLAUDE.md is the ordinary case — the `fs` verb's own
-      // sentence for a file that is not there, which is not a failure to show.
       if (!message(error).includes('does not exist')) claudeError = message(error);
     }
   }
@@ -122,7 +123,6 @@
       claude = text;
       return true;
     } catch (error) {
-      // Said in the card's own header, and the editor stays open over the text.
       claudeError = message(error);
       return false;
     }
@@ -130,124 +130,365 @@
 
   const live = $derived(project ? cockpit.liveIn(project) : []);
   const stored = $derived(project ? cockpit.storedIn(project) : []);
+  const storedVisible = $derived(showMore ? stored : stored.slice(0, 8));
 
-  async function startSession(scratch: boolean) {
+  function startSession(scratch: boolean) {
     if (!project) return;
+    const perm = spawnPrefs.permissionMode;
+    const mod = spawnPrefs.model;
+    const prompt = spawnPrompt.trim() || undefined;
     const instanceId = spawnSession({
       machineId: project.machineId,
       cwd: project.cwd,
       projectId: project.id,
+      permissionMode: perm,
+      model: mod,
+      prompt,
       scratch: scratch ? {} : undefined,
     });
-    await goto(`/session/${instanceId}`);
+    rememberSpawn({ model: mod, permissionMode: perm });
+    spawnPrompt = '';
+    spawnOpen = false;
+    void goto(`/session/${instanceId}`);
   }
 
   async function forget() {
     if (!project) return;
     await deleteProject(project.id);
+    forgetOpen = false;
     await goto('/session');
   }
 
-  const action =
-    'shrink-0 rounded-md border border-border px-2 py-1 text-xs transition-colors hover:bg-accent hover:text-accent-foreground hover:text-foreground disabled:opacity-40';
+  function docListKeydown(event: KeyboardEvent) {
+    if (!docs.length) return;
+    const idx = open ? docs.findIndex((d) => d.path === open?.path) : -1;
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      const next = Math.min(idx + 1, docs.length - 1);
+      void openDoc(docs[next]);
+      (event.currentTarget as HTMLElement).querySelectorAll('button')[next]?.focus();
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      const prev = Math.max(idx - 1, 0);
+      void openDoc(docs[prev]);
+      (event.currentTarget as HTMLElement).querySelectorAll('button')[prev]?.focus();
+    }
+  }
+
+  const os = $derived(machine ? machineOs(machine.os) : null);
 </script>
+
+<svelte:head>
+  <title>{project?.name ?? 'Project'} &middot; Outpost</title>
+</svelte:head>
 
 {#if !project}
   <div class="flex flex-1 items-center justify-center">
-    <p class="text-sm text-muted-foreground">No such project.</p>
+    <p class="text-body text-muted-foreground">No such project.</p>
   </div>
 {:else}
   <div class="flex h-full flex-1 flex-col overflow-hidden">
-    <header class="flex items-center gap-3 border-b border-border px-4 py-2">
-      <h1 class="shrink-0 text-sm font-semibold">{project.name}</h1>
-      <span class="truncate font-mono text-xs text-muted-foreground">{project.cwd}</span>
-      <span class="shrink-0 text-xs text-muted-foreground">
-        {machine?.hostname ?? project.machineId}
-      </span>
-      <button
-        type="button"
-        class="{action} ml-auto"
-        title="Forget the grouping — the checkout and its sessions stay"
-        onclick={forget}
-      >
-        Forget
-      </button>
-      <button type="button" class={action} onclick={() => startSession(true)}>Side quest</button>
-      <button
-        type="button"
-        class="shrink-0 rounded-md bg-primary px-3 py-1 text-xs text-primary-foreground transition-colors hover:bg-primary/90 hover:text-primary"
-        onclick={() => startSession(false)}
-      >
-        New session
-      </button>
+    <!-- Header -->
+    <header class="flex flex-wrap items-center gap-x-4 gap-y-2 px-6 pt-6 pb-4">
+      <div class="flex min-w-0 flex-1 flex-col gap-1">
+        <h1 class="text-display">{project.name}</h1>
+        <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <span class="truncate font-mono text-micro text-muted-foreground">{project.cwd}</span>
+          {#if machine}
+            <span class="flex items-center gap-1.5">
+              {#if os}
+                <os.Icon class="size-3.5 text-muted-foreground" />
+              {/if}
+              <span class="text-micro text-muted-foreground">
+                {machineLabel(machine.hostname)}
+              </span>
+              <span
+                class="size-2 shrink-0 rounded-full {machine.status === 'online' ? 'bg-success' : 'bg-muted-foreground/40'}"
+                title={machine.status}
+              ></span>
+            </span>
+          {/if}
+        </div>
+      </div>
+      <div class="flex shrink-0 items-center gap-2">
+        <Popover.Root bind:open={spawnOpen}>
+          <Popover.Trigger>
+            {#snippet child({ props })}
+              <Button {...props} class="pressable">New session</Button>
+            {/snippet}
+          </Popover.Trigger>
+          <Popover.Content class="w-80 p-0" align="end">
+            <form
+              class="flex flex-col gap-3 p-4"
+              onsubmit={(e) => { e.preventDefault(); startSession(false); }}
+            >
+              <label class="flex flex-col gap-1 text-caption">
+                First prompt (optional)
+                <Input
+                  bind:value={spawnPrompt}
+                  autocomplete="off"
+                  spellcheck="false"
+                  placeholder="What should this session do?"
+                  class="text-sm"
+                />
+              </label>
+              <div class="flex items-center justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onclick={() => startSession(false)}
+                >
+                  Start empty
+                </Button>
+                <Button type="submit" size="sm">Start</Button>
+              </div>
+            </form>
+          </Popover.Content>
+        </Popover.Root>
+        <Button
+          variant="outline"
+          class="pressable"
+          onclick={() => startSession(true)}
+        >
+          Side quest
+        </Button>
+        <AlertDialog.Root bind:open={forgetOpen}>
+          <AlertDialog.Trigger>
+            {#snippet child({ props })}
+              <Button {...props} variant="ghost" class="text-muted-foreground">
+                Forget project&hellip;
+              </Button>
+            {/snippet}
+          </AlertDialog.Trigger>
+          <AlertDialog.Content class="rounded-2xl shadow-xl">
+            <AlertDialog.Header>
+              <AlertDialog.Title>Forget {project.name}?</AlertDialog.Title>
+              <AlertDialog.Description>
+                The grouping is removed. The checkout and its sessions stay on disk.
+              </AlertDialog.Description>
+            </AlertDialog.Header>
+            <AlertDialog.Footer>
+              <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
+              <AlertDialog.Action onclick={forget}>Forget</AlertDialog.Action>
+            </AlertDialog.Footer>
+          </AlertDialog.Content>
+        </AlertDialog.Root>
+      </div>
     </header>
 
-    <div class="flex min-h-0 flex-1 flex-col md:flex-row">
-      <nav
-        class="flex shrink-0 flex-col overflow-y-auto border-b border-border py-2 md:w-52 md:border-r md:border-b-0"
-        aria-label="Project docs"
-      >
-        <span
-          class="px-3 pb-1 text-xs font-medium tracking-wider text-muted-foreground uppercase"
-        >
-          Docs
-        </span>
-        <div class="flex overflow-x-auto md:flex-col" role="tablist" aria-label="Docs">
-          {#each docs as doc (doc.path)}
-            <button
-              type="button"
-              role="tab"
-              aria-selected={open?.path === doc.path}
-              aria-controls="project-doc-panel"
-              class="shrink-0 truncate px-3 py-1 text-left font-mono text-xs transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring md:shrink
-                {open?.path === doc.path ? 'bg-accent text-accent-foreground' : 'text-muted-foreground'}"
-              onclick={() => openDoc(doc)}
-            >
-              {doc.name}
-            </button>
-          {:else}
-            <p class="px-3 py-1 text-xs text-muted-foreground">
-              {docsError ?? 'No markdown yet. Add a README.md at the top of the checkout and it shows up here.'}
+    <!-- Body: columns at >=768 -->
+    <div class="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 pb-6 lg:flex-row lg:gap-6 lg:overflow-hidden">
+      <!-- Main column: docs -->
+      <div class="flex min-w-0 flex-1 flex-col gap-4 lg:overflow-y-auto">
+        {#if docs.length === 0 && !docsError}
+          <div class="rounded-xl bg-card p-6 shadow-md">
+            <p class="text-body text-muted-foreground">
+              No markdown yet. Add a README.md at the top of the checkout and it shows up here.
             </p>
-          {/each}
-        </div>
-      </nav>
-
-      <div class="flex min-w-0 flex-1 flex-col gap-6 overflow-y-auto p-4">
-        {#if open}
-          <section id="project-doc-panel" role="tabpanel" class="rounded-xl border border-border bg-card">
-            <header class="flex items-center gap-3 border-b border-border px-4 py-2">
-              <span class="truncate font-mono text-xs text-muted-foreground">{open.name}</span>
-              {#if docError}
-                <span class="truncate text-xs text-error" role="alert">{docError}</span>
-              {/if}
-              {#if draft === null}
-                <button type="button" class="{action} ml-auto" onclick={() => (draft = content)}>
-                  Edit
-                </button>
-              {:else}
-                <button type="button" class="{action} ml-auto" onclick={() => (draft = null)}>
-                  Cancel
-                </button>
-                <button type="button" class={action} disabled={saving} onclick={save}>
-                  {saving ? 'Saving…' : 'Save'}
-                </button>
-              {/if}
-            </header>
-            {#if draft === null}
-              <div class="max-h-[60vh] overflow-y-auto px-4 py-3">
-                <Markdown source={content} />
-              </div>
-            {:else}
-              <textarea
-                bind:value={draft}
-                spellcheck="false"
-                class="h-[60vh] w-full resize-none bg-transparent px-4 py-3 font-mono text-base text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset sm:text-xs"
-              ></textarea>
+          </div>
+        {:else if docsError}
+          <div class="rounded-xl bg-card p-6 shadow-md" role="alert">
+            <p class="text-body text-warning">{docsError}</p>
+          </div>
+        {:else}
+          <!-- Doc nav: Select on mobile -->
+          <div class="block md:hidden">
+            {#if docs.length > 0}
+              <Select.Root
+                type="single"
+                value={open?.path ?? ''}
+                onValueChange={(val) => {
+                  const doc = docs.find((d) => d.path === val);
+                  if (doc) void openDoc(doc);
+                }}
+              >
+                <Select.Trigger class="w-full font-mono text-sm">
+                  {open?.name ?? 'Select a document'}
+                </Select.Trigger>
+                <Select.Content>
+                  {#each docs as doc (doc.path)}
+                    <Select.Item value={doc.path} class="font-mono text-sm">{doc.name}</Select.Item>
+                  {/each}
+                </Select.Content>
+              </Select.Root>
             {/if}
-          </section>
-        {/if}
+          </div>
 
+          <div class="hidden md:flex md:min-h-0 md:flex-1 md:gap-4 xl:gap-0">
+            <!-- 3-col ultrawide: doc nav list | document | rail -->
+            <nav
+              class="hidden shrink-0 flex-col overflow-y-auto pr-2 xl:flex xl:w-48"
+              aria-label="Project docs"
+            >
+              <!-- svelte-ignore a11y_no_noninteractive_element_to_interactive_role -->
+              <div
+                class="flex flex-col gap-0.5"
+                role="listbox"
+                tabindex="0"
+                aria-label="Docs"
+                onkeydown={docListKeydown}
+              >
+                {#each docs as doc (doc.path)}
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={open?.path === doc.path}
+                    class="truncate rounded-lg px-3 py-1.5 text-left font-mono text-micro transition-colors
+                      hover:bg-accent
+                      {open?.path === doc.path
+                        ? 'bg-accent text-accent-foreground font-medium'
+                        : 'text-muted-foreground'}"
+                    onclick={() => openDoc(doc)}
+                  >
+                    {doc.name}
+                  </button>
+                {/each}
+              </div>
+            </nav>
+
+            <!-- 2-col (768-1919): doc nav is horizontal above reading pane -->
+            <div class="flex min-w-0 flex-1 flex-col gap-4">
+              <nav class="flex shrink-0 gap-1 overflow-x-auto xl:hidden" aria-label="Project docs">
+                <!-- svelte-ignore a11y_no_noninteractive_element_to_interactive_role -->
+                <div
+                  class="flex gap-1"
+                  role="listbox"
+                  tabindex="0"
+                  aria-label="Docs"
+                  onkeydown={docListKeydown}
+                >
+                  {#each docs as doc (doc.path)}
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={open?.path === doc.path}
+                      class="shrink-0 truncate rounded-lg px-3 py-1.5 font-mono text-micro transition-colors
+                        hover:bg-accent
+                        {open?.path === doc.path
+                          ? 'bg-accent text-accent-foreground font-medium'
+                          : 'text-muted-foreground'}"
+                      onclick={() => openDoc(doc)}
+                    >
+                      {doc.name}
+                    </button>
+                  {/each}
+                </div>
+              </nav>
+
+              {#if open}
+                <section class="rounded-xl bg-card shadow-md">
+                  <header class="flex items-center gap-3 px-4 py-2.5">
+                    <span class="min-w-0 truncate font-mono text-micro text-muted-foreground">{open.name}</span>
+                    {#if docError}
+                      <span class="truncate text-micro text-error" role="alert">{docError}</span>
+                    {/if}
+                    {#if draft === null}
+                      <Button variant="outline" size="sm" class="ml-auto shrink-0" onclick={() => (draft = content)}>
+                        Edit
+                      </Button>
+                    {:else}
+                      <Button variant="ghost" size="sm" class="ml-auto shrink-0" onclick={() => (draft = null)}>
+                        Cancel
+                      </Button>
+                      <Button variant="outline" size="sm" class="shrink-0" disabled={saving} onclick={save}>
+                        {saving ? 'Saving…' : 'Save'}
+                      </Button>
+                    {/if}
+                  </header>
+                  {#if draft === null}
+                    <div class="max-h-[60vh] overflow-y-auto border-t border-border px-6 py-4">
+                      <div class="prose prose-sm dark:prose-invert max-w-[72ch]">
+                        <Markdown source={content} />
+                      </div>
+                    </div>
+                  {:else}
+                    <textarea
+                      bind:value={draft}
+                      spellcheck="false"
+                      class="h-[60vh] w-full resize-none border-t border-border bg-transparent px-6 py-4 font-mono text-sm text-foreground
+                        focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+                    ></textarea>
+                  {/if}
+                </section>
+              {/if}
+            </div>
+          </div>
+
+          <!-- Mobile: reading pane only (doc selection by Select above) -->
+          <div class="md:hidden">
+            {#if open}
+              <section class="rounded-xl bg-card shadow-md">
+                <header class="flex items-center gap-3 px-4 py-2.5">
+                  <span class="min-w-0 truncate font-mono text-micro text-muted-foreground">{open.name}</span>
+                  {#if docError}
+                    <span class="truncate text-micro text-error" role="alert">{docError}</span>
+                  {/if}
+                  {#if draft === null}
+                    <Button variant="outline" size="sm" class="ml-auto shrink-0" onclick={() => (draft = content)}>
+                      Edit
+                    </Button>
+                  {:else}
+                    <Button variant="ghost" size="sm" class="ml-auto shrink-0" onclick={() => (draft = null)}>
+                      Cancel
+                    </Button>
+                    <Button variant="outline" size="sm" class="shrink-0" disabled={saving} onclick={save}>
+                      {saving ? 'Saving…' : 'Save'}
+                    </Button>
+                  {/if}
+                </header>
+                {#if draft === null}
+                  <div class="max-h-[60vh] overflow-y-auto border-t border-border px-5 py-4">
+                    <div class="prose prose-sm dark:prose-invert max-w-[72ch]">
+                      <Markdown source={content} />
+                    </div>
+                  </div>
+                {:else}
+                  <textarea
+                    bind:value={draft}
+                    spellcheck="false"
+                    class="h-[60vh] w-full resize-none border-t border-border bg-transparent px-5 py-4 font-mono text-sm text-foreground
+                      focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+                  ></textarea>
+                {/if}
+              </section>
+            {/if}
+          </div>
+        {/if}
+      </div>
+
+      <!-- Right rail (320-380px on lg; stacked on mobile) -->
+      <aside class="mt-6 flex w-full shrink-0 flex-col gap-4 lg:mt-0 lg:w-[340px] lg:overflow-y-auto xl:w-[360px]">
+        <!-- Sessions -->
+        <section class="rounded-xl bg-card shadow-md">
+          <header class="px-4 py-3">
+            <h2 class="text-title">Sessions</h2>
+          </header>
+          <div class="flex flex-col gap-1.5 px-3 pb-3">
+            {#each live as instance (instance.id)}
+              <LiveSessionRow {instance} />
+            {/each}
+            {#each storedVisible as info (info.sessionId)}
+              <StoredSessionRow machineId={project.machineId} {info} />
+            {:else}
+              {#if live.length === 0}
+                <p class="px-1 py-2 text-caption">Nothing running, nothing recorded yet.</p>
+              {/if}
+            {/each}
+            {#if stored.length > 8 && !showMore}
+              <Button
+                variant="ghost"
+                size="sm"
+                class="self-start text-muted-foreground"
+                onclick={() => (showMore = true)}
+              >
+                Show {stored.length - 8} more
+              </Button>
+            {/if}
+          </div>
+        </section>
+
+        <!-- CLAUDE.md -->
         <MemoryCard
           path="CLAUDE.md"
           content={claude}
@@ -255,37 +496,29 @@
           save={claudeOnline ? saveClaude : undefined}
           emptyText={claudeOnline
             ? 'No CLAUDE.md in this project — click to create it.'
-            : `No machine online — ${machine?.hostname ?? project.machineId} has to be up to read this file.`}
+            : `No machine online — ${machine ? machineLabel(machine.hostname) : project.machineId} has to be up to read this file.`}
         >
           {#snippet meta()}
             {#if claudeError}
-              <span class="min-w-0 truncate text-xs text-error" role="alert">{claudeError}</span>
+              <span class="min-w-0 truncate text-micro text-error" role="alert">{claudeError}</span>
             {/if}
           {/snippet}
           {#snippet footer()}
-            <p class="border-t border-border px-4 py-2 text-xs text-muted-foreground">
-              This file is the repo's own — commit it to share it. Git is its sync; cockpit does not
-              replicate it.
+            <p class="border-t border-border px-4 py-2 text-micro text-muted-foreground">
+              This file is the repo's own — commit it to share it. Git is its sync; Outpost does not replicate it.
             </p>
           {/snippet}
         </MemoryCard>
 
-        <section class="flex flex-col gap-2">
-          <h2 class="text-xs font-medium tracking-wider text-muted-foreground uppercase">
-            Happening
-          </h2>
-          {#each live as instance (instance.id)}
-            <LiveSessionRow {instance} />
-          {/each}
-          {#each stored.slice(0, 8) as info (info.sessionId)}
-            <StoredSessionRow machineId={project.machineId} {info} />
-          {:else}
-            {#if live.length === 0}
-              <p class="text-sm text-muted-foreground">Nothing running, nothing recorded yet.</p>
-            {/if}
-          {/each}
-        </section>
-      </div>
+        <!-- Machine inventory -->
+        {#if project && machine}
+          <MachineInventory
+            machines={machine ? [machine] : []}
+            kind="mcp"
+            taken={[]}
+          />
+        {/if}
+      </aside>
     </div>
   </div>
 {/if}
