@@ -8,9 +8,8 @@ CLAUDE.md and this file disagree, this file wins.
 
 The failure mode this file exists to prevent: this repo was previously killed by
 serial re-planning — seven planning docs, four stacked migrations, each
-abandoned halfway. **No new planning documents.** Plans live here; tasks live in
-`.flow/bin/flowctl` (create new epics; epics fn-1 through fn-12 are legacy
-history, never re-anchor to them). Finish over polish: the user has explicitly
+abandoned halfway. **No new planning documents.** Plans live here, nowhere
+else. Finish over polish: the user has explicitly
 said they fixate on minor things — when a choice arises between shipping the
 working loop and improving a detail, ship the loop.
 
@@ -40,12 +39,11 @@ North star (in priority order):
    connection layer.
 4. **Project home** (Linear-style, files-as-truth): a project page that shows
    the project's documents (rendered markdown from the repo via the `fs` verb —
-   PRD/research/CLAUDE.md, pinned docs first), its flowctl epics with progress,
-   recent + active sessions, and start-session/side-quest actions. Strictly a
-   view over the repo's files + flowctl — **no separate document store, no
-   WYSIWYG, no issue tracker.** Light markdown editing via the `fs` verb at
-   most. (Happy 2's "rig-documents"/"file-viewer" plans reach the same
-   files-as-truth conclusion.)
+   PRD/research/CLAUDE.md, pinned docs first), recent + active sessions, and
+   start-session/side-quest actions. Strictly a view over the repo's files —
+   **no separate document store, no WYSIWYG, no issue tracker.** Light
+   markdown editing via the `fs` verb at most. (Happy 2's "rig-documents"/
+   "file-viewer" plans reach the same files-as-truth conclusion.)
 
 Explicitly NOT the product: teams/collaboration, channels, a Slack clone,
 multi-provider harnesses (Codex/Kimi). One user, their machines, Claude.
@@ -297,10 +295,9 @@ old tests/scripts) were already deleted on 2026-07-30.
   scratch section in sidebar, keep/discard. *Done when: idea → fork → verdict
   without touching a terminal.*
 - **Phase 5 — Project home.** The Linear-style project page from north-star
-  item 4: docs rail (rendered repo markdown, pinned PRD first), flowctl epics
-  + progress, sessions list, spawn actions. *Done when: opening a project
-  answers "what is this, what's the plan, what's happening" without a
-  terminal or editor.*
+  item 4: docs rail (rendered repo markdown, pinned PRD first), sessions
+  list, spawn actions. *Done when: opening a project answers "what is this,
+  what's happening" without a terminal or editor.*
 - **Phase 6 — Polish.** Only now: design pass, animations, keyboard palette,
   empty states. Delete remaining legacy packages and this section's
   temptations until here.
@@ -314,18 +311,156 @@ implementations are gone.
 
 - Bun everywhere; no Node-isms (`ws`, `better-sqlite3`, `node:fs` where
   `Bun.file` works).
-- Tasks in flowctl (new epics only), plans in this file, nowhere else.
+- Plans in this file, nowhere else.
 - Verify by running: `bun run dev` (hub+agent+dashboard) and driving the real
   UI, not just typecheck. The old repo's checklist was full of "✅ works"
   claims that were false — trust only what you've exercised.
 - When old code disagrees with this file, this file wins. When the SDK's real
   types disagree with this file, the types win — note the drift here in one
   line, don't write a new doc about it.
-- SDK drift (fn-24): `bypassPermissions` cannot be entered live —
+- SDK drift: `bypassPermissions` cannot be entered live —
   `setPermissionMode` refuses it unless the session was launched with
   `allowDangerouslySkipPermissions` — so switching into it relaunches the
   session on its own SDK session. Every other direction switches live,
   downgrades out of bypass included.
-- SDK drift (fn-24): `query()` holds its process back until the session is given
+- SDK drift: `query()` holds its process back until the session is given
   work, so a relaunch's first frame is no signal that it is up. `spawn` carries
   an optional `requestId` and the agent answers it with a `control_result`.
+- Script drift: §12 promises the hub under `bun --watch` in dev, but the root
+  `hub` script ran the watchless `start` — a hub frozen at boot-time code
+  looked like missing endpoints. Root script now calls `dev` (2026-08-07).
+
+## 10. Tool provisioning
+
+Machines carry the user's workflow CLIs — opencode and the Antigravity CLI
+today, more later. One click and automatic: a `tools` policy table on the hub
+says what every machine must have; the daemon reports `ToolStatus[]` in
+`register`; the hub answers with machine-scoped `installTool` controls for
+whatever is missing. No new verb — `listTools`/`installTool` join `listRepos`
+in the machine-scoped control set. The catalog is data
+(`packages/core/src/tools.ts`): adding a tool is one `ToolSpec` — ordered
+per-OS install methods, `needs` prerequisite gating, `pinnedCommand` for
+version pins, a `native` escape hatch for installs no portable one-liner can
+express. The agent's executor is generic and never names a tool. A failed
+install waits for a click instead of retrying on every register (the daemon
+remembers failures per boot). Last-known status lives in an `agents.tools`
+JSON column and rides the `instances` frame, so every dashboard follows
+installs live; the UI is one `/tools` machines × tools matrix with per-cell
+install/retry and a per-tool "required everywhere" toggle. Deliberately not
+here: tool auth (opencode's auth.json and Google's login stay the user's),
+sudo-needing installs, and upgrade flows beyond re-running the installer.
+Gemini CLI was the original ask and is deliberately absent: Google cut
+consumer access on 2026-06-18 and points terminals at the Antigravity CLI;
+swapping the entry was one spec object, which is the point of the catalog.
+
+## 11. Fleet MCP + skills, and the `/` menu
+
+One place manages what every machine's Claude Code can reach. The hub owns
+the desired state (three tables: `mcp_servers`, `marketplaces`, `plugins`);
+a machine-scoped `syncFleetConfig` control applies it and answers with a
+`FleetSyncReport`; the hub sends it on register and on any change, so a new
+machine converges the moment it appears. Status lands in an `agents.fleet`
+JSON column and rides the `instances` frame. No new verbs.
+
+How applying works (verified against CLI 2.1.223 docs, 2026-08-07):
+- **MCP servers** merge into `~/.claude.json` top-level `mcpServers` — user
+  scope loads for every project and the SDK reads it regardless of
+  `settingSources`. A sidecar (`~/.claude/cockpit-fleet.json` — one file
+  for the MCP, marketplace and plugin lists alike) names what cockpit
+  manages; anything else in any file is never touched.
+  `bunx <pkg>` is the quick-add path for stdio servers; the daemon writes
+  the runner's absolute path (Windows: `cmd /c` only for `.cmd` shims —
+  stdio servers spawn without a shell). Remote servers are `http`/`sse`
+  entries with headers; `${VAR}` expansion is the CLI's own.
+- **Skills** arrive two ways. Plugin bundles (which can carry MCP servers
+  and hooks, not just files) install through the plugin system, headless:
+  the daemon runs `claude plugin marketplace add <source>` and
+  `claude plugin install <plugin>@<marketplace> --scope user`, both
+  idempotent; state is read back from `~/.claude/plugins/
+  {known_marketplaces,installed_plugins}.json`. A `marketplaceCatalog`
+  control reads a linked marketplace's `marketplace.json` so the dashboard
+  can browse what is installable. Plain skills are **fetched directly**:
+  the hub resolves `npm:pkg@ver` / `github:owner/repo/path@ref` / a raw
+  URL to the skill's files once, hashes them, and sync carries the files —
+  a daemon writes `~/.claude/skills/<name>/` only on a hash change.
+  Installer CLIs (`npx impeccable`-style) are deliberately never run on
+  machines: an installer is a wrapper around copying files, and cockpit
+  does the copy itself — no Node, no TTY, one download for N machines,
+  removal deletes exactly what the sidecar says cockpit wrote.
+- **Reload**: new sessions pick everything up (MCP config is read at
+  session start by CLI design — no forced restarts of working sessions;
+  per-session relaunch is the opt-in). Skill file edits hot-reload live.
+- **`/` menu**: the composer's command palette exists and was never fed.
+  Init frames carry `slash_commands` + `skills` on every turn;
+  `supportedCommands()` (already reachable — the agent reflects any Query
+  method) adds descriptions/argument hints; the SDK's `commands_changed`
+  push replaces the cache mid-session. `AvailableCommand` is hoisted to
+  core (it was declared three times in the dashboard) and derived from the
+  SDK's `SlashCommand`.
+
+**Scopes.** Every row carries Claude Code's own placement: `user` (every
+machine — `~/.claude.json` top-level `mcpServers`, `~/.claude/skills/`,
+plugins `--scope user`), `local` (one project, privately — the
+`projects["<cwd>"]` map in `~/.claude.json`, plugins `--scope local`), or
+`project` (one project, shared — repo-root `.mcp.json`, plugins `--scope
+project`). A project-bound row defaults to `local`, so cockpit never dirties
+a working tree unless the reader asks it to. The hub resolves `projectId` →
+`cwd` as it sends a sync, and a machine only receives the project rows that
+live on it.
+
+**Discovery and adoption.** A machine's existing config is never touched and
+was, at first, never seen either — half a feature. `inspectConfig(cwd?)`
+reports what a machine really has (all scopes, managed and not) and what a
+session in `cwd` would see; the dashboard runs it the moment a folder is
+chosen for a session and on the project page. Unmanaged rows are shown
+beside fleet rows with an **Adopt** action: an MCP definition is copied into
+the hub, and a skill's files are read off that machine
+(`readSkillFiles`) and stored like any fetched skill — so a skill written on
+one machine reaches the rest. Adoption is always explicit, and a fleet
+server shadowed by a nearer scope says so rather than looking broken.
+
+Deliberately not here: MCP server OAuth (each machine's `claude mcp login`
+stays its own), enterprise managed-settings surfaces, and writing hooks or
+subagents that a skill ships outside its own directory.
+
+## 12. Services, and updating a fleet you are editing
+
+Cockpit supervises the code it is built from, so "keep it running" and "keep it
+current" are one problem. `cockpit service install [hub|dashboard|agent]`
+writes per-user services — systemd units on Linux, LaunchAgents on macOS (on a
+Mac the LaunchAgent is not optional: only a job inside the Aqua session can
+read the login keychain Claude Code keeps credentials in). Everything is
+per-user: no sudo, nothing outside `$HOME`.
+
+Each service gets the update rule its risk deserves:
+
+- **hub** — restarting it costs nothing: sessions live in the daemons, which
+  reconnect with backoff, and state is on disk. `install --dev` runs it under
+  `bun --watch`, so an edit is live in a second.
+- **dashboard** — `--dev` runs vite itself (invoked directly with `--port`;
+  vite ignores `PORT`, and a unit that claims a port it does not hold is worse
+  than no unit). Prod serves the built bundle. Same port either way.
+- **agent** — never watched, never restarted automatically. It hosts the
+  sessions a restart would cut in half. `cockpit service restart agent` asks
+  the hub how many of this machine's sessions are mid-turn and refuses while
+  any are; `--when-idle` waits for them; `--force` overrides. When the hub
+  cannot be reached to answer, it refuses rather than guessing — restarting
+  blind is what cost two sessions on 2026-08-07.
+
+**Knowing a machine is behind.** Every daemon reports its `BuildInfo` (package
+version, short commit, whether the checkout is dirty, boot time) on register;
+the hub reports its own on `/health`. A machine quietly a month behind is the
+normal failure of a fleet edited while it runs, and this is what lets a rail
+say so instead of the user meeting it as a protocol error.
+
+**Catching one up.** `POST /api/agents/:machineId/update` runs the
+`updateCockpit` control: `git pull --ff-only`, `bun install`, a dashboard
+build where a dashboard is served, then restarts. It refuses a dirty checkout
+unless forced — a dev machine must never be clobbered. The agent and the hub
+schedule their own restarts a second late, so the report reaches the caller
+before the socket carrying it dies; the report says what actually happened,
+and a step asked for but skipped says why.
+
+Deliberately not here: updating a machine that is not a git checkout,
+cross-version protocol negotiation (the fleet is one user's, and the answer to
+skew is to update), and Windows services.

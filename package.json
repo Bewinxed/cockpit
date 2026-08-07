@@ -16,7 +16,7 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "typecheck": "bun run --filter '*' typecheck",
-    "hub": "bun run --filter '@cockpit/hub' start",
+    "hub": "bun run --filter '@cockpit/hub' dev",
     "agent": "bun run --filter '@cockpit/agent' start",
     "cockpit": "bun packages/cli/src/cli.ts",
     "db:push": "bun run --filter '@cockpit/hub' db:push"

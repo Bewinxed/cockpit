@@ -32,9 +32,8 @@ compatibility with legacy internals (user's explicit call, 2026-07-31).
   NEW.md in one line (see the drift log in §5 there).
 - Claude Agent SDK pinned exactly `0.3.220`; tunnel it, never re-model it.
 - New code uses `COCKPIT_*` env vars and `@cockpit/*` names only.
-- Task tracking: `.flow/bin/flowctl` — rework epics are fn-13+ (fn-1…fn-12
-  are legacy history). No markdown TODOs, no TodoWrite, no new planning docs;
-  plans live in NEW.md.
+- No markdown TODOs, no TodoWrite, no new planning docs; plans live in
+  NEW.md.
 - Verify by running the real thing (`bun run dev`, boot the hub/daemon), not
   just typecheck.
 
