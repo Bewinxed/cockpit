@@ -4,7 +4,6 @@
     IconArrowDown,
     IconChat,
     IconCheck,
-    IconDocument,
     IconFlow,
     IconFork,
     IconPlay,
@@ -41,6 +40,7 @@
   import ActivityDot from '$lib/cockpit/ActivityDot.svelte';
   import McpChips from '$lib/cockpit/McpChips.svelte';
   import SessionContext from '$lib/cockpit/SessionContext.svelte';
+  import SessionContextButton from '$lib/cockpit/SessionContextButton.svelte';
   import PermissionStack from '$lib/cockpit/PermissionStack.svelte';
   import { questionsOf } from '$lib/cockpit/question';
   import { ACTIVITY_LABEL } from '$lib/cockpit/activity';
@@ -81,6 +81,7 @@
   import { Button, type ButtonVariant } from '$lib/components/ui/button';
   import * as ButtonGroup from '$lib/components/ui/button-group';
   import * as Select from '$lib/components/ui/select';
+  import * as Sidebar from '$lib/components/ui/sidebar';
   import * as ToggleGroup from '$lib/components/ui/toggle-group';
   import * as Tooltip from '$lib/components/ui/tooltip';
   import { sessionFailedMessage } from '$lib/cockpit/frames';
@@ -867,214 +868,207 @@
   <MachineLogin {machine} bind:open={loggingIn} />
 {/if}
 
-<div
-  class="flex h-full flex-1 flex-col overflow-hidden"
-  use:swipeBetween={{
-    onNext: () => step(1),
-    onPrevious: () => step(-1),
-    // Not while a question or a permission is waiting: swiping away from
-    // something that is blocked on an answer loses the reader's place in the
-    // one situation where the page is asking them for something.
-    enabled: () => answerable.length === 0,
-  }}
+<!-- `relative`, so the rail anchors to the session rather than to the window,
+     and `overflow-hidden`, so it is clipped while it is slid out. -->
+<Sidebar.Provider
+  bind:open={memoryOpen}
+  style="--sidebar-width: 26rem"
+  class="relative h-full min-h-0 flex-1 overflow-hidden"
 >
-  {#if cannotAnswer && machine}
-    <!-- The machine's own report, not a reading of anything it said. Shown
-         before a turn is even sent, because the session cannot answer one. -->
-    <div
-      role="status"
-      class="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-warning/30 bg-warning/10 px-4 py-2 text-sm"
-      transition:fly={{ y: -6, duration: 180, easing: quintOut }}
-    >
-      <span class="font-medium text-warning">{machine.hostname} is not logged in</span>
-      <span class="text-warning/80">
-        Claude Code there cannot reach its credentials, so this session cannot answer.
-      </span>
-      <Button size="sm" class="ml-auto" onclick={() => (loggingIn = true)}>Log in</Button>
-    </div>
-  {/if}
-
-  <!-- The controls are the fixed cost; the path is what gives way. Without
-       min-w-0 the flex items refuse to shrink below their content and the
-       right-hand group is pushed off the window instead. -->
-  <header class="flex min-w-0 items-center gap-3 border-b border-border px-4 py-2">
-    <a href="/session" class="hidden shrink-0 text-sm text-muted-foreground hover:text-foreground sm:inline"
-      >Sessions</a
-    >
-    <h1 class="min-w-0 flex-1 truncate font-mono text-sm font-normal" title={session?.cwd || viewId}>
-      {session?.cwd || viewId}
-    </h1>
-    {#if session?.scratch}
-      <span
-        class="shrink-0 rounded-sm border border-dashed border-muted-foreground/40 px-1.5 py-0.5 text-xs tracking-wide text-muted-foreground uppercase"
+  <div
+    class="flex h-full min-w-0 flex-1 flex-col overflow-hidden"
+    use:swipeBetween={{
+      onNext: () => step(1),
+      onPrevious: () => step(-1),
+      // Not while a question or a permission is waiting: swiping away from
+      // something that is blocked on an answer loses the reader's place in the
+      // one situation where the page is asking them for something.
+      enabled: () => answerable.length === 0,
+    }}
+  >
+    {#if cannotAnswer && machine}
+      <!-- The machine's own report, not a reading of anything it said. Shown
+           before a turn is even sent, because the session cannot answer one. -->
+      <div
+        role="status"
+        class="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-warning/30 bg-warning/10 px-4 py-2 text-sm"
+        transition:fly={{ y: -6, duration: 180, easing: quintOut }}
       >
-        side quest
-      </span>
+        <span class="font-medium text-warning">{machine.hostname} is not logged in</span>
+        <span class="text-warning/80">
+          Claude Code there cannot reach its credentials, so this session cannot answer.
+        </span>
+        <Button size="sm" class="ml-auto" onclick={() => (loggingIn = true)}>Log in</Button>
+      </div>
     {/if}
-    <span
-      class="ml-auto flex min-h-6 shrink-0 items-center gap-1.5 text-xs text-muted-foreground"
-      role="status"
-      aria-live="polite"
-    >
-      {#if !browsing}
-        <!-- The state carries a colour of its own, so the dot says it before the
-             word is read: pinging amber when the session is waiting on you. -->
-        <ActivityDot {activity} size={1.5} />
-      {/if}
-      {#if browsing}
-        Transcript · {session?.loading
-          ? 'loading'
-          : `${session?.messages.length ?? 0} messages`}
-      {:else}
-        <!-- The word swaps in place; the dot beside the session is the static cue.
-             One inline run, so the separator's leading space survives. -->
-        <span>
-          <span class="inline-grid">
-            {#key activity}
-              <span
-                class="col-start-1 row-start-1"
-                in:fly={{ y: 5, duration: painted ? 180 : 0, easing: quintOut }}
-                out:fly={{ y: -5, duration: painted ? 140 : 0, easing: quintOut }}
-              >{ACTIVITY_LABEL[activity]}</span>
-            {/key}
-          </span>{runningTool}
+
+    <!-- The controls are the fixed cost; the path is what gives way. Without
+         min-w-0 the flex items refuse to shrink below their content and the
+         right-hand group is pushed off the window instead. -->
+    <header class="flex min-w-0 items-center gap-3 border-b border-border px-4 py-2">
+      <a href="/session" class="hidden shrink-0 text-sm text-muted-foreground hover:text-foreground sm:inline"
+        >Sessions</a
+      >
+      <h1 class="min-w-0 flex-1 truncate font-mono text-sm font-normal" title={session?.cwd || viewId}>
+        {session?.cwd || viewId}
+      </h1>
+      {#if session?.scratch}
+        <span
+          class="shrink-0 rounded-sm border border-dashed border-muted-foreground/40 px-1.5 py-0.5 text-xs tracking-wide text-muted-foreground uppercase"
+        >
+          side quest
         </span>
       {/if}
-    </span>
-
-    {#if !browsing && session && session.mcp && session.mcp.length > 0}
-      <McpChips servers={session.mcp} instanceId={viewId} machineId={session.machineId} />
-    {/if}
-
-    <!-- The three CLAUDE.md files this session is really reading, at the cwd it
-         is really running in. -->
-    {#if !browsing && session?.machineId && session.cwd}
-      <Button
-        variant={memoryOpen ? 'secondary' : 'outline'}
-        size="icon-sm"
-        class="shrink-0"
-        aria-pressed={memoryOpen}
-        aria-label="Memory files"
-        title="CLAUDE.md files this session reads"
-        onclick={() => (memoryOpen = !memoryOpen)}
+      <span
+        class="ml-auto flex min-h-6 shrink-0 items-center gap-1.5 text-xs text-muted-foreground"
+        role="status"
+        aria-live="polite"
       >
-        <IconDocument />
-      </Button>
-    {/if}
-
-    <ToggleGroup.Root
-      type="single"
-      variant="outline"
-      size="sm"
-      value={view}
-      onValueChange={chooseView}
-      class="shrink-0"
-      aria-label="Session view"
-    >
-      <ToggleGroup.Item value="chat" aria-controls="session-view-panel" aria-label="Chat">
-        <IconChat />
-        <span class="hidden sm:inline">Chat</span>
-      </ToggleGroup.Item>
-      <ToggleGroup.Item value="flow" aria-controls="session-view-panel" aria-label="Flow">
-        <IconFlow />
-        <span class="hidden sm:inline">Flow</span>
-      </ToggleGroup.Item>
-    </ToggleGroup.Root>
-
-    {#if !browsing}
-      <!-- How the session is configured: two pickers, read as one control. -->
-      <ButtonGroup.Root class="shrink-0">
-        <Select.Root type="single" value={permissionMode ?? ''} onValueChange={chooseMode}>
-          <Select.Trigger
-            size="sm"
-            aria-label={permissionMode ? 'Permission mode' : 'Permission mode, not reported yet'}
-            title={permissionMode
-              ? 'How this session answers tool permissions'
-              : "Read from this session's next turn — it has not said how it answers tool permissions"}
-            class="text-xs {permissionMode === 'bypassPermissions'
-              ? 'font-medium text-warning'
-              : 'text-muted-foreground'}"
-          >
-            {permissionMode ? permissionModeLabel(permissionMode) : '—'}
-          </Select.Trigger>
-          <Select.Content>
-            {#each PERMISSION_MODES as option (option.value)}
-              {@const locked =
-                option.value === 'bypassPermissions' &&
-                option.value !== permissionMode &&
-                !canRelaunch}
-              <Select.Item
-                value={option.value}
-                label={option.label}
-                disabled={locked}
-                title={locked
-                  ? 'This session has not started yet — try again in a moment'
-                  : option.description} class={locked ? 'opacity-40' : ''}
-              >
-                <span class="flex flex-col">
-                  <span class={option.value === 'bypassPermissions' ? 'text-warning' : ''}>
-                    {option.label}
-                  </span>
-                  <span class="text-xs text-muted-foreground">{option.description}</span>
-                </span>
-              </Select.Item>
-            {/each}
-          </Select.Content>
-        </Select.Root>
-
-        <ModelCombobox
-          value={currentModel}
-          onchoose={chooseModel}
-          class="text-xs text-muted-foreground"
-        />
-      </ButtonGroup.Root>
-
-      <!-- What you can do to the session itself. -->
-      <ButtonGroup.Root class="shrink-0">
-        {@render verb({
-          label: 'Fork',
-          tip: 'Branch a side quest off this session',
-          icon: IconFork,
-          onclick: handleFork,
-          disabled: !forkable || !wholeTranscript,
-        })}
-        {#if session?.scratch}
-          {@render verb({
-            label: 'Keep',
-            tip: 'Promote this side quest to mainline work',
-            icon: IconCheck,
-            onclick: handleKeep,
-          })}
-          {@render verb({
-            label: 'Discard',
-            tip: "Delete this quest's worktree and its transcript, for good",
-            icon: IconTrash,
-            onclick: () => (confirmingDiscard = true),
-            variant: 'destructive',
-          })}
-        {:else}
-          {@render verb({
-            label: 'Stop',
-            tip: 'End this session',
-            icon: IconStop,
-            onclick: () => session && stopSession(viewId, session.machineId),
-          })}
+        {#if !browsing}
+          <!-- The state carries a colour of its own, so the dot says it before the
+               word is read: pinging amber when the session is waiting on you. -->
+          <ActivityDot {activity} size={1.5} />
         {/if}
-      </ButtonGroup.Root>
-    {/if}
-  </header>
+        {#if browsing}
+          Transcript · {session?.loading
+            ? 'loading'
+            : `${session?.messages.length ?? 0} messages`}
+        {:else}
+          <!-- The word swaps in place; the dot beside the session is the static cue.
+               One inline run, so the separator's leading space survives. -->
+          <span>
+            <span class="inline-grid">
+              {#key activity}
+                <span
+                  class="col-start-1 row-start-1"
+                  in:fly={{ y: 5, duration: painted ? 180 : 0, easing: quintOut }}
+                  out:fly={{ y: -5, duration: painted ? 140 : 0, easing: quintOut }}
+                >{ACTIVITY_LABEL[activity]}</span>
+              {/key}
+            </span>{runningTool}
+          </span>
+        {/if}
+      </span>
 
-  <!-- Two panes of one screen: they slide past each other rather than cutting,
-       so the toggle reads as moving sideways instead of reloading. -->
-  <!-- Named so the view toggle can point at what it swaps; the toggle is a group
-       of two, not a tablist, so the panel does not claim the matching role. -->
-  <!-- The chat and the memory dock are one row: opening the dock shrinks the
-       chat beside it rather than covering what it is about. -->
-  <div class="flex min-h-0 flex-1 overflow-hidden">
-    <div
-      class="relative min-h-0 min-w-0 flex-1 {memoryOpen ? 'hidden md:block' : ''}"
-      id="session-view-panel"
-    >
+      {#if !browsing && session && session.mcp && session.mcp.length > 0}
+        <McpChips servers={session.mcp} instanceId={viewId} machineId={session.machineId} />
+      {/if}
+
+      <!-- What this session is running in: its CLAUDE.md files, its MCP servers
+           and its own facts, in the rail on the right. -->
+      {#if !browsing && session?.machineId && session.cwd}
+        <SessionContextButton />
+      {/if}
+
+      <ToggleGroup.Root
+        type="single"
+        variant="outline"
+        size="sm"
+        value={view}
+        onValueChange={chooseView}
+        class="shrink-0"
+        aria-label="Session view"
+      >
+        <ToggleGroup.Item value="chat" aria-controls="session-view-panel" aria-label="Chat">
+          <IconChat />
+          <span class="hidden sm:inline">Chat</span>
+        </ToggleGroup.Item>
+        <ToggleGroup.Item value="flow" aria-controls="session-view-panel" aria-label="Flow">
+          <IconFlow />
+          <span class="hidden sm:inline">Flow</span>
+        </ToggleGroup.Item>
+      </ToggleGroup.Root>
+
+      {#if !browsing}
+        <!-- How the session is configured: two pickers, read as one control. -->
+        <ButtonGroup.Root class="shrink-0">
+          <Select.Root type="single" value={permissionMode ?? ''} onValueChange={chooseMode}>
+            <Select.Trigger
+              size="sm"
+              aria-label={permissionMode ? 'Permission mode' : 'Permission mode, not reported yet'}
+              title={permissionMode
+                ? 'How this session answers tool permissions'
+                : "Read from this session's next turn — it has not said how it answers tool permissions"}
+              class="text-xs {permissionMode === 'bypassPermissions'
+                ? 'font-medium text-warning'
+                : 'text-muted-foreground'}"
+            >
+              {permissionMode ? permissionModeLabel(permissionMode) : '—'}
+            </Select.Trigger>
+            <Select.Content>
+              {#each PERMISSION_MODES as option (option.value)}
+                {@const locked =
+                  option.value === 'bypassPermissions' &&
+                  option.value !== permissionMode &&
+                  !canRelaunch}
+                <Select.Item
+                  value={option.value}
+                  label={option.label}
+                  disabled={locked}
+                  title={locked
+                    ? 'This session has not started yet — try again in a moment'
+                    : option.description} class={locked ? 'opacity-40' : ''}
+                >
+                  <span class="flex flex-col">
+                    <span class={option.value === 'bypassPermissions' ? 'text-warning' : ''}>
+                      {option.label}
+                    </span>
+                    <span class="text-xs text-muted-foreground">{option.description}</span>
+                  </span>
+                </Select.Item>
+              {/each}
+            </Select.Content>
+          </Select.Root>
+
+          <ModelCombobox
+            value={currentModel}
+            onchoose={chooseModel}
+            class="text-xs text-muted-foreground"
+          />
+        </ButtonGroup.Root>
+
+        <!-- What you can do to the session itself. -->
+        <ButtonGroup.Root class="shrink-0">
+          {@render verb({
+            label: 'Fork',
+            tip: 'Branch a side quest off this session',
+            icon: IconFork,
+            onclick: handleFork,
+            disabled: !forkable || !wholeTranscript,
+          })}
+          {#if session?.scratch}
+            {@render verb({
+              label: 'Keep',
+              tip: 'Promote this side quest to mainline work',
+              icon: IconCheck,
+              onclick: handleKeep,
+            })}
+            {@render verb({
+              label: 'Discard',
+              tip: "Delete this quest's worktree and its transcript, for good",
+              icon: IconTrash,
+              onclick: () => (confirmingDiscard = true),
+              variant: 'destructive',
+            })}
+          {:else}
+            {@render verb({
+              label: 'Stop',
+              tip: 'End this session',
+              icon: IconStop,
+              onclick: () => session && stopSession(viewId, session.machineId),
+            })}
+          {/if}
+        </ButtonGroup.Root>
+      {/if}
+    </header>
+
+    <!-- Two panes of one screen: they slide past each other rather than cutting,
+         so the toggle reads as moving sideways instead of reloading. -->
+    <!-- Named so the view toggle can point at what it swaps; the toggle is a group
+         of two, not a tablist, so the panel does not claim the matching role. -->
+    <!-- `min-w-0` so the column really gives way as the rail's gap grows; the
+         chat reflows with it rather than being covered by it. -->
+    <div class="relative min-h-0 min-w-0 flex-1" id="session-view-panel">
       {#if view === 'flow'}
         <div
           class="absolute inset-0"
@@ -1310,22 +1304,23 @@
         </div>
       </div>
     </div>
-
-    {#if memoryOpen && !browsing && session?.machineId && session.cwd}
-      <SessionContext
-        instanceId={viewId}
-        machineId={session.machineId}
-        cwd={session.cwd}
-        servers={session.mcp ?? null}
-        model={session.model}
-        permissionMode={session.permissionMode}
-        sessionId={session.sessionId}
-        hostname={machine?.hostname ?? null}
-        {totalCostUsd}
-        lastActivityAt={session.lastActivityAt}
-        branches={[...branches.values()]}
-        onclose={() => (memoryOpen = false)}
-      />
-    {/if}
   </div>
-</div>
+
+  <!-- Always mounted: the kit slides the rail in and animates the gap the
+       chat shrinks into, which a panel mounted on demand cannot do. -->
+  {#if !browsing && session?.machineId && session.cwd}
+    <SessionContext
+      instanceId={viewId}
+      machineId={session.machineId}
+      cwd={session.cwd}
+      servers={session.mcp ?? null}
+      model={session.model}
+      permissionMode={session.permissionMode}
+      sessionId={session.sessionId}
+      hostname={machine?.hostname ?? null}
+      {totalCostUsd}
+      lastActivityAt={session.lastActivityAt}
+      branches={[...branches.values()]}
+    />
+  {/if}
+</Sidebar.Provider>

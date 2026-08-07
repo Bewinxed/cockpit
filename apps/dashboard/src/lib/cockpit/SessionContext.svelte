@@ -5,19 +5,18 @@
    * the facts about the session itself. Three answers to "what is in front of
    * this model", which is one question and so one rail.
    *
-   * Nothing here is fetched twice: the memory files are read once on mount, and
-   * the servers and the facts are the page's own live state, passed in.
+   * The rail is always mounted — the kit slides it and animates the gap the
+   * chat shrinks into — so the files are read on the rising edge of open rather
+   * than on mount. The servers and the facts are the page's own live state.
    */
-  import { onMount } from 'svelte';
-  import { fly } from 'svelte/transition';
-  import { quintOut } from 'svelte/easing';
   import type { McpServerStatus, PermissionMode } from '@cockpit/core';
   import { IconClose } from '$lib/icons';
   import { Button } from '$lib/components/ui/button';
   import { CopyButton } from '$lib/components/ui/copy-button';
   import * as Sidebar from '$lib/components/ui/sidebar';
+  import { useSidebar } from '$lib/components/ui/sidebar';
   import { Skeleton } from '$lib/components/ui/skeleton';
-  import * as ToggleGroup from '$lib/components/ui/toggle-group';
+  import * as Tabs from '$lib/components/ui/tabs';
   import MemoryCard from '$lib/components/features/MemoryCard.svelte';
   import type { SubagentState } from '$lib/utils/flow-types';
   import { formatDistanceToNow } from '$lib/utils/time';
@@ -42,7 +41,6 @@
     totalCostUsd: number;
     lastActivityAt: Date | null;
     branches: SubagentState[];
-    onclose: () => void;
   }
 
   let {
@@ -57,10 +55,11 @@
     totalCostUsd,
     lastActivityAt,
     branches,
-    onclose,
   }: Props = $props();
 
-  let tab = $state<'memory' | 'mcp' | 'info'>('memory');
+  const sidebar = useSidebar();
+  /** Bound to the kit's tabs, which own the value; a union would not bind to it. */
+  let tab = $state('memory');
 
   /** The rail's own dot for a branch, in the colours the left one uses. */
   const BRANCH_DOT: Record<string, string> = {
@@ -111,11 +110,17 @@
     loading = false;
   }
 
-  // The panel is mounted only while it is open, so every open is a fresh read:
-  // these files change under a running session, which is the reason to look.
-  onMount(() => {
-    void load();
+  // Every opening is a fresh read: these files change under a running session,
+  // which is the reason to be looking at them. On the rising edge only — the
+  // rail stays mounted while it is closed, and a closed rail reads nothing.
+  let wasOpen = false;
+  $effect(() => {
+    const open = sidebar.open || sidebar.openMobile;
+    if (open && !wasOpen) void load();
+    wasOpen = open;
   });
+
+  const close = () => (sidebar.isMobile ? sidebar.setOpenMobile(false) : sidebar.setOpen(false));
 
   async function saveProject(text: string): Promise<boolean> {
     await machineFs(machineId, 'write', `${cwd}/CLAUDE.md`, text);
@@ -148,48 +153,35 @@
   </span>
 {/snippet}
 
-<!-- The wrapper carries the transition, which needs an element rather than a
-     component; the rail itself is the kit's, like the one down the left. -->
-<div
-  class="flex h-full w-full shrink-0 md:w-auto"
-  transition:fly={{ x: 16, duration: 200, easing: quintOut }}
-  aria-label="Session context"
-  role="complementary"
->
-  <Sidebar.Root collapsible="none" class="h-full w-full border-l border-border md:w-[26rem]">
-    <!-- The kit's header stacks; this one is a row. The tabs are the same
-         control the session header swaps its two views with. -->
+<!-- Offcanvas, so the kit animates the gap the chat shrinks into rather than
+     the chat snapping to width when the rail mounts.
+
+     The kit's desktop container is `fixed … h-svh`, which would lay the rail
+     over the app's own header; anchored to the provider instead, it is exactly
+     as tall as the session. Only from `md`, which is where the kit stops
+     rendering the mobile sheet — that one is portalled and must stay fixed. -->
+<Sidebar.Root side="right" collapsible="offcanvas" class="md:absolute md:h-full">
+  <Tabs.Root bind:value={tab} class="flex min-h-0 flex-1 flex-col gap-0">
+    <!-- The kit's header stacks; this one is a row. -->
     <Sidebar.Header class="flex-row items-center gap-2 border-b border-border px-4 py-2">
-      <ToggleGroup.Root
-        type="single"
-        variant="outline"
-        size="sm"
-        value={tab}
-        onValueChange={(next) => {
-          if (next) tab = next as 'memory' | 'mcp' | 'info';
-        }}
-        class="min-w-0"
-        aria-label="Session context"
-      >
-        <ToggleGroup.Item value="memory" aria-controls="session-context-panel">
-          Memory
-        </ToggleGroup.Item>
-        <ToggleGroup.Item value="mcp" aria-controls="session-context-panel">MCP</ToggleGroup.Item>
-        <ToggleGroup.Item value="info" aria-controls="session-context-panel">Info</ToggleGroup.Item>
-      </ToggleGroup.Root>
+      <Tabs.List>
+        <Tabs.Trigger value="memory">Memory</Tabs.Trigger>
+        <Tabs.Trigger value="mcp">MCP</Tabs.Trigger>
+        <Tabs.Trigger value="info">Info</Tabs.Trigger>
+      </Tabs.List>
       <Button
         variant="ghost"
         size="icon-sm"
         class="ml-auto shrink-0 text-muted-foreground"
         aria-label="Close context panel"
-        onclick={onclose}
+        onclick={close}
       >
         <IconClose />
       </Button>
     </Sidebar.Header>
 
-    <Sidebar.Content class="gap-4 p-4" id="session-context-panel">
-      {#if tab === 'memory'}
+    <Sidebar.Content class="gap-4 p-4">
+      <Tabs.Content value="memory" class="flex flex-col gap-4">
         <p class="text-[13px] text-muted-foreground">
           What Claude Code reads at <span class="font-mono">{cwd}</span> on this machine — user, project,
           then local.
@@ -237,7 +229,9 @@
             {/snippet}
           </MemoryCard>
         {/if}
-      {:else if tab === 'mcp'}
+      </Tabs.Content>
+
+      <Tabs.Content value="mcp" class="flex flex-col gap-4">
         {#if servers === null}
           {#each [0, 1] as slot (slot)}
             <Skeleton class="h-28 w-full shrink-0 rounded-xl" />
@@ -251,7 +245,9 @@
             </div>
           {/each}
         {/if}
-      {:else}
+      </Tabs.Content>
+
+      <Tabs.Content value="info" class="flex flex-col gap-4">
         <dl class="flex shrink-0 flex-col gap-3">
           {#if model}
             {@render fact('Model', modelLabel(model), false)}
@@ -322,7 +318,7 @@
             </ul>
           </div>
         {/if}
-      {/if}
+      </Tabs.Content>
     </Sidebar.Content>
-  </Sidebar.Root>
-</div>
+  </Tabs.Root>
+</Sidebar.Root>
