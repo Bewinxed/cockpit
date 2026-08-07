@@ -363,6 +363,50 @@
   letter-spacing: 0.008em;
 }
 
+/* ---- Rendered markdown. @tailwindcss/typography paints its own gray palette,
+   which sits dim in light and goes near-invisible in dark — bold and links
+   worst of all. Every colour it reaches for comes from the tokens instead, so
+   one rule serves both modes and `prose-invert` is a no-op rather than a
+   second palette to keep in step. Unlayered on purpose: it has to outrank the
+   plugin's own `.prose`. */
+.prose {
+  --tw-prose-body: var(--foreground);
+  --tw-prose-headings: var(--foreground);
+  --tw-prose-lead: var(--muted-foreground);
+  --tw-prose-links: var(--primary);
+  --tw-prose-bold: var(--foreground);
+  --tw-prose-counters: var(--muted-foreground);
+  --tw-prose-bullets: color-mix(in oklch, var(--muted-foreground) 55%, transparent);
+  --tw-prose-hr: var(--border);
+  --tw-prose-quotes: var(--muted-foreground);
+  --tw-prose-quote-borders: var(--border);
+  --tw-prose-captions: var(--muted-foreground);
+  --tw-prose-kbd: var(--foreground);
+  --tw-prose-code: var(--foreground);
+  --tw-prose-pre-code: var(--foreground);
+  --tw-prose-pre-bg: var(--muted);
+  --tw-prose-th-borders: var(--border);
+  --tw-prose-td-borders: var(--border);
+
+  --tw-prose-invert-body: var(--tw-prose-body);
+  --tw-prose-invert-headings: var(--tw-prose-headings);
+  --tw-prose-invert-lead: var(--tw-prose-lead);
+  --tw-prose-invert-links: var(--tw-prose-links);
+  --tw-prose-invert-bold: var(--tw-prose-bold);
+  --tw-prose-invert-counters: var(--tw-prose-counters);
+  --tw-prose-invert-bullets: var(--tw-prose-bullets);
+  --tw-prose-invert-hr: var(--tw-prose-hr);
+  --tw-prose-invert-quotes: var(--tw-prose-quotes);
+  --tw-prose-invert-quote-borders: var(--tw-prose-quote-borders);
+  --tw-prose-invert-captions: var(--tw-prose-captions);
+  --tw-prose-invert-kbd: var(--tw-prose-kbd);
+  --tw-prose-invert-code: var(--tw-prose-code);
+  --tw-prose-invert-pre-code: var(--tw-prose-pre-code);
+  --tw-prose-invert-pre-bg: var(--tw-prose-pre-bg);
+  --tw-prose-invert-th-borders: var(--tw-prose-th-borders);
+  --tw-prose-invert-td-borders: var(--tw-prose-td-borders);
+}
+
 /* ---- Chrome materials. Structural translucency, never decoration. */
 @utility material-chrome {
   background: var(--material-chrome);

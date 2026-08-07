@@ -11,16 +11,21 @@
 <StoredSessionMenu {machineId} {info}>
   <a
     href={transcriptHref(machineId, info)}
-    class="flex flex-col rounded-lg border border-border px-3 py-2
-      transition-[background-color,box-shadow,translate] duration-150 ease-out
-      hover:-translate-y-px hover:bg-accent hover:text-accent-foreground hover:shadow-md motion-reduce:hover:translate-y-0"
+    class="flex min-h-9 items-center gap-2.5 rounded-lg px-3 py-1.5
+      transition-colors duration-150 ease-out hover:bg-accent hover:text-accent-foreground"
   >
-    <span class="flex items-baseline gap-3">
-      <span class="truncate text-sm">{sessionTitle(info)}</span>
-      <span class="ml-auto shrink-0 text-xs opacity-70">
-        {formatDistanceToNow(new Date(info.lastModified))}
-      </span>
+    <!-- Where a live row carries its state dot, so the two lists a machine card
+         stacks share one title column. -->
+    <span class="size-2 shrink-0" aria-hidden="true"></span>
+    <span class="min-w-0 flex-[3_1_0] truncate text-[13px]">{sessionTitle(info)}</span>
+    <!-- Second to the title for room, and what it keeps it gives up from the
+         left — the leaf is what tells two checkouts apart. -->
+    <span
+      class="hidden min-w-0 flex-[2_1_0] truncate font-mono text-micro text-muted-foreground [direction:rtl] sm:block"
+      title={info.cwd ?? ''}
+    ><bdi>{info.cwd ?? ''}</bdi></span>
+    <span class="shrink-0 text-micro text-muted-foreground tabular-nums" data-tabular>
+      {formatDistanceToNow(new Date(info.lastModified))}
     </span>
-    <span class="truncate font-mono text-xs opacity-70">{info.cwd ?? ''}</span>
   </a>
 </StoredSessionMenu>

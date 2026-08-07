@@ -190,7 +190,7 @@
     <Sidebar.Content class="gap-4 p-4">
       <Tabs.Content value="memory" class="flex flex-col gap-4">
         <p class="text-caption">
-          What Outpost reads at <span class="font-mono">{cwd}</span> on this machine — user, project,
+          What Claude Code reads at <span class="font-mono">{cwd}</span> on this machine — user, project,
           then local.
         </p>
 

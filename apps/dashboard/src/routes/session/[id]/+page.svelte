@@ -20,6 +20,7 @@
   import { smoothText } from '$lib/utils/smooth-text.svelte';
   import { fly } from 'svelte/transition';
   import { quintOut } from 'svelte/easing';
+  import { MediaQuery } from 'svelte/reactivity';
   import { Virtualizer } from 'virtua/svelte';
   import type { VirtualizerHandle } from 'virtua/svelte';
   import { goto } from '$app/navigation';
@@ -418,6 +419,13 @@
 
   /** The memory dock, beside the chat rather than over it. */
   let memoryOpen = $state(false);
+
+  // Past this width the session has room for three columns, so the rail is
+  // docked rather than summoned: the transcript keeps its measure centred in
+  // what is left instead of floating in half a screen of nothing. Still the
+  // reader's to close — this only sets where each width starts.
+  const roomForRail = new MediaQuery('min-width: 1920px');
+  $effect(() => void (memoryOpen = roomForRail.current));
 
   let searchOpen = $state(false);
   let search = $state<ReturnType<typeof TranscriptSearch> | null>(null);
