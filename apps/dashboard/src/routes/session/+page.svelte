@@ -20,6 +20,7 @@
   import MachineMenu from '$lib/cockpit/MachineMenu.svelte';
   import ModelCombobox from '$lib/cockpit/ModelCombobox.svelte';
   import { MODEL_DEFAULT } from '$lib/cockpit/models.svelte';
+  import { rememberSpawn, spawnPrefs } from '$lib/cockpit/spawnPrefs.svelte';
   import StoredSessionRow from '$lib/cockpit/StoredSessionRow.svelte';
   import { PERMISSION_MODES, permissionModeLabel } from '$lib/cockpit/permission-modes';
   import { permissionSummary } from '$lib/cockpit/permission-summary';
@@ -43,9 +44,11 @@
   let cwd = $state('');
   let repo = $state('');
   let prompt = $state('');
-  let permissionMode = $state<PermissionMode>('default');
+  // Seeded from the last spawn: how you last chose to work is a better default
+  // than the built-in one, and `MODEL_DEFAULT` is still what a first visit gets.
+  let permissionMode = $state<PermissionMode>(spawnPrefs.permissionMode);
   /** Empty is a choice: the spawn leaves `model` out and the SDK picks. */
-  let model = $state(MODEL_DEFAULT);
+  let model = $state(spawnPrefs.model || MODEL_DEFAULT);
   let sideQuest = $state(false);
   let worktree = $state(false);
   let projectName = $state('');
@@ -197,6 +200,7 @@
     }
     invalid = null;
     try {
+      rememberSpawn({ model, permissionMode });
       const instanceId = spawnSession({
         machineId,
         cwd: workdir,
@@ -528,7 +532,7 @@
     </section>
 
     {#each cockpit.machines as machine, index (machine.machineId)}
-      {@const running = cockpit.runningOn(machine.machineId)}
+      {@const running = cockpit.listedOn(machine.machineId)}
       {@const stored = cockpit.catalogOf(machine.machineId)}
       <section
         class="flex flex-col gap-2"

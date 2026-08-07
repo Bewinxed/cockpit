@@ -71,3 +71,22 @@ export { default as IconDollar } from '~icons/solar/dollar-linear';
 export { default as IconDownload } from '~icons/solar/download-linear';
 export { default as IconBook } from '~icons/solar/book-linear';
 export { default as IconHome } from '~icons/solar/home-linear';
+export { default as IconPin } from '~icons/solar/pin-linear';
+export { default as IconPinList } from '~icons/solar/pin-list-linear';
+/** A pressed pin, not a kind of thing — hence bold rather than duotone. */
+export { default as IconPinFilled } from '~icons/solar/pin-bold';
+
+/*
+ * `Duo` is Solar's bold-duotone cut: a filled two-tone shape that says what a
+ * row *is*. Everything above is linear and says what you can do to it, so a
+ * glyph never means both at once.
+ */
+export { default as IconLaptopDuo } from '~icons/solar/laptop-minimalistic-bold-duotone';
+export { default as IconMonitorDuo } from '~icons/solar/monitor-bold-duotone';
+export { default as IconWindowDuo } from '~icons/solar/window-frame-bold-duotone';
+export { default as IconServerDuo } from '~icons/solar/server-2-bold-duotone';
+export { default as IconFolderDuo } from '~icons/solar/folder-bold-duotone';
+export { default as IconHistoryDuo } from '~icons/solar/history-bold-duotone';
+export { default as IconSparklesDuo } from '~icons/solar/magic-stick-3-bold-duotone';
+/** Delegated work: the subagents a session still has out. */
+export { default as IconSubagentsDuo } from '~icons/solar/users-group-rounded-bold-duotone';

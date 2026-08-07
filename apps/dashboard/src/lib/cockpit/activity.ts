@@ -9,9 +9,29 @@ export type Activity = 'working' | 'blocked' | 'idle';
  * Blocked wins over working: a session with a parked permission is not making
  * progress, whatever its turn state says.
  */
-export function activityOf(session: { pending: readonly unknown[]; busy: boolean }): Activity {
+export function activityOf(session: {
+  pending: readonly unknown[];
+  busy: boolean;
+  subagents?: Record<string, { status: string }>;
+}): Activity {
   if (session.pending.length > 0) return 'blocked';
-  return session.busy ? 'working' : 'idle';
+  // A background subagent outlives the turn that spawned it: the main loop goes
+  // quiet and `busy` drops, while the work the session was asked for carries on
+  // somewhere else. Reporting that as idle is how a rail full of running agents
+  // reads as a rail with nothing happening.
+  return session.busy || runningSubagents(session.subagents) > 0 ? 'working' : 'idle';
+}
+
+/** How many of a session's subagents are still going — 0 for a session with none. */
+export function runningSubagents(
+  subagents: Record<string, { status: string }> | undefined
+): number {
+  if (!subagents) return 0;
+  let running = 0;
+  for (const branch of Object.values(subagents)) {
+    if (branch.status === 'running' || branch.status === 'starting') running += 1;
+  }
+  return running;
 }
 
 /** The word each state is shown as — the enum is wire vocabulary, not copy. */

@@ -95,6 +95,7 @@
   );
 
   const blocked = $derived(cockpit.blockedCount);
+
 </script>
 
 <svelte:window onkeydown={handleKeydown} />

@@ -7,11 +7,14 @@
   import { Toaster } from '$lib/components/ui/sonner';
   import Shell from '$lib/cockpit/Shell.svelte';
   import { ensureConnected } from '$lib/cockpit/client.svelte';
+  import { enableLongPressMenus } from '$lib/utils/longpress';
 
   let { children }: { children: Snippet } = $props();
 
   // One socket for the whole app; routes only read the state it fills in.
   onMount(ensureConnected);
+  // iOS has no right-click; a held press is its context menu.
+  onMount(enableLongPressMenus);
 
   // Native page transitions: same-document view transitions, skipped for
   // readers who prefer reduced motion; browsers without the API just navigate.
@@ -19,14 +22,25 @@
     if (!document.startViewTransition) return;
     // A hidden document has nothing to animate, and Chrome aborts the
     // transition there — which rejects `finished` under a navigation race.
-    if (document.hidden) return;
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    if (document.hidden) {
+      delete document.documentElement.dataset.nav;
+      return;
+    }
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      delete document.documentElement.dataset.nav;
+      return;
+    }
     return new Promise((resolve) => {
       const transition = document.startViewTransition(async () => {
         resolve();
         await navigation.complete.catch(() => {});
       });
-      transition.finished.catch(() => {});
+      // Cleared only once the animation has actually finished — the direction
+      // is read by CSS *during* it, so clearing any earlier means a swipe
+      // backwards animates forwards. Anything that navigates without setting a
+      // direction gets the forward push, which is the right default.
+      const clear = () => delete document.documentElement.dataset.nav;
+      transition.finished.then(clear, clear);
     });
   });
 </script>

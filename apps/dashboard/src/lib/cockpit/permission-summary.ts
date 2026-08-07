@@ -1,4 +1,5 @@
 import type { PermissionUpdate, PermissionUpdateDestination } from '@cockpit/core';
+import { questionsOf } from './question';
 
 /**
  * One line naming what a parked tool call would do. The permission card and the
@@ -6,6 +7,11 @@ import type { PermissionUpdate, PermissionUpdateDestination } from '@cockpit/cor
  * you decide which session to open, the card is what you approve there.
  */
 export function permissionSummary(toolName: string, input: Record<string, unknown>): string {
+  // A question names itself: "AskUserQuestion operation" tells the rail's reader
+  // nothing about which of their sessions is worth opening.
+  const questions = questionsOf(toolName, input);
+  if (questions) return questions.map((question) => question.question).join(' · ');
+
   switch (toolName) {
     case 'Edit':
     case 'Write':

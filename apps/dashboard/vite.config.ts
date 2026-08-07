@@ -10,6 +10,11 @@ export default defineConfig({
   server: {
     port: 3000,
     host: true,
+    // The dashboard is reached from the other machines on the tailnet, by name.
+    // Vite refuses an unknown Host header with a 403, so the tailnet suffix is
+    // named here; `.ts.net` covers this tailnet's MagicDNS names without
+    // pinning the machine's own hostname into the repo.
+    allowedHosts: ['.ts.net', 'localhost'],
     proxy: {
       // Proxy WebSocket connections to the hub server
       '/ws': {

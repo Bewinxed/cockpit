@@ -5,10 +5,18 @@
  * The SDK's own types are the input contract (tunnelled through `@cockpit/core`),
  * so nothing here re-models them.
  */
-import type { SDKAssistantMessage, SDKMessage, SendPayload, SessionMessage } from '@cockpit/core';
+import type {
+  SDKAssistantMessage,
+  SDKMessage,
+  SDKStatus,
+  SendPayload,
+  SessionMessage,
+  SlashCommand,
+} from '@cockpit/core';
 import type { SubagentState } from '$lib/utils/flow-types';
 import { getToolGlance } from '$lib/utils/tool-display';
 import type { Message, MessageMetadata, MessageType } from './types';
+import { newId } from './id';
 
 type AssistantBlock = SDKAssistantMessage['message']['content'][number];
 
@@ -42,6 +50,8 @@ export interface BranchEvent {
   summary?: string;
   lastToolName?: string;
   result?: string;
+  /** Requested alias from the spawn input, or the wire id an assistant frame answered with. */
+  model?: string;
 }
 
 export interface FrameMapping {
@@ -63,6 +73,26 @@ export interface FrameMapping {
   clearsStream: boolean;
   /** The turn is over — the session is idle again. */
   endsTurn: boolean;
+  /**
+   * What the session says it is doing right now: `compacting` while it rewrites
+   * its own context, `requesting` while it waits on the model, `null` when it
+   * has stopped saying. The only live word on a compaction — `compact_boundary`
+   * arrives once the work is already done.
+   */
+  status?: SDKStatus;
+  /** How a compaction ended, on the `status` frame that closes it. */
+  compaction?: { result: 'success' | 'failed'; error?: string };
+  /**
+   * The whole `/` menu again, pushed when what is on disk changed mid-session.
+   * The SDK sends the full list, so it replaces the cache rather than adding to
+   * it — a skill that was deleted has to leave the menu too.
+   */
+  commands?: SlashCommand[];
+  /**
+   * The turn the `result` frame closes answered with an error, whatever its
+   * subtype claims. The SDK's own flag — not a reading of what was said.
+   */
+  failedTurn?: boolean;
 }
 
 /** `task_updated`'s wire statuses, in the vocabulary the branch card renders. */
@@ -85,7 +115,6 @@ const QUIET = new Set([
   'control_request_progress',
   'thinking_tokens',
   'session_state_changed',
-  'commands_changed',
   'background_tasks_changed',
   'files_persisted',
   'rate_limit_event',
@@ -104,6 +133,13 @@ const modelFallback = (sdk: {
   if (frame.subtype !== 'model_fallback') return null;
   if (typeof frame.content !== 'string' || typeof frame.fallback_model !== 'string') return null;
   return { content: frame.content, model: frame.fallback_model };
+};
+
+
+/** The fleet tools whose calls are shown as hand-offs rather than tool cards. */
+const HANDOFF_TOOLS: Record<string, 'handoff' | 'start'> = {
+  mcp__outpost__handoff: 'handoff',
+  mcp__outpost__start_session: 'start',
 };
 
 const empty = (): FrameMapping => ({
@@ -157,6 +193,27 @@ function blockToMessage(
         metadata: { isRedactedThinking: true },
       };
     case 'tool_use': {
+      // A hand-off is not a tool call to read like the others: it is this
+      // session addressing another one, and the sender needs to see that it
+      // left. Recognised by the tool's name — structured, not by its text.
+      const handoff = HANDOFF_TOOLS[block.name];
+      if (handoff) {
+        const input = (block.input ?? {}) as { target?: unknown; cwd?: unknown; prompt?: unknown };
+        return {
+          ...base,
+          type: 'tool.handoff',
+          content: String(input.target ?? input.cwd ?? ''),
+          toolCallId: block.id,
+          metadata: {
+            toolId: block.id,
+            toolName: block.name,
+            toolInput: block.input as MessageMetadata['toolInput'],
+            toolStatus: 'pending',
+            handoffKind: handoff,
+            handoffBrief: String(input.prompt ?? (block.input as { message?: unknown })?.message ?? ''),
+          },
+        };
+      }
       const spawn = subagentSpawn(block.input);
       return {
         ...base,
@@ -170,6 +227,7 @@ function blockToMessage(
           toolStatus: 'pending',
           subagentType: spawn?.subagentType,
           subagentDescription: spawn?.description,
+          subagentModel: spawn?.model,
         },
       };
     }
@@ -183,11 +241,17 @@ function blockToMessage(
  * tool's name — the same call is the Task tool and the Agent tool depending on
  * the session's tool set.
  */
-function subagentSpawn(input: unknown): { subagentType: string; description?: string } | null {
+function subagentSpawn(
+  input: unknown
+): { subagentType: string; description?: string; model?: string } | null {
   if (typeof input !== 'object' || input === null) return null;
-  const { subagent_type: type, description } = input as Record<string, unknown>;
+  const { subagent_type: type, description, model } = input as Record<string, unknown>;
   if (typeof type !== 'string') return null;
-  return { subagentType: type, description: typeof description === 'string' ? description : undefined };
+  return {
+    subagentType: type,
+    description: typeof description === 'string' ? description : undefined,
+    model: typeof model === 'string' ? model : undefined,
+  };
 }
 
 function systemLine(
@@ -209,7 +273,7 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
   // names a *grandparent* and is always null at the SDK's depth cap of 1.
   const agentId = parentOf(sdk);
   const base: Omit<Message, 'type' | 'content'> = {
-    id: uuid ?? crypto.randomUUID(),
+    id: uuid ?? newId(),
     instanceId,
     timestamp: new Date(),
     sdkUuid: uuid,
@@ -233,6 +297,11 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
           mapping.branch = { toolUseId: block.id, ...spawn, status: 'starting' };
         }
       });
+      // The forwarded frame names the model that actually answered — ground truth
+      // over whatever alias the spawn input asked for.
+      if (agentId && typeof sdk.message.model === 'string') {
+        mapping.branch = { toolUseId: agentId, model: sdk.message.model };
+      }
       // The final message supersedes whatever the partials painted.
       mapping.clearsStream = true;
       break;
@@ -245,6 +314,22 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
       // have one, added on send, so it is skipped — except when it isn't the
       // human's at all, which nothing echoes either.
       const text = transcriptUserText(sdk.message);
+      // A message from another session is nobody's local echo, so nothing else
+      // will render it — and it must not render as the reader's own words.
+      const peer = 'origin' in sdk && sdk.origin?.kind === 'peer' ? sdk.origin : null;
+      if (peer && text) {
+        mapping.messages.push({
+          ...base,
+          type: 'user.peer',
+          content: peer.body ?? text,
+          metadata: {
+            peerFrom: peer.from,
+            peerName: peer.name,
+            peerSession: peer.fromSession,
+          },
+        });
+        break;
+      }
       if (text && (agentId || systemNote(text))) {
         mapping.messages.push({ ...base, ...userBody(text, transcriptUserImages(sdk.message)) });
       }
@@ -273,6 +358,12 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
     case 'result': {
       mapping.clearsStream = true;
       mapping.endsTurn = true;
+      // `subtype` is how the *run* ended; `is_error` is whether the turn did.
+      // They disagree: a machine with no credentials answers "Not logged in"
+      // and closes with `subtype: 'success', is_error: true` — measured on a
+      // real one. Reading only the subtype makes that a normal turn, which is
+      // what left the failure to be recognised by its prose.
+      mapping.failedTurn = sdk.is_error === true;
       if (sdk.subtype === 'success') break;
       mapping.messages.push(
         systemLine(base, 'result.error', sdk.subtype.replace(/_/g, ' '), {
@@ -307,10 +398,22 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
               tools: sdk.tools,
               sessionId: sdk.session_id,
               mcpServers: sdk.mcp_servers,
+              // Re-listed every turn, and the only source of which of them are
+              // skills — `supportedCommands` describes the commands but does
+              // not say where any of them came from.
+              slashCommands: sdk.slash_commands,
+              skills: sdk.skills,
             })
           );
           break;
+        case 'commands_changed':
+          mapping.commands = sdk.commands;
+          break;
         case 'status':
+          mapping.status = sdk.status;
+          if (sdk.compact_result) {
+            mapping.compaction = { result: sdk.compact_result, error: sdk.compact_error };
+          }
           break;
         case 'task_started':
           mapping.branch = {
@@ -429,9 +532,15 @@ export function applyBranchEvent(
   if (event.description) branch.description = event.description;
   if (event.summary) branch.summary = event.summary;
   if (event.lastToolName) branch.lastToolName = event.lastToolName;
+  if (event.model) branch.model = event.model;
   if (event.result) branch.result = event.result;
+  // Finished is final. A branch that has reported `complete` or `error` is done,
+  // and the progress frames still in flight behind it would otherwise put it
+  // back to `running` — leaving every subagent reading "working" forever, long
+  // after it answered.
+  const settled = branch.status === 'complete' || branch.status === 'error';
   // A late `starting` must not walk a running branch backwards.
-  if (event.status && !(event.status === 'starting' && branch.status !== 'starting')) {
+  if (event.status && !settled && !(event.status === 'starting' && branch.status !== 'starting')) {
     branch.status = event.status;
     if (event.status === 'complete' || event.status === 'error') branch.completedAt = new Date();
   }
@@ -618,7 +727,13 @@ export function mapTranscript(instanceId: string, transcript: SessionMessage[]):
   for (const entry of transcript) {
     if (entry.type === 'system') continue;
 
-    const opening = turnStart(entry);
+    // A hand-off is a user-role message and looks exactly like one the reader
+    // typed — so this branch claimed it and rendered another agent's words as
+    // the reader's own, which is the one thing the peer origin exists to stop.
+    // `mapFrame` below knows the difference; let it have them.
+    const fromPeer =
+      'origin' in entry && (entry as { origin?: { kind?: string } }).origin?.kind === 'peer';
+    const opening = fromPeer ? null : turnStart(entry);
     if (opening) {
       messages.push({
         id: entry.uuid,
@@ -657,7 +772,7 @@ export function localUserMessage(
 ): Message {
   const carried = Boolean(attachments?.length || images?.length);
   return {
-    id: crypto.randomUUID(),
+    id: newId(),
     instanceId,
     type: 'user',
     content: text,
@@ -679,7 +794,7 @@ export function localUserMessage(
 /** A client- or hub-side failure, rendered inline so it cannot be missed. */
 export function errorMessage(instanceId: string, text: string): Message {
   return {
-    id: crypto.randomUUID(),
+    id: newId(),
     instanceId,
     type: 'ui.error',
     content: text,
@@ -701,7 +816,11 @@ export function sessionFailedMessage(instanceId: string, reason: string): Messag
 
 /** Folds a tool result into the `tool.use` it answers. */
 export function applyToolResult(messages: Message[], { toolId, result, isError }: ToolResult): void {
-  const target = messages.find((m) => m.type === 'tool.use' && m.metadata?.toolId === toolId);
+  // `tool.handoff` is a tool call too — it just renders as a receipt. Matching
+  // only `tool.use` left it stuck on "sending…" with the answer never applied.
+  const target = messages.find(
+    (m) => (m.type === 'tool.use' || m.type === 'tool.handoff') && m.metadata?.toolId === toolId
+  );
   if (!target) return;
   target.metadata = {
     ...target.metadata,

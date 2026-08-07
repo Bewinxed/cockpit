@@ -19,6 +19,9 @@ export const DISCARD_TIMEOUT_MS = 30000;
 /** `claude update` downloads a release, so it gets far longer than a control call. */
 export const UPDATE_TIMEOUT_MS = 180000;
 
+/** Installing a workflow tool fetches an installer and runs it — slower still. */
+export const INSTALL_TIMEOUT_MS = 300000;
+
 /** Up to this many entries, a stored transcript is mapped in one pass. */
 export const TRANSCRIPT_CHUNK_THRESHOLD = 300;
 

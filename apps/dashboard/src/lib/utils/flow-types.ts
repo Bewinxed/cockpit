@@ -31,6 +31,8 @@ export interface SubagentState {
   /** `agentProgressSummaries`' present-tense line, when enabled. */
   summary?: string;
   lastToolName?: string;
+  /** Model that answered (wire id from assistant frames), or the requested alias until the first frame arrives. */
+  model?: string;
 }
 
 // ============================================================

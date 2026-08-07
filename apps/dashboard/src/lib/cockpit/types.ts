@@ -4,6 +4,7 @@
  * folds them into these. Anything that describes the wire belongs in the SDK.
  */
 import type {
+  AvailableCommand,
   SDKCompactBoundaryMessage,
   SDKHookResponseMessage,
   SDKResultMessage,
@@ -17,9 +18,13 @@ export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue
 
 export type MessageType =
   | 'user'
+  /** A message another session sent — reported speech, never the reader's own. */
+  | 'user.peer'
   | 'assistant'
   | 'thinking'
   | 'tool.use'
+  /** This session handing work to another one. */
+  | 'tool.handoff'
   | 'tool.result'
   | 'tool.progress'
   | 'result.success'
@@ -61,7 +66,19 @@ export interface MessageMetadata {
   sessionId?: string;
   status?: SDKStatus;
   mcpServers?: SDKSystemMessage['mcp_servers'];
+  /** `init` only: what this session answers behind `/`, without the leading slash. */
+  slashCommands?: SDKSystemMessage['slash_commands'];
+  /** `init` only: which of those names are skills rather than commands. */
+  skills?: SDKSystemMessage['skills'];
   // Compact boundary
+  /** Who sent a {@link MessageType} of `user.peer`: the sending session's id. */
+  handoffKind?: 'handoff' | 'start';
+  handoffBrief?: string;
+  peerFrom?: string;
+  /** Its display name, as the sender's host asserted it. */
+  peerName?: string;
+  /** The sender's host-openable session, so the card can link back to it. */
+  peerSession?: string;
   preTokens?: SDKCompactBoundaryMessage['compact_metadata']['pre_tokens'];
   trigger?: SDKCompactBoundaryMessage['compact_metadata']['trigger'];
   // Hook response
@@ -97,11 +114,7 @@ export interface MessageMetadata {
   questionAnswers?: Record<string, string>;
   // Help menu
   version?: string;
-  commands?: Array<{
-    name: string;
-    description?: string;
-    type: 'builtin' | 'custom' | 'skill' | 'mcp';
-  }>;
+  commands?: AvailableCommand[];
   // Thinking blocks
   thinking?: string;
   thinkingSignature?: string;
@@ -115,6 +128,8 @@ export interface MessageMetadata {
   // Subagent spawning (Task tool)
   subagentType?: string;
   subagentDescription?: string;
+  /** The `model` override the spawn input asked for, when present. */
+  subagentModel?: string;
   // Harness-injected user-role content (task notifications, reminders, compaction)
   noteKind?: string;
   noteTitle?: string;

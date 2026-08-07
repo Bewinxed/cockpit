@@ -4,6 +4,7 @@
     IconArrowDown,
     IconChat,
     IconCheck,
+    IconDocument,
     IconFlow,
     IconFork,
     IconPlay,
@@ -32,8 +33,16 @@
   } from '$lib/components/features';
   import { FlowView } from '$lib/components/features/flow';
   import ModelCombobox from '$lib/cockpit/ModelCombobox.svelte';
+  import ContextMeter from '$lib/cockpit/ContextMeter.svelte';
+  import { targetsFrom, type PeerTarget } from '$lib/cockpit/peer';
+  import { swipeBetween } from '$lib/cockpit/swipe';
+  import MachineLogin from '$lib/cockpit/MachineLogin.svelte';
+  import { workingSet } from '$lib/cockpit/working-set.svelte';
   import ActivityDot from '$lib/cockpit/ActivityDot.svelte';
+  import McpChips from '$lib/cockpit/McpChips.svelte';
+  import SessionContext from '$lib/cockpit/SessionContext.svelte';
   import PermissionStack from '$lib/cockpit/PermissionStack.svelte';
+  import { questionsOf } from '$lib/cockpit/question';
   import { ACTIVITY_LABEL } from '$lib/cockpit/activity';
   import type {
     InstanceRow,
@@ -49,12 +58,17 @@
     interrupt,
     isResumable,
     keepSession,
+    loadCommands,
+    loadMcpServers,
     openSession,
     openTranscript,
     permissionAnswer,
+    refreshContext,
     relaunchSession,
     resolvePermission,
     resumeSession,
+    peerTargets,
+    sendToPeer,
     sendOrRevive,
     setModel,
     setPermissionMode,
@@ -144,6 +158,78 @@
     unseen = false;
   }
 
+  /**
+   * Holds the transcript at the bottom while the layout settles.
+   *
+   * Virtua opens with an *estimate* — `itemSize` per group — and a transcript of
+   * tool cards and markdown is far taller than that, so the first paint's
+   * `scrollHeight` is a fraction of the real one. A single pin lands on the
+   * estimated bottom, which is nowhere near the last message, and the growth
+   * that follows arrives as virtua measures each group it renders.
+   *
+   * So the bottom is re-taken every frame until it stops moving. Bounded twice
+   * over: it gives up after `SETTLE_MS`, and the moment the reader scrolls away
+   * from the edge it stops rather than fighting them for the scrollbar.
+   */
+  /**
+   * Whether the reader has actually taken hold of the scrollbar.
+   *
+   * `atBottom` is measured in a scroll handler, and growth fires scroll events
+   * too — so a transcript that grows faster than it is re-pinned latches
+   * "the reader scrolled away" when nobody touched anything, and every follow
+   * path is gated on it. Measured on a 390px viewport: the column grew from
+   * 12.8k to 17k as virtua measured the narrower wrapping, and the transcript
+   * gave up 4,236px short. A real gesture is the only thing that should stop it.
+   */
+  let grabbed = $state(false);
+
+  const SETTLE_MS = 6000;
+  let settling = 0;
+  function settleAtBottom() {
+    const until = performance.now() + SETTLE_MS;
+    const token = ++settling;
+    let lastHeight = -1;
+    const step = () => {
+      // A newer settle, a gone scroller, or a reader who took hold ends it —
+      // deliberately not `atBottom`, which the growth itself keeps falsifying.
+      if (token !== settling || !scroller || grabbed) return;
+      // Virtua's own jump first. A raw `scrollTop = scrollHeight` is measured
+      // against a height virtua has only estimated, so it aims at a bottom that
+      // is not there yet; `scrollToIndex` goes through virtua's measurement
+      // instead, which is the thing that knows the estimate is wrong. The raw
+      // write still follows, for whatever renders after the last group.
+      const last = groups.length - 1;
+      if (last >= 0) vlist?.scrollToIndex(last, { align: 'end' });
+      pinToLatest();
+      const height = scroller.scrollHeight;
+      // Stop early once two frames agree the layout has stopped growing.
+      if (height === lastHeight && performance.now() > until - SETTLE_MS + 200) return;
+      lastHeight = height;
+      atBottom = true;
+      unseen = false;
+      if (performance.now() < until) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
+
+  // A transcript that has just arrived opens at its newest turn. Keyed on the
+  // session and on the transcript being present, so it runs once per opened
+  // session rather than on every message that lands afterwards.
+  /** The session whose opening settle has already run, so it runs once. */
+  let settledFor = $state<string | null>(null);
+  $effect(() => {
+    const id = viewId;
+    const ready = (session?.messages.length ?? 0) > 0 && !(session?.loading ?? false);
+    if (!id || !ready) return;
+    untrack(() => {
+      // Every later message is the live-follow path's job, not this one's.
+      if (settledFor === id) return;
+      settledFor = id;
+      grabbed = false;
+      void tick().then(settleAtBottom);
+    });
+  });
+
   // Following is driven by content size, not message events: any growth —
   // streamed tokens, a card expanding, an image landing — keeps the live edge
   // pinned frame by frame, and never fights an in-flight height animation.
@@ -166,9 +252,41 @@
       setTimeout(trackScroll, 420);
     };
     follow.observe(column);
+    // And the container itself. On a phone the viewport is the thing that moves
+    // — the URL bar collapses, the keyboard opens, `h-dvh` resolves to a new
+    // number — and the content does not change at all, so watching only the
+    // column means the live edge silently slides out of view with nothing
+    // firing. This is the same growth from the reader's side of the glass.
+    follow.observe(node);
+
+    // `visualViewport` is the only thing that reports the keyboard, which
+    // resizes nothing else on iOS.
+    const viewport = window.visualViewport;
+    const onViewport = () => {
+      if (performance.now() < followHold) return;
+      if (atBottom) pinToLatest();
+    };
+    viewport?.addEventListener('resize', onViewport);
+
+    // A gesture, not a scroll event: only these mean the reader moved the
+    // transcript themselves. Everything else that scrolls it is us.
+    const grab = () => (grabbed = true);
+    const grabKey = (event: KeyboardEvent) => {
+      if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End'].includes(event.key)) {
+        grabbed = true;
+      }
+    };
+    node.addEventListener('wheel', grab, { passive: true });
+    node.addEventListener('touchstart', grab, { passive: true });
+    node.addEventListener('keydown', grabKey);
+
     node.addEventListener('click', noteToggle, true);
     return () => {
       follow.disconnect();
+      viewport?.removeEventListener('resize', onViewport);
+      node.removeEventListener('wheel', grab);
+      node.removeEventListener('touchstart', grab);
+      node.removeEventListener('keydown', grabKey);
       node.removeEventListener('click', noteToggle, true);
     };
   });
@@ -295,6 +413,9 @@
 
   let view = $state<'chat' | 'flow'>('chat');
 
+  /** The memory dock, beside the chat rather than over it. */
+  let memoryOpen = $state(false);
+
   let searchOpen = $state(false);
   let search = $state<ReturnType<typeof TranscriptSearch> | null>(null);
   let dock = $state<HTMLDivElement | null>(null);
@@ -343,6 +464,9 @@
   function answerPending(event: KeyboardEvent) {
     const request = answerable[0];
     if (!request || event.metaKey || event.ctrlKey || event.altKey || isTyping()) return;
+    // A question is answered on its own card, by its own keys: "y" is not a
+    // choice it offers, and approving it would run it unanswered.
+    if (questionsOf(request.toolName, request.input)) return;
     const answer = answerFor(event, request);
     if (!answer) return;
     event.preventDefault();
@@ -388,6 +512,160 @@
     if (!session) return;
     interrupt(viewId, session.machineId);
   }
+
+  /**
+   * The rail links to a branch by hash. The transcript is virtualised, so the
+   * browser cannot scroll to an element that is not mounted — the jump has to
+   * go through virtua, which is what the search already does. Waits for the
+   * transcript, then jumps once per hash so it does not fight the reader.
+   */
+  let jumped = $state<string | null>(null);
+  $effect(() => {
+    const hash = page.url.hash;
+    const ready = groups.length > 0;
+    if (!hash.startsWith('#subagent-') || !ready) return;
+    if (untrack(() => jumped) === hash) return;
+    const key = hash.slice(1);
+    const index = untrack(() => groups).findIndex((group) => groupKey(group) === key);
+    if (index === -1) return;
+    jumped = hash;
+    void tick().then(() => jumpToMatch(index));
+  });
+
+  /**
+   * A reading for the session on screen. Only a live one can answer, so a dead
+   * session keeps whatever the meter last showed rather than being revived just
+   * to report a number nobody asked to change.
+   */
+  function askContext() {
+    if (!session?.machineId) return;
+    const row = cockpit.instances.find((instance) => instance.id === viewId);
+    if (row && row.status !== 'running' && row.status !== 'starting') return;
+    void refreshContext(viewId, session.machineId);
+  }
+
+  // One reading when a live session comes into view: the window was already
+  // filling before this tab opened, and a meter that starts empty is a lie.
+  // Keyed on the row's status, not on `initialized` — that only turns true when
+  // an init banner arrives, so a session already running when the tab opened
+  // would never take a first reading.
+  $effect(() => {
+    const id = viewId;
+    const machineId = session?.machineId;
+    const live = cockpit.instances.find((instance) => instance.id === id)?.status;
+    if (!id || !machineId || (live !== 'running' && live !== 'starting')) return;
+    untrack(() => {
+      if (!session?.context) askContext();
+    });
+  });
+
+  /**
+   * While a turn runs the window is filling, so a reading taken at the last turn
+   * boundary is already wrong. Polled only for the session on screen, and only
+   * while it is working — an idle session's number cannot move on its own.
+   */
+  const CONTEXT_POLL_MS = 5000;
+  $effect(() => {
+    if (!session?.busy) return;
+    const timer = setInterval(() => untrack(askContext), CONTEXT_POLL_MS);
+    return () => clearInterval(timer);
+  });
+
+  /** This session's own `/` menu — empty until it has taken a turn and said. */
+  const commands = $derived(cockpit.commandsOf(viewId));
+
+  /**
+   * What each of them does, asked for the first time the reader opens the menu.
+   * Only a live session can answer, like the context reading; the names it
+   * already listed are the menu either way.
+   */
+  function askCommands() {
+    if (!session?.machineId) return;
+    const row = cockpit.instances.find((instance) => instance.id === viewId);
+    if (row && row.status !== 'running' && row.status !== 'starting') return;
+    void loadCommands(viewId, session.machineId);
+  }
+
+  // The header's MCP chips: ask a live session once; an init frame nulls the
+  // answer and this asks again.
+  $effect(() => {
+    if (browsing || !session || !session.machineId || session.mcp !== null) return;
+    loadMcpServers(viewId, session.machineId);
+  });
+
+  /** Every other live session, named the way the rail names them. */
+  const peers = $derived(
+    targetsFrom(
+      peerTargets(viewId),
+      (machineId) =>
+        cockpit.machines.find((machine) => machine.machineId === machineId)?.hostname ?? machineId,
+      (instanceId) => cockpit.activityOf(instanceId) === 'working'
+    )
+  );
+
+  /**
+   * Hands this session's message to another one. The note is attributed to this
+   * session and queued rather than delivered as a turn, so the target finishes
+   * what it is doing first — see `sendToPeer`.
+   */
+  async function handleHandoff(peer: PeerTarget, text: string) {
+    if (!text.trim()) return;
+    const label = session?.cwd ? (session.cwd.split('/').filter(Boolean).pop() ?? viewId) : viewId;
+    try {
+      await sendToPeer(
+        { instanceId: peer.id, machineId: peer.machineId },
+        { instanceId: viewId, label },
+        text
+      );
+      handoffNote = `Handed to ${peer.label}`;
+      clearTimeout(handoffTimer);
+      handoffTimer = setTimeout(() => (handoffNote = null), 4000);
+    } catch (error) {
+      handoffNote = error instanceof Error ? error.message : 'That did not reach the session.';
+    }
+  }
+
+  /** The receipt, until the tracked hand-off status replaces it. */
+  let handoffNote = $state<string | null>(null);
+  let handoffTimer: ReturnType<typeof setTimeout>;
+
+  /** Every conversation that still exists — the bound on where a swipe may go. */
+  const reachable = $derived(cockpit.listedInstances.map((row) => row.id));
+
+  // Being on screen is what puts a conversation in the working set, and what
+  // keeps it near the front of it.
+  $effect(() => {
+    const id = viewId;
+    if (id) untrack(() => workingSet.visit(id));
+  });
+
+  function step(by: number) {
+    // Ordered by what the reader has been working between, not by the rail's
+    // list: passing four sessions untouched for a week to reach the one you
+    // left a minute ago is not switching, it is scrolling.
+    const next = workingSet.step(viewId, by, reachable);
+    if (!next || next === viewId) return;
+    // Tells the view transition which way the page is going, so it leaves the
+    // way the finger did rather than always pushing the same direction.
+    document.documentElement.dataset.nav = by > 0 ? 'next' : 'prev';
+    void goto(`/session/${next}`);
+  }
+
+  /**
+   * Whether this session's machine can answer at all.
+   *
+   * Read off the machine's own reported credential state — a typed enum the
+   * daemon probes and re-announces — rather than inferred from what a turn
+   * happened to say. A sentence about being logged out is not evidence, as a
+   * message merely quoting one proved.
+   */
+  const machine = $derived(
+    cockpit.machines.find((row) => row.machineId === session?.machineId) ?? null
+  );
+  const cannotAnswer = $derived(
+    machine !== null && machine.auth !== 'authenticated' && machine.auth !== 'unknown'
+  );
+  let loggingIn = $state(false);
 
   function handleResolve(requestId: string, result: PermissionResult) {
     if (!session) return;
@@ -585,7 +863,37 @@
   </AlertDialog.Content>
 </AlertDialog.Root>
 
-<div class="flex h-full flex-1 flex-col overflow-hidden">
+{#if machine}
+  <MachineLogin {machine} bind:open={loggingIn} />
+{/if}
+
+<div
+  class="flex h-full flex-1 flex-col overflow-hidden"
+  use:swipeBetween={{
+    onNext: () => step(1),
+    onPrevious: () => step(-1),
+    // Not while a question or a permission is waiting: swiping away from
+    // something that is blocked on an answer loses the reader's place in the
+    // one situation where the page is asking them for something.
+    enabled: () => answerable.length === 0,
+  }}
+>
+  {#if cannotAnswer && machine}
+    <!-- The machine's own report, not a reading of anything it said. Shown
+         before a turn is even sent, because the session cannot answer one. -->
+    <div
+      role="status"
+      class="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-warning/30 bg-warning/10 px-4 py-2 text-sm"
+      transition:fly={{ y: -6, duration: 180, easing: quintOut }}
+    >
+      <span class="font-medium text-warning">{machine.hostname} is not logged in</span>
+      <span class="text-warning/80">
+        Claude Code there cannot reach its credentials, so this session cannot answer.
+      </span>
+      <Button size="sm" class="ml-auto" onclick={() => (loggingIn = true)}>Log in</Button>
+    </div>
+  {/if}
+
   <!-- The controls are the fixed cost; the path is what gives way. Without
        min-w-0 the flex items refuse to shrink below their content and the
        right-hand group is pushed off the window instead. -->
@@ -633,6 +941,26 @@
         </span>
       {/if}
     </span>
+
+    {#if !browsing && session && session.mcp && session.mcp.length > 0}
+      <McpChips servers={session.mcp} instanceId={viewId} machineId={session.machineId} />
+    {/if}
+
+    <!-- The three CLAUDE.md files this session is really reading, at the cwd it
+         is really running in. -->
+    {#if !browsing && session?.machineId && session.cwd}
+      <Button
+        variant={memoryOpen ? 'secondary' : 'outline'}
+        size="icon-sm"
+        class="shrink-0"
+        aria-pressed={memoryOpen}
+        aria-label="Memory files"
+        title="CLAUDE.md files this session reads"
+        onclick={() => (memoryOpen = !memoryOpen)}
+      >
+        <IconDocument />
+      </Button>
+    {/if}
 
     <ToggleGroup.Root
       type="single"
@@ -740,215 +1068,264 @@
        so the toggle reads as moving sideways instead of reloading. -->
   <!-- Named so the view toggle can point at what it swaps; the toggle is a group
        of two, not a tablist, so the panel does not claim the matching role. -->
-  <div class="relative min-h-0 flex-1" id="session-view-panel">
-    {#if view === 'flow'}
-      <div
-        class="absolute inset-0"
-        in:fly={{ x: 10, duration: painted ? 200 : 0, easing: quintOut }}
-        out:fly={{ x: 10, duration: painted ? 150 : 0, easing: quintOut }}
-      >
-        <FlowView
-          instanceId={viewId}
-          messages={session?.messages ?? []}
-          subagents={branches}
-          streamingToolId={session?.currentTool?.toolId}
-          {totalCostUsd}
-          onJump={() => (view = 'chat')}
-        />
-      </div>
-    {:else}
-      <div
-        class="absolute inset-0"
-        in:fly={{ x: -10, duration: painted ? 200 : 0, easing: quintOut }}
-        out:fly={{ x: -10, duration: painted ? 150 : 0, easing: quintOut }}
-      >
+  <!-- The chat and the memory dock are one row: opening the dock shrinks the
+       chat beside it rather than covering what it is about. -->
+  <div class="flex min-h-0 flex-1 overflow-hidden">
+    <div
+      class="relative min-h-0 min-w-0 flex-1 {memoryOpen ? 'hidden md:block' : ''}"
+      id="session-view-panel"
+    >
+      {#if view === 'flow'}
         <div
-          bind:this={scroller}
-          onscroll={trackScroll}
-          tabindex="-1"
-          class="h-full space-y-4 overflow-y-auto overflow-x-hidden px-4 pt-4 pb-44 [overflow-anchor:none] focus:outline-none"
+          class="absolute inset-0"
+          in:fly={{ x: 10, duration: painted ? 200 : 0, easing: quintOut }}
+          out:fly={{ x: 10, duration: painted ? 150 : 0, easing: quintOut }}
         >
-          <div class="mx-auto max-w-4xl">
-            <!-- Mounted once the scroller exists: virtua reads scrollRef once, on
-                 mount, and silently falls back to its parent element if it is unset. -->
-            {#if scroller}
-              <Virtualizer
-                bind:this={vlistRaw}
-                data={groups}
-                getKey={groupKey}
-                scrollRef={scroller}
-                itemSize={120}
-                bufferSize={400}
-                shift={session?.hydrating ?? false}
-              >
-                {#snippet children(group)}
-                  <div class="pb-4 {groupKey(group) === flashKey ? 'transcript-flash' : ''}">
-                    {#if group.kind === 'tools'}
-                      <div class="flex justify-start gap-3">
-                        <div
-                          class="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl border border-border bg-secondary"
-                        >
-                          <IconTools class="size-[18px] text-muted-foreground" />
-                        </div>
-                        <div class="w-full max-w-[85%] min-w-0">
-                          <ToolGroup tools={group.messages} />
-                        </div>
-                      </div>
-                    {:else if group.kind === 'subagent'}
-                      <div class="flex justify-start gap-3">
-                        <div
-                          class="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl border border-border bg-secondary"
-                        >
-                          <IconSubagent class="size-[18px] text-muted-foreground" />
-                        </div>
-                        <div class="w-full max-w-[85%] min-w-0">
-                          <SubagentBranch branch={group.branch} spawn={group.spawn} />
-                        </div>
-                      </div>
-                    {:else}
-                      <ChatMessage message={group.message} instanceId={viewId} />
-                    {/if}
-                  </div>
-                {/snippet}
-              </Virtualizer>
-            {/if}
-
-            {#if session?.loading}
-              <p class="text-sm text-muted-foreground">Reading transcript…</p>
-            {:else if sleeping}
-              <!-- Not a failure, so nothing here is coloured like one: the work
-                   is intact and one message would bring it back on its own. -->
-              <div
-                class="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card px-4 py-3"
-              >
-                <p class="min-w-0 flex-1 text-sm text-muted-foreground">
-                  This session is sleeping — its process ended, but the conversation was kept.
-                  Send a message, or pick it back up now.
-                </p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  class="shrink-0 text-xs"
-                  disabled={cockpit.status !== 'connected' || (session?.relaunching ?? false)}
-                  onclick={handleRevive}
-                >
-                  <IconPlay />
-                  Resume
-                </Button>
-              </div>
-            {:else if groups.length === 0 && !session?.streaming}
-              <p class="text-sm text-muted-foreground">
-                {browsing
-                  ? 'This session recorded no messages.'
-                  : 'Nothing said yet — send a message below to start.'}
-              </p>
-            {/if}
-
-            {#if session?.streaming}
-              <div class="flex justify-start gap-3">
-                <div
-                  class="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl border border-border bg-secondary"
-                >
-                  <IconAgent class="size-[18px] text-muted-foreground" />
-                </div>
-                <div
-                  class="max-w-[85%] min-w-0 rounded-2xl rounded-bl-sm border border-border bg-card px-4 py-3 text-sm leading-relaxed break-words text-card-foreground shadow-sm"
-                >
-                  <!-- The stream renders as markdown too — raw asterisks mid-turn
-                       read as a bug, and long resumed turns stream for minutes. -->
-                  <Markdown source={stream.text} />
-                </div>
-              </div>
-            {/if}
-          </div>
-        </div>
-
-        {#if searchOpen}
-          <TranscriptSearch bind:this={search} {groups} onJump={jumpToMatch} onClose={closeSearch} />
-        {/if}
-
-        {#if unseen}
-          <Button
-            variant="outline"
-            size="sm"
-            class="absolute right-4 bottom-4 bg-card text-xs shadow-md"
-            onclick={jumpToLatest}
-          >
-            <IconArrowDown />
-            Jump to latest
-          </Button>
-        {/if}
-      </div>
-    {/if}
-
-    <!-- Content blurs and dissolves as it slides under the floating dock -->
-    <div class="pointer-events-none absolute inset-x-0 bottom-0 h-32">
-      <div
-        class="absolute inset-0 backdrop-blur-sm"
-        style="mask-image: linear-gradient(to bottom, transparent, black 70%); -webkit-mask-image: linear-gradient(to bottom, transparent, black 70%);"
-      ></div>
-      <div class="absolute inset-0 bg-linear-to-t from-background/80 via-background/25 to-transparent"></div>
-    </div>
-
-    <div class="pointer-events-none absolute inset-x-0 bottom-0 px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-      <div bind:this={dock} class="pointer-events-auto mx-auto flex max-w-4xl flex-col gap-2">
-      {#if error}
-        <!-- Keyed so a second failure shakes again instead of sitting there. -->
-        {#key error}
-          <p class="animate-shake text-xs text-error motion-reduce:animate-none" role="alert">
-            {error}
-          </p>
-        {/key}
-      {/if}
-      {#if browsing}
-        <div class="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3 shadow-lg">
-          <span class="text-sm text-muted-foreground">
-            Read-only transcript of a stored session.
-          </span>
-          <!-- The two ways on from a stored transcript, in the order they read:
-               branch it, or pick it back up. -->
-          <ButtonGroup.Root class="ml-auto">
-            <Button
-              variant="outline"
-              disabled={!wholeTranscript || cockpit.status !== 'connected'}
-              onclick={handleFork}
-            >
-              <IconFork />
-              Fork
-            </Button>
-            <Button
-              disabled={!wholeTranscript || cockpit.status !== 'connected'}
-              onclick={handleResume}
-            >
-              <IconPlay />
-              Resume session
-            </Button>
-          </ButtonGroup.Root>
+          <FlowView
+            instanceId={viewId}
+            messages={session?.messages ?? []}
+            subagents={branches}
+            streamingToolId={session?.currentTool?.toolId}
+            {totalCostUsd}
+            onJump={() => (view = 'chat')}
+          />
         </div>
       {:else}
-        {#if session?.relaunching}
-          <!-- Covers both ways the process is replaced: a mode only a new one
-               can take, and a sleeping session being woken. -->
-          <p class="text-xs text-muted-foreground">Picking this session back up…</p>
-        {/if}
-        {#if session?.scratch}
-          <p class="text-xs text-muted-foreground">
-            Side quest — hidden from your history. Discard deletes it for good.
-          </p>
-        {/if}
-        <ChatInput
-          onSend={handleSend}
-          onInterrupt={handleInterrupt}
-          streaming={session?.busy ?? false}
-          disabled={cockpit.status !== 'connected' || (session?.relaunching ?? false)}
-          attachmentOpen={answerable.length > 0}
+        <div
+          class="absolute inset-0"
+          in:fly={{ x: -10, duration: painted ? 200 : 0, easing: quintOut }}
+          out:fly={{ x: -10, duration: painted ? 150 : 0, easing: quintOut }}
         >
-          {#snippet attachment()}
-            <PermissionStack requests={answerable} onResolve={handleResolve} />
-          {/snippet}
-        </ChatInput>
+          <div
+            bind:this={scroller}
+            onscroll={trackScroll}
+            tabindex="-1"
+            class="h-full space-y-4 overflow-y-auto overflow-x-hidden px-4 pt-4 pb-44 [overflow-anchor:none] focus:outline-none"
+          >
+            <div class="mx-auto max-w-4xl">
+              <!-- Mounted once the scroller exists: virtua reads scrollRef once, on
+                   mount, and silently falls back to its parent element if it is unset. -->
+              {#if scroller}
+                <Virtualizer
+                  bind:this={vlistRaw}
+                  data={groups}
+                  getKey={groupKey}
+                  scrollRef={scroller}
+                  itemSize={120}
+                  bufferSize={400}
+                  shift={session?.hydrating ?? false}
+                >
+                  {#snippet children(group)}
+                    <div class="pb-4 {groupKey(group) === flashKey ? 'transcript-flash' : ''}">
+                      {#if group.kind === 'tools'}
+                        <div class="flex justify-start gap-3">
+                          <div
+                            class="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl border border-border bg-secondary"
+                          >
+                            <IconTools class="size-[18px] text-muted-foreground" />
+                          </div>
+                          <div class="w-full max-w-[85%] min-w-0">
+                            <ToolGroup tools={group.messages} />
+                          </div>
+                        </div>
+                      {:else if group.kind === 'subagent'}
+                        <div class="flex justify-start gap-3">
+                          <div
+                            class="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl border border-border bg-secondary"
+                          >
+                            <IconSubagent class="size-[18px] text-muted-foreground" />
+                          </div>
+                          <!-- The rail links straight to a branch; `scroll-margin`
+                               keeps the jump clear of the sticky header. -->
+                          <div
+                            id="subagent-{group.branch.toolUseId}"
+                            class="w-full max-w-[85%] min-w-0 scroll-mt-20"
+                          >
+                            <SubagentBranch branch={group.branch} spawn={group.spawn} />
+                          </div>
+                        </div>
+                      {:else}
+                        <ChatMessage message={group.message} instanceId={viewId} />
+                      {/if}
+                    </div>
+                  {/snippet}
+                </Virtualizer>
+              {/if}
+
+              {#if session?.loading}
+                <p class="text-sm text-muted-foreground">Reading transcript…</p>
+              {:else if sleeping}
+                <!-- Not a failure, so nothing here is coloured like one: the work
+                     is intact and one message would bring it back on its own. -->
+                <div
+                  class="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card px-4 py-3"
+                >
+                  <p class="min-w-0 flex-1 text-sm text-muted-foreground">
+                    This session is sleeping — its process ended, but the conversation was kept.
+                    Send a message, or pick it back up now.
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    class="shrink-0 text-xs"
+                    disabled={cockpit.status !== 'connected' || (session?.relaunching ?? false)}
+                    onclick={handleRevive}
+                  >
+                    <IconPlay />
+                    Resume
+                  </Button>
+                </div>
+              {:else if groups.length === 0 && !session?.streaming}
+                <p class="text-sm text-muted-foreground">
+                  {browsing
+                    ? 'This session recorded no messages.'
+                    : 'Nothing said yet — send a message below to start.'}
+                </p>
+              {/if}
+
+              {#if session?.streaming}
+                <div class="flex justify-start gap-3">
+                  <div
+                    class="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl border border-border bg-secondary"
+                  >
+                    <IconAgent class="size-[18px] text-muted-foreground" />
+                  </div>
+                  <div
+                    class="max-w-[85%] min-w-0 rounded-2xl rounded-bl-sm border border-border bg-card px-4 py-3 text-sm leading-relaxed break-words text-card-foreground shadow-sm"
+                  >
+                    <!-- The stream renders as markdown too — raw asterisks mid-turn
+                         read as a bug, and long resumed turns stream for minutes. -->
+                    <Markdown source={stream.text} />
+                  </div>
+                </div>
+              {/if}
+            </div>
+          </div>
+
+          {#if searchOpen}
+            <TranscriptSearch bind:this={search} {groups} onJump={jumpToMatch} onClose={closeSearch} />
+          {/if}
+
+          {#if unseen}
+            <Button
+              variant="outline"
+              size="sm"
+              class="absolute right-4 bottom-4 bg-card text-xs shadow-md"
+              onclick={jumpToLatest}
+            >
+              <IconArrowDown />
+              Jump to latest
+            </Button>
+          {/if}
+        </div>
       {/if}
+
+      <!-- Content blurs and dissolves as it slides under the floating dock -->
+      <div class="pointer-events-none absolute inset-x-0 bottom-0 h-32">
+        <div
+          class="absolute inset-0 backdrop-blur-sm"
+          style="mask-image: linear-gradient(to bottom, transparent, black 70%); -webkit-mask-image: linear-gradient(to bottom, transparent, black 70%);"
+        ></div>
+        <div class="absolute inset-0 bg-linear-to-t from-background/80 via-background/25 to-transparent"></div>
+      </div>
+
+      <div class="pointer-events-none absolute inset-x-0 bottom-0 px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+        <div bind:this={dock} class="pointer-events-auto mx-auto flex max-w-4xl flex-col gap-2">
+        {#if error}
+          <!-- Keyed so a second failure shakes again instead of sitting there. -->
+          {#key error}
+            <p class="animate-shake text-xs text-error motion-reduce:animate-none" role="alert">
+              {error}
+            </p>
+          {/key}
+        {/if}
+        {#if browsing}
+          <div class="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3 shadow-lg">
+            <span class="text-sm text-muted-foreground">
+              Read-only transcript of a stored session.
+            </span>
+            <!-- The two ways on from a stored transcript, in the order they read:
+                 branch it, or pick it back up. -->
+            <ButtonGroup.Root class="ml-auto">
+              <Button
+                variant="outline"
+                disabled={!wholeTranscript || cockpit.status !== 'connected'}
+                onclick={handleFork}
+              >
+                <IconFork />
+                Fork
+              </Button>
+              <Button
+                disabled={!wholeTranscript || cockpit.status !== 'connected'}
+                onclick={handleResume}
+              >
+                <IconPlay />
+                Resume session
+              </Button>
+            </ButtonGroup.Root>
+          </div>
+        {:else}
+          {#if session?.relaunching}
+            <!-- Covers both ways the process is replaced: a mode only a new one
+                 can take, and a sleeping session being woken. -->
+            <p class="text-xs text-muted-foreground">Picking this session back up…</p>
+          {/if}
+          {#if session?.scratch}
+            <p class="text-xs text-muted-foreground">
+              Side quest — hidden from your history. Discard deletes it for good.
+            </p>
+          {/if}
+          <ChatInput
+            onSend={handleSend}
+            onInterrupt={handleInterrupt}
+            streaming={session?.busy ?? false}
+            disabled={cockpit.status !== 'connected' || (session?.relaunching ?? false)}
+            attachmentOpen={answerable.length > 0}
+            {commands}
+            onCommandsNeeded={askCommands}
+            {peers}
+            onHandoff={handleHandoff}
+          >
+            {#snippet meter()}
+              {#if handoffNote}
+                <span
+                  class="mr-1 shrink-0 rounded-md bg-primary/10 px-2 py-1 text-xs text-primary"
+                  transition:fly={{ y: 4, duration: 150, easing: quintOut }}
+                >
+                  {handoffNote}
+                </span>
+              {/if}
+              <ContextMeter
+                usage={session?.context ?? null}
+                status={session?.sdkStatus ?? null}
+                compaction={session?.lastCompaction ?? null}
+                onrefresh={askContext}
+              />
+            {/snippet}
+            {#snippet attachment()}
+              <PermissionStack requests={answerable} onResolve={handleResolve} />
+            {/snippet}
+          </ChatInput>
+        {/if}
+        </div>
       </div>
     </div>
+
+    {#if memoryOpen && !browsing && session?.machineId && session.cwd}
+      <SessionContext
+        instanceId={viewId}
+        machineId={session.machineId}
+        cwd={session.cwd}
+        servers={session.mcp ?? null}
+        model={session.model}
+        permissionMode={session.permissionMode}
+        sessionId={session.sessionId}
+        hostname={machine?.hostname ?? null}
+        {totalCostUsd}
+        lastActivityAt={session.lastActivityAt}
+        branches={[...branches.values()]}
+        onclose={() => (memoryOpen = false)}
+      />
+    {/if}
   </div>
 </div>

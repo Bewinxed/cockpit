@@ -5,16 +5,11 @@
   import { quintOut } from 'svelte/easing';
   import { buttonVariants } from '$lib/components/ui/button';
   import { cn } from '$lib/utils';
-
-  interface Command {
-    name: string;
-    description?: string;
-    type: 'builtin' | 'custom' | 'skill' | 'mcp';
-  }
+  import type { AvailableCommand } from '@cockpit/core';
 
   interface Props {
     version: string;
-    commands: Command[];
+    commands: AvailableCommand[];
     onClose?: () => void;
   }
 

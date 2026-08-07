@@ -5,16 +5,26 @@
    */
   import type { Snippet } from 'svelte';
   import { goto } from '$app/navigation';
-  import { IconCopy, IconCheck, IconExternal, IconStop, IconTrash } from '$lib/icons';
+  import {
+    IconCopy,
+    IconCheck,
+    IconExternal,
+    IconPin,
+    IconPinFilled,
+    IconStop,
+    IconTrash,
+  } from '$lib/icons';
   import * as AlertDialog from '$lib/components/ui/alert-dialog';
   import * as ContextMenu from '$lib/components/ui/context-menu';
   import { discardSession, keepSession, stopSession, type InstanceRow } from './client.svelte';
   import { copyToClipboard } from './copy';
+  import { rail } from './rail.svelte';
 
   let { instance, children }: { instance: InstanceRow; children: Snippet } = $props();
 
   const href = $derived(`/session/${instance.id}`);
   const scratch = $derived(instance.kind === 'scratch');
+  const pinned = $derived(rail.isPinned('session', instance.id));
 
   let confirmingDiscard = $state(false);
   let busy = $state(false);
@@ -43,6 +53,15 @@
     <ContextMenu.Item onSelect={() => stopSession(instance.id, instance.machineId)}>
       <IconStop />
       Stop
+    </ContextMenu.Item>
+    <ContextMenu.Item onSelect={() => rail.togglePin('session', instance.id)}>
+      {#if pinned}
+        <IconPinFilled />
+        Unpin from rail
+      {:else}
+        <IconPin />
+        Pin to rail
+      {/if}
     </ContextMenu.Item>
 
     {#if scratch}

@@ -363,6 +363,51 @@ button.text-destructive-foreground { color: var(--destructive-foreground); }
   }
 }
 
+/* On a phone the cross-fade reads as the page being rebuilt: everything dims
+   and comes back, so the eye cannot tell a navigation from a reload. Pages move
+   sideways instead — the old one leaves the way the new one arrives, which is
+   what a phone has taught everyone a page change looks like. `data-nav` is set
+   by whatever caused the navigation, so a swipe leftward pushes leftward. */
+@media (max-width: 767px) {
+  ::view-transition-old(root) {
+    animation: 180ms cubic-bezier(0.32, 0.72, 0, 1) both vt-push-out;
+  }
+  ::view-transition-new(root) {
+    animation: 180ms cubic-bezier(0.32, 0.72, 0, 1) both vt-push-in;
+  }
+  html[data-nav='prev'] ::view-transition-old(root) {
+    animation-name: vt-push-out-back;
+  }
+  html[data-nav='prev'] ::view-transition-new(root) {
+    animation-name: vt-push-in-back;
+  }
+}
+
+@keyframes vt-push-out {
+  to {
+    transform: translateX(-18%);
+    opacity: 0;
+  }
+}
+@keyframes vt-push-in {
+  from {
+    transform: translateX(18%);
+    opacity: 0;
+  }
+}
+@keyframes vt-push-out-back {
+  to {
+    transform: translateX(18%);
+    opacity: 0;
+  }
+}
+@keyframes vt-push-in-back {
+  from {
+    transform: translateX(-18%);
+    opacity: 0;
+  }
+}
+
 /* Instance card → header morphing transition */
 ::view-transition-old(instance-*),
 ::view-transition-new(instance-*) {
@@ -420,4 +465,12 @@ button.text-destructive-foreground { color: var(--destructive-foreground); }
 }
 .no-scrollbar::-webkit-scrollbar {
   display: none;
+}
+
+/* A held press summons our menu; the platform's callout and text selection on
+   the same gesture would fight it for the finger. Scoped to menu triggers. */
+[data-slot='context-menu-trigger'] {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }

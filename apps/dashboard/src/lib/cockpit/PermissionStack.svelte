@@ -4,6 +4,10 @@
    * A queue of permissions rendered in full pushes the transcript off screen and
    * asks the reader to decide four things at once — so the oldest is the card,
    * the rest are slivers behind it, and the whole list is one hover away.
+   *
+   * "Everything" includes the requests that are questions rather than
+   * permissions: one place holds what is waiting on the reader, whichever of the
+   * two it is.
    */
   import { slide } from 'svelte/transition';
   import { quintOut } from 'svelte/easing';
@@ -11,6 +15,8 @@
   import type { PermissionResult } from '@cockpit/core';
   import type { PendingPermission } from './client.svelte';
   import PermissionCard from './PermissionCard.svelte';
+  import QuestionCard from './QuestionCard.svelte';
+  import { questionsOf } from './question';
 
   interface Props {
     requests: PendingPermission[];
@@ -36,6 +42,21 @@
 
   const duration = (ms: number): number => (prefersReducedMotion.current ? 0 : ms);
 </script>
+
+{#snippet card(request: PendingPermission, shortcuts: boolean)}
+  {@const questions = questionsOf(request.toolName, request.input)}
+  {#if questions}
+    <!-- Keyed, so the next question gets a card of its own. The selections live
+         in the card's own state, sized from the questions it opened with: reuse
+         it for a different request and the reader's choices carry over into a
+         question that never offered them. -->
+    {#key request.requestId}
+      <QuestionCard {request} {questions} {shortcuts} {onResolve} />
+    {/key}
+  {:else}
+    <PermissionCard {request} {shortcuts} {onResolve} />
+  {/if}
+{/snippet}
 
 <div
   role="group"
@@ -68,7 +89,7 @@
         {/if}
       {/if}
 
-      <PermissionCard request={top} shortcuts {onResolve} />
+      {@render card(top, true)}
     </div>
 
     {#if expanded}
@@ -78,7 +99,7 @@
           in:slide={{ duration: duration(250), easing: quintOut }}
           out:slide={{ duration: duration(180), easing: quintOut }}
         >
-          <PermissionCard {request} {onResolve} />
+          {@render card(request, false)}
         </div>
       {/each}
     {/if}

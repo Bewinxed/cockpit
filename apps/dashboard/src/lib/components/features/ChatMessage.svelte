@@ -19,7 +19,8 @@
 		IconReset,
 		IconDownload,
 		IconGallery,
-		IconWarningTriangle
+		IconWarningTriangle,
+		IconSubagentsDuo,
 	} from '$lib/icons';
 	import { Markdown } from '$lib/components/ui/markdown';
 	import * as Collapsible from '$lib/components/ui/collapsible';
@@ -584,6 +585,65 @@
 						</Collapsible.Content>
 					</Collapsible.Root>
 				</div>
+			{:else if message.type === 'tool.handoff'}
+				<!-- The sender's receipt. Firing a hand-off and seeing nothing is
+				     indistinguishable from it never happening, which is the whole
+				     reason this exists. -->
+				{@const done = message.metadata?.toolStatus === 'success'}
+				{@const failed = message.metadata?.toolStatus === 'error'}
+				<div
+					class="w-full overflow-hidden rounded-xl border {failed
+						? 'border-destructive/40 bg-destructive/5'
+						: 'border-primary/30 bg-primary/5'}"
+				>
+					<div class="flex items-center gap-2 px-3 py-2">
+						<IconSubagentsDuo
+							class="size-4 shrink-0 {failed ? 'text-destructive' : 'text-primary'}"
+						/>
+						<span class="min-w-0 flex-1 truncate text-sm">
+							<span class="font-medium {failed ? 'text-destructive' : 'text-primary'}">
+								{message.metadata?.handoffKind === 'start' ? 'Started' : 'Handed to'}
+							</span>
+							<span class="font-mono text-foreground">{message.content}</span>
+						</span>
+						<span class="shrink-0 text-xs {failed ? 'text-destructive' : 'text-muted-foreground'}">
+							{failed ? 'failed' : done ? 'delivered' : 'sending…'}
+						</span>
+					</div>
+					{#if message.metadata?.handoffBrief}
+						<p class="border-t border-border/40 px-3 py-2 text-xs text-muted-foreground">
+							{message.metadata.handoffBrief.slice(0, 240)}
+						</p>
+					{/if}
+					{#if message.metadata?.toolResult}
+						<p class="border-t border-border/40 px-3 py-2 text-xs text-muted-foreground">
+							{String(message.metadata.toolResult).slice(0, 200)}
+						</p>
+					{/if}
+				</div>
+			{:else if message.type === 'user.peer'}
+				<!-- Another session's hand-off. Deliberately not the user bubble:
+				     this is reported speech, and a reader who mistakes it for
+				     their own instruction loses track of who asked for what. -->
+				<div class="w-full overflow-hidden rounded-xl border border-primary/30 bg-primary/5">
+					<div class="flex items-center gap-2 border-b border-primary/20 px-3 py-2">
+						<IconSubagentsDuo class="size-4 shrink-0 text-primary" />
+						<span class="min-w-0 flex-1 truncate text-xs font-medium text-primary">
+							Handed over by {message.metadata?.peerName ?? 'another session'}
+						</span>
+						{#if message.metadata?.peerSession}
+							<a
+								href="/session/{message.metadata.peerSession}"
+								class="shrink-0 text-xs text-muted-foreground underline-offset-2 hover:text-primary hover:underline"
+							>
+								Open it
+							</a>
+						{/if}
+					</div>
+					<div class="px-3 py-2.5 text-sm">
+						<Markdown source={message.content} />
+					</div>
+				</div>
 			{:else if message.type === 'ui.system_note'}
 				<!-- Harness-injected note that arrived as a user turn - collapsible card -->
 				<div class="w-full bg-muted/30 border border-border rounded-xl overflow-hidden">
@@ -842,3 +902,4 @@
 		{/if}
 	</div>
 {/if}
+

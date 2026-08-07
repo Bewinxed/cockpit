@@ -4,26 +4,35 @@
  */
 import type {
   AgentRow,
+  AvailableCommand,
   ControlPayload,
   Envelope,
   FramePayload,
   FsPayload,
   InstanceRow,
+  McpServerStatus,
   ModelInfo,
   Options,
   PermissionMode,
   PermissionResult,
   PermissionUpdate,
   SDKSessionInfo,
+  SDKStatus,
   SendPayload,
   SessionMessage,
+  SlashCommand,
   SpawnPayload,
   StopPayload,
 } from '@cockpit/core';
-import { COCKPIT_SCRATCH_TAG, RESOLVE_PERMISSION, RESTART_RESUMABLE } from '@cockpit/core';
+import {
+  classifyCommand,
+  COCKPIT_SCRATCH_TAG,
+  RESOLVE_PERMISSION,
+  RESTART_RESUMABLE,
+} from '@cockpit/core';
 import type { SubagentState } from '$lib/utils/flow-types';
 import type { Activity } from './activity';
-import { activityOf } from './activity';
+import { activityOf, runningSubagents } from './activity';
 import type { Message } from './types';
 import {
   CONTROL_TIMEOUT_MS,
@@ -36,6 +45,7 @@ import {
   WS_RECONNECT_MAX_DELAY,
 } from '$lib/config';
 import type { ToolGlance } from './frames';
+import { newId } from './id';
 import {
   applyBranchEvent,
   applyToolResult,
@@ -95,6 +105,9 @@ export const isFailed = (row: InstanceRow): boolean =>
   row.status === 'error' && !isResumable(row);
 
 /** A side quest's worktree sits under the project's checkout, so it counts as in it. */
+/** The last path segment — how the rail names a session, and how a hand-off does. */
+const leafOf = (path: string): string => path.split('/').filter(Boolean).pop() ?? path;
+
 const under = (root: string, path: string): boolean =>
   path === root || path.startsWith(`${root}/`);
 
@@ -123,6 +136,37 @@ export interface BlockedRequest {
 }
 
 /** Everything one session view needs — live or browsed from storage. */
+/**
+ * What the session's own context window looks like right now — the SDK's
+ * `getContextUsage`, which is what Claude Code's `/context` reads. Categories
+ * come through in the SDK's order and carry its colours; the dashboard shows
+ * the numbers, not a second opinion about them.
+ */
+export interface ContextUsage {
+  totalTokens: number;
+  maxTokens: number;
+  percentage: number;
+  categories: { name: string; tokens: number; color: string }[];
+  /** When this reading was taken, so a stale one can say so instead of lying. */
+  readAt: number;
+}
+
+/**
+ * What one session answers behind `/` (NEW.md §11), from its two sources: every
+ * `system.init` lists the names and says which of them are skills, and
+ * `supportedCommands` — asked once, when somebody first opens the menu — adds
+ * the prose. Per instance, because two machines rarely have the same skills
+ * installed and a session only ever offers its own.
+ */
+export interface CommandState {
+  /** Names as the session lists them, without the leading slash. */
+  names: string[];
+  /** The subset of `names` that are skills — {@link classifyCommand}'s evidence. */
+  skills: string[];
+  /** Descriptions and argument hints, `null` until something has asked. */
+  detailed: Map<string, SlashCommand> | null;
+}
+
 export interface SessionState {
   /** The id this view lives at: a spawned instance, or the SDK session browsed. */
   instanceId: string;
@@ -159,11 +203,55 @@ export interface SessionState {
   relaunching: boolean;
   /** A side quest (NEW.md §1) — kept visually apart until it is kept or discarded. */
   scratch: boolean;
+  /** The last context reading, `null` until one has been asked for. */
+  context: ContextUsage | null;
+  /** A `getContextUsage` call is out; the meter keeps its last number meanwhile. */
+  contextPending: boolean;
+  /** What this session offers behind `/` — see {@link commandsOf}. */
+  commands: CommandState;
+  /** A `supportedCommands` call is out; the names from `init` are the menu meanwhile. */
+  commandsPending: boolean;
+  /** The session's MCP servers (`mcpServerStatus`), null until asked; [] when the ask failed or found none. */
+  mcp: McpServerStatus[] | null;
+  mcpPending: boolean;
+  /**
+   * The last turn came back an error — the SDK's `is_error`, not a reading of
+   * what it said. Paired with the machine's auth state, this is what tells a
+   * "cannot answer" apart from an answer nobody liked.
+   */
+  lastTurnFailed: boolean;
+  /**
+   * The session's own word on what it is doing: `compacting` while it rewrites
+   * its context — the only live signal, since the boundary frame lands after
+   * the work — `requesting` while it waits on the model.
+   */
+  sdkStatus: SDKStatus;
+  /**
+   * What the last compaction did, from the `compact_boundary` the SDK emits when
+   * one finishes. Kept on the session rather than only in the transcript so the
+   * dock can say it happened without the reader scrolling to find the line.
+   */
+  lastCompaction: {
+    at: number;
+    preTokens: number;
+    trigger: 'manual' | 'auto';
+    result?: 'success' | 'failed';
+    error?: string;
+  } | null;
 }
 
 const state = $state({
   status: 'disconnected' as ConnectionStatus,
+  /** When the next reconnect attempt fires, so the banner can count it down. */
+  retryAt: null as number | null,
   machines: [] as Machine[],
+  /**
+   * Sessions that have been handed work and have not yet taken a turn on it.
+   * Keyed by the target: the question the rail answers is what *that* session
+   * is carrying. A hand-off whose arrival is invisible is one you have to go
+   * and check for, which is the thing it was supposed to replace.
+   */
+  handoffs: {} as Record<string, { from: string; at: number }>,
   instances: [] as InstanceRow[],
   projects: [] as ProjectRow[],
   sessions: {} as Record<string, SessionState>,
@@ -197,11 +285,14 @@ declare global {
   var __cockpitReconnectTimeout: ReturnType<typeof setTimeout> | null;
   var __cockpitReconnectAttempts: number;
   var __cockpitDisposing: boolean;
+  /** The wake listeners are document-wide; bind them once across HMR reloads. */
+  var __cockpitWakeBound: boolean;
 }
 globalThis.__cockpitSocket ??= null;
 globalThis.__cockpitReconnectTimeout ??= null;
 globalThis.__cockpitReconnectAttempts ??= 0;
 globalThis.__cockpitDisposing ??= false;
+globalThis.__cockpitWakeBound ??= false;
 
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {
@@ -231,6 +322,12 @@ function teardown(): void {
   abandonInflight('The connection to the hub closed before that finished.');
 }
 
+/** Mainline sessions the rail lists for one machine: live work and what stopped. */
+const listedOn = (machineId: string): InstanceRow[] =>
+  state.instances.filter(
+    (row) => row.machineId === machineId && isListed(row) && row.kind !== 'scratch'
+  );
+
 function session(instanceId: string): SessionState {
   const existing = state.sessions[instanceId];
   if (existing) return existing;
@@ -254,6 +351,15 @@ function session(instanceId: string): SessionState {
     model: null,
     relaunching: false,
     scratch: false,
+    context: null,
+    contextPending: false,
+    commands: { names: [], skills: [], detailed: null },
+    commandsPending: false,
+    mcp: null,
+    mcpPending: false,
+    lastTurnFailed: false,
+    sdkStatus: null,
+    lastCompaction: null,
   };
   state.sessions[instanceId] = created;
   // Read it back: the literal above is the raw target, and `$state` writes land
@@ -359,13 +465,17 @@ function adoptInstances(instances: InstanceRow[]): void {
 
 /** Registry reads: on connect and again after every reconnect. */
 async function refresh(): Promise<void> {
-  const [machines, instances, projects, pending] = await Promise.all([
+  const [machines, instances, projects, pending, handoffs] = await Promise.all([
     load<Machine[]>('/api/agents'),
     load<InstanceRow[]>('/api/instances'),
     load<ProjectRow[]>('/api/projects'),
     load<Envelope<FramePayload>[]>('/api/pending'),
+    // Read on connect, not only broadcast on change: a dashboard opened after
+    // a hand-off went out has missed every broadcast it will ever get.
+    load<Record<string, { from: string; at: number }>>('/api/handoffs'),
   ]);
 
+  if (handoffs) state.handoffs = handoffs;
   if (machines) state.machines = machines;
   if (projects) state.projects = projects;
   if (instances) adoptInstances(instances);
@@ -396,6 +506,11 @@ function handleFrame(frame: FramePayload): void {
     // The machines ride along so a daemon registering — the moment its auth
     // state is decided — reaches the rail without a re-fetch.
     state.machines = frame.agents;
+    // The hub's own record of what each session is carrying. Kept there rather
+    // than learnt by watching, so it is the same on every device and survives a
+    // reload — a hand-off only this tab saw is one your phone never knows about.
+    state.handoffs = (frame as { handoffs?: Record<string, { from: string; at: number }> })
+      .handoffs ?? {};
     adoptInstances(frame.instances);
     return;
   }
@@ -462,10 +577,42 @@ function handleFrame(frame: FramePayload): void {
             permissionMode: message.metadata?.permissionMode,
             model: message.metadata?.model,
           });
+          // The `/` menu, from the same re-emitted frame and for the same
+          // reason: a skill installed since the last turn is in this list.
+          target.commands.names = message.metadata?.slashCommands ?? target.commands.names;
+          target.commands.skills = message.metadata?.skills ?? target.commands.skills;
+          // A relaunch can change the MCP set; null makes the header ask again.
+          target.mcp = null;
           // The process behind a relaunch is up: this is the frame it opens with.
           target.relaunching = false;
-          if (target.initialized) continue;
           target.initialized = true;
+          // Anything still parked belongs to a process that is gone.
+          //
+          // A permission blocks the turn that asked it, so a session cannot
+          // reach its next `init` with one outstanding — an init arriving on top
+          // of pending questions means the process holding their resolvers died
+          // and a new one opened the session. Answering those reaches a daemon
+          // that never asked, which is the "no permission request <id>" the
+          // reader gets for clicking a button the app was still showing them.
+          if (target.pending.length > 0) target.pending = [];
+          // Never a transcript line. `init` is re-emitted every single turn, so
+          // any attempt to render it once relies on a flag that survives every
+          // reload, reconnect and daemon restart — and each time that flag is
+          // missed the reader gets "Session started" in the middle of a
+          // conversation that plainly never stopped. Everything it carries is
+          // already on screen: the model in the header, the servers behind it.
+          continue;
+        }
+        // A compaction just landed. The transcript has its own line for it; the
+        // dock needs the fact and the size, and a fresh reading because the
+        // window it is metering just changed underneath it.
+        if (message.type === 'system.compact_boundary') {
+          target.lastCompaction = {
+            at: Date.now(),
+            preTokens: message.metadata?.preTokens ?? 0,
+            trigger: message.metadata?.trigger === 'manual' ? 'manual' : 'auto',
+          };
+          if (target.machineId) void refreshContext(frame.instanceId, target.machineId);
         }
         // An id the SDK took but could not honour: the init that opened this
         // turn still names what was asked for, so the picker follows this
@@ -487,7 +634,45 @@ function handleFrame(frame: FramePayload): void {
         }
         sink.push(message);
       }
-      for (const result of mapping.toolResults) applyToolResult(sink, result);
+      for (const result of mapping.toolResults) {
+        applyToolResult(sink, result);
+        // The Task call's own result is the authoritative end of the subagent it
+        // spawned: branches are keyed by that `tool_use_id`. Progress frames can
+        // re-open a branch that already reported itself finished, and nothing
+        // closes it again — which is how every subagent ends up reading
+        // "running" forever, whether it is working or was done an hour ago.
+        const branch = target.subagents[result.toolId];
+        if (!branch) continue;
+        branch.status = result.isError ? 'error' : 'complete';
+        branch.completedAt ??= new Date();
+        if (result.isError) branch.error ??= result.result;
+        else branch.result ??= result.result;
+      }
+
+      // A push the SDK sends when the commands on disk changed: the full list,
+      // so it replaces what was cached — including the names, which are now
+      // fresher than the init that listed them.
+      if (mapping.commands) {
+        target.commands = {
+          ...target.commands,
+          names: mapping.commands.map((command) => command.name),
+          detailed: detailsOf(mapping.commands),
+        };
+      }
+
+      // `undefined` is "this frame said nothing about it"; `null` is the session
+      // saying it stopped. Only the latter clears the meter's label.
+      if (mapping.status !== undefined) target.sdkStatus = mapping.status;
+      if (mapping.compaction) {
+        target.lastCompaction = {
+          at: Date.now(),
+          preTokens: target.lastCompaction?.preTokens ?? 0,
+          trigger: target.lastCompaction?.trigger ?? 'auto',
+          result: mapping.compaction.result,
+          error: mapping.compaction.error,
+        };
+        if (target.machineId) void refreshContext(frame.instanceId, target.machineId);
+      }
 
       if (mapping.currentTool) target.currentTool = mapping.currentTool;
       const answered = target.currentTool?.toolId;
@@ -496,9 +681,13 @@ function handleFrame(frame: FramePayload): void {
       }
       if (mapping.delta) target.streaming += mapping.delta;
       if (mapping.clearsStream) target.streaming = '';
+      if (mapping.failedTurn !== undefined) target.lastTurnFailed = mapping.failedTurn;
       if (mapping.endsTurn) {
         target.busy = false;
         target.currentTool = null;
+        target.sdkStatus = null;
+        // The turn just changed how full the window is; ask rather than guess.
+        if (target.machineId) void refreshContext(frame.instanceId, target.machineId);
       } else if (
         mapping.delta ||
         mapping.currentTool ||
@@ -535,21 +724,52 @@ function send(envelope: Envelope): void {
   socket.send(JSON.stringify(envelope));
 }
 
+/**
+ * Backs off, but never gives up. A dashboard is a window somebody leaves open:
+ * the hub restarting, a laptop sleeping or a dev server reloading all end with
+ * the hub coming back, and a client that has stopped trying by then shows stale
+ * rows behind a status dot until the tab is reloaded by hand. The delay is
+ * capped instead of the attempts, so a long outage costs one poll per
+ * `WS_RECONNECT_MAX_DELAY` and no more.
+ *
+ * `WS_RECONNECT_MAX_ATTEMPTS` now only decides when to stop growing the delay.
+ */
 function scheduleReconnect(): void {
-  if (globalThis.__cockpitReconnectAttempts >= WS_RECONNECT_MAX_ATTEMPTS) {
-    console.error('[cockpit] max reconnect attempts reached');
-    state.status = 'error';
-    return;
-  }
+  const attempt = globalThis.__cockpitReconnectAttempts;
   const delay = Math.min(
-    WS_RECONNECT_BASE_DELAY * 2 ** globalThis.__cockpitReconnectAttempts,
+    WS_RECONNECT_BASE_DELAY * 2 ** Math.min(attempt, WS_RECONNECT_MAX_ATTEMPTS),
     WS_RECONNECT_MAX_DELAY
   );
+  state.retryAt = Date.now() + delay;
   globalThis.__cockpitReconnectTimeout = setTimeout(() => {
     globalThis.__cockpitReconnectAttempts++;
     connect();
   }, delay);
 }
+
+/**
+ * Reconnects now instead of waiting out the backoff. What the reconnect banner
+ * calls, and what a tab that just came back to the foreground calls: the delay
+ * was chosen while nobody was watching, and a user looking at the window is
+ * evidence worth more than the schedule.
+ */
+export function reconnectNow(): void {
+  const socket = globalThis.__cockpitSocket;
+  if (socket?.readyState === WebSocket.OPEN || socket?.readyState === WebSocket.CONNECTING) return;
+  if (globalThis.__cockpitReconnectTimeout) clearTimeout(globalThis.__cockpitReconnectTimeout);
+  globalThis.__cockpitReconnectAttempts = 0;
+  state.retryAt = null;
+  connect();
+}
+
+/**
+ * Whether this module instance has claimed the socket on `globalThis`. Claiming
+ * happens once: the adoption below reads the registry, and reading the registry
+ * goes through `waitForOpen`, which calls back in here. Without the latch that
+ * is not a slow path, it is a loop that re-enters itself for every catalog it
+ * loads and never returns.
+ */
+let claimed = false;
 
 function connect(): void {
   globalThis.__cockpitDisposing = false;
@@ -561,10 +781,29 @@ function connect(): void {
 
   socket.onopen = () => {
     state.status = 'connected';
+    state.retryAt = null;
     globalThis.__cockpitReconnectAttempts = 0;
     void refresh().then(refreshCatalogs);
   };
 
+  bind(socket);
+  // This module made it, so it already owns it: `ensureConnected` has nothing
+  // left to adopt, and `onopen` above is what refreshes.
+  claimed = true;
+  globalThis.__cockpitSocket = socket;
+}
+
+/**
+ * Points a socket's handlers at *this* module's state.
+ *
+ * The socket is stored on `globalThis` so a module reload never orphans it, but
+ * `state` is per module instance. A reloaded module that inherits a live socket
+ * therefore inherits handlers that still write to the state nobody is rendering
+ * any more: frames keep arriving, the old instance keeps up, and the instance on
+ * screen sits at its initial `disconnected` for good. Re-binding is what makes
+ * the inherited socket belong to whoever is rendering.
+ */
+function bind(socket: WebSocket): void {
   socket.onmessage = (event) => {
     const envelope = JSON.parse(String(event.data)) as Envelope<FramePayload>;
     if (envelope.verb !== 'frames') return;
@@ -578,21 +817,51 @@ function connect(): void {
   };
 
   socket.onerror = () => {
+    // Always followed by `onclose`, which schedules the retry — this only
+    // records that the last attempt failed, never that trying has stopped.
     state.status = 'error';
   };
-
-  globalThis.__cockpitSocket = socket;
 }
 
 /** What routes call on mount: the socket is app-scoped, not page-scoped. */
 export function ensureConnected(): void {
   const socket = globalThis.__cockpitSocket;
   if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
+    if (claimed) return;
+    // Adopt it rather than assume somebody else is still listening: `onopen`
+    // has already fired for an open socket and will never fire again, so the
+    // status has to be read off the socket instead of waited for.
+    claimed = true;
+    bind(socket);
+    if (socket.readyState === WebSocket.OPEN) {
+      state.status = 'connected';
+      state.retryAt = null;
+      void refresh().then(refreshCatalogs);
+    } else {
+      state.status = 'connecting';
+    }
     return;
   }
   // A navigation is a fresh user intent — earlier exhausted retries don't apply.
   globalThis.__cockpitReconnectAttempts = 0;
   connect();
+}
+
+/**
+ * The three moments worth more than the backoff schedule: the machine says its
+ * network is back, the tab comes to the foreground after a sleep, and the
+ * window regains focus. Each means the outage may be over right now, and the
+ * timer was set when none of that was known. Registered once per document.
+ */
+if (typeof window !== 'undefined' && !globalThis.__cockpitWakeBound) {
+  globalThis.__cockpitWakeBound = true;
+  const wake = () => {
+    if (document.visibilityState === 'hidden') return;
+    reconnectNow();
+  };
+  window.addEventListener('online', wake);
+  window.addEventListener('focus', wake);
+  document.addEventListener('visibilitychange', wake);
 }
 
 /** Resolves once the app socket is OPEN, connecting it if needed. */
@@ -620,12 +889,36 @@ function userMessage(text: string): SendPayload['message'] {
     type: 'user',
     message: { role: 'user', content: text },
     parent_tool_use_id: null,
+    // Stamped, not implied. The SDK treats an unstamped message as
+    // unattributed and fails it closed at the gates that ask whether a human
+    // said this — so a typed sentence has to say that it was typed.
+    origin: { kind: 'human' },
+  };
+}
+
+/**
+ * A message one session sends another. Two things make it a hand-off rather
+ * than a second reader talking:
+ *
+ * - `origin: peer` marks it as reported speech, so the receiving agent weighs
+ *   it as another agent's word and not as its user's authority.
+ * - `shouldQuery: false` appends it without starting a turn. The target is
+ *   usually mid-work; the note lands in its transcript now and is picked up
+ *   when it next answers, instead of derailing what it was asked to do.
+ */
+function peerMessage(text: string, from: { id: string; name: string }): SendPayload['message'] {
+  return {
+    type: 'user',
+    message: { role: 'user', content: text },
+    parent_tool_use_id: null,
+    origin: { kind: 'peer', from: from.id, name: from.name, fromSession: from.id },
+    shouldQuery: false,
   };
 }
 
 /** Spawns a session on `machineId` and registers the view it streams into. */
 function start({ machineId, ...spawn }: Omit<SpawnPayload, 'instanceId'> & { machineId: string }): SessionState {
-  const instanceId = crypto.randomUUID();
+  const instanceId = newId();
   const payload: SpawnPayload = { instanceId, ...spawn };
   send({ verb: 'spawn', machineId, instanceId, payload });
 
@@ -694,6 +987,22 @@ export function resumeSession({
   history?: Message[];
   options?: Options;
 }): string {
+  // Already running? Then this is not a resume, it is a way back to it.
+  //
+  // Resuming regardless spawns a second process onto the same SDK session: two
+  // rows in the rail, two live processes, one conversation — both writing to
+  // the same transcript, and the reader looking at what seems to be a duplicate
+  // of a chat they are already in. The catalog cannot tell a stored session
+  // from a running one, so this is the check that does.
+  const live = state.instances.find((row) => row.sessionId === sessionId && isLive(row));
+  if (live) {
+    const existing = session(live.id);
+    existing.machineId ||= live.machineId;
+    existing.cwd ||= live.cwd;
+    existing.sessionId = sessionId;
+    return live.id;
+  }
+
   const created = start({ machineId, cwd, options: { ...options, resume: sessionId } });
   created.sessionId = sessionId;
   created.messages = history.map((message) => ({ ...message, instanceId: created.instanceId }));
@@ -762,7 +1071,7 @@ export async function ensureAlive(instanceId: string, machineId: string): Promis
   const row = state.instances.find((candidate) => candidate.id === instanceId);
   const dead = row && (row.status === 'error' || row.status === 'stopped');
   if (dead && target.sessionId) {
-    const requestId = crypto.randomUUID();
+    const requestId = newId();
     const payload: SpawnPayload = {
       instanceId,
       cwd: target.cwd,
@@ -770,8 +1079,15 @@ export async function ensureAlive(instanceId: string, machineId: string): Promis
       scratch: target.scratch ? {} : undefined,
       // The new process answers the way the old one did: a revive nobody asked
       // for is not the moment to hand the session back on other settings.
-      permissionMode: target.permissionMode ?? undefined,
-      model: target.model ?? undefined,
+      //
+      // Falls back to the row, because the store learns these from a running
+      // session and a dead one has told it nothing — a tab opened after the
+      // process died holds `null` for both, and sending nothing is how a
+      // session comes back asking permission for everything.
+      permissionMode: (target.permissionMode ?? row?.permissionMode ?? undefined) as
+        | PermissionMode
+        | undefined,
+      model: target.model ?? row?.model ?? undefined,
       requestId,
     };
     target.relaunching = true;
@@ -796,6 +1112,38 @@ export async function sendOrRevive(
   sendText(instanceId, machineId, text, extras);
 }
 
+/**
+ * Hands a note to another session. The target is usually busy, so this never
+ * interrupts it: the note lands in its transcript at once and is answered when
+ * it next takes a turn (see {@link peerMessage}).
+ *
+ * A sleeping target is revived first. The alternative is a message that goes
+ * nowhere and a sender told it was delivered — and a hand-off you cannot trust
+ * to arrive is worse than no hand-off, because you stop checking.
+ */
+export async function sendToPeer(
+  target: { instanceId: string; machineId: string },
+  from: { instanceId: string; label: string },
+  text: string
+): Promise<void> {
+  await ensureAlive(target.instanceId, target.machineId);
+  const payload: SendPayload = {
+    instanceId: target.instanceId,
+    message: peerMessage(text, { id: from.instanceId, name: from.label }),
+  };
+  send({
+    verb: 'send',
+    machineId: target.machineId,
+    instanceId: target.instanceId,
+    payload,
+  });
+}
+
+/** Sessions this one can hand work to: every other live session in the fleet. */
+export function peerTargets(exceptInstanceId: string): InstanceRow[] {
+  return state.instances.filter((row) => row.id !== exceptInstanceId && isLive(row));
+}
+
 export function stopSession(instanceId: string, machineId: string): void {
   const payload: StopPayload = { instanceId };
   send({ verb: 'stop', machineId, instanceId, payload });
@@ -810,7 +1158,7 @@ export function stopSession(instanceId: string, machineId: string): void {
  * worktree that could not be removed is reported rather than silently left.
  */
 export async function discardSession(instanceId: string, machineId: string): Promise<void> {
-  const requestId = crypto.randomUUID();
+  const requestId = newId();
   const payload: StopPayload = { instanceId, discard: true, requestId };
   settleStopped(instanceId);
 
@@ -866,7 +1214,7 @@ function settleStopped(instanceId: string): void {
 }
 
 function control(instanceId: string, machineId: string, method: string, args: unknown[]): void {
-  const payload: ControlPayload = { instanceId, requestId: crypto.randomUUID(), method, args };
+  const payload: ControlPayload = { instanceId, requestId: newId(), method, args };
   send({ verb: 'control', machineId, instanceId, requestId: payload.requestId, payload });
 }
 
@@ -882,7 +1230,7 @@ export async function machineControl<T>(
   replyTimeoutMs = CONTROL_TIMEOUT_MS
 ): Promise<T> {
   await waitForOpen();
-  const requestId = crypto.randomUUID();
+  const requestId = newId();
   const payload: ControlPayload = { requestId, method, args };
   return ask<T>(requestId, method, replyTimeoutMs, () =>
     send({ verb: 'control', machineId, requestId, payload })
@@ -900,7 +1248,7 @@ export async function machineFs<T>(
   content?: string
 ): Promise<T> {
   await waitForOpen();
-  const requestId = crypto.randomUUID();
+  const requestId = newId();
   const payload: FsPayload = { requestId, op, path, content };
   return ask<T>(requestId, `fs ${op} ${path}`, CONTROL_TIMEOUT_MS, () =>
     send({ verb: 'fs', machineId, requestId, payload })
@@ -994,6 +1342,13 @@ async function ingestTranscript(
   epoch: number,
   onPublished?: () => void
 ): Promise<void> {
+  // A transcript that already has turns in it is a session that already
+  // started, so the banner announcing the start has had its moment. The SDK
+  // re-emits `system.init` every turn; without this, every reload re-arms the
+  // flag and the next turn opens with "Session started" as if the process had
+  // just come up — which is exactly what it does *not* mean.
+  if (transcript.length > 0) target.initialized = true;
+
   if (transcript.length <= TRANSCRIPT_CHUNK_THRESHOLD) {
     const { messages, subagents } = mapTranscript(viewId, transcript);
     target.messages = messages;
@@ -1085,12 +1440,25 @@ export async function openTranscript({
 export async function backfillSession(instanceId: string): Promise<void> {
   if (backfilled.has(instanceId) || backfilling.has(instanceId)) return;
   const target = session(instanceId);
-  if (target.messages.length > 0 || target.loading) return;
+  // Deliberately not "it already has messages, so it is loaded".
+  //
+  // This browser watches every session, not just the one on screen, so a
+  // session left in another tab quietly collects the frames of whatever it did
+  // meanwhile. Treating those few as a transcript meant switching to it showed
+  // the last thing it said and nothing before — and `backfilled` latched that
+  // for the rest of the tab, which is why only a hard refresh fixed it. Live
+  // frames are the tail of a conversation, never the whole of one.
+  if (target.loading) return;
   const { machineId, sessionId, cwd } = target;
   if (!machineId || !sessionId) return;
 
   backfilled.add(instanceId);
   backfilling.set(instanceId, []);
+  // Whatever this session said while the reader was elsewhere. The transcript
+  // that is about to arrive replaces the message list wholesale, so these are
+  // kept and re-applied behind it — deduplicated against it by uuid, exactly
+  // like the frames that land *during* the fetch.
+  const live = target.messages.slice();
   const epoch = claimTranscript(instanceId);
   target.loading = true;
   try {
@@ -1101,6 +1469,14 @@ export async function backfillSession(instanceId: string): Promise<void> {
     const seeded = new Set(transcript.map((entry) => entry.uuid));
     await ingestTranscript(instanceId, target, transcript, epoch, () => {
       target.streaming = '';
+      // Anything seen live that the stored transcript does not carry yet — the
+      // newest turn is written to disk a moment after it is streamed, so this
+      // is what stops the last thing on screen vanishing on a switch.
+      for (const message of live) {
+        if (message.sdkUuid && seeded.has(message.sdkUuid)) continue;
+        if (target.messages.some((existing) => existing.id === message.id)) continue;
+        target.messages.push(message);
+      }
       // What was held belongs to the end of the transcript, which is now on
       // screen: it appends while the older chunks prepend, so neither waits.
       replayHeld(instanceId, seeded);
@@ -1152,7 +1528,7 @@ export async function setPermissionMode(
   const previous = target.permissionMode;
   target.permissionMode = mode;
 
-  const requestId = crypto.randomUUID();
+  const requestId = newId();
   const payload: ControlPayload = {
     instanceId,
     requestId,
@@ -1172,17 +1548,176 @@ export async function setPermissionMode(
 }
 
 /**
+ * How full the session's context window is, straight from the SDK — the same
+ * reading `/context` shows, so the dock never has to estimate it from token
+ * counts it saw go past. A `Query` method, so only a live session can answer;
+ * a dead one keeps its last number rather than dropping to zero, which would
+ * read as "empty" when it means "nobody asked".
+ */
+export async function refreshContext(instanceId: string, machineId: string): Promise<void> {
+  const target = session(instanceId);
+  if (target.contextPending) return;
+  target.contextPending = true;
+  const requestId = newId();
+  const payload: ControlPayload = { instanceId, requestId, method: 'getContextUsage', args: [] };
+  try {
+    const usage = await ask<{
+      totalTokens: number;
+      maxTokens: number;
+      percentage: number;
+      categories: { name: string; tokens: number; color: string }[];
+    }>(requestId, 'getContextUsage', CONTROL_TIMEOUT_MS, () =>
+      send({ verb: 'control', machineId, instanceId, requestId, payload })
+    );
+    target.context = {
+      totalTokens: usage.totalTokens,
+      maxTokens: usage.maxTokens,
+      percentage: usage.percentage,
+      // "Free space" is the remainder, not a consumer: showing it as a slice
+      // would make every session look mostly full of nothing.
+      categories: (usage.categories ?? []).filter((row) => row.name !== 'Free space'),
+      readAt: Date.now(),
+    };
+  } catch {
+    // A session that cannot answer keeps the last reading; the meter says when.
+  } finally {
+    target.contextPending = false;
+  }
+}
+
+/**
  * The models this session offers. `supportedModels` is a `Query` method, so it
  * is only answerable while the session is up — the answer is the same account's
  * either way, so `models.svelte.ts` asks once through whoever is running and
  * keeps it for the whole app.
  */
 export async function loadModels(instanceId: string, machineId: string): Promise<ModelInfo[]> {
-  const requestId = crypto.randomUUID();
+  const requestId = newId();
   const payload: ControlPayload = { instanceId, requestId, method: 'supportedModels', args: [] };
   return ask<ModelInfo[]>(requestId, 'supportedModels', CONTROL_TIMEOUT_MS, () =>
     send({ verb: 'control', machineId, instanceId, requestId, payload })
   );
+}
+
+/** A `SlashCommand[]` answer as the lookup the menu reads its prose from. */
+const detailsOf = (commands: SlashCommand[]): Map<string, SlashCommand> =>
+  new Map(commands.map((command) => [command.name, command]));
+
+/**
+ * What each of this session's commands does. `supportedCommands` is a `Query`
+ * method, so only a live session can answer — and only the prose is at stake:
+ * the names come free on every init, so a session that cannot answer still has
+ * a menu. Asked once, the first time somebody opens it; a `commands_changed`
+ * push replaces the answer.
+ */
+export async function loadCommands(instanceId: string, machineId: string): Promise<void> {
+  const target = session(instanceId);
+  if (target.commands.detailed || target.commandsPending) return;
+  target.commandsPending = true;
+
+  const requestId = newId();
+  const payload: ControlPayload = { instanceId, requestId, method: 'supportedCommands', args: [] };
+  try {
+    const commands = await ask<SlashCommand[]>(
+      requestId,
+      'supportedCommands',
+      CONTROL_TIMEOUT_MS,
+      () => send({ verb: 'control', machineId, instanceId, requestId, payload })
+    );
+    target.commands = { ...target.commands, detailed: detailsOf(commands) };
+  } catch (error) {
+    // The menu is still every name the init frame listed, undescribed, and the
+    // next opening asks again — nothing the reader needs to act on.
+    console.error(`[cockpit] supportedCommands on ${instanceId} failed:`, error);
+  } finally {
+    target.commandsPending = false;
+  }
+}
+
+/** The bare `mcpServerStatus` call; what the caller does with a refusal differs. */
+function askMcp(instanceId: string, machineId: string): Promise<McpServerStatus[]> {
+  const requestId = newId();
+  const payload: ControlPayload = { instanceId, requestId, method: 'mcpServerStatus', args: [] };
+  return ask<McpServerStatus[]>(requestId, 'mcpServerStatus', CONTROL_TIMEOUT_MS, () =>
+    send({ verb: 'control', machineId, instanceId, requestId, payload })
+  );
+}
+
+/**
+ * Which MCP servers this session runs, for the header's chips. `mcpServerStatus`
+ * is a Query method, so only a live session answers. A failed ask stores `[]`
+ * rather than staying null: null is what re-triggers the asking effect, and a
+ * machine that cannot answer must not be asked in a loop.
+ */
+export async function loadMcpServers(instanceId: string, machineId: string): Promise<void> {
+  const target = session(instanceId);
+  if (target.mcp !== null || target.mcpPending) return;
+  target.mcpPending = true;
+
+  try {
+    target.mcp = await askMcp(instanceId, machineId);
+  } catch (error) {
+    console.error(`[cockpit] mcpServerStatus on ${instanceId} failed:`, error);
+    target.mcp = [];
+  } finally {
+    target.mcpPending = false;
+  }
+}
+
+/** The same question again after a restart or a stop, cache ignored. */
+export async function refreshMcpServers(instanceId: string, machineId: string): Promise<void> {
+  const target = session(instanceId);
+  if (target.mcpPending) return;
+  target.mcpPending = true;
+
+  try {
+    target.mcp = await askMcp(instanceId, machineId);
+  } catch (error) {
+    // A failed refresh keeps the stale list: blanking chips that were fine is a
+    // worse answer than showing the reading from a moment ago.
+    console.error(`[cockpit] mcpServerStatus on ${instanceId} failed:`, error);
+  } finally {
+    target.mcpPending = false;
+  }
+}
+
+/** Connects one MCP server again — what a `failed` or `needs-auth` chip offers. */
+export async function restartMcpServer(
+  instanceId: string,
+  machineId: string,
+  name: string
+): Promise<void> {
+  const requestId = newId();
+  const payload: ControlPayload = {
+    instanceId,
+    requestId,
+    method: 'reconnectMcpServer',
+    args: [name],
+  };
+  await ask<void>(requestId, 'reconnectMcpServer', CONTROL_TIMEOUT_MS, () =>
+    send({ verb: 'control', machineId, instanceId, requestId, payload })
+  );
+  await refreshMcpServers(instanceId, machineId);
+}
+
+/** Takes one MCP server out of this session's tool set, or puts it back. */
+export async function setMcpServerEnabled(
+  instanceId: string,
+  machineId: string,
+  name: string,
+  enabled: boolean
+): Promise<void> {
+  const requestId = newId();
+  const payload: ControlPayload = {
+    instanceId,
+    requestId,
+    method: 'toggleMcpServer',
+    args: [name, enabled],
+  };
+  await ask<void>(requestId, 'toggleMcpServer', CONTROL_TIMEOUT_MS, () =>
+    send({ verb: 'control', machineId, instanceId, requestId, payload })
+  );
+  await refreshMcpServers(instanceId, machineId);
 }
 
 /**
@@ -1202,7 +1737,7 @@ export async function setModel(
   const previous = target.model;
   target.model = model;
 
-  const requestId = crypto.randomUUID();
+  const requestId = newId();
   const payload: ControlPayload = { instanceId, requestId, method: 'setModel', args: [model] };
   try {
     await ask<void>(requestId, 'setModel', CONTROL_TIMEOUT_MS, () =>
@@ -1233,7 +1768,7 @@ export async function relaunchSession(
     throw new Error('This session has not named itself yet. Try again in a moment.');
   }
 
-  const requestId = crypto.randomUUID();
+  const requestId = newId();
   const payload: SpawnPayload = {
     instanceId,
     cwd: target.cwd,
@@ -1341,10 +1876,57 @@ function blockedRequests(): BlockedRequest[] {
   return rows;
 }
 
+/** What the palette groups by: what this machine was given, then the harness's own. */
+const COMMAND_ORDER: Record<AvailableCommand['type'], number> = {
+  skill: 0,
+  custom: 1,
+  builtin: 2,
+  mcp: 3,
+};
+
+/**
+ * Where a command came from, when its own name says: a plugin component wears
+ * its plugin (`plugin:command`), an MCP prompt its server (`mcp__server__prompt`).
+ */
+function sourceOf(name: string): string | undefined {
+  if (name.startsWith('mcp__')) return name.split('__')[1] || undefined;
+  const namespace = name.indexOf(':');
+  return namespace > 0 ? name.slice(0, namespace) : undefined;
+}
+
+/**
+ * One session's `/` menu: every name it listed, wearing whatever
+ * `supportedCommands` has since said about it. The init frame leads because it
+ * arrives on every turn and is free — the descriptions are one lazy call behind
+ * it, and are all there is before the first init.
+ */
+function availableCommands({ names, skills, detailed }: CommandState): AvailableCommand[] {
+  const listed = names.length > 0 ? names : [...(detailed?.keys() ?? [])];
+  return listed
+    .map((name) => {
+      const known = detailed?.get(name);
+      return {
+        name,
+        // Both are required strings to the SDK, which sends '' for "none".
+        description: known?.description || undefined,
+        argumentHint: known?.argumentHint || undefined,
+        type: classifyCommand(name, skills),
+        source: sourceOf(name),
+      };
+    })
+    .sort((a, b) => COMMAND_ORDER[a.type] - COMMAND_ORDER[b.type] || a.name.localeCompare(b.name));
+}
+
 export const cockpit = {
   get status() {
     return state.status;
   },
+  get retryAt() {
+    return state.retryAt;
+  },
+  /** What a session has been handed and not yet answered; `null` for most. */
+  handoffFor: (instanceId: string): { from: string; at: number } | null =>
+    state.handoffs[instanceId] ?? null,
   get machines() {
     return state.machines;
   },
@@ -1362,10 +1944,20 @@ export const cockpit = {
     return state.instances.filter(isStale);
   },
   /** Mainline sessions on one machine — what the sidebar groups under it. */
-  runningOn: (machineId: string): InstanceRow[] =>
-    state.instances.filter(
-      (row) => row.machineId === machineId && isListed(row) && row.kind !== 'scratch'
-    ),
+  listedOn,
+  /** The ones the hub can still reach: what this machine is doing right now. */
+  liveOn: (machineId: string): InstanceRow[] => listedOn(machineId).filter(isLive),
+  /**
+   * The ones whose process is gone — asleep, or failed. A different question
+   * from the live list, so it is a different list rather than a heading that
+   * changes its mind about what it is over.
+   */
+  notRunningOn: (machineId: string): InstanceRow[] =>
+    listedOn(machineId).filter((row) => !isLive(row)),
+  /** Every session the rail lists: live work, plus what failed or fell asleep. */
+  get listedInstances(): InstanceRow[] {
+    return state.instances.filter(isListed);
+  },
   /** Side quests across the fleet — kept in their own section, not per machine. */
   get scratchInstances(): InstanceRow[] {
     return state.instances.filter((row) => isListed(row) && row.kind === 'scratch');
@@ -1402,6 +1994,19 @@ export const cockpit = {
   },
   currentToolOf: (instanceId: string): ToolGlance | null =>
     state.sessions[instanceId]?.currentTool ?? null,
+  /** What a session offers behind `/`, grouped the way the palette lists it. */
+  commandsOf: (instanceId: string): AvailableCommand[] => {
+    const target = state.sessions[instanceId];
+    return target ? availableCommands(target.commands) : [];
+  },
+  /** The subagents a session still has out, newest last — what the rail expands to. */
+  subagentsOf: (instanceId: string): SubagentState[] =>
+    Object.values(state.sessions[instanceId]?.subagents ?? {}).sort(
+      (a, b) => a.startedAt.getTime() - b.startedAt.getTime()
+    ),
+  /** Just the count, for the badge that does not need the list to draw itself. */
+  runningSubagentsOf: (instanceId: string): number =>
+    runningSubagents(state.sessions[instanceId]?.subagents),
   get blocked(): BlockedRequest[] {
     return blockedRequests();
   },

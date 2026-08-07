@@ -1,0 +1,422 @@
+/**
+ * The dashboard's half of fleet MCP + skills (NEW.md §11): the hub's desired
+ * state over REST, and one machine-scoped read for browsing a marketplace.
+ * Every write fans out to the online machines from the hub itself, so nothing
+ * here ever loops over machines — it changes the fleet's mind and lets the
+ * `instances` frames say what came of it.
+ */
+import {
+  MARKETPLACE_CATALOG,
+  type FleetConfig,
+  type FleetMarketplace,
+  type FleetMcpConfig,
+  type FleetMcpServer,
+  type FleetPlugin,
+  type FleetSkillMeta,
+  type MarketplacePluginInfo,
+  type McpHttpServerConfig,
+  type McpSSEServerConfig,
+} from '@cockpit/core';
+import { CONTROL_TIMEOUT_MS } from '$lib/config';
+import { machineControl, type Machine } from './client.svelte';
+
+/** The fleet's user-scope CLAUDE.md, as the hub stores it (NEW.md §11). */
+export interface FleetMemoryRow {
+  content: string;
+  hash: string;
+  /** ISO: a `Date` crossing JSON is a string by the time it is read here. */
+  updatedAt: string;
+}
+
+/**
+ * What `GET /api/fleet` answers with. The skills are a sibling of the config
+ * rather than part of it: what the machines get carries every skill's files,
+ * and a catalog read should not weigh megabytes.
+ */
+export interface FleetSnapshot {
+  config: FleetConfig;
+  skills: FleetSkillMeta[];
+  /** Null while the fleet keeps no memory, which is where every fleet starts. */
+  memory: FleetMemoryRow | null;
+}
+
+/**
+ * What a skill write answers with: the row as the hub stored it, plus — when
+ * the repo held several skills and the source named none — the ones it could
+ * have meant. The row is stored either way, error and all.
+ */
+export interface SkillWriteResult extends FleetSkillMeta {
+  choices?: string[];
+}
+
+/** The charset MCP server names are held to, on the hub and here. */
+const NAME_PATTERN = /^[A-Za-z0-9_-]+$/;
+
+/**
+ * Names Claude Code keeps for its own servers. The hub turns these away, so the
+ * form does too — a refusal you can read before you click beats one after.
+ */
+const RESERVED = [
+  'workspace',
+  'claude-in-chrome',
+  'computer-use',
+  'claude preview',
+  'claude browser',
+];
+
+/** Why this name cannot be used, in a sentence, or nothing when it can. */
+export function mcpNameProblem(name: string, taken: readonly string[] = []): string | undefined {
+  const trimmed = name.trim();
+  if (!trimmed) return 'Give the server a name.';
+  if (!NAME_PATTERN.test(trimmed)) return 'Letters, digits, dashes and underscores only.';
+  if (RESERVED.includes(trimmed.toLowerCase())) return `Claude Code keeps “${trimmed}” for itself.`;
+  if (taken.includes(trimmed)) return `There is already a server called “${trimmed}”.`;
+  return undefined;
+}
+
+/**
+ * A name for the server a package would run — its last path segment, minus any
+ * version, in the charset names are held to. Only a suggestion: the field it
+ * fills stays editable.
+ */
+export function suggestMcpName(pkg: string): string {
+  const segment = pkg.trim().split('/').pop() ?? '';
+  const at = segment.lastIndexOf('@');
+  const bare = at > 0 ? segment.slice(0, at) : segment;
+  return bare.replace(/[^A-Za-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
+/** Remote servers are the ones with an endpoint; stdio's `type` is optional. */
+export const isRemoteMcp = (
+  config: FleetMcpConfig
+): config is McpHttpServerConfig | McpSSEServerConfig => 'url' in config;
+
+/** The one line a row shows: the command it runs, or the endpoint it calls. */
+export const describeMcp = (config: FleetMcpConfig): string =>
+  isRemoteMcp(config) ? config.url : [config.command, ...(config.args ?? [])].join(' ');
+
+/**
+ * Splits an args field the naive way — on whitespace, with no quoting. Args
+ * with spaces in them are rare enough that the form says so rather than
+ * shipping a shell parser nobody asked for.
+ */
+export const splitArgs = (line: string): string[] => line.trim().split(/\s+/).filter(Boolean);
+
+/** Drops the blank rows a key/value editor always ends up carrying. */
+export function pairsToRecord(rows: readonly { key: string; value: string }[]): Record<string, string> {
+  const record: Record<string, string> = {};
+  for (const row of rows) {
+    const key = row.key.trim();
+    if (key) record[key] = row.value;
+  }
+  return record;
+}
+
+/** A record back into editor rows, always with one empty row to type into. */
+export const recordToPairs = (
+  record: Record<string, string> | undefined
+): { key: string; value: string }[] => [
+  ...Object.entries(record ?? {}).map(([key, value]) => ({ key, value })),
+  { key: '', value: '' },
+];
+
+/** The charset skill names are held to, on the hub and here. */
+const SKILL_NAME_PATTERN = /^[A-Za-z0-9._-]+$/;
+
+/** The source forms the hub's resolver takes as they are. */
+const SKILL_SCHEME = /^(?:skills:|github:|npm:|https?:\/\/)/;
+
+/**
+ * The words an installer command line is built out of — the runner, its
+ * subcommand, and the tool being run. A paste is stripped down to the slug
+ * they surround.
+ */
+const WRAPPERS = new Set([
+  'bunx',
+  'bun',
+  'npx',
+  'npm',
+  'pnpm',
+  'pnpx',
+  'yarn',
+  'dlx',
+  'x',
+  'run',
+  'skills',
+  'add',
+  'install',
+  'i',
+]);
+
+/** Why this name cannot be used, in a sentence, or nothing when it can. */
+export function skillNameProblem(name: string, taken: readonly string[] = []): string | undefined {
+  const trimmed = name.trim();
+  if (!trimmed) return 'Give the skill a name.';
+  if (!SKILL_NAME_PATTERN.test(trimmed)) return 'Letters, digits, dots, dashes and underscores only.';
+  if (taken.includes(trimmed)) return `There is already a skill called “${trimmed}”.`;
+  return undefined;
+}
+
+/**
+ * The source a paste really names. An installer command line is how a skill is
+ * written down everywhere, so the field takes one whole and keeps the slug —
+ * cockpit fetches the files itself and runs no installer.
+ */
+export function normalizeSkillSource(input: string): string {
+  const trimmed = input.trim();
+  if (SKILL_SCHEME.test(trimmed)) return trimmed;
+  const slug = trimmed
+    .split(/\s+/)
+    .filter((word) => word !== '' && !word.startsWith('-'))
+    .find((word) => !WRAPPERS.has(word.toLowerCase()));
+  if (!slug) return '';
+  return SKILL_SCHEME.test(slug) ? slug : `skills:${slug}`;
+}
+
+/**
+ * The name a source suggests: the skill it filters for, or the last segment of
+ * its path, in the charset names are held to. Only a suggestion — the field it
+ * fills stays editable.
+ */
+export function suggestSkillName(source: string): string {
+  const scheme = /^(skills|github|npm):/.exec(source)?.[1];
+  const body = source.slice(scheme ? scheme.length + 1 : 0).split('#')[0];
+  const at = body.lastIndexOf('@');
+  // `@` names the skill in a `skills:` slug, and a ref or a version elsewhere.
+  const filter = at > 0 && (scheme === undefined || scheme === 'skills') ? body.slice(at + 1) : '';
+  const segments = (at > 0 ? body.slice(0, at) : body).split(/[/?]/).filter(Boolean);
+  // A plain URL points at the skill's own file; the directory holds its name.
+  if (segments.at(-1)?.toLowerCase() === 'skill.md') segments.pop();
+  return (filter || segments.at(-1) || '')
+    .replace(/[^A-Za-z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+/** The same source, narrowed to one skill of a repo that holds several. */
+export function pickSkill(source: string, choice: string): string {
+  const hash = source.indexOf('#');
+  const body = hash === -1 ? source : source.slice(0, hash);
+  const at = body.lastIndexOf('@');
+  return `${at > 0 ? body.slice(0, at) : body}@${choice}${hash === -1 ? '' : source.slice(hash)}`;
+}
+
+/** A resolved skill's size, in the units a download is talked about in. */
+export function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  const kb = bytes / 1024;
+  if (kb < 1024) return `${kb < 10 ? kb.toFixed(1) : Math.round(kb)} kB`;
+  const mb = kb / 1024;
+  return `${mb < 10 ? mb.toFixed(1) : Math.round(mb)} MB`;
+}
+
+/**
+ * A machine that can answer for a marketplace: online, and its last report says
+ * the marketplace is really linked there. Any one will do — the clone is the
+ * same on all of them.
+ */
+export const catalogHost = (machines: readonly Machine[], name: string): Machine | undefined =>
+  machines.find(
+    (machine) =>
+      machine.status === 'online' && machine.fleet?.marketplaces?.[name]?.state === 'applied'
+  );
+
+/**
+ * What the hub said went wrong. Elysia answers a refused write with a bare
+ * string, so the body is the sentence; the status is the fallback for a hub
+ * that fell over without one.
+ */
+async function said(response: Response): Promise<string> {
+  const body = (await response.text()).trim();
+  if (!body) return `the hub answered ${response.status}`;
+  try {
+    const parsed: unknown = JSON.parse(body);
+    if (typeof parsed === 'string') return parsed;
+    if (parsed && typeof parsed === 'object') {
+      const { message, error } = parsed as { message?: unknown; error?: unknown };
+      if (typeof message === 'string') return message;
+      if (typeof error === 'string') return error;
+    }
+  } catch {
+    // A plain-text refusal, which is Elysia's own default.
+  }
+  return body;
+}
+
+async function send<T>(url: string, init: RequestInit, attempt: string): Promise<T> {
+  const response = await fetch(url, init);
+  if (!response.ok) throw new Error(`Could not ${attempt} — ${await said(response)}.`);
+  return (await response.json()) as T;
+}
+
+const put = <T>(url: string, body: unknown, attempt: string): Promise<T> =>
+  send<T>(
+    url,
+    { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
+    attempt
+  );
+
+async function erase(url: string, attempt: string): Promise<void> {
+  const response = await fetch(url, { method: 'DELETE' });
+  if (!response.ok) throw new Error(`Could not ${attempt} — ${await said(response)}.`);
+}
+
+export const saveMcpServer = (
+  name: string,
+  config: FleetMcpConfig,
+  enabled?: boolean
+): Promise<FleetMcpServer> =>
+  put(`/api/fleet/mcp/${encodeURIComponent(name)}`, { config, enabled }, `save ${name}`);
+
+export const removeMcpServer = (name: string): Promise<void> =>
+  erase(`/api/fleet/mcp/${encodeURIComponent(name)}`, `remove ${name}`);
+
+export const saveMarketplace = (name: string, source: string): Promise<FleetMarketplace> =>
+  put(`/api/fleet/marketplaces/${encodeURIComponent(name)}`, { source }, `link ${name}`);
+
+export const removeMarketplace = (name: string): Promise<void> =>
+  erase(`/api/fleet/marketplaces/${encodeURIComponent(name)}`, `unlink ${name}`);
+
+export const savePlugin = (id: string, patch: { enabled?: boolean }): Promise<FleetPlugin> =>
+  put(`/api/fleet/plugins/${encodeURIComponent(id)}`, patch, `save ${id}`);
+
+export const removePlugin = (id: string): Promise<void> =>
+  erase(`/api/fleet/plugins/${encodeURIComponent(id)}`, `remove ${id}`);
+
+/**
+ * Stores a skill and resolves it on the hub, once, for every machine. A source
+ * the hub could not resolve still answers with a row — the failure is the row's
+ * to carry, not this call's to throw.
+ */
+export const saveSkill = (
+  name: string,
+  body: { source: string; enabled?: boolean }
+): Promise<SkillWriteResult> =>
+  put(`/api/fleet/skills/${encodeURIComponent(name)}`, body, `save ${name}`);
+
+/** Resolves the same source again — for a skill whose repo has moved on. */
+export const refreshSkill = (name: string): Promise<FleetSkillMeta> =>
+  send(`/api/fleet/skills/${encodeURIComponent(name)}/refresh`, { method: 'POST' }, `refresh ${name}`);
+
+export const removeSkill = (name: string): Promise<void> =>
+  erase(`/api/fleet/skills/${encodeURIComponent(name)}`, `remove ${name}`);
+
+/** One superseded version of the memory, as the history list reads it. */
+export interface FleetMemoryVersion {
+  id: number;
+  hash: string;
+  /** `fleet`, or `machine:<machineId>` for a copy an overwrite took off one. */
+  source: string;
+  bytes: number;
+  createdAt: string;
+}
+
+/** What a save came to: the row the hub stored, or the one it has instead. */
+export type MemorySave =
+  | { ok: true; memory: FleetMemoryRow }
+  | { ok: false; latest: FleetMemoryRow };
+
+/**
+ * Stores the fleet's user-scope CLAUDE.md; every machine gets it from the hub.
+ * `expectedHash` is what the writer had in front of them — a save against a row
+ * somebody else moved comes back with what is really there, unwritten.
+ */
+export async function saveMemory(content: string, expectedHash?: string): Promise<MemorySave> {
+  const response = await fetch('/api/fleet/memory', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content, expectedHash }),
+  });
+  if (response.status === 409) return { ok: false, latest: (await response.json()) as FleetMemoryRow };
+  if (!response.ok) throw new Error(`Could not save the memory — ${await said(response)}.`);
+  return { ok: true, memory: (await response.json()) as FleetMemoryRow };
+}
+
+/** What one machine really has, without adopting it: the read behind Compare. */
+export const peekMemory = (machineId: string): Promise<{ content: string; hash: string } | null> =>
+  send(
+    '/api/fleet/memory/peek',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ machineId }),
+    },
+    "read this machine's memory"
+  );
+
+/** What the memory used to say, newest first and without the content. */
+export const memoryHistory = (): Promise<FleetMemoryVersion[]> =>
+  send('/api/fleet/memory/history', {}, 'read the memory history');
+
+export const memoryVersion = (
+  id: number
+): Promise<FleetMemoryVersion & { content: string }> =>
+  send(`/api/fleet/memory/history/${id}`, {}, 'read that version');
+
+/** Undo: the version becomes the fleet's, and what it replaced joins the history. */
+export const restoreMemory = (id: number): Promise<FleetMemoryRow> =>
+  send(
+    '/api/fleet/memory/restore',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    },
+    'restore that version'
+  );
+
+/** Drops it, and with it the copy on every machine that still has cockpit's. */
+export const removeMemory = (): Promise<void> => erase('/api/fleet/memory', 'remove the memory');
+
+/**
+ * Takes one machine's own CLAUDE.md as the fleet's. Where the first document
+ * comes from, and how a machine that drifted has its version win.
+ */
+export const adoptMemory = (machineId: string): Promise<FleetMemoryRow> =>
+  send(
+    '/api/fleet/memory/adopt',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ machineId }),
+    },
+    "adopt this machine's memory"
+  );
+
+/** The other direction: the fleet's document over a machine copy that drifted. */
+export const pushMemory = (machineId: string): Promise<unknown> =>
+  send(
+    '/api/fleet/memory/push',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ machineId }),
+    },
+    'overwrite this machine'
+  );
+
+/**
+ * Asks the hub to push the desired state again — at one machine, or at every
+ * machine that is online. A change already syncs itself; this is for the
+ * machine that was asleep when one happened.
+ */
+export const syncFleet = (machineId?: string): Promise<unknown> =>
+  send(
+    '/api/fleet/sync',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(machineId ? { machineId } : {}),
+    },
+    'sync the fleet'
+  );
+
+/**
+ * What a linked marketplace offers, read from its clone on one machine. A
+ * machine-scoped control like `listRepos`: the answer is the same everywhere
+ * the marketplace is linked, so the caller picks any online machine that has it.
+ */
+export const marketplaceCatalog = (
+  machineId: string,
+  name: string
+): Promise<MarketplacePluginInfo[]> =>
+  machineControl<MarketplacePluginInfo[]>(machineId, MARKETPLACE_CATALOG, [name], CONTROL_TIMEOUT_MS);

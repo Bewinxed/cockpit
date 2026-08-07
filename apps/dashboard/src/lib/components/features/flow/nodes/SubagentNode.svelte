@@ -5,6 +5,7 @@
   import type { Message } from '$lib/cockpit/types';
   import type { SubagentState } from '$lib/utils/flow-types';
   import { getToolGlance, getToolStatus } from '$lib/utils/tool-display';
+  import { modelLabel } from '$lib/cockpit/models.svelte';
   import {
     ELAPSED_TIME_UPDATE_INTERVAL,
     ZOOM_THRESHOLD_OVERVIEW,
@@ -266,6 +267,9 @@
         <div class="flex items-center gap-2">
           <IconSkill class="h-3 w-3 shrink-0" style="color: {branchColor}" />
           <span class="text-sm font-medium truncate">{subagent.subagentType}</span>
+          {#if subagent.model}
+            <span class="truncate text-xs text-muted-foreground">{modelLabel(subagent.model)}</span>
+          {/if}
           {#if subagent.messages?.length}
             <span class="text-xs bg-muted px-1 py-0.5 rounded">{subagent.messages.length}</span>
           {/if}
@@ -295,6 +299,9 @@
           <div class="flex items-center gap-2">
             <IconSkill class="h-4 w-4 shrink-0" style="color: {branchColor}" />
             <span class="text-sm font-medium">{subagent.subagentType}</span>
+            {#if subagent.model}
+              <span class="shrink-0 text-xs text-muted-foreground">{modelLabel(subagent.model)}</span>
+            {/if}
             <SubIcon class="h-4 w-4 ml-auto {getStatusColor(subagent.status)} {subagent.status === 'running' ? 'animate-spin' : ''}" />
           </div>
 
