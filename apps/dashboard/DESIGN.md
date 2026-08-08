@@ -423,6 +423,33 @@ rows answer to `y`/`a` and `n`/`d` while focused; questions get no shortcut
 because they need a real choice. Actions are `sm` buttons right-aligned, dropping
 to their own full-width row on phones.
 
+### Task Ring (signature)
+Every session keeps a plan, and `TaskRing` is how much of it is done: a 16px
+(header) or 12px (board row) SVG ring, `stroke-border` track, arc in
+`currentColor` so the parent's `identity-ink` + `--identity-h` paint it in the
+folder's own hue. Progress is **decoration, not action** — the ring is never
+olive, because olive means "this acts" and a count of finished work does not.
+The arc eases its `stroke-dashoffset` over 240ms; finishing swaps ring for a
+green check in 160ms, the one moment progress earns a state colour, because by
+then it is a result.
+
+Task status reuses the Reserved Hue semantics unchanged: amber for the task in
+progress, green for done, hollow muted for pending — and **never red**, because
+a task does not need a human by itself. Only the session around it can.
+
+Data rule, and it is a design rule too: the ledger on disk
+(`<home>/.claude/tasks/<sessionId>/*.json`) is the only parsed source.
+`TaskCreate`/`TaskUpdate` frames in the transcript are *invalidation signals* —
+they say the plan moved, never what it now says — so no surface ever reads a
+task out of a tool result's prose. In the transcript those calls are one quiet
+36px line each, not cards: writing the plan down is bookkeeping, not work to
+inspect.
+
+**Absence over placeholder.** A session with no tasks renders no ring, no
+count, no panel and no empty state — zero new DOM, no skeleton, no reserved
+space. The pill, the board cluster and the peek section each check the count
+before they exist.
+
 ### Permission Card (signature)
 `bg-card rounded-xl shadow-sm p-4`, shield glyph, one-line summary, a collapsible
 `Details` holding the raw command in mono, and three verbs: Deny (quiet, left),
