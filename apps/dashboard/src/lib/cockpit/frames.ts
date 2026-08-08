@@ -65,6 +65,13 @@ export interface FrameMapping {
   agentId?: string;
   /** A subagent branch's lifecycle, moved by this frame. */
   branch?: BranchEvent;
+  /**
+   * The main loop's own user turn, which the local copy already renders. The
+   * copy is pushed without an SDK uuid — this is that uuid, so the store can
+   * stamp it and edit/fork can anchor on a message the reader just sent
+   * instead of waiting for a transcript re-read.
+   */
+  echo?: { uuid: string; text: string };
   /** The tool that just went in flight on the main loop. */
   currentTool?: ToolGlance;
   /** Text to append to the instance's streaming buffer. */
@@ -332,6 +339,10 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
       }
       if (text && (agentId || systemNote(text))) {
         mapping.messages.push({ ...base, ...userBody(text, transcriptUserImages(sdk.message)) });
+      } else if (text && uuid && !agentId) {
+        // The human's own turn: rendered by the local copy, so nothing is
+        // pushed — but the copy has no SDK uuid until now.
+        mapping.echo = { uuid, text };
       }
       if (typeof content === 'string') break;
       for (const block of content) {

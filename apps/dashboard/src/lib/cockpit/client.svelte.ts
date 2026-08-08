@@ -639,6 +639,15 @@ function handleFrame(frame: FramePayload): void {
         }
         sink.push(message);
       }
+      // The frame for a turn the reader typed: stamp their local copy with the
+      // SDK's uuid so edit/fork can anchor on it without a transcript re-read.
+      // Oldest unstamped copy first — frames arrive in send order — preferring
+      // an exact text match when two sends are in flight.
+      if (mapping.echo && !mapping.agentId) {
+        const copies = target.messages.filter((m) => m.type === 'user' && !m.sdkUuid);
+        const copy = copies.find((m) => m.content === mapping.echo?.text) ?? copies[0];
+        if (copy) copy.sdkUuid = mapping.echo.uuid;
+      }
       for (const result of mapping.toolResults) {
         applyToolResult(sink, result);
         // The ledger on disk just moved. The result says only that it did —
