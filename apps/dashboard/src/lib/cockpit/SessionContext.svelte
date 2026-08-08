@@ -93,8 +93,19 @@
   const isMissing = (error: unknown) => message(error).includes('does not exist');
 
   /**
-   * What a read that never came back says out loud. The exception underneath is
-   * the tunnel's own ("Failed to execute 'json' on 'Response'…") and names
+   * A machine that is away fails all three reads at once, and that is one fact
+   * about the machine rather than three about the files. Said once in the
+   * banner; the cards then only note that they are unreadable.
+   */
+  const anyFailed = $derived(Boolean(failed.user || failed.project || failed.local));
+  const allFailed = $derived(Boolean(failed.user && failed.project && failed.local));
+
+  /** A card whose read did not come back, in place of its content. */
+  const UNREADABLE = 'Unreadable while the machine is away.';
+
+  /**
+   * The tooltip on a single scope that did not answer. The exception underneath
+   * is the tunnel's own ("Failed to execute 'json' on 'Response'…") and names
    * neither the file nor a way out of it, so it stays in the tooltip for
    * whoever is debugging the wire rather than reading their memory.
    */
@@ -160,12 +171,13 @@
 {/snippet}
 
 {#snippet scope(name: string, file: string, problem: string | null)}
-  <span class="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+  <span class="flex min-w-0 items-center gap-2 text-micro text-muted-foreground">
     <span>{name}</span>
-    {#if problem}
-      <span class="min-w-0 shrink-0 text-error" role="alert" title="{unanswered(file)} ({problem})">
-        no answer
-      </span>
+    <!-- Not red: a machine that cannot be reached is a fact, not a thing the
+         reader has to answer. When all three failed the banner has said it
+         once already, so the cards keep quiet. -->
+    {#if problem && !allFailed}
+      <span class="min-w-0 shrink-0" title="{unanswered(file)} ({problem})">no answer</span>
     {/if}
   </span>
 {/snippet}
@@ -200,22 +212,42 @@
 
     <Sidebar.Content class="gap-4 overflow-x-hidden p-4">
       <Tabs.Content value="memory" class="flex flex-col gap-4">
-        <p class="text-caption">
-          What Claude Code reads at <span class="font-mono break-all">{cwd}</span> on this machine —
-          user, project, then local.
-        </p>
+        <div class="flex items-start gap-2">
+          <p class="min-w-0 flex-1 text-caption">
+            What Claude Code reads at <span class="font-mono break-words">{cwd}</span> on this machine
+            — user, project, then local.
+          </p>
+          <!-- The read only happens on the rising edge of open, so a failure
+               with the rail already open has no other way back. -->
+          {#if anyFailed && !allFailed}
+            <Button variant="ghost" size="xs" class="shrink-0" disabled={loading} onclick={load}>
+              Retry
+            </Button>
+          {/if}
+        </div>
 
         {#if loading}
           {#each [0, 1, 2] as slot (slot)}
             <Skeleton class="h-32 w-full shrink-0 rounded-xl" />
           {/each}
         {:else}
+          {#if allFailed}
+            <div
+              role="status"
+              title={failed.user}
+              class="flex shrink-0 items-center gap-2 rounded-xl bg-warning/10 px-4 py-3 text-caption"
+            >
+              <span class="min-w-0 flex-1">
+                This machine is not answering — memory can't be read.
+              </span>
+              <Button variant="ghost" size="xs" class="shrink-0" onclick={load}>Retry</Button>
+            </div>
+          {/if}
+
           <MemoryCard
             path="~/.claude/CLAUDE.md"
             content={user}
-            emptyText={failed.user
-              ? unanswered('its user memory')
-              : 'No user CLAUDE.md on this machine.'}
+            emptyText={failed.user ? UNREADABLE : 'No user CLAUDE.md on this machine.'}
           >
             {#snippet meta()}
               {@render scope('user', 'its user memory', failed.user)}
@@ -228,9 +260,9 @@
           <MemoryCard
             path="CLAUDE.md"
             content={project}
-            save={saveProject}
+            save={failed.project ? undefined : saveProject}
             emptyText={failed.project
-              ? unanswered('CLAUDE.md')
+              ? UNREADABLE
               : 'No CLAUDE.md in this project — click to write one.'}
           >
             {#snippet meta()}
@@ -241,9 +273,9 @@
           <MemoryCard
             path="CLAUDE.local.md"
             content={local}
-            save={saveLocal}
+            save={failed.local ? undefined : saveLocal}
             emptyText={failed.local
-              ? unanswered('CLAUDE.local.md')
+              ? UNREADABLE
               : 'No CLAUDE.local.md — click to write one. Git never sees this file.'}
           >
             {#snippet meta()}
