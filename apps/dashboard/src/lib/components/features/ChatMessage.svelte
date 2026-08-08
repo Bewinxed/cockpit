@@ -680,9 +680,11 @@
 							<Markdown source={message.content} />
 						{/if}
 
-						<!-- Action buttons -->
+						<!-- Action buttons. Above the bubble rather than over its corner:
+						     a one-line turn has no corner to spare, and a 32px control
+						     parked there sits on the words it belongs to. -->
 						<div
-							class="absolute -right-2 -top-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity"
+							class="absolute right-0 bottom-full mb-1 flex items-center gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity"
 						>
 							{#if message.type === 'user' && canEdit && onEditMessage}
 								<!-- Edit button for user messages -->
