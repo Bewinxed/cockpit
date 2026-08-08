@@ -481,6 +481,13 @@ export function describeTool(
   }
 }
 
+/** The tunnel hands results back as strings; anything else is shown as JSON. */
+export function resultText(value: unknown): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value === 'string') return value.length > 0 ? value : undefined;
+  return JSON.stringify(value, null, 2);
+}
+
 /** The first line of what went wrong, for a failed row's second line. */
 export function errorLine(result: string | undefined): string | undefined {
   return firstLine(result);
