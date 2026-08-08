@@ -5,7 +5,7 @@
 export type { MessageRendererProps, MessageRenderer, RendererMatch } from './types';
 
 // Registry functions
-export { getRenderer, registerRenderer, getRegisteredRenderers } from './registry';
+export { getRenderer, registerRenderer, getRegisteredRenderers, standsAlone } from './registry';
 
 // Individual renderer components (for direct import if needed)
 export { default as LoginPrompt } from './LoginPrompt.svelte';

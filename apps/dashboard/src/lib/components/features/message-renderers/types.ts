@@ -47,6 +47,13 @@ export interface MessageRenderer {
 	priority: number;
 	/** Name for debugging */
 	name: string;
+	/**
+	 * The renderer draws a whole tool call by itself, so the transcript must
+	 * not fold that call into a ToolGroup on its way past — see
+	 * {@link import('./registry').standsAlone}. Only tool messages need this;
+	 * nothing groups the other kinds.
+	 */
+	standalone?: boolean;
 }
 
 /**

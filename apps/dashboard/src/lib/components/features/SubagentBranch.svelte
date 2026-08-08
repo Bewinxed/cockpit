@@ -14,6 +14,7 @@
   import type { Message } from '$lib/cockpit/types';
   import type { SubagentState } from '$lib/utils/flow-types';
   import ChatMessage from './ChatMessage.svelte';
+  import { standsAlone } from './message-renderers';
   import ToolGroup from './ToolGroup.svelte';
 
   interface Props {
@@ -89,7 +90,10 @@
   const description = $derived(branch.description || spawn.metadata?.subagentDescription);
   const model = $derived(branch.model ?? spawn.metadata?.subagentModel);
 
-  const isTool = (message: Message) => message.type === 'tool.use' || message.type === 'tool.result';
+  // Grouped the way the main thread groups it, standalone renderers included:
+  // a subagent writing the plan down reads as a line here too.
+  const isTool = (message: Message) =>
+    (message.type === 'tool.use' || message.type === 'tool.result') && !standsAlone(message);
 
   // The branch's own transcript, grouped the way the main thread groups it.
   const groups = $derived.by(() => {

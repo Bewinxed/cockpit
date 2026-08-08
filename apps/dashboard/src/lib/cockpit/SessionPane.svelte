@@ -47,6 +47,7 @@
     ToolGroup,
     TranscriptSearch,
   } from '$lib/components/features';
+  import { standsAlone } from '$lib/components/features/message-renderers';
   import { FlowView } from '$lib/components/features/flow';
   import ModelCombobox from '$lib/cockpit/ModelCombobox.svelte';
   import ContextMeter from '$lib/cockpit/ContextMeter.svelte';
@@ -423,7 +424,10 @@
     void tick().then(pinToLatest);
   });
 
-  const isTool = (message: Message) => message.type === 'tool.use' || message.type === 'tool.result';
+  // A call whose renderer draws the whole thing is not folded into a group —
+  // the registry says which those are, so this does not keep its own list.
+  const isTool = (message: Message) =>
+    (message.type === 'tool.use' || message.type === 'tool.result') && !standsAlone(message);
 
   const subagents = $derived(session?.subagents ?? {});
 

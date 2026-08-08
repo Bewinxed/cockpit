@@ -1,9 +1,11 @@
+import { TASK_LEDGER_TOOLS } from '$lib/cockpit/tasks.svelte';
 import type { Message } from '$lib/cockpit/types';
 import type { MessageRenderer, RendererMatch } from './types';
 import LoginPrompt from './LoginPrompt.svelte';
 import ModelPicker from './ModelPicker.svelte';
 import MemoryPicker from './MemoryPicker.svelte';
 import AskQuestionPicker from './AskQuestionPicker.svelte';
+import TaskEvent from './TaskEvent.svelte';
 import CompactBoundary from './CompactBoundary.svelte';
 import ThinkingBlock from './ThinkingBlock.svelte';
 import ResultError from './ResultError.svelte';
@@ -48,6 +50,16 @@ const renderers: MessageRenderer[] = [
 		},
 		priority: 100,
 		name: 'AskQuestionPicker'
+	},
+	{
+		// Writing the plan down is not work to inspect: these render as one
+		// quiet line each, which is also why `standsAlone` keeps them out of
+		// the tool groups. `TaskGet`/`TaskList` only read, so they stay generic.
+		component: TaskEvent,
+		match: (m: Message) => m.type === 'tool.use' && TASK_LEDGER_TOOLS.has(m.metadata?.toolName ?? ''),
+		priority: 100,
+		name: 'TaskEvent',
+		standalone: true
 	},
 
 	// Visual system message types (priority 80)
@@ -96,6 +108,21 @@ export function getRenderer(message: Message): RendererMatch {
 		}
 	}
 	return null;
+}
+
+/**
+ * Whether this message draws itself and must not be folded into a ToolGroup.
+ * The transcript groups consecutive tool calls, which would swallow a renderer
+ * that was written to stand on its own — so the one list that knows a message
+ * has its own component is the one that says so, rather than each grouping
+ * site keeping a list of tool names.
+ *
+ * Opt-in per renderer: `AskQuestionPicker` also matches `tool.use`, but it is
+ * a card the reader answers rather than a line, and enabling it here would
+ * change a surface nothing has asked to change.
+ */
+export function standsAlone(message: Message): boolean {
+	return renderers.some((renderer) => renderer.standalone && renderer.match(message));
 }
 
 /**
