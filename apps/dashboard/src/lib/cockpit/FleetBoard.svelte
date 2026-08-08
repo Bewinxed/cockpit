@@ -1,4 +1,11 @@
 <script lang="ts">
+  /**
+   * The fleet board — what every machine and project is running, and what needs
+   * a human. Kept alive by `session/+layout.svelte` alongside the conversation
+   * panes rather than mounted by a route of its own: Fleet is the first tab in
+   * the strip, so leaving it is switching tabs, and coming back should find the
+   * board where it was left rather than rebuilt and re-animated.
+   */
   import {
     IconChevronRight,
     IconPlus,
@@ -28,6 +35,14 @@
   import { isTyping } from '$lib/utils/typing';
   import { Button } from '$lib/components/ui/button';
   import * as Collapsible from '$lib/components/ui/collapsible';
+
+  interface Props {
+    /** Whether the board is the tab on screen. The keyboard belongs to that
+     *  one; hidden, it only keeps its place. */
+    active: boolean;
+  }
+
+  let { active }: Props = $props();
 
   /** Groups the fleet board shows: a project, or a machine with ungrouped sessions. */
   type BoardGroup =
@@ -121,7 +136,9 @@
   }
 
   function onKeydown(event: KeyboardEvent): void {
-    if (!peeked || isTyping()) return;
+    // The board is one of several tabs kept mounted at once; only the one on
+    // screen answers for the keyboard.
+    if (!active || !peeked || isTyping()) return;
     if (event.key === 'Escape') {
       peeked = null;
       return;
