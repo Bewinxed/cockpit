@@ -15,6 +15,7 @@
   import { quintOut } from 'svelte/easing';
   import { MediaQuery } from 'svelte/reactivity';
   import { goto } from '$app/navigation';
+  import { page } from '$app/state';
   import type { SDKSessionInfo } from '@cockpit/core';
   import {
     cockpit,
@@ -117,6 +118,29 @@
     spawnPrefill = prefill;
     spawnOpen = true;
   }
+
+  /**
+   * "New session on this machine", wherever it is asked from — the rail's machine
+   * menu, the jump palette — is a link to `/session?machine=<id>`, and the board
+   * is where that lands, so the board is what has to answer it. The params are
+   * consumed once and then swapped out of the URL: left there, a refresh or a
+   * return to this tab re-opens a panel the reader already dismissed. The board
+   * is kept alive across tab switches, so this reacts to the URL rather than to
+   * mounting, and the latch is what keeps one arrival from being read twice.
+   */
+  let consumed = $state.raw<string | null>(null);
+  $effect(() => {
+    if (!active || page.params.id) return;
+    const url = page.url.href;
+    const machineId = page.url.searchParams.get('machine');
+    const cwd = page.url.searchParams.get('cwd');
+    untrack(() => {
+      if (!machineId || consumed === url) return;
+      consumed = url;
+      openSpawn({ machineId, cwd: cwd ?? undefined });
+      void goto('/session', { replaceState: true, keepFocus: true, noScroll: true });
+    });
+  });
 
   const machineCount = $derived(cockpit.machines.length);
   const onlineCount = $derived(cockpit.onlineMachines.length);
