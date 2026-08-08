@@ -20,14 +20,14 @@
 <StoredSessionMenu {machineId} {info}>
   <a
     href={transcriptHref(machineId, info)}
-    class="flex min-h-9 items-center rounded-lg px-3 py-1.5
+    class="flex min-h-9 items-center rounded-lg px-4 py-1.5
       transition-colors duration-150 ease-out hover:bg-accent hover:text-accent-foreground"
   >
     <!-- Full-width band, measured content: the same bargain the live rows make. -->
-    <span class="flex w-full max-w-3xl items-center gap-2.5">
-      <!-- Where a live row carries its state dot, so the two lists a machine card
-           stacks share one title column. -->
-      <span class="size-2 shrink-0" aria-hidden="true"></span>
+    <span class="flex w-full max-w-3xl items-center gap-3">
+      <!-- Where a live row carries its state dot and the card's header carries
+           its mark, so a card has one title column top to bottom. -->
+      <span class="w-5 shrink-0" aria-hidden="true"></span>
       <!-- Stops at a readable measure, as the live rows do, so a runaway title
            does not crush the path beside it. -->
       <span class="min-w-0 max-w-lg truncate text-[13px]">{sessionTitle(info)}</span>

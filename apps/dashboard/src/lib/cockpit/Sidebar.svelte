@@ -100,7 +100,6 @@
   import * as Sidebar from '$lib/components/ui/sidebar';
   import {
     IconChevronRight,
-    IconFolderDuo,
     IconPinFilled,
     IconPlus,
     IconSparklesDuo,
@@ -130,13 +129,24 @@
   import { machineLabel, signInWarning } from './machine';
   import { orderMachines, rail, type PinKind } from './rail.svelte';
 
-  /** 32px row, one line, the same slots wherever the rail draws one. */
-  const ROW = 'h-8 gap-2 rounded-lg px-2 text-[13px]';
+  /**
+   * 32px row, one line, the same slots wherever the rail draws one. The right
+   * inset is the folder header's "+" gutter, taken by every row rather than by
+   * that one: a tail that stops 28px short of its neighbour's is the ragged
+   * edge, and reserving the gutter once is what puts every tail on one line.
+   */
+  const ROW = 'h-8 gap-2 rounded-lg pr-9 pl-2 text-[13px]';
   const LABEL = 'h-7 gap-1.5 px-2 text-micro font-medium text-muted-foreground';
   const ITEM = 'rounded-lg focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none';
   /**
    * The leading slot every row shares — a 16px glyph, or a 6px dot centred in
    * the same space, so titles line up down the whole rail whatever leads them.
+   *
+   * A top-level row takes two of them: state or disclosure first, then the
+   * folder's mark. A row with no mark leaves the second one empty rather than
+   * closing it up, which is what puts a session's title in the same column as
+   * the folder headers above and below it — and it is the same 24px a nested
+   * row is indented by, so the whole rail runs down one line.
    */
   const LEAD = 'flex w-4 shrink-0 items-center justify-center';
   /** Everything to the right of a title, in one cluster at the far edge. */
@@ -507,12 +517,15 @@
             <ActivityDot activity="blocked" size={1.5} />
           {/if}
         </span>
+        <span class={LEAD}></span>
         <span class="min-w-0 truncate {name.path ? 'font-mono' : ''}">{name.text}</span>
         <span class={TAIL}>
           {#if failed}
             <span class="text-micro font-medium text-error">Failed</span>
           {/if}
-          {@render machineChip(instance.machineId)}
+          <!-- The glyph, not the 112px name badge: a queue row is a session
+               row, and it ends where every other tail ends. -->
+          {@render machineGlyph(instance.machineId)}
         </span>
       </a>
     {/snippet}
@@ -533,7 +546,6 @@
   {@const current = isCurrent(`/session/${instance.id}`)}
   {@const showing = unfolded[instance.id] ?? false}
   {@const name = titleOf(instance)}
-  {@const Mark = flat ? folderPrefs.mark(flat.cwd) : IconFolderDuo}
   <LiveSessionMenu
     {instance}
     ongroup={flat ? () => folderPrefs.setGrouping(flat.cwd, 'grouped') : undefined}
@@ -560,31 +572,22 @@
               <ActivityDot {activity} size={1.5} />
             {/if}
           </span>
-          <!-- A row standing in for its own folder carries the folder's hue
-               and mark, so the directory is still recognisable without its
-               header. -->
+          <!-- A session is not a folder, so it wears no folder mark — the slot
+               its folder's mark would take is left empty, and the directory it
+               stands for is said by the leaf in the tail instead. -->
           {#if flat}
-            <Mark class="identity-ink shrink-0" style={identityVar(flat.cwd)} />
+            <span class={LEAD}></span>
           {/if}
           <span
             class="min-w-0 truncate {name.path ? 'font-mono' : ''} {sleeping
               ? 'text-muted-foreground'
-              : ''}"
+              : name.path && flat
+                ? 'identity-ink'
+                : ''}"
+            style={flat && name.path && !sleeping ? identityVar(flat.cwd) : undefined}
           >
             {name.text}
           </span>
-          <!-- Where it runs, since no header says it any more — and only when
-               the title is not already that same path. A leaf is short by
-               nature, so here it is the title that yields: a sliver of a
-               directory name is worth less than the room it saved. -->
-          {#if flat && !name.path}
-            <span
-              class="max-w-24 shrink-0 truncate font-mono text-micro text-muted-foreground"
-              title={flat.cwd}
-            >
-              {flat.name}
-            </span>
-          {/if}
           <!-- A glance cue, not an alert: it says only that this one stopped
                while you were elsewhere, and it goes when you open it. -->
           {#if unseen[instance.id] !== undefined}
@@ -622,6 +625,21 @@
             {/if}
             {#if rail.isPinned('session', instance.id)}
               <IconPinFilled class="size-3 text-muted-foreground/60" />
+            {/if}
+            <!-- Where it runs, since no header says it any more — and only when
+                 the title is not already that same path. It carries the
+                 directory's hue, which is the whole of what the folder mark
+                 used to say on a row that is not a folder. -->
+            {#if flat && !name.path}
+              <span
+                class="max-w-24 truncate font-mono text-micro {sleeping
+                  ? 'text-muted-foreground'
+                  : 'identity-ink'}"
+                style={sleeping ? undefined : identityVar(flat.cwd)}
+                title={flat.cwd}
+              >
+                {flat.name}
+              </span>
             {/if}
             {#if chip}
               {@render machineChip(instance.machineId)}
@@ -726,7 +744,7 @@
     oncollapseothers={() => collapseOthers(folder.id)}
   >
     <div class="group/folder relative">
-      <Sidebar.MenuButton class="{ROW} pr-9">
+      <Sidebar.MenuButton class={ROW}>
         {#snippet child({ props })}
           <button
             {...props}
@@ -746,11 +764,15 @@
               />
             </span>
             <!-- The directory's own hue and mark, except while it is shouting:
-                 what is waiting on a human outranks what the folder wears. -->
-            <Mark
-              class="shrink-0 {tinted ? 'text-error' : 'identity-ink'}"
-              style={tinted ? undefined : identityVar(folder.cwd)}
-            />
+                 what is waiting on a human outranks what the folder wears. In
+                 a slot of its own, so a wider mark cannot push the title out
+                 of the column the rows below it keep. -->
+            <span class={LEAD}>
+              <Mark
+                class="size-4 {tinted ? 'text-error' : 'identity-ink'}"
+                style={tinted ? undefined : identityVar(folder.cwd)}
+              />
+            </span>
             <span class="min-w-0 truncate font-medium {folder.mono ? 'font-mono' : ''}">
               {folder.name}
             </span>
@@ -840,6 +862,7 @@
       <span class={LEAD}>
         <OsMark os={machine.os} class="text-muted-foreground" />
       </span>
+      <span class={LEAD}></span>
       <span class="min-w-0 truncate {online ? '' : 'text-muted-foreground'}">
         {machineLabel(machine.hostname)}
       </span>
@@ -887,6 +910,7 @@
               <span class={LEAD}>
                 <IconTools class="size-4 text-muted-foreground" />
               </span>
+              <span class={LEAD}></span>
               <span>Tools</span>
             </a>
           {/snippet}

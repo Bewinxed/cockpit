@@ -3,7 +3,6 @@
   import { onMount } from 'svelte';
   import { fly } from 'svelte/transition';
   import { quintOut } from 'svelte/easing';
-  import { IconSparklesDuo } from '$lib/icons';
   import { Badge } from '$lib/components/ui/badge';
   import { ACTIVITY_LABEL, SLEEPING_HINT, SLEEPING_LABEL } from './activity';
   import ActivityDot from './ActivityDot.svelte';
@@ -52,27 +51,31 @@
   <a
     href="/session/{instance.id}"
     title={sleeping ? SLEEPING_HINT : undefined}
-    class="group flex min-h-9 flex-col justify-center gap-0.5 rounded-lg px-3 py-1.5
+    class="group flex min-h-9 flex-col justify-center gap-0.5 rounded-lg px-4 py-1.5
       transition-colors duration-150 ease-out hover:bg-accent hover:text-accent-foreground
       {failed || activity === 'blocked' ? 'bg-error/10' : ''}"
   >
     <!-- The row's band is the card's full width, so the whole strip is the
          hover target; what it *says* stops at a scannable measure, or an
          ultrawide track leaves the state word a screen away from the name. -->
-    <span class="flex max-w-3xl items-center gap-2.5">
-      {#if failed}
-        <span class="size-2 shrink-0 rounded-full bg-error"></span>
-      {:else if sleeping}
-        <span class="size-2 shrink-0 rounded-full bg-muted-foreground/40"></span>
-      {:else}
-        <ActivityDot {activity} />
-      {/if}
-      {#if quest}
-        <IconSparklesDuo class="size-4 shrink-0 text-muted-foreground" />
-      {/if}
+    <span class="flex max-w-3xl items-center gap-3">
+      <!-- The card's lead column: the header's 20px mark sits in the same one,
+           so a card has a single title column rather than a header set in from
+           the rows it heads. -->
+      <span class="flex w-5 shrink-0 items-center justify-center">
+        {#if failed}
+          <span class="size-2 rounded-full bg-error"></span>
+        {:else if sleeping}
+          <span class="size-2 rounded-full bg-muted-foreground/40"></span>
+        {:else}
+          <ActivityDot {activity} />
+        {/if}
+      </span>
       <!-- `max-w-lg`: a title that runs on — a pasted URL, usually — stops at a
            readable measure instead of crushing the path beside it. -->
       <span class="min-w-0 max-w-lg truncate text-[13px]">{title}</span>
+      <!-- A quest is named beside its title rather than glyphed in front of it:
+           the lead slot belongs to state, and the titles keep their column. -->
       {#if quest}
         <Badge variant="secondary" class="shrink-0 text-micro font-normal">side quest</Badge>
       {/if}
@@ -107,7 +110,7 @@
       </span>
     </span>
     {#if activity === 'working' && tool}
-      <span class="flex max-w-3xl items-baseline gap-2 pl-[18px] text-micro text-muted-foreground">
+      <span class="flex max-w-3xl items-baseline gap-2 pl-8 text-micro text-muted-foreground">
         <span class="shrink-0">{tool.name}</span>
         <span class="truncate font-mono">{tool.glance}</span>
       </span>

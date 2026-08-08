@@ -49,15 +49,18 @@
            1.1-.5.6-.9 1.4-.7 2.2.8.1 1.6-.4 2.1-1Z"
       />
     {:else if shape === 'tux'}
-      <!-- Nonzero winding, so the belly and face are cut out of the body and
-           the eyes and beak are filled back into the face. -->
+      <!-- Redrawn for 16px (user, 2026-08-08): the old mark's white belly inside
+           a tall dark body rasterised as a padlock plate and its head as the
+           shackle. The silhouette carries the bird instead — feet, flippers, a
+           wide body and a head with two eyes far enough apart to survive one
+           pixel each — and no belly is cut out of it at all. Nonzero winding:
+           the eyes and the beak notch are the only holes. -->
       <path
-        d="M8 .7C9.9.7 11.1 2.3 11.1 4.2c0 .6-.1 1.1-.1 1.5 0 .7.5 1.2 1.1 1.9 1.1 1.4 1.7 2.8 1.7 4.2 0
-           1.6-1.5 2.6-5.8 2.6s-5.8-1-5.8-2.6c0-1.4.6-2.8 1.7-4.2C4.5 6.9 5 6.4 5 5.7c0-.4-.1-.9-.1-1.5C4.9
-           2.3 6.1.7 8 .7ZM5.3 10.6a2.7 3 0 0 0 5.4 0 2.7 3 0 0 0-5.4 0ZM5.9 4.6a2.1 2.3 0 0 0 4.2 0 2.1 2.3
-           0 0 0-4.2 0ZM6.45 4.2a.5.7 0 0 1 1 0 .5.7 0 0 1-1 0ZM8.55 4.2a.5.7 0 0 1 1 0 .5.7 0 0 1-1
-           0ZM6.9 5.9a1.1.7 0 0 1 2.2 0 1.1.7 0 0 1-2.2 0ZM2.71 14.58a2.2.9-18 0 1 4.18-1.36 2.2.9-18 0
-           1-4.18 1.36ZM9.11 13.22a2.2.9 18 0 1 4.18 1.36 2.2.9 18 0 1-4.18-1.36Z"
+        d="M1.8 14.6a2.4 1.25 0 0 1 4.8 0 2.4 1.25 0 0 1-4.8 0ZM9.4 14.6a2.4 1.25 0 0 1 4.8 0 2.4 1.25 0 0
+           1-4.8 0ZM2.57 7.13a3.1 1.35 82 0 1 .86 6.14 3.1 1.35 82 0 1-.86-6.14ZM13.43 7.13a3.1 1.35 98 0 1
+           -.86 6.14 3.1 1.35 98 0 1 .86-6.14ZM3.1 9.9a4.9 5.1 0 0 1 9.8 0 4.9 5.1 0 0 1-9.8 0ZM4.7 4.1a3.3
+           3.4 0 0 1 6.6 0 3.3 3.4 0 0 1-6.6 0ZM5.55 3.9a.9 1.1 0 0 0 1.8 0 .9 1.1 0 0 0-1.8 0ZM8.65 3.9a.9
+           1.1 0 0 0 1.8 0 .9 1.1 0 0 0-1.8 0ZM8 5.6 6.6 7h2.8Z"
       />
     {:else}
       <path d="M7.6 2.5 15 1.4v6.1H7.6ZM6.9 2.6v4.9H1V3.4ZM6.9 8.5v4.9L1 12.6V8.5ZM7.6 8.5H15v6.1L7.6 13.5Z" />
