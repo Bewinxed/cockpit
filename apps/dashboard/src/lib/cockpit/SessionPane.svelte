@@ -1197,6 +1197,14 @@
           class="min-w-0 flex-1 truncate text-sm font-medium"
           title={[heading, cwdLabel].join('\n')}
         >{heading}</h1>
+        <!-- Below `2xl` the whole path does not fit, but its last segment does,
+             and that is the segment that tells two checkouts apart. -->
+        {#if leaf !== heading}
+          <span
+            class="hidden shrink-0 truncate font-mono text-micro text-muted-foreground sm:block 2xl:hidden"
+            title={cwdLabel}
+          >{leaf}</span>
+        {/if}
         <span
           class="hidden max-w-[60%] shrink-0 truncate font-mono text-micro text-muted-foreground [direction:rtl] 2xl:block"
           title={cwdLabel}
