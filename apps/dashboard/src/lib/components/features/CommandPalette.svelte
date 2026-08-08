@@ -21,7 +21,7 @@
     optionIdPrefix = 'cmd-opt',
   }: Props = $props();
 
-  let itemRefs: HTMLButtonElement[] = [];
+  let itemRefs: HTMLButtonElement[] = $state([]);
 
   // Scroll selected item into view when index changes. Instant, not smooth:
   // held arrow keys outrun a tween and the list lags behind the highlight.
