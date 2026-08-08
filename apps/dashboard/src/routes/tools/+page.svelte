@@ -1,9 +1,9 @@
 <script lang="ts">
   /**
    * What the fleet's machines carry: the workflow CLIs (NEW.md §10), the MCP
-   * servers, and the skill plugins (NEW.md §11). Four tabs over one hub read,
-   * because they are four answers to the same question — what can a session
-   * started on that machine reach?
+   * servers, the skill plugins and the subagents (NEW.md §11). Five tabs over
+   * one hub read, because they are five answers to the same question — what can
+   * a session started on that machine reach?
    *
    * The tab is a search param so a tab can be linked to, and the load never
    * reads the URL, so switching one costs no request.
@@ -11,10 +11,11 @@
   import { onMount, untrack } from 'svelte';
   import { page } from '$app/state';
   import { goto } from '$app/navigation';
-  import type { FleetConfig, FleetSkillMeta } from '@cockpit/core';
+  import type { FleetAgent, FleetConfig, FleetSkillMeta } from '@cockpit/core';
   import * as Tabs from '$lib/components/ui/tabs';
   import { cockpit } from '$lib/cockpit/client.svelte';
   import type { FleetMemoryRow } from '$lib/cockpit/fleet';
+  import FleetAgents from '$lib/cockpit/FleetAgents.svelte';
   import FleetMcp from '$lib/cockpit/FleetMcp.svelte';
   import FleetMemory from '$lib/cockpit/FleetMemory.svelte';
   import FleetSkills from '$lib/cockpit/FleetSkills.svelte';
@@ -28,6 +29,7 @@
     { id: 'tools', label: 'Tools' },
     { id: 'mcp', label: 'MCP servers' },
     { id: 'skills', label: 'Skills & plugins' },
+    { id: 'agents', label: 'Agents' },
     { id: 'memory', label: 'Memory' },
   ] as const;
 
@@ -44,6 +46,7 @@
    */
   let config = $state<FleetConfig>(untrack(() => data.config));
   let skills = $state<FleetSkillMeta[]>(untrack(() => data.skills));
+  let agents = $state<FleetAgent[]>(untrack(() => data.agents));
   let memory = $state<FleetMemoryRow | null>(untrack(() => data.memory));
 
   /** Re-seed from the load when `data` changes on navigation. The identity of
@@ -57,6 +60,7 @@
       seeded = data.config;
       config = data.config;
       skills = data.skills;
+      agents = data.agents;
       memory = data.memory;
     }
   });
@@ -105,6 +109,10 @@
 
       <Tabs.Content value="skills" class="flex flex-col gap-4 pt-4">
         <FleetSkills {config} {skills} {machines} {settling} error={data.fleetError} />
+      </Tabs.Content>
+
+      <Tabs.Content value="agents" class="flex flex-col gap-4 pt-4">
+        <FleetAgents {agents} {machines} {settling} error={data.fleetError} />
       </Tabs.Content>
 
       <Tabs.Content value="memory" class="flex flex-col gap-4 pt-4">

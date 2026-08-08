@@ -152,6 +152,22 @@ export const skills = sqliteTable('skills', {
   createdAt: timestamp('created_at').notNull().$defaultFn(() => new Date()),
 });
 
+/**
+ * The subagent definitions the fleet writes into `~/.claude/agents/` (NEW.md
+ * §11). A subagent is its markdown file, so the file is what is stored — front
+ * matter and prompt body verbatim — and the front matter's own `name`, which is
+ * what a delegation asks for, is the key.
+ */
+export const fleetAgents = sqliteTable('fleet_agents', {
+  /** Also the file it lands in on every machine: `<name>.md`. */
+  name: text('name').primaryKey(),
+  content: text('content').notNull(),
+  /** sha256 hex of the content — what tells a machine's copy apart from this. */
+  hash: text('hash').notNull(),
+  bytes: integer('bytes').notNull(),
+  updatedAt: timestamp('updated_at').notNull().$defaultFn(() => new Date()),
+});
+
 /** The fleet's user-scope CLAUDE.md — one row, one document (NEW.md §11). */
 export const fleetMemory = sqliteTable('fleet_memory', {
   /** Always `memory`: the fleet has one, and a table with a key says so cheaply. */

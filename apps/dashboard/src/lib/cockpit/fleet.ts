@@ -1,25 +1,30 @@
 /**
- * The dashboard's half of fleet MCP + skills (NEW.md §11): the hub's desired
- * state over REST, and one machine-scoped read for browsing a marketplace.
- * Every write fans out to the online machines from the hub itself, so nothing
- * here ever loops over machines — it changes the fleet's mind and lets the
+ * The dashboard's half of fleet MCP, skills and subagents (NEW.md §11): the
+ * hub's desired state over REST, plus the two machine-scoped reads — a
+ * marketplace's catalog and the subagent files a machine really has. Every
+ * write fans out to the online machines from the hub itself, so nothing here
+ * ever loops over machines — it changes the fleet's mind and lets the
  * `instances` frames say what came of it.
  */
 import {
   MARKETPLACE_CATALOG,
+  parseAgentFrontMatter,
   type ConfigInspection,
+  type FleetAgent,
   type FleetConfig,
   type FleetMarketplace,
   type FleetMcpConfig,
   type FleetMcpServer,
   type FleetPlugin,
   type FleetSkillMeta,
+  type FsEntry,
   type MarketplacePluginInfo,
   type McpHttpServerConfig,
   type McpSSEServerConfig,
 } from '@cockpit/core';
 import { CONTROL_TIMEOUT_MS } from '$lib/config';
-import { machineControl, type Machine } from './client.svelte';
+import { machineControl, machineFs, type Machine } from './client.svelte';
+import { homeOf } from './tasks.svelte';
 
 /** The fleet's user-scope CLAUDE.md, as the hub stores it (NEW.md §11). */
 export interface FleetMemoryRow {
@@ -37,8 +42,15 @@ export interface FleetMemoryRow {
 export interface FleetSnapshot {
   config: FleetConfig;
   skills: FleetSkillMeta[];
+  /**
+   * The subagents, file and all: a definition is a page of markdown, so the
+   * editor is seeded from this read rather than fetching each one again.
+   */
+  agents: FleetAgent[];
   /** Null while the fleet keeps no memory, which is where every fleet starts. */
   memory: FleetMemoryRow | null;
+  /** Machines the hub could not write the subagents to, by machineId → why. */
+  unpushable: Record<string, string>;
 }
 
 /**
@@ -331,6 +343,91 @@ export const refreshSkill = (name: string): Promise<FleetSkillMeta> =>
 
 export const removeSkill = (name: string): Promise<void> =>
   erase(`/api/fleet/skills/${encodeURIComponent(name)}`, `remove ${name}`);
+
+/**
+ * Stores a subagent's file and writes it to every machine that is online. The
+ * markdown is the whole of it: the hub parses the front matter to refuse a
+ * broken one and stores what it was given either way.
+ */
+export const saveAgent = (name: string, content: string): Promise<FleetAgent> =>
+  put(`/api/fleet/agents/${encodeURIComponent(name)}`, { content }, `save ${name}`);
+
+/**
+ * Forgets it here. The file stays on the machines — the `fs` verb has no
+ * delete — so discovery lists it as unmanaged until the daemon can take it
+ * away itself.
+ */
+export const removeAgent = (name: string): Promise<void> =>
+  erase(`/api/fleet/agents/${encodeURIComponent(name)}`, `remove ${name}`);
+
+/** Writes the subagents again, at every machine that is online. */
+export const pushAgents = (): Promise<{ unpushable: Record<string, string> }> =>
+  send('/api/fleet/agents/push', { method: 'POST' }, 'push the subagents to the machines');
+
+/** One subagent found on a machine, whoever wrote it. */
+export interface DiscoveredAgent {
+  /** The front matter's `name` — the identity, whatever the file is called. */
+  name: string;
+  path: string;
+  content: string;
+  description?: string;
+}
+
+/** A `.md` under the agents directory, as a listing gives it. */
+const markdown = (entry: FsEntry): boolean => entry.kind === 'file' && entry.name.endsWith('.md');
+
+/**
+ * The subagent files a machine really has under `~/.claude/agents`. Claude Code
+ * scans that directory recursively; one level down is as deep as anybody files
+ * them, and a walk that goes deeper over a socket is a walk that keeps the page
+ * waiting.
+ *
+ * A machine whose home cannot be worked out, or which has no such directory,
+ * answers with nothing at all — absence over placeholder.
+ */
+export async function discoverAgents(machineId: string): Promise<DiscoveredAgent[]> {
+  const home = await homeOf(machineId);
+  if (!home) return [];
+
+  const root = `${home}/.claude/agents`;
+  let entries: FsEntry[];
+  try {
+    entries = await machineFs<FsEntry[]>(machineId, 'list', root);
+  } catch {
+    return [];
+  }
+
+  const paths = entries.filter(markdown).map((entry) => `${root}/${entry.name}`);
+  for (const dir of entries.filter((entry) => entry.kind === 'dir')) {
+    try {
+      const nested = await machineFs<FsEntry[]>(machineId, 'list', `${root}/${dir.name}`);
+      paths.push(...nested.filter(markdown).map((entry) => `${root}/${dir.name}/${entry.name}`));
+    } catch {
+      // One unreadable subdirectory is not a reason to lose the rest of them.
+    }
+  }
+
+  const read = await Promise.all(
+    paths.map(async (path) => {
+      try {
+        const content = await machineFs<string>(machineId, 'read', path);
+        const front = parseAgentFrontMatter(content);
+        // A markdown file with no `name` is not a subagent — it is a note
+        // somebody left in the directory, and Claude Code ignores it too.
+        if (!front.name) return null;
+        return {
+          name: front.name,
+          path,
+          content,
+          ...(front.description ? { description: front.description } : {}),
+        };
+      } catch {
+        return null;
+      }
+    })
+  );
+  return read.filter((row): row is DiscoveredAgent => row !== null);
+}
 
 /** One superseded version of the memory, as the history list reads it. */
 export interface FleetMemoryVersion {

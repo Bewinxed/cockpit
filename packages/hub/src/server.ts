@@ -7,6 +7,7 @@ import type {
   FleetMcpConfig,
   FleetSyncReport,
   FramePayload,
+  FsPayload,
   InstanceRow,
   PermissionMode,
   SkillFile,
@@ -17,9 +18,11 @@ import type {
 } from '@cockpit/core';
 import {
   AGENT_BUSY,
+  agentProblem,
   FLEET_STATUS,
   FLEET_SYNC,
   INSPECT_CONFIG,
+  parseAgentFrontMatter,
   READ_MEMORY_FILE,
   READ_SKILL_FILES,
   TOOL_CATALOG,
@@ -238,6 +241,9 @@ const mcpProblem = (name: string, config: Record<string, unknown>): string | und
 
 /** What a skill may be called: it names a directory under `~/.claude/skills`. */
 const SKILL_NAME = /^[A-Za-z0-9._-]+$/;
+
+/** `/home/<user>` or `/Users/<user>` — the prefix every path on a machine shares. */
+const HOME_PREFIX = /^(\/(?:home|Users)\/[^/]+)/;
 
 /** Whether a machine's last report says it still has anything of the fleet's on it. */
 const holdsFleet = (report: FleetSyncReport | undefined): boolean =>
@@ -527,6 +533,106 @@ export const createServer = ({ registry, db, pending }: HubServices) => {
     }
   };
 
+  /**
+   * Machines the subagents could not be written to, by machineId → why. Read
+   * back in the fleet response, so a definition that is going nowhere says so
+   * on the page rather than only in a log.
+   */
+  const unpushable = new Map<string, string>();
+
+  /**
+   * Where this machine's home directory is, taken off the directories its
+   * sessions are open in — a session running in `/home/x/repo` has already said
+   * what the home is.
+   *
+   * A heuristic, and knowingly so: until register carries `home` — see the
+   * parked daemon batch — the instance rows are the only thing on the hub's
+   * side that has ever named a real path on that machine.
+   */
+  const homeOf = (machineId: string): string | undefined => {
+    for (const row of db.listInstances()) {
+      if (row.machineId !== machineId) continue;
+      const match = HOME_PREFIX.exec(row.cwd);
+      if (match) return match[1];
+    }
+    return undefined;
+  };
+
+  /**
+   * Writes one file on a machine over the `fs` verb. The daemon answers a write
+   * with a `control_result` frame, exactly as it answers a control call, so the
+   * same `waiting` map routes the reply and no dashboard is broadcast a write
+   * it never asked for.
+   */
+  const writeMachineFile = (
+    machineId: string,
+    agent: HubSocket,
+    path: string,
+    content: string
+  ): Promise<ControlResult | 'timeout'> => {
+    const requestId = crypto.randomUUID();
+    const payload: FsPayload = { requestId, op: 'write', path, content };
+    agent.send({ verb: 'fs', machineId, requestId, payload } satisfies Envelope<FsPayload>);
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        waiting.delete(requestId);
+        resolve('timeout');
+      }, READ_TIMEOUT_MS);
+      waiting.set(requestId, (frame) => {
+        clearTimeout(timer);
+        resolve(frame);
+      });
+    });
+  };
+
+  /**
+   * Writes every fleet subagent into `<home>/.claude/agents/` on one machine
+   * (NEW.md §11). Claude Code re-scans that directory within seconds, so a
+   * definition saved here is delegatable out there without anything being
+   * restarted.
+   *
+   * Unconditional: a definition is a page of markdown, and deciding whether to
+   * write it would cost the read that the write itself costs.
+   *
+   * Phase B: `syncFleetConfig` gets the agents and the daemon owns convergence
+   * — and with it removal, which a verb of list/read/write cannot do.
+   */
+  const pushAgents = async (machineId: string): Promise<void> => {
+    const agent = registry.agent(machineId);
+    const files = db.listFleetAgents();
+    if (!agent || files.length === 0) return;
+
+    const home = homeOf(machineId);
+    if (!home) {
+      unpushable.set(machineId, 'no session on this machine has said where its home directory is');
+      return;
+    }
+
+    for (const file of files) {
+      const answer = await writeMachineFile(
+        machineId,
+        agent,
+        `${home}/.claude/agents/${file.name}.md`,
+        file.content
+      );
+      if (answer === 'timeout' || !answer.ok) {
+        unpushable.set(
+          machineId,
+          answer === 'timeout'
+            ? 'the machine did not answer the write'
+            : (answer.error ?? 'the machine refused the write')
+        );
+        return;
+      }
+    }
+    unpushable.delete(machineId);
+  };
+
+  /** A definition changed: every machine that is online takes it now. */
+  const fanOutAgents = (): void => {
+    for (const machineId of registry.machineIds()) void pushAgents(machineId);
+  };
+
   /** The fleet changed: every machine that is online converges now, not on its next reconnect. */
   const fanOutFleet = (): void => {
     for (const machineId of registry.machineIds()) {
@@ -655,13 +761,17 @@ export const createServer = ({ registry, db, pending }: HubServices) => {
     //
     // The skills come back as rows rather than as part of the config: what the
     // machines get carries every skill's files, and a page that only lists them
-    // must not weigh what the fleet weighs.
+    // must not weigh what the fleet weighs. The subagents do carry their files —
+    // a definition is a page of markdown, and an editor that has to fetch each
+    // one again is a round trip for nothing.
     .get('/api/fleet', () => {
       const { mcp, marketplaces, plugins } = db.fleetConfig();
       return {
         config: { mcp, marketplaces, plugins },
         skills: db.listSkills(),
+        agents: db.listFleetAgents(),
         memory: db.getFleetMemory() ?? null,
+        unpushable: Object.fromEntries(unpushable),
       };
     })
     .put(
@@ -828,6 +938,37 @@ export const createServer = ({ registry, db, pending }: HubServices) => {
       db.deleteSkill(params.name);
       fanOutFleet();
       return { ok: true };
+    })
+    // A subagent is its markdown file (NEW.md §11): front matter over a body
+    // that becomes the system prompt. The file is stored verbatim, and the only
+    // thing parsed out of it is what a broken one has to be refused on — the
+    // name a delegation asks for, and the description it decides to delegate on.
+    .put(
+      '/api/fleet/agents/:name',
+      { body: t.Object({ content: t.String() }) },
+      ({ params, body, status }) => {
+        const problem = agentProblem(parseAgentFrontMatter(body.content), params.name);
+        if (problem) return status(400, problem);
+
+        const agent = db.putFleetAgent({ name: params.name, content: body.content });
+        fanOutAgents();
+        return agent;
+      }
+    )
+    // Forgotten here, and left where it is out there: the `fs` verb has list,
+    // read and write and no delete, so every machine keeps the file until Phase
+    // B's daemon-side sync can take it away. Discovery then shows the leftover
+    // as unmanaged, which is the truth rather than a comforting silence.
+    .delete('/api/fleet/agents/:name', ({ params }) => {
+      db.deleteFleetAgent(params.name);
+      return { ok: true };
+    })
+    // The click for a machine that was asleep when a definition was written, and
+    // for one whose home the hub could only work out later. Awaited, so the
+    // answer carries what this attempt could not reach rather than the last one.
+    .post('/api/fleet/agents/push', async () => {
+      await Promise.all(registry.machineIds().map((machineId) => pushAgents(machineId)));
+      return { ok: true, unpushable: Object.fromEntries(unpushable) };
     })
     // The fleet's user-scope CLAUDE.md (NEW.md §11): one document, hash-synced
     // to every machine like a skill's files are.
@@ -1001,6 +1142,9 @@ export const createServer = ({ registry, db, pending }: HubServices) => {
             publishInstances(message.machineId);
             autoInstall(message.machineId, ws);
             sendFleetSync(message.machineId, ws);
+            // After `settleInstances`, so the rows this reads the machine's home
+            // out of are the ones the returning daemon just accounted for.
+            void pushAgents(message.machineId);
             ws.send(ack(message));
             break;
           case 'heartbeat':

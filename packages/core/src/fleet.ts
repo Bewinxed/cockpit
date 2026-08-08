@@ -1,6 +1,7 @@
 /**
- * Fleet configuration (NEW.md §11): the MCP servers and skill plugins every
- * machine's Claude Code should have. The hub owns the desired state; a
+ * Fleet configuration (NEW.md §11): the MCP servers, skill plugins and
+ * subagents every machine's Claude Code should have. The hub owns the desired
+ * state; a
  * machine-scoped `syncFleetConfig` control applies it and answers with what
  * the machine really has. Unlike the tool catalog (tools.ts), none of this is
  * a code catalog — the entries are the user's own rows.
@@ -123,6 +124,139 @@ export interface FleetSkillPayload extends FleetPlacement {
   hash: string;
   files: SkillFile[];
 }
+
+/**
+ * One subagent the fleet keeps (NEW.md §11), without the file it is. A subagent
+ * *is* its markdown — YAML front matter over a body that becomes the system
+ * prompt — and its identity is the front matter's `name`, not the filename. So
+ * cockpit stores the file verbatim and re-models none of it.
+ */
+export interface FleetAgentMeta {
+  name: string;
+  /** sha256 hex of `content` — what tells a machine's copy apart from the fleet's. */
+  hash: string;
+  bytes: number;
+  /** When the hub last stored it, ms epoch. */
+  at: number;
+}
+
+/**
+ * The whole file. Unlike a skill's, it rides the catalog read: a definition is
+ * a page of markdown, and an editor that has to fetch it again is a round trip
+ * for nothing.
+ *
+ * Phase B: daemon `syncFleetConfig` owns convergence; until then the hub pushes
+ * over the `fs` verb, which is why this is nowhere in {@link FleetConfig}.
+ */
+export interface FleetAgent extends FleetAgentMeta {
+  content: string;
+}
+
+/**
+ * A subagent's front matter, as far as anything outside Claude Code reads it:
+ * the two fields that make the file usable, and the three a row shows. The file
+ * is the interface — every other field passes through untouched, because
+ * cockpit is not a second schema for it.
+ */
+export interface AgentFrontMatter {
+  name?: string;
+  description?: string;
+  /** `sonnet`/`opus`/`haiku`/`fable`, a full id, or `inherit` — the default. */
+  model?: string;
+  tools?: string[];
+  /** `low` … `max`. */
+  effort?: string;
+}
+
+/**
+ * What a subagent may be called. Claude Code's own rule: the name is the token
+ * a delegation asks for, and a `:` in it collides with the plugin namespace.
+ */
+export const AGENT_NAME = /^[a-z][a-z0-9-]*$/;
+
+const FRONT_MATTER = /^---\r?\n([\s\S]*?)\r?\n---/;
+
+/** `"a"`, `'a'` or a bare word — YAML's three ways of writing one scalar. */
+const unquote = (value: string): string => {
+  const trimmed = value.trim();
+  const quoted = /^(["'])([\s\S]*)\1$/.exec(trimmed);
+  return quoted ? quoted[2] : trimmed;
+};
+
+/** A comma-separated list, an inline `[a, b]`, or a sequence already joined. */
+const splitList = (value: string): string[] =>
+  value
+    .replace(/^\[|\]$/g, '')
+    .split(',')
+    .map(unquote)
+    .filter(Boolean);
+
+/**
+ * The front matter block's top-level scalars. Deliberately not a YAML parser:
+ * the five fields anything here reads are a word, a sentence or a list of
+ * words, and a dependency that understands anchors and merge keys would still
+ * be storing the file verbatim. A block scalar (`|`, `>`) folds to one line and
+ * a block sequence joins with commas, so both reach the reader as themselves.
+ */
+export const parseAgentFrontMatter = (content: string): AgentFrontMatter => {
+  const block = FRONT_MATTER.exec(content);
+  if (!block) return {};
+
+  const lines = block[1].split(/\r?\n/);
+  const fields: Record<string, string> = {};
+  for (let at = 0; at < lines.length; at += 1) {
+    // Top-level keys only: an indented line belongs to whatever opened above it.
+    const pair = /^([A-Za-z][A-Za-z0-9_-]*):(.*)$/.exec(lines[at]);
+    if (!pair) continue;
+    const [, key, rest] = pair;
+    const value = rest.trim();
+
+    if (value.startsWith('|') || value.startsWith('>')) {
+      const folded: string[] = [];
+      while (at + 1 < lines.length && /^\s+\S/.test(lines[at + 1])) folded.push(lines[++at].trim());
+      fields[key] = folded.join(' ');
+    } else if (value === '') {
+      const items: string[] = [];
+      while (at + 1 < lines.length && /^\s*-\s+/.test(lines[at + 1])) {
+        items.push(unquote(lines[++at].replace(/^\s*-\s+/, '')));
+      }
+      if (items.length > 0) fields[key] = items.join(', ');
+    } else {
+      fields[key] = unquote(value);
+    }
+  }
+
+  return {
+    ...(fields.name ? { name: fields.name } : {}),
+    ...(fields.description ? { description: fields.description } : {}),
+    ...(fields.model ? { model: fields.model } : {}),
+    ...(fields.tools ? { tools: splitList(fields.tools) } : {}),
+    ...(fields.effort ? { effort: fields.effort } : {}),
+  };
+};
+
+/**
+ * Why this file cannot be stored as a subagent, in a sentence, or nothing when
+ * it can. One rule for the hub's refusal and the editor's live reading, so a
+ * save is never turned away for something the page said was fine.
+ *
+ * `expected` is the name the file is being stored under: a definition renamed
+ * in place would leave the old row and the old file behind, so it is refused
+ * rather than silently made into two subagents.
+ */
+export const agentProblem = (front: AgentFrontMatter, expected?: string): string | undefined => {
+  if (!front.name) return 'the front matter needs a name — that, not the filename, is what a delegation asks for';
+  if (!AGENT_NAME.test(front.name)) {
+    return `“${front.name}” is not a usable subagent name: lowercase letters, digits and hyphens only`;
+  }
+  if (expected !== undefined && front.name !== expected) {
+    return `this file names “${front.name}”, not “${expected}” — remove that one and add this one instead`;
+  }
+  if (!front.description?.trim()) {
+    return 'the front matter needs a description — it is the whole of how Claude Code decides to delegate';
+  }
+  return undefined;
+};
 
 /** The user-scope memory (`~/.claude/CLAUDE.md`), one document for the whole fleet. */
 export interface FleetMemory {
