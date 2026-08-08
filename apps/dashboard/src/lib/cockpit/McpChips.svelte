@@ -229,17 +229,49 @@
     <ul class="flex max-h-[60vh] flex-col overflow-y-auto">
       {#each servers as server (server.name)}
         {@const open = foldedDetail === server.name}
+        {@const host = mcpHost(server)}
+        {@const candidates = host ? faviconCandidates(host) : []}
+        {@const step = attempt[server.name] ?? 0}
         <li class="flex flex-col">
           <button
             type="button"
-            class="flex min-h-9 items-center gap-2 rounded-lg px-2 text-left transition-colors
+            class="flex min-h-9 items-center gap-2.5 rounded-lg px-2 text-left transition-colors
                    hover:bg-accent hover:text-accent-foreground"
             aria-expanded={open}
             onclick={() => (foldedDetail = open ? null : server.name)}
           >
-            <span
-              class="size-2 shrink-0 rounded-full {CHIP_DOT[server.status] ?? DOT.connected}"
-            ></span>
+            <!-- Same favicon + ringed status dot as the unfolded chips, at row
+                 scale — the fold hid the row, not the identity. -->
+            <span class="relative size-5 shrink-0">
+              {#if step < candidates.length}
+                <img
+                  src={candidates[step]}
+                  alt=""
+                  class="size-full rounded-full object-cover transition-opacity duration-300 {loaded[
+                    server.name
+                  ]
+                    ? 'opacity-100'
+                    : 'opacity-0'}"
+                  loading="lazy"
+                  onload={() => (loaded[server.name] = true)}
+                  onerror={() => (attempt[server.name] = step + 1)}
+                />
+              {:else}
+                <span
+                  class="flex size-full items-center justify-center rounded-full bg-muted text-micro
+                         leading-none font-medium text-muted-foreground uppercase"
+                  aria-hidden="true"
+                >
+                  {server.name.charAt(0)}
+                </span>
+              {/if}
+              {#if CHIP_DOT[server.status]}
+                <span
+                  class="absolute -right-0.5 -bottom-0.5 size-2 rounded-full ring-2 ring-popover
+                         transition-colors duration-300 {CHIP_DOT[server.status]}"
+                ></span>
+              {/if}
+            </span>
             <span class="min-w-0 flex-1 truncate text-sm">{server.name}</span>
             <span class="shrink-0 text-micro text-muted-foreground">{server.status}</span>
           </button>
