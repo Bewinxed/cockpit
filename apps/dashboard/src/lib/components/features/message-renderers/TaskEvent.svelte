@@ -65,7 +65,15 @@
     {:else if !creating && status === 'in_progress'}
       <span class="size-1.5 rounded-full bg-warning"></span>
     {:else if !creating && status === 'deleted'}
-      <span class="text-muted-foreground/60" aria-hidden="true">×</span>
+      <svg width="12" height="12" viewBox="0 0 12 12" class="text-muted-foreground/60" aria-hidden="true">
+        <path
+          d="M3.4 3.4 L8.6 8.6 M8.6 3.4 L3.4 8.6"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+        />
+      </svg>
     {:else}
       <span class="size-1.5 rounded-full border border-muted-foreground/40"></span>
     {/if}
