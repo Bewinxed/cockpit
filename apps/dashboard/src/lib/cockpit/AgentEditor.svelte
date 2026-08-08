@@ -104,11 +104,13 @@ You are a <role>, working in one repository at a time.
       {/if}
     </div>
 
+    <!-- The kit's textarea is `field-sizing-content`, so a long prompt body would
+         grow the dialog straight off the screen, buttons and all. -->
     <Textarea
       bind:value={draft}
       spellcheck="false"
       aria-label="{target ?? 'New'} definition"
-      class="min-h-80 font-mono text-sm md:text-sm"
+      class="max-h-[55vh] min-h-80 overflow-y-auto font-mono text-sm md:text-sm"
     />
 
     {#if refused}<p class="text-caption text-destructive" role="alert">{refused}</p>{/if}
