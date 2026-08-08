@@ -6,6 +6,7 @@
   import type { Machine } from './client.svelte';
   import { syncFleet } from './fleet';
   import { machineLabel, machineOs } from './machine';
+  import OsMark from './OsMark.svelte';
 
   let { machines, kind, name, what }: {
     machines: Machine[];
@@ -35,6 +36,7 @@
     <Popover.Root>
       <Popover.Trigger class="{CHIP} {tone} {online ? '' : 'opacity-50'}" aria-label="{machineLabel(machine.hostname)}: {item?.state ?? 'not reported'}">
         {#if item?.state === 'applied'}<IconCheck class="size-3 shrink-0" />{:else if item?.state === 'failed'}<IconWarningTriangle class="size-3 shrink-0" />{/if}
+        <OsMark os={machine.os} class="size-3.5 shrink-0" />
         <span class="truncate">{machineLabel(machine.hostname)}</span>
       </Popover.Trigger>
       <Popover.Content class="w-80 rounded-2xl p-0 shadow-xl" align="start">

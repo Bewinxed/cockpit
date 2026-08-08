@@ -565,7 +565,46 @@
       else searchOpen = true;
       return;
     }
+    if (scrollTranscript(event)) {
+      event.preventDefault();
+      return;
+    }
     answerPending(event);
+  }
+
+  /**
+   * The reading keys, answered by the pane rather than by the browser: the
+   * scroller is `tabindex="-1"`, so until the reader has clicked into it the
+   * default key scrolling goes nowhere. Every step is instant — virtua measures
+   * rows as they come into view, and a smooth animation fights the layout it is
+   * still settling. Returns whether the key was one of ours.
+   */
+  function scrollTranscript(event: KeyboardEvent): boolean {
+    if (!scroller || event.metaKey || event.ctrlKey || event.altKey || isTyping()) return false;
+    switch (event.key) {
+      case 'PageDown':
+        scroller.scrollBy({ top: scroller.clientHeight * 0.85 });
+        return true;
+      case 'PageUp':
+        scroller.scrollBy({ top: -scroller.clientHeight * 0.85 });
+        return true;
+      case 'Home':
+        scroller.scrollTo({ top: 0 });
+        return true;
+      case 'End':
+        // The button's own path, so the live edge the pin follows and the
+        // unseen badge stay in step with the keyboard.
+        jumpToLatest();
+        return true;
+      case 'j':
+        scroller.scrollBy({ top: 80 });
+        return true;
+      case 'k':
+        scroller.scrollBy({ top: -80 });
+        return true;
+      default:
+        return false;
+    }
   }
 
   /** Which answer a bare key is, for the card that would take it. */
@@ -1158,6 +1197,14 @@
           class="min-w-0 flex-1 truncate text-sm font-medium"
           title={[heading, cwdLabel].join('\n')}
         >{heading}</h1>
+        <!-- Below `2xl` the whole path does not fit, but its last segment does,
+             and that is the segment that tells two checkouts apart. -->
+        {#if leaf !== heading}
+          <span
+            class="hidden min-w-0 truncate font-mono text-micro text-muted-foreground sm:block 2xl:hidden"
+            title={cwdLabel}
+          >{leaf}</span>
+        {/if}
         <span
           class="hidden max-w-[60%] shrink-0 truncate font-mono text-micro text-muted-foreground [direction:rtl] 2xl:block"
           title={cwdLabel}

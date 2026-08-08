@@ -258,12 +258,14 @@
     class="no-scrollbar flex shrink-0 items-end gap-0.5 overflow-x-auto border-b border-border/60 px-2 pt-1"
   >
     <!-- Still a link, so a modified click opens it the way the browser would;
-         a plain one is a tab switch and travels like the rest. -->
+         a plain one is a tab switch and travels like the rest. Hidden on a
+         phone, where the thumb bar owns the verb and three Fleets on one
+         screen is two too many. -->
     <a
       href="/session"
       role="tab"
       aria-selected={onFleet}
-      class="{TAB} {onFleet ? ACTIVE : IDLE}"
+      class="{TAB} hidden md:flex {onFleet ? ACTIVE : IDLE}"
       onclick={(event) => {
         if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
         event.preventDefault();

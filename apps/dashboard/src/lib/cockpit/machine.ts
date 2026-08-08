@@ -1,6 +1,5 @@
 /** How a machine names itself vs. how the rail should say it out loud. */
 import type { AgentRow } from '@cockpit/core';
-import { IconLaptopDuo, IconMonitorDuo, IconServerDuo, IconWindowDuo } from '$lib/icons';
 
 /** mDNS and router suffixes: they say "same network", which the rail already implies. */
 const LOCAL_SUFFIXES = ['.local', '.lan', '.home'];
@@ -14,21 +13,22 @@ export function machineLabel(hostname: string): string {
 /**
  * Splits the daemon's `platform-arch` fingerprint into something readable.
  * The platform is Node's `process.platform`, so it is a fixed vocabulary.
- * The glyph is duotone because it says what the box is, not what to do with it.
+ * Words only — the mark for the same fingerprint is `OsMark`, and one machine
+ * is named the same way everywhere.
  */
 export function machineOs(os: string) {
   const [platform = '', arch = ''] = os.trim().toLowerCase().split('-');
 
   switch (platform) {
     case 'darwin':
-      return { label: 'macOS', arch, Icon: IconLaptopDuo };
+      return { label: 'macOS', arch };
     case 'linux':
-      return { label: 'Linux', arch, Icon: IconMonitorDuo };
+      return { label: 'Linux', arch };
     case 'win32':
     case 'windows':
-      return { label: 'Windows', arch, Icon: IconWindowDuo };
+      return { label: 'Windows', arch };
     default:
-      return { label: 'Unknown', arch, Icon: IconServerDuo };
+      return { label: 'Unknown', arch };
   }
 }
 
