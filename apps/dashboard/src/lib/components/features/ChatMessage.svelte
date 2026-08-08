@@ -4,9 +4,7 @@
 		IconTools,
 		IconDocument,
 		IconAlert,
-		IconChevronDown,
 		IconChevronRight,
-		IconChevronUp,
 		IconSpinner,
 		IconSuccess,
 		IconError,
@@ -27,10 +25,11 @@
 	import { formatTimestamp } from '$lib/utils/time';
 	import type { Message } from '$lib/cockpit/types';
 	import HelpMenu from './HelpMenu.svelte';
-	import DiffView from './DiffView.svelte';
 	import { CopyButton } from '$lib/components/ui/copy-button';
 	import { getRenderer, type MessageRendererProps } from './message-renderers';
 	import MCPStatus from './message-renderers/MCPStatus.svelte';
+	import ToolRow from './tool-cards/ToolRow.svelte';
+	import { isFileDiffTool, resultText, type ToolStatus } from './tool-cards/descriptors';
 
 	interface Props {
 		message: Message;
@@ -120,25 +119,11 @@
 	});
 
 	// Auto-expand for diff tools, collapsed for others
-	const hasDiff = $derived.by(() => {
-		if (message.type !== 'tool.use' && message.type !== 'tool.result') return false;
-		const toolName = message.metadata?.toolName;
-		if (!toolName) return false;
-		const diffTools = [
-			'Edit',
-			'edit',
-			'str_replace_editor',
-			'str_replace',
-			'file_edit',
-			'Write',
-			'write',
-			'create_file',
-			'write_file'
-		];
-		return diffTools.includes(toolName);
-	});
+	const hasDiff = $derived(
+		(message.type === 'tool.use' || message.type === 'tool.result') &&
+			isFileDiffTool(message.metadata?.toolName)
+	);
 
-	let diffFullyExpanded = $state(false);
 	// Track manual override of expansion state. Null means "auto" (based on hasDiff), otherwise use the boolean value
 	let manualExpansion = $state<boolean | null>(null);
 	// isExpanded: use manual override if set, otherwise auto-expand for diff tools
@@ -222,57 +207,6 @@
 			stderr: message.metadata?.stderr
 		};
 	});
-
-	// Check if a tool is a file modification tool that should show a diff
-	function isFileDiffTool(toolName: string | undefined): boolean {
-		if (!toolName) return false;
-		const diffTools = [
-			// Edit tools (partial file modification)
-			'Edit',
-			'edit',
-			'str_replace_editor',
-			'str_replace',
-			'file_edit',
-			// Write tools (full file write)
-			'Write',
-			'write',
-			'create_file',
-			'write_file'
-		];
-		return diffTools.includes(toolName);
-	}
-
-	// Check if this is a write (full file) vs edit (partial) tool
-	function isWriteTool(toolName: string | undefined): boolean {
-		if (!toolName) return false;
-		const writeTools = ['Write', 'write', 'create_file', 'write_file'];
-		return writeTools.includes(toolName);
-	}
-
-	// Extract diff info from tool input for file modification tools
-	function getDiffInfo(
-		input: Record<string, unknown> | undefined,
-		toolName: string | undefined
-	): { filePath: string; oldContent: string; newContent: string } | null {
-		if (!input) return null;
-
-		// Handle different tool input formats
-		const filePath = (input.file_path || input.path || input.filename) as string | undefined;
-
-		if (!filePath) return null;
-
-		// For write tools, old content is empty (new file or full overwrite)
-		if (isWriteTool(toolName)) {
-			const newContent = (input.content || '') as string;
-			return { filePath, oldContent: '', newContent };
-		}
-
-		// For edit tools, get old and new strings
-		const oldContent = (input.old_string || input.old_str || '') as string;
-		const newContent = (input.new_string || input.new_str || input.content || '') as string;
-
-		return { filePath, oldContent, newContent };
-	}
 
 	const messageConfig = {
 		user: {
@@ -416,112 +350,17 @@
 				: 'items-start'} min-w-0 {message.type === 'ui.help_menu' ? 'w-full' : 'max-w-[85%]'}"
 		>
 			{#if message.type === 'tool.use' || message.type === 'tool.result'}
-				<!-- Tool message - collapsible card -->
-				<div class="w-full bg-card border border-border rounded-xl overflow-hidden shadow-sm">
-					<Collapsible.Root open={isExpanded} onOpenChange={toggleExpanded}>
-						<Collapsible.Trigger class="w-full text-left">
-							<div
-								class="w-full px-3 py-2.5 text-left cursor-pointer hover:bg-muted/50 transition-colors flex items-center gap-2"
-							>
-								<IconChevronRight
-									class="w-4 h-4 text-muted-foreground shrink-0 transition-transform duration-200 ease-out {isExpanded
-										? 'rotate-90'
-										: ''}"
-								/>
-								<span class="font-medium text-foreground text-sm">
-									{toolInfo?.name || 'Tool'}
-								</span>
-								<!-- Status indicator -->
-								{#if toolInfo?.status === 'pending'}
-									<IconSpinner class="w-4 h-4 text-warning animate-spin ml-auto" />
-								{:else if toolInfo?.status === 'error'}
-									<IconError class="w-4 h-4 text-destructive ml-auto" />
-								{:else}
-									<IconSuccess class="w-4 h-4 text-success ml-auto" />
-								{/if}
-							</div>
-						</Collapsible.Trigger>
-
-						<Collapsible.Content>
-							{@const tool = toolInfo}
-							{@const diffInfo = getDiffInfo(
-								tool?.input as Record<string, unknown> | undefined,
-								tool?.name
-							)}
-							<div class="p-3 pt-0 space-y-3 border-t border-border">
-								<!-- Input: Show diff for file modification tools, JSON for others -->
-								{#if isFileDiffTool(tool?.name) && diffInfo}
-									{@const totalLines =
-										diffInfo.oldContent.split('\n').length + diffInfo.newContent.split('\n').length}
-									{@const needsExpansion = totalLines > 8}
-									<div
-										class="relative overflow-hidden rounded-lg mt-3"
-										class:max-h-[150px]={needsExpansion && !diffFullyExpanded}
-									>
-										<DiffView
-											filePath={diffInfo.filePath}
-											oldContent={diffInfo.oldContent}
-											newContent={diffInfo.newContent}
-										/>
-										{#if needsExpansion && !diffFullyExpanded}
-											<button
-												type="button"
-												aria-label="Show full diff"
-												class="absolute bottom-0 left-0 right-0 h-[60px] flex items-center justify-center cursor-pointer z-10 bg-gradient-to-b from-transparent via-card/85 to-card/95"
-												onclick={() => (diffFullyExpanded = true)}
-											>
-												<IconChevronDown
-													class="w-6 h-6 p-1 text-muted-foreground bg-muted border border-border rounded-full shadow-sm hover:text-foreground hover:translate-y-0.5 transition-[color,translate] duration-150 ease-out"
-												/>
-											</button>
-										{/if}
-									</div>
-									{#if needsExpansion && diffFullyExpanded}
-										<button
-											class="flex items-center justify-center gap-1.5 w-full py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-											onclick={() => (diffFullyExpanded = false)}
-										>
-											<IconChevronUp class="w-3.5 h-3.5" />
-											<span>Collapse</span>
-										</button>
-									{/if}
-								{:else}
-									<div class="bg-muted/50 rounded-lg p-3 font-mono text-xs overflow-x-auto mt-3">
-										<div class="text-muted-foreground text-xs uppercase tracking-wide mb-1.5 font-medium">
-											Input
-										</div>
-										<pre class="whitespace-pre-wrap break-all text-muted-foreground">{JSON.stringify(
-												tool?.input,
-												null,
-												2
-											)}</pre>
-									</div>
-								{/if}
-
-								<!-- Result (if available) -->
-								{#if tool?.result !== undefined && tool?.result !== null}
-									<div
-										class="rounded-lg p-3 font-mono text-xs overflow-x-auto {tool?.status === 'error'
-											? 'bg-destructive/5 text-destructive border border-destructive/20'
-											: 'bg-success/5 border border-success/20'}"
-									>
-										<div
-											class="text-xs uppercase tracking-wide mb-1.5 font-medium {tool?.status ===
-											'error'
-												? 'text-destructive'
-												: 'text-success'}"
-										>
-											{tool?.status === 'error' ? 'Error' : 'Result'}
-										</div>
-										<pre class="whitespace-pre-wrap break-all text-muted-foreground">{typeof tool.result ===
-										'string'
-											? tool.result
-											: JSON.stringify(tool.result, null, 2)}</pre>
-									</div>
-								{/if}
-							</div>
-						</Collapsible.Content>
-					</Collapsible.Root>
+				<!-- One tool call standing on its own: the same row a group holds,
+				     in a card of its own. -->
+				<div class="w-full overflow-hidden rounded-xl bg-card shadow-md">
+					<ToolRow
+						toolName={toolInfo?.name}
+						input={toolInfo?.input as Record<string, unknown> | undefined}
+						result={resultText(toolInfo?.result)}
+						status={(toolInfo?.status ?? 'pending') as ToolStatus}
+						open={isExpanded}
+						onToggle={toggleExpanded}
+					/>
 				</div>
 			{:else if message.type === 'system.hook_response'}
 				<!-- Hook response - collapsible card -->

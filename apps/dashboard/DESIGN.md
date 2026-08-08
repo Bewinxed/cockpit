@@ -459,6 +459,42 @@ optimistically flips to its resolved colour (green fill on allow, red tint on
 deny) and the other verbs fade — the answer travels browser → hub → agent, so the
 card says it heard you immediately.
 
+### Tool Cards (signature)
+
+A tool call reads as a **sentence, not a record**: glyph · verb · object ·
+fact, with the operator's tail — the first line the call printed — under it in
+mono micro. `Edited package.json  +1 −1`. `Read sidebar.svelte
+…/components/ui  106 lines`. The verb is 13px sans and never yields to its own
+object (it caps at 60% of the line instead); the object is mono because it is
+data — a path, a command, a pattern; the fact is right-aligned `text-micro
+tabular-nums` and answers "what came back" in one measurement. Below 640px the
+parent directory and the server chip drop out and the leaf and the fact stay.
+A turn's calls stack in one `rounded-xl bg-card shadow-md` card whose header is
+a stack of up to four family glyphs, a step count, and the top two kinds —
+`23 steps · 11 commands · 6 reads`, not "23 Tools".
+
+**The Success-Is-Silent Rule.** A finished step says nothing. The status slot
+carries an amber spinner while a call runs and a red mark when it failed (plus
+`bg-error/10` on the row and the first error line in `text-error` — Calm Red,
+tint only). Success is *empty*, and the slot is not even reserved: those pixels
+go to the path leaf. The one exception is a call that finishes while you are
+watching — the spinner swaps to a green check through `.icon-swap`, holds
+~900ms, then fades out over 240ms. A transcript read back from storage never
+passes through `pending`, so it never lights up at all. Fourteen green checks
+down one card is the failure this rule exists to prevent.
+
+**One vocabulary.** `features/tool-cards/descriptors.ts` is the only place that
+knows what a tool call means. `describeTool()` returns the sentence, the fact,
+and which body the row opens — terminal well, diff, output, params — and
+`familyId()` classifies once, reading through an `mcp__server__tool` name to
+the tool's own name and hanging the server on as a chip. Nothing else in the
+transcript branches on a tool name.
+
+**The Params-Table Floor.** A tool nobody wrote a sentence for still gets a
+dignified row: its name humanised, its most identifying argument in mono, and,
+expanded, up to eight `key : value` rows above the output. A raw
+`JSON.stringify` of a tool input never renders again.
+
 ### Motion Details Worth Copying
 - **Label swaps:** `{#key}` + `fly y:5 in / y:-5 out` at 180/140ms, guarded by a
   `painted` flag so rows that merely appear with the page announce nothing.
