@@ -422,6 +422,12 @@ the hub, and a skill's files are read off that machine
 one machine reaches the rest. Adoption is always explicit, and a fleet
 server shadowed by a nearer scope says so rather than looking broken.
 
+**Subagents** joined the fleet config 2026-08-08: each is stored as its
+verbatim markdown file keyed by the front matter's `name`, and the hub writes
+`<home>/.claude/agents/<name>.md` over the `fs` verb — on save, on register
+and on a manual re-push — until daemon-side sync (Phase B) takes over
+convergence and, with it, removal.
+
 Deliberately not here: MCP server OAuth (each machine's `claude mcp login`
 stays its own), enterprise managed-settings surfaces, and writing hooks or
 subagents that a skill ships outside its own directory.
