@@ -92,6 +92,20 @@
   import type { Message, TranscriptGroup } from '$lib/cockpit/types';
   import type { SubagentState } from '$lib/utils/flow-types';
 
+  /**
+   * Where each session was left, and whether it was left at the live edge.
+   *
+   * Module level on purpose: SvelteKit reuses this component across every
+   * `/session/[id]`, so anything remembered per session has to outlive the
+   * page's own state rather than be reset with it. A number alone is not
+   * enough — a transcript left following its own output has to resume
+   * following it, not be pinned to the pixel it happened to be at.
+   */
+  const scrollMemory = new Map<string, { top: number; atBottom: boolean }>();
+
+  /** What was typed into each session's composer and not sent. */
+  const drafts = new Map<string, string>();
+
   const viewId = $derived(page.params.id ?? '');
   /** A `machine` in the query means this id is a stored session, not a live one. */
   const browsing = $derived(page.url.searchParams.get('machine'));
@@ -105,7 +119,9 @@
     const cwd = browsingCwd;
     const id = viewId;
     untrack(() => {
-      anchored = false;
+      // A session being returned to is not opening at its end, so the pass that
+      // would take it there stands down and the remembered offset is restored.
+      anchored = scrollMemory.get(id)?.atBottom === false;
       if (machineId) void openTranscript({ viewId: id, machineId, sessionId: id, cwd });
       else openSession(id);
     });
@@ -167,6 +183,10 @@
     if (!scroller) return;
     atBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 80;
     if (atBottom) unseen = false;
+    // Recorded as it moves rather than on the way out: by the time a switch has
+    // run its effects the column already holds the *next* session's messages,
+    // and a scroller measured then reports where that one starts.
+    if (viewId) scrollMemory.set(viewId, { top: scroller.scrollTop, atBottom });
   }
 
   // Always the raw write. `scrollToIndex(last, 'end')` parks on the end of the
@@ -239,6 +259,39 @@
     requestAnimationFrame(step);
   }
 
+  /**
+   * The same hold, aimed at where the reader left off instead of at the end.
+   *
+   * Two things move the offset out from under a single write. The column is
+   * shorter than the target for the first frames, so the browser clamps it —
+   * and virtua, which caches measured heights *by index*, is holding the sizes
+   * of whichever session was on screen last: as it corrects them it also shifts
+   * the offset to keep what it is rendering still. Measured on a 6,200px
+   * transcript, letting go at the first stable frame landed 279px — one
+   * message — above where the reader left. So the offset is held until the
+   * column has stopped growing and stopped being corrected under it.
+   */
+  const STEADY_FRAMES = 8;
+  function settleAt(top: number) {
+    const until = performance.now() + SETTLE_MS;
+    const token = ++settling;
+    let lastHeight = -1;
+    let want = -1;
+    let steady = 0;
+    const step = () => {
+      if (token !== settling || !scroller || grabbed) return;
+      const shifted = want >= 0 && scroller.scrollTop !== want;
+      const reachable = scroller.scrollHeight - scroller.clientHeight;
+      want = Math.min(top, Math.max(reachable, 0));
+      scroller.scrollTop = want;
+      const height = scroller.scrollHeight;
+      steady = !shifted && want === top && height === lastHeight ? steady + 1 : 0;
+      lastHeight = height;
+      if (steady < STEADY_FRAMES && performance.now() < until) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
+
   // A transcript that has just arrived opens at its newest turn. Keyed on the
   // session and on the transcript being present, so it runs once per opened
   // session rather than on every message that lands afterwards.
@@ -253,7 +306,17 @@
       if (settledFor === id) return;
       settledFor = id;
       grabbed = false;
-      void tick().then(settleAtBottom);
+      // Read now, not in the callback: the scroller is shared, and the next
+      // scroll event it fires is already attributed to the session arriving.
+      const left = scrollMemory.get(id);
+      if (left && !left.atBottom) {
+        // Said before the first frame is drawn, or the follow pin the session
+        // being left behind armed would drag this one to the bottom first.
+        atBottom = false;
+        void tick().then(() => settleAt(left.top));
+      } else {
+        void tick().then(settleAtBottom);
+      }
     });
   });
 
@@ -356,6 +419,13 @@
    * bare error line where the tab that opened afterwards gets the card.
    */
   const said = $derived((session?.messages ?? []).filter((message) => message.type !== 'ui.error'));
+
+  /**
+   * Only where there is genuinely nothing to show. A session the store already
+   * holds renders out of it on the frame it is switched to, and a read running
+   * behind that is not a reason to take its transcript off the screen.
+   */
+  const reading = $derived((session?.loading ?? false) && (session?.messages.length ?? 0) === 0);
 
   // The row behind a session with nothing to show for itself. It is what
   // explains one, live or long afterwards — and which kind of end it came to
@@ -542,8 +612,24 @@
   let restoredDraft = $state<string | null>(null);
   let chatInputRef = $state<ReturnType<typeof ChatInput> | null>(null);
 
+  // The composer is one box shared by every session, so what is in it belongs to
+  // whichever one is on screen: it is put away on the way out and handed back on
+  // the way in, and a session with nothing typed gets an empty box rather than
+  // the last one's sentence.
+  $effect(() => {
+    const id = viewId;
+    untrack(() => void chatInputRef?.setDraft?.(drafts.get(id) ?? ''));
+    return () =>
+      untrack(() => {
+        const text = chatInputRef?.draft?.() ?? '';
+        if (text) drafts.set(id, text);
+        else drafts.delete(id);
+      });
+  });
+
   async function handleSend(text: string, extras: SendExtras) {
     if (!session) return;
+    drafts.delete(viewId);
     sendError = null;
     try {
       await sendOrRevive(viewId, session.machineId, text, extras);
@@ -1270,7 +1356,7 @@
                 </Virtualizer>
               {/if}
 
-              {#if session?.loading}
+              {#if reading}
                 <div class="flex flex-col items-center gap-2 py-8">
                   <IconSpinner class="size-5 animate-spin text-muted-foreground" />
                   <p class="text-caption">Reading transcript…</p>

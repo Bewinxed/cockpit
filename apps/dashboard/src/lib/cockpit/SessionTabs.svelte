@@ -50,10 +50,21 @@
   );
   const visible = $derived(tabs.slice(0, MAX_VISIBLE));
   const overflow = $derived(tabs.slice(MAX_VISIBLE));
-  const currentId = $derived(page.params?.id ?? '');
+  const routeId = $derived(page.params?.id ?? '');
+
+  /** The tab just clicked. `page` only names it once the router has finished,
+   *  and a tab that highlights a frame late reads as the click being ignored. */
+  let pending = $state<string | null>(null);
+  const currentId = $derived(pending ?? routeId);
 
   function navigate(id: string) {
-    void goto(`/session/${id}`);
+    if (id === currentId) return;
+    pending = id;
+    // The session owns its own scroll and its own focus; letting the router
+    // reset either is the rest of the "full navigation" feel.
+    void goto(`/session/${id}`, { noScroll: true, keepFocus: true }).finally(
+      () => (pending = null)
+    );
   }
 
   function close(event: MouseEvent, id: string) {

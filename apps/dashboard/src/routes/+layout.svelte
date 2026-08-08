@@ -16,10 +16,26 @@
   // iOS has no right-click; a held press is its context menu.
   onMount(enableLongPressMenus);
 
+  /** Two of these are the same surface holding a different conversation. */
+  const SESSION = /^\/session\/[^/]+$/;
+
   // Native page transitions: same-document view transitions, skipped for
   // readers who prefer reduced motion; browsers without the API just navigate.
   onNavigate((navigation) => {
     if (!document.startViewTransition) return;
+    // Switching tabs is not going anywhere: crossfading the whole document
+    // between two sessions is what made a tab click read as a page load. A
+    // swipe still animates — it names a direction, and the gesture is the
+    // thing being animated.
+    if (
+      !document.documentElement.dataset.nav &&
+      navigation.from &&
+      navigation.to &&
+      SESSION.test(navigation.from.url.pathname) &&
+      SESSION.test(navigation.to.url.pathname)
+    ) {
+      return;
+    }
     // A hidden document has nothing to animate, and Chrome aborts the
     // transition there — which rejects `finished` under a navigation race.
     if (document.hidden) {

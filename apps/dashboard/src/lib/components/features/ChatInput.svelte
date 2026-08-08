@@ -418,13 +418,20 @@
     }
   }
 
-  /** Restores text the user typed after a failed send. */
-  export function setDraft(text: string) {
+  /** What is typed and not sent — kept per session by the page that owns it. */
+  export function draft(): string {
+    return message;
+  }
+
+  /** Restores text the user typed after a failed send, or on the way back to
+   *  the session they typed it in. Measured after the text is in the box —
+   *  `scrollHeight` before that reports the height of what it is replacing. */
+  export async function setDraft(text: string) {
     message = text;
-    if (textareaRef) {
-      textareaRef.style.height = 'auto';
-      textareaRef.style.height = Math.min(textareaRef.scrollHeight, 200) + 'px';
-    }
+    await tick();
+    if (!textareaRef) return;
+    textareaRef.style.height = 'auto';
+    textareaRef.style.height = Math.min(textareaRef.scrollHeight, 200) + 'px';
   }
 </script>
 
