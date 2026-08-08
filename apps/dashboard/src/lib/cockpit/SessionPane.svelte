@@ -1660,7 +1660,7 @@
   <!-- The phone's answer to the popover. The panel writes its own heading, so
        the sheet's is only there for the screen reader. -->
   <Drawer.Root bind:open={planSheet}>
-    <Drawer.Content class="px-2 pb-[max(env(safe-area-inset-bottom),0.5rem)]">
+    <Drawer.Content class="px-2 pb-[max(env(safe-area-inset-bottom),1rem)]">
       <Drawer.Title class="sr-only">Tasks</Drawer.Title>
       <div class="max-h-[60vh] overflow-y-auto">
         <TaskPanel {viewId} />
