@@ -59,6 +59,10 @@
   import SessionContext from '$lib/cockpit/SessionContext.svelte';
   import SessionContextButton from '$lib/cockpit/SessionContextButton.svelte';
   import PermissionStack from '$lib/cockpit/PermissionStack.svelte';
+  import TaskPanel from '$lib/cockpit/TaskPanel.svelte';
+  import TaskRing from '$lib/cockpit/TaskRing.svelte';
+  import { identityVar } from '$lib/cockpit/folder-prefs.svelte';
+  import { refreshTasks, taskProgress, tasksOf } from '$lib/cockpit/tasks.svelte';
   import { questionsOf } from '$lib/cockpit/question';
   import { ACTIVITY_LABEL } from '$lib/cockpit/activity';
   import { sessionTitle } from '$lib/cockpit/links';
@@ -98,6 +102,8 @@
   import * as AlertDialog from '$lib/components/ui/alert-dialog';
   import { Button, type ButtonVariant } from '$lib/components/ui/button';
   import * as ButtonGroup from '$lib/components/ui/button-group';
+  import * as Drawer from '$lib/components/ui/drawer';
+  import * as Popover from '$lib/components/ui/popover';
   import * as Select from '$lib/components/ui/select';
   import * as Sidebar from '$lib/components/ui/sidebar';
   import * as ToggleGroup from '$lib/components/ui/toggle-group';
@@ -621,6 +627,27 @@
   const runningTool = $derived(session?.currentTool ? ` · ${session.currentTool.name}` : '');
   const activity = $derived(cockpit.activityOf(viewId));
 
+  /**
+   * What this session has planned. Asked for when the pane comes on screen —
+   * a plan written before this browser was watching has no frame to announce
+   * itself — and re-armed on the SDK session id, which is what the ledger is
+   * filed under and what arrives late. The `TaskCreate`/`TaskUpdate` results
+   * landing afterwards keep it current.
+   */
+  $effect(() => {
+    if (!active || !session?.sessionId) return;
+    refreshTasks(viewId);
+  });
+
+  const plan = $derived(tasksOf(viewId));
+  const progress = $derived(plan && plan.tasks.length > 0 ? taskProgress(plan) : null);
+  /** What the session says it is on, for the pill — only while it is on it. */
+  const doingNow = $derived(
+    activity === 'working' ? (progress?.current?.activeForm ?? null) : null
+  );
+  /** The phone's ledger, which has nowhere to put a popover. */
+  let planSheet = $state(false);
+
   const branches = $derived(new Map(Object.entries(subagents)));
   const totalCostUsd = $derived(
     session?.messages.reduce((cost, message) => message.metadata?.totalCost ?? cost, 0) ?? 0
@@ -1087,6 +1114,24 @@
       {#if leaf !== heading}
         <span class="shrink-0 font-mono text-micro text-muted-foreground">{leaf}</span>
       {/if}
+      <!-- The count only: a phone header has no room for what it is on, and
+           the sheet this opens says that on its own row. -->
+      {#if progress}
+        <button
+          type="button"
+          class="-mr-1 ml-auto flex min-h-8 shrink-0 items-center gap-1.5 self-center rounded-full
+            px-2 transition-colors duration-150 ease-out hover:bg-accent"
+          aria-label="Tasks: {progress.done} of {progress.total} done"
+          onclick={() => (planSheet = true)}
+        >
+          <span class="identity-ink flex items-center" style={identityVar(cwdLabel)}>
+            <TaskRing done={progress.done} total={progress.total} size="sm" />
+          </span>
+          <span class="text-micro tabular-nums" data-tabular>
+            {progress.done}/{progress.total}
+          </span>
+        </button>
+      {/if}
     </div>
 
     <!-- A fixed height, whatever the session puts in it: a stored transcript
@@ -1113,6 +1158,43 @@
           class="hidden max-w-[60%] shrink-0 truncate font-mono text-micro text-muted-foreground [direction:rtl] 2xl:block"
           title={cwdLabel}
         ><bdi>{cwdLabel}</bdi></span>
+        <!-- The plan, beside the name it belongs to rather than out in the
+             toolbar: it is a fact about this conversation, not a verb. The
+             ring wears the directory's hue and nothing else does — identity
+             is decoration here, and olive still means "this acts". -->
+        {#if progress}
+          <Popover.Root>
+            <Popover.Trigger
+              class="flex min-h-8 shrink-0 items-center gap-1.5 self-center rounded-full px-2
+                transition-colors duration-150 ease-out hover:bg-accent"
+              aria-label="Tasks: {progress.done} of {progress.total} done"
+            >
+              <span class="identity-ink flex items-center" style={identityVar(cwdLabel)}>
+                <TaskRing done={progress.done} total={progress.total} />
+              </span>
+              <span class="inline-grid text-micro tabular-nums" data-tabular>
+                {#key `${progress.done}/${progress.total}`}
+                  <span
+                    class="col-start-1 row-start-1"
+                    in:fly={{ y: 5, duration: painted ? 180 : 0, easing: quintOut }}
+                    out:fly={{ y: -5, duration: painted ? 140 : 0, easing: quintOut }}
+                  >{progress.done}/{progress.total}</span>
+                {/key}
+              </span>
+              {#if doingNow}
+                <span class="max-w-[24ch] truncate text-micro text-muted-foreground">
+                  · {doingNow}
+                </span>
+              {/if}
+            </Popover.Trigger>
+            <Popover.Content
+              class="material-panel max-h-[480px] w-[380px] overflow-y-auto p-0"
+              align="start"
+            >
+              <TaskPanel {viewId} />
+            </Popover.Content>
+          </Popover.Root>
+        {/if}
       </div>
       {#if session?.scratch}
         <span
@@ -1570,4 +1652,15 @@
       branches={[...branches.values()]}
     />
   {/if}
+
+  <!-- The phone's answer to the popover. The panel writes its own heading, so
+       the sheet's is only there for the screen reader. -->
+  <Drawer.Root bind:open={planSheet}>
+    <Drawer.Content class="px-2 pb-[max(env(safe-area-inset-bottom),0.5rem)]">
+      <Drawer.Title class="sr-only">Tasks</Drawer.Title>
+      <div class="max-h-[60vh] overflow-y-auto">
+        <TaskPanel {viewId} />
+      </div>
+    </Drawer.Content>
+  </Drawer.Root>
 </Sidebar.Provider>
