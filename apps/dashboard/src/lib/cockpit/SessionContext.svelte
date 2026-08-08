@@ -7,9 +7,16 @@
    *
    * The rail is always mounted — the kit slides it and animates the gap the
    * chat shrinks into — so the files are read on the rising edge of open rather
-   * than on mount. The servers and the facts are the page's own live state.
+   * than on mount, and the machine's skills on the rising edge of their own
+   * tab. The servers and the facts are the page's own live state.
    */
-  import type { AvailableCommand, McpServerStatus, PermissionMode } from '@cockpit/core';
+  import { toast } from 'svelte-sonner';
+  import type {
+    AvailableCommand,
+    DiscoveredSkill,
+    McpServerStatus,
+    PermissionMode,
+  } from '@cockpit/core';
   import { IconClose } from '$lib/icons';
   import { Badge } from '$lib/components/ui/badge';
   import { Button } from '$lib/components/ui/button';
@@ -22,7 +29,7 @@
   import type { SubagentState } from '$lib/utils/flow-types';
   import { formatDistanceToNow } from '$lib/utils/time';
   import { machineFs } from './client.svelte';
-  import { peekMemory } from './fleet';
+  import { adoptSkill, inspectMachine, peekMemory } from './fleet';
   import { machineLabel } from './machine';
   import McpServerDetail from './McpServerDetail.svelte';
   import { modelLabel } from './models.svelte';
@@ -155,6 +162,52 @@
     if (open && !wasOpen) void load();
     wasOpen = open;
   });
+
+  /**
+   * The machine's own word about the skills the session listed, by name —
+   * which scope each really came from and whether the fleet manages it. The
+   * `/` menu knows neither, and a project-scoped skill is exactly the one the
+   * reader could not act on from here.
+   */
+  let discovered = $state<Record<string, DiscoveredSkill>>({});
+  let adopting = $state<Record<string, boolean>>({});
+
+  // Asked when the Skills tab is first shown, not when the rail opens: most
+  // openings never reach this tab, and the answer holds for one opening.
+  let asked = false;
+  $effect(() => {
+    const open = sidebar.open || sidebar.openMobile;
+    if (!open) {
+      asked = false;
+      discovered = {};
+      return;
+    }
+    if (tab !== 'skills' || asked) return;
+    asked = true;
+    void discover();
+  });
+
+  async function discover() {
+    try {
+      const inspection = await inspectMachine(machineId, cwd);
+      discovered = Object.fromEntries(inspection.skills.map((skill) => [skill.name, skill]));
+    } catch {
+      // Absence over an error: the list is what it was before anyone asked.
+    }
+  }
+
+  async function adopt(skill: DiscoveredSkill) {
+    adopting[skill.name] = true;
+    try {
+      await adoptSkill(skill.name, machineId, cwd);
+      discovered[skill.name] = { ...skill, managed: true };
+      toast.success(`${skill.name} is the fleet's now — its files went to the hub.`);
+    } catch (error) {
+      toast.error(message(error));
+    } finally {
+      delete adopting[skill.name];
+    }
+  }
 
   const close = () => (sidebar.isMobile ? sidebar.setOpenMobile(false) : sidebar.setOpen(false));
 
@@ -324,17 +377,45 @@
           </p>
           <ul class="flex flex-col rounded-xl bg-card shadow-md">
             {#each skills as skill (skill.name)}
-              <li class="flex flex-col gap-0.5 border-t border-border/50 px-3 py-2 first:border-t-0">
-                <span class="flex flex-wrap items-center gap-x-2 gap-y-1">
-                  <span class="truncate font-mono text-[13px]">{skill.name}</span>
-                  {#if skill.source}
-                    <Badge variant="outline">{skill.source}</Badge>
+              {@const found = discovered[skill.name]}
+              <li
+                class="flex min-h-9 flex-wrap items-start gap-x-3 gap-y-1 border-t border-border/50 px-3 py-2 first:border-t-0"
+              >
+                <span class="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span class="truncate font-mono text-[13px]">{skill.name}</span>
+                    <!-- The scope is the better fact when the machine has
+                         answered; `source` is only the name's own prefix. -->
+                    {#if found}
+                      <Badge variant="outline" class="text-micro">{found.scope}</Badge>
+                    {:else if skill.source}
+                      <Badge variant="outline">{skill.source}</Badge>
+                    {/if}
+                  </span>
+                  {#if skill.description}
+                    <span class="line-clamp-2 text-micro text-muted-foreground">
+                      {skill.description}
+                    </span>
                   {/if}
                 </span>
-                {#if skill.description}
-                  <span class="line-clamp-2 text-micro text-muted-foreground">
-                    {skill.description}
+                <!-- A plugin's skills ride the plugin, so they are neither the
+                     fleet's nor adoptable. -->
+                {#if found?.managed}
+                  <span
+                    class="shrink-0 rounded-full bg-muted px-2 py-0.5 text-micro text-muted-foreground"
+                  >
+                    fleet
                   </span>
+                {:else if found && found.scope !== 'plugin'}
+                  <Button
+                    variant="outline"
+                    size="xs"
+                    class="shrink-0"
+                    disabled={adopting[skill.name] === true}
+                    onclick={() => adopt(found)}
+                  >
+                    {adopting[skill.name] ? 'Adopting…' : 'Adopt'}
+                  </Button>
                 {/if}
               </li>
             {/each}
