@@ -16,7 +16,14 @@
   import DiffView from '../DiffView.svelte';
   import OutputBlock from './OutputBlock.svelte';
   import ParamsTable from './ParamsTable.svelte';
-  import { describeTool, errorLine, getDiffInfo, isErrorLine, type ToolStatus } from './descriptors';
+  import {
+    codeOf,
+    describeTool,
+    errorLine,
+    getDiffInfo,
+    isErrorLine,
+    type ToolStatus,
+  } from './descriptors';
 
   interface Props {
     toolName?: string;
@@ -37,7 +44,7 @@
   const descriptor = $derived(describeTool(toolName, input, result, status));
   const diff = $derived(descriptor.expanded === 'diff' ? getDiffInfo(input, toolName) : null);
   const command = $derived(typeof input?.command === 'string' ? input.command : '');
-  const code = $derived(typeof input?.code === 'string' ? input.code : '');
+  const code = $derived(codeOf(input));
   const url = $derived(typeof input?.url === 'string' ? input.url : undefined);
 
   /** What went wrong, which replaces the tail on a failed row. */
@@ -123,7 +130,7 @@
                  from the left, because the deep end is what tells two
                  checkouts apart. -->
             <span
-              class="hidden min-w-0 shrink-[3] truncate text-muted-foreground sm:inline
+              class="hidden max-w-[45%] min-w-0 shrink-[9] truncate text-muted-foreground sm:inline
                 {descriptor.detailIsMono ? 'font-mono text-micro [direction:rtl]' : 'text-micro'}"
               title={descriptor.detail}
             >
@@ -184,7 +191,7 @@
       {#if descriptor.expanded === 'bash'}
         <div class="max-h-[320px] overflow-auto rounded-lg bg-muted/50 p-3 font-mono text-micro">
           <div class="whitespace-pre-wrap break-all text-muted-foreground">
-            <span class="select-none">$ </span>{command}
+            <span class="select-none">$&nbsp;</span>{command}
           </div>
           {#if result && status === 'error'}
             <div class="mt-1.5">

@@ -88,17 +88,26 @@ const FAMILIES: Record<FamilyId, Omit<ToolFamily, 'id'>> = {
   navigate: { icon: IconCompass, one: 'page', many: 'pages' },
   js: { icon: IconCode, one: 'script', many: 'scripts' },
   mcp: { icon: IconPlug, one: 'call', many: 'calls' },
-  other: { icon: IconTools, one: 'step', many: 'steps' },
+  // Not "step": the header already counts steps, and a summary that repeats
+  // the count's own word ("3 steps · 2 steps") says nothing.
+  other: { icon: IconTools, one: 'action', many: 'actions' },
 };
 
 const EDIT_TOOLS = new Set(['edit', 'str_replace_editor', 'str_replace', 'file_edit']);
 const WRITE_TOOLS = new Set(['write', 'create_file', 'write_file']);
 
-/** The one classifier: both the sentence and the group header dispatch on it. */
+const MCP_NAME = /^mcp__(.+?)__(.+)$/;
+
+/**
+ * The one classifier: both the sentence and the group header dispatch on it.
+ * An MCP tool is classified on its own name first — the browser's `computer`
+ * and `navigate` are the same act whether or not a server carried them.
+ */
 export function familyId(toolName: string | undefined): FamilyId {
-  const name = (toolName ?? '').toLowerCase();
+  const raw = toolName ?? '';
+  const mcp = MCP_NAME.exec(raw);
+  const name = (mcp ? mcp[2] : raw).toLowerCase();
   if (!name) return 'other';
-  if (name.startsWith('mcp__')) return 'mcp';
   if (name === 'bash') return 'bash';
   if (name === 'read') return 'read';
   if (EDIT_TOOLS.has(name)) return 'edit';
@@ -112,7 +121,7 @@ export function familyId(toolName: string | undefined): FamilyId {
   if (name === 'computer') return 'screen';
   if (name === 'navigate') return 'navigate';
   if (name === 'javascript_tool' || name === 'repl') return 'js';
-  return 'other';
+  return mcp ? 'mcp' : 'other';
 }
 
 export function toolFamily(toolName: string | undefined): ToolFamily {
@@ -287,6 +296,24 @@ export function describeTool(
   result: string | undefined,
   status: ToolStatus
 ): ToolDescriptor {
+  const described = sentence(toolName, input, result, status);
+  const server = MCP_NAME.exec(toolName ?? '')?.[1];
+  if (!server) return described;
+  // Which server answered is the one thing the sentence cannot say for itself.
+  const identity = readServer(server);
+  return {
+    ...described,
+    chip: described.chip ?? identity.label,
+    favicon: described.favicon ?? (identity.host ? faviconUrl(identity.host) : undefined),
+  };
+}
+
+function sentence(
+  toolName: string | undefined,
+  input: Record<string, unknown> | undefined,
+  result: string | undefined,
+  status: ToolStatus
+): ToolDescriptor {
   const name = toolName ?? 'Tool';
   const output = status === 'success' ? result : undefined;
   const family = familyId(name);
@@ -443,11 +470,12 @@ export function describeTool(
 
     case 'js': {
       const description = str(input?.description);
-      const code = str(input?.code);
+      const code = codeOf(input);
       return {
         ...base,
         label: 'Ran JavaScript',
-        object: description ? undefined : code ? oneLine(code.split('\n')[0]) : undefined,
+        // Snippets routinely open on a blank line; lead with the first real one.
+        object: description ? undefined : firstLine(code),
         detail: description,
         secondLine: firstLine(output),
         expanded: 'code',
@@ -455,14 +483,11 @@ export function describeTool(
     }
 
     case 'mcp': {
-      const [, server, tool] = /^mcp__(.+?)__(.+)$/.exec(name) ?? [];
-      const identity = server ? readServer(server) : undefined;
+      const tool = MCP_NAME.exec(name)?.[2];
       return {
         ...base,
         label: humanize(tool ?? name),
         objectIsMono: false,
-        chip: identity?.label,
-        favicon: identity?.host ? faviconUrl(identity.host) : undefined,
         secondLine: firstLine(output),
         expanded: 'params',
       };
@@ -480,6 +505,11 @@ export function describeTool(
     }
   }
 }
+
+/** Where a JavaScript call keeps its source: `code` in the REPL, `text` in
+ *  the browser's, since each names the same field differently. */
+export const codeOf = (input: Record<string, unknown> | undefined): string | undefined =>
+  str(input?.code) ?? str(input?.text) ?? str(input?.script);
 
 /** The tunnel hands results back as strings; anything else is shown as JSON. */
 export function resultText(value: unknown): string | undefined {
