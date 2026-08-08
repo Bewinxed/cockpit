@@ -59,6 +59,7 @@
     IconChevronRight,
     IconFolderDuo,
     IconHistoryDuo,
+    IconPlus,
     IconPin,
     IconPinFilled,
     IconPinList,
@@ -86,6 +87,7 @@
   import MachineLogin from './MachineLogin.svelte';
   import StoredSessionMenu from './StoredSessionMenu.svelte';
   import { sessionTitle, transcriptHref } from './links';
+  import SpawnPanel from './SpawnPanel.svelte';
   import { machineLabel, machineOs, signInWarning } from './machine';
   import { orderMachines, rail, type Pin, type PinKind } from './rail.svelte';
 
@@ -135,6 +137,32 @@
   }
 
   const unpinned = (instance: InstanceRow) => !rail.isPinned('session', instance.id);
+
+  /** Blocked or failed sessions, deduped by instance — the rail's red list. */
+  const needsYou = $derived.by(() => {
+    const seen = new Set<string>();
+    const rows: { instance: InstanceRow; failed: boolean }[] = [];
+    for (const req of cockpit.blocked) {
+      if (seen.has(req.instanceId)) continue;
+      const instance = cockpit.listedInstances.find((row) => row.id === req.instanceId);
+      if (instance) {
+        seen.add(req.instanceId);
+        rows.push({ instance, failed: false });
+      }
+    }
+    for (const instance of cockpit.listedInstances) {
+      if (isFailed(instance) && !seen.has(instance.id)) rows.push({ instance, failed: true });
+    }
+    return rows;
+  });
+
+  /** Spawn-here from a folder group header, prefilled machine + cwd. */
+  let spawnOpen = $state(false);
+  let spawnPrefill = $state<{ machineId?: string; cwd?: string } | undefined>();
+  const spawnHere = (machineId: string, cwd: string) => {
+    spawnPrefill = { machineId, cwd };
+    spawnOpen = true;
+  };
 
   const pinnedItems = $derived(
     rail.pins.map(resolve).filter((item): item is RailItem => item !== null)
@@ -455,7 +483,7 @@
     <Sidebar.Menu>
       {#each groupByCwd(instances) as entry (isCwdGroup(entry) ? `dir:${entry.cwd}` : entry.id)}
         {#if isCwdGroup(entry)}
-          <Sidebar.GroupLabel class="h-auto gap-1.5 px-2 pt-2 pb-1" title={entry.cwd}>
+          <Sidebar.GroupLabel class="group/cwd h-auto gap-1.5 px-2 pt-2 pb-1" title={entry.cwd}>
             <IconFolderDuo class="size-3.5 shrink-0" />
             <span class="truncate font-mono text-xs font-medium">
               {leaf(entry.cwd)}
@@ -463,6 +491,17 @@
             <span class="shrink-0 text-xs tabular-nums text-muted-foreground">
               {entry.rows.length}
             </span>
+            <button
+              type="button"
+              class="ml-auto flex size-6 shrink-0 items-center justify-center rounded-md
+                text-muted-foreground opacity-0 transition-opacity hover:bg-accent
+                hover:text-foreground focus-visible:opacity-100 group-hover/cwd:opacity-100
+                max-md:opacity-100"
+              title="New session in {leaf(entry.cwd)}"
+              onclick={() => spawnHere(entry.rows[0].machineId, entry.cwd)}
+            >
+              <IconPlus class="size-3.5" />
+            </button>
           </Sidebar.GroupLabel>
           {#each entry.rows as instance (instance.id)}
             <Sidebar.MenuItem class={ITEM}>
@@ -660,6 +699,43 @@
   </Sidebar.Header>
 
   <Sidebar.Content>
+    {#if needsYou.length > 0}
+      <Sidebar.Group class="py-0">
+        <Sidebar.GroupLabel class="gap-1.5 px-2 text-[13px] font-medium text-muted-foreground">
+          Needs you
+          <span
+            class="ml-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-error/15
+              px-1 text-xs font-semibold tabular-nums text-error"
+          >
+            {needsYou.length}
+          </span>
+        </Sidebar.GroupLabel>
+        <Sidebar.Menu>
+          {#each needsYou as row (row.instance.id)}
+            {@const current = isCurrent(`/session/${row.instance.id}`)}
+            <Sidebar.MenuItem class={ITEM}>
+              <Sidebar.MenuButton isActive={current} class={ROW}>
+                {#snippet child({ props })}
+                  <a
+                    {...props}
+                    href="/session/{row.instance.id}"
+                    aria-current={current ? 'page' : undefined}
+                    data-rail-row
+                  >
+                    <span class="size-2 shrink-0 rounded-full bg-error"></span>
+                    <span class={NAME}>{titleOf(row.instance) ?? leaf(row.instance.cwd)}</span>
+                    <span class="ml-auto shrink-0 text-xs text-error">
+                      {row.failed ? 'Failed' : 'Needs you'}
+                    </span>
+                  </a>
+                {/snippet}
+              </Sidebar.MenuButton>
+            </Sidebar.MenuItem>
+          {/each}
+        </Sidebar.Menu>
+      </Sidebar.Group>
+    {/if}
+
     {#if pinned.length > 0}
       <Sidebar.Group class="py-0">
         <Sidebar.GroupLabel class="gap-1.5 px-2 text-[13px] font-medium text-muted-foreground">
@@ -767,6 +843,10 @@
     {/if}
   </Sidebar.Content>
 </Sidebar.Root>
+
+{#if spawnOpen}
+  <SpawnPanel open={spawnOpen} prefill={spawnPrefill} onclose={() => (spawnOpen = false)} />
+{/if}
 
 {#if loginTarget}
   <MachineLogin
