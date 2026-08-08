@@ -196,6 +196,30 @@
     }
   }
 
+  /**
+   * What the tab lists. A session that has spoken names its own skills and the
+   * discovery enriches them; a resumed one has no init frame and would show
+   * nothing forever — so the machine's answer for this folder stands alone,
+   * which is exactly what a session here would see (NEW.md §11).
+   */
+  const skillRows = $derived(
+    skills.length > 0
+      ? skills.map((skill) => ({
+          name: skill.name,
+          description: skill.description,
+          source: skill.source,
+          found: discovered[skill.name] as DiscoveredSkill | undefined,
+        }))
+      : Object.values(discovered)
+          .sort((a, b) => a.name.localeCompare(b.name))
+          .map((found) => ({
+            name: found.name,
+            description: found.description,
+            source: undefined as string | undefined,
+            found: found as DiscoveredSkill | undefined,
+          }))
+  );
+
   async function adopt(skill: DiscoveredSkill) {
     adopting[skill.name] = true;
     try {
@@ -365,19 +389,24 @@
       </Tabs.Content>
 
       <Tabs.Content value="skills" class={PANEL}>
-        {#if skills.length === 0}
+        {#if skillRows.length === 0}
           <p class="text-caption">
-            This session has listed no skills yet. The list arrives with the session's own init
-            frame, so it fills in on the first turn.
+            No skills here yet — the session has listed none, and the machine names none for this
+            folder.
           </p>
         {:else}
           <p class="text-caption">
-            {skills.length} skill{skills.length === 1 ? '' : 's'} this session can reach, as its
-            <span class="font-mono">/</span> menu lists them.
+            {#if skills.length > 0}
+              {skills.length} skill{skills.length === 1 ? '' : 's'} this session can reach, as its
+              <span class="font-mono">/</span> menu lists them.
+            {:else}
+              {skillRows.length} skill{skillRows.length === 1 ? '' : 's'} a session in this folder
+              can reach, as the machine lists them.
+            {/if}
           </p>
           <ul class="flex flex-col rounded-xl bg-card shadow-md">
-            {#each skills as skill (skill.name)}
-              {@const found = discovered[skill.name]}
+            {#each skillRows as skill (skill.name)}
+              {@const found = skill.found}
               <li
                 class="flex min-h-9 flex-wrap items-start gap-x-3 gap-y-1 border-t border-border/50 px-3 py-2 first:border-t-0"
               >
