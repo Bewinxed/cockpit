@@ -113,7 +113,11 @@
       <span class="flex min-w-0 flex-1 flex-col gap-0.5">
         <span class="flex min-w-0 items-baseline gap-1.5">
           {#if descriptor.label}
-            <span class="shrink-0 text-[13px] leading-5 text-foreground">{descriptor.label}</span>
+            <!-- The verb never yields to its own object — it only refuses to
+                 take more than three fifths of the line on a narrow screen. -->
+            <span class="max-w-[60%] shrink-0 truncate text-[13px] leading-5 text-foreground">
+              {descriptor.label}
+            </span>
           {/if}
           {#if descriptor.object}
             <span
@@ -170,19 +174,19 @@
         </span>
       {/if}
 
-      <span class="mt-0.5 flex size-4 shrink-0 items-center justify-center">
-        {#if status === 'pending' || justFinished}
-          <span class="icon-swap size-4" out:fade={{ duration: 240 }}>
-            <IconSpinner
-              class="size-4 animate-spin text-warning motion-reduce:animate-none"
-              data-active={status === 'pending'}
-            />
-            <IconCheck class="size-4 text-success" data-active={justFinished} />
-          </span>
-        {:else if status === 'error'}
-          <IconError class="size-4 text-error" />
-        {/if}
-      </span>
+      <!-- No slot is reserved for silence: a finished row spends those pixels
+           on the path leaf instead, which is what a phone needs them for. -->
+      {#if status === 'pending' || justFinished}
+        <span class="icon-swap mt-0.5 size-4 shrink-0" out:fade={{ duration: 240 }}>
+          <IconSpinner
+            class="size-4 animate-spin text-warning motion-reduce:animate-none"
+            data-active={status === 'pending'}
+          />
+          <IconCheck class="size-4 text-success" data-active={justFinished} />
+        </span>
+      {:else if status === 'error'}
+        <IconError class="mt-0.5 size-4 shrink-0 text-error" />
+      {/if}
     </div>
   </Collapsible.Trigger>
 
