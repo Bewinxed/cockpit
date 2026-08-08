@@ -33,7 +33,7 @@
     stopSession,
   } from './client.svelte';
   import { copyToClipboard } from './copy';
-  import { identityVar } from './identity';
+  import { identityVar } from './folder-prefs.svelte';
   import { sessionTitle } from './links';
   import { workingSet } from './working-set.svelte';
 

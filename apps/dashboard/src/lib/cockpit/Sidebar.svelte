@@ -125,7 +125,7 @@
   import OsMark from './OsMark.svelte';
   import SpawnPanel from './SpawnPanel.svelte';
   import StoredSessionMenu from './StoredSessionMenu.svelte';
-  import { identityVar } from './identity';
+  import { folderPrefs, identityVar } from './folder-prefs.svelte';
   import { sessionTitle, transcriptHref } from './links';
   import { machineLabel, signInWarning } from './machine';
   import { orderMachines, rail, type PinKind } from './rail.svelte';
@@ -341,6 +341,18 @@
   const isSolo = (folder: Folder): boolean =>
     !folder.project && folder.live.length === 1 && folder.stored.length === 0;
 
+  /**
+   * Whether the rail flattens this directory into plain rows. The rule above
+   * is only the default: what the reader said outranks it in both directions,
+   * registered or not. A folder with nothing running has no rows to flatten
+   * into, so it keeps its header and its preference waits.
+   */
+  const isFlat = (folder: Folder): boolean => {
+    if (folder.live.length === 0) return false;
+    const said = folderPrefs.grouping(folder.cwd);
+    return said ? said === 'ungrouped' : isSolo(folder);
+  };
+
   type MachineItem = { id: string; machine: Machine };
 
   const machineItems = $derived(
@@ -371,7 +383,7 @@
   /** Everything but this one shut — how you get back to one folder at a time. */
   function collapseOthers(id: string): void {
     for (const folder of folders) {
-      if (folder.id !== id && !isSolo(folder)) shut[folder.id] = true;
+      if (folder.id !== id && !isFlat(folder)) shut[folder.id] = true;
     }
     delete shut[id];
     writeMap(SHUT_KEY, shut);
@@ -507,7 +519,7 @@
   </Sidebar.MenuButton>
 {/snippet}
 
-{#snippet sessionRow(instance: InstanceRow, chip: boolean, solo: Folder | null)}
+{#snippet sessionRow(instance: InstanceRow, chip: boolean, flat: Folder | null)}
   {@const activity = cockpit.activityOf(instance.id)}
   {@const branches = cockpit.subagentsOf(instance.id)}
   {@const delegated = cockpit.runningSubagentsOf(instance.id)}
@@ -521,7 +533,11 @@
   {@const current = isCurrent(`/session/${instance.id}`)}
   {@const showing = unfolded[instance.id] ?? false}
   {@const name = titleOf(instance)}
-  <LiveSessionMenu {instance}>
+  {@const Mark = flat ? folderPrefs.mark(flat.cwd) : IconFolderDuo}
+  <LiveSessionMenu
+    {instance}
+    ongroup={flat ? () => folderPrefs.setGrouping(flat.cwd, 'grouped') : undefined}
+  >
     <Sidebar.MenuButton isActive={current} class={ROW}>
       {#snippet child({ props })}
         <a
@@ -544,10 +560,11 @@
               <ActivityDot {activity} size={1.5} />
             {/if}
           </span>
-          <!-- A row standing in for its own folder carries the folder's hue,
-               so the directory is still recognisable without its header. -->
-          {#if solo}
-            <IconFolderDuo class="identity-ink shrink-0" style={identityVar(solo.cwd)} />
+          <!-- A row standing in for its own folder carries the folder's hue
+               and mark, so the directory is still recognisable without its
+               header. -->
+          {#if flat}
+            <Mark class="identity-ink shrink-0" style={identityVar(flat.cwd)} />
           {/if}
           <span
             class="min-w-0 truncate {name.path ? 'font-mono' : ''} {sleeping
@@ -560,12 +577,12 @@
                the title is not already that same path. A leaf is short by
                nature, so here it is the title that yields: a sliver of a
                directory name is worth less than the room it saved. -->
-          {#if solo && !name.path}
+          {#if flat && !name.path}
             <span
               class="max-w-24 shrink-0 truncate font-mono text-micro text-muted-foreground"
-              title={solo.cwd}
+              title={flat.cwd}
             >
-              {solo.name}
+              {flat.name}
             </span>
           {/if}
           <!-- A glance cue, not an alert: it says only that this one stopped
@@ -609,8 +626,8 @@
             {#if chip}
               {@render machineChip(instance.machineId)}
             {/if}
-            {#if solo?.oneMachine}
-              {@render machineGlyph(solo.machineId)}
+            {#if flat?.oneMachine}
+              {@render machineGlyph(flat.machineId)}
             {/if}
           </span>
         </a>
@@ -697,10 +714,15 @@
   {@const tinted = !open && folder.alerting}
   {@const all = showingAll[folder.id] ?? false}
   {@const recents = all ? folder.stored : folder.stored.slice(0, RECENTS)}
+  {@const Mark = folderPrefs.mark(folder.cwd)}
   <FolderMenu
     name={folder.name}
+    cwd={folder.cwd}
     project={folder.project}
     onnew={() => spawnHere(folder)}
+    onungroup={folder.live.length > 0
+      ? () => folderPrefs.setGrouping(folder.cwd, 'ungrouped')
+      : undefined}
     oncollapseothers={() => collapseOthers(folder.id)}
   >
     <div class="group/folder relative">
@@ -723,9 +745,9 @@
                 style="transition-timing-function: var(--ease-out-expo)"
               />
             </span>
-            <!-- The directory's own hue, except while it is shouting: what is
-                 waiting on a human outranks what the folder is called. -->
-            <IconFolderDuo
+            <!-- The directory's own hue and mark, except while it is shouting:
+                 what is waiting on a human outranks what the folder wears. -->
+            <Mark
               class="shrink-0 {tinted ? 'text-error' : 'identity-ink'}"
               style={tinted ? undefined : identityVar(folder.cwd)}
             />
@@ -908,13 +930,22 @@
         {#if folders.length > 0}
           <Sidebar.Menu>
             {#each folders as folder (folder.id)}
-              <Sidebar.MenuItem class={ITEM}>
-                {#if isSolo(folder) && folder.live[0]}
-                  {@render sessionRow(folder.live[0], false, folder)}
-                {:else}
+              {#if isFlat(folder)}
+                <!-- Flattened: the folder's live work stands at the top level,
+                     one row each. What stopped here is not shown — a folder
+                     asked to get out of the way should not leave its history
+                     behind as loose rows; the project page and ⌘K still have
+                     it. -->
+                {#each folder.live as instance (instance.id)}
+                  <Sidebar.MenuItem class={ITEM}>
+                    {@render sessionRow(instance, false, folder)}
+                  </Sidebar.MenuItem>
+                {/each}
+              {:else}
+                <Sidebar.MenuItem class={ITEM}>
                   {@render folderGroup(folder)}
-                {/if}
-              </Sidebar.MenuItem>
+                </Sidebar.MenuItem>
+              {/if}
             {/each}
           </Sidebar.Menu>
         {:else}

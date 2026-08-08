@@ -9,6 +9,7 @@
     IconCopy,
     IconCheck,
     IconExternal,
+    IconFolder,
     IconPin,
     IconPinFilled,
     IconStop,
@@ -20,7 +21,18 @@
   import { copyToClipboard } from './copy';
   import { rail } from './rail.svelte';
 
-  let { instance, children }: { instance: InstanceRow; children: Snippet } = $props();
+  interface Props {
+    instance: InstanceRow;
+    /**
+     * Set only where the rail has flattened this session's directory out of
+     * its folder — the way back. A row drawn inside a folder is already
+     * grouped, and offering it the verb would say nothing.
+     */
+    ongroup?: () => void;
+    children: Snippet;
+  }
+
+  let { instance, ongroup, children }: Props = $props();
 
   const href = $derived(`/session/${instance.id}`);
   const scratch = $derived(instance.kind === 'scratch');
@@ -63,6 +75,12 @@
         Pin to rail
       {/if}
     </ContextMenu.Item>
+    {#if ongroup}
+      <ContextMenu.Item onSelect={ongroup}>
+        <IconFolder />
+        Group into folder
+      </ContextMenu.Item>
+    {/if}
 
     {#if scratch}
       <ContextMenu.Separator />

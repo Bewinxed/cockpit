@@ -71,6 +71,8 @@ export { default as IconDollar } from '~icons/solar/dollar-linear';
 export { default as IconDownload } from '~icons/solar/download-linear';
 export { default as IconBook } from '~icons/solar/book-linear';
 export { default as IconHome } from '~icons/solar/home-linear';
+/** Solar's own spelling. The `palette-*` cut is a board; this one is the palette. */
+export { default as IconPalette } from '~icons/solar/pallete-2-linear';
 export { default as IconPin } from '~icons/solar/pin-linear';
 export { default as IconPinList } from '~icons/solar/pin-list-linear';
 /** A pressed pin, not a kind of thing — hence bold rather than duotone. */
@@ -90,3 +92,24 @@ export { default as IconHistoryDuo } from '~icons/solar/history-bold-duotone';
 export { default as IconSparklesDuo } from '~icons/solar/magic-stick-3-bold-duotone';
 /** Delegated work: the subagents a session still has out. */
 export { default as IconSubagentsDuo } from '~icons/solar/users-group-rounded-bold-duotone';
+
+/*
+ * The marks a folder can be given by hand (see `FOLDER_MARKS` in
+ * lib/cockpit/folder-prefs.svelte.ts). Duotone, like every other "what this
+ * is" glyph, and picked to span the kinds of work a directory holds rather
+ * than to be a complete icon set.
+ */
+export { default as IconRocketDuo } from '~icons/solar/rocket-2-bold-duotone';
+export { default as IconBoxDuo } from '~icons/solar/box-bold-duotone';
+export { default as IconGlobeDuo } from '~icons/solar/global-bold-duotone';
+export { default as IconTerminalDuo } from '~icons/solar/code-square-bold-duotone';
+export { default as IconBookDuo } from '~icons/solar/book-bold-duotone';
+export { default as IconLabDuo } from '~icons/solar/test-tube-bold-duotone';
+export { default as IconDatabaseDuo } from '~icons/solar/database-bold-duotone';
+export { default as IconCpuDuo } from '~icons/solar/cpu-bold-duotone';
+export { default as IconBoltDuo } from '~icons/solar/bolt-bold-duotone';
+export { default as IconLeafDuo } from '~icons/solar/leaf-bold-duotone';
+export { default as IconPlanetDuo } from '~icons/solar/planet-bold-duotone';
+export { default as IconFireDuo } from '~icons/solar/fire-bold-duotone';
+export { default as IconGhostDuo } from '~icons/solar/ghost-smile-bold-duotone';
+export { default as IconPaletteDuo } from '~icons/solar/pallete-2-bold-duotone';

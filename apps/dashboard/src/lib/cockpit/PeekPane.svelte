@@ -27,7 +27,7 @@
   import { goto } from '$app/navigation';
   import { Button } from '$lib/components/ui/button';
   import * as ContextMenu from '$lib/components/ui/context-menu';
-  import { IconClose, IconExternal, IconFolderDuo, IconFork, IconStop } from '$lib/icons';
+  import { IconClose, IconExternal, IconFork, IconStop } from '$lib/icons';
   import { smoothText } from '$lib/utils/smooth-text.svelte';
   import { getToolGlance } from '$lib/utils/tool-display';
   import { ACTIVITY_LABEL, SLEEPING_LABEL } from './activity';
@@ -49,7 +49,7 @@
     type PendingPermission,
     type PermissionAnswer,
   } from './client.svelte';
-  import { identityVar } from './identity';
+  import { folderPrefs, identityVar } from './folder-prefs.svelte';
   import { sessionTitle } from './links';
   import { machineLabel } from './machine';
   import { permissionSummary } from './permission-summary';
@@ -245,7 +245,8 @@
                     <!-- The directory's hue, the same one the card it was
                          picked from wears: the peek belongs to a project. -->
                     {#if cwd}
-                      <IconFolderDuo class="identity-ink size-4 shrink-0" style={identityVar(cwd)} />
+                      {@const Mark = folderPrefs.mark(cwd)}
+                      <Mark class="identity-ink size-4 shrink-0" style={identityVar(cwd)} />
                     {/if}
                     <span class="truncate">{title}</span>
                   </h2>

@@ -1,7 +1,6 @@
 <script lang="ts">
   import {
     IconChevronRight,
-    IconFolderDuo,
     IconPlus,
   } from '$lib/icons';
   import { onMount, type Snippet } from 'svelte';
@@ -23,7 +22,7 @@
   import AttentionQueue from '$lib/cockpit/AttentionQueue.svelte';
   import PeekPane, { type PeekTarget } from '$lib/cockpit/PeekPane.svelte';
   import SpawnPanel from '$lib/cockpit/SpawnPanel.svelte';
-  import { identityVar } from '$lib/cockpit/identity';
+  import { folderPrefs, identityVar } from '$lib/cockpit/folder-prefs.svelte';
   import { transcriptHref } from '$lib/cockpit/links';
   import { machineLabel, machineOs } from '$lib/cockpit/machine';
   import { isTyping } from '$lib/utils/typing';
@@ -213,15 +212,18 @@
                 {@const count = live.length + stored.length}
                 <!-- Header shares the rows' max-w-3xl measure: one right edge
                      per card at ultrawide, not two (finish-review finding). -->
+                {@const Mark = folderPrefs.mark(group.project.cwd)}
                 <FolderMenu
                   name={group.project.name}
+                  cwd={group.project.cwd}
                   project={group.project}
                   onnew={() => openSpawn({ machineId: group.project.machineId, cwd: group.project.cwd, projectId: group.project.id })}
                 >
                   <div class="flex max-w-3xl items-center gap-3 px-4 py-3">
-                    <!-- The project's own hue, the same one its folder wears in
-                         the rail: the card is recognisable before it is read. -->
-                    <IconFolderDuo
+                    <!-- The project's own hue and mark, the same ones its folder
+                         wears in the rail: the card is recognisable before it is
+                         read. -->
+                    <Mark
                       class="identity-ink size-5 shrink-0"
                       style={identityVar(group.project.cwd)}
                     />
