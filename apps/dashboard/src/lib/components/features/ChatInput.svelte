@@ -445,8 +445,8 @@
     ondrop={handleDrop}
   >
     <!-- One card: grows to accommodate prompts and the command palette, input row at the bottom -->
-    <div class="bg-card border border-border rounded-xl shadow-lg overflow-hidden
-                focus-within:ring-2 focus-within:ring-ring/20 focus-within:border-ring
+    <div class="material-panel rounded-xl shadow-lg overflow-hidden
+                focus-within:ring-2 focus-within:ring-ring/20
                 transition-colors {dragging ? 'ring-2 ring-ring/40' : ''}"
     >
       {#if attachmentOpen && attachment}
