@@ -110,8 +110,9 @@
   const blocked = $derived(cockpit.blockedCount);
   const disconnected = $derived(cockpit.status !== 'connected');
 
-  /** The two screens a phone lives on; the rest are read, not worked from. */
-  const thumbBar = $derived(page.url.pathname.startsWith('/session'));
+  /** Where the work happens: the board and the conversations. It is the phone's
+   *  two screens, and the only place the tab strip belongs. */
+  const sessionRoute = $derived(page.url.pathname.startsWith('/session'));
 
   /* ---- Reconnect banner countdown ---- */
   let countdown = $state(0);
@@ -185,8 +186,6 @@
     </Button>
 
     <a href="/session" class="text-title shrink-0 text-[17px]">Outpost</a>
-
-    <SessionTabs />
 
     <div class="ml-auto flex items-center gap-1.5">
       <Button
@@ -282,6 +281,11 @@
       onkeydown={resizeKeydown}
     ></div>
     <main id="main" class="flex min-w-0 flex-1 flex-col overflow-hidden">
+      <!-- Colocated with what it opens (user, 2026-08-08): the strip is the top
+           row of the working column, not part of the chrome above it. -->
+      {#if sessionRoute}
+        <SessionTabs />
+      {/if}
       {@render children()}
     </main>
 
@@ -294,7 +298,7 @@
     </Sheet.Root>
   </SidebarPrimitive.Provider>
 
-  {#if thumbBar}
+  {#if sessionRoute}
     <ThumbBar onjump={() => (palette = true)} />
   {/if}
 </div>

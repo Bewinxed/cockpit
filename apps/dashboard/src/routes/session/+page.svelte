@@ -1,7 +1,6 @@
 <script lang="ts">
   import {
     IconChevronRight,
-    IconFolderDuo,
     IconPlus,
   } from '$lib/icons';
   import { onMount, type Snippet } from 'svelte';
@@ -15,12 +14,15 @@
     type InstanceRow,
     type ProjectRow,
   } from '$lib/cockpit/client.svelte';
+  import FolderMenu from '$lib/cockpit/FolderMenu.svelte';
   import LiveSessionRow from '$lib/cockpit/LiveSessionRow.svelte';
   import MachineMenu from '$lib/cockpit/MachineMenu.svelte';
+  import OsMark from '$lib/cockpit/OsMark.svelte';
   import StoredSessionRow from '$lib/cockpit/StoredSessionRow.svelte';
   import AttentionQueue from '$lib/cockpit/AttentionQueue.svelte';
   import PeekPane, { type PeekTarget } from '$lib/cockpit/PeekPane.svelte';
   import SpawnPanel from '$lib/cockpit/SpawnPanel.svelte';
+  import { folderPrefs, identityVar } from '$lib/cockpit/folder-prefs.svelte';
   import { transcriptHref } from '$lib/cockpit/links';
   import { machineLabel, machineOs } from '$lib/cockpit/machine';
   import { isTyping } from '$lib/utils/typing';
@@ -210,56 +212,72 @@
                 {@const count = live.length + stored.length}
                 <!-- Header shares the rows' max-w-3xl measure: one right edge
                      per card at ultrawide, not two (finish-review finding). -->
-                <div class="flex max-w-3xl items-center gap-3 px-4 py-3">
-                  <IconFolderDuo class="size-5 shrink-0 text-muted-foreground" />
-                  <div class="min-w-0 flex-1">
-                    <span class="text-sm font-semibold">{group.project.name}</span>
-                    <span class="block truncate font-mono text-micro text-muted-foreground">{group.project.cwd}</span>
-                  </div>
-                  <span class="shrink-0 text-micro text-muted-foreground tabular-nums" data-tabular>
-                    {count} session{count === 1 ? '' : 's'}
-                  </span>
-                  <button
-                    type="button"
-                    class="flex size-8 items-center justify-center rounded-lg text-muted-foreground
-                      transition-colors hover:bg-accent hover:text-foreground"
-                    title="New session in {group.project.name}"
-                    onclick={() => openSpawn({ machineId: group.project.machineId, cwd: group.project.cwd, projectId: group.project.id })}
-                  >
-                    <IconPlus class="size-4" />
-                  </button>
-                </div>
-              {:else}
-                {@const osInfo = machineOs(group.os)}
-                {@const machine = cockpit.machines.find((m) => m.machineId === group.machineId)}
-                {@const count = live.length + stored.length}
-                {#if machine}
+                {@const Mark = folderPrefs.mark(group.project.cwd)}
+                <FolderMenu
+                  name={group.project.name}
+                  cwd={group.project.cwd}
+                  project={group.project}
+                  onnew={() => openSpawn({ machineId: group.project.machineId, cwd: group.project.cwd, projectId: group.project.id })}
+                >
                   <div class="flex max-w-3xl items-center gap-3 px-4 py-3">
-                    <MachineMenu {machine}>
-                      <div class="flex min-w-0 flex-1 items-center gap-3">
-                        {#if osInfo.Icon}
-                          {@const OsIcon = osInfo.Icon}
-                          <OsIcon class="size-5 shrink-0 text-muted-foreground" />
-                        {/if}
-                        <div class="min-w-0 flex-1">
-                          <span class="text-sm font-semibold">{machineLabel(group.hostname)}</span>
-                          <span class="block text-micro text-muted-foreground">{osInfo.label}{osInfo.arch ? ` ${osInfo.arch}` : ''}</span>
-                        </div>
-                      </div>
-                    </MachineMenu>
-                    <span class="shrink-0 text-micro text-muted-foreground tabular-nums" data-tabular>
+                    <!-- The project's own hue and mark, the same ones its folder
+                         wears in the rail: the card is recognisable before it is
+                         read. -->
+                    <Mark
+                      class="identity-ink size-5 shrink-0"
+                      style={identityVar(group.project.cwd)}
+                    />
+                    <div class="min-w-0 flex-1">
+                      <span class="text-sm font-semibold">{group.project.name}</span>
+                      <span class="block truncate font-mono text-micro text-muted-foreground">{group.project.cwd}</span>
+                    </div>
+                    <span
+                      class="identity-tint shrink-0 rounded-full px-2 py-0.5 text-micro text-muted-foreground tabular-nums"
+                      style={identityVar(group.project.cwd)}
+                      data-tabular
+                    >
                       {count} session{count === 1 ? '' : 's'}
                     </span>
                     <button
                       type="button"
                       class="flex size-8 items-center justify-center rounded-lg text-muted-foreground
                         transition-colors hover:bg-accent hover:text-foreground"
-                      title="New session on {machineLabel(group.hostname)}"
-                      onclick={() => openSpawn({ machineId: group.machineId })}
+                      title="New session in {group.project.name}"
+                      onclick={() => openSpawn({ machineId: group.project.machineId, cwd: group.project.cwd, projectId: group.project.id })}
                     >
                       <IconPlus class="size-4" />
                     </button>
                   </div>
+                </FolderMenu>
+              {:else}
+                {@const osInfo = machineOs(group.os)}
+                {@const machine = cockpit.machines.find((m) => m.machineId === group.machineId)}
+                {@const count = live.length + stored.length}
+                {#if machine}
+                  <!-- The whole header answers the right button, not just the
+                       name in it: a menu you have to hit a 20px glyph for is
+                       one nobody finds. -->
+                  <MachineMenu {machine}>
+                    <div class="flex max-w-3xl items-center gap-3 px-4 py-3">
+                      <OsMark os={group.os} class="size-5 shrink-0 text-muted-foreground" />
+                      <div class="min-w-0 flex-1">
+                        <span class="text-sm font-semibold">{machineLabel(group.hostname)}</span>
+                        <span class="block text-micro text-muted-foreground">{osInfo.label}{osInfo.arch ? ` ${osInfo.arch}` : ''}</span>
+                      </div>
+                      <span class="shrink-0 text-micro text-muted-foreground tabular-nums" data-tabular>
+                        {count} session{count === 1 ? '' : 's'}
+                      </span>
+                      <button
+                        type="button"
+                        class="flex size-8 items-center justify-center rounded-lg text-muted-foreground
+                          transition-colors hover:bg-accent hover:text-foreground"
+                        title="New session on {machineLabel(group.hostname)}"
+                        onclick={() => openSpawn({ machineId: group.machineId })}
+                      >
+                        <IconPlus class="size-4" />
+                      </button>
+                    </div>
+                  </MachineMenu>
                 {/if}
               {/if}
 
@@ -386,7 +404,7 @@
        over rather than in a second gutter. -->
   {#if roomForPeek.current}
     <aside class="flex w-[520px] shrink-0 flex-col py-4 pr-4 sm:py-6 sm:pr-6" aria-label="Session detail">
-      <PeekPane target={peeked} />
+      <PeekPane target={peeked} onclose={() => (peeked = null)} />
     </aside>
   {/if}
 </div>
