@@ -7,8 +7,11 @@
   import { ACTIVITY_LABEL, SLEEPING_HINT, SLEEPING_LABEL } from './activity';
   import ActivityDot from './ActivityDot.svelte';
   import { cockpit, isFailed, isResumable, type InstanceRow } from './client.svelte';
+  import { identityVar } from './folder-prefs.svelte';
   import { sessionTitle } from './links';
   import LiveSessionMenu from './LiveSessionMenu.svelte';
+  import TaskRing from './TaskRing.svelte';
+  import { taskProgress, tasksOf } from './tasks.svelte';
 
   interface Props {
     instance: InstanceRow;
@@ -34,6 +37,12 @@
   // transcript this instance is writing. A quest is tagged out of the catalog,
   // and a session that has not spoken yet is not in it either, so both land on
   // the fallback with the path beside them to say the rest.
+  // Read only — the board sweeps the fleet's ledgers once on arrival and the
+  // frames keep them current. A row that fetched for itself would make a card
+  // of thirty sessions thirty round trips in one frame.
+  const plan = $derived(tasksOf(instance.id));
+  const progress = $derived(plan && plan.tasks.length > 0 ? taskProgress(plan) : null);
+
   const title = $derived.by(() => {
     const info = instance.sessionId
       ? cockpit.catalogOf(instance.machineId).find((row) => row.sessionId === instance.sessionId)
@@ -91,11 +100,27 @@
           title={instance.cwd}
         ><bdi>{instance.cwd}</bdi></span>
       {/if}
+      <!-- How far its plan has got, at a glance and nothing more: the row is
+           already a link, and a control inside one is two targets sharing a
+           36px band. It takes the right cluster's `ml-auto` when it is here,
+           so the state word beside it keeps reading as one group. -->
+      {#if progress}
+        <span
+          class="ml-auto flex shrink-0 items-center gap-1.5 text-micro text-muted-foreground tabular-nums"
+          data-tabular
+        >
+          <span class="identity-ink flex items-center" style={identityVar(instance.cwd)}>
+            <TaskRing done={progress.done} total={progress.total} size="sm" />
+          </span>
+          {progress.done}/{progress.total}
+        </span>
+      {/if}
       <!-- The state word keeps its colour until the row goes dark under the
            pointer, where only the surface's own foreground stays legible. -->
       <span
-        class="ml-auto inline-grid shrink-0 justify-items-end text-micro tabular-nums group-hover:text-accent-foreground {failed ||
-        activity === 'blocked'
+        class="inline-grid shrink-0 justify-items-end text-micro tabular-nums group-hover:text-accent-foreground {progress
+          ? 'ml-2'
+          : 'ml-auto'} {failed || activity === 'blocked'
           ? 'font-medium text-error'
           : 'text-muted-foreground'}"
         data-tabular

@@ -77,9 +77,13 @@ async function read(viewId: string): Promise<void> {
   const inflight = running.get(viewId);
   if (inflight) return inflight;
 
+  // A board row's session has never been opened, so it has no view state — but
+  // the registry already knows which machine it runs on and which SDK session
+  // it is writing, which is all the ledger is filed under.
   const session = cockpit.session(viewId);
-  const machineId = session?.machineId;
-  const sessionId = session?.sessionId;
+  const row = cockpit.instances.find((instance) => instance.id === viewId);
+  const machineId = session?.machineId || row?.machineId;
+  const sessionId = session?.sessionId || row?.sessionId;
   if (!machineId || !sessionId) return;
 
   const invalidated = stale.delete(viewId);

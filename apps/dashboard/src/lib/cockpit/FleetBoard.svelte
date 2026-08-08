@@ -10,7 +10,7 @@
     IconChevronRight,
     IconPlus,
   } from '$lib/icons';
-  import { onMount, type Snippet } from 'svelte';
+  import { onMount, untrack, type Snippet } from 'svelte';
   import { fly } from 'svelte/transition';
   import { quintOut } from 'svelte/easing';
   import { MediaQuery } from 'svelte/reactivity';
@@ -31,6 +31,7 @@
   import SpawnPanel from '$lib/cockpit/SpawnPanel.svelte';
   import { folderPrefs, identityVar } from '$lib/cockpit/folder-prefs.svelte';
   import { transcriptHref } from '$lib/cockpit/links';
+  import { refreshTasks } from '$lib/cockpit/tasks.svelte';
   import { machineLabel, machineOs } from '$lib/cockpit/machine';
   import { isTyping } from '$lib/utils/typing';
   import { Button } from '$lib/components/ui/button';
@@ -86,6 +87,27 @@
   onMount(() => {
     const timer = setTimeout(() => (entering = false), 800);
     return () => clearTimeout(timer);
+  });
+
+  /**
+   * One sweep of the fleet's task ledgers, so the rows can draw their rings —
+   * the board asks, not the rows, or a card of thirty sessions is thirty round
+   * trips in the same frame. Each session is asked once and the `Task*` frames
+   * keep it current from there; the registry arrives after the board mounts and
+   * grows as sessions start, so this re-arms on the list rather than on mount.
+   */
+  const swept = new Set<string>();
+  $effect(() => {
+    const live = cockpit.runningInstances;
+    untrack(() => {
+      let delay = 0;
+      for (const instance of live) {
+        if (swept.has(instance.id)) continue;
+        swept.add(instance.id);
+        setTimeout(() => refreshTasks(instance.id), delay);
+        delay += 100;
+      }
+    });
   });
 
   let spawnOpen = $state(false);

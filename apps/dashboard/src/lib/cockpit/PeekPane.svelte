@@ -54,6 +54,8 @@
   import { machineLabel } from './machine';
   import { permissionSummary } from './permission-summary';
   import { questionsOf } from './question';
+  import TaskPanel from './TaskPanel.svelte';
+  import { refreshTasks, taskProgress, tasksOf } from './tasks.svelte';
   import type { Message } from './types';
 
   interface Props {
@@ -82,6 +84,9 @@
       } else {
         openSession(next.viewId);
       }
+      // A peek is the one moment a stopped or stored session is looked at, and
+      // no frame is coming to say its plan moved while nobody was watching.
+      refreshTasks(next.viewId);
     });
   });
 
@@ -164,6 +169,9 @@
     if (!id || !machineId || !running) return;
     untrack(() => void refreshContext(id, machineId));
   });
+
+  const plan = $derived(target ? tasksOf(target.viewId) : null);
+  const progress = $derived(plan && plan.tasks.length > 0 ? taskProgress(plan) : null);
 
   /** How much conversation a peek is: enough to see what it is up to. */
   const TAIL = 10;
@@ -355,6 +363,20 @@
             <p class="border-t border-border/50 bg-error/10 px-4 py-3 text-caption text-error">
               {row?.lastError || 'Failed without saying why.'}
             </p>
+          {/if}
+
+          <!-- What it set out to do, before what it last said about doing it.
+               Capped, because a peek is a glance — a forty-task plan scrolls
+               inside its own section rather than pushing the tail off. -->
+          {#if progress}
+            <div class="flex flex-col border-t border-border/50 pb-2">
+              <p class="px-4 pt-3 pb-1 text-caption">
+                Tasks · {progress.done} of {progress.total}
+              </p>
+              <div class="max-h-48 overflow-y-auto px-2">
+                <TaskPanel viewId={target.viewId} dense />
+              </div>
+            </div>
           {/if}
 
           <div
