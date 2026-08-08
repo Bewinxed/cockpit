@@ -17,7 +17,8 @@
   import type { ProjectRow } from '$lib/cockpit/client.svelte';
   import { readDocs, type Doc } from '$lib/cockpit/docs';
   import { spawnPrefs, rememberSpawn } from '$lib/cockpit/spawnPrefs.svelte';
-  import { machineLabel, machineOs } from '$lib/cockpit/machine';
+  import { machineLabel } from '$lib/cockpit/machine';
+  import OsMark from '$lib/cockpit/OsMark.svelte';
   import LiveSessionRow from '$lib/cockpit/LiveSessionRow.svelte';
   import StoredSessionRow from '$lib/cockpit/StoredSessionRow.svelte';
   import MachineInventory from '$lib/cockpit/MachineInventory.svelte';
@@ -197,8 +198,6 @@
       (event.currentTarget as HTMLElement).querySelectorAll('button')[prev]?.focus();
     }
   }
-
-  const os = $derived(machine ? machineOs(machine.os) : null);
 </script>
 
 <svelte:head>
@@ -219,9 +218,7 @@
           <span class="truncate font-mono text-micro text-muted-foreground">{project.cwd}</span>
           {#if machine}
             <span class="flex items-center gap-1.5">
-              {#if os}
-                <os.Icon class="size-3.5 text-muted-foreground" />
-              {/if}
+              <OsMark os={machine.os} class="size-4 text-muted-foreground" />
               <span class="text-micro text-muted-foreground">
                 {machineLabel(machine.hostname)}
               </span>

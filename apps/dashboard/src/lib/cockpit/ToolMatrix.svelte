@@ -9,6 +9,7 @@
   import * as Tooltip from '$lib/components/ui/tooltip';
   import type { Machine } from './client.svelte';
   import { machineLabel, machineOs } from './machine';
+  import OsMark from './OsMark.svelte';
   import { installTool, policyFor, setPolicy } from './tools';
 
   let {
@@ -201,7 +202,7 @@
           <tr class={online ? '' : 'opacity-50'}>
             <th scope="row" class="sticky left-0 z-10 border-t border-border bg-card px-4 py-2.5 font-normal">
               <span class="flex items-center gap-2">
-                <os.Icon class="size-4 shrink-0 text-muted-foreground" />
+                <OsMark os={machine.os} class="size-4 shrink-0 text-muted-foreground" />
                 <span class="flex min-w-0 flex-col">
                   <span class="flex items-center gap-2">
                     <span class="truncate text-caption font-medium text-foreground">{machineLabel(machine.hostname)}</span>
