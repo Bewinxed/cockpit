@@ -108,7 +108,7 @@
   }
 </script>
 
-<section class="rounded-xl border border-border bg-card">
+<section class="w-full min-w-0 overflow-hidden rounded-xl border border-border bg-card">
   <header class="flex items-center gap-3 border-b border-border px-4 py-2">
     <span class="min-w-0 truncate font-mono text-xs text-muted-foreground" title={path}>{path}</span>
     {#if meta}
@@ -155,9 +155,11 @@
       <Markdown source={content} />
     </div>
   {:else if save}
+    <!-- The kit's button is `whitespace-nowrap`; a sentence long enough to need
+         two lines would push the card past its column instead of wrapping. -->
     <Button
       variant="ghost"
-      class="h-auto w-full justify-start rounded-none px-4 py-6 text-[13px] font-normal text-muted-foreground"
+      class="h-auto w-full justify-start rounded-none px-4 py-6 text-left text-[13px] font-normal whitespace-normal text-muted-foreground"
       onclick={edit}
     >
       {emptyText}

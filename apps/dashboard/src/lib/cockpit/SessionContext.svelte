@@ -198,11 +198,11 @@
       </Button>
     </Sidebar.Header>
 
-    <Sidebar.Content class="gap-4 p-4">
+    <Sidebar.Content class="gap-4 overflow-x-hidden p-4">
       <Tabs.Content value="memory" class="flex flex-col gap-4">
         <p class="text-caption">
-          What Claude Code reads at <span class="font-mono">{cwd}</span> on this machine — user, project,
-          then local.
+          What Claude Code reads at <span class="font-mono break-all">{cwd}</span> on this machine —
+          user, project, then local.
         </p>
 
         {#if loading}
