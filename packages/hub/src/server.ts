@@ -93,10 +93,21 @@ const peek = (payload: unknown, key: string): string | undefined => {
   return typeof value === 'string' ? value : undefined;
 };
 
-/** The SDK session a `spawn` resumes, so the instance row records what it re-opened. */
+/**
+ * The SDK session a `spawn` resumes, so the instance row records what it
+ * re-opened. A fork is the exception: it *reads* the origin conversation but
+ * creates a new one (`forkSession`), so claiming the origin's id here would
+ * trip openInstance's one-conversation-one-row guard and the fork would never
+ * get a board row. Left blank, the fork's own init frame stamps the real id
+ * via noteInstanceSession.
+ */
 const peekResume = (payload: unknown): string | undefined => {
   if (typeof payload !== 'object' || payload === null) return undefined;
-  return peek((payload as Record<string, unknown>).options, 'resume');
+  const { options } = payload as { options?: unknown };
+  if (typeof options === 'object' && options !== null) {
+    if ((options as { forkSession?: unknown }).forkSession) return undefined;
+  }
+  return peek(options, 'resume');
 };
 
 /** A spawn asking for scratch isolation, or for a session the SDK never stores. */
