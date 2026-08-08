@@ -13,19 +13,6 @@ export interface MessageRendererProps {
 	/** Show timestamp on hover */
 	showTimestamp?: boolean;
 
-	// Login prompt callbacks
-	onLoginSubmit?: (code: string) => Promise<void>;
-	onLoginCancel?: () => void;
-
-	// Model picker callbacks
-	onModelSelect?: (model: string) => Promise<void>;
-	onModelCancel?: () => void;
-
-	// Memory picker callbacks
-	onMemorySelect?: (memoryType: 'project' | 'user') => void;
-	onMemorySave?: (content: string) => Promise<void>;
-	onMemoryCancel?: () => void;
-
 	// Question picker callbacks (AskUserQuestion)
 	onQuestionSubmit?: (requestId: string, answers: Record<string, string>) => Promise<void>;
 	onQuestionCancel?: () => void;
