@@ -85,23 +85,26 @@
   );
   const visible = $derived(tabs.slice(0, MAX_VISIBLE));
   const overflow = $derived(tabs.slice(MAX_VISIBLE));
-  const routeId = $derived(page.params?.id ?? '');
-  const onFleet = $derived(page.url.pathname === '/session');
-
   /** The tab just clicked. `page` only names it once the router has finished,
    *  and a tab that highlights a frame late reads as the click being ignored. */
   let pending = $state<string | null>(null);
-  const currentId = $derived(pending ?? routeId);
+  const currentPath = $derived(pending ?? page.url.pathname);
+  const currentId = $derived(currentPath.startsWith('/session/') ? currentPath.slice(9) : '');
+  const onFleet = $derived(currentPath === '/session');
 
-  function navigate(id: string) {
-    if (id === currentId) return;
-    pending = id;
-    // The session owns its own scroll and its own focus; letting the router
-    // reset either is the rest of the "full navigation" feel.
-    void goto(`/session/${id}`, { noScroll: true, keepFocus: true }).finally(
-      () => (pending = null)
-    );
+  /**
+   * Every tab travels the same way, Fleet included. Each of them is a surface
+   * the layout already has mounted, so a click is a switch: the router must not
+   * reset the scroll or move the focus, which is the rest of the "full
+   * navigation" feel — and Fleet, left as a plain link, was taking both.
+   */
+  function navigate(path: string) {
+    if (path === currentPath) return;
+    pending = path;
+    void goto(path, { noScroll: true, keepFocus: true }).finally(() => (pending = null));
   }
+
+  const open = (id: string) => navigate(`/session/${id}`);
 
   /**
    * Every open tab read in, one at a time, behind whatever is on screen.
@@ -164,12 +167,12 @@
     const next = tabs[at + 1] ?? tabs[at - 1] ?? null;
     workingSet.forget(id);
     if (id !== currentId) return;
-    void goto(next ? `/session/${next.id}` : '/session');
+    navigate(next ? `/session/${next.id}` : '/session');
   }
 
   function closeOthers(id: string) {
     for (const tab of tabs.filter((tab) => tab.id !== id)) workingSet.forget(tab.id);
-    navigate(id);
+    open(id);
   }
 
   /** The registered project this session belongs to — the board's own rule for
@@ -221,7 +224,7 @@
     event.preventDefault();
     const by = event.key === ']' ? 1 : -1;
     const next = workingSet.step(currentId, by, fallbackIds);
-    if (next) navigate(next);
+    if (next) open(next);
   }
 
   /** The strip scrolls rather than squeezing its tabs, so a tab reached with
@@ -254,7 +257,19 @@
     aria-label="Open sessions"
     class="no-scrollbar flex shrink-0 items-end gap-0.5 overflow-x-auto border-b border-border/60 px-2 pt-1"
   >
-    <a href="/session" role="tab" aria-selected={onFleet} class="{TAB} {onFleet ? ACTIVE : IDLE}">
+    <!-- Still a link, so a modified click opens it the way the browser would;
+         a plain one is a tab switch and travels like the rest. -->
+    <a
+      href="/session"
+      role="tab"
+      aria-selected={onFleet}
+      class="{TAB} {onFleet ? ACTIVE : IDLE}"
+      onclick={(event) => {
+        if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        event.preventDefault();
+        navigate('/session');
+      }}
+    >
       <IconColumns class="size-4" />
       Fleet
     </a>
@@ -271,8 +286,8 @@
             tabindex={active ? 0 : -1}
             style={identityVar(tab.cwd)}
             class="{TAB} max-w-[200px] cursor-default {active ? ACTIVE : IDLE}"
-            onclick={() => navigate(tab.id)}
-            onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(tab.id); } else { handleTabKeydown(e); } }}
+            onclick={() => open(tab.id)}
+            onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(tab.id); } else { handleTabKeydown(e); } }}
           >
             <ActivityDot activity={tab.activity} size={1.5} />
             <span class="truncate">{tab.title}</span>
@@ -341,7 +356,7 @@
         </DropdownMenu.Trigger>
         <DropdownMenu.Content align="start">
           {#each overflow as tab (tab.id)}
-            <DropdownMenu.Item onSelect={() => navigate(tab.id)}>
+            <DropdownMenu.Item onSelect={() => open(tab.id)}>
               <ActivityDot activity={tab.activity} size={1.5} />
               <span class="truncate">{tab.title}</span>
             </DropdownMenu.Item>

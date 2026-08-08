@@ -16,17 +16,21 @@
   // iOS has no right-click; a held press is its context menu.
   onMount(enableLongPressMenus);
 
-  /** Two of these are the same surface holding a different conversation. */
-  const SESSION = /^\/session\/[^/]+$/;
+  /**
+   * Everything the tab strip reaches: the conversations, and the fleet board
+   * that leads them. One surface with several things stacked in it, not several
+   * pages — `session/+layout.svelte` keeps all of them mounted at once.
+   */
+  const SESSION = /^\/session(\/|$)/;
 
   // Native page transitions: same-document view transitions, skipped for
   // readers who prefer reduced motion; browsers without the API just navigate.
   onNavigate((navigation) => {
     if (!document.startViewTransition) return;
     // Switching tabs is not going anywhere: crossfading the whole document
-    // between two sessions is what made a tab click read as a page load. A
-    // swipe still animates — it names a direction, and the gesture is the
-    // thing being animated.
+    // between two tabs is what made a tab click read as a page load, and Fleet
+    // is the first tab in the strip. A swipe still animates — it names a
+    // direction, and the gesture is the thing being animated.
     if (
       !document.documentElement.dataset.nav &&
       navigation.from &&
