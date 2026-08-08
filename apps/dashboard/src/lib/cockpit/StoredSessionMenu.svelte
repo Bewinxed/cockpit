@@ -12,8 +12,6 @@
     IconExternal,
     IconFork,
     IconPenLine,
-    IconPin,
-    IconPinFilled,
     IconTrash,
   } from '$lib/icons';
   import * as AlertDialog from '$lib/components/ui/alert-dialog';
@@ -24,7 +22,6 @@
   import { forkSession, loadCatalog, machineControl } from './client.svelte';
   import { copyToClipboard } from './copy';
   import { sessionTitle, transcriptHref } from './links';
-  import { rail } from './rail.svelte';
 
   let {
     machineId,
@@ -35,7 +32,6 @@
   const href = $derived(transcriptHref(machineId, info));
   /** Every mutation names the directory the session was recorded under. */
   const where = $derived({ dir: info.cwd || undefined });
-  const pinned = $derived(rail.isPinned('stored', info.sessionId));
 
   let renaming = $state(false);
   let title = $state('');
@@ -99,15 +95,6 @@
     <ContextMenu.Item onSelect={fork}>
       <IconFork />
       Fork from here
-    </ContextMenu.Item>
-    <ContextMenu.Item onSelect={() => rail.togglePin('stored', info.sessionId)}>
-      {#if pinned}
-        <IconPinFilled />
-        Unpin from rail
-      {:else}
-        <IconPin />
-        Pin to rail
-      {/if}
     </ContextMenu.Item>
 
     <ContextMenu.Separator />

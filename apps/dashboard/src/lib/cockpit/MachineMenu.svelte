@@ -6,8 +6,6 @@
     IconCopy,
     IconDownload,
     IconKey,
-    IconPin,
-    IconPinFilled,
     IconPlus,
     IconRefresh,
   } from '$lib/icons';
@@ -15,7 +13,6 @@
   import * as ContextMenu from '$lib/components/ui/context-menu';
   import { loadCatalog, machineControl, type Machine } from './client.svelte';
   import { copyToClipboard } from './copy';
-  import { rail } from './rail.svelte';
   import UnlockKeychain from './UnlockKeychain.svelte';
   import MachineLogin from './MachineLogin.svelte';
   import { UPDATE_TIMEOUT_MS } from '$lib/config';
@@ -33,7 +30,6 @@
   let unlocking = $state(false);
   let loggingIn = $state(false);
 
-  const pinned = $derived(rail.isPinned('machine', machine.machineId));
 
   /**
    * Updates the machine's Claude Code in place. Sessions already running keep the
@@ -83,15 +79,6 @@
     <ContextMenu.Item onSelect={() => void updateClaudeCode()}>
       <IconDownload />
       Update Claude Code
-    </ContextMenu.Item>
-    <ContextMenu.Item onSelect={() => rail.togglePin('machine', machine.machineId)}>
-      {#if pinned}
-        <IconPinFilled />
-        Unpin machine
-      {:else}
-        <IconPin />
-        Pin machine
-      {/if}
     </ContextMenu.Item>
 
     <ContextMenu.Separator />
