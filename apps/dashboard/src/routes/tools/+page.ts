@@ -34,6 +34,7 @@ export const load: PageLoad = async ({ fetch }) => {
     toolsError: tools instanceof Error ? `Could not read the tool catalog — ${tools.message}.` : null,
     config: fleet instanceof Error ? EMPTY : { ...EMPTY, ...fleet.config },
     skills: fleet instanceof Error ? [] : (fleet.skills ?? []),
+    agents: fleet instanceof Error ? [] : (fleet.agents ?? []),
     memory: fleet instanceof Error ? null : (fleet.memory ?? null),
     fleetError: fleet instanceof Error ? `Could not read the fleet's setup — ${fleet.message}.` : null,
   };

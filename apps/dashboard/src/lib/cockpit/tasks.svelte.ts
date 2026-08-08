@@ -193,8 +193,12 @@ function remember(machineId: string, home: string): string {
  * Where this machine's `.claude` lives. Cheapest first: what was resolved
  * before, then the machine's own working directories — a session running in
  * `/home/x/repo` has already said what the home is — and only then a listing.
+ *
+ * Exported because everything that reads a machine's `.claude` needs the same
+ * answer, and a second copy of this heuristic would be a second cache to go
+ * stale differently.
  */
-async function homeOf(machineId: string): Promise<string | null> {
+export async function homeOf(machineId: string): Promise<string | null> {
   const known = homes.get(machineId);
   if (known) return known;
 
