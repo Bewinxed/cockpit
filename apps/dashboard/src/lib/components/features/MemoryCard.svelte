@@ -108,9 +108,9 @@
   }
 </script>
 
-<section class="w-full min-w-0 overflow-hidden rounded-xl border border-border bg-card">
-  <header class="flex items-center gap-3 border-b border-border px-4 py-2">
-    <span class="min-w-0 truncate font-mono text-xs text-muted-foreground" title={path}>{path}</span>
+<section class="w-full min-w-0 overflow-hidden rounded-xl bg-card shadow-md">
+  <header class="flex items-center gap-3 border-b border-border/50 px-4 py-2">
+    <span class="min-w-0 truncate font-mono text-micro text-muted-foreground" title={path}>{path}</span>
     {#if meta}
       {@render meta()}
     {/if}
