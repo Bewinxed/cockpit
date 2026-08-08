@@ -502,6 +502,33 @@ export const createServer = ({ registry, db, pending }: HubServices) => {
     agent.send({ verb: 'control', machineId, payload } satisfies Envelope<ControlPayload>);
   };
 
+  /**
+   * A machine that just converged wrote new skill files and plugin installs
+   * under sessions that are already running. The SDK picks both up without a
+   * restart — `reloadSkills`/`reloadPlugins` on the session's Query — so every
+   * live session on that machine is told the moment its sync report lands,
+   * and a skill adopted from the rail is usable in the session that adopted
+   * it seconds later (user, 2026-08-08). Fire-and-forget: a session racing
+   * shutdown answers with an error nobody is waiting on.
+   */
+  const refreshSessions = (machineId: string, agent: HubSocket): void => {
+    for (const row of db.listInstances()) {
+      if (row.machineId !== machineId) continue;
+      if (row.status !== 'running' && row.status !== 'starting') continue;
+      for (const method of ['reloadSkills', 'reloadPlugins'] as const) {
+        const requestId = crypto.randomUUID();
+        const payload: ControlPayload = { instanceId: row.id, requestId, method, args: [] };
+        agent.send({
+          verb: 'control',
+          machineId,
+          instanceId: row.id,
+          requestId,
+          payload,
+        } satisfies Envelope<ControlPayload>);
+      }
+    }
+  };
+
   const sendFleetSync = (machineId: string, agent: HubSocket): void => {
     const config = db.fleetConfig();
     const empty =
@@ -1242,6 +1269,8 @@ export const createServer = ({ registry, db, pending }: HubServices) => {
               if (report) {
                 db.setAgentFleet(message.machineId, report);
                 publishInstances(message.machineId);
+                // The disk just changed under this machine's live sessions.
+                refreshSessions(message.machineId, ws);
               }
             }
             // A control a route is waiting on: the reply is that request's
