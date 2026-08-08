@@ -12,6 +12,7 @@
 		IconTerminal,
 		IconHelp,
 		IconPen,
+		IconFork,
 		IconCheck,
 		IconAgent,
 		IconReset,
@@ -21,6 +22,7 @@
 		IconSubagentsDuo,
 	} from '$lib/icons';
 	import { Markdown } from '$lib/components/ui/markdown';
+	import { Button } from '$lib/components/ui/button';
 	import * as Collapsible from '$lib/components/ui/collapsible';
 	import { formatTimestamp } from '$lib/utils/time';
 	import type { Message } from '$lib/cockpit/types';
@@ -35,28 +37,19 @@
 		message: Message;
 		instanceId?: string;
 		showTimestamp?: boolean;
-		onLoginSubmit?: (code: string) => Promise<void>;
-		onLoginCancel?: () => void;
-		onModelSelect?: (model: string) => Promise<void>;
-		onModelCancel?: () => void;
-		onMemorySelect?: (memoryType: 'project' | 'user') => void;
-		onMemorySave?: (content: string) => Promise<void>;
-		onMemoryCancel?: () => void;
 		onQuestionSubmit?: (requestId: string, answers: Record<string, string>) => Promise<void>;
 		onQuestionCancel?: () => void;
 		onDismissMessage?: () => void;
-		/** Callback when user wants to edit this message and continue from here */
-		onEditMessage?: (messageId: string, newContent: string) => Promise<void>;
-		/** Whether this login prompt is currently active (pending) */
-		isLoginActive?: boolean;
-		/** Whether this model picker is currently active */
-		isModelPickerActive?: boolean;
-		/** Whether this memory picker is currently active */
-		isMemoryPickerActive?: boolean;
+		/** Rewrite this turn and take the conversation from there, keyed by its SDK uuid */
+		onEditMessage?: (sdkUuid: string, newContent: string) => Promise<void>;
+		/** Branch a side quest from the point this turn was said at */
+		onForkFrom?: (sdkUuid: string) => Promise<void>;
 		/** Whether the question picker is currently active */
 		isQuestionPickerActive?: boolean;
 		/** Whether editing is supported for this message */
 		canEdit?: boolean;
+		/** Whether this message can be branched from */
+		canFork?: boolean;
 		/** Callback to reset session and start fresh (for session_error recovery) */
 		onResetSession?: () => Promise<void>;
 		/** Callback to download chat transcript */
@@ -67,24 +60,16 @@
 		message,
 		instanceId = '',
 		showTimestamp = false,
-		onLoginSubmit,
-		onLoginCancel,
-		onModelSelect,
-		onModelCancel,
-		onMemorySelect,
-		onMemorySave,
-		onMemoryCancel,
 		onQuestionSubmit,
 		onQuestionCancel,
 		onDismissMessage,
 		onEditMessage,
+		onForkFrom,
 		onResetSession,
 		onDownloadTranscript,
-		isLoginActive = false,
-		isModelPickerActive = false,
-		isMemoryPickerActive = false,
 		isQuestionPickerActive = false,
-		canEdit = false
+		canEdit = false,
+		canFork = false
 	}: Props = $props();
 
 	// Check if this message has a specialized renderer
@@ -93,9 +78,6 @@
 	// Determine if a specialized renderer is active
 	const rendererIsActive = $derived.by(() => {
 		if (!renderer) return false;
-		if (renderer.name === 'LoginPrompt') return isLoginActive;
-		if (renderer.name === 'ModelPicker') return isModelPickerActive;
-		if (renderer.name === 'MemoryPicker') return isMemoryPickerActive;
 		if (renderer.name === 'AskQuestionPicker') return isQuestionPickerActive;
 		return false;
 	});
@@ -106,13 +88,6 @@
 		instanceId,
 		isActive: rendererIsActive,
 		showTimestamp,
-		onLoginSubmit,
-		onLoginCancel,
-		onModelSelect,
-		onModelCancel,
-		onMemorySelect,
-		onMemorySave,
-		onMemoryCancel,
 		onQuestionSubmit,
 		onQuestionCancel,
 		onDismissMessage
@@ -139,6 +114,7 @@
 	let editContent = $state('');
 	let resettingSession = $state(false);
 	let editLoading = $state(false);
+	let forkLoading = $state(false);
 
 	function startEditing() {
 		editContent = message.content;
@@ -151,16 +127,16 @@
 	}
 
 	async function submitEdit() {
-		if (!onEditMessage || !message.id || !editContent.trim()) return;
+		if (!onEditMessage || !message.sdkUuid || !editContent.trim()) return;
 
 		// Close edit mode immediately for better UX
 		const content = editContent.trim();
-		const id = message.id;
+		const uuid = message.sdkUuid;
 		isEditing = false;
 		editLoading = true;
 
 		try {
-			await onEditMessage(id, content);
+			await onEditMessage(uuid, content);
 		} catch (err) {
 			console.error('[Edit] onEditMessage error:', err);
 			// Re-open edit mode on error so user can retry
@@ -168,6 +144,16 @@
 			editContent = content;
 		} finally {
 			editLoading = false;
+		}
+	}
+
+	async function forkFromHere() {
+		if (!onForkFrom || !message.sdkUuid) return;
+		forkLoading = true;
+		try {
+			await onForkFrom(message.sdkUuid);
+		} finally {
+			forkLoading = false;
 		}
 	}
 
@@ -694,27 +680,49 @@
 							<Markdown source={message.content} />
 						{/if}
 
-						<!-- Action buttons -->
+						<!-- Action buttons. Above the bubble rather than over its corner:
+						     a one-line turn has no corner to spare, and a 32px control
+						     parked there sits on the words it belongs to. -->
 						<div
-							class="absolute -right-2 -top-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity"
+							class="absolute right-0 bottom-full mb-1 flex items-center gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity"
 						>
 							{#if message.type === 'user' && canEdit && onEditMessage}
 								<!-- Edit button for user messages -->
-								<button
-									class="p-1.5 rounded-md bg-card border border-border shadow-sm hover:bg-accent hover:text-accent-foreground focus-visible:opacity-100"
+								<Button
+									variant="outline"
+									size="icon-sm"
+									class="shadow-sm"
 									onclick={startEditing}
 									aria-label="Edit message"
 									title="Edit message and restart from here"
 								>
-									<IconPen class="w-3.5 h-3.5 text-muted-foreground" />
-								</button>
+									<IconPen class="text-muted-foreground" />
+								</Button>
+							{/if}
+							{#if message.type === 'user' && canFork && onForkFrom}
+								<!-- Branch a side quest from this point in the conversation -->
+								<Button
+									variant="outline"
+									size="icon-sm"
+									class="shadow-sm"
+									disabled={forkLoading}
+									onclick={forkFromHere}
+									aria-label="Fork from here"
+									title="Branch a side quest from this point"
+								>
+									{#if forkLoading}
+										<IconSpinner class="animate-spin text-muted-foreground" />
+									{:else}
+										<IconFork class="text-muted-foreground" />
+									{/if}
+								</Button>
 							{/if}
 							<!-- Copy button -->
 							<CopyButton
 								text={message.content}
-								variant="ghost"
+								variant="outline"
 								size="icon-sm"
-								class="p-1.5 h-auto w-auto rounded-md bg-card border border-border shadow-sm hover:bg-accent hover:text-accent-foreground [&_svg]:w-3.5 [&_svg]:h-3.5 [&_svg]:text-muted-foreground"
+								class="shadow-sm [&_svg]:text-muted-foreground"
 							/>
 						</div>
 					</div>

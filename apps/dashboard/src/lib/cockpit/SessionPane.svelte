@@ -76,7 +76,9 @@
     backfillSession,
     cockpit,
     discardSession,
+    editAndResend,
     ensureAlive,
+    forkFrom,
     forkSession,
     interrupt,
     isResumable,
@@ -90,6 +92,7 @@
     relaunchSession,
     resolvePermission,
     resumeSession,
+    rewindableTurns,
     peerTargets,
     sendToPeer,
     sendOrRevive,
@@ -995,6 +998,47 @@
     await goto(`/session/${instanceId}`);
   }
 
+  /**
+   * The turns the transcript offers its two rewind verbs on. Only a message the
+   * SDK has a uuid for can be gone back to, and only with an answered turn
+   * behind it to resume at — the store decides both, so the rule lives in one
+   * place and this is one pass rather than one per message on screen.
+   */
+  const rewindable = $derived(browsing ? new Set<string>() : rewindableTurns(viewId));
+
+  // Rewriting a turn replaces the process behind the session, so it waits for
+  // one that is not in the middle of something.
+  const canRewind = $derived(
+    !browsing &&
+      cockpit.status === 'connected' &&
+      !machineOffline &&
+      !(session?.busy ?? false) &&
+      !(session?.relaunching ?? false)
+  );
+
+  // Branching leaves this session alone, so a busy one can still be forked.
+  const canBranch = $derived(!browsing && cockpit.status === 'connected' && !machineOffline);
+
+  async function handleEditMessage(sdkUuid: string, content: string) {
+    error = null;
+    try {
+      await editAndResend(viewId, sdkUuid, content);
+    } catch (err) {
+      error = err instanceof Error ? err.message : String(err);
+      // Rethrown so the message hands the reader their text back to try again.
+      throw err;
+    }
+  }
+
+  async function handleForkFrom(sdkUuid: string) {
+    error = null;
+    try {
+      await goto(`/session/${forkFrom(viewId, sdkUuid)}`);
+    } catch (err) {
+      error = err instanceof Error ? err.message : String(err);
+    }
+  }
+
   /** Discard throws work away, so it asks once before it does. */
   let confirmingDiscard = $state(false);
 
@@ -1500,7 +1544,15 @@
                           </div>
                         </div>
                       {:else}
-                        <ChatMessage message={group.message} instanceId={viewId} />
+                        {@const rewind = rewindable.has(group.message.sdkUuid ?? '')}
+                        <ChatMessage
+                          message={group.message}
+                          instanceId={viewId}
+                          canEdit={rewind && canRewind}
+                          canFork={rewind && canBranch}
+                          onEditMessage={handleEditMessage}
+                          onForkFrom={handleForkFrom}
+                        />
                       {/if}
                     </div>
                   {/snippet}

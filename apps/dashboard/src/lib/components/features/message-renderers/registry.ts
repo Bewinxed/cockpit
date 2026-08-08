@@ -1,9 +1,6 @@
 import { TASK_LEDGER_TOOLS } from '$lib/cockpit/tasks.svelte';
 import type { Message } from '$lib/cockpit/types';
 import type { MessageRenderer, RendererMatch } from './types';
-import LoginPrompt from './LoginPrompt.svelte';
-import ModelPicker from './ModelPicker.svelte';
-import MemoryPicker from './MemoryPicker.svelte';
 import AskQuestionPicker from './AskQuestionPicker.svelte';
 import TaskEvent from './TaskEvent.svelte';
 import CompactBoundary from './CompactBoundary.svelte';
@@ -17,24 +14,6 @@ import ResultError from './ResultError.svelte';
  */
 const renderers: MessageRenderer[] = [
 	// Interactive system message types (priority 100)
-	{
-		component: LoginPrompt,
-		match: (m: Message) => m.type === 'system.login_prompt',
-		priority: 100,
-		name: 'LoginPrompt'
-	},
-	{
-		component: ModelPicker,
-		match: (m: Message) => m.type === 'system.model_picker',
-		priority: 100,
-		name: 'ModelPicker'
-	},
-	{
-		component: MemoryPicker,
-		match: (m: Message) => m.type === 'system.memory_picker',
-		priority: 100,
-		name: 'MemoryPicker'
-	},
 	{
 		component: AskQuestionPicker,
 		match: (m: Message) => {

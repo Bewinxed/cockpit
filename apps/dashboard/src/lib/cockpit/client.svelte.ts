@@ -1034,16 +1034,19 @@ export function forkSession({
   cwd,
   sessionId,
   history = [],
+  at,
 }: {
   machineId: string;
   cwd: string;
   sessionId: string;
   history?: Message[];
+  /** Branch from this assistant turn rather than from the end — see {@link rewindPoint}. */
+  at?: string;
 }): string {
   const created = start({
     machineId,
     cwd,
-    options: { resume: sessionId, forkSession: true },
+    options: { resume: sessionId, forkSession: true, ...(at && { resumeSessionAt: at }) },
     scratch: {},
   });
   created.messages = history.map((message) => ({ ...message, instanceId: created.instanceId }));
@@ -1825,6 +1828,153 @@ export async function relaunchSession(
     target.relaunching = false;
     void refresh();
   }
+}
+
+/**
+ * Where a rewind lands: the turn `resumeSessionAt` names, and how much of the
+ * transcript survives it.
+ *
+ * The SDK resumes "up to and including" an `SDKAssistantMessage.uuid`, so the
+ * anchor has to be an assistant frame — and one that ended in words. A frame
+ * whose blocks include a tool call would resume into a `tool_use` with no
+ * result behind it, which the API refuses outright, so the search walks past
+ * those to the last turn that closed.
+ */
+function rewindPoint(target: SessionState, sdkUuid: string): { at: string; cut: number } | null {
+  const edited = target.messages.findIndex((message) => message.sdkUuid === sdkUuid);
+  if (edited < 0) return null;
+  const calls = toolFrames(target.messages);
+  for (let index = edited - 1; index >= 0; index--) {
+    const { type, sdkUuid: uuid } = target.messages[index];
+    if (type !== 'assistant' || !uuid || calls.has(uuid)) continue;
+    // One assistant turn is several messages under one uuid; the whole frame
+    // the anchor belongs to stays, because the SDK keeps all of it too.
+    let cut = index + 1;
+    while (cut < edited && target.messages[cut].sdkUuid === uuid) cut++;
+    return { at: uuid, cut };
+  }
+  return null;
+}
+
+/** The uuids of assistant frames that asked for a tool — never a rewind anchor. */
+function toolFrames(messages: Message[]): Set<string | undefined> {
+  return new Set(
+    messages
+      .filter((message) => message.type === 'tool.use' || message.type === 'tool.handoff')
+      .map((message) => message.sdkUuid)
+  );
+}
+
+/**
+ * Which of a session's turns can be rewound to, by uuid — what decides whether
+ * the transcript offers the edit and fork affordances at all. One pass over the
+ * transcript, because every message on screen asks the same question.
+ */
+export function rewindableTurns(instanceId: string): Set<string> {
+  const turns = new Set<string>();
+  const target = state.sessions[instanceId];
+  if (!target) return turns;
+  const calls = toolFrames(target.messages);
+  let anchored = false;
+  for (const message of target.messages) {
+    if (message.type === 'user' && message.sdkUuid && anchored) turns.add(message.sdkUuid);
+    if (message.type === 'assistant' && message.sdkUuid && !calls.has(message.sdkUuid)) {
+      anchored = true;
+    }
+  }
+  return turns;
+}
+
+/**
+ * Says a turn again, differently. The session is started back up in place at
+ * the answer before the edited message — same instance id, same SDK session,
+ * `resumeSessionAt` cutting the conversation there — and the new wording goes
+ * through as an ordinary turn, so everything the old one led to is gone from
+ * both the screen and the session the next process reads back.
+ */
+export async function editAndResend(
+  instanceId: string,
+  sdkUuid: string,
+  content: string
+): Promise<void> {
+  const target = session(instanceId);
+  const machineId = target.machineId;
+  if (!target.sessionId || !machineId) {
+    throw new Error('This session has not named itself yet. Try again in a moment.');
+  }
+  const point = rewindPoint(target, sdkUuid);
+  if (!point) {
+    throw new Error('There is no answered turn behind this message to go back to.');
+  }
+
+  const requestId = newId();
+  const payload: SpawnPayload = {
+    instanceId,
+    cwd: target.cwd,
+    options: { resume: target.sessionId, resumeSessionAt: point.at },
+    // The same three a relaunch carries: a rewind changes what the session has
+    // said, not what it is.
+    scratch: target.scratch ? {} : undefined,
+    permissionMode: target.permissionMode ?? undefined,
+    model: target.model ?? undefined,
+    requestId,
+  };
+
+  // Cut on screen before the process is cut, so the rewind reads as the reader
+  // asked for it — and put every bit of it back if the spawn never lands, or
+  // they are left with a transcript shorter than the conversation behind it.
+  const transcript = target.messages;
+  const branches = target.subagents;
+  const read = backfilled.has(instanceId);
+  target.messages = transcript.slice(0, point.cut);
+  const spawned = new Set(target.messages.map((message) => message.metadata?.toolId));
+  target.subagents = Object.fromEntries(
+    Object.entries(branches).filter(([toolUseId]) => spawned.has(toolUseId))
+  );
+  target.streaming = '';
+  // Whatever was in flight belongs to the process being replaced.
+  settleStopped(instanceId);
+  // What is on screen is no longer the whole of what is on disk: the next join
+  // has to read this session back rather than trust the latch.
+  backfilled.delete(instanceId);
+  target.relaunching = true;
+  try {
+    await ask<void>(requestId, 'rewind', CONTROL_TIMEOUT_MS, () =>
+      send({ verb: 'spawn', machineId, instanceId, requestId, payload })
+    );
+    sendText(instanceId, machineId, content);
+  } catch (error) {
+    target.messages = transcript;
+    target.subagents = branches;
+    if (read) backfilled.add(instanceId);
+    throw error;
+  } finally {
+    target.relaunching = false;
+    void refresh();
+  }
+}
+
+/**
+ * A side quest that starts from the middle of a conversation rather than its
+ * end: the fork the header offers, resumed at the turn the reader picked. The
+ * session it branches from is left running and untouched.
+ */
+export function forkFrom(instanceId: string, sdkUuid: string): string {
+  const target = session(instanceId);
+  if (!target.sessionId || !target.machineId) {
+    throw new Error('This session has not named itself yet. Try again in a moment.');
+  }
+  const point = rewindPoint(target, sdkUuid);
+  if (!point) {
+    throw new Error('There is no answered turn behind this message to branch from.');
+  }
+  return forkSession({
+    machineId: target.machineId,
+    cwd: target.cwd,
+    sessionId: target.sessionId,
+    history: target.messages.slice(0, point.cut),
+    at: point.at,
+  });
 }
 
 /** The answers a permission card offers — the keyboard has one key for each. */
