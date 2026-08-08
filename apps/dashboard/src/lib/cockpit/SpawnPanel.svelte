@@ -8,17 +8,20 @@
    * "spawn here" on a group card.
    */
   import { tick } from 'svelte';
-  import { slide } from 'svelte/transition';
+  import { fade, slide } from 'svelte/transition';
+  import { quintOut } from 'svelte/easing';
   import { goto } from '$app/navigation';
-  import type { PermissionMode, RepoInfo, ReposResult } from '@cockpit/core';
+  import type { ConfigInspection, FsEntry, PermissionMode, RepoInfo, ReposResult } from '@cockpit/core';
   import { repoPath } from '@cockpit/core';
   import {
     cockpit,
     createProject,
     machineControl,
+    machineFs,
     spawnSession,
     type ProjectRow,
   } from './client.svelte';
+  import { inspectMachine } from './fleet';
   import ModelCombobox from './ModelCombobox.svelte';
   import { MODEL_DEFAULT } from './models.svelte';
   import { rememberSpawn, spawnPrefs } from './spawnPrefs.svelte';
@@ -200,6 +203,7 @@
     source = next;
     if (next === 'repo' && !cwd.trim()) cwd = '~';
     diverge();
+    inspectFolder();
   }
 
   function openProjects() {
@@ -213,7 +217,127 @@
     projectQuery = project.name;
     projectOpen = false;
     clearInvalid();
+    inspectFolder();
   }
+
+  /**
+   * What the chosen folder gives a session — `inspectConfig` (NEW.md §11), run
+   * the moment a folder is picked rather than found out after the session is
+   * already running. Kept for the page's life and keyed by machine + directory:
+   * it is the same answer for every panel that asks, and the read shells out on
+   * the machine, so a keystroke must not be able to buy one.
+   */
+  const inspections = new Map<string, ConfigInspection>();
+  const reading = new Map<string, Promise<ConfigInspection | null>>();
+
+  let inspection = $state<ConfigInspection | null>(null);
+  let inspecting = $state(false);
+  /** Only the answer to the folder still in the field is allowed to land. */
+  let asked = 0;
+  let settling: ReturnType<typeof setTimeout> | undefined;
+
+  /**
+   * A machine answers for its user scope whatever path it is handed, so its own
+   * word cannot tell a real directory from a typo — the listing is what does,
+   * and a folder that is not there gives a session nothing to load.
+   */
+  async function readFolder(id: string, dir: string): Promise<ConfigInspection> {
+    const [found] = await Promise.all([
+      inspectMachine(id, dir),
+      machineFs<FsEntry[]>(id, 'list', dir),
+    ]);
+    return found;
+  }
+
+  /** Nothing is said about a folder that cannot be named yet, or cannot answer. */
+  function inspectFolder() {
+    clearTimeout(settling);
+    const id = machineId;
+    const dir = cwd.trim().replace(/(?!^)\/+$/, '');
+    const epoch = ++asked;
+    inspecting = false;
+    inspection = null;
+    // A clone's directory is not there to be read until the clone has landed.
+    if (!id || source !== 'directory' || !dir.startsWith('/')) return;
+
+    const key = `${id}:${dir}`;
+    const known = inspections.get(key);
+    if (known) {
+      inspection = known;
+      return;
+    }
+
+    inspecting = true;
+    let pending = reading.get(key);
+    if (!pending) {
+      pending = readFolder(id, dir).catch(() => null);
+      reading.set(key, pending);
+    }
+    void pending.then((found) => {
+      reading.delete(key);
+      if (found) inspections.set(key, found);
+      if (epoch !== asked) return;
+      inspection = found;
+      inspecting = false;
+    });
+  }
+
+  /**
+   * A path mid-typing is not a path yet: what is on screen describes a folder
+   * that is no longer in the field, so it goes, and the machine is asked once
+   * the typing settles rather than once per character.
+   */
+  function inspectTyped() {
+    clearTimeout(settling);
+    asked += 1;
+    inspecting = false;
+    inspection = null;
+    settling = setTimeout(inspectFolder, 600);
+  }
+
+  /** Everything a folder brings, in one row: its servers by name, the rest counted. */
+  interface FolderChip {
+    key: string;
+    label: string;
+    /** A measurement, and the only part of a chip set in mono. */
+    measure?: string;
+    title?: string;
+    dim?: string;
+  }
+
+  const chips = $derived.by((): FolderChip[] => {
+    const found = inspection;
+    if (!found) return [];
+    const row: FolderChip[] = found.mcp.map((server) => ({
+      key: `mcp:${server.scope}:${server.name}`,
+      label: server.name,
+      ...(server.shadowedBy
+        ? { title: `shadowed by nearer ${server.shadowedBy} scope`, dim: 'opacity-60' }
+        : server.managed
+          ? {}
+          : { title: 'machine-local, not fleet-managed', dim: 'opacity-80' }),
+    }));
+    if (found.skills.length > 0) {
+      row.push({
+        key: 'skills',
+        label: `${found.skills.length} skill${found.skills.length === 1 ? '' : 's'}`,
+      });
+    }
+    if (found.plugins.length > 0) {
+      row.push({
+        key: 'plugins',
+        label: `${found.plugins.length} plugin${found.plugins.length === 1 ? '' : 's'}`,
+      });
+    }
+    if (found.memory) {
+      row.push({ key: 'memory', label: 'memory · ', measure: `${(found.memory.bytes / 1024).toFixed(1)} KB` });
+    }
+    return row;
+  });
+
+  /** Past eight the row is a paragraph; the tail folds into one chip that names it. */
+  const shownChips = $derived(chips.length > 8 ? chips.slice(0, 7) : chips);
+  const foldedChips = $derived(chips.length > 8 ? chips.slice(7) : []);
 
   /** Everything the form knows, seeded from a prefill where one was handed in. */
   function resetForm() {
@@ -240,6 +364,7 @@
     repoOpen = false;
     repos = [];
     repoNotice = null;
+    inspectFolder();
   }
 
   // Edge-triggered: only the moment `open` turns true, never on every render
@@ -348,7 +473,14 @@
 {#snippet targetFields()}
   <div class="flex flex-col gap-1">
     <span id="spawn-machine-label" class="text-micro text-muted-foreground">Machine</span>
-    <Select.Root type="single" bind:value={machineId} onValueChange={diverge}>
+    <Select.Root
+      type="single"
+      bind:value={machineId}
+      onValueChange={() => {
+        diverge();
+        inspectFolder();
+      }}
+    >
       <Select.Trigger
         bind:ref={machineTrigger}
         aria-labelledby="spawn-machine-label"
@@ -527,7 +659,10 @@
       placeholder={source === 'repo' ? '~' : '/home/you/project'}
       class="input font-mono motion-reduce:animate-none {invalid === 'cwd' ? 'border-error' : ''}"
       class:animate-shake={invalid === 'cwd'}
-      oninput={diverge}
+      oninput={() => {
+        diverge();
+        inspectTyped();
+      }}
     />
   </div>
 
@@ -538,12 +673,43 @@
       onSelect={(path) => {
         cwd = path;
         diverge();
+        inspectFolder();
       }}
     />
     {#if source === 'repo' && cloneInto}
       <span class="truncate font-mono text-micro text-muted-foreground/70">{cloneInto}</span>
     {/if}
   </div>
+{/snippet}
+
+<!-- What the folder itself brings to the session, under whichever way the folder
+     was arrived at. Inventory, not state: no status hue, no action — adopting
+     what is only on that machine is the fleet inventory's job, not this form's.
+     A folder that says nothing renders nothing. -->
+{#snippet folderLoads()}
+  {#if inspecting}
+    <p class="text-micro text-muted-foreground" role="status">Reading folder…</p>
+  {:else if shownChips.length > 0}
+    <div
+      class="flex flex-wrap items-center gap-1.5"
+      in:fade={{ duration: 160, easing: quintOut }}
+    >
+      <span class="text-caption">This folder loads</span>
+      {#each shownChips as chip (chip.key)}
+        <span class="rounded-full bg-muted px-2 py-0.5 text-micro {chip.dim ?? ''}" title={chip.title}>
+          {chip.label}{#if chip.measure}<span class="font-mono">{chip.measure}</span>{/if}
+        </span>
+      {/each}
+      {#if foldedChips.length > 0}
+        <span
+          class="rounded-full bg-muted px-2 py-0.5 text-micro text-muted-foreground"
+          title={foldedChips.map((chip) => `${chip.label}${chip.measure ?? ''}`).join(', ')}
+        >
+          +{foldedChips.length} more
+        </span>
+      {/if}
+    </div>
+  {/if}
 {/snippet}
 
 {#snippet formBody()}
@@ -553,6 +719,7 @@
     {:else}
       {@render prefillSummary()}
     {/if}
+    {@render folderLoads()}
 
     <div class="grid grid-cols-2 gap-2">
       <div class="flex flex-col gap-1">
