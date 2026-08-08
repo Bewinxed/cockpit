@@ -24,15 +24,20 @@
    */
   import { onMount, untrack } from 'svelte';
   import { fade } from 'svelte/transition';
+  import { goto } from '$app/navigation';
   import { Button } from '$lib/components/ui/button';
+  import * as ContextMenu from '$lib/components/ui/context-menu';
+  import { IconClose, IconExternal, IconFolderDuo, IconFork, IconStop } from '$lib/icons';
   import { smoothText } from '$lib/utils/smooth-text.svelte';
   import { getToolGlance } from '$lib/utils/tool-display';
   import { ACTIVITY_LABEL, SLEEPING_LABEL } from './activity';
   import ActivityDot from './ActivityDot.svelte';
   import ContextMeter from './ContextMeter.svelte';
+  import OsMark from './OsMark.svelte';
   import {
     backfillSession,
     cockpit,
+    forkSession,
     isFailed,
     isResumable,
     openSession,
@@ -40,9 +45,11 @@
     permissionAnswer,
     refreshContext,
     resolvePermission,
+    stopSession,
     type PendingPermission,
     type PermissionAnswer,
   } from './client.svelte';
+  import { identityVar } from './identity';
   import { sessionTitle } from './links';
   import { machineLabel } from './machine';
   import { permissionSummary } from './permission-summary';
@@ -52,9 +59,11 @@
   interface Props {
     /** The peeked row, or nothing while the board is only being glanced at. */
     target: PeekTarget | null;
+    /** Puts the pane back to its resting state — the board keeps the selection. */
+    onclose: () => void;
   }
 
-  let { target }: Props = $props();
+  let { target, onclose }: Props = $props();
 
   // Opening writes to the store, so it stays in an effect and the reads below
   // stay derived — the route's bargain, for the same reason: the fields this
@@ -110,13 +119,32 @@
     return info ? sessionTitle(info) : 'untitled session';
   });
 
-  const host = $derived.by(() => {
+  const machine = $derived.by(() => {
     const machineId = session?.machineId || target?.browsing?.machineId || '';
-    const machine = cockpit.machines.find((entry) => entry.machineId === machineId);
-    return machine ? machineLabel(machine.hostname) : machineId;
+    return cockpit.machines.find((entry) => entry.machineId === machineId) ?? null;
   });
 
+  const host = $derived(
+    machine
+      ? machineLabel(machine.hostname)
+      : session?.machineId || target?.browsing?.machineId || ''
+  );
+
   const cwd = $derived(session?.cwd || target?.browsing?.cwd || '');
+
+  /** The SDK session a fork branches from: the stored one, or the live one's. */
+  const forkable = $derived(target?.browsing ? target.viewId : (session?.sessionId ?? null));
+
+  async function fork() {
+    if (!forkable || !machine) return;
+    const instanceId = forkSession({
+      machineId: machine.machineId,
+      cwd,
+      sessionId: forkable,
+      history: session?.messages ?? [],
+    });
+    await goto(`/session/${instanceId}`);
+  }
 
   /**
    * A permission parked by a process that has since died cannot be answered —
@@ -209,24 +237,62 @@
             Pick a session to see what it is doing. Enter or a double-click opens it.
           </p>
         {:else}
-          <header class="flex items-start gap-2 px-4 py-3">
-            <div class="min-w-0 flex-1">
-              <h2 class="truncate text-body font-semibold">{title}</h2>
-              <p class="flex items-baseline gap-2 text-micro text-muted-foreground">
-                <span class="shrink-0">{host}</span>
-                {#if cwd}
-                  <!-- Truncated from the left, as every path in the app is: the
-                       leaf is what tells two checkouts apart. -->
-                  <span class="min-w-0 truncate font-mono [direction:rtl]" title={cwd}>
-                    <bdi>{cwd}</bdi>
-                  </span>
-                {/if}
-              </p>
-            </div>
-            <Button size="sm" variant="ghost" href={target.href} class="-mr-1.5 shrink-0">
-              Open
-            </Button>
-          </header>
+          <ContextMenu.Root>
+            <ContextMenu.Trigger class="contents">
+              <header class="flex items-start gap-2 px-4 py-3">
+                <div class="min-w-0 flex-1">
+                  <h2 class="flex min-w-0 items-center gap-2 text-body font-semibold">
+                    <!-- The directory's hue, the same one the card it was
+                         picked from wears: the peek belongs to a project. -->
+                    {#if cwd}
+                      <IconFolderDuo class="identity-ink size-4 shrink-0" style={identityVar(cwd)} />
+                    {/if}
+                    <span class="truncate">{title}</span>
+                  </h2>
+                  <p class="flex items-baseline gap-2 text-micro text-muted-foreground">
+                    <span class="flex shrink-0 items-center gap-1.5">
+                      {#if machine}
+                        <OsMark os={machine.os} class="size-3.5" />
+                      {/if}
+                      {host}
+                    </span>
+                    {#if cwd}
+                      <!-- Truncated from the left, as every path in the app is: the
+                           leaf is what tells two checkouts apart. -->
+                      <span class="min-w-0 truncate font-mono [direction:rtl]" title={cwd}>
+                        <bdi>{cwd}</bdi>
+                      </span>
+                    {/if}
+                  </p>
+                </div>
+                <Button size="sm" variant="ghost" href={target.href} class="-mr-1.5 shrink-0">
+                  Open
+                </Button>
+              </header>
+            </ContextMenu.Trigger>
+
+            <ContextMenu.Content>
+              <ContextMenu.Item onSelect={() => goto(target.href)}>
+                <IconExternal />
+                Open
+              </ContextMenu.Item>
+              <ContextMenu.Item disabled={!forkable || !machine} onSelect={fork}>
+                <IconFork />
+                Fork
+              </ContextMenu.Item>
+              {#if running && row}
+                <ContextMenu.Item onSelect={() => stopSession(row.id, row.machineId)}>
+                  <IconStop />
+                  Stop
+                </ContextMenu.Item>
+              {/if}
+              <ContextMenu.Separator />
+              <ContextMenu.Item onSelect={onclose}>
+                <IconClose />
+                Close peek
+              </ContextMenu.Item>
+            </ContextMenu.Content>
+          </ContextMenu.Root>
 
           <div class="flex items-center gap-2 px-4 pb-3 text-micro">
             {#if failed}

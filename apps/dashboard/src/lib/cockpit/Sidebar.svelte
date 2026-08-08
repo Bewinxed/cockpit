@@ -118,13 +118,16 @@
     type Machine,
     type ProjectRow,
   } from './client.svelte';
+  import FolderMenu from './FolderMenu.svelte';
   import LiveSessionMenu from './LiveSessionMenu.svelte';
   import MachineMenu from './MachineMenu.svelte';
   import NewProjectPopover from './NewProjectPopover.svelte';
+  import OsMark from './OsMark.svelte';
   import SpawnPanel from './SpawnPanel.svelte';
   import StoredSessionMenu from './StoredSessionMenu.svelte';
+  import { identityVar } from './identity';
   import { sessionTitle, transcriptHref } from './links';
-  import { machineLabel, machineOs, signInWarning } from './machine';
+  import { machineLabel, signInWarning } from './machine';
   import { orderMachines, rail, type PinKind } from './rail.svelte';
 
   /** 32px row, one line, the same slots wherever the rail draws one. */
@@ -329,6 +332,15 @@
     );
   });
 
+  /**
+   * A directory nobody registered, holding one running session and nothing
+   * that has stopped there, is not a hierarchy — the header, the chevron and
+   * the indent all say "there is more in here" about a folder with one thing
+   * in it. It draws as that session's own row instead.
+   */
+  const isSolo = (folder: Folder): boolean =>
+    !folder.project && folder.live.length === 1 && folder.stored.length === 0;
+
   type MachineItem = { id: string; machine: Machine };
 
   const machineItems = $derived(
@@ -351,6 +363,19 @@
 
   /** "Spawn here" from a folder header — the board's own panel, prefilled. */
   let spawnFor = $state<{ machineId: string; cwd: string; projectId?: string } | null>(null);
+
+  const spawnHere = (folder: Folder): void => {
+    spawnFor = { machineId: folder.machineId, cwd: folder.cwd, projectId: folder.project?.id };
+  };
+
+  /** Everything but this one shut — how you get back to one folder at a time. */
+  function collapseOthers(id: string): void {
+    for (const folder of folders) {
+      if (folder.id !== id && !isSolo(folder)) shut[folder.id] = true;
+    }
+    delete shut[id];
+    writeMap(SHUT_KEY, shut);
+  }
 
   let settled = $state(false);
   $effect(() => {
@@ -441,11 +466,10 @@
 {#snippet machineGlyph(machineId: string)}
   {@const machine = cockpit.machines.find((row) => row.machineId === machineId)}
   {#if machine}
-    {@const os = machineOs(machine.os)}
     <!-- Said once for the whole folder, where every row would otherwise carry
          the same 112px chip: the box is a property of the directory here. -->
     <span class="flex shrink-0 items-center" title={machineLabel(machine.hostname)}>
-      <os.Icon class="text-muted-foreground" />
+      <OsMark os={machine.os} class="size-3.5 text-muted-foreground" />
     </span>
   {/if}
 {/snippet}
@@ -483,7 +507,7 @@
   </Sidebar.MenuButton>
 {/snippet}
 
-{#snippet sessionRow(instance: InstanceRow, chip: boolean)}
+{#snippet sessionRow(instance: InstanceRow, chip: boolean, solo: Folder | null)}
   {@const activity = cockpit.activityOf(instance.id)}
   {@const branches = cockpit.subagentsOf(instance.id)}
   {@const delegated = cockpit.runningSubagentsOf(instance.id)}
@@ -520,6 +544,11 @@
               <ActivityDot {activity} size={1.5} />
             {/if}
           </span>
+          <!-- A row standing in for its own folder carries the folder's hue,
+               so the directory is still recognisable without its header. -->
+          {#if solo}
+            <IconFolderDuo class="identity-ink shrink-0" style={identityVar(solo.cwd)} />
+          {/if}
           <span
             class="min-w-0 truncate {name.path ? 'font-mono' : ''} {sleeping
               ? 'text-muted-foreground'
@@ -527,6 +556,18 @@
           >
             {name.text}
           </span>
+          <!-- Where it runs, since no header says it any more — and only when
+               the title is not already that same path. A leaf is short by
+               nature, so here it is the title that yields: a sliver of a
+               directory name is worth less than the room it saved. -->
+          {#if solo && !name.path}
+            <span
+              class="max-w-24 shrink-0 truncate font-mono text-micro text-muted-foreground"
+              title={solo.cwd}
+            >
+              {solo.name}
+            </span>
+          {/if}
           <!-- A glance cue, not an alert: it says only that this one stopped
                while you were elsewhere, and it goes when you open it. -->
           {#if unseen[instance.id] !== undefined}
@@ -567,6 +608,9 @@
             {/if}
             {#if chip}
               {@render machineChip(instance.machineId)}
+            {/if}
+            {#if solo?.oneMachine}
+              {@render machineGlyph(solo.machineId)}
             {/if}
           </span>
         </a>
@@ -653,79 +697,86 @@
   {@const tinted = !open && folder.alerting}
   {@const all = showingAll[folder.id] ?? false}
   {@const recents = all ? folder.stored : folder.stored.slice(0, RECENTS)}
-  <div class="group/folder relative">
-    <Sidebar.MenuButton class="{ROW} pr-9">
-      {#snippet child({ props })}
-        <button
-          {...props}
-          type="button"
-          aria-expanded={open}
-          title={folder.cwd}
-          data-rail-row
-          data-folder={folder.id}
-          onclick={() => setFolder(folder.id, !open)}
-        >
-          <span class={LEAD}>
-            <IconChevronRight
-              class="text-muted-foreground/70 transition-transform duration-240 {open
-                ? 'rotate-90'
-                : ''}"
-              style="transition-timing-function: var(--ease-out-expo)"
+  <FolderMenu
+    name={folder.name}
+    project={folder.project}
+    onnew={() => spawnHere(folder)}
+    oncollapseothers={() => collapseOthers(folder.id)}
+  >
+    <div class="group/folder relative">
+      <Sidebar.MenuButton class="{ROW} pr-9">
+        {#snippet child({ props })}
+          <button
+            {...props}
+            type="button"
+            aria-expanded={open}
+            title={folder.cwd}
+            data-rail-row
+            data-folder={folder.id}
+            onclick={() => setFolder(folder.id, !open)}
+          >
+            <span class={LEAD}>
+              <IconChevronRight
+                class="text-muted-foreground/70 transition-transform duration-240 {open
+                  ? 'rotate-90'
+                  : ''}"
+                style="transition-timing-function: var(--ease-out-expo)"
+              />
+            </span>
+            <!-- The directory's own hue, except while it is shouting: what is
+                 waiting on a human outranks what the folder is called. -->
+            <IconFolderDuo
+              class="shrink-0 {tinted ? 'text-error' : 'identity-ink'}"
+              style={tinted ? undefined : identityVar(folder.cwd)}
             />
-          </span>
-          <IconFolderDuo class="shrink-0 {tinted ? 'text-error' : 'text-muted-foreground'}" />
-          <span class="min-w-0 truncate font-medium {folder.mono ? 'font-mono' : ''}">
-            {folder.name}
-          </span>
-          <span class={TAIL}>
-            {#if folder.pinned}
-              <IconPinFilled class="size-3 text-muted-foreground/60" />
-            {/if}
-            {#if folder.live.length > 0}
-              <span
-                class="text-micro font-medium {tinted
-                  ? 'rounded-full bg-error/15 px-1.5 text-error'
-                  : 'text-muted-foreground'}"
-                title={tinted ? 'Something in here is waiting on you' : undefined}
-                data-tabular
-              >
-                {folder.live.length}
-              </span>
-            {/if}
-            {#if folder.oneMachine}
-              {@render machineGlyph(folder.machineId)}
-            {/if}
-          </span>
-        </button>
-      {/snippet}
-    </Sidebar.MenuButton>
-    <!-- Reserved by `pr-9` above, so nothing shifts when it fades in. A phone
-         has no hover to reveal it with, so there it simply stays. -->
-    <Button
-      variant="ghost"
-      size="icon-sm"
-      class="absolute top-0 right-0 transition-opacity duration-150 md:opacity-0
-             md:group-focus-within/folder:opacity-100 md:group-hover/folder:opacity-100
-             md:focus-visible:opacity-100"
-      title="New session in {folder.name}"
-      aria-label="New session in {folder.name}"
-      onclick={() =>
-        (spawnFor = {
-          machineId: folder.machineId,
-          cwd: folder.cwd,
-          projectId: folder.project?.id,
-        })}
-    >
-      <IconPlus />
-    </Button>
-  </div>
+            <span class="min-w-0 truncate font-medium {folder.mono ? 'font-mono' : ''}">
+              {folder.name}
+            </span>
+            <span class={TAIL}>
+              {#if folder.pinned}
+                <IconPinFilled class="size-3 text-muted-foreground/60" />
+              {/if}
+              {#if folder.live.length > 0}
+                <span
+                  class="text-micro font-medium {tinted
+                    ? 'rounded-full bg-error/15 px-1.5 text-error'
+                    : 'text-muted-foreground'}"
+                  title={tinted ? 'Something in here is waiting on you' : undefined}
+                  data-tabular
+                >
+                  {folder.live.length}
+                </span>
+              {/if}
+              {#if folder.oneMachine}
+                {@render machineGlyph(folder.machineId)}
+              {/if}
+            </span>
+          </button>
+        {/snippet}
+      </Sidebar.MenuButton>
+      <!-- Reserved by `pr-9` above, so nothing shifts when it fades in. A phone
+           has no hover to reveal it with, so there it simply stays. -->
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        class="absolute top-0 right-0 transition-opacity duration-150 md:opacity-0
+               md:group-focus-within/folder:opacity-100 md:group-hover/folder:opacity-100
+               md:focus-visible:opacity-100"
+        title="New session in {folder.name}"
+        aria-label="New session in {folder.name}"
+        onclick={() => spawnHere(folder)}
+      >
+        <IconPlus />
+      </Button>
+    </div>
+  </FolderMenu>
 
   {#if open}
     <div transition:slide={rowIn}>
       <Sidebar.Menu class={NEST}>
         {#each folder.live as instance (instance.id)}
           <Sidebar.MenuItem class={ITEM}>
-            {@render sessionRow(instance, !folder.oneMachine)}
+            {@render sessionRow(instance, !folder.oneMachine, null)}
           </Sidebar.MenuItem>
         {/each}
         {#each recents as info (info.sessionId)}
@@ -755,7 +806,6 @@
 {/snippet}
 
 {#snippet machineRow(machine: Machine)}
-  {@const os = machineOs(machine.os)}
   {@const needsSignIn = signInWarning(machine)}
   {@const online = machine.status === 'online'}
   <MachineMenu {machine}>
@@ -766,7 +816,7 @@
       tabindex="-1"
     >
       <span class={LEAD}>
-        <os.Icon class="size-4 text-muted-foreground" />
+        <OsMark os={machine.os} class="text-muted-foreground" />
       </span>
       <span class="min-w-0 truncate {online ? '' : 'text-muted-foreground'}">
         {machineLabel(machine.hostname)}
@@ -859,7 +909,11 @@
           <Sidebar.Menu>
             {#each folders as folder (folder.id)}
               <Sidebar.MenuItem class={ITEM}>
-                {@render folderGroup(folder)}
+                {#if isSolo(folder) && folder.live[0]}
+                  {@render sessionRow(folder.live[0], false, folder)}
+                {:else}
+                  {@render folderGroup(folder)}
+                {/if}
               </Sidebar.MenuItem>
             {/each}
           </Sidebar.Menu>
