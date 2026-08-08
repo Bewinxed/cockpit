@@ -1,6 +1,7 @@
 import type {
   AgentRow,
   BuildInfo,
+  FleetAgent,
   FleetConfig,
   FleetMarketplace,
   FleetMcpServer,
@@ -19,6 +20,7 @@ import { migrate } from 'drizzle-orm/bun-sqlite/migrator';
 import { DB_PATH } from '../config';
 import {
   agents,
+  fleetAgents,
   fleetMemory,
   fleetMemoryHistory,
   instances,
@@ -158,6 +160,14 @@ export interface DbShape {
     files?: SkillFile[];
   }) => FleetSkillMeta;
   readonly deleteSkill: (name: string) => void;
+  /**
+   * Every subagent the fleet keeps, file and all: a definition is a page of
+   * markdown, so the listing is what the editor is seeded from.
+   */
+  readonly listFleetAgents: () => FleetAgent[];
+  /** Upsert of one definition's file; the hash and the size are read off it. */
+  readonly putFleetAgent: (agent: { name: string; content: string }) => FleetAgent;
+  readonly deleteFleetAgent: (name: string) => void;
   /** The fleet's user-scope CLAUDE.md, or undefined while the fleet keeps none. */
   readonly getFleetMemory: () => { content: string; hash: string; updatedAt: Date } | undefined;
   /** Stores the document and the hash the machines compare against. */
@@ -204,6 +214,15 @@ const skillMeta = (row: Omit<typeof skills.$inferSelect, 'files' | 'createdAt'>)
   ...(row.hash ? { hash: row.hash } : {}),
   ...(row.bytes === null ? {} : { bytes: row.bytes }),
   ...(row.error ? { error: row.error } : {}),
+});
+
+/** A subagent row as everything outside the hub reads it. */
+const agentFile = (row: typeof fleetAgents.$inferSelect): FleetAgent => ({
+  name: row.name,
+  content: row.content,
+  hash: row.hash,
+  bytes: row.bytes,
+  at: row.updatedAt.getTime(),
 });
 
 /** The one row the fleet's memory ever takes: there is one document, not a list. */
@@ -567,6 +586,28 @@ const make = (path: string): DbShape => {
     },
     deleteSkill: (name) => {
       db.delete(skills).where(eq(skills.name, name)).run();
+    },
+    listFleetAgents: () =>
+      db.select().from(fleetAgents).orderBy(fleetAgents.name).all().map(agentFile),
+    putFleetAgent: ({ name, content }) => {
+      const row = {
+        name,
+        content,
+        hash: hashText(content),
+        bytes: Buffer.byteLength(content),
+        updatedAt: new Date(),
+      };
+      db.insert(fleetAgents)
+        .values(row)
+        .onConflictDoUpdate({
+          target: fleetAgents.name,
+          set: { content: row.content, hash: row.hash, bytes: row.bytes, updatedAt: row.updatedAt },
+        })
+        .run();
+      return agentFile(row);
+    },
+    deleteFleetAgent: (name) => {
+      db.delete(fleetAgents).where(eq(fleetAgents.name, name)).run();
     },
     getFleetMemory,
     setFleetMemory: (content) => {
