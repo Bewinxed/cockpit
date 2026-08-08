@@ -1,11 +1,11 @@
 /**
  * The conversations you are actually moving between.
  *
- * A swipe that walks the sidebar's list is a swipe through everything you have
- * ever started, in an order nobody chose — you pass four sessions you have not
- * opened in a week to get to the one you were in a minute ago. What a phone
- * teaches is app switching: the things you are working between, most recent
- * first, and the ordering stays put while you are moving through it.
+ * Browser-tab grammar (user's call, 2026-08-08): the order is the order things
+ * were opened in, and it holds still. The first one you opened stays leftmost,
+ * a click moves nothing, a new session lands on the right, and closing one is
+ * the only thing that ever shifts the rest. An order that re-ranked itself by
+ * recency is what made the strip feel like it was dodging the pointer.
  *
  * Kept per browser rather than on the hub. It is a record of what *this* reader
  * has been looking at, not a property of the fleet.
@@ -15,18 +15,9 @@ const KEY = 'outpost-working-set';
 /** Beyond this it stops being a working set and becomes history again. */
 const LIMIT = 10;
 
-/**
- * How long after the last move the order is allowed to re-rank.
- *
- * Without this, recency re-sorts on every visit and swiping "next" twice takes
- * you back where you started: you arrive, you become the most recent, so the
- * next one along is the one you just left. Alt-tab has the same problem and
- * solves it the same way — the order holds while your finger is still working.
- */
-const SETTLE_MS = 2500;
-
 interface Visit {
   id: string;
+  /** Only eviction reads this: the tab that goes is the coldest one. */
   at: number;
 }
 
@@ -55,14 +46,10 @@ const save = () => {
   }
 };
 
-/** The order a swipe is currently walking, held still until the reader stops. */
-let frozen: string[] | null = null;
-let frozenAt = 0;
-
 export const workingSet = {
-  /** Most recent first. What the switcher walks. */
+  /** Left to right, oldest tab first. The strip, and what stepping walks. */
   get order(): string[] {
-    return [...visits].sort((a, b) => b.at - a.at).map((visit) => visit.id);
+    return visits.map((visit) => visit.id);
   },
 
   /** Notes that a conversation is on screen. */
@@ -70,12 +57,21 @@ export const workingSet = {
     if (!id) return;
     const at = Date.now();
     const existing = visits.findIndex((visit) => visit.id === id);
-    if (existing === -1) visits.push({ id, at });
-    else visits[existing] = { id, at };
-    // Oldest out, so the set stays the things being worked between.
+    // Coming back to a tab only re-dates it. Moving it is the re-rank this
+    // ordering exists to be rid of.
+    if (existing !== -1) {
+      visits[existing] = { id, at };
+      save();
+      return;
+    }
+    visits.push({ id, at });
+    // The coldest tab makes room; everything else keeps the place it had.
     if (visits.length > LIMIT) {
-      visits.sort((a, b) => b.at - a.at);
-      visits.splice(LIMIT);
+      let coldest = 0;
+      for (let i = 1; i < visits.length; i++) {
+        if (visits[i].at < visits[coldest].at) coldest = i;
+      }
+      visits.splice(coldest, 1);
     }
     save();
   },
@@ -89,21 +85,19 @@ export const workingSet = {
   },
 
   /**
-   * The next conversation in the switcher, `null` when there is nowhere to go.
+   * The next conversation along the strip, `null` when there is nowhere to go.
+   *
+   * Walks tab order, so `[` and `]` and a swipe move left and right exactly as
+   * the eye reads them — and stepping twice lands two tabs along rather than
+   * back where it started, which is what the old recency order could not do.
    *
    * `fallback` is the rail's own list, used only until the reader has been in
    * more than one place — a brand new browser has no working set, and a swipe
    * that does nothing at all reads as a broken gesture rather than an empty one.
    */
   step(from: string, by: number, fallback: string[]): string | null {
-    const now = Date.now();
-    if (!frozen || now - frozenAt > SETTLE_MS) {
-      const recent = this.order.filter((id) => fallback.includes(id));
-      frozen = recent.length > 1 ? recent : fallback;
-    }
-    frozenAt = now;
-
-    const order = frozen;
+    const open = this.order.filter((id) => fallback.includes(id));
+    const order = open.length > 1 ? open : fallback;
     if (order.length < 2) return null;
     const at = order.indexOf(from);
     if (at === -1) return order[0] ?? null;
