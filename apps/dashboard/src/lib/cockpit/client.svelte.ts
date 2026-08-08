@@ -56,6 +56,7 @@ import {
   mapTranscript,
   turnBoundaries,
 } from './frames';
+import { invalidateTasks, refreshTasks, TASK_LEDGER_TOOLS } from './tasks.svelte';
 
 export type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'error';
 
@@ -501,6 +502,10 @@ function settle(requestId: string | undefined, answer: (waiter: Waiter) => void)
   return true;
 }
 
+/** Which tool a result answers, from the call it lands on. */
+const nameOfCall = (messages: Message[], toolId: string): string =>
+  messages.findLast((message) => message.metadata?.toolId === toolId)?.metadata?.toolName ?? '';
+
 function handleFrame(frame: FramePayload): void {
   if (frame.kind === 'instances') {
     // The machines ride along so a daemon registering — the moment its auth
@@ -636,6 +641,14 @@ function handleFrame(frame: FramePayload): void {
       }
       for (const result of mapping.toolResults) {
         applyToolResult(sink, result);
+        // The ledger on disk just moved. The result says only that it did —
+        // what it now says is read back from the files, never parsed out of
+        // here. Answered against `sink`, so a subagent editing the plan
+        // invalidates the session the same way the main loop does; searched
+        // backwards because a result answers one of the last calls made.
+        if (TASK_LEDGER_TOOLS.has(nameOfCall(sink, result.toolId))) {
+          invalidateTasks(frame.instanceId);
+        }
         // The Task call's own result is the authoritative end of the subagent it
         // spawned: branches are keyed by that `tool_use_id`. Progress frames can
         // re-open a branch that already reported itself finished, and nothing
@@ -1407,6 +1420,9 @@ export async function openTranscript({
   target.machineId = machineId;
   target.cwd = cwd;
   target.sessionId = sessionId;
+  // A stored session's plan is still on its machine, and no frame will ever
+  // arrive to say so — opening it is the only moment there is to ask.
+  refreshTasks(viewId);
   // Re-opening what is already read — or still hydrating, which has published
   // its newest turns by now — must not start a second read over the top of it.
   if (target.messages.length > 0 || target.loading) return;
