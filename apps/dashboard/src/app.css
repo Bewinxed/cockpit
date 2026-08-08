@@ -410,6 +410,30 @@
   --tw-prose-invert-td-borders: var(--tw-prose-td-borders);
 }
 
+/* ---- Project identity color (see lib/cockpit/identity.ts). Elements set
+   --identity-h inline; these utilities tune lightness/chroma per appearance.
+   Identity is ink, tint, and underline — never a status dot. */
+@utility identity-ink {
+  color: oklch(0.5 0.12 var(--identity-h, 120));
+}
+.dark .identity-ink {
+  color: oklch(0.74 0.11 var(--identity-h, 122));
+}
+
+@utility identity-tint {
+  background-color: oklch(0.52 0.11 var(--identity-h, 120) / 0.09);
+}
+.dark .identity-tint {
+  background-color: oklch(0.7 0.1 var(--identity-h, 122) / 0.14);
+}
+
+@utility identity-underline {
+  box-shadow: inset 0 -2px 0 oklch(0.52 0.11 var(--identity-h, 120) / 0.85);
+}
+.dark .identity-underline {
+  box-shadow: inset 0 -2px 0 oklch(0.72 0.1 var(--identity-h, 122) / 0.85);
+}
+
 /* ---- Chrome materials. Structural translucency, never decoration. */
 @utility material-chrome {
   background: var(--material-chrome);
