@@ -75,6 +75,12 @@ export { default as IconPin } from '~icons/solar/pin-linear';
 export { default as IconPinList } from '~icons/solar/pin-list-linear';
 /** A pressed pin, not a kind of thing — hence bold rather than duotone. */
 export { default as IconPinFilled } from '~icons/solar/pin-bold';
+/* The tool-card families that had no glyph yet (see tool-cards/descriptors.ts). */
+export { default as IconFolderFiles } from '~icons/solar/folder-with-files-linear';
+export { default as IconCompass } from '~icons/solar/compass-linear';
+export { default as IconCursor } from '~icons/solar/cursor-linear';
+/** An MCP server whose name never resolved to a site to take a favicon from. */
+export { default as IconPlug } from '~icons/solar/plug-circle-linear';
 
 /*
  * `Duo` is Solar's bold-duotone cut: a filled two-tone shape that says what a
