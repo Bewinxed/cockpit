@@ -1201,7 +1201,7 @@
              and that is the segment that tells two checkouts apart. -->
         {#if leaf !== heading}
           <span
-            class="hidden shrink-0 truncate font-mono text-micro text-muted-foreground sm:block 2xl:hidden"
+            class="hidden min-w-0 truncate font-mono text-micro text-muted-foreground sm:block 2xl:hidden"
             title={cwdLabel}
           >{leaf}</span>
         {/if}
