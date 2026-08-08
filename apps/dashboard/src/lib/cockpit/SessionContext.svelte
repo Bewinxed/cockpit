@@ -67,11 +67,21 @@
   /** Bound to the kit's tabs, which own the value; a union would not bind to it. */
   let tab = $state('memory');
 
-  /** The rail's own dot for a branch, in the colours the left one uses. */
+  /**
+   * The kit keeps every panel mounted and only toggles `hidden`, so a Svelte
+   * `in:` transition would never fire. Going `display:none` → shown restarts a
+   * CSS animation, which is the entrance: 160ms of opacity, no travel.
+   */
+  const PANEL =
+    'flex flex-col gap-4 duration-[160ms] ease-[var(--ease-out-expo)] ' +
+    'data-[state=active]:animate-in data-[state=active]:fade-in';
+
+  /** The rail's own dot for a branch, in `ActivityDot`'s vocabulary: amber is
+      work in progress, green is never a branch mid-flight. */
   const BRANCH_DOT: Record<string, string> = {
-    error: 'bg-destructive',
-    running: 'bg-success',
-    starting: 'bg-warning',
+    error: 'bg-error',
+    running: 'bg-warning',
+    starting: 'bg-warning/60',
     complete: 'bg-muted-foreground/40',
   };
 
@@ -93,8 +103,19 @@
   const isMissing = (error: unknown) => message(error).includes('does not exist');
 
   /**
-   * What a read that never came back says out loud. The exception underneath is
-   * the tunnel's own ("Failed to execute 'json' on 'Response'…") and names
+   * A machine that is away fails all three reads at once, and that is one fact
+   * about the machine rather than three about the files. Said once in the
+   * banner; the cards then only note that they are unreadable.
+   */
+  const anyFailed = $derived(Boolean(failed.user || failed.project || failed.local));
+  const allFailed = $derived(Boolean(failed.user && failed.project && failed.local));
+
+  /** A card whose read did not come back, in place of its content. */
+  const UNREADABLE = 'Unreadable while the machine is away.';
+
+  /**
+   * The tooltip on a single scope that did not answer. The exception underneath
+   * is the tunnel's own ("Failed to execute 'json' on 'Response'…") and names
    * neither the file nor a way out of it, so it stays in the tooltip for
    * whoever is debugging the wire rather than reading their memory.
    */
@@ -160,12 +181,13 @@
 {/snippet}
 
 {#snippet scope(name: string, file: string, problem: string | null)}
-  <span class="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+  <span class="flex min-w-0 items-center gap-2 text-micro text-muted-foreground">
     <span>{name}</span>
-    {#if problem}
-      <span class="min-w-0 shrink-0 text-error" role="alert" title="{unanswered(file)} ({problem})">
-        no answer
-      </span>
+    <!-- Not red: a machine that cannot be reached is a fact, not a thing the
+         reader has to answer. When all three failed the banner has said it
+         once already, so the cards keep quiet. -->
+    {#if problem && !allFailed}
+      <span class="min-w-0 shrink-0" title="{unanswered(file)} ({problem})">no answer</span>
     {/if}
   </span>
 {/snippet}
@@ -198,24 +220,44 @@
       </Button>
     </Sidebar.Header>
 
-    <Sidebar.Content class="gap-4 p-4">
-      <Tabs.Content value="memory" class="flex flex-col gap-4">
-        <p class="text-caption">
-          What Claude Code reads at <span class="font-mono">{cwd}</span> on this machine — user, project,
-          then local.
-        </p>
+    <Sidebar.Content class="gap-4 overflow-x-hidden p-4">
+      <Tabs.Content value="memory" class={PANEL}>
+        <div class="flex items-start gap-2">
+          <p class="min-w-0 flex-1 text-caption">
+            What Claude Code reads at <span class="font-mono break-words">{cwd}</span> on this machine
+            — user, project, then local.
+          </p>
+          <!-- The read only happens on the rising edge of open, so a failure
+               with the rail already open has no other way back. -->
+          {#if anyFailed && !allFailed}
+            <Button variant="ghost" size="xs" class="shrink-0" disabled={loading} onclick={load}>
+              Retry
+            </Button>
+          {/if}
+        </div>
 
         {#if loading}
           {#each [0, 1, 2] as slot (slot)}
             <Skeleton class="h-32 w-full shrink-0 rounded-xl" />
           {/each}
         {:else}
+          {#if allFailed}
+            <div
+              role="status"
+              title={failed.user}
+              class="flex shrink-0 items-center gap-2 rounded-xl bg-warning/10 px-4 py-3 text-caption"
+            >
+              <span class="min-w-0 flex-1">
+                This machine is not answering — memory can't be read.
+              </span>
+              <Button variant="ghost" size="xs" class="shrink-0" onclick={load}>Retry</Button>
+            </div>
+          {/if}
+
           <MemoryCard
             path="~/.claude/CLAUDE.md"
             content={user}
-            emptyText={failed.user
-              ? unanswered('its user memory')
-              : 'No user CLAUDE.md on this machine.'}
+            emptyText={failed.user ? UNREADABLE : 'No user CLAUDE.md on this machine.'}
           >
             {#snippet meta()}
               {@render scope('user', 'its user memory', failed.user)}
@@ -228,9 +270,9 @@
           <MemoryCard
             path="CLAUDE.md"
             content={project}
-            save={saveProject}
+            save={failed.project ? undefined : saveProject}
             emptyText={failed.project
-              ? unanswered('CLAUDE.md')
+              ? UNREADABLE
               : 'No CLAUDE.md in this project — click to write one.'}
           >
             {#snippet meta()}
@@ -241,9 +283,9 @@
           <MemoryCard
             path="CLAUDE.local.md"
             content={local}
-            save={saveLocal}
+            save={failed.local ? undefined : saveLocal}
             emptyText={failed.local
-              ? unanswered('CLAUDE.local.md')
+              ? UNREADABLE
               : 'No CLAUDE.local.md — click to write one. Git never sees this file.'}
           >
             {#snippet meta()}
@@ -253,7 +295,7 @@
         {/if}
       </Tabs.Content>
 
-      <Tabs.Content value="mcp" class="flex flex-col gap-4">
+      <Tabs.Content value="mcp" class={PANEL}>
         {#if servers === null}
           {#each [0, 1] as slot (slot)}
             <Skeleton class="h-28 w-full shrink-0 rounded-xl" />
@@ -262,14 +304,14 @@
           <p class="text-caption">No MCP servers in this session.</p>
         {:else}
           {#each servers as server (server.name)}
-            <div class="shrink-0 rounded-xl bg-card p-3 shadow-sm">
+            <div class="shrink-0 rounded-xl bg-card p-3 shadow-md">
               <McpServerDetail {server} {instanceId} {machineId} />
             </div>
           {/each}
         {/if}
       </Tabs.Content>
 
-      <Tabs.Content value="skills" class="flex flex-col gap-4">
+      <Tabs.Content value="skills" class={PANEL}>
         {#if skills.length === 0}
           <p class="text-caption">
             This session has listed no skills yet. The list arrives with the session's own init
@@ -280,9 +322,9 @@
             {skills.length} skill{skills.length === 1 ? '' : 's'} this session can reach, as its
             <span class="font-mono">/</span> menu lists them.
           </p>
-          <ul class="flex flex-col rounded-xl bg-card shadow-sm">
+          <ul class="flex flex-col rounded-xl bg-card shadow-md">
             {#each skills as skill (skill.name)}
-              <li class="flex flex-col gap-0.5 border-t border-border px-3 py-2 first:border-t-0">
+              <li class="flex flex-col gap-0.5 border-t border-border/50 px-3 py-2 first:border-t-0">
                 <span class="flex flex-wrap items-center gap-x-2 gap-y-1">
                   <span class="truncate font-mono text-[13px]">{skill.name}</span>
                   {#if skill.source}
@@ -290,7 +332,9 @@
                   {/if}
                 </span>
                 {#if skill.description}
-                  <span class="line-clamp-2 text-xs text-muted-foreground">{skill.description}</span>
+                  <span class="line-clamp-2 text-micro text-muted-foreground">
+                    {skill.description}
+                  </span>
                 {/if}
               </li>
             {/each}
@@ -304,7 +348,7 @@
       </Tabs.Content>
 
 
-      <Tabs.Content value="info" class="flex flex-col gap-4">
+      <Tabs.Content value="info" class={PANEL}>
         <dl class="flex shrink-0 flex-col gap-3">
           {#if model}
             {@render fact('Model', modelLabel(model), false)}
@@ -340,9 +384,7 @@
 
         {#if branches.length > 0}
           <div class="flex shrink-0 flex-col gap-2">
-            <h3 class="text-xs font-medium tracking-wider text-muted-foreground uppercase">
-              Subagents
-            </h3>
+            <h3 class="text-caption">Subagents</h3>
             <ul class="flex flex-col gap-1">
               {#each branches as branch (branch.toolUseId)}
                 <li>
@@ -357,18 +399,18 @@
                     <span
                       class="size-1.5 shrink-0 rounded-full {BRANCH_DOT[branch.status] ??
                         'bg-muted-foreground/40'} {branch.status === 'running'
-                        ? 'animate-pulse'
+                        ? 'animate-pulse motion-reduce:animate-none'
                         : ''}"
                     ></span>
                     <span class="min-w-0 flex-1 truncate text-left text-[13px]">
                       {branch.description ?? branch.subagentType}
                     </span>
                     {#if branch.model}
-                      <span class="shrink-0 text-xs text-muted-foreground">
+                      <span class="shrink-0 text-micro text-muted-foreground">
                         {modelLabel(branch.model)}
                       </span>
                     {/if}
-                    <span class="shrink-0 text-xs text-muted-foreground">{branch.status}</span>
+                    <span class="shrink-0 text-micro text-muted-foreground">{branch.status}</span>
                   </Button>
                 </li>
               {/each}
