@@ -37,6 +37,7 @@ import type { AgentAuth, DbShape, InstanceKind } from './db';
 import type { PendingShape } from './pending';
 import type { HubSocket, RegistryShape } from './registry';
 import { hashFiles, resolveSkill } from './skills';
+import type { TelegramBridge } from './telegram';
 
 /** The frame a forwarded `control` comes back as, whoever asked for it. */
 type ControlResult = Extract<FramePayload, { kind: 'control_result' }>;
@@ -54,6 +55,8 @@ export interface HubServices {
   readonly registry: RegistryShape;
   readonly db: DbShape;
   readonly pending: PendingShape;
+  /** Absent unless the hub was given a bot token; every call site guards for it. */
+  readonly telegram?: TelegramBridge;
 }
 
 const isEnvelope = (value: unknown): value is Envelope =>
@@ -324,7 +327,19 @@ const isQuerySend = (payload: unknown): boolean => {
   return message?.shouldQuery !== false;
 };
 
-export const createServer = ({ registry, db, pending }: HubServices) => {
+export const createServer = ({ registry, db, pending, telegram }: HubServices) => {
+  /**
+   * Drops a dead process's parked questions, telling whoever carried them
+   * elsewhere that they are over — a Telegram message whose buttons still work
+   * after the session behind them is gone is a message that lies.
+   */
+  const forgetPending = (instanceId: string): void => {
+    for (const parked of pending.list())
+      if (parked.instanceId === instanceId && parked.requestId)
+        telegram?.onSettled(parked.requestId);
+    pending.forget(instanceId);
+  };
+
   /**
    * Sessions that have been handed work and have not answered it yet, kept here
    * rather than in a browser: a hand-off learnt by whichever tab happened to be
@@ -1169,7 +1184,7 @@ export const createServer = ({ registry, db, pending }: HubServices) => {
               peekInstances(message.payload),
               peekResumable(message.payload)
             )) {
-              pending.forget(settled.row.id);
+              forgetPending(settled.row.id);
               // The daemon went away and came back. A session whose conversation
               // the SDK still has is not finished — it lost its process, which is
               // this hub's problem to fix rather than the user's to notice. Put
@@ -1230,8 +1245,10 @@ export const createServer = ({ registry, db, pending }: HubServices) => {
             break;
           case 'frames': {
             const kind = peek(message.payload, 'kind');
-            if (message.requestId && kind === 'permission_request')
+            if (message.requestId && kind === 'permission_request') {
               pending.remember(message.requestId, message);
+              telegram?.onAsk(message);
+            }
             if (kind === 'sdk' && message.instanceId) {
               const init = peekInit(message.payload);
               if (init) {
@@ -1242,11 +1259,10 @@ export const createServer = ({ registry, db, pending }: HubServices) => {
             // An agent only frames an error about a session that failed to start
             // or died on its own, so the row records it for whoever looks later.
             if (kind === 'error' && message.instanceId) {
-              db.failInstance(
-                message.instanceId,
-                peek(message.payload, 'message') ?? 'the session failed'
-              );
-              pending.forget(message.instanceId);
+              const reason = peek(message.payload, 'message') ?? 'the session failed';
+              db.failInstance(message.instanceId, reason);
+              forgetPending(message.instanceId);
+              telegram?.onError(message.instanceId, reason);
               publishInstances(message.machineId);
             }
             // An install answering, whoever asked for it: the cell is the hub's
@@ -1326,7 +1342,7 @@ export const createServer = ({ registry, db, pending }: HubServices) => {
             if (forward(message, ws) && message.instanceId) {
               // A relaunch replaces the process — questions the old one had
               // open are settled by its teardown and must not replay.
-              pending.forget(message.instanceId);
+              forgetPending(message.instanceId);
               db.openInstance({
                 id: message.instanceId,
                 machineId: message.machineId,
@@ -1365,6 +1381,7 @@ export const createServer = ({ registry, db, pending }: HubServices) => {
           case 'control': {
             if (!forward(message, ws) || !message.requestId) break;
             registry.rememberRequester(message.requestId, ws);
+            telegram?.onSettled(message.requestId);
             pending.resolve(message.requestId);
             // A per-cell install or retry, clicked rather than swept: the chip
             // turns on every dashboard, not only the one that clicked it.

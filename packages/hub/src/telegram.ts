@@ -1,0 +1,520 @@
+import type {
+  ControlPayload,
+  Envelope,
+  FramePayload,
+  PermissionResult,
+  SendPayload,
+  UserAnswers,
+  UserQuestion,
+} from '@cockpit/core';
+import { ASK_USER_QUESTION, COCKPIT_ENV, RESOLVE_PERMISSION } from '@cockpit/core';
+import type { DbShape } from './db';
+import type { PendingShape } from './pending';
+import type { RegistryShape } from './registry';
+
+/** The parked ask, as the bridge reads it out of the envelope the hub kept. */
+type PermissionRequest = Extract<FramePayload, { kind: 'permission_request' }>;
+
+export interface TelegramBridge {
+  /** A session is blocked on the reader; put it in their pocket. */
+  readonly onAsk: (envelope: Envelope) => void;
+  /** Answered somewhere else, or died with its process: the buttons are stale. */
+  readonly onSettled: (requestId: string) => void;
+  readonly onError: (instanceId: string, message: string) => void;
+  readonly start: () => void;
+}
+
+export interface TelegramServices {
+  readonly registry: RegistryShape;
+  readonly db: DbShape;
+  readonly pending: PendingShape;
+}
+
+/** The row of the credentials table the pinned chat lives in. */
+const CREDENTIAL_ID = 'telegram';
+
+/** Overridable so a test can point the bridge at a local stand-in. */
+const API_BASE = Bun.env.COCKPIT_TELEGRAM_API ?? 'https://api.telegram.org';
+
+/** Telegram's own ceiling on a message, and how long a `getUpdates` may hang. */
+const MESSAGE_LIMIT = 4096;
+const POLL_SECONDS = 50;
+const POLL_TIMEOUT_MS = (POLL_SECONDS + 15) * 1000;
+const BACKOFF_FLOOR_MS = 2_000;
+const BACKOFF_CEILING_MS = 30_000;
+
+/** How many bridged messages stay answerable, and for how long. */
+const TRACKED_MESSAGES = 500;
+const TRACK_TTL_MS = 24 * 60 * 60_000;
+const SWEEP_INTERVAL_MS = 60 * 60_000;
+
+/** Where a message that is too big to answer here sends the reader instead. */
+const DASHBOARD_URL = 'https://outpost.bewinxed.com';
+
+/** One bridged message, and what replying to it means. */
+interface Tracked {
+  instanceId: string;
+  machineId: string;
+  /** The ask it carries, while that ask is still open. */
+  requestId?: string;
+  /** Kept so an edit can append to the message rather than replace it. */
+  text: string;
+  at: number;
+}
+
+interface TelegramMessage {
+  message_id: number;
+  chat?: { id?: number };
+  text?: string;
+  reply_to_message?: { message_id?: number };
+}
+
+interface TelegramUpdate {
+  update_id: number;
+  message?: TelegramMessage;
+  callback_query?: {
+    id: string;
+    data?: string;
+    message?: TelegramMessage;
+  };
+}
+
+interface InlineButton {
+  text: string;
+  callback_data: string;
+}
+
+const esc = (value: string): string =>
+  value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+/** Clipped before escaping, so a cut never lands inside an entity. */
+const clip = (value: string, max: number): string =>
+  value.length > max ? `${value.slice(0, max)}…` : value;
+
+/**
+ * Whole lines go, never half a tag. Every line the bridge writes closes what it
+ * opens, so dropping trailing ones leaves the HTML Telegram parses intact —
+ * which cutting the assembled string at a character count would not.
+ */
+const fit = (lines: string[]): string => {
+  const kept = [...lines];
+  const note = '\n\n… (truncated — open it in the dashboard)';
+  let body = kept.join('\n');
+  if (body.length <= MESSAGE_LIMIT) return body;
+  while (kept.length > 1 && body.length > MESSAGE_LIMIT - note.length) {
+    kept.pop();
+    body = kept.join('\n');
+  }
+  return `${body.slice(0, MESSAGE_LIMIT - note.length)}${note}`;
+};
+
+/** The directory a session is in, as the reader would name it. */
+const leaf = (cwd: string): string => cwd.split('/').filter(Boolean).at(-1) ?? cwd;
+
+const looksLikeQuestion = (value: unknown): value is UserQuestion =>
+  typeof value === 'object' &&
+  value !== null &&
+  typeof (value as UserQuestion).question === 'string' &&
+  Array.isArray((value as UserQuestion).options);
+
+/**
+ * What a parked tool call is asking the reader, when it is asking rather than
+ * requesting permission. Mirrors the dashboard's `questionsOf`; the hub cannot
+ * import a browser module, and neither end should re-model the SDK's schema.
+ */
+const questionsOf = (request: PermissionRequest): UserQuestion[] | null => {
+  if (request.toolName !== ASK_USER_QUESTION) return null;
+  const { questions } = request.input as { questions?: unknown };
+  if (!Array.isArray(questions) || questions.length === 0) return null;
+  return questions.every(looksLikeQuestion) ? (questions as UserQuestion[]) : null;
+};
+
+/**
+ * One line of what a tool is about to do, off whichever field carries it. Best
+ * effort by design: the fleet's tools are not a closed set, so a glance that
+ * cannot be taken is simply not shown.
+ */
+const glance = (input: Record<string, unknown>): string | undefined => {
+  for (const key of ['command', 'description', 'file_path', 'url']) {
+    const value = input[key];
+    if (typeof value === 'string' && value.trim()) return value;
+  }
+  for (const value of Object.values(input)) if (typeof value === 'string' && value.trim()) return value;
+  return undefined;
+};
+
+/**
+ * The hub's own line to its owner's Telegram: every ask the fleet parks lands
+ * in one chat with the buttons that settle it, and what the owner types back
+ * reaches the session that asked. `null` without a token — the bridge is opt-in
+ * and its absence costs the hub nothing.
+ */
+export const createTelegramBridge = ({
+  registry,
+  db,
+  pending,
+}: TelegramServices): TelegramBridge | null => {
+  const token = Bun.env[COCKPIT_ENV.telegramToken];
+  if (!token) {
+    console.log('[telegram] no COCKPIT_TELEGRAM_TOKEN — bridge off');
+    return null;
+  }
+
+  const stored = db.getCredential(CREDENTIAL_ID);
+  let chatId = typeof stored?.chatId === 'number' ? stored.chatId : undefined;
+
+  /** Bridged messages by Telegram id, for routing a reply back to a session. */
+  const tracked = new Map<number, Tracked>();
+  /** Open asks by `requestId`, for editing their message once they settle. */
+  const asked = new Map<string, number>();
+  /** Asks this bridge answered itself, so `onSettled` does not overwrite them. */
+  const settledHere = new Set<string>();
+
+  const sweep = setInterval(() => {
+    const cutoff = Date.now() - TRACK_TTL_MS;
+    for (const [messageId, entry] of tracked) {
+      if (entry.at >= cutoff) continue;
+      tracked.delete(messageId);
+      if (entry.requestId) {
+        asked.delete(entry.requestId);
+        settledHere.delete(entry.requestId);
+      }
+    }
+  }, SWEEP_INTERVAL_MS);
+  sweep.unref();
+
+  const call = async <T>(method: string, body: unknown): Promise<T | undefined> => {
+    const response = await fetch(`${API_BASE}/bot${token}/${method}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(POLL_TIMEOUT_MS),
+    });
+    const answer = (await response.json()) as { ok?: boolean; result?: T; description?: string };
+    if (!answer.ok) {
+      console.warn(`[telegram] ${method} refused: ${answer.description ?? response.status}`);
+      return undefined;
+    }
+    return answer.result;
+  };
+
+  const send = async (
+    text: string,
+    buttons?: InlineButton[][]
+  ): Promise<TelegramMessage | undefined> => {
+    if (chatId === undefined) return undefined;
+    return call<TelegramMessage>('sendMessage', {
+      chat_id: chatId,
+      text,
+      parse_mode: 'HTML',
+      ...(buttons && { reply_markup: { inline_keyboard: buttons } }),
+    });
+  };
+
+  /** Records what replying to a bridged message means, newest crowding out oldest. */
+  const track = (messageId: number, entry: Omit<Tracked, 'at'>): void => {
+    tracked.set(messageId, { ...entry, at: Date.now() });
+    if (entry.requestId) asked.set(entry.requestId, messageId);
+    while (tracked.size > TRACKED_MESSAGES) {
+      const oldest = tracked.keys().next();
+      if (oldest.done) break;
+      const dropped = tracked.get(oldest.value);
+      tracked.delete(oldest.value);
+      if (dropped?.requestId) {
+        asked.delete(dropped.requestId);
+        settledHere.delete(dropped.requestId);
+      }
+    }
+  };
+
+  /** Stamps an ask's message with how it ended and takes its buttons away. */
+  const close = async (requestId: string, verdict: string): Promise<void> => {
+    const messageId = asked.get(requestId);
+    const entry = messageId === undefined ? undefined : tracked.get(messageId);
+    if (messageId === undefined || !entry || chatId === undefined) return;
+    const text = fit([entry.text, '', verdict]);
+    entry.text = text;
+    entry.requestId = undefined;
+    asked.delete(requestId);
+    await call('editMessageText', {
+      chat_id: chatId,
+      message_id: messageId,
+      text,
+      parse_mode: 'HTML',
+      reply_markup: { inline_keyboard: [] },
+    });
+  };
+
+  /**
+   * Where a session is, in the words its reader knows it by. Scanned rather than
+   * looked up: the hub has no single-instance read, and the table is small.
+   */
+  const header = (instanceId: string, mark: string): string => {
+    const row = db.listInstances().find((instance) => instance.id === instanceId);
+    if (!row) return `${mark} <b>${esc(instanceId.slice(0, 8))}</b>`;
+    const hostname =
+      db.listAgents().find((agent) => agent.machineId === row.machineId)?.hostname ?? row.machineId;
+    const project = row.projectId
+      ? db.listProjects().find((candidate) => candidate.id === row.projectId)?.name
+      : undefined;
+    const parts = [`<b>${esc(leaf(row.cwd))}</b>`, esc(hostname)];
+    if (project) parts.push(esc(project));
+    return `${mark} ${parts.join(' · ')}`;
+  };
+
+  /** The one place a hub-originated envelope reaches the machine that owns it. */
+  const toAgent = (envelope: Envelope): boolean => {
+    const agent = registry.agent(envelope.machineId);
+    if (!agent) return false;
+    agent.send(envelope);
+    return true;
+  };
+
+  const resolve = (envelope: Envelope, requestId: string, result: PermissionResult): boolean => {
+    const request = envelope.payload as PermissionRequest;
+    const payload: ControlPayload = {
+      instanceId: request.instanceId,
+      requestId,
+      method: RESOLVE_PERMISSION,
+      args: [requestId, result],
+    };
+    const reached = toAgent({
+      verb: 'control',
+      machineId: envelope.machineId,
+      instanceId: request.instanceId,
+      requestId,
+      payload,
+    });
+    if (!reached) return false;
+    settledHere.add(requestId);
+    pending.resolve(requestId);
+    return true;
+  };
+
+  /** The owner typing here is the human the SDK gates on, so the turn says so. */
+  const talkBack = (entry: Tracked, text: string): boolean => {
+    const payload: SendPayload = {
+      instanceId: entry.instanceId,
+      message: {
+        type: 'user',
+        message: { role: 'user', content: text },
+        parent_tool_use_id: null,
+        origin: { kind: 'human' },
+      },
+    };
+    return toAgent({
+      verb: 'send',
+      machineId: entry.machineId,
+      instanceId: entry.instanceId,
+      payload,
+    });
+  };
+
+  const onAsk = (envelope: Envelope): void => {
+    if (chatId === undefined || !envelope.requestId) return;
+    const request = envelope.payload as PermissionRequest;
+    const requestId = envelope.requestId;
+    const lines = [header(request.instanceId, '❓')];
+    let buttons: InlineButton[][] | undefined;
+
+    const questions = questionsOf(request);
+    if (questions && questions.length === 1) {
+      const [question] = questions;
+      lines.push('', esc(clip(question.question, 1200)));
+      if (question.multiSelect) lines.push('', '<i>(multi-select — full control in the dashboard)</i>');
+      buttons = question.options.map((option, index) => [
+        { text: clip(option.label, 60), callback_data: `q:${requestId}:${index}` },
+      ]);
+    } else if (questions) {
+      // Several questions at once is more than three buttons can settle, and a
+      // partial answer runs the tool as if the rest were skipped.
+      for (const question of questions) {
+        lines.push('', `<b>${esc(clip(question.question, 400))}</b>`);
+        for (const option of question.options) lines.push(`• ${esc(clip(option.label, 200))}`);
+      }
+      lines.push('', `Answer in the dashboard → ${DASHBOARD_URL}/session/${request.instanceId}`);
+    } else {
+      lines.push('', `<b>${esc(request.toolName)}</b>`);
+      const detail = glance(request.input);
+      if (detail) lines.push(`<code>${esc(clip(detail, 900))}</code>`);
+      buttons = [
+        [
+          { text: 'Allow', callback_data: `p:${requestId}:a` },
+          ...(request.suggestions?.length
+            ? [{ text: 'Always allow', callback_data: `p:${requestId}:w` }]
+            : []),
+          { text: 'Deny', callback_data: `p:${requestId}:d` },
+        ],
+      ];
+    }
+
+    const text = fit(lines);
+    void send(text, buttons).then((message) => {
+      if (!message) return;
+      track(message.message_id, {
+        instanceId: request.instanceId,
+        machineId: envelope.machineId,
+        // A multi-question ask keeps no `requestId`: nothing sent from here can
+        // settle it, so a reply to it should talk to the session instead.
+        ...(buttons && { requestId }),
+        text,
+      });
+    });
+  };
+
+  const onSettled = (requestId: string): void => {
+    if (settledHere.delete(requestId)) return;
+    if (!asked.has(requestId)) return;
+    void close(requestId, '☑️ Answered in the dashboard');
+  };
+
+  const onError = (instanceId: string, message: string): void => {
+    if (chatId === undefined) return;
+    const row = db.listInstances().find((instance) => instance.id === instanceId);
+    if (!row) return;
+    const text = fit([`${header(instanceId, '💥')} — <code>${esc(clip(message, 900))}</code>`]);
+    void send(text).then((sent) => {
+      if (sent) track(sent.message_id, { instanceId, machineId: row.machineId, text });
+    });
+  };
+
+  const onCallback = async (query: NonNullable<TelegramUpdate['callback_query']>): Promise<void> => {
+    const [tag, requestId, arg] = (query.data ?? '').split(':');
+    const envelope = requestId ? pending.get(requestId) : undefined;
+    // Answered before anything is awaited: Telegram spins the button until the
+    // callback is acknowledged, and a resolve is slower than a map read.
+    await call('answerCallbackQuery', {
+      callback_query_id: query.id,
+      ...(envelope ? {} : { text: 'Already answered elsewhere' }),
+    });
+    if (!requestId) return;
+    if (!envelope) {
+      await close(requestId, '☑️ Answered in the dashboard');
+      return;
+    }
+
+    const request = envelope.payload as PermissionRequest;
+    let result: PermissionResult | undefined;
+    if (tag === 'p') {
+      if (arg === 'd') result = { behavior: 'deny', message: 'User denied permission' };
+      else
+        result = {
+          behavior: 'allow',
+          updatedInput: request.input,
+          ...(arg === 'w' && { updatedPermissions: request.suggestions }),
+        };
+    } else if (tag === 'q') {
+      const [question] = questionsOf(request) ?? [];
+      const option = question?.options[Number(arg)];
+      if (!question || !option) return;
+      const answers: UserAnswers = {
+        [question.question]: question.multiSelect ? [option.label] : option.label,
+      };
+      result = { behavior: 'allow', updatedInput: { ...request.input, answers } };
+    }
+    if (!result) return;
+
+    if (!resolve(envelope, requestId, result)) {
+      await close(requestId, '⚠️ That machine is offline');
+      return;
+    }
+    await close(
+      requestId,
+      result.behavior === 'deny' ? '⛔ Denied via Telegram' : '✅ Allowed via Telegram'
+    );
+  };
+
+  const onMessage = async (message: TelegramMessage): Promise<void> => {
+    const text = message.text?.trim();
+    if (!text) return;
+
+    const repliedTo = message.reply_to_message?.message_id;
+    const entry = repliedTo === undefined ? undefined : tracked.get(repliedTo);
+    if (!entry) {
+      await send(
+        'Reply to one of my messages: to an open ask to answer it, to any other to type into that session.'
+      );
+      return;
+    }
+
+    const open = entry.requestId ? pending.get(entry.requestId) : undefined;
+    if (entry.requestId && open) {
+      const request = open.payload as PermissionRequest;
+      const [question] = questionsOf(request) ?? [];
+      const result: PermissionResult = question
+        ? {
+            behavior: 'allow',
+            updatedInput: {
+              ...request.input,
+              answers: { [question.question]: question.multiSelect ? [text] : text },
+            },
+          }
+        : // The reader's own words, which is what a denial is for: the model is
+          // told why, not merely that it was refused.
+          { behavior: 'deny', message: text };
+      if (!resolve(open, entry.requestId, result)) {
+        await close(entry.requestId, '⚠️ That machine is offline');
+        return;
+      }
+      await close(
+        entry.requestId,
+        result.behavior === 'deny' ? '⛔ Denied via Telegram' : '✅ Allowed via Telegram'
+      );
+      return;
+    }
+
+    if (!talkBack(entry, text)) {
+      await send('That machine is offline.');
+      return;
+    }
+    const sent = await send('→ sent');
+    if (sent)
+      track(sent.message_id, {
+        instanceId: entry.instanceId,
+        machineId: entry.machineId,
+        text: '→ sent',
+      });
+  };
+
+  const onUpdate = async (update: TelegramUpdate): Promise<void> => {
+    const chat = update.message?.chat?.id ?? update.callback_query?.message?.chat?.id;
+    if (chatId === undefined) {
+      // First contact pins the chat. Whoever reaches the bot first owns the
+      // fleet, which is the same trust the token itself carries.
+      if (typeof chat !== 'number' || !update.message) return;
+      chatId = chat;
+      db.putCredential(CREDENTIAL_ID, { chatId: chat });
+      console.log(`[telegram] pinned to chat ${chat}`);
+      await send('This chat now runs your fleet. Asks will land here.');
+      return;
+    }
+    if (chat !== chatId) return;
+    if (update.callback_query) await onCallback(update.callback_query);
+    else if (update.message) await onMessage(update.message);
+  };
+
+  const start = (): void => {
+    void (async () => {
+      let offset = 0;
+      let backoff = BACKOFF_FLOOR_MS;
+      console.log(`[telegram] bridge on${chatId === undefined ? ' — waiting to be pinned' : ''}`);
+      for (;;) {
+        try {
+          const updates =
+            (await call<TelegramUpdate[]>('getUpdates', { offset, timeout: POLL_SECONDS })) ?? [];
+          backoff = BACKOFF_FLOOR_MS;
+          for (const update of updates) {
+            offset = update.update_id + 1;
+            await onUpdate(update);
+          }
+        } catch (error) {
+          console.warn(`[telegram] poll failed, retrying in ${backoff}ms:`, error);
+          await new Promise<void>((wake) => setTimeout(wake, backoff).unref());
+          backoff = Math.min(backoff * 2, BACKOFF_CEILING_MS);
+        }
+      }
+    })();
+  };
+
+  return { onAsk, onSettled, onError, start };
+};
