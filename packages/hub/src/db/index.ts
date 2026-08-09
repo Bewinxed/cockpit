@@ -20,6 +20,7 @@ import { migrate } from 'drizzle-orm/bun-sqlite/migrator';
 import { DB_PATH } from '../config';
 import {
   agents,
+  credentials,
   fleetAgents,
   fleetMemory,
   fleetMemoryHistory,
@@ -202,6 +203,8 @@ export interface DbShape {
     cwd: string;
   }) => typeof projects.$inferSelect | undefined;
   readonly deleteProject: (id: string) => void;
+  readonly getCredential: (id: string) => Record<string, unknown> | undefined;
+  readonly putCredential: (id: string, blob: Record<string, unknown>) => void;
 }
 
 export class Db extends Context.Service<Db, DbShape>()('Db') {}
@@ -701,6 +704,16 @@ const make = (path: string): DbShape => {
       // The sessions started from it outlive it; they just stop being its.
       db.update(instances).set({ projectId: null }).where(eq(instances.projectId, id)).run();
       db.delete(projects).where(eq(projects.id, id)).run();
+    },
+    getCredential: (id) => db.select().from(credentials).where(eq(credentials.id, id)).get()?.blob,
+    putCredential: (id, blob) => {
+      db.insert(credentials)
+        .values({ id, blob })
+        .onConflictDoUpdate({
+          target: credentials.id,
+          set: { blob, updatedAt: new Date() },
+        })
+        .run();
     },
   };
 };

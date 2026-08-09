@@ -7,6 +7,8 @@ import { Context, Effect, Layer } from 'effect';
  */
 export interface PendingShape {
   readonly remember: (requestId: string, envelope: Envelope) => void;
+  /** The parked ask itself, for whoever answers it away from a dashboard. */
+  readonly get: (requestId: string) => Envelope | undefined;
   readonly resolve: (requestId: string) => void;
   /** A relaunch or a death answers every question its process had open. */
   readonly forget: (instanceId: string) => void;
@@ -22,6 +24,7 @@ const make = (): PendingShape => {
     remember: (requestId, envelope) => {
       requests.set(requestId, envelope);
     },
+    get: (requestId) => requests.get(requestId),
     resolve: (requestId) => {
       requests.delete(requestId);
     },

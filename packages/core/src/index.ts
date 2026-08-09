@@ -412,6 +412,8 @@ export const COCKPIT_ENV = {
   machineId: 'COCKPIT_MACHINE_ID',
   /** `1` stops the hub advertising itself over mDNS, and is not read anywhere else. */
   noMdns: 'COCKPIT_NO_MDNS',
+  /** The bot the hub reaches its owner's Telegram on. Absent, no bridge runs. */
+  telegramToken: 'COCKPIT_TELEGRAM_TOKEN',
 } as const;
 
 /**
