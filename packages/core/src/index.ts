@@ -414,6 +414,13 @@ export const COCKPIT_ENV = {
   noMdns: 'COCKPIT_NO_MDNS',
   /** The bot the hub reaches its owner's Telegram on. Absent, no bridge runs. */
   telegramToken: 'COCKPIT_TELEGRAM_TOKEN',
+  /**
+   * The OpenAI-compatible router a voice note is transcribed on. Absent, the
+   * bridge says so rather than swallowing what was said.
+   */
+  telegramAsrUrl: 'COCKPIT_TELEGRAM_ASR_URL',
+  /** Which model there does the transcribing; an alias of one is resolved. */
+  telegramAsrModel: 'COCKPIT_TELEGRAM_ASR_MODEL',
 } as const;
 
 /**
