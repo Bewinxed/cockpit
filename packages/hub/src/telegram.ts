@@ -11,6 +11,8 @@ import { ASK_USER_QUESTION, COCKPIT_ENV, RESOLVE_PERMISSION } from '@cockpit/cor
 import type { DbShape } from './db';
 import type { PendingShape } from './pending';
 import type { RegistryShape } from './registry';
+import type { Intake, TelegramMedia } from './telegram-media';
+import { carriesMedia, createMediaIntake } from './telegram-media';
 
 /** The parked ask, as the bridge reads it out of the envelope the hub kept. */
 type PermissionRequest = Extract<FramePayload, { kind: 'permission_request' }>;
@@ -62,7 +64,7 @@ interface Tracked {
   at: number;
 }
 
-interface TelegramMessage {
+interface TelegramMessage extends TelegramMedia {
   message_id: number;
   chat?: { id?: number };
   text?: string;
@@ -198,6 +200,8 @@ export const createTelegramBridge = ({
     return answer.result;
   };
 
+  const media = createMediaIntake({ call, filesBase: `${API_BASE}/file/bot${token}` });
+
   const send = async (
     text: string,
     buttons?: InlineButton[][]
@@ -292,7 +296,11 @@ export const createTelegramBridge = ({
   };
 
   /** The owner typing here is the human the SDK gates on, so the turn says so. */
-  const talkBack = (entry: Tracked, text: string): boolean => {
+  const talkBack = (
+    entry: Tracked,
+    text: string,
+    carried?: Extract<Intake, { kind: 'media' }>
+  ): boolean => {
     const payload: SendPayload = {
       instanceId: entry.instanceId,
       message: {
@@ -301,6 +309,8 @@ export const createTelegramBridge = ({
         parent_tool_use_id: null,
         origin: { kind: 'human' },
       },
+      ...(carried?.images && { images: carried.images }),
+      ...(carried?.attachments && { attachments: carried.attachments }),
     };
     return toAgent({
       verb: 'send',
@@ -425,8 +435,8 @@ export const createTelegramBridge = ({
   };
 
   const onMessage = async (message: TelegramMessage): Promise<void> => {
-    const text = message.text?.trim();
-    if (!text) return;
+    const typed = message.text?.trim();
+    if (!typed && !carriesMedia(message)) return;
 
     const repliedTo = message.reply_to_message?.message_id;
     const entry = repliedTo === undefined ? undefined : tracked.get(repliedTo);
@@ -437,8 +447,23 @@ export const createTelegramBridge = ({
       return;
     }
 
+    // Fetched only once there is somewhere for it to go — a voice note nobody
+    // replied to is not worth waking a model for.
+    const carried = await media.intake(message);
+    if (carried?.kind === 'refused') {
+      await send(esc(carried.reason));
+      return;
+    }
+    const text = carried?.kind === 'text' ? carried.text : (typed ?? '');
+    const attached = carried?.kind === 'media' ? carried : undefined;
+    /** What was heard, so the reader can see it rather than trust it. */
+    const heard =
+      carried?.kind === 'text' ? `🎤 <i>"${esc(clip(carried.transcript, 200))}"</i>\n` : '';
+
     const open = entry.requestId ? pending.get(entry.requestId) : undefined;
-    if (entry.requestId && open) {
+    // Nothing but words settles an ask. An image is for the session to look at,
+    // so it goes there and the ask is left standing.
+    if (entry.requestId && open && !attached) {
       const request = open.payload as PermissionRequest;
       const [question] = questionsOf(request) ?? [];
       const result: PermissionResult = question
@@ -453,26 +478,27 @@ export const createTelegramBridge = ({
           // told why, not merely that it was refused.
           { behavior: 'deny', message: text };
       if (!resolve(open, entry.requestId, result)) {
-        await close(entry.requestId, '⚠️ That machine is offline');
+        await close(entry.requestId, `${heard}⚠️ That machine is offline`);
         return;
       }
       await close(
         entry.requestId,
-        result.behavior === 'deny' ? '⛔ Denied via Telegram' : '✅ Allowed via Telegram'
+        `${heard}${result.behavior === 'deny' ? '⛔ Denied via Telegram' : '✅ Allowed via Telegram'}`
       );
       return;
     }
 
-    if (!talkBack(entry, text)) {
+    if (!talkBack(entry, text, attached)) {
       await send('That machine is offline.');
       return;
     }
-    const sent = await send('→ sent');
+    const note = `${heard}→ sent${open ? ' — answer that ask with text or a button' : ''}`;
+    const sent = await send(note);
     if (sent)
       track(sent.message_id, {
         instanceId: entry.instanceId,
         machineId: entry.machineId,
-        text: '→ sent',
+        text: note,
       });
   };
 
