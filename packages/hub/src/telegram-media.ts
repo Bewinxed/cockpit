@@ -222,19 +222,58 @@ export const createMediaIntake = ({ call, filesBase }: MediaServices): MediaInta
     const cold = await warm(url, name);
     if (cold) return { kind: 'refused', reason: cold };
 
-    const form = new FormData();
-    form.append('file', new Blob([bytes]), filename);
-    form.append('model', name);
-    const response = await fetch(`${url}/v1/audio/transcriptions`, {
-      method: 'POST',
-      body: form,
-      signal: AbortSignal.timeout(TRANSCRIBE_TIMEOUT_MS),
-    }).catch(() => undefined);
+    const chat = Bun.env[COCKPIT_ENV.telegramAsrMode] === 'chat';
+    const response = await (chat
+      ? // An audio-capable LLM has no transcription API — it is asked to
+        // transcribe the way it is asked anything, with the audio attached.
+        fetch(`${url}/v1/chat/completions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: name,
+            temperature: 0,
+            messages: [
+              {
+                role: 'user',
+                content: [
+                  {
+                    type: 'input_audio',
+                    input_audio: {
+                      data: Buffer.from(bytes).toString('base64'),
+                      format: extensionOf(filename) || 'ogg',
+                    },
+                  },
+                  {
+                    type: 'text',
+                    text:
+                      'Transcribe this audio exactly as spoken. Output only the transcript' +
+                      ' — no commentary, no quotation marks.',
+                  },
+                ],
+              },
+            ],
+          }),
+          signal: AbortSignal.timeout(TRANSCRIBE_TIMEOUT_MS),
+        })
+      : (() => {
+          const form = new FormData();
+          form.append('file', new Blob([bytes]), filename);
+          form.append('model', name);
+          return fetch(`${url}/v1/audio/transcriptions`, {
+            method: 'POST',
+            body: form,
+            signal: AbortSignal.timeout(TRANSCRIBE_TIMEOUT_MS),
+          });
+        })()
+    ).catch(() => undefined);
     if (!response) return { kind: 'refused', reason: 'The router took too long to answer.' };
     if (!response.ok) return { kind: 'refused', reason: await refusal(url, response, name) };
 
-    const { text } = (await response.json().catch(() => ({}))) as { text?: string };
-    const said = text?.trim();
+    const body = (await response.json().catch(() => ({}))) as {
+      text?: string;
+      choices?: { message?: { content?: string } }[];
+    };
+    const said = (chat ? body.choices?.[0]?.message?.content : body.text)?.trim();
     if (!said) return { kind: 'refused', reason: 'The router heard nothing in that.' };
     return { kind: 'text', text: said, transcript: said };
   };

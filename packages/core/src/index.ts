@@ -421,6 +421,13 @@ export const COCKPIT_ENV = {
   telegramAsrUrl: 'COCKPIT_TELEGRAM_ASR_URL',
   /** Which model there does the transcribing; an alias of one is resolved. */
   telegramAsrModel: 'COCKPIT_TELEGRAM_ASR_MODEL',
+  /**
+   * `transcriptions` posts multipart to the OpenAI transcription API
+   * (whisper-family only in vLLM); `chat` sends the audio as an
+   * `input_audio` content part to a chat completion — the shape an
+   * audio-capable LLM (Nemotron Nano, the owner's pick) is served under.
+   */
+  telegramAsrMode: 'COCKPIT_TELEGRAM_ASR_MODE',
 } as const;
 
 /**
