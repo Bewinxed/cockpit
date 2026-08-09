@@ -232,6 +232,10 @@ export const createMediaIntake = ({ call, filesBase }: MediaServices): MediaInta
           body: JSON.stringify({
             model: name,
             temperature: 0,
+            // Bounded: the serving model is a reasoning family — without a cap
+            // a "transcription" can ramble. 1024 covers ~8 minutes of speech;
+            // the router caps audio at ~10.5 min anyway.
+            max_tokens: 1024,
             messages: [
               {
                 role: 'user',
