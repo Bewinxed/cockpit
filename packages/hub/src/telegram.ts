@@ -454,7 +454,9 @@ export const createTelegramBridge = ({
       await send(esc(carried.reason));
       return;
     }
-    const text = carried?.kind === 'text' ? carried.text : (typed ?? '');
+    // What the turn says, which media speaks for: a transcript, or the caption
+    // that came with the picture.
+    const text = carried ? carried.text : (typed ?? '');
     const attached = carried?.kind === 'media' ? carried : undefined;
     /** What was heard, so the reader can see it rather than trust it. */
     const heard =
