@@ -206,7 +206,11 @@
 		assistant: {
 			align: 'justify-start',
 			bubble:
-				'relative max-w-prose text-sm leading-relaxed text-foreground break-words',
+				// min(65ch, 100%) in ONE declaration: `max-w-prose max-w-full` looks
+				// right but only one max-width survives the cascade, and in this
+				// items-start flex column the bubble sizes to fit-content — 65ch won
+				// and overflowed a 390px phone (user report, 2026-08-09).
+				'relative max-w-[min(65ch,100%)] min-w-0 text-sm leading-relaxed text-foreground break-words',
 			icon: IconAgent,
 			iconBg: 'bg-secondary border border-border',
 			iconColor: 'text-muted-foreground'
@@ -620,7 +624,7 @@
 						</div>
 					</div>
 				{:else}
-					<div class="{config.bubble} relative max-w-full min-w-0">
+					<div class={config.bubble}>
 						{#if bubbleImages.length > 0}
 							<div class="flex flex-wrap gap-2 mb-2">
 								{#each bubbleImages as image, index (index)}

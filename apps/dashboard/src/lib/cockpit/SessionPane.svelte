@@ -1594,7 +1594,7 @@
               {/if}
 
               {#if session?.streaming}
-                <div class="max-w-prose text-body leading-relaxed text-foreground break-words">
+                <div class="max-w-[min(65ch,100%)] min-w-0 text-body leading-relaxed text-foreground break-words">
                   <Markdown source={stream.text} /><span class="inline-block w-[3px] h-4 rounded-sm bg-primary/60 align-text-bottom animate-pulse"></span>
                 </div>
               {/if}
