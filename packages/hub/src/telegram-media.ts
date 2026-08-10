@@ -174,8 +174,13 @@ export const createMediaIntake = ({ call, filesBase }: MediaServices): MediaInta
       const after = response.headers.get('retry-after');
       return `The router is cooling down${after ? ` — try again in ${after}s` : ''}.`;
     }
-    const { error } = (await response.json().catch(() => ({}))) as { error?: string };
-    return `The router refused: ${error ?? response.status}.`;
+    // The chat/completions endpoint answers `{ error }`, but the transcriptions
+    // endpoint answers `{ detail }` — both carry the sentence worth relaying.
+    const { error, detail } = (await response.json().catch(() => ({}))) as {
+      error?: string;
+      detail?: string;
+    };
+    return `The router refused: ${error ?? detail ?? response.status}.`;
   };
 
   /**
