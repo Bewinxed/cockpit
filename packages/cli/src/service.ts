@@ -211,8 +211,9 @@ const SERVICES: Record<ServiceId, ServiceSpec> = {
       // The hub's DB_PATH defaults to `./cockpit.db` — relative to wherever it
       // was started. A unit that leaves this unset opens a second, empty
       // database in whatever directory the init system chose, and the fleet
-      // comes up blank with nothing to say why.
-      COCKPIT_DB_PATH: join(ROOT, 'cockpit.db'),
+      // comes up blank with nothing to say why. The live database is the one
+      // `bun run hub` has always written from its own package directory.
+      COCKPIT_DB_PATH: join(ROOT, 'packages', 'hub', 'cockpit.db'),
     },
     workingDirectory: ROOT,
     after: ['network-online.target'],
@@ -288,12 +289,18 @@ const DEV: Partial<Record<ServiceId, Partial<ServiceSpec>>> = {
   dashboard: {
     // vite reads its config out of the working directory, which is the app, not
     // the workspace root; `--port`/`--host` then override what that config says
-    // so the dev flavour answers where the prod one did.
-    command: [process.execPath, DASHBOARD_VITE, 'dev', '--port', DASHBOARD_PORT, '--host', DASHBOARD_HOST],
+    // so the dev flavour answers where the prod one did. Vite runs under node,
+    // not Bun: under Bun its `ws: true` proxy never completes the upgrade, so
+    // the dashboard socket hangs in CONNECTING and the UI reads as an empty
+    // fleet — node is also what `bun run dev` always gave it via the shebang.
+    command: [Bun.which('node') ?? 'node', DASHBOARD_VITE, 'dev', '--port', DASHBOARD_PORT, '--host', DASHBOARD_HOST],
     workingDirectory: DASHBOARD_DIR,
     check: () => {
       if (!existsSync(DASHBOARD_VITE)) {
         throw new ServiceError(`no vite at ${DASHBOARD_VITE} — run \`bun install\` in ${ROOT} first.`);
+      }
+      if (!Bun.which('node')) {
+        throw new ServiceError(`vite's dev server needs node on PATH, and there is none.`);
       }
       return undefined;
     },

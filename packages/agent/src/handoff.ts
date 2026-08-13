@@ -30,22 +30,60 @@ const leafOf = (path: string): string => path.split('/').filter(Boolean).pop() ?
 
 interface Peer {
   row: InstanceRow;
+  /** The checkout's leaf — what a reader calls it, and what several peers share. */
   name: string;
+  /** `cockpit#84a24e7b`: the name plus enough id to be unique in one glance. */
+  label: string;
+  /** Which machine it runs on, so two checkouts of one repo are told apart. */
+  host: string;
 }
+
+/** Enough of a UUID to name one session among a fleet's worth. */
+const shortId = (id: string): string => id.slice(0, 8);
+
+/** How long ago the row moved, for a reader choosing between identical names. */
+const ageOf = (at: InstanceRow['updatedAt']): string => {
+  if (!at) return 'age unknown';
+  const ms = Date.now() - new Date(at).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return 'age unknown';
+  const minutes = Math.round(ms / 60_000);
+  if (minutes < 1) return 'active now';
+  if (minutes < 60) return `active ${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  return hours < 24 ? `active ${hours}h ago` : `active ${Math.round(hours / 24)}d ago`;
+};
 
 /**
  * The fleet, read from the hub rather than from this daemon's own sessions:
  * the whole point is reaching a session that is usually somewhere else.
  */
 async function roster(exceptInstanceId: string): Promise<Peer[]> {
-  const response = await fetch(`${hubHttpUrl()}/api/instances`, {
-    signal: AbortSignal.timeout(5000),
-  });
-  if (!response.ok) throw new Error(`the hub answered ${response.status}`);
-  const rows = (await response.json()) as InstanceRow[];
+  const base = hubHttpUrl();
+  const [instancesRes, agentsRes] = await Promise.all([
+    fetch(`${base}/api/instances`, { signal: AbortSignal.timeout(5000) }),
+    // Hostnames are worth one more request: two machines checking out the same
+    // repository is the normal case here, not the exotic one.
+    fetch(`${base}/api/agents`, { signal: AbortSignal.timeout(5000) }).catch(() => undefined),
+  ]);
+  if (!instancesRes.ok) throw new Error(`the hub answered ${instancesRes.status}`);
+  const rows = (await instancesRes.json()) as InstanceRow[];
+  const hosts = new Map<string, string>();
+  if (agentsRes?.ok) {
+    for (const agent of (await agentsRes.json()) as { machineId: string; hostname: string }[]) {
+      hosts.set(agent.machineId, agent.hostname);
+    }
+  }
   return rows
     .filter((row) => row.id !== exceptInstanceId && (row.status === 'running' || row.status === 'starting'))
-    .map((row) => ({ row, name: leafOf(row.cwd) }));
+    .map((row) => {
+      const name = leafOf(row.cwd);
+      return {
+        row,
+        name,
+        label: `${name}#${shortId(row.id)}`,
+        host: hosts.get(row.machineId) ?? row.machineId,
+      };
+    });
 }
 
 /**
@@ -60,6 +98,14 @@ function resolve(peers: Peer[], target: string): Peer {
   const byId = peers.find((peer) => peer.row.id === needle);
   if (byId) return byId;
 
+  // `cockpit#84a24e7b` and a bare `84a24e7b` are what the listing invites the
+  // model to copy, so both resolve — a short id is unique in any real fleet.
+  const idPart = needle.includes('#') ? needle.split('#').pop() ?? '' : needle;
+  if (idPart.length >= 6) {
+    const byShortId = peers.filter((peer) => peer.row.id.startsWith(idPart));
+    if (byShortId.length === 1) return byShortId[0];
+  }
+
   const exact = peers.filter((peer) => peer.name.toLowerCase() === needle);
   if (exact.length === 1) return exact[0];
 
@@ -67,11 +113,19 @@ function resolve(peers: Peer[], target: string): Peer {
   const candidates = exact.length > 1 ? exact : partial;
   if (candidates.length === 1) return candidates[0];
   if (candidates.length === 0) {
-    const known = peers.map((peer) => peer.name).join(', ') || 'none are running';
+    const known = peers.map((peer) => peer.label).join(', ') || 'none are running';
     throw new Error(`No running session matches "${target}". Running now: ${known}.`);
   }
-  const listed = candidates.map((peer) => `${peer.name} (${peer.row.id})`).join(', ');
-  throw new Error(`"${target}" matches more than one session: ${listed}. Name one by its id.`);
+  // Several sessions in one checkout is the normal case, and the reason a
+  // hand-off lands in the wrong one: name them so the choice can be made on
+  // something other than a coin toss.
+  const listed = candidates
+    .map((peer) => `${peer.label} on ${peer.host} (${ageOf(peer.row.updatedAt)})`)
+    .join(', ');
+  throw new Error(
+    `"${target}" matches ${candidates.length} sessions: ${listed}. ` +
+      `Name one by its short id — and if you cannot tell them apart, ask rather than guess.`
+  );
 }
 
 /** A session id the daemon can also address, so the model gets a name back. */
@@ -99,9 +153,15 @@ export function handoffTools({ instanceId, cwd, emit }: HandoffDeps) {
           if (peers.length === 0) {
             return { content: [{ type: 'text' as const, text: 'No other sessions are running.' }] };
           }
-          const lines = peers.map(
-            (peer) => `- ${peer.name} — ${peer.row.cwd} (id: ${peer.row.id})`
-          );
+          const lines = peers.map((peer) => {
+            const facts = [
+              peer.host,
+              peer.row.model ?? 'default model',
+              ageOf(peer.row.updatedAt),
+              ...(peer.row.kind === 'scratch' ? ['side quest'] : []),
+            ];
+            return `- ${peer.label} — ${peer.row.cwd} · ${facts.join(' · ')}`;
+          });
           return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
         }
       ),
@@ -158,7 +218,7 @@ export function handoffTools({ instanceId, cwd, emit }: HandoffDeps) {
               {
                 type: 'text' as const,
                 text:
-                  `Handed to ${peer.name} (${peer.row.cwd}). It is queued there and will be ` +
+                  `Handed to ${peer.label} (${peer.row.cwd} on ${peer.host}). It is queued there and will be ` +
                   `picked up when that session finishes its current turn — it was not interrupted.`,
               },
             ],

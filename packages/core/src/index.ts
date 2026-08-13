@@ -330,6 +330,12 @@ export interface InstanceRow {
   model?: string | null;
   /** What killed the session, on a row the agent reported as `error`. */
   lastError?: string | null;
+  /**
+   * When the row last moved. The strongest way to tell two sessions in the same
+   * checkout apart — a fleet where five sessions are all called `cockpit` needs
+   * something a reader can actually choose by.
+   */
+  updatedAt?: string | number | Date | null;
 }
 
 /**
