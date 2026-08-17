@@ -99,31 +99,32 @@
 </script>
 
 <Collapsible.Root {open} onOpenChange={onToggle}>
-  <Collapsible.Trigger class="w-full text-left">
+  <Collapsible.Trigger class="group/toolcard w-full text-left">
     <div
       class="flex min-h-9 w-full cursor-pointer items-start gap-2 px-3 py-2 transition-colors
         {status === 'error' ? 'bg-error/10 hover:bg-error/15' : 'hover:bg-accent/40'}"
       in:fly={{ y: 4, duration: entering ? 160 : 0, easing: quintOut }}
     >
-      <IconChevronRight
-        class="mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform duration-200 {open
-          ? 'rotate-90'
-          : ''}"
-      />
-
-      <span class="mt-0.5 flex size-4 shrink-0 items-center justify-center">
+      <span class="relative mt-0.5 flex size-4 shrink-0 items-center justify-center">
         {#if descriptor.favicon && !faviconFailed}
           <img
             src={descriptor.favicon}
             alt=""
-            class="size-4 rounded-full object-cover ring-1 ring-border"
+            class="size-4 rounded-full object-cover ring-1 ring-border transition-opacity duration-150 md:group-hover/toolcard:opacity-0 md:group-focus-within/toolcard:opacity-0"
             loading="lazy"
             onerror={() => (faviconFailed = true)}
           />
         {:else}
           {@const Glyph = descriptor.icon}
-          <Glyph class="size-4 {descriptor.color}" />
+          <Glyph
+            class="size-4 {descriptor.color} transition-opacity duration-150 md:group-hover/toolcard:opacity-0 md:group-focus-within/toolcard:opacity-0"
+          />
         {/if}
+        <IconChevronRight
+          class="absolute inset-0 m-auto size-4 text-muted-foreground opacity-0 transition-all duration-240 ease-expo md:group-hover/toolcard:opacity-100 md:group-focus-within/toolcard:opacity-100 {open
+            ? 'rotate-90'
+            : ''}"
+        />
       </span>
 
       <span class="flex min-w-0 flex-1 flex-col gap-0.5">

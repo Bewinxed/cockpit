@@ -163,26 +163,27 @@
   in:fly={{ y: entering ? 10 : 0, duration: entering ? 250 : 0, easing: quintOut }}
 >
   <Collapsible.Root {open} onOpenChange={() => (open = !open)}>
-    <Collapsible.Trigger class="w-full text-left">
+    <Collapsible.Trigger class="group/branch w-full text-left">
       <div class="flex cursor-pointer items-start gap-2 px-4 py-3 transition-colors hover:bg-muted/30">
-        <IconChevronRight
-          class="mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform duration-200 {open
-            ? 'rotate-90'
-            : ''}"
-        />
-
-        <div
-          class="flex size-6 shrink-0 items-center justify-center rounded-md
-            {branch.status === 'error' ? 'bg-destructive/10 text-destructive' : running ? 'bg-primary/10 text-primary' : 'bg-success/10'}"
-        >
-          <IconSkill
-            class="size-3.5 {branch.status === 'error'
-              ? 'text-destructive'
-              : running
-                ? 'text-primary'
-                : 'text-success'}"
+        <span class="relative size-6 shrink-0">
+          <div
+            class="flex size-6 shrink-0 items-center justify-center rounded-md transition-opacity duration-150 md:group-hover/branch:opacity-0 md:group-focus-within/branch:opacity-0
+              {branch.status === 'error' ? 'bg-destructive/10 text-destructive' : running ? 'bg-primary/10 text-primary' : 'bg-success/10'}"
+          >
+            <IconSkill
+              class="size-3.5 {branch.status === 'error'
+                ? 'text-destructive'
+                : running
+                  ? 'text-primary'
+                  : 'text-success'}"
+            />
+          </div>
+          <IconChevronRight
+            class="absolute inset-0 m-auto size-4 text-muted-foreground opacity-0 transition-all duration-240 ease-expo md:group-hover/branch:opacity-100 md:group-focus-within/branch:opacity-100 {open
+              ? 'rotate-90'
+              : ''}"
           />
-        </div>
+        </span>
 
         <div class="min-w-0 flex-1">
           <div class="flex items-baseline gap-2">

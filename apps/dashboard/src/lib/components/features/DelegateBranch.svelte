@@ -93,13 +93,6 @@
   const model = $derived(delegateState?.model ?? row?.model ?? String(toolInput?.model ?? ''));
 
   let open = $state(false);
-  /** The user closed the card by hand; auto-open must not fight them. */
-  let manuallyClosed = $state(false);
-
-  // A live, working delegate opens itself so the reader sees what it is saying.
-  $effect(() => {
-    if (working && !manuallyClosed) open = true;
-  });
 
   const isTool = (m: Message) =>
     (m.type === 'tool.use' || m.type === 'tool.result') && !standsAlone(m);
@@ -244,37 +237,32 @@
     class="w-full max-w-[min(65ch,100%)] overflow-hidden rounded-xl bg-card shadow-sm motion-reduce:transition-none"
     in:fly={{ y: entering ? 10 : 0, duration: entering ? 250 : 0, easing: quintOut }}
   >
-    <Collapsible.Root
-      {open}
-      onOpenChange={() => {
-        open = !open;
-        if (!open) manuallyClosed = true;
-      }}
-    >
-      <Collapsible.Trigger class="w-full text-left">
+    <Collapsible.Root {open} onOpenChange={() => (open = !open)}>
+      <Collapsible.Trigger class="group/delegate w-full text-left">
         <div class="flex cursor-pointer items-start gap-2 px-4 py-3 transition-colors hover:bg-muted/30">
-          <IconChevronRight
-            class="mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform duration-200 {open
-              ? 'rotate-90'
-              : ''}"
-          />
-
-          <div
-            class="flex size-6 shrink-0 items-center justify-center rounded-md
-              {status === 'failed' ? 'bg-destructive/10 text-destructive' : working ? 'bg-primary/10 text-primary' : 'bg-success/10'}"
-          >
-            {#if providerOf(model)}
-              <ProviderLogo model={model} />
-            {:else}
-              <IconSubagentsDuo
-                class="size-3.5 {status === 'failed'
-                  ? 'text-destructive'
-                  : working
-                    ? 'text-primary'
-                    : 'text-success'}"
-              />
-            {/if}
-          </div>
+          <span class="relative size-6 shrink-0">
+            <div
+              class="flex size-6 shrink-0 items-center justify-center rounded-md transition-opacity duration-150 md:group-hover/delegate:opacity-0 md:group-focus-within/delegate:opacity-0
+                {status === 'failed' ? 'bg-destructive/10 text-destructive' : working ? 'bg-primary/10 text-primary' : 'bg-success/10'}"
+            >
+              {#if providerOf(model)}
+                <ProviderLogo model={model} />
+              {:else}
+                <IconSubagentsDuo
+                  class="size-3.5 {status === 'failed'
+                    ? 'text-destructive'
+                    : working
+                      ? 'text-primary'
+                      : 'text-success'}"
+                />
+              {/if}
+            </div>
+            <IconChevronRight
+              class="absolute inset-0 m-auto size-4 text-muted-foreground opacity-0 transition-all duration-240 ease-expo md:group-hover/delegate:opacity-100 md:group-focus-within/delegate:opacity-100 {open
+                ? 'rotate-90'
+                : ''}"
+            />
+          </span>
 
           <div class="min-w-0 flex-1">
             <div class="flex items-baseline gap-2">
