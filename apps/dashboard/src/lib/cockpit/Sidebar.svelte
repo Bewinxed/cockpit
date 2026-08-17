@@ -824,12 +824,12 @@
     !provider
       ? ''
       : sleeping
-        ? 'ring-muted-foreground/30 opacity-60'
+        ? 'ring-1 ring-muted-foreground/30 opacity-60'
         : activity === 'working'
-          ? 'ring-success animate-pulse motion-reduce:animate-none'
+          ? 'ring-2 ring-success animate-pulse motion-reduce:animate-none'
           : activity === 'blocked'
-            ? 'ring-error'
-            : 'ring-muted-foreground/30'}
+            ? 'ring-2 ring-error'
+            : 'ring-1 ring-muted-foreground/30'}
   {@const current = isCurrent(`/session/${instance.id}`)}
   {@const name = titleOf(instance)}
   {@const nested = delegatesOf(instance.id)}
@@ -853,8 +853,11 @@
         >
           <span class={LEAD}>
             {#if provider && model}
-              <span class="flex size-4 items-center justify-center rounded-full ring-2 {ringClass}">
-                <ProviderLogo {model} size={12} />
+              <!-- An enclosed mark needs real clearance: 10px glyph in a 16px
+                   circle is ~30% air, and the ring carries its own weight per
+                   state — hairline at rest, 2px only when it has news. -->
+              <span class="flex size-4 items-center justify-center rounded-full {ringClass}">
+                <ProviderLogo {model} size={10} />
               </span>
             {:else if sleeping}
               <span class="size-1.5 rounded-full bg-muted-foreground/40" title={SLEEPING_LABEL}></span>
