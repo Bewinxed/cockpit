@@ -12,7 +12,12 @@
   import { Markdown } from '$lib/components/ui/markdown';
   import { modelLabel, providerOf } from '$lib/cockpit/models.svelte';
   import { askDetail, askDetailOf, askShort, askShortOf, matchesSession } from '$lib/cockpit/frames';
-  import { cockpit } from '$lib/cockpit/client.svelte';
+  import {
+    backfillSession,
+    cockpit,
+    unwatchDelegate,
+    watchDelegate,
+  } from '$lib/cockpit/client.svelte';
   import ProviderLogo from './ProviderLogo.svelte';
   import type {
     DelegateAskEvent,
@@ -85,6 +90,23 @@
   const model = $derived(delegateState?.model ?? row?.model ?? String(toolInput?.model ?? ''));
 
   let open = $state(false);
+
+  /**
+   * Expanding the card is the only sign this delegate's transcript is wanted,
+   * since its parent's transcript is what the reader is in. Watching the
+   * instance subscribes its frames, and a backfill reads the transcript already
+   * stored — the two together cover a live delegate and one that already ran.
+   */
+  const onToggle = (nextOpen: boolean) => {
+    open = nextOpen;
+    if (!id) return;
+    if (nextOpen) {
+      watchDelegate(id);
+      void backfillSession(id);
+    } else {
+      unwatchDelegate(id);
+    }
+  };
 
   const isTool = (m: Message) =>
     (m.type === 'tool.use' || m.type === 'tool.result') && !standsAlone(m);
@@ -237,7 +259,7 @@
 </script>
 
   <div class="w-full overflow-hidden rounded-xl bg-card shadow-sm motion-reduce:transition-none">
-    <Collapsible.Root {open} onOpenChange={() => (open = !open)}>
+    <Collapsible.Root {open} onOpenChange={onToggle}>
       <Collapsible.Trigger class="group/delegate w-full text-left">
         <div class="flex cursor-pointer items-start gap-2 px-4 py-3 transition-colors hover:bg-muted/30">
           <span class="relative size-6 shrink-0">
@@ -367,10 +389,12 @@
           {#if !hasMessages && !streaming}
             {#if spawning}
               <p class="text-caption text-muted-foreground">Spawning delegate…</p>
+            {:else if delegateState?.loading}
+              <p class="text-caption text-muted-foreground">Loading transcript…</p>
             {:else if status === 'working'}
               <p class="text-caption">Waiting for the first message…</p>
             {:else}
-              <p class="text-caption">Transcript detail is only streamed live.</p>
+              <p class="text-caption text-muted-foreground">No transcript yet.</p>
             {/if}
           {/if}
         </div>

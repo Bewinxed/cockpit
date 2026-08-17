@@ -1001,6 +1001,15 @@ function handleFrame(frame: FramePayload): void {
 /** The session the board is peeking — subscribed for frames, like an open tab. */
 let peekedId = $state<string | null>(null);
 
+/**
+ * Delegates whose cards are expanded. A delegate is a full instance, but its
+ * parent's transcript is what the reader is in — so it is not in the working
+ * set, and without this it receives no frames and its expanded card stays empty.
+ * Watching on expand (and stopping on collapse) is what feeds the card its
+ * transcript without opening the session as a tab.
+ */
+const watchedDelegates = new Set<string>();
+
 /** A session is "open" when a tab or the peek pane is actively watching it. */
 function isSubscribed(instanceId: string): boolean {
   return workingSet.order.includes(instanceId) || peekedId === instanceId;
@@ -1010,6 +1019,7 @@ function isSubscribed(instanceId: string): boolean {
 function subscriptionIds(): string[] {
   const ids = new Set(workingSet.order);
   if (peekedId) ids.add(peekedId);
+  for (const id of watchedDelegates) ids.add(id);
   return [...ids];
 }
 
@@ -1037,6 +1047,18 @@ export function syncSubscriptions(): void {
 export function setPeeked(id: string | null): void {
   if (peekedId === id) return;
   peekedId = id;
+  syncSubscriptions();
+}
+
+/** A delegate card expanded: watch this instance's frames so its card can render them. */
+export function watchDelegate(instanceId: string): void {
+  watchedDelegates.add(instanceId);
+  syncSubscriptions();
+}
+
+/** A delegate card collapsed: stop watching, so the instance's frames no longer stream. */
+export function unwatchDelegate(instanceId: string): void {
+  if (!watchedDelegates.delete(instanceId)) return;
   syncSubscriptions();
 }
 
