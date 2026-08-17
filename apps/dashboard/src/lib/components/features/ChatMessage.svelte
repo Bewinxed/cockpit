@@ -27,7 +27,7 @@
 	import { formatTimestamp } from '$lib/utils/time';
 	import { askShort, delegateOf, isDelegateReport, matchesSession } from '$lib/cockpit/frames';
 	import { resolveInstanceId } from '$lib/cockpit/links';
-	import { providerOf } from '$lib/cockpit/models.svelte';
+	import { modelLabel, providerOf } from '$lib/cockpit/models.svelte';
 	import ProviderLogo from './ProviderLogo.svelte';
 	import { cockpit } from '$lib/cockpit/client.svelte';
 	import type { Message } from '$lib/cockpit/types';
@@ -129,6 +129,21 @@
 		const name = row.cwd.split('/').filter(Boolean).pop() ?? row.cwd;
 		return `${name}#${row.id.slice(0, 8)}`;
 	});
+
+	// The delegate a follow-up names, resolved the same way `followUpLabel` does,
+	// so the card can wear that delegate's model mark instead of the anonymous
+	// subagents glyph.
+	const followUpRow = $derived(
+		message.type === 'tool.handoff'
+			? delegateOf(String(message.content), instanceId, cockpit.instances)
+			: null
+	);
+	// The full instance row for its `model` — `delegateOf` returns only id + cwd.
+	const followUpModel = $derived(
+		followUpRow
+			? (cockpit.instances.find((row) => row.id === followUpRow.id)?.model ?? null)
+			: null
+	);
 
 	// A delegation brief is the parent's own prompt landing in its delegate's
 	// transcript — not a hand-over from some peer session. The card names the
@@ -560,19 +575,23 @@
 				<div
 					class="w-full overflow-hidden rounded-xl border {failed
 						? 'border-destructive/40 bg-destructive/5'
-						: 'border-primary/30 bg-primary/5'}"
+						: 'border-border/60 bg-muted/20'}"
 				>
 					<div class="flex items-center gap-2 px-3 py-2">
-						<IconSubagentsDuo
-							class="size-4 shrink-0 {failed ? 'text-destructive' : 'text-primary'}"
-						/>
+						{#if followUpModel && providerOf(followUpModel)}
+							<ProviderLogo model={followUpModel} size={16} />
+						{:else}
+							<IconSubagentsDuo
+								class="size-4 shrink-0 {failed ? 'text-destructive' : 'text-muted-foreground'}"
+							/>
+						{/if}
 						<span class="min-w-0 flex-1 truncate text-sm">
-							<span class="font-medium {failed ? 'text-destructive' : 'text-primary'}">
+							<span class="font-medium {failed ? 'text-destructive' : 'text-foreground'}">
 								{followUpLabel
-									? 'Follow-up to'
+									? 'Follow-up → '
 									: message.metadata?.handoffKind === 'start'
-										? 'Started'
-										: 'Handed to'}
+										? 'Started → '
+										: 'Handed → '}
 							</span>
 							<span class="font-mono text-foreground">
 							{#if sessionHref}
@@ -587,14 +606,21 @@
 							{/if}
 						</span>
 						</span>
+						{#if followUpModel}
+							<span class="shrink-0 font-mono text-micro text-muted-foreground/70">
+								{modelLabel(followUpModel)}
+							</span>
+						{/if}
 						<span class="shrink-0 text-xs {failed ? 'text-destructive' : 'text-muted-foreground'}">
 							{failed ? 'failed' : done ? 'delivered' : 'sending…'}
 						</span>
 					</div>
 					{#if message.metadata?.handoffBrief}
-						<p class="border-t border-border/40 px-3 py-2 text-xs text-muted-foreground">
-							{message.metadata.handoffBrief.slice(0, 240)}
-						</p>
+						<div class="border-t border-border/40 px-3 py-2 text-xs text-muted-foreground">
+							<div class="max-h-64 overflow-y-auto">
+								<Markdown source={message.metadata.handoffBrief} />
+							</div>
+						</div>
 					{/if}
 					{#if failed && message.metadata?.toolResult && !followUpLabel}
 						<p class="border-t border-border/40 px-3 py-2 text-xs text-destructive/80">
@@ -614,21 +640,21 @@
 							{#if message.metadata?.reportKind}
 								{#if sessionHref}
 									<a href={sessionHref} class="underline-offset-2 hover:underline">
-										Report from {message.metadata?.peerName ?? 'a delegate'}{message
+										← Report from {message.metadata?.peerName ?? 'a delegate'}{message
 											.metadata.reportKind === 'failed'
 											? ' — turn failed'
 											: ''}
 									</a>
 								{:else}
-									Report from {message.metadata?.peerName ?? 'a delegate'}{message.metadata
+									← Report from {message.metadata?.peerName ?? 'a delegate'}{message.metadata
 										.reportKind === 'failed'
 										? ' — turn failed'
 										: ''}
 								{/if}
 							{:else if briefParent}
-								Delegation brief from <span class="font-mono">{briefParent.label}</span>
+								← Delegation brief from <span class="font-mono">{briefParent.label}</span>
 							{:else}
-								Handed over by {message.metadata?.peerName ?? 'another session'}
+								← Handed over by {message.metadata?.peerName ?? 'another session'}
 							{/if}
 						</span>
 						{#if briefParent}
