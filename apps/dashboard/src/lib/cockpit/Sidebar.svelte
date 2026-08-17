@@ -155,6 +155,7 @@
   import ProviderLogo from '$lib/components/features/ProviderLogo.svelte';
   import { machineLabel, signInWarning } from './machine';
   import { orderMachines, rail, type PinKind } from './rail.svelte';
+  import type { DelegateReportEvent } from './types';
 
   /**
    * 32px row, one line, the same slots wherever the rail draws one. Rows end
@@ -209,24 +210,49 @@
   };
 
   /**
-   * When a session last spoke, by its transcript: the catalog's `lastModified`
-   * for a session the SDK recorded, and the newest message the live store has
-   * heard for one it has not — a delegate has no catalog entry, so without the
-   * live fallback they all tie and sort back to spawn order. A session that
-   * has never spoken at all is the newest thing in the folder, not the oldest,
-   * so it sorts first, not last. This is what orders live rows by recency
-   * rather than by the hub's own order.
+   * What a delegate row says once it has reported: the first line of its latest
+   * report's body — the outcome it handed back — instead of the brief it was
+   * handed, which is boilerplate on every row of a delegation. A delegate that
+   * has not reported keeps today's title (its brief, or its fleet-wide handle).
+   */
+  const delegateTitleOf = (instance: InstanceRow): { text: string; path: boolean } => {
+    const reports = cockpit
+      .delegateEventsOf(instance.id)
+      .filter((event): event is DelegateReportEvent => event.kind === 'report');
+    const latest = reports[reports.length - 1];
+    const first = latest?.payload.body
+      .split('\n')
+      .map((line) => line.trim())
+      .find((line) => line.length > 0);
+    if (first) return { text: first.length > 80 ? `${first.slice(0, 79)}…` : first, path: false };
+    return titleOf(instance);
+  };
+
+  /**
+   * When a session last spoke, best signal first. The catalog's `lastModified`
+   * dates a session the SDK recorded. After that comes the newest frame the
+   * live store heard — the word on a subscribed session with no catalog entry.
+   * Then the daemon's pulse: broadcast ~1/sec for every session, subscribed or
+   * not, so it still dates a delegate whose transcript this tab never watched
+   * (a delegate has no catalog entry, and its frame store is empty until it is
+   * opened). Then the registry's own `updatedAt`, the last time the row itself
+   * moved. A session none of these have dated has never spoken: the newest
+   * thing in the folder, not the oldest, so it sorts first, not last.
    */
   const lastActiveAt = (row: InstanceRow): number => {
     const catalog = cockpit
       .catalogOf(row.machineId)
       .find((info) => info.sessionId === row.sessionId)?.lastModified;
     if (catalog) return catalog;
-    // The live store hears every session's frames; the newest message is the
-    // freshest signal a session without a catalog entry has.
     const live = cockpit.session(row.id)?.messages.at(-1)?.timestamp;
     if (live) return live instanceof Date ? live.getTime() : Number(live);
-    // Nothing has spoken yet: the newest thing in the list, not the oldest.
+    const pulse = cockpit.pulseAt(row.id);
+    if (pulse !== undefined) return pulse;
+    const updated = row.updatedAt;
+    if (updated != null) {
+      const at = updated instanceof Date ? updated.getTime() : new Date(updated).getTime();
+      if (Number.isFinite(at)) return at;
+    }
     return Number.MAX_SAFE_INTEGER;
   };
 
@@ -263,6 +289,25 @@
     delegates
       .filter((row) => row.parentInstanceId === parentId)
       .sort((a, b) => lastActiveAt(b) - lastActiveAt(a));
+
+  /** How long a delegate's last activity keeps it in the default fold view. */
+  const DELEGATE_AGE_OUT_MS = 30 * 60 * 1000;
+
+  /**
+   * The delegates a fold shows by default: ones with live activity, or that
+   * spoke within the last half hour, or that finished while the reader was
+   * away. Older idle delegates fall behind "Show all", so a delegation that
+   * finished long ago does not sit in the rail forever. A delegate that has
+   * never spoken has no timestamp (`lastActiveAt` reads as newest), so it
+   * counts as recent, not aged out.
+   */
+  const freshDelegatesOf = (parentId: string): InstanceRow[] =>
+    delegatesOf(parentId).filter(
+      (row) =>
+        cockpit.activityOf(row.id) !== 'idle' ||
+        unseen[row.id] !== undefined ||
+        Date.now() - lastActiveAt(row) < DELEGATE_AGE_OUT_MS
+    );
 
   /**
    * The only red in the rail: a session parked on a permission or a question —
@@ -604,10 +649,11 @@
   {@const current = isCurrent(`/session/${instance.id}`)}
   {@const name = titleOf(instance)}
   {@const delegateRows = delegatesOf(instance.id)}
+  {@const delegateRowsFresh = freshDelegatesOf(instance.id)}
   {@const branchesAll = showingSubwork[`${instance.id}:branches`] ?? false}
   {@const delegatesAll = showingSubwork[`${instance.id}:delegates`] ?? false}
   {@const branchesShown = branchesAll ? branches : branches.slice(0, SUBWORK_CAP)}
-  {@const delegateRowsShown = delegatesAll ? delegateRows : delegateRows.slice(0, SUBWORK_CAP)}
+  {@const delegateRowsShown = delegatesAll ? delegateRows : delegateRowsFresh.slice(0, SUBWORK_CAP)}
   {@const bgTasks = cockpit.backgroundTasksOf(instance.id)}
   {@const subworkTotal = branches.length + delegateRows.length}
   {@const subworkRunning =
@@ -794,7 +840,7 @@
             {@render delegateRow(delegate)}
           </li>
         {/each}
-        {#if delegateRows.length > SUBWORK_CAP}
+        {#if delegatesAll || delegateRowsShown.length < delegateRows.length}
           <li>
             <button
               type="button"
@@ -831,14 +877,16 @@
             ? 'ring-2 ring-error'
             : 'ring-1 ring-muted-foreground/30'}
   {@const current = isCurrent(`/session/${instance.id}`)}
-  {@const name = titleOf(instance)}
+  {@const name = delegateTitleOf(instance)}
+  {@const base = titleOf(instance)}
   {@const nested = delegatesOf(instance.id)}
+  {@const nestedFresh = freshDelegatesOf(instance.id)}
   {@const nestedAll = showingSubwork[`${instance.id}:delegates`] ?? false}
-  {@const nestedShown = nestedAll ? nested : nested.slice(0, SUBWORK_CAP)}
+  {@const nestedShown = nestedAll ? nested : nestedFresh.slice(0, SUBWORK_CAP)}
   <!-- A titled row no longer shows its handle, and the handle is what its
        reports name it by — the hover carries both, so the cross-reference to
        the parent's transcript stays one pointer away. -->
-  {@const hover = `${instance.title ? `${delegateHandle(instance)} · ${instance.title}` : name.text}${model ? ` · ${model}` : ''}`}
+  {@const hover = `${instance.title ? `${delegateHandle(instance)} · ${instance.title}` : base.text}${model ? ` · ${model}` : ''}`}
   <LiveSessionMenu {instance}>
     <Sidebar.MenuButton isActive={current} class={ROW}>
       {#snippet child({ props })}
@@ -853,11 +901,13 @@
         >
           <span class={LEAD}>
             {#if provider && model}
-              <!-- An enclosed mark needs real clearance: 10px glyph in a 16px
-                   circle is ~30% air, and the ring carries its own weight per
-                   state — hairline at rest, 2px only when it has news. -->
+              <!-- A filled-disc mark (DeepSeek) needs real air inside the ring:
+                   an 8px glyph in the 16px circle leaves ~4px of annulus, so the
+                   ring reads as an enclosure, not a second concentric circle.
+                   The ring still carries its own weight per state — hairline at
+                   rest, 2px only when it has news. -->
               <span class="flex size-4 items-center justify-center rounded-full {ringClass}">
-                <ProviderLogo {model} size={10} />
+                <ProviderLogo {model} size={8} />
               </span>
             {:else if sleeping}
               <span class="size-1.5 rounded-full bg-muted-foreground/40" title={SLEEPING_LABEL}></span>
@@ -883,7 +933,7 @@
           {@render delegateRow(delegate)}
         </li>
       {/each}
-      {#if nested.length > SUBWORK_CAP}
+      {#if nestedAll || nestedShown.length < nested.length}
         <li>
           <button
             type="button"

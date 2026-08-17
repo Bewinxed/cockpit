@@ -2605,6 +2605,12 @@ export const cockpit = {
     if (target && isSubscribed(instanceId)) return target.currentTool;
     return state.pulses[instanceId]?.currentTool ?? null;
   },
+  /**
+   * When the daemon last pulsed a session, ms epoch — the freshest signal a
+   * rail has for an unsubscribed session, since the pulse is broadcast for
+   * every session while its transcript frames only flow to a watcher.
+   */
+  pulseAt: (instanceId: string): number | undefined => state.pulses[instanceId]?.at,
   /** What a session offers behind `/`, grouped the way the palette lists it. */
   commandsOf: (instanceId: string): AvailableCommand[] => {
     const target = state.sessions[instanceId];
