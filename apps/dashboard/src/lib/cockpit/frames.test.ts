@@ -19,6 +19,7 @@ import {
   mergePeerMessage,
   streamPhase,
   thinkingDurationMs,
+  unwrapMidTurn,
 } from './frames';
 import type { DelegateEvent, JsonValue, Message } from './types';
 
@@ -397,6 +398,57 @@ test('a stored report is a delegate report for its parent, by prefix', () => {
   const stored = mapTranscript('parent', [storedEntry(REPORT_TEXT, 'u-r2')]).messages;
   expect(isDelegateReport(stored[0], 'parent', [row(REPORT_ID, 'parent')])).toBe(true);
   expect(isDelegateReport(stored[0], 'parent', [row(REPORT_ID, 'other')])).toBe(false);
+});
+
+// A peer/delegate message queued for a BUSY session loses its `origin` inside
+// the native binary, which re-materializes it wrapped as human speech at drain
+// time. The wrapper buries the marker, so the start-anchored parsers miss it —
+// the report-leak bug. `unwrapMidTurn` strips the wrapper, and the live and
+// stored paths classify on the unwrapped text.
+const WRAPPED_REPORT =
+  'The user sent a new message while you were working:\n' +
+  '[Report from delegate cockpit#095b96ac — turn complete]\n\n' +
+  'leak-test-ok\n' +
+  'Mon 17 Aug 09:08:14 +03 2026\n' +
+  'This is how Claude Code surfaces messages the user sends mid-turn — within the ' +
+  'running turn, often alongside the next tool result, rather than as a separate ' +
+  'conversation turn. Address the message above as you continue this turn.';
+
+const plainUserFrame = (text: string): SDKMessage => ({
+  type: 'user',
+  uuid: 'u-plain',
+  session_id: 's1',
+  message: { role: 'user', content: text },
+});
+
+test('a wrapped mid-turn report unwraps to a single user.peer report', () => {
+  const live = mapFrame('i1', plainUserFrame(WRAPPED_REPORT)).messages;
+  expect(live).toHaveLength(1);
+  expect(live[0].type).toBe('user.peer');
+  expect(live[0].metadata?.reportKind).toBe('report');
+  expect(live[0].metadata?.peerSession).toBe('095b96ac');
+  expect(live[0].content.startsWith('leak-test-ok')).toBe(true);
+  expect(live[0].content).not.toContain('This is how Claude Code surfaces');
+});
+
+test('a wrapped human mid-turn message with no marker still echoes the wrapper intact', () => {
+  const text =
+    'The user sent a new message while you were working:\n' +
+    'ship the fix now\n' +
+    'This is how Claude Code surfaces messages the user sends mid-turn — within the ' +
+    'running turn, often alongside the next tool result, rather than as a separate ' +
+    'conversation turn. Address the message above as you continue this turn.';
+  const mapping = mapFrame('i1', plainUserFrame(text));
+  // A human's own turn is rendered by the local copy and echoed, never pushed —
+  // and it is not misclassified as a peer bubble.
+  expect(mapping.messages).toHaveLength(0);
+  expect(mapping.echo).toEqual({ uuid: 'u-plain', text });
+});
+
+test('unwrapMidTurn leaves ordinary text alone', () => {
+  expect(unwrapMidTurn('plain old message')).toBeNull();
+  expect(unwrapMidTurn('[Report from delegate cockpit#095b96ac — turn complete]\n\nbody')).toBeNull();
+  expect(unwrapMidTurn('')).toBeNull();
 });
 
 // The hub serialises tool asks as `<tool> — <input JSON>`; the parts parser

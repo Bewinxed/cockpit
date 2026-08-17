@@ -479,6 +479,55 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
         });
         break;
       }
+      // A message queued for a busy session loses its `origin` and is re-wrapped
+      // as human speech at drain time, so it arrives here as a plain user frame
+      // whose text still carries the peer marker under the wrapper. Unwrap and
+      // classify it the same way the peer branch above does — a genuinely human
+      // mid-turn message has no marker and falls through to the echo path below
+      // with the wrapper intact.
+      if (text) {
+        const inner = unwrapMidTurn(text);
+        if (inner) {
+          const ask = delegateAsk(inner);
+          if (ask) {
+            mapping.messages.push({
+              ...base,
+              type: 'user.delegate_ask',
+              content: ask.body,
+              metadata: {
+                peerSession: ask.instance,
+                askRequestId: ask.request,
+                askLabel: ask.label,
+              },
+            });
+            break;
+          }
+          const report = delegateReport(inner);
+          if (report) {
+            mapping.messages.push({
+              ...base,
+              type: 'user.peer',
+              content: report.body,
+              metadata: {
+                peerName: `${report.name}#${report.short}`,
+                peerSession: report.short,
+                reportKind: report.failed ? 'failed' : 'report',
+              },
+            });
+            break;
+          }
+          const peerName = handoffFrom(inner);
+          if (peerName) {
+            mapping.messages.push({
+              ...base,
+              type: 'user.peer',
+              content: inner,
+              metadata: { peerName },
+            });
+            break;
+          }
+        }
+      }
       if (text && (agentId || systemNote(text))) {
         mapping.messages.push({ ...base, ...userBody(text, transcriptUserImages(sdk.message)) });
       } else if (text && uuid && !agentId) {
@@ -1013,6 +1062,27 @@ function delegateReport(
 }
 
 /**
+ * The CLI's mid-turn delivery wrapper, reversed. A message queued for a busy
+ * session loses its `origin` inside the native binary, which re-materializes
+ * it wrapped as human speech at drain time. The wrapper prose is stable, so
+ * it is stripped here before the peer markers are consulted — and a report's
+ * id still has to name one of this transcript's own delegates downstream
+ * (isDelegateReport), so ordinary prose cannot impersonate peer traffic.
+ */
+const MID_TURN_PREFIXES = [
+  'The user sent a new message while you were working:\n',
+  'Another Claude session sent a message while you were working:\n',
+];
+const MID_TURN_SUFFIX_START = '\nThis is how Claude Code surfaces';
+export function unwrapMidTurn(text: string): string | null {
+  const prefix = MID_TURN_PREFIXES.find((p) => text.startsWith(p));
+  if (!prefix) return null;
+  const inner = text.slice(prefix.length);
+  const cut = inner.lastIndexOf(MID_TURN_SUFFIX_START);
+  return (cut === -1 ? inner : inner.slice(0, cut)).trim();
+}
+
+/**
  * Whether a message's `peerSession` names this session. A live copy carries the
  * full id; a stored report carries only its 8-char prefix — so the match is
  * exact or by prefix, and never on anything shorter than 8 characters. Legacy
@@ -1276,7 +1346,13 @@ export function mapTranscript(instanceId: string, transcript: SessionMessage[]):
       // `user.delegate_ask` here rather than rendered as the reader's own turn.
       // Storage lost the peer origin, so only the marker-derived metadata (not
       // peerFrom/peerName) is carried.
-      const ask = delegateAsk(opening.text);
+      //
+      // The SDK filters queued entries out of stored reads today, so a wrapped
+      // mid-turn delivery is theoretical here — but if a future version surfaces
+      // one, classify on the unwrapped text. The fallback userBody below keeps
+      // the ORIGINAL wrapped text, so a stored human message renders as stored.
+      const text = unwrapMidTurn(opening.text) ?? opening.text;
+      const ask = delegateAsk(text);
       if (ask) {
         messages.push({
           id: entry.uuid,
@@ -1291,7 +1367,7 @@ export function mapTranscript(instanceId: string, transcript: SessionMessage[]):
       }
       // A stored report has only its header's short id left; `matchesSession`
       // is how consumers pair it with the delegate's full id.
-      const report = delegateReport(opening.text);
+      const report = delegateReport(text);
       if (report) {
         messages.push({
           id: entry.uuid,
@@ -1313,14 +1389,14 @@ export function mapTranscript(instanceId: string, transcript: SessionMessage[]):
       // message here rather than rendered as the reader's own turn. Its body is
       // the whole text, marker included, so it dedups against the live echo by
       // exact text.
-      const peerName = handoffFrom(opening.text);
+      const peerName = handoffFrom(text);
       messages.push(
         peerName
           ? {
               id: entry.uuid,
               instanceId,
               type: 'user.peer',
-              content: opening.text,
+              content: text,
               timestamp: new Date(),
               sdkUuid: entry.uuid,
               metadata: { peerName },

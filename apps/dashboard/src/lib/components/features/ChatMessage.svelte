@@ -30,7 +30,7 @@
 	import { modelLabel, providerOf } from '$lib/cockpit/models.svelte';
 	import ProviderLogo from './ProviderLogo.svelte';
 	import { cockpit } from '$lib/cockpit/client.svelte';
-	import type { Message } from '$lib/cockpit/types';
+	import type { DelegateReportEvent, Message } from '$lib/cockpit/types';
 	import HelpMenu from './HelpMenu.svelte';
 	import { CopyButton } from '$lib/components/ui/copy-button';
 	import { getRenderer, type MessageRendererProps } from './message-renderers';
@@ -144,6 +144,27 @@
 			? (cockpit.instances.find((row) => row.id === followUpRow.id)?.model ?? null)
 			: null
 	);
+
+	// A follow-up to one's own delegate names a report the hub already recorded
+	// for it. When one arrived after this receipt's timestamp, its first line is
+	// the outcome that replaces the bare `delivered`. Read straight off the hub's
+	// `delegate_events` store — keyed by the delegate's instanceId, the same
+	// table `DelegateBranch` folds (`cockpit.delegateEventsOf`).
+	const followUpOutcome = $derived.by((): string | null => {
+		if (!followUpLabel || !followUpRow) return null;
+		const reports = cockpit
+			.delegateEventsOf(followUpRow.id)
+			.filter((event): event is DelegateReportEvent => event.kind === 'report');
+		const since = message.timestamp.getTime();
+		const after = reports.filter((event) => new Date(event.createdAt).getTime() > since);
+		if (after.length === 0) return null;
+		return (
+			after[after.length - 1].payload.body
+				.split('\n')
+				.map((line) => line.trim())
+				.find((line) => line.length > 0) ?? null
+		);
+	});
 
 	// A delegation brief is the parent's own prompt landing in its delegate's
 	// transcript — not a hand-over from some peer session. The card names the
@@ -472,7 +493,7 @@
 	<div class="flex {config.align} gap-3 group">
 		<!-- Tool rows carry their own family glyph now; a wrench avatar beside
 		     them said the same thing twice. -->
-		{#if message.type !== 'user' && message.type !== 'assistant' && message.type !== 'user.delegate_ask' && message.type !== 'tool.use' && message.type !== 'tool.result' && !message.type.startsWith('system.') && message.type !== 'ui.help_menu'}
+		{#if message.type !== 'user' && message.type !== 'assistant' && message.type !== 'user.delegate_ask' && message.type !== 'tool.use' && message.type !== 'tool.result' && !message.type.startsWith('system.') && message.type !== 'ui.help_menu' && !suppressedAsDelegateTraffic}
 			<!-- Avatar: another session's words wear the sender's model mark. -->
 			<div
 				class="shrink-0 size-9 rounded-xl {config.iconBg} flex items-center justify-center mt-0.5"
@@ -611,9 +632,11 @@
 								{modelLabel(followUpModel)}
 							</span>
 						{/if}
-						<span class="shrink-0 text-xs {failed ? 'text-destructive' : 'text-muted-foreground'}">
-							{failed ? 'failed' : done ? 'delivered' : 'sending…'}
-						</span>
+						{#if failed || !followUpOutcome}
+							<span class="shrink-0 text-xs {failed ? 'text-destructive' : 'text-muted-foreground'}">
+								{failed ? 'failed' : done ? 'delivered' : 'sending…'}
+							</span>
+						{/if}
 					</div>
 					{#if message.metadata?.handoffBrief}
 						<div class="border-t border-border/40 px-3 py-2 text-xs text-muted-foreground">
@@ -622,16 +645,22 @@
 							</div>
 						</div>
 					{/if}
+					{#if followUpOutcome && !failed}
+						<div class="border-t border-border/40 px-3 py-2">
+							<p class="line-clamp-1 text-micro text-muted-foreground">{followUpOutcome}</p>
+						</div>
+					{/if}
 					{#if failed && message.metadata?.toolResult && !followUpLabel}
 						<p class="border-t border-border/40 px-3 py-2 text-xs text-destructive/80">
 							{String(message.metadata.toolResult).slice(0, 200)}
 						</p>
 					{/if}
 				</div>
-			{:else if message.type === 'user.peer' && !suppressedAsDelegateTraffic}
+			{:else if message.type === 'user.peer'}
 				<!-- Another session's hand-off. Deliberately not the user bubble:
 				     this is reported speech, and a reader who mistakes it for
 				     their own instruction loses track of who asked for what. -->
+				{#if !suppressedAsDelegateTraffic}
 				<div class="w-full overflow-hidden rounded-xl border border-primary/30 bg-primary/5">
 					<div class="flex items-center gap-2 border-b border-primary/20 px-3 py-2">
 						<!-- The kind glyph; the sender's model mark is the gutter avatar. -->
@@ -681,6 +710,7 @@
 						{/if}
 					</div>
 				</div>
+				{/if}
 			{:else if message.type === 'user.delegate_ask'}
 				<!-- A delegate's routed permission ask. When the delegate's card is
 				     in this transcript the ask folds into its Asks section, so
