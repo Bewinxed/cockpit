@@ -20,7 +20,9 @@ export { default as IconUnfold } from '~icons/solar/sort-vertical-linear';
 export { default as IconArrowRight } from '~icons/solar/arrow-right-linear';
 export { default as IconArrowUp } from '~icons/solar/arrow-up-linear';
 export { default as IconArrowDown } from '~icons/solar/arrow-down-linear';
-export { default as IconPlus } from '~icons/solar/add-circle-linear';
+// Not solar: the set has no bare plus (only circled/squared "add"), and an
+// enclosed glyph double-encloses inside pill buttons. Local, set-matched.
+export { default as IconPlus } from '$lib/components/icons/Plus.svelte';
 export { default as IconClose } from '~icons/solar/close-circle-linear';
 export { default as IconCheck } from '~icons/solar/check-read-linear';
 export { default as IconSuccess } from '~icons/solar/check-circle-linear';
