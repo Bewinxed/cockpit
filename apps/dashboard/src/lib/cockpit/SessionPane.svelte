@@ -31,7 +31,7 @@
   import { onMount, tick, untrack } from 'svelte';
   import { Markdown } from '$lib/components/ui/markdown';
   import { smoothText } from '$lib/utils/smooth-text.svelte';
-  import { fly } from 'svelte/transition';
+  import { fade, fly } from 'svelte/transition';
   import { quintOut } from 'svelte/easing';
   import { MediaQuery } from 'svelte/reactivity';
   import { Virtualizer } from 'virtua/svelte';
@@ -850,15 +850,45 @@
   });
 
   /**
+   * The presence line's tool claim, spelled as a sentence. MCP tools drop the
+   * `mcp__<server>__` prefix down to the human part, and the outpost tool names
+   * map to the verb they actually perform rather than their bare identifier.
+   */
+  function toolPresenceLabel(
+    tool: { name: string; glance: string } | null | undefined
+  ): string | null {
+    if (!tool) return null;
+    const { name, glance } = tool;
+    let label: string;
+    if (name === 'mcp__outpost__delegate' || name === 'delegate') {
+      label = 'Messaging a delegate…';
+    } else if (name === 'mcp__outpost__handoff' || name === 'handoff') {
+      label = 'Handing off…';
+    } else if (name === 'mcp__outpost__start_session' || name === 'start_session') {
+      label = 'Starting a session…';
+    } else if (name.startsWith('mcp__')) {
+      const toolName = name.split('__').at(-1);
+      label = `Running ${toolName && toolName !== 'mcp' ? toolName : name}…`;
+    } else {
+      label = `Running ${name}…`;
+    }
+    return glance ? `${label} · ${glance.slice(0, 60)}` : label;
+  }
+
+  /**
    * What that line is allowed to claim, in order of how much is known: the step
-   * the session's own plan says it is on, then the subagents it has out — which
-   * is where the minutes go on a turn whose main loop has gone quiet — and
-   * otherwise nothing, so the line shimmers its honest "Working…". Never
-   * "Thinking": this is the one place with no evidence of what the model is
-   * doing, and a turn that is genuinely reasoning renders its trace instead.
+   * the session's own plan says it is on, then the tool it has out right now —
+   * which is the long tool and MCP calls, the stretch that used to blank the
+   * line — then the subagents it has out, which is where the minutes go on a
+   * turn whose main loop has gone quiet, and otherwise nothing, so the line
+   * shimmers its honest "Working…". Never "Thinking": this is the one place
+   * with no evidence of what the model is doing, and a turn that is genuinely
+   * reasoning renders its trace instead.
    */
   const presenceLabel = $derived.by((): string | null => {
     if (doingNow) return doingNow;
+    const tool = toolPresenceLabel(session?.currentTool);
+    if (tool) return tool;
     const running = cockpit.runningSubagentsOf(viewId);
     if (running === 0) return null;
     return `Running ${running} ${running === 1 ? 'agent' : 'agents'}`;
@@ -1715,7 +1745,7 @@
                     {@const isNew = painted && !seenGroups.has(key)}
                     <div
                       class="pb-4 {key === flashKey ? 'transcript-flash' : ''}"
-                      in:fly={{ y: isNew && !stillness.current ? 10 : 0, duration: isNew && !stillness.current ? 220 : 0, easing: quintOut }}
+                      in:fade={{ duration: isNew && !stillness.current ? 150 : 0 }}
                     >
                       {#if group.kind === 'tools'}
                         <!-- No wrench avatar: every row in the group already

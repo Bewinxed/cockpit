@@ -36,14 +36,14 @@ test('streamed text is the session speaking for itself', () => {
   expect(showsPresence({ ...working, streaming: 'Reading th' })).toBe(false);
 });
 
-test('a tool in flight carries its own spinner', () => {
-  expect(showsPresence({ ...working, toolInFlight: true })).toBe(false);
+test('a tool in flight is still a working stretch, so the line stays', () => {
+  expect(showsPresence({ ...working, toolInFlight: true })).toBe(true);
 });
 
-test('tool rows still waiting on their results carry the spinners too', () => {
+test('tool rows still waiting on their results keep the line too', () => {
   // Parallel calls: the one the session is tracking answered first, and the
-  // rows beside it are still going.
-  expect(showsPresence({ ...working, tailToolPending: true })).toBe(false);
+  // rows beside it are still going. No row stands in for them, so presence does.
+  expect(showsPresence({ ...working, tailToolPending: true })).toBe(true);
 });
 
 test('idle and blocked sessions render nothing', () => {
