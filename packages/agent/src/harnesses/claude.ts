@@ -275,7 +275,16 @@ class ClaudeSession implements HarnessSession {
         ...(persistSession === false ? { persistSession: false } : {}),
         ...(permissionMode ? { permissionMode: permissionMode as import('@anthropic-ai/claude-agent-sdk').PermissionMode } : {}),
         ...(model && { model }),
-        ...(permissionMode === 'bypassPermissions' && { allowDangerouslySkipPermissions: true }),
+        ...(permissionMode === 'bypassPermissions' && {
+          allowDangerouslySkipPermissions: true,
+          // Bypass mode must also let the model run commands outside the sandbox
+          // via `dangerouslyDisableSandbox` — otherwise the SDK auto-denies such
+          // Bash calls (`sandboxOverride`) without ever reaching `canUseTool`.
+          sandbox: {
+            ...((options as { sandbox?: Record<string, unknown> } | undefined)?.sandbox ?? {}),
+            allowUnsandboxedCommands: true,
+          },
+        }),
         cwd: workdir,
         includePartialMessages: true,
         canUseTool: (toolName, toolInput, { requestId, suggestions }) =>

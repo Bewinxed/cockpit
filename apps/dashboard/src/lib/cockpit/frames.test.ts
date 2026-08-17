@@ -97,6 +97,26 @@ test('a mid-session change hands over the whole list, and says nothing in the tr
   expect(mapping.messages).toEqual([]);
 });
 
+test('a permission_denied frame becomes a note naming the tool and the reason', () => {
+  const mapping = mapFrame('i1', {
+    ...base,
+    subtype: 'permission_denied',
+    tool_name: 'Bash',
+    tool_use_id: 'toolu_1',
+    decision_reason_type: 'sandboxOverride',
+    decision_reason: 'commands may not run outside the sandbox',
+    message: 'the auto-deny message',
+  } as never);
+  expect(mapping.messages).toHaveLength(1);
+  const note = mapping.messages[0];
+  expect(note.type).toBe('ui.system_note');
+  expect(note.content).toBe(
+    'The SDK denied Bash without asking (sandboxOverride): commands may not run outside the sandbox'
+  );
+  expect(note.metadata?.noteKind).toBe('Permission denied');
+  expect(note.metadata?.noteTitle).toBe('Bash');
+});
+
 import { applyBranchEvent } from './frames';
 import type { SubagentState } from '$lib/utils/flow-types';
 

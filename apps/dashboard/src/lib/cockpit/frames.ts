@@ -702,6 +702,35 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
             })
           );
           break;
+        case 'permission_denied': {
+          // The SDK short-circuited a tool call without ever surfacing a
+          // `canUseTool` ask — a sandbox override in bypass mode, a deny rule,
+          // an auto-mode classifier. Nothing else renders it, so name the tool
+          // and the deciding component's own reason rather than hiding it behind
+          // the generic `system.permission_denied` line.
+          const denied = sdk as {
+            tool_name?: string;
+            decision_reason_type?: string;
+            decision_reason?: string;
+            message?: string;
+          };
+          const tool = denied.tool_name ?? 'a tool';
+          const reason = denied.decision_reason ?? denied.message ?? 'no reason given';
+          const reasonType = denied.decision_reason_type ? ` (${denied.decision_reason_type})` : '';
+          mapping.messages.push(
+            systemLine(
+              base,
+              'ui.system_note',
+              `The SDK denied ${tool} without asking${reasonType}: ${reason}`,
+              {
+                subtype: 'permission_denied',
+                noteKind: 'Permission denied',
+                noteTitle: tool,
+              }
+            )
+          );
+          break;
+        }
         default:
           if (!QUIET.has(sdk.subtype)) {
             mapping.messages.push(
