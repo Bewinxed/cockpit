@@ -159,6 +159,17 @@
     };
   });
 
+  /** The report's first non-empty line — the collapsed card's outcome glimpse. */
+  const glimpse = $derived.by(() => {
+    if (!report) return '';
+    return (
+      report.body
+        .split('\n')
+        .map((line) => line.trim())
+        .find((line) => line.length > 0) ?? ''
+    );
+  });
+
   /**
    * The delegate's permission asks routed to this parent, oldest first, each
    * with its answered/denied/pending state. The hub's rows carry the state
@@ -287,21 +298,23 @@
             {#if brief}
               <p class="mt-0.5 text-caption text-muted-foreground line-clamp-2">{brief}</p>
             {/if}
-            <div class="mt-1 flex items-center gap-1.5">
-              <span
-                class="inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 text-micro
-                  font-medium
-                  {status === 'failed'
-                    ? 'bg-destructive/15 text-destructive'
-                    : working
-                      ? 'bg-primary/15 text-primary'
-                      : status === 'delivered'
-                        ? 'bg-success/15 text-success'
-                        : 'bg-muted text-muted-foreground'}"
-              >
-                {status}
-              </span>
-            </div>
+            {#if !(report && !open && status === 'delivered')}
+              <div class="mt-1 flex items-center gap-1.5">
+                <span
+                  class="inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 text-micro
+                    font-medium
+                    {status === 'failed'
+                      ? 'bg-destructive/15 text-destructive'
+                      : working
+                        ? 'bg-primary/15 text-primary'
+                        : status === 'delivered'
+                          ? 'bg-success/15 text-success'
+                          : 'bg-muted text-muted-foreground'}"
+                >
+                  {status}
+                </span>
+              </div>
+            {/if}
           </div>
 
           <div class="flex shrink-0 items-center gap-1.5">
@@ -324,6 +337,18 @@
             {/if}
           </div>
         </div>
+
+        {#if report && !open}
+          <div class="border-t border-border/40 px-4 py-2">
+            <p
+              class="line-clamp-1 text-micro {report.failed
+                ? 'text-destructive/80'
+                : 'text-muted-foreground'}"
+            >
+              {#if report.failed}turn failed · {/if}{glimpse}
+            </p>
+          </div>
+        {/if}
       </Collapsible.Trigger>
 
       <Collapsible.Content>
