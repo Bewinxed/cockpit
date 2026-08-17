@@ -70,6 +70,16 @@
   /** Which folders are showing every recent they have, rather than the first few. */
   const showingAll = $state<Record<string, boolean>>({});
 
+  /** How many sub-work rows a fold draws before it offers the rest behind Show all. */
+  const SUBWORK_CAP = 5;
+
+  /**
+   * Which folds are showing every delegate or branch they have, not the first
+   * few. Keyed `${instanceId}:delegates` / `${instanceId}:branches`; a nested
+   * delegate list keys on the parent delegate's own id.
+   */
+  const showingSubwork = $state<Record<string, boolean>>({});
+
   /**
    * Sessions that finished while you were looking somewhere else, by when they
    * did. A dot cannot say this for itself: by the time you look, the session
@@ -141,6 +151,7 @@
   import StoredSessionMenu from './StoredSessionMenu.svelte';
   import { folderPrefs, identityVar } from './folder-prefs.svelte';
   import { delegateHandle, sessionTitle, transcriptHref } from './links';
+  import { providerOf } from './models.svelte';
   import ProviderLogo from '$lib/components/features/ProviderLogo.svelte';
   import { machineLabel, signInWarning } from './machine';
   import { orderMachines, rail, type PinKind } from './rail.svelte';
@@ -198,14 +209,26 @@
   };
 
   /**
-   * When a session's transcript was last written, from the catalog — a session
-   * with no transcript yet is the newest thing in the folder, not the oldest,
+   * When a session last spoke, by its transcript: the catalog's `lastModified`
+   * for a session the SDK recorded, and the newest message the live store has
+   * heard for one it has not — a delegate has no catalog entry, so without the
+   * live fallback they all tie and sort back to spawn order. A session that
+   * has never spoken at all is the newest thing in the folder, not the oldest,
    * so it sorts first, not last. This is what orders live rows by recency
    * rather than by the hub's own order.
    */
-  const lastActiveAt = (row: InstanceRow): number =>
-    cockpit.catalogOf(row.machineId).find((info) => info.sessionId === row.sessionId)?.lastModified ??
-    Number.MAX_SAFE_INTEGER;
+  const lastActiveAt = (row: InstanceRow): number => {
+    const catalog = cockpit
+      .catalogOf(row.machineId)
+      .find((info) => info.sessionId === row.sessionId)?.lastModified;
+    if (catalog) return catalog;
+    // The live store hears every session's frames; the newest message is the
+    // freshest signal a session without a catalog entry has.
+    const live = cockpit.session(row.id)?.messages.at(-1)?.timestamp;
+    if (live) return live instanceof Date ? live.getTime() : Number(live);
+    // Nothing has spoken yet: the newest thing in the list, not the oldest.
+    return Number.MAX_SAFE_INTEGER;
+  };
 
   /** With more than one box, a folder whose rows all share one can say so once. */
   const manyMachines = $derived(cockpit.machines.length > 1);
@@ -581,6 +604,10 @@
   {@const current = isCurrent(`/session/${instance.id}`)}
   {@const name = titleOf(instance)}
   {@const delegateRows = delegatesOf(instance.id)}
+  {@const branchesAll = showingSubwork[`${instance.id}:branches`] ?? false}
+  {@const delegatesAll = showingSubwork[`${instance.id}:delegates`] ?? false}
+  {@const branchesShown = branchesAll ? branches : branches.slice(0, SUBWORK_CAP)}
+  {@const delegateRowsShown = delegatesAll ? delegateRows : delegateRows.slice(0, SUBWORK_CAP)}
   {@const bgTasks = cockpit.backgroundTasksOf(instance.id)}
   {@const subworkTotal = branches.length + delegateRows.length}
   {@const subworkRunning =
@@ -699,7 +726,7 @@
 
     {#if subworkOpen}
       <ul class="flex flex-col gap-0.5 pl-8" transition:slide={rowIn}>
-        {#each branches as branch (branch.toolUseId)}
+        {#each branchesShown as branch (branch.toolUseId)}
           {@const branchRunning = branch.status === 'running' || branch.status === 'starting'}
           {@const branchDone = branch.status === 'complete'}
           {@const branchError = branch.status === 'error'}
@@ -751,11 +778,33 @@
             </SubagentPeek>
           </li>
         {/each}
-        {#each delegateRows as delegate (delegate.id)}
+        {#if branches.length > SUBWORK_CAP}
+          <li>
+            <button
+              type="button"
+              class={SUBROW}
+              onclick={() => (showingSubwork[`${instance.id}:branches`] = !branchesAll)}
+            >
+              {branchesAll ? 'Show fewer' : `Show all ${branches.length}`}
+            </button>
+          </li>
+        {/if}
+        {#each delegateRowsShown as delegate (delegate.id)}
           <li>
             {@render delegateRow(delegate)}
           </li>
         {/each}
+        {#if delegateRows.length > SUBWORK_CAP}
+          <li>
+            <button
+              type="button"
+              class={SUBROW}
+              onclick={() => (showingSubwork[`${instance.id}:delegates`] = !delegatesAll)}
+            >
+              {delegatesAll ? 'Show fewer' : `Show all ${delegateRows.length}`}
+            </button>
+          </li>
+        {/if}
         {#if bgTasks > 0}
           <li class="px-2 py-1 text-micro text-muted-foreground/50">
             {bgTasks} background task{bgTasks === 1 ? '' : 's'}
@@ -769,13 +818,27 @@
 {#snippet delegateRow(instance: InstanceRow)}
   {@const activity = cockpit.activityOf(instance.id)}
   {@const sleeping = isResumable(instance)}
+  {@const model = instance.model}
+  {@const provider = model ? providerOf(model) : null}
+  {@const ringClass =
+    !provider
+      ? ''
+      : sleeping
+        ? 'ring-muted-foreground/30 opacity-60'
+        : activity === 'working'
+          ? 'ring-success animate-pulse motion-reduce:animate-none'
+          : activity === 'blocked'
+            ? 'ring-error'
+            : 'ring-muted-foreground/30'}
   {@const current = isCurrent(`/session/${instance.id}`)}
   {@const name = titleOf(instance)}
   {@const nested = delegatesOf(instance.id)}
+  {@const nestedAll = showingSubwork[`${instance.id}:delegates`] ?? false}
+  {@const nestedShown = nestedAll ? nested : nested.slice(0, SUBWORK_CAP)}
   <!-- A titled row no longer shows its handle, and the handle is what its
        reports name it by — the hover carries both, so the cross-reference to
        the parent's transcript stays one pointer away. -->
-  {@const hover = instance.title ? `${delegateHandle(instance)} · ${instance.title}` : name.text}
+  {@const hover = `${instance.title ? `${delegateHandle(instance)} · ${instance.title}` : name.text}${model ? ` · ${model}` : ''}`}
   <LiveSessionMenu {instance}>
     <Sidebar.MenuButton isActive={current} class={ROW}>
       {#snippet child({ props })}
@@ -789,7 +852,11 @@
           out:slide={rowOut}
         >
           <span class={LEAD}>
-            {#if sleeping}
+            {#if provider && model}
+              <span class="flex size-4 items-center justify-center rounded-full ring-2 {ringClass}">
+                <ProviderLogo {model} size={12} />
+              </span>
+            {:else if sleeping}
               <span class="size-1.5 rounded-full bg-muted-foreground/40" title={SLEEPING_LABEL}></span>
             {:else}
               <ActivityDot {activity} size={1.5} />
@@ -802,34 +869,28 @@
           >
             {name.text}
           </span>
-          <span class={TAIL}>
-            <!-- What the delegate IS, not just that it is one: the executor
-                 model's mark and leaf, with the word kept for the hover. -->
-            <span
-              class="flex shrink-0 items-center gap-1 rounded-full bg-muted px-1.5 text-micro font-medium text-muted-foreground"
-              title={instance.model ? `delegate · ${instance.model}` : 'delegate'}
-            >
-              {#if instance.model}
-                <ProviderLogo model={instance.model} size={12} />
-                <!-- A phone rail has no room for a model name; the mark alone
-                     says it, and the hover/long-press title keeps the words. -->
-                <span class="hidden max-w-24 truncate sm:inline">{instance.model.split('/').pop()}</span>
-              {:else}
-                delegate
-              {/if}
-            </span>
-          </span>
         </a>
       {/snippet}
     </Sidebar.MenuButton>
   </LiveSessionMenu>
   {#if nested.length > 0}
     <ul class="flex flex-col gap-0.5 pl-8" transition:slide={rowIn}>
-      {#each nested as delegate (delegate.id)}
+      {#each nestedShown as delegate (delegate.id)}
         <li>
           {@render delegateRow(delegate)}
         </li>
       {/each}
+      {#if nested.length > SUBWORK_CAP}
+        <li>
+          <button
+            type="button"
+            class={SUBROW}
+            onclick={() => (showingSubwork[`${instance.id}:delegates`] = !nestedAll)}
+          >
+            {nestedAll ? 'Show fewer' : `Show all ${nested.length}`}
+          </button>
+        </li>
+      {/if}
     </ul>
   {/if}
 {/snippet}
