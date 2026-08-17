@@ -23,6 +23,7 @@
   import { page } from '$app/state';
   import FleetBoard from '$lib/cockpit/FleetBoard.svelte';
   import SessionPane from '$lib/cockpit/SessionPane.svelte';
+  import { syncSubscriptions } from '$lib/cockpit/client.svelte';
   import { workingSet } from '$lib/cockpit/working-set.svelte';
 
   let { children }: { children: Snippet } = $props();
@@ -76,6 +77,13 @@
       const keep = panes.filter((pane) => pane.id === id || open.has(pane.id));
       if (keep.length !== panes.length) panes = keep;
     });
+  });
+
+  // The open tabs *are* the frame subscription. The store re-sends the whole
+  // set whenever it changes — a tab opened, closed, evicted or reordered — and
+  // the effect below is the one place that change is observed.
+  $effect(() => {
+    syncSubscriptions();
   });
 </script>
 

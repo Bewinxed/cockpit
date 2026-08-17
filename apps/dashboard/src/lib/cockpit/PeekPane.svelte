@@ -45,6 +45,7 @@
     permissionAnswer,
     refreshContext,
     resolvePermission,
+    setPeeked,
     stopSession,
     type PendingPermission,
     type PermissionAnswer,
@@ -66,6 +67,12 @@
   }
 
   let { target, onclose }: Props = $props();
+
+  // A peek is a live view, so it subscribes for frames exactly like an open tab
+  // and unsubscribes the moment the pane rests again.
+  $effect(() => {
+    setPeeked(target?.viewId ?? null);
+  });
 
   // Opening writes to the store, so it stays in an effect and the reads below
   // stay derived — the route's bargain, for the same reason: the fields this

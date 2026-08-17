@@ -1939,7 +1939,13 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
                 ? registry.takeRequester(message.requestId)
                 : undefined;
             if (requester) requester.send(message);
-            else registry.broadcast(message);
+            else if (kind === 'frame' && message.instanceId) {
+              // Instance-scoped frames go only to dashboards subscribed to that
+              // session. Everything else — permission_request, instances,
+              // delegate_event, usage, pulse, error, and any kind a future build
+              // adds — broadcasts, so an unknown kind is never silently dropped.
+              registry.broadcastFrame(message, message.instanceId);
+            } else registry.broadcast(message);
             break;
           }
           // A session braking one of its own delegates, across machines. Honoured
@@ -2077,6 +2083,16 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
             if (forward(message, ws) && message.requestId)
               registry.rememberRequester(message.requestId, ws);
             break;
+          case 'subscribe': {
+            // Replace-whole-set: the dashboard's open tabs *are* the subscription,
+            // so every change re-sends the lot and the hub takes it verbatim.
+            const ids = (message.payload as { instanceIds?: unknown } | null)?.instanceIds;
+            registry.setSubscriptions(
+              ws,
+              Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string') : []
+            );
+            break;
+          }
           default:
             console.warn(`[hub] unhandled dashboard verb ${message.verb}`);
         }

@@ -14,11 +14,13 @@ import type {
   FramePayload,
   FsPayload,
   HarnessKind,
+  NeutralMessage,
   NeutralSessionInfo,
   PermissionResult,
   RepoInfo,
   ReposResult,
   SendPayload,
+  SessionPulse,
   SpawnPayload,
   StopPayload,
 } from '@cockpit/core';
@@ -86,6 +88,24 @@ const TAIL_LINES = 4;
 
 const tail = (output: string): string =>
   output.trim().split('\n').slice(-TAIL_LINES).join('\n');
+
+/** At most one pulse per instance per this long, unless busy/blocked moves. */
+const PULSE_THROTTLE_MS = 1_000;
+
+/** The one readable field of a tool call, for the rail's glance line. */
+const glanceOf = (input: Record<string, unknown> | undefined): string => {
+  if (!input) return '';
+  if (input.file_path) return String(input.file_path).split('/').slice(-2).join('/');
+  if (input.path) return String(input.path).split('/').slice(-2).join('/');
+  if (input.command) {
+    const cmd = String(input.command);
+    return cmd.length > 40 ? `${cmd.slice(0, 40)}...` : cmd;
+  }
+  if (input.pattern) return `/${input.pattern}/`;
+  if (input.glob) return String(input.glob);
+  if (input.description) return String(input.description);
+  return '';
+};
 
 /** Whether the GitHub CLI is here at all — its absence is an answer, not a failure. */
 const ghAvailable = async (): Promise<boolean> =>
@@ -174,6 +194,19 @@ export class SessionSupervisor {
   /** The sessions with a turn in flight — from the `send` that starts one until the turn ends. */
   readonly #busy = new Set<string>();
 
+  /**
+   * Per-instance pulse, folded from the frames already passing through (Part 2
+   * of per-instance subscription). Only the parts a rail needs without frames:
+   * the tool in flight, the parked-permission count, and the running-subagent
+   * task ids. `busy` reuses {@link #busy}; the pulse is rebuilt on emit.
+   */
+  readonly #pulseTool = new Map<string, { name: string; glance: string }>();
+  readonly #pulseBlocked = new Map<string, number>();
+  readonly #pulseSubagents = new Map<string, Set<string>>();
+  /** Last emit per instance — the 1/sec throttle — and its trailing-edge timer. */
+  readonly #pulseAt = new Map<string, number>();
+  readonly #pulseTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
   readonly #daemonFunctions: Record<string, ControlMethod> = {
     [AGENT_BUSY]: () => ({ busy: this.#busy.size, instances: [...this.#busy] }),
     [UPDATE_COCKPIT]: (options) =>
@@ -207,6 +240,125 @@ export class SessionSupervisor {
   /** The sessions running right now — what `register` reconciles the hub against. */
   get instanceIds(): string[] {
     return [...this.#sessions.keys()];
+  }
+
+  /** The pulse as it stands, computed from the parts rather than stored. */
+  #buildPulse(instanceId: string): SessionPulse {
+    const blocked = (this.#pulseBlocked.get(instanceId) ?? 0) > 0;
+    const busy = this.#busy.has(instanceId);
+    const running = this.#pulseSubagents.get(instanceId)?.size ?? 0;
+    return {
+      instanceId,
+      busy,
+      activity: blocked ? 'blocked' : busy || running > 0 ? 'working' : 'idle',
+      currentTool: this.#pulseTool.get(instanceId) ?? null,
+      runningSubagents: running,
+      at: Date.now(),
+    };
+  }
+
+  /**
+   * Pushes the current pulse, throttled to {@link PULSE_THROTTLE_MS} per
+   * instance. A busy/blocked transition always goes immediately; everything
+   * else waits for the trailing edge of the window.
+   */
+  #emitPulse(instanceId: string, important: boolean): void {
+    if (!this.#sessions.has(instanceId)) return;
+    const now = Date.now();
+    const last = this.#pulseAt.get(instanceId) ?? 0;
+    const sendNow = () => {
+      const timer = this.#pulseTimers.get(instanceId);
+      if (timer) clearTimeout(timer);
+      this.#pulseTimers.delete(instanceId);
+      this.#pulseAt.set(instanceId, Date.now());
+      this.sink({ kind: 'pulse', instanceId, pulse: this.#buildPulse(instanceId) });
+    };
+    if (important || now - last >= PULSE_THROTTLE_MS) {
+      sendNow();
+    } else if (!this.#pulseTimers.has(instanceId)) {
+      this.#pulseTimers.set(
+        instanceId,
+        setTimeout(() => {
+          this.#pulseTimers.delete(instanceId);
+          if (!this.#sessions.has(instanceId)) return;
+          this.#pulseAt.set(instanceId, Date.now());
+          this.sink({ kind: 'pulse', instanceId, pulse: this.#buildPulse(instanceId) });
+        }, PULSE_THROTTLE_MS - (now - last))
+      );
+    }
+  }
+
+  /** Drops every trace of an instance's pulse — the session is gone. */
+  #forgetPulse(instanceId: string): void {
+    this.#pulseTool.delete(instanceId);
+    this.#pulseBlocked.delete(instanceId);
+    this.#pulseSubagents.delete(instanceId);
+    this.#pulseAt.delete(instanceId);
+    const timer = this.#pulseTimers.get(instanceId);
+    if (timer) clearTimeout(timer);
+    this.#pulseTimers.delete(instanceId);
+  }
+
+  /**
+   * Folds one neutral frame into the pulse, then emits. Only the main loop's
+   * frames move the tool; a subagent's carry `parent_tool_use_id` and belong to
+   * the subagent count, not the rail's tool line.
+   */
+  #foldPulse(instanceId: string, message: NeutralMessage): void {
+    const main = !('parent_tool_use_id' in message) || !message.parent_tool_use_id;
+    if (message.type === 'assistant' && main) {
+      for (const block of message.message.content) {
+        if (block.type !== 'tool_use') continue;
+        this.#pulseTool.set(instanceId, {
+          name: block.name,
+          glance: glanceOf(block.input as Record<string, unknown>),
+        });
+        this.#emitPulse(instanceId, false);
+        return;
+      }
+      return;
+    }
+    if (message.type === 'user' && main) {
+      const content = message.message.content;
+      if (!Array.isArray(content)) return;
+      for (const block of content) {
+        if (block.type !== 'tool_result') continue;
+        this.#pulseTool.delete(instanceId);
+        this.#emitPulse(instanceId, false);
+        return;
+      }
+      return;
+    }
+    if (message.type === 'result') {
+      this.#pulseTool.delete(instanceId);
+      this.#emitPulse(instanceId, false);
+      return;
+    }
+    if (message.type === 'system') {
+      const taskId = message.task_id;
+      const running = this.#pulseSubagents.get(instanceId);
+      if (message.subtype === 'task_started' || message.subtype === 'task_progress') {
+        // `subagent_type` is what separates a real Task/Agent subagent from a
+        // plain Bash task — only the former counts in the rail's subagent badge.
+        if (message.subagent_type && taskId) {
+          if (!running) this.#pulseSubagents.set(instanceId, new Set([taskId]));
+          else running.add(taskId);
+          this.#emitPulse(instanceId, false);
+        }
+      } else if (message.subtype === 'task_notification') {
+        if (taskId && running?.has(taskId)) {
+          running.delete(taskId);
+          this.#emitPulse(instanceId, false);
+        }
+      } else if (message.subtype === 'task_updated') {
+        const status = message.patch?.status;
+        const terminal = status === 'completed' || status === 'failed' || status === 'killed';
+        if (taskId && terminal && running?.has(taskId)) {
+          running.delete(taskId);
+          this.#emitPulse(instanceId, false);
+        }
+      }
+    }
   }
 
   async shutdown(): Promise<void> {
@@ -267,6 +419,7 @@ export class SessionSupervisor {
       const running = this.#sessions.get(instanceId);
       if (running) {
         this.#sessions.delete(instanceId);
+        this.#forgetPulse(instanceId);
         await running.stop();
       }
 
@@ -276,11 +429,19 @@ export class SessionSupervisor {
         cwd: workdir,
         frame: (message) => {
           if (message.type === 'result') this.#tagQuest(instanceId, adapter);
+          this.#foldPulse(instanceId, message);
           this.sink({ kind: 'frame', instanceId, harness: adapter.kind, message });
         },
-        permission: (request) =>
-          this.sink({ kind: 'permission_request', instanceId, harness: adapter.kind, ...request }),
-        busy: (active) => (active ? this.#busy.add(instanceId) : this.#busy.delete(instanceId)),
+        permission: (request) => {
+          this.#pulseBlocked.set(instanceId, (this.#pulseBlocked.get(instanceId) ?? 0) + 1);
+          this.#emitPulse(instanceId, true);
+          this.sink({ kind: 'permission_request', instanceId, harness: adapter.kind, ...request });
+        },
+        busy: (active) => {
+          if (active) this.#busy.add(instanceId);
+          else this.#busy.delete(instanceId);
+          this.#emitPulse(instanceId, true);
+        },
         session: (sessionId) => this.#noteQuestSession(instanceId, sessionId, adapter.kind),
         failed: (error) => this.#fail(instanceId, error),
         emit: (envelope) => this.emit(envelope),
@@ -288,6 +449,7 @@ export class SessionSupervisor {
           if (spawned && this.#sessions.get(instanceId) === spawned) {
             this.#sessions.delete(instanceId);
             this.#busy.delete(instanceId);
+            this.#forgetPulse(instanceId);
           }
         },
       };
@@ -356,6 +518,7 @@ export class SessionSupervisor {
     const session = this.#sessions.get(instanceId);
     if (session) {
       this.#sessions.delete(instanceId);
+      this.#forgetPulse(instanceId);
       await session.stop();
     }
     if (!discard) return;
@@ -571,6 +734,10 @@ export class SessionSupervisor {
 
     if (method === RESOLVE_PERMISSION) {
       this.#session(instanceId).resolvePermission(args[0] as string, args[1] as PermissionResult);
+      const left = (this.#pulseBlocked.get(instanceId) ?? 1) - 1;
+      if (left <= 0) this.#pulseBlocked.delete(instanceId);
+      else this.#pulseBlocked.set(instanceId, left);
+      this.#emitPulse(instanceId, true);
       return undefined;
     }
     return await this.#session(instanceId).control(method, args);

@@ -29,7 +29,8 @@ export type Verb =
   | 'control'
   | 'frames'
   | 'fs'
-  | 'usage';
+  | 'usage'
+  | 'subscribe';
 
 /**
  * Every message on every hop. `payload` is whatever the verb carries — a neutral
@@ -164,6 +165,11 @@ export interface SendPayload {
   urgent?: boolean;
   /** The instance a fleet-originated send claims as its caller. */
   from?: string;
+}
+
+/** `subscribe`: the open sessions a dashboard wants `frame` frames for. */
+export interface SubscribePayload {
+  instanceIds: string[];
 }
 
 /** `stop`: interrupt and close a live session. */
@@ -339,6 +345,25 @@ export interface InstanceRow {
 }
 
 /**
+ * A coarse, now-state the rail draws without frames: what a session is doing
+ * right now, folded on the daemon from the frames it is already pumping. It is
+ * the *fallback* the dashboard reads for sessions it has not subscribed to —
+ * open sessions still render the richer frame-fed state. `activity` is the same
+ * three words the fleet view uses; `busy`/`runningSubagents` keep the finer
+ * signals separate so a reader can still tell "blocked" from "working".
+ */
+export interface SessionPulse {
+  instanceId: string;
+  busy: boolean;
+  /** Coarse now-state the rail draws without frames. */
+  activity: 'working' | 'blocked' | 'idle';
+  currentTool: { name: string; glance: string } | null;
+  runningSubagents: number;
+  /** ms epoch of the last frame that changed this pulse. */
+  at: number;
+}
+
+/**
  * What the hub records on a session whose daemon restarted out from under it.
  */
 export const RESTART_RESUMABLE = 'The agent restarted; this session did not survive it.';
@@ -403,6 +428,16 @@ export type FramePayload =
       requestId?: string;
       verb?: Verb;
       message: string;
+    }
+  | {
+      /**
+       * Daemon-originated: one instance's coarse now-state, throttled to ~1/sec.
+       * Broadcast — every dashboard wants the rail's word on every session, not
+       * only the ones it has open.
+       */
+      kind: 'pulse';
+      instanceId: string;
+      pulse: SessionPulse;
     };
 
 export const COCKPIT_HUB_PORT = 3456;

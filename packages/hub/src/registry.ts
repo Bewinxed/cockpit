@@ -20,6 +20,14 @@ export interface RegistryShape {
   readonly addDashboard: (socket: HubSocket) => void;
   readonly dropDashboard: (socket: HubSocket) => void;
   readonly broadcast: (envelope: Envelope) => void;
+  /**
+   * Fans an instance-scoped frame out only to dashboards subscribed to
+   * `instanceId`. Everything else goes through {@link broadcast} — an unknown
+   * kind must never be silently dropped, so the relay fails open.
+   */
+  readonly broadcastFrame: (envelope: Envelope, instanceId: string) => void;
+  /** Replaces a dashboard's subscription set whole — one verb, no add/remove bookkeeping. */
+  readonly setSubscriptions: (socket: HubSocket, instanceIds: string[]) => void;
   /** Routes the reply to a forwarded `control` back to the dashboard that asked. */
   readonly rememberRequester: (requestId: string, socket: HubSocket) => void;
   /** Consumes the route — a `requestId` is answered once. */
@@ -34,7 +42,8 @@ export class Registry extends Context.Service<Registry, RegistryShape>()('Regist
 
 const make = (): RegistryShape => {
   const agents = new Map<string, HubSocket>();
-  const dashboards = new Map<string, HubSocket>();
+  /** One entry per dashboard socket, with the instances it subscribes to. */
+  const dashboards = new Map<string, { socket: HubSocket; subscriptions: Set<string> }>();
   const requesters = new Map<string, { socket: HubSocket; at: number }>();
 
   const sweep = setInterval(() => {
@@ -59,7 +68,7 @@ const make = (): RegistryShape => {
     agent: (machineId) => agents.get(machineId),
     machineIds: () => [...agents.keys()],
     addDashboard: (socket) => {
-      dashboards.set(socket.id, socket);
+      dashboards.set(socket.id, { socket, subscriptions: new Set() });
     },
     dropDashboard: (socket) => {
       dashboards.delete(socket.id);
@@ -67,7 +76,15 @@ const make = (): RegistryShape => {
         if (entry.socket.id === socket.id) requesters.delete(requestId);
     },
     broadcast: (envelope) => {
-      for (const socket of dashboards.values()) socket.send(envelope);
+      for (const { socket } of dashboards.values()) socket.send(envelope);
+    },
+    broadcastFrame: (envelope, instanceId) => {
+      for (const { socket, subscriptions } of dashboards.values())
+        if (subscriptions.has(instanceId)) socket.send(envelope);
+    },
+    setSubscriptions: (socket, instanceIds) => {
+      const entry = dashboards.get(socket.id);
+      if (entry) entry.subscriptions = new Set(instanceIds);
     },
     rememberRequester: (requestId, socket) => {
       requesters.set(requestId, { socket, at: Date.now() });

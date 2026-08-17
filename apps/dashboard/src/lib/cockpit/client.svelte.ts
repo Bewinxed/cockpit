@@ -21,6 +21,7 @@ import type {
   SDKStatus,
   SendPayload,
   SessionMessage,
+  SessionPulse,
   SlashCommand,
   SpawnPayload,
   StopPayload,
@@ -63,6 +64,7 @@ import {
   turnBoundaries,
 } from './frames';
 import { invalidateTasks, refreshTasks, TASK_LEDGER_TOOLS } from './tasks.svelte';
+import { workingSet } from './working-set.svelte';
 
 export type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'error';
 
@@ -304,6 +306,13 @@ const state = $state({
   projects: [] as ProjectRow[],
   sessions: {} as Record<string, SessionState>,
   /**
+   * Each instance's coarse now-state, pushed by the daemon ~1/sec (broadcast).
+   * The rail reads this for sessions it has not subscribed to — the ones whose
+   * frame-fed {@link SessionState} is either absent or frozen at the last frame
+   * before the tab closed.
+   */
+  pulses: {} as Record<string, SessionPulse>,
+  /**
    * The hub's record of every delegate's asks, answers and reports, keyed by
    * the delegate they are about and oldest first. Kept apart from the session
    * it belongs to because the reader of this traffic is the *parent* — a
@@ -509,6 +518,10 @@ async function persistSettings(
 export function openSession(instanceId: string): void {
   hydrate(session(instanceId));
   void loadDelegateEvents(instanceId);
+  // Opening a view is the moment its frames become this browser's to render.
+  // (The working-set effect in the route layout already names it; this makes
+  // the direct route the only trigger the store needs to know about.)
+  syncSubscriptions();
 }
 
 /** Views whose delegates' traffic has been read back — it is read once. */
@@ -675,6 +688,13 @@ function handleFrame(frame: FramePayload): void {
   if (frame.kind === 'usage') {
     // The small limits frame the hub pushes on each report (USAGE-SPEC.md §6.4).
     state.usageLimits = usageLimitReadings(frame.limits);
+    return;
+  }
+
+  if (frame.kind === 'pulse') {
+    // The daemon's coarse now-state, broadcast — this is the whole of what the
+    // rail knows about a session this browser has not subscribed to.
+    state.pulses[frame.instanceId] = frame.pulse;
     return;
   }
 
@@ -978,6 +998,48 @@ function handleFrame(frame: FramePayload): void {
   target.lastActivityAt = new Date();
 }
 
+/** The session the board is peeking — subscribed for frames, like an open tab. */
+let peekedId = $state<string | null>(null);
+
+/** A session is "open" when a tab or the peek pane is actively watching it. */
+function isSubscribed(instanceId: string): boolean {
+  return workingSet.order.includes(instanceId) || peekedId === instanceId;
+}
+
+/** The full set of instance ids this dashboard wants `frame` frames for. */
+function subscriptionIds(): string[] {
+  const ids = new Set(workingSet.order);
+  if (peekedId) ids.add(peekedId);
+  return [...ids];
+}
+
+/** The last subscription set sent, so an unchanged working set stays quiet. */
+let lastSubscriptionKey = '';
+
+/**
+ * Re-sends the whole subscription set. Replace-whole-set on every change; a
+ * no-op when the set is unchanged since the last send, and nothing at all when
+ * the socket is not open — the reconnect path re-sends.
+ */
+export function syncSubscriptions(): void {
+  const socket = globalThis.__cockpitSocket;
+  if (!socket || socket.readyState !== WebSocket.OPEN) return;
+  const ids = subscriptionIds().sort();
+  const key = ids.join('\u0000');
+  if (key === lastSubscriptionKey) return;
+  lastSubscriptionKey = key;
+  socket.send(
+    JSON.stringify({ verb: 'subscribe', machineId: '', payload: { instanceIds: ids } })
+  );
+}
+
+/** The board peeking a session subscribes it for frames; `null` closes the peek. */
+export function setPeeked(id: string | null): void {
+  if (peekedId === id) return;
+  peekedId = id;
+  syncSubscriptions();
+}
+
 function send(envelope: Envelope): void {
   const socket = globalThis.__cockpitSocket;
   if (!socket || socket.readyState !== WebSocket.OPEN) {
@@ -1046,6 +1108,10 @@ function connect(): void {
     state.retryAt = null;
     globalThis.__cockpitReconnectAttempts = 0;
     void refresh().then(refreshCatalogs);
+    // Re-state the subscription on every (re)connect — the hub's registry forgot
+    // this dashboard the moment the socket dropped.
+    lastSubscriptionKey = '';
+    syncSubscriptions();
   };
 
   bind(socket);
@@ -1099,6 +1165,8 @@ export function ensureConnected(): void {
       state.status = 'connected';
       state.retryAt = null;
       void refresh().then(refreshCatalogs);
+      lastSubscriptionKey = '';
+      syncSubscriptions();
     } else {
       state.status = 'connecting';
     }
@@ -2500,10 +2568,21 @@ export const cockpit = {
   /** What a session needs from you — `idle` for one nothing has been heard from. */
   activityOf: (instanceId: string): Activity => {
     const target = state.sessions[instanceId];
+    // Blocked wins everywhere: a parked permission is broadcast, not filtered.
+    if (target && target.pending.length > 0) return 'blocked';
+    // An open session's frames are live and authoritative; anything else falls
+    // back to the daemon's pulse — the only word on a session this browser has
+    // not subscribed to, whose frame-fed state is frozen at the tab that closed.
+    if (target && isSubscribed(instanceId)) return activityOf(target);
+    const pulse = state.pulses[instanceId];
+    if (pulse) return pulse.activity;
     return target ? activityOf(target) : 'idle';
   },
-  currentToolOf: (instanceId: string): ToolGlance | null =>
-    state.sessions[instanceId]?.currentTool ?? null,
+  currentToolOf: (instanceId: string): { name: string; glance: string } | null => {
+    const target = state.sessions[instanceId];
+    if (target && isSubscribed(instanceId)) return target.currentTool;
+    return state.pulses[instanceId]?.currentTool ?? null;
+  },
   /** What a session offers behind `/`, grouped the way the palette lists it. */
   commandsOf: (instanceId: string): AvailableCommand[] => {
     const target = state.sessions[instanceId];
@@ -2520,8 +2599,11 @@ export const cockpit = {
       (branch) => !isRealSubagent(branch)
     ).length,
   /** Just the count of running *real* subagents, for the badge. */
-  runningSubagentsOf: (instanceId: string): number =>
-    runningSubagents(state.sessions[instanceId]?.subagents),
+  runningSubagentsOf: (instanceId: string): number => {
+    const target = state.sessions[instanceId];
+    if (target && isSubscribed(instanceId)) return runningSubagents(target.subagents);
+    return state.pulses[instanceId]?.runningSubagents ?? 0;
+  },
   get blocked(): BlockedRequest[] {
     return blockedRequests();
   },
