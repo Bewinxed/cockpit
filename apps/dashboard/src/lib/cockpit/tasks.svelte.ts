@@ -8,9 +8,9 @@
  * stale and the disk answers the question again. Files-as-truth (NEW.md §1) —
  * cockpit stores none of this.
  */
-import type { FsEntry } from '@cockpit/core';
+import type { FsEntry, HarnessKind } from '@cockpit/core';
 import { browser } from '$app/environment';
-import { cockpit, machineFs } from './client.svelte';
+import { cockpit, machineControl, machineFs } from './client.svelte';
 
 export interface SessionTask {
   id: string;
@@ -84,13 +84,15 @@ async function read(viewId: string): Promise<void> {
   const row = cockpit.instances.find((instance) => instance.id === viewId);
   const machineId = session?.machineId || row?.machineId;
   const sessionId = session?.sessionId || row?.sessionId;
+  const harness = (session?.harness ?? (row?.harness as HarnessKind | null | undefined) ?? 'claude') as HarnessKind;
+  const cwd = session?.cwd || row?.cwd;
   if (!machineId || !sessionId) return;
 
   const invalidated = stale.delete(viewId);
   const current = snapshots[viewId];
   if (!invalidated && current && Date.now() - current.fetchedAt < FRESH_MS) return;
 
-  const work = fetchLedger(viewId, machineId, sessionId).finally(() => {
+  const work = fetchLedger(viewId, machineId, sessionId, harness, cwd).finally(() => {
     running.delete(viewId);
     // An edit that landed mid-read was answered by a listing taken before it,
     // so the ledger this just published is already one revision behind.
@@ -100,8 +102,35 @@ async function read(viewId: string): Promise<void> {
   return work;
 }
 
-async function fetchLedger(viewId: string, machineId: string, sessionId: string): Promise<void> {
+async function fetchLedger(
+  viewId: string,
+  machineId: string,
+  sessionId: string,
+  harness: HarnessKind,
+  cwd?: string
+): Promise<void> {
   snapshots[viewId] = { tasks: snapshots[viewId]?.tasks ?? [], fetchedAt: 0, loading: true };
+
+  // opencode keeps its plan in a native `todo` list on the server; pi has none.
+  if (harness === 'opencode') {
+    try {
+      const tasks = await machineControl<SessionTask[]>(
+        machineId,
+        'getTodos',
+        [sessionId, cwd || undefined],
+        undefined,
+        harness
+      );
+      publish(viewId, tasks ?? []);
+    } catch {
+      publish(viewId, []);
+    }
+    return;
+  }
+  if (harness === 'pi') {
+    publish(viewId, []);
+    return;
+  }
 
   const home = await homeOf(machineId);
   // Nothing was asked of the machine, so nothing is known — which is not the

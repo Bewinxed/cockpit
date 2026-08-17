@@ -102,15 +102,19 @@
     </div>
 
     {#if expanded}
-      {#each rest as request (request.requestId)}
-        <div
-          class="border-t border-border"
-          in:slide={{ duration: duration(250), easing: quintOut }}
-          out:slide={{ duration: duration(180), easing: quintOut }}
-        >
-          {@render card(request, false)}
-        </div>
-      {/each}
+      <!-- Capped: a delegate's ask storm queues dozens, and an uncapped list
+           expands past the viewport the moment the pointer arrives. -->
+      <div class="max-h-[50vh] overflow-y-auto">
+        {#each rest as request (request.requestId)}
+          <div
+            class="border-t border-border"
+            in:slide={{ duration: duration(250), easing: quintOut }}
+            out:slide={{ duration: duration(180), easing: quintOut }}
+          >
+            {@render card(request, false)}
+          </div>
+        {/each}
+      </div>
     {/if}
   {/if}
 </div>

@@ -10,7 +10,7 @@ import type {
   McpHttpServerConfig,
   McpSSEServerConfig,
   McpStdioServerConfig,
-} from '@anthropic-ai/claude-agent-sdk';
+} from './harness';
 
 /**
  * Where a fleet row applies, in Claude Code's own vocabulary:
@@ -307,8 +307,9 @@ export interface FleetSyncReport {
   /** Absent from a daemon that predates directly-fetched skills. */
   skills?: Record<string, FleetItemState>;
   /**
-   * The user-scope CLAUDE.md. Absent from a daemon that predates it; `failed`
-   * is how a machine says its own copy was edited and was not overwritten.
+   * The user-scope memory (CLAUDE.md). Absent from a daemon that predates it;
+   * `failed` is how a machine says its own copy was edited and was not
+   * overwritten.
    */
   memory?: FleetItemState;
   /** When the sync ran, ms epoch. */

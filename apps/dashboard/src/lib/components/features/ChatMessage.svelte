@@ -25,17 +25,30 @@
 	import { Button } from '$lib/components/ui/button';
 	import * as Collapsible from '$lib/components/ui/collapsible';
 	import { formatTimestamp } from '$lib/utils/time';
+	import { askShort, delegateOf, isDelegateReport, matchesSession } from '$lib/cockpit/frames';
+	import { resolveInstanceId } from '$lib/cockpit/links';
+	import { providerOf } from '$lib/cockpit/models.svelte';
+	import ProviderLogo from './ProviderLogo.svelte';
+	import { cockpit } from '$lib/cockpit/client.svelte';
 	import type { Message } from '$lib/cockpit/types';
 	import HelpMenu from './HelpMenu.svelte';
 	import { CopyButton } from '$lib/components/ui/copy-button';
 	import { getRenderer, type MessageRendererProps } from './message-renderers';
 	import MCPStatus from './message-renderers/MCPStatus.svelte';
+	import SourcesStrip from './SourcesStrip.svelte';
+	import { sourcesForMessage } from '$lib/cockpit/sources';
+	import type { MessageHints } from '$lib/cockpit/message-hints';
 	import ToolRow from './tool-cards/ToolRow.svelte';
+	import ReportBody from './tool-cards/ReportBody.svelte';
 	import { isFileDiffTool, resultText, type ToolStatus } from './tool-cards/descriptors';
 
 	interface Props {
 		message: Message;
 		instanceId?: string;
+		/** Pre-computed reactive hints from SessionPane.  When provided the
+		 *  component reads these instead of subscribing to the global store,
+		 *  cutting per-message reactive overhead from 6 derivations to 0. */
+		hints?: MessageHints;
 		showTimestamp?: boolean;
 		onQuestionSubmit?: (requestId: string, answers: Record<string, string>) => Promise<void>;
 		onQuestionCancel?: () => void;
@@ -59,6 +72,7 @@
 	let {
 		message,
 		instanceId = '',
+		hints,
 		showTimestamp = false,
 		onQuestionSubmit,
 		onQuestionCancel,
@@ -74,6 +88,111 @@
 
 	// Check if this message has a specialized renderer
 	const renderer = $derived(getRenderer(message));
+
+	// A delegate's report lives inside its own card (DelegateBranch) — a peer
+	// bubble saying the same thing again helps nobody — and a delegate's routed
+	// ask folds into that card's Asks section. Both are suppressed only when the
+	// card is provably in this transcript: the delegate's spawn result names its
+	// id, the same `id: <uuid>` containment DelegateBranch itself parses to find
+	// its delegate. Otherwise the bubble stands, because a report (or an ask)
+	// must never disappear. A report needs the delegate row to actually be this
+	// transcript's child (`isDelegateReport`); an ask carries its own
+	// `user.delegate_ask` type, so the containment test alone decides.
+	const suppressedAsDelegateTraffic = $derived.by(() => {
+		if (hints) return hints.suppressedAsDelegateTraffic;
+		if (message.type === 'user.peer') {
+			if (!isDelegateReport(message, instanceId, cockpit.instances)) return false;
+		} else if (message.type !== 'user.delegate_ask') {
+			return false;
+		}
+		const peerSession = message.metadata?.peerSession;
+		if (!peerSession) return false;
+		const parent = cockpit.session(instanceId);
+		return (parent?.messages ?? []).some(
+			(m) =>
+				(m.type === 'tool.handoff' || m.type === 'tool.use') &&
+				m.metadata?.delegateInstanceId != null &&
+				matchesSession(peerSession, m.metadata.delegateInstanceId)
+		);
+	});
+
+	// A follow-up handed to one's OWN delegate is delegation traffic, not a
+	// hand-off to a foreign session: it is named by its label, never its raw
+	// uuid, and the result sentence (which only restates the headline) is
+	// dropped. Foreign targets keep the plain hand-off receipt.
+	const followUpLabel = $derived.by(() => {
+		if (hints) return hints.followUpLabel;
+		if (message.type !== 'tool.handoff' || message.metadata?.handoffKind === 'delegate')
+			return null;
+		const row = delegateOf(String(message.content), instanceId, cockpit.instances);
+		if (!row) return null;
+		const name = row.cwd.split('/').filter(Boolean).pop() ?? row.cwd;
+		return `${name}#${row.id.slice(0, 8)}`;
+	});
+
+	// A delegation brief is the parent's own prompt landing in its delegate's
+	// transcript — not a hand-over from some peer session. The card names the
+	// parent and wears its model's mark. Matched by the sender id when the
+	// origin survived, by the parent's directory name when only the stored
+	// marker did.
+	const briefParent = $derived.by(() => {
+		if (hints) return hints.briefParent;
+		if (message.type !== 'user.peer' || message.metadata?.reportKind) return null;
+		const row = cockpit.instances.find((r) => r.id === (instanceId || message.instanceId));
+		if (!row?.parentInstanceId) return null;
+		const parent = cockpit.instances.find((r) => r.id === row.parentInstanceId);
+		if (!parent) return null;
+		const sender = message.metadata?.peerSession ?? message.metadata?.peerFrom;
+		const parentLeaf = parent.cwd.split('/').filter(Boolean).pop() ?? parent.cwd;
+		const matched = sender
+			? matchesSession(sender, parent.id)
+			: message.metadata?.peerName === parentLeaf;
+		return matched ? { ...parent, label: `${parentLeaf}#${parent.id.slice(0, 8)}` } : null;
+	});
+
+	// The gutter avatar for another session's words wears the SENDER's model
+	// mark — a delegation brief shows who delegated, a report shows the
+	// delegate that wrote it — never a generic bot glyph.
+	const peerSenderModel = $derived.by(() => {
+		if (hints) return hints.peerSenderModel;
+		if (message.type !== 'user.peer') return null;
+		if (briefParent) return briefParent.model ?? null;
+		const sender = message.metadata?.peerSession ?? message.metadata?.peerFrom;
+		if (!sender) return null;
+		const row = cockpit.instances.find((r) => matchesSession(sender, r.id));
+		return row?.model ?? null;
+	});
+
+	// A session reference — a report's delegate, a hand-off's target — resolves
+	// to a clickable `/session/<id>` when the fleet has exactly one matching row.
+	const sessionHref = $derived.by(() => {
+		if (hints) return hints.sessionHref;
+		if (message.type === 'user.peer') {
+			const sender = message.metadata?.peerSession ?? message.metadata?.peerFrom;
+			const id = resolveInstanceId(sender, cockpit.instances);
+			return id ? `/session/${id}` : null;
+		}
+		if (message.type === 'tool.handoff') {
+			const full = message.metadata?.delegateInstanceId;
+			if (typeof full === 'string') return `/session/${full}`;
+			const short = /#([0-9a-f]{8,})$/.exec(String(message.content ?? '').trim());
+			const id = short ? resolveInstanceId(short[1], cockpit.instances) : undefined;
+			return id ? `/session/${id}` : null;
+		}
+		return null;
+	});
+
+	// A task notification is the harness's echo of a finished Task call. When
+	// that call's branch is in this transcript, the branch already carries the
+	// same report — thirty of these echoes stacked up say nothing new.
+	const suppressedAsTaskEcho = $derived.by(() => {
+		if (hints) return hints.suppressedAsTaskEcho;
+		if (message.type !== 'ui.system_note') return false;
+		if (message.metadata?.noteKind !== 'Task notification') return false;
+		const toolId = message.metadata?.noteTaskToolId;
+		if (!toolId) return false;
+		return Boolean(cockpit.session(instanceId)?.subagents?.[toolId]);
+	});
 
 	// Determine if a specialized renderer is active
 	const rendererIsActive = $derived.by(() => {
@@ -316,6 +435,18 @@
 	const messageRest = $derived(message.content.slice(HUGE_MESSAGE_HEAD));
 
 	let fullMessageOpen = $state(false);
+
+	// What this answer read on the web: the pages the calls between it and the
+	// turn before it named. The message alone cannot see those calls, so the
+	// list comes from the session the same way the suppression rules above read
+	// it — and a turn rendered outside that list (a delegate's own branch) finds
+	// itself nowhere in it and cites nothing.
+	const sources = $derived.by(() => {
+		if (hints) return hints.sources;
+		if (message.type !== 'assistant') return [];
+		const messages = cockpit.session(instanceId)?.messages ?? [];
+		return sourcesForMessage(messages, messages.indexOf(message));
+	});
 </script>
 
 <!-- If there's a specialized renderer, use it -->
@@ -324,12 +455,18 @@
 {:else}
 	<!-- Default rendering logic -->
 	<div class="flex {config.align} gap-3 group">
-		{#if message.type !== 'user' && message.type !== 'assistant' && !message.type.startsWith('system.') && message.type !== 'ui.help_menu'}
-			<!-- Avatar -->
+		<!-- Tool rows carry their own family glyph now; a wrench avatar beside
+		     them said the same thing twice. -->
+		{#if message.type !== 'user' && message.type !== 'assistant' && message.type !== 'user.delegate_ask' && message.type !== 'tool.use' && message.type !== 'tool.result' && !message.type.startsWith('system.') && message.type !== 'ui.help_menu'}
+			<!-- Avatar: another session's words wear the sender's model mark. -->
 			<div
 				class="shrink-0 size-9 rounded-xl {config.iconBg} flex items-center justify-center mt-0.5"
 			>
-				<config.icon class="size-[18px] {config.iconColor}" />
+				{#if peerSenderModel && providerOf(peerSenderModel)}
+					<ProviderLogo model={peerSenderModel} size={18} />
+				{:else}
+					<config.icon class="size-[18px] {config.iconColor}" />
+				{/if}
 			</div>
 		{/if}
 
@@ -431,9 +568,24 @@
 						/>
 						<span class="min-w-0 flex-1 truncate text-sm">
 							<span class="font-medium {failed ? 'text-destructive' : 'text-primary'}">
-								{message.metadata?.handoffKind === 'start' ? 'Started' : 'Handed to'}
+								{followUpLabel
+									? 'Follow-up to'
+									: message.metadata?.handoffKind === 'start'
+										? 'Started'
+										: 'Handed to'}
 							</span>
-							<span class="font-mono text-foreground">{message.content}</span>
+							<span class="font-mono text-foreground">
+							{#if sessionHref}
+								<a
+									href={sessionHref}
+									class="underline-offset-2 hover:text-primary hover:underline"
+								>
+									{followUpLabel ?? message.content}
+								</a>
+							{:else}
+								{followUpLabel ?? message.content}
+							{/if}
+						</span>
 						</span>
 						<span class="shrink-0 text-xs {failed ? 'text-destructive' : 'text-muted-foreground'}">
 							{failed ? 'failed' : done ? 'delivered' : 'sending…'}
@@ -444,23 +596,49 @@
 							{message.metadata.handoffBrief.slice(0, 240)}
 						</p>
 					{/if}
-					{#if message.metadata?.toolResult}
-						<p class="border-t border-border/40 px-3 py-2 text-xs text-muted-foreground">
+					{#if failed && message.metadata?.toolResult && !followUpLabel}
+						<p class="border-t border-border/40 px-3 py-2 text-xs text-destructive/80">
 							{String(message.metadata.toolResult).slice(0, 200)}
 						</p>
 					{/if}
 				</div>
-			{:else if message.type === 'user.peer'}
+			{:else if message.type === 'user.peer' && !suppressedAsDelegateTraffic}
 				<!-- Another session's hand-off. Deliberately not the user bubble:
 				     this is reported speech, and a reader who mistakes it for
 				     their own instruction loses track of who asked for what. -->
 				<div class="w-full overflow-hidden rounded-xl border border-primary/30 bg-primary/5">
 					<div class="flex items-center gap-2 border-b border-primary/20 px-3 py-2">
+						<!-- The kind glyph; the sender's model mark is the gutter avatar. -->
 						<IconSubagentsDuo class="size-4 shrink-0 text-primary" />
 						<span class="min-w-0 flex-1 truncate text-xs font-medium text-primary">
-							Handed over by {message.metadata?.peerName ?? 'another session'}
+							{#if message.metadata?.reportKind}
+								{#if sessionHref}
+									<a href={sessionHref} class="underline-offset-2 hover:underline">
+										Report from {message.metadata?.peerName ?? 'a delegate'}{message
+											.metadata.reportKind === 'failed'
+											? ' — turn failed'
+											: ''}
+									</a>
+								{:else}
+									Report from {message.metadata?.peerName ?? 'a delegate'}{message.metadata
+										.reportKind === 'failed'
+										? ' — turn failed'
+										: ''}
+								{/if}
+							{:else if briefParent}
+								Delegation brief from <span class="font-mono">{briefParent.label}</span>
+							{:else}
+								Handed over by {message.metadata?.peerName ?? 'another session'}
+							{/if}
 						</span>
-						{#if message.metadata?.peerSession}
+						{#if briefParent}
+							<a
+								href="/session/{briefParent.id}"
+								class="shrink-0 text-xs text-muted-foreground underline-offset-2 hover:text-primary hover:underline"
+							>
+								Open it
+							</a>
+						{:else if message.metadata?.peerSession}
 							<a
 								href="/session/{message.metadata.peerSession}"
 								class="shrink-0 text-xs text-muted-foreground underline-offset-2 hover:text-primary hover:underline"
@@ -470,10 +648,38 @@
 						{/if}
 					</div>
 					<div class="px-3 py-2.5 text-sm">
-						<Markdown source={message.content} />
+						{#if message.metadata?.reportKind}
+							<ReportBody text={message.content} />
+						{:else}
+							<Markdown source={message.content} />
+						{/if}
 					</div>
 				</div>
+			{:else if message.type === 'user.delegate_ask'}
+				<!-- A delegate's routed permission ask. When the delegate's card is
+				     in this transcript the ask folds into its Asks section, so
+				     nothing is drawn here; otherwise (chunked transcript, or an ask
+				     escalated out of a dead parent) a muted fallback row stands in —
+				     not a user bubble, and not markdown. -->
+				{#if !suppressedAsDelegateTraffic}
+					<div
+						class="w-full max-w-[min(65ch,100%)] rounded-xl border border-border/50 bg-muted/30 px-3 py-2"
+					>
+						<div class="flex items-center gap-2">
+							<IconHelp class="size-4 shrink-0 text-muted-foreground" />
+							<span class="text-xs font-medium text-muted-foreground">
+								Ask from {message.metadata?.askLabel ?? 'a delegate'}
+							</span>
+							<span
+								class="min-w-0 flex-1 font-mono text-xs text-muted-foreground line-clamp-2 break-all"
+							>
+								{askShort(message.content)}
+							</span>
+						</div>
+					</div>
+				{/if}
 			{:else if message.type === 'ui.system_note'}
+				{#if !suppressedAsTaskEcho}
 				<!-- Harness-injected note that arrived as a user turn - collapsible card -->
 				<div class="w-full bg-muted/30 border border-border rounded-xl overflow-hidden">
 					<Collapsible.Root open={isExpanded} onOpenChange={toggleExpanded}>
@@ -502,6 +708,7 @@
 						</Collapsible.Content>
 					</Collapsible.Root>
 				</div>
+				{/if}
 			{:else if message.type === 'ui.command_output'}
 				<!-- Command output (like /help) - rendered with markdown and terminal styling -->
 				<div
@@ -682,6 +889,10 @@
 							</Collapsible.Root>
 						{:else}
 							<Markdown source={message.content} />
+						{/if}
+
+						{#if sources.length > 0}
+							<SourcesStrip {sources} />
 						{/if}
 
 						<!-- Action buttons. Above the bubble rather than over its corner:

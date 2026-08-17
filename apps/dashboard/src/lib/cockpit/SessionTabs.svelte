@@ -10,20 +10,25 @@
    * there is no reorder to animate. Fleet leads it as the fixed first tab, the
    * way back to the board.
    */
-  import { page } from '$app/state';
-  import { goto } from '$app/navigation';
-  import * as ContextMenu from '$lib/components/ui/context-menu';
-  import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
-  import {
-    IconClose,
-    IconColumns,
-    IconCopy,
-    IconFolder,
-    IconFork,
-    IconStop,
-  } from '$lib/icons';
-  import { isTyping } from '$lib/utils/typing';
-  import ActivityDot from './ActivityDot.svelte';
+import { flip } from 'svelte/animate';
+import { SvelteSet } from 'svelte/reactivity';
+import { dndzone, SHADOW_ITEM_MARKER_PROPERTY_NAME, type DndEvent } from 'svelte-dnd-action';
+import { page } from '$app/state';
+import { goto } from '$app/navigation';
+import * as ContextMenu from '$lib/components/ui/context-menu';
+import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
+import {
+  IconClose,
+  IconColumns,
+  IconCopy,
+  IconFolder,
+  IconFork,
+  IconPlus,
+  IconStop,
+} from '$lib/icons';
+import { isTyping } from '$lib/utils/typing';
+import ActivityDot from './ActivityDot.svelte';
+import SpawnPanel from './SpawnPanel.svelte';
   import {
     backfillSession,
     cockpit,
@@ -33,9 +38,10 @@
     stopSession,
   } from './client.svelte';
   import { copyToClipboard } from './copy';
-  import { identityVar } from './folder-prefs.svelte';
-  import { sessionTitle } from './links';
-  import { workingSet } from './working-set.svelte';
+import { identityVar } from './folder-prefs.svelte';
+import { sessionTitle } from './links';
+import { flipDurationMs } from './motion.svelte';
+import { workingSet } from './working-set.svelte';
 
   const MAX_VISIBLE = 6;
 
@@ -48,6 +54,8 @@
     live: boolean;
     activity: ReturnType<typeof cockpit.activityOf>;
   }
+
+  type DragTab = Tab & { [SHADOW_ITEM_MARKER_PROPERTY_NAME]?: boolean };
 
   function resolveTab(id: string): Tab | null {
     const instance = cockpit.listedInstances.find((row) => row.id === id);
@@ -85,6 +93,18 @@
   );
   const visible = $derived(tabs.slice(0, MAX_VISIBLE));
   const overflow = $derived(tabs.slice(MAX_VISIBLE));
+
+  let tabDrag = $state<DragTab[] | null>(null);
+  const dragItems = $derived<DragTab[]>(tabDrag ?? visible);
+
+  function considerTabs(event: CustomEvent<DndEvent<DragTab>>): void {
+    tabDrag = event.detail.items;
+  }
+
+  function finalizeTabs(event: CustomEvent<DndEvent<DragTab>>): void {
+    tabDrag = null;
+    workingSet.reorder(event.detail.items.map((item) => item.id));
+  }
   /** The tab just clicked. `page` only names it once the router has finished,
    *  and a tab that highlights a frame late reads as the click being ignored. */
   let pending = $state<string | null>(null);
@@ -129,6 +149,7 @@
       machineId: tab.machineId,
       sessionId: tab.id,
       cwd: tab.cwd,
+      harness: cockpit.session(tab.id)?.harness ?? 'claude',
     });
   }
 
@@ -160,14 +181,42 @@
     return () => clearTimeout(handle);
   });
 
+  /** Tabs whose exit animation is in flight — removed after it finishes.
+   *  A `SvelteSet` so `closing.has(id)` in the template is reactive: a plain
+   *  `Set` never triggers, and the `tab-exiting` class never applies. */
+  const closing = new SvelteSet<string>();
+
+  /** The exit animation duration — CSS keyframes and the removal delay share it. */
+  const TAB_EXIT_MS = 300;
+
   /** Where the strip goes when the tab being closed is the one on screen: the
    *  neighbour to the right, then the left, then the board. */
   function closeTab(id: string) {
+    if (closing.has(id)) return;
+
+    // Capture the tab wrapper's width BEFORE the class triggers the animation,
+    // so the CSS `width` property can interpolate from this value to 0. Without
+    // an explicit starting width, `width: auto → 0` is not animatable and the
+    // `+` button snaps instead of sliding.
+    const wrapper = strip?.querySelector(`[data-tab="${id}"]`)?.closest<HTMLElement>('[data-tab-wrapper]');
+    if (wrapper) {
+      wrapper.style.width = `${wrapper.getBoundingClientRect().width}px`;
+    }
+
+    closing.add(id);
+
+    // Navigate away immediately so the next tab is active while the old one fades.
     const at = tabs.findIndex((tab) => tab.id === id);
     const next = tabs[at + 1] ?? tabs[at - 1] ?? null;
-    workingSet.forget(id);
-    if (id !== currentId) return;
-    navigate(next ? `/session/${next.id}` : '/session');
+    if (id === currentId) {
+      navigate(next ? `/session/${next.id}` : '/session');
+    }
+
+    // Remove after the CSS exit animation finishes — FLIP then fills the gap.
+    setTimeout(() => {
+      closing.delete(id);
+      workingSet.forget(id);
+    }, TAB_EXIT_MS);
   }
 
   function closeOthers(id: string) {
@@ -190,6 +239,7 @@
       machineId: target.machineId,
       cwd: target.cwd,
       sessionId: target.sessionId,
+      harness: target.harness,
       history: target.messages,
     });
     await goto(`/session/${instanceId}`);
@@ -231,6 +281,7 @@
    *  `]` or a swipe has to be brought back into view. Instant, and it moves the
    *  strip's own scroll — no tab changes place. */
   let strip = $state<HTMLElement | null>(null);
+  let spawnOpen = $state(false);
   $effect(() => {
     const id = currentId;
     if (!strip || !id) return;
@@ -246,6 +297,59 @@
     'transition-colors duration-150 ease-out';
   const ACTIVE = 'identity-underline bg-card font-medium text-foreground';
   const IDLE = 'text-muted-foreground hover:bg-accent hover:text-accent-foreground';
+
+  /** The `+` button element, passed to SpawnPanel as its anchor. */
+  let spawnBtn = $state<HTMLElement | null>(null);
+
+  /** The entrance animation duration — CSS keyframes and the action share it. */
+  const TAB_ENTER_MS = 500;
+
+  /**
+   * Tabs the strip has already rendered. A `use:` action that runs on every
+   * mount would replay the entrance when `svelte-dnd-action` re-creates DOM
+   * elements during a drag — tracking which ids have been seen prevents that.
+   * Shadow items (the dnd library's own copies) are never added.
+   */
+  const seenTabs = new Set<string>();
+
+  /**
+   * Paper tab unfolds from behind via CSS class, not a Svelte `in:` transition.
+   *
+   * `in:` and `animate:flip` on the same keyed `#each` have a timing conflict
+   * in Svelte 5: FLIP captures the layout before the `in:` transition applies
+   * its starting state, so the element flashes at full size for one frame, then
+   * snaps to the start state and animates forward. A `use:` action sets the
+   * start styles inline BEFORE the first paint, adds a CSS class that runs the
+   * keyframes, and cleans up after itself.
+   */
+  function tabEnterAction(node: HTMLElement, tabId: string) {
+    // Empty string = shadow item (dnd copy); skip it.
+    if (!tabId || seenTabs.has(tabId)) return;
+    seenTabs.add(tabId);
+
+    // Set the starting state inline so the first paint is small/dark — no flash.
+    node.style.transform = 'scaleX(0.92) scaleY(0.3)';
+    node.style.transformOrigin = 'bottom center';
+    node.style.opacity = '0.4';
+    node.style.filter = 'brightness(0.35)';
+
+    // Kick off the CSS keyframes on the next frame so the browser has committed
+    // the inline start styles and the animation runs FROM them TO the end state.
+    requestAnimationFrame(() => {
+      node.classList.add('tab-entering');
+      const cleanup = () => {
+        node.classList.remove('tab-entering');
+        node.style.transform = '';
+        node.style.transformOrigin = '';
+        node.style.opacity = '';
+        node.style.filter = '';
+      };
+      node.addEventListener('animationend', cleanup, { once: true });
+      // Safety: clear inline styles even if animationend never fires.
+      setTimeout(cleanup, TAB_ENTER_MS + 50);
+    });
+  }
+
 </script>
 
 <svelte:window onkeydown={handleGlobalKeydown} />
@@ -276,80 +380,118 @@
       Fleet
     </a>
 
-    {#each visible as tab (tab.id)}
-      {@const active = tab.id === currentId}
-      {@const project = projectFor(tab)}
-      <ContextMenu.Root>
-        <ContextMenu.Trigger class="contents">
-          <div
-            role="tab"
-            data-tab={tab.id}
-            aria-selected={active}
-            tabindex={active ? 0 : -1}
-            style={identityVar(tab.cwd)}
-            class="{TAB} max-w-[200px] cursor-default {active ? ACTIVE : IDLE}"
-            onclick={() => open(tab.id)}
-            onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(tab.id); } else { handleTabKeydown(e); } }}
-          >
-            <ActivityDot activity={tab.activity} size={1.5} />
-            <span class="truncate">{tab.title}</span>
-            <button
-              type="button"
-              tabindex={-1}
-              class="-mr-1.5 flex size-6 shrink-0 items-center justify-center rounded-full opacity-0
-                     transition-opacity hover:bg-muted group-hover:opacity-100 {active
-                ? 'opacity-60'
-                : ''}"
-              aria-label="Close {tab.title}"
-              onclick={(e) => { e.stopPropagation(); e.preventDefault(); closeTab(tab.id); }}
-            >
-              <IconClose class="size-3.5" />
-            </button>
-          </div>
-        </ContextMenu.Trigger>
+    <div
+      use:dndzone={{
+        items: dragItems,
+        flipDurationMs: flipDurationMs(),
+        dropTargetStyle: {},
+        type: 'session-tabs',
+        dragDisabled: false,
+        autoAriaDisabled: true,
+        zoneTabIndex: -1,
+        zoneItemTabIndex: -1,
+        delayTouchStart: true,
+      }}
+      onconsider={considerTabs}
+      onfinalize={finalizeTabs}
+      class="flex items-end gap-0.5"
+    >
+      {#each dragItems as tab (tab.id)}
+        {@const active = tab.id === currentId}
+        {@const project = projectFor(tab)}
+        <div
+          data-tab-wrapper={tab.id}
+          animate:flip={{ duration: flipDurationMs() }}
+          use:tabEnterAction={tab[SHADOW_ITEM_MARKER_PROPERTY_NAME] ? '' : tab.id}
+          class="shrink-0 {closing.has(tab.id) ? 'tab-exiting' : ''}"
+          onauxclick={(e) => {
+            if (e.button === 1) {
+              e.preventDefault();
+              closeTab(tab.id);
+            }
+          }}
+        >
+          <ContextMenu.Root>
+            <ContextMenu.Trigger class="contents">
+              <div
+                role="tab"
+                data-tab={tab.id}
+                aria-selected={active}
+                tabindex={active ? 0 : -1}
+                style={identityVar(tab.cwd)}
+                class="{TAB} max-w-[200px] cursor-default {active ? ACTIVE : IDLE}"
+                onclick={() => open(tab.id)}
+                onkeydown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    open(tab.id);
+                  } else {
+                    handleTabKeydown(e);
+                  }
+                }}
+              >
+                <ActivityDot activity={tab.activity} size={1.5} />
+                <span class="truncate">{tab.title}</span>
+                <button
+                  type="button"
+                  tabindex={-1}
+                  class="-mr-1.5 flex size-6 shrink-0 items-center justify-center rounded-full opacity-0
+                         transition-opacity hover:bg-muted group-hover:opacity-100 {active
+                    ? 'opacity-60'
+                    : ''}"
+                  aria-label="Close {tab.title}"
+                  onclick={(e) => { e.stopPropagation(); e.preventDefault(); closeTab(tab.id); }}
+                >
+                  <IconClose class="size-3.5" />
+                </button>
+              </div>
+            </ContextMenu.Trigger>
 
-        <ContextMenu.Content>
-          <ContextMenu.Item onSelect={() => closeTab(tab.id)}>
-            <IconClose />
-            Close
-          </ContextMenu.Item>
-          <ContextMenu.Item disabled={tabs.length < 2} onSelect={() => closeOthers(tab.id)}>
-            <IconClose />
-            Close others
-          </ContextMenu.Item>
+            <ContextMenu.Content>
+              <ContextMenu.Item onSelect={() => closeTab(tab.id)}>
+                <IconClose />
+                Close
+              </ContextMenu.Item>
+              <ContextMenu.Item disabled={tabs.length < 2} onSelect={() => closeOthers(tab.id)}>
+                <IconClose />
+                Close others
+              </ContextMenu.Item>
 
-          <ContextMenu.Separator />
+              <ContextMenu.Separator />
 
-          <ContextMenu.Item disabled={!forkable(tab)} onSelect={() => fork(tab)}>
-            <IconFork />
-            Fork
-          </ContextMenu.Item>
-          <ContextMenu.Item
-            disabled={!tab.live}
-            onSelect={() => stopSession(tab.id, tab.machineId)}
-          >
-            <IconStop />
-            Stop
-          </ContextMenu.Item>
+              <ContextMenu.Item disabled={!forkable(tab)} onSelect={() => fork(tab)}>
+                <IconFork />
+                Fork
+              </ContextMenu.Item>
+              <ContextMenu.Item
+                disabled={!tab.live}
+                onSelect={() => stopSession(tab.id, tab.machineId)}
+              >
+                <IconStop />
+                Stop
+              </ContextMenu.Item>
 
-          <ContextMenu.Separator />
+              <ContextMenu.Separator />
 
-          {#if project}
-            <ContextMenu.Item onSelect={() => goto(`/project/${project.id}`)}>
-              <IconFolder />
-              Open project
-            </ContextMenu.Item>
-          {/if}
-          <ContextMenu.Item
-            onSelect={() =>
-              copyToClipboard('Link', `${location.origin}/session/${tab.id}`)}
-          >
-            <IconCopy />
-            Copy link
-          </ContextMenu.Item>
-        </ContextMenu.Content>
-      </ContextMenu.Root>
-    {/each}
+              {#if project}
+                <ContextMenu.Item onSelect={() => goto(`/project/${project.id}`)}>
+                  <IconFolder />
+                  Open project
+                </ContextMenu.Item>
+              {/if}
+              <ContextMenu.Item
+                onSelect={() =>
+                  copyToClipboard('Link', `${location.origin}/session/${tab.id}`)}
+              >
+                <IconCopy />
+                Copy link
+              </ContextMenu.Item>
+            </ContextMenu.Content>
+          </ContextMenu.Root>
+        </div>
+      {/each}
+    </div>
 
     {#if overflow.length > 0}
       <DropdownMenu.Root>
@@ -366,5 +508,60 @@
         </DropdownMenu.Content>
       </DropdownMenu.Root>
     {/if}
+
+    <button
+      bind:this={spawnBtn}
+      type="button"
+      class="{TAB} {IDLE}"
+      aria-label="New session"
+      onclick={() => (spawnOpen = true)}
+    >
+      <IconPlus class="size-4" />
+    </button>
   </div>
 {/if}
+
+<SpawnPanel open={spawnOpen} onclose={() => (spawnOpen = false)} anchor={spawnBtn} />
+
+<style>
+  :global([data-is-dnd-shadow-item-internal]) {
+    visibility: visible !important;
+    opacity: 0.5;
+  }
+
+  .tab-entering {
+    animation: tab-enter 500ms cubic-bezier(0.33, 1, 0.68, 1) forwards;
+    transform-origin: bottom center;
+  }
+
+  @keyframes tab-enter {
+    from {
+      transform: scaleX(0.92) scaleY(0.3);
+      opacity: 0.4;
+      filter: brightness(0.35);
+    }
+    to {
+      transform: scaleX(1) scaleY(1);
+      opacity: 1;
+      filter: brightness(1);
+    }
+  }
+
+  .tab-exiting {
+    animation: tab-exit 300ms cubic-bezier(0.33, 1, 0.68, 1) forwards;
+    transform-origin: bottom center;
+    pointer-events: none;
+    overflow: hidden;
+  }
+
+  @keyframes tab-exit {
+    to {
+      transform: scaleX(0.92) scaleY(0.3);
+      opacity: 0;
+      filter: brightness(0.35);
+      width: 0;
+      padding: 0;
+      margin: 0;
+    }
+  }
+</style>

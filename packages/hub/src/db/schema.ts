@@ -1,12 +1,14 @@
 import type {
   AuthState,
   BuildInfo,
+  ClaudeLimits,
   FleetMcpConfig,
   FleetSyncReport,
+  HarnessReport,
   SkillFile,
   ToolStatus,
 } from '@cockpit/core';
-import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { index, integer, real, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
 const timestamp = (column: string) => integer(column, { mode: 'timestamp_ms' });
 
@@ -40,6 +42,8 @@ export const agents = sqliteTable('agents', {
    * Null until a daemon that says so has registered once.
    */
   build: text('build', { mode: 'json' }).$type<BuildInfo>(),
+  /** What each harness adapter on the machine can do, as reported at register. */
+  harnesses: text('harnesses', { mode: 'json' }).$type<HarnessReport[]>(),
   lastSeenAt: timestamp('last_seen_at'),
   createdAt: timestamp('created_at').notNull().$defaultFn(() => new Date()),
 });
@@ -64,7 +68,19 @@ export const instances = sqliteTable('instances', {
   projectId: text('project_id').references(() => projects.id),
   /** SDK session id, absent until the first init frame arrives. */
   sessionId: text('session_id'),
+  /** Which harness owns `sessionId` — what a resume and a catalog read route on. */
+  harness: text('harness'),
+  /** The instance this one is a delegate of (nested under it in every rail). */
+  parentInstanceId: text('parent_instance_id'),
+  /** The delegating tool call, so the parent transcript can render the round trip. */
+  parentToolUseId: text('parent_tool_use_id'),
   cwd: text('cwd').notNull(),
+  /**
+   * What the session is for, one line, as its spawn said: a delegate's brief
+   * headline. Null on a session that was started without one — the rails fall
+   * back to the transcript's own title, then to where it runs.
+   */
+  title: text('title'),
   /** `scratch`: a side quest (NEW.md §1), shown apart from mainline work. */
   kind: text('kind').$type<'mainline' | 'scratch'>().notNull().default('mainline'),
   /**
@@ -84,6 +100,40 @@ export const instances = sqliteTable('instances', {
   lastError: text('last_error'),
   createdAt: timestamp('created_at').notNull().$defaultFn(() => new Date()),
   updatedAt: timestamp('updated_at').notNull().$defaultFn(() => new Date()),
+});
+
+/** The three things a delegate and its parent ever say to each other. */
+export type DelegateEventKind = 'ask' | 'answer' | 'report';
+
+/** An ask's life: parked on the parent, then allowed or refused by it. */
+export type DelegateAskStatus = 'pending' | 'answered' | 'denied';
+
+/** What each kind carries: the ask's own input, the answer, the turn's report. */
+export type DelegateEventPayload =
+  | { input: unknown }
+  | { behavior: string; answers?: Record<string, unknown> }
+  | { body: string; failed: boolean };
+
+/**
+ * What a delegate and its parent said to each other through the hub: every ask
+ * routed up, every answer back, every turn's report. The messages themselves
+ * are the harnesses' copies; this is the hub's own record, so a reader that was
+ * not watching does not have to reconstruct the exchange out of transcript text.
+ */
+export const delegateEvents = sqliteTable('delegate_events', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  /** The delegate the traffic is about — never the parent, on any of the kinds. */
+  instanceId: text('instance_id').notNull(),
+  parentInstanceId: text('parent_instance_id').notNull(),
+  kind: text('kind').$type<DelegateEventKind>().notNull(),
+  /** The permission request an ask and its answer share. Null on a report. */
+  requestId: text('request_id'),
+  toolName: text('tool_name'),
+  requestKind: text('request_kind').$type<'question' | 'tool'>(),
+  payload: text('payload', { mode: 'json' }).$type<DelegateEventPayload>().notNull(),
+  /** An ask's own state; null on an answer and a report, which settle nothing. */
+  status: text('status').$type<DelegateAskStatus>(),
+  createdAt: timestamp('created_at').notNull().$defaultFn(() => new Date()),
 });
 
 /**
@@ -199,4 +249,51 @@ export const credentials = sqliteTable('credentials', {
   blob: text('blob', { mode: 'json' }).$type<Record<string, unknown>>().notNull(),
   expiresAt: timestamp('expires_at'),
   updatedAt: timestamp('updated_at').notNull().$defaultFn(() => new Date()),
+});
+
+/**
+ * One (session, model, hour) bucket of usage the agent reports (USAGE-SPEC.md
+ * §6.1). The id is the full `${machineId}:${harness}:${sessionId}:${model}:
+ * ${hourStart}` key, so a re-report of the same bucket is an idempotent upsert
+ * over absolute totals rather than an addition.
+ */
+export const usageBuckets = sqliteTable(
+  'usage_buckets',
+  {
+    /** `${machineId}:${harness}:${sessionId}:${model}:${hourStart}` */
+    id: text('id').primaryKey(),
+    machineId: text('machine_id').notNull(),
+    harness: text('harness').$type<'claude' | 'opencode'>().notNull(),
+    hourStart: integer('hour_start').notNull(),
+    firstTs: integer('first_ts').notNull(),
+    lastTs: integer('last_ts').notNull(),
+    sessionId: text('session_id').notNull(),
+    project: text('project').notNull(),
+    projectPath: text('project_path'),
+    model: text('model').notNull(),
+    provider: text('provider'),
+    inputTokens: integer('input_tokens').notNull().default(0),
+    outputTokens: integer('output_tokens').notNull().default(0),
+    cacheCreationTokens: integer('cache_creation_tokens').notNull().default(0),
+    cacheReadTokens: integer('cache_read_tokens').notNull().default(0),
+    reasoningTokens: integer('reasoning_tokens').notNull().default(0),
+    costUsd: real('cost_usd').notNull().default(0),
+    messages: integer('messages').notNull().default(0),
+    updatedAt: timestamp('updated_at').notNull().$defaultFn(() => new Date()),
+  },
+  (table) => [
+    index('usage_buckets_hour_start_idx').on(table.hourStart),
+    index('usage_buckets_machine_harness_hour_idx').on(table.machineId, table.harness, table.hourStart),
+    index('usage_buckets_session_idx').on(table.sessionId),
+  ]
+);
+
+/**
+ * The last limit reading each machine's daemon fetched from the Anthropic API
+ * (USAGE-SPEC.md §6.1). One row per machine — the account it is signed in to.
+ */
+export const usageLimits = sqliteTable('usage_limits', {
+  machineId: text('machine_id').primaryKey(),
+  payload: text('payload', { mode: 'json' }).$type<ClaudeLimits>().notNull(),
+  fetchedAt: timestamp('fetched_at').notNull().$defaultFn(() => new Date()),
 });

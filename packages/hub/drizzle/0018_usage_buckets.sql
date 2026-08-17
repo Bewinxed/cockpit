@@ -1,0 +1,21 @@
+CREATE TABLE `usage_buckets` (
+	`id` text PRIMARY KEY NOT NULL,
+	`machine_id` text NOT NULL,
+	`harness` text NOT NULL,
+	`hour_start` integer NOT NULL,
+	`first_ts` integer NOT NULL,
+	`last_ts` integer NOT NULL,
+	`session_id` text NOT NULL,
+	`project` text NOT NULL,
+	`project_path` text,
+	`model` text NOT NULL,
+	`provider` text,
+	`input_tokens` integer DEFAULT 0 NOT NULL,
+	`output_tokens` integer DEFAULT 0 NOT NULL,
+	`cache_creation_tokens` integer DEFAULT 0 NOT NULL,
+	`cache_read_tokens` integer DEFAULT 0 NOT NULL,
+	`reasoning_tokens` integer DEFAULT 0 NOT NULL,
+	`cost_usd` real DEFAULT 0 NOT NULL,
+	`messages` integer DEFAULT 0 NOT NULL,
+	`updated_at` integer NOT NULL
+);

@@ -486,6 +486,7 @@
 									otherTexts = new Map(otherTexts);
 								}}
 								onkeydown={(e) => {
+									e.stopPropagation();
 									if (e.key === 'Enter' && canSubmit()) {
 										e.preventDefault();
 										handleSubmit();

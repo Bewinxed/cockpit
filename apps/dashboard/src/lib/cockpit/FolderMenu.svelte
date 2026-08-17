@@ -20,7 +20,7 @@
   import * as AlertDialog from '$lib/components/ui/alert-dialog';
   import * as ContextMenu from '$lib/components/ui/context-menu';
   import { deleteProject, type ProjectRow } from './client.svelte';
-  import { FOLDER_MARKS, folderPrefs, identityVar } from './folder-prefs.svelte';
+  import { folderPrefs } from './folder-prefs.svelte';
   import { HUES } from './identity';
   import { rail } from './rail.svelte';
 
@@ -51,7 +51,6 @@
   }: Props = $props();
 
   const pickedHue = $derived(folderPrefs.chosenHue(cwd));
-  const pickedMark = $derived(folderPrefs.chosenMark(cwd));
 
   /** A swatch shows the colour it would apply, at the ink lightness it lands on. */
   const swatch = (hue: number) => `background: oklch(0.58 0.12 ${hue})`;
@@ -143,23 +142,6 @@
                 class="size-5 rounded-full {on ? 'ring-2 ring-ring ring-offset-2 ring-offset-popover' : ''}"
                 style={swatch(hue)}
               ></span>
-            </button>
-          {/each}
-        </div>
-
-        <p class="pt-3 pb-2 pl-1 text-micro font-medium text-muted-foreground">Mark</p>
-        <div class="grid grid-cols-6 gap-1.5">
-          {#each FOLDER_MARKS as mark (mark.key)}
-            {@const on = pickedMark === mark.key}
-            <button
-              type="button"
-              class="flex size-8 items-center justify-center rounded-lg transition-colors
-                     duration-150 hover:bg-accent {on ? 'bg-accent' : ''}"
-              title={mark.label}
-              aria-pressed={on}
-              onclick={() => folderPrefs.setMark(cwd, mark.key)}
-            >
-              <mark.Icon class="identity-ink size-5" style={identityVar(cwd)} />
             </button>
           {/each}
         </div>

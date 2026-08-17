@@ -49,7 +49,7 @@
     if (!next || busy) return;
     busy = true;
     try {
-      await machineControl(machineId, 'renameSession', [info.sessionId, next, where]);
+      await machineControl(machineId, 'renameSession', [info.sessionId, next, where], undefined, info.harness);
       await loadCatalog(machineId);
       renaming = false;
     } finally {
@@ -60,7 +60,7 @@
   async function remove() {
     busy = true;
     try {
-      await machineControl(machineId, 'deleteSession', [info.sessionId, where]);
+      await machineControl(machineId, 'deleteSession', [info.sessionId, where], undefined, info.harness);
       await loadCatalog(machineId);
       confirmingDelete = false;
     } finally {
@@ -73,6 +73,7 @@
       machineId,
       cwd: info.cwd ?? '',
       sessionId: info.sessionId,
+      harness: info.harness,
     });
     await goto(`/session/${instanceId}`);
   }

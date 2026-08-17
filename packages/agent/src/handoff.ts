@@ -1,310 +1,208 @@
-import type { Envelope, InstanceRow, SendPayload, SpawnPayload } from '@cockpit/core';
-import { COCKPIT_ENV, COCKPIT_HUB_PORT } from '@cockpit/core';
 import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
+import { handoffActions, type HandoffDeps } from './harnesses/handoff-shared';
 
 /**
- * The tools a session uses to hand work to another session.
+ * The tools a Claude session uses to hand work to another session. The bodies
+ * are the shared {@link handoffActions}; this file only wraps them in the
+ * in-process MCP server the claude SDK injects under the name `outpost`.
  *
- * This is the point of the feature: the agent that found the problem is the one
- * that knows what to say about it, so it does the telling. A reader retyping the
- * finding into another session's composer is the thing this exists to avoid.
- *
- * Two properties are load-bearing and set here rather than left to the caller:
- *
- * - `origin: peer` marks the message as another agent's word. The receiving
- *   session weighs it as reported speech instead of as its user's instruction,
- *   which is what stops one repo's agent borrowing authority in another.
- * - `shouldQuery: false` appends it without starting a turn. The target is
- *   usually mid-work; the note waits for it to finish rather than derailing it.
+ * Two properties are load-bearing and set by the shared actions, not here:
+ * `origin: peer` marks the message as another agent's word, and
+ * `shouldQuery: false` appends it without starting a turn.
  */
 
-/** Where the hub answers REST, derived from the websocket url the daemon uses. */
-const hubHttpUrl = (): string => {
-  const ws = process.env[COCKPIT_ENV.hubUrl] ?? `ws://localhost:${COCKPIT_HUB_PORT}/ws`;
-  return ws.replace(/^ws/, 'http').replace(/\/ws$/, '');
-};
-
-/** The last path segment — how the rail names a session, and how the model will. */
-const leafOf = (path: string): string => path.split('/').filter(Boolean).pop() ?? path;
-
-interface Peer {
-  row: InstanceRow;
-  /** The checkout's leaf — what a reader calls it, and what several peers share. */
-  name: string;
-  /** `cockpit#84a24e7b`: the name plus enough id to be unique in one glance. */
-  label: string;
-  /** Which machine it runs on, so two checkouts of one repo are told apart. */
-  host: string;
-}
-
-/** Enough of a UUID to name one session among a fleet's worth. */
-const shortId = (id: string): string => id.slice(0, 8);
-
-/** How long ago the row moved, for a reader choosing between identical names. */
-const ageOf = (at: InstanceRow['updatedAt']): string => {
-  if (!at) return 'age unknown';
-  const ms = Date.now() - new Date(at).getTime();
-  if (!Number.isFinite(ms) || ms < 0) return 'age unknown';
-  const minutes = Math.round(ms / 60_000);
-  if (minutes < 1) return 'active now';
-  if (minutes < 60) return `active ${minutes}m ago`;
-  const hours = Math.round(minutes / 60);
-  return hours < 24 ? `active ${hours}h ago` : `active ${Math.round(hours / 24)}d ago`;
-};
+export type { HandoffDeps };
 
 /**
- * The fleet, read from the hub rather than from this daemon's own sessions:
- * the whole point is reaching a session that is usually somewhere else.
+ * Called when a tool handler returns structured data the Claude SDK would
+ * otherwise drop. The harness intercepts the result text and injects the
+ * structured payload onto the `tool_result` content block it can match.
  */
-async function roster(exceptInstanceId: string): Promise<Peer[]> {
-  const base = hubHttpUrl();
-  const [instancesRes, agentsRes] = await Promise.all([
-    fetch(`${base}/api/instances`, { signal: AbortSignal.timeout(5000) }),
-    // Hostnames are worth one more request: two machines checking out the same
-    // repository is the normal case here, not the exotic one.
-    fetch(`${base}/api/agents`, { signal: AbortSignal.timeout(5000) }).catch(() => undefined),
-  ]);
-  if (!instancesRes.ok) throw new Error(`the hub answered ${instancesRes.status}`);
-  const rows = (await instancesRes.json()) as InstanceRow[];
-  const hosts = new Map<string, string>();
-  if (agentsRes?.ok) {
-    for (const agent of (await agentsRes.json()) as { machineId: string; hostname: string }[]) {
-      hosts.set(agent.machineId, agent.hostname);
-    }
-  }
-  return rows
-    .filter((row) => row.id !== exceptInstanceId && (row.status === 'running' || row.status === 'starting'))
-    .map((row) => {
-      const name = leafOf(row.cwd);
-      return {
-        row,
-        name,
-        label: `${name}#${shortId(row.id)}`,
-        host: hosts.get(row.machineId) ?? row.machineId,
-      };
-    });
-}
-
-/**
- * Resolves what the model typed to one session.
- *
- * Ambiguity is reported rather than guessed: picking one of two sessions in the
- * same repo and saying nothing is how a hand-off lands somewhere the sender
- * never looks again.
- */
-function resolve(peers: Peer[], target: string): Peer {
-  const needle = target.trim().toLowerCase().replace(/^@/, '');
-  const byId = peers.find((peer) => peer.row.id === needle);
-  if (byId) return byId;
-
-  // `cockpit#84a24e7b` and a bare `84a24e7b` are what the listing invites the
-  // model to copy, so both resolve — a short id is unique in any real fleet.
-  const idPart = needle.includes('#') ? needle.split('#').pop() ?? '' : needle;
-  if (idPart.length >= 6) {
-    const byShortId = peers.filter((peer) => peer.row.id.startsWith(idPart));
-    if (byShortId.length === 1) return byShortId[0];
-  }
-
-  const exact = peers.filter((peer) => peer.name.toLowerCase() === needle);
-  if (exact.length === 1) return exact[0];
-
-  const partial = peers.filter((peer) => peer.name.toLowerCase().includes(needle));
-  const candidates = exact.length > 1 ? exact : partial;
-  if (candidates.length === 1) return candidates[0];
-  if (candidates.length === 0) {
-    const known = peers.map((peer) => peer.label).join(', ') || 'none are running';
-    throw new Error(`No running session matches "${target}". Running now: ${known}.`);
-  }
-  // Several sessions in one checkout is the normal case, and the reason a
-  // hand-off lands in the wrong one: name them so the choice can be made on
-  // something other than a coin toss.
-  const listed = candidates
-    .map((peer) => `${peer.label} on ${peer.host} (${ageOf(peer.row.updatedAt)})`)
-    .join(', ');
-  throw new Error(
-    `"${target}" matches ${candidates.length} sessions: ${listed}. ` +
-      `Name one by its short id — and if you cannot tell them apart, ask rather than guess.`
-  );
-}
-
-/** A session id the daemon can also address, so the model gets a name back. */
-const newInstanceId = (): string => crypto.randomUUID();
-
-export interface HandoffDeps {
-  /** The session doing the handing over. */
-  readonly instanceId: string;
-  /** What it is working on, so the receiver knows who is calling. */
-  readonly cwd: string;
-  /** Puts an envelope on the daemon's hub socket. */
-  readonly emit: (envelope: Envelope) => void;
-}
+export type OnStructuredResult = (resultText: string, data: Record<string, unknown>) => void;
 
 /** The tools themselves, separated from the server so they can be exercised directly. */
-export function handoffTools({ instanceId, cwd, emit }: HandoffDeps) {
+export function handoffTools(deps: HandoffDeps, onStructured?: OnStructuredResult) {
+  const actions = handoffActions(deps);
   return [
-      tool(
-        'list_sessions',
-        'List the other sessions running on the fleet, with the directory each is working in. ' +
-          'Use this to find the right session to hand work to.',
-        {},
-        async () => {
-          const peers = await roster(instanceId);
-          if (peers.length === 0) {
-            return { content: [{ type: 'text' as const, text: 'No other sessions are running.' }] };
-          }
-          const lines = peers.map((peer) => {
-            const facts = [
-              peer.host,
-              peer.row.model ?? 'default model',
-              ageOf(peer.row.updatedAt),
-              ...(peer.row.kind === 'scratch' ? ['side quest'] : []),
-            ];
-            return `- ${peer.label} — ${peer.row.cwd} · ${facts.join(' · ')}`;
-          });
-          return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
-        }
-      ),
-      tool(
-        'handoff',
-        'Send a message to another session on the fleet — the one already working in the ' +
-          'repository the work belongs to. It arrives attributed to this session and does NOT ' +
-          'interrupt: the other session picks it up when it finishes its current turn. Write the ' +
-          'message as a brief for another engineer who cannot see your conversation: what you ' +
-          'found, where (file and line), and what you are asking them to do.',
-        {
-          target: z
-            .string()
-            .describe('The session to hand to: its directory name, e.g. "keeboard", or its id.'),
-          message: z
-            .string()
-            .describe('The brief. Include the finding, the paths involved, and the ask.'),
-        },
-        async ({ target, message }) => {
-          const peer = resolve(await roster(instanceId), target);
-          // The attribution goes in the body as well as the origin.
-          //
-          // `origin` is what the live UI and the SDK's trust gates read, but the
-          // stored transcript does not keep it — so a reader who reloads, or a
-          // dashboard that was not watching the moment it arrived, sees another
-          // agent's instructions as if the user had typed them. Said in the text
-          // too, it survives being written to disk and read back, and the
-          // receiving model knows who is asking rather than assuming it was you.
-          const from = leafOf(cwd);
-          const body = `[Hand-off from the ${from} session — another agent, not the user]\n\n${message}`;
-          const payload: SendPayload = {
-            instanceId: peer.row.id,
-            message: {
-              type: 'user',
-              message: { role: 'user', content: body },
-              parent_tool_use_id: null,
-              origin: {
-                kind: 'peer',
-                from: instanceId,
-                name: from,
-                fromSession: instanceId,
-              },
-              shouldQuery: false,
-            },
-          };
-          emit({
-            verb: 'send',
-            machineId: peer.row.machineId,
-            instanceId: peer.row.id,
-            payload,
-          });
-          return {
-            content: [
-              {
-                type: 'text' as const,
-                text:
-                  `Handed to ${peer.label} (${peer.row.cwd} on ${peer.host}). It is queued there and will be ` +
-                  `picked up when that session finishes its current turn — it was not interrupted.`,
-              },
-            ],
-          };
-        }
-      ),
-      tool(
-        'start_session',
-        'Start a NEW Claude Code session on the fleet and give it work. Unlike a subagent, this ' +
-          'is a full session of its own: it gets its own row in the sidebar, its own transcript ' +
-          'the user can open and read, its own model and permission mode, and it survives after ' +
-          'this turn ends. Use it when the user asks you to spin something off, or when work ' +
-          'belongs in a different directory and no session is running there yet. Prefer ' +
-          '`handoff` when a session is ALREADY running in that directory.',
-        {
-          cwd: z
-            .string()
-            .describe(
-              'Absolute directory the new session works in. Often a DIFFERENT project from this ' +
-                'one — if the user named another repository or folder, use that. Defaults to ' +
-                'this session\'s directory only when they did not.'
-            ),
-          prompt: z
-            .string()
-            .describe('The opening instruction. Write it as a full brief: the new session cannot see this conversation.'),
-          sideQuest: z
-            .boolean()
-            .optional()
-            .describe(
-              'A detour from this session\'s work. It appears nested under this session in the ' +
-                'sidebar and shares its directory. Default false.'
-            ),
-          model: z.string().optional().describe('Model id. Omit to let the SDK choose.'),
-        },
-        async ({ cwd: workdir, prompt, sideQuest, model }) => {
-          const id = newInstanceId();
-          const payload: SpawnPayload = {
-            instanceId: id,
-            cwd: workdir,
-            ...(model ? { model } : {}),
-            // No worktree: the user works in their checkout, not in a detached
-            // copy of it. A quest is kept apart by being a quest, not by being
-            // somewhere else on disk.
-            ...(sideQuest ? { scratch: { baseCwd: workdir } } : {}),
-          };
-          // Spawned on this machine: the daemon that runs this tool is the one
-          // with the directory. Reaching another machine's disk is a different
-          // question, and guessing at it would fail on a path that only looks
-          // like it exists here.
-          emit({ verb: 'spawn', machineId: '', instanceId: id, payload });
-          // The opening instruction is a turn, so it goes as a normal send once
-          // the session is up — `shouldQuery` unset, because this one *should* run.
-          const opening: SendPayload = {
-            instanceId: id,
-            message: {
-              type: 'user',
-              message: { role: 'user', content: prompt },
-              parent_tool_use_id: null,
-              origin: { kind: 'peer', from: instanceId, name: leafOf(cwd), fromSession: instanceId },
-            },
-          };
-          emit({ verb: 'send', machineId: '', instanceId: id, payload: opening });
-          return {
-            content: [
-              {
-                type: 'text' as const,
-                text:
-                  `Started ${leafOf(workdir)}${sideQuest ? ' as a side quest' : ''} in ${workdir} ` +
-                  `(id: ${id}). It is in the sidebar now and the user can open its transcript. ` +
-                  `Hand it more work later with handoff("${id}", ...).`,
-              },
-            ],
-          };
-        }
-      ),
+    tool(
+      'list_sessions',
+      'List the other sessions running on the fleet, with the directory each is working in. ' +
+        'The listing shows where each session works, not what it is currently doing, how busy it ' +
+        'is, or how likely it is to pick up a handoff — and recency is not an ownership signal. ' +
+        'Use it to find a session that already owns the work, or to name a delegate.',
+      {},
+      async () => ({ content: [{ type: 'text' as const, text: await actions.listSessions() }] })
+    ),
+    tool(
+      'handoff',
+      'Send a message to another session on the fleet — to continue one of your own ' +
+        'delegates, or to brief a session that already owns the work. An idle target wakes ' +
+        'and works on it immediately; a busy target finishes its current turn first, then ' +
+        'reads everything queued in one wake turn. Write the message as a brief ' +
+        'for another engineer who cannot see your conversation: what you found, where (file ' +
+        'and line), and what you are asking them to do. For new standalone work, use delegate instead.',
+      {
+        target: z
+          .string()
+          .describe('The session to hand to: its directory name, e.g. "keeboard", or its id.'),
+        message: z
+          .string()
+          .describe('The brief. Include the finding, the paths involved, and the ask.'),
+        urgent: z
+          .boolean()
+          .optional()
+          .describe(
+            'Force delivery to one of YOUR delegates: a busy claude delegate reads it mid-turn; ' +
+              'other harnesses interrupt their turn to read it now. Only valid toward your own delegates.'
+          ),
+      },
+      async ({ target, message, urgent }) => ({
+        content: [{ type: 'text' as const, text: await actions.handoff(target, message, urgent) }],
+      })
+    ),
+    tool(
+      'start_session',
+      'Start a NEW Claude Code session on the fleet and give it work. Unlike a subagent, this ' +
+        'is a full session of its own: it gets its own row in the sidebar, its own transcript ' +
+        'the user can open and read, its own model and permission mode, and it survives after ' +
+        'this turn ends. Use it when the user asks you to spin something off, or when work ' +
+        'belongs in a different directory and no session is running there yet. Prefer ' +
+        '`handoff` when a session is ALREADY running in that directory.',
+      {
+        cwd: z
+          .string()
+          .describe(
+            'Absolute directory the new session works in. Often a DIFFERENT project from this ' +
+              'one — if the user named another repository or folder, use that. Defaults to ' +
+              'this session\'s directory only when they did not.'
+          ),
+        prompt: z
+          .string()
+          .describe('The opening instruction. Write it as a full brief: the new session cannot see this conversation.'),
+        sideQuest: z
+          .boolean()
+          .optional()
+          .describe(
+            'A detour from this session\'s work. It appears nested under this session in the ' +
+              'sidebar and shares its directory. Default false.'
+          ),
+        model: z.string().optional().describe('Model id. Omit to let the SDK choose.'),
+      },
+      async ({ cwd, prompt, sideQuest, model }) => {
+        const result = await actions.startSession(cwd, prompt, sideQuest, model);
+        const sc = { instanceId: result.id, title: result.title };
+        onStructured?.(result.text, sc);
+        return {
+          content: [{ type: 'text' as const, text: result.text }],
+          structuredContent: sc,
+        };
+      }
+    ),
+    tool(
+      'delegate',
+      'Run a task as a SUB-AGENT: a new temporary fleet session nested under this one. It works ' +
+        'autonomously in its own transcript the user can watch, and reports back to this session ' +
+        'automatically when each of its turns completes — no report protocol to follow. Guide it ' +
+        'or send follow-ups with handoff. Prefer this over start_session when the work is a ' +
+        'delegation that must report back, and over handoff for new standalone work, even in ' +
+        'another repository (set cwd there).',
+      {
+        prompt: z
+          .string()
+          .describe('The full brief. The delegate cannot see this conversation.'),
+        harness: z
+          .enum(['claude', 'opencode', 'pi'])
+          .optional()
+          .describe(
+            "Which runtime runs the delegate. 'opencode' with model 'opencode-go/deepseek-v4-pro' " +
+              'delegates to DeepSeek. Default claude.'
+          ),
+        model: z
+          .string()
+          .optional()
+          .describe(
+            'Model id for the harness, e.g. opencode-go/deepseek-v4-flash. Omit for the harness default.'
+          ),
+        cwd: z.string().optional().describe("Defaults to this session's directory."),
+        skills: z
+          .array(z.string())
+          .optional()
+          .describe(
+            'Skill names to load natively into the delegate session. Each skill is invoked ' +
+              'via the harness\'s own slash-command mechanism before the prompt — the same as ' +
+              'if the user typed /skill-name in that session. Works cross-harness.'
+          ),
+      },
+      async ({ prompt, harness, model, cwd, skills }) => {
+        const result = await actions.delegate(prompt, { cwd, harness, model, skills });
+        const sc = { delegateInstanceId: result.id, title: result.title };
+        onStructured?.(result.text, sc);
+        return {
+          content: [{ type: 'text' as const, text: result.text }],
+          structuredContent: sc,
+        };
+      }
+    ),
+    tool(
+      'stop_delegate',
+      'Stop one of YOUR delegates (a session you spawned with delegate). Only your own delegates ' +
+        'can be stopped. The transcript survives.',
+      {
+        target: z.string().describe('The delegate to stop: its directory name, e.g. "keeboard", or its id.'),
+      },
+      async ({ target }) => ({
+        content: [{ type: 'text' as const, text: await actions.stopDelegate(target) }],
+      })
+    ),
+    tool(
+      'interrupt_delegate',
+      'Interrupt one of YOUR delegates mid-turn without ending it — the fleet\'s pause. It keeps ' +
+        'its state; resume it with handoff.',
+      {
+        target: z.string().describe('The delegate to interrupt: its directory name, e.g. "keeboard", or its id.'),
+      },
+      async ({ target }) => ({
+        content: [{ type: 'text' as const, text: await actions.interruptDelegate(target) }],
+      })
+    ),
+    tool(
+      'answer_delegate',
+      'Answer an ask your delegate parked and routed to you. Answers are keyed by the EXACT ' +
+        'question text and the value is the chosen option label — copy them from the ' +
+        '"[delegate-ask ...]" message the delegate sent you. Pass deny=true to refuse the ask ' +
+        'instead. Leave answers empty and deny false to allow the ask unchanged.',
+      {
+        target: z.string().describe('The delegate to answer: its directory name, e.g. "keeboard", or its id.'),
+        requestId: z.string().describe('The requestId from the delegate\'s "[delegate-ask ...]" line.'),
+        answers: z
+          .record(z.string())
+          .optional()
+          .describe('Exact question text → chosen option label, for each question asked.'),
+        deny: z.boolean().optional().describe('Refuse the ask instead of answering it. Default false.'),
+      },
+      async ({ target, requestId, answers, deny }) => ({
+        content: [
+          {
+            type: 'text' as const,
+            text: await actions.answerDelegate(target, requestId, answers, deny),
+          },
+        ],
+      })
+    ),
   ];
 }
 
-export function handoffServer(deps: HandoffDeps) {
+export function handoffServer(deps: HandoffDeps, onStructured?: OnStructuredResult) {
   return createSdkMcpServer({
     name: 'outpost',
     version: '1.0.0',
     instructions:
-      'Other Claude Code sessions running on this fleet, each with its own repository and its ' +
-      'own context. Use these when work belongs to a repository this session is not in: hand it ' +
-      'to the session already working there instead of changing files outside your own tree.',
-    tools: handoffTools(deps),
+      'A repository may have several sessions; the listing shows where each works, not what it ' +
+      'is doing. Hand work to an existing session only to continue work it already owns. For new ' +
+      'standalone work in another repository, spawn a delegate with cwd set there instead. ' +
+      'An idle handoff target wakes and works immediately; a busy one finishes its current ' +
+      'turn, then reads everything queued in one wake turn.',
+    tools: handoffTools(deps, onStructured),
   });
 }

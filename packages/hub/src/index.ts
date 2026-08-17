@@ -12,7 +12,11 @@ const main = Effect.gen(function* () {
   const db = yield* Db;
   const pending = yield* Pending;
   const telegram = createTelegramBridge({ registry, db, pending }) ?? undefined;
-  createServer({ registry, db, pending, telegram }).listen(HUB_PORT);
+  // `idleTimeout` past Bun's 10s default: a skill refresh re-downloads and
+  // hashes the whole skill before it says anything (impeccable is 3.2MB /
+  // 147 files), and the socket is silent that whole time. 120s clears the
+  // resolver's own 60s fetch timeout with room for the hash.
+  createServer({ registry, db, pending, telegram }).listen({ port: HUB_PORT, idleTimeout: 120 });
   yield* Effect.log(`cockpit hub ${HUB_VERSION} listening on :${HUB_PORT}`);
   advertise(HUB_PORT);
   // After `listen`, so the first ask the bridge can be handed is one this hub

@@ -1,15 +1,20 @@
-import type { AuthState, BuildInfo, Envelope, ToolStatus } from '@cockpit/core';
+import type { AuthState, BuildInfo, Envelope, HarnessReport, ToolStatus } from '@cockpit/core';
 import { COCKPIT_ENV, COCKPIT_HUB_PORT } from '@cockpit/core';
+import { fetchClaudeLimits } from '@cockpit/core/usage/limits';
 import { Data, Duration, Effect, Fiber, Schedule } from 'effect';
 import { arch, hostname, platform } from 'node:os';
-import { probeAuth } from './auth';
 import { buildInfo } from './build';
+import { convergeDeniedTools, DENIED_WEB_TOOLS } from './denied-tools';
 import { machineId } from './machine-id';
 import { resumableSessions, SessionSupervisor } from './session';
 import { probeTools } from './tools';
+import { harnesses } from './harnesses';
+import { UsageScanner } from './usage/scanner';
 
 const DEFAULT_HUB_URL = `ws://localhost:${COCKPIT_HUB_PORT}/ws`;
 const HEARTBEAT_INTERVAL = Duration.seconds(15);
+const USAGE_INTERVAL = Duration.seconds(60);
+const USAGE_FULL_REBUILD_MS = 30 * 60 * 1000;
 
 
 /** How the hub identifies this machine in its registry. */
@@ -34,21 +39,24 @@ interface MachineIdentity {
 export interface RegisterPayload extends MachineIdentity {
   instances: string[];
   /**
-   * The SDK sessions this machine could resume, so the rows the daemon no
+   * The sessions this machine could resume, so the rows the daemon no
    * longer carries settle as sleeping or as lost rather than all alike. Absent
    * when the catalog could not be read.
    */
   resumable?: string[];
   /**
+   * What each harness adapter on this machine can do, and whether it is
+   * installed and authenticated — the rail's per-harness word, and what gates
+   * the fleet syncs and spawn forms.
+   */
+  harnesses?: HarnessReport[];
+  /**
    * What the machine has of the tool catalog (NEW.md §10), so the hub can send
-   * an install for whatever its policy requires and this machine lacks. Absent
-   * from a register that did not probe.
+   * an install for whatever its policy requires and this machine lacks.
    */
   tools?: ToolStatus[];
   /**
-   * The cockpit this daemon is running (NEW.md §12), so the hub can say which
-   * machines are behind it. Absent from the re-announce, which is about
-   * credentials and has nothing new to say about the build.
+   * The cockpit this daemon is running (NEW.md §12), as it reported at register.
    */
   build?: BuildInfo;
 }
@@ -99,33 +107,34 @@ const closed = (socket: WebSocket, url: string) =>
     return Effect.sync(() => socket.removeEventListener('close', onClose));
   });
 
-const attach = (supervisor: SessionSupervisor, identity: MachineIdentity, url: string) =>
+const attach = (
+  scanner: UsageScanner,
+  supervisor: SessionSupervisor,
+  identity: MachineIdentity,
+  url: string
+) =>
   Effect.gen(function* () {
     const socket = yield* connection(url);
     const payload: RegisterPayload = {
       ...identity,
       instances: supervisor.instanceIds,
       resumable: yield* Effect.promise(() => resumableSessions()),
+      harnesses: yield* Effect.promise(() =>
+        Promise.all(harnesses().map((adapter) => adapter.detect()))
+      ),
       tools: yield* Effect.promise(() => probeTools()),
       build: yield* Effect.promise(() => buildInfo()),
     };
     send(socket, { verb: 'register', machineId: identity.machineId, payload });
     yield* Effect.logInfo(`registered with ${url}`);
 
-    // Says this machine over again, with whatever it can do about credentials
-    // now. An unlock changes the answer, and the fleet has to hear it or the
-    // rail keeps reporting a machine that has just been fixed as broken.
-    //
-    // No tool report rides along: an install answers with its own status on the
-    // `control_result` the hub is already waiting for, and a stale report here
-    // would have the hub install a tool it has just watched arrive.
     supervisor.reannounce = () => {
       if (socket.readyState !== WebSocket.OPEN) return;
-      void probeAuth().then((auth) => {
+      void Promise.all(harnesses().map((adapter) => adapter.detect())).then((harnesses) => {
         send(socket, {
           verb: 'register',
           machineId: identity.machineId,
-          payload: { ...identity, auth, instances: supervisor.instanceIds },
+          payload: { ...identity, auth: harnesses[0]?.auth ?? identity.auth, harnesses, instances: supervisor.instanceIds },
         });
       });
     };
@@ -139,11 +148,15 @@ const attach = (supervisor: SessionSupervisor, identity: MachineIdentity, url: s
 
     supervisor.sink = (frame) => {
       if (socket.readyState !== WebSocket.OPEN) return;
+      // Every frame a session sinks is instance-scoped. `usage` is the one
+      // FramePayload variant the hub originates for dashboards, so it never
+      // arrives here — narrowing on the field keeps that asymmetry honest.
+      if (!('instanceId' in frame)) return;
       send(socket, {
         verb: 'frames',
         machineId: identity.machineId,
         instanceId: frame.instanceId,
-        requestId: frame.kind === 'sdk' ? undefined : frame.requestId,
+        requestId: 'requestId' in frame ? frame.requestId : undefined,
         payload: frame,
       });
     };
@@ -161,6 +174,35 @@ const attach = (supervisor: SessionSupervisor, identity: MachineIdentity, url: s
           })
         ),
         Schedule.spaced(HEARTBEAT_INTERVAL)
+      )
+    );
+
+    // Usage, cost & limits (USAGE-SPEC.md §5): scan the machine's transcripts
+    // and opencode DB, then report absolute bucket totals with the live limit
+    // windows. A scan failure must never kill the daemon — it hosts the user's
+    // live sessions — so the whole tick is caught and logged.
+    yield* Effect.forkScoped(
+      Effect.repeat(
+        Effect.gen(function* () {
+          const rebuilt = scanner.dueForFullRebuild(USAGE_FULL_REBUILD_MS);
+          yield* Effect.promise(() =>
+            rebuilt ? scanner.fullRebuild() : scanner.incremental()
+          );
+          const buckets = scanner.reportBuckets(Date.now());
+          const limits = yield* Effect.promise(() => fetchClaudeLimits());
+          send(socket, {
+            verb: 'usage',
+            machineId: identity.machineId,
+            payload: { buckets, limits },
+          });
+        }).pipe(
+          Effect.catchDefect((error) =>
+            Effect.logWarning(
+              `usage scan failed: ${error instanceof Error ? error.message : String(error)}`
+            )
+          )
+        ),
+        Schedule.spaced(USAGE_INTERVAL)
       )
     );
 
@@ -189,11 +231,27 @@ const attach = (supervisor: SessionSupervisor, identity: MachineIdentity, url: s
 export const startDaemon = (auth?: AuthState) =>
   Effect.gen(function* () {
     const url = process.env[COCKPIT_ENV.hubUrl] ?? DEFAULT_HUB_URL;
+    // The claude harness's auth is the machine's headline word — the original
+    // rail still reads it — while `register` carries every harness's own.
+    const claude = harnesses().find((adapter) => adapter.kind === 'claude');
+    const machineIdValue = yield* Effect.promise(() => machineId());
+    // Child processes — the opencode server and its plugins most of all — read
+    // the machine's identity and the hub off the environment they inherit.
+    process.env[COCKPIT_ENV.machineId] = machineIdValue;
+    process.env[COCKPIT_ENV.hubUrl] = url;
+    // The sessions this daemon spawns carry the deny list in their own options;
+    // the settings file is how the `claude` the user starts by hand gets it too.
+    const denied = yield* Effect.promise(() => convergeDeniedTools());
+    if (denied.state === 'applied') {
+      yield* Effect.logInfo(`denied ${DENIED_WEB_TOOLS.join(', ')} in ~/.claude/settings.json`);
+    } else if (denied.state === 'failed') {
+      yield* Effect.logWarning(denied.detail);
+    }
     const identity: MachineIdentity = {
-      machineId: yield* Effect.promise(() => machineId()),
+      machineId: machineIdValue,
       hostname: hostname(),
       os: `${platform()}-${arch()}`,
-      auth: auth ?? (yield* Effect.promise(() => probeAuth())),
+      auth: auth ?? (yield* Effect.promise(() => (claude ? claude.detect() : Promise.resolve({ auth: 'unauthenticated' as AuthState })).then((r) => r.auth))),
     };
     if (identity.auth !== 'authenticated') {
       yield* Effect.logWarning(`Claude Code credentials are ${identity.auth} on this machine`);
@@ -208,8 +266,12 @@ export const startDaemon = (auth?: AuthState) =>
         )
     );
 
+    // The usage scanner outlives connections too: its dedup set is rebuilt only
+    // on start (USAGE-SPEC.md §5.1), so a reconnect must not reset it.
+    const scanner = yield* Effect.promise(() => UsageScanner.load());
+
     yield* Effect.logInfo(`cockpit agent ${identity.machineId} connecting to ${url}`);
-    yield* Effect.scoped(attach(supervisor, identity, url)).pipe(
+    yield* Effect.scoped(attach(scanner, supervisor, identity, url)).pipe(
       Effect.tapError((error) => Effect.logWarning(`${error.reason} — reconnecting`)),
       Effect.retry(reconnect)
     );

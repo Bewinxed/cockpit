@@ -105,20 +105,23 @@
       <IconCompact class="size-3.5 animate-pulse" />
       <span>Compacting</span>
     {:else}
+      <!-- Glyph and number, no rail. A 28px bar under a text field is too short
+           to read as a quantity and too loud to ignore; the percentage already
+           is the quantity, and the shape of the window belongs in the popover
+           where it has room. -->
+      <IconWindow
+        class="size-3.5 shrink-0"
+        role="img"
+        aria-hidden={usage ? 'true' : 'false'}
+        aria-label={usage ? undefined : 'Context usage unknown'}
+      />
       <span
-        class="relative h-1 w-7 overflow-hidden rounded-full bg-muted"
         role="progressbar"
         aria-valuenow={shown}
         aria-valuemin={0}
         aria-valuemax={100}
+        aria-label="Context window used">{usage ? `${shown}%` : '—'}</span
       >
-        <span
-          class="absolute inset-y-0 left-0 rounded-full {FILL[band]}
-                 transition-[width,background-color] duration-500 ease-out"
-          style="width: {Math.max(shown, usage ? 2 : 0)}%"
-        ></span>
-      </span>
-      <span>{usage ? `${shown}%` : '—'}</span>
       {#if recentlyCompacted}
         <IconCompact class="size-3 text-muted-foreground" />
       {/if}

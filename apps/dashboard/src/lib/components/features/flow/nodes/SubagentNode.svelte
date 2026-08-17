@@ -1,10 +1,11 @@
 <script lang="ts">
-  import { IconSkill, IconSpinner, IconSuccess, IconError, IconChevronRight, IconChevronDown, IconLayers, IconTools } from '$lib/icons';
+  import { IconSkill, IconSpinner, IconSuccess, IconError, IconChevronRight, IconChevronDown, IconLayers } from '$lib/icons';
   import { Handle, Position, useStore, useSvelteFlow } from '@xyflow/svelte';
   import * as Collapsible from '$lib/components/ui/collapsible';
   import type { Message } from '$lib/cockpit/types';
   import type { SubagentState } from '$lib/utils/flow-types';
   import { getToolGlance, getToolStatus } from '$lib/utils/tool-display';
+  import { toolFamily } from '../../tool-cards/descriptors';
   import { modelLabel } from '$lib/cockpit/models.svelte';
   import {
     ELAPSED_TIME_UPDATE_INTERVAL,
@@ -354,8 +355,11 @@
               <Collapsible.Content>
                 <div class="border-t border-border/50 pt-2 space-y-1">
                   {#each toolMessages as tool (tool.metadata?.toolId)}
+                    {@const family = toolFamily(tool.metadata?.toolName)}
                     <div class="flex items-center gap-2 text-xs py-1 px-2 rounded bg-muted/50">
-                      <IconTools class="h-3 w-3 {getToolStatusColor(tool)} shrink-0" />
+                      <!-- The family's face, but the status's ink: this row has
+                           nowhere else to say how the call went. -->
+                      <family.icon class="h-3 w-3 {getToolStatusColor(tool)} shrink-0" />
                       <span class="font-medium">{tool.metadata?.toolName || 'Tool'}</span>
                       <span class="text-muted-foreground truncate">
                         {getToolGlance(tool.metadata?.toolInput as Record<string, unknown>) || ''}

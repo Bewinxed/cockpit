@@ -85,6 +85,26 @@ export const workingSet = {
   },
 
   /**
+   * Replaces the order in place, for a drag reorder of the strip. `ids` names
+   * the tabs in their new left-to-right order; anything the list does not name
+   * keeps its place at the tail, so a reorder of the visible tabs never drops
+   * the overflow ones out of the set.
+   */
+  reorder(ids: string[]): void {
+    const known = new Map(visits.map((visit) => [visit.id, visit]));
+    const reordered: Visit[] = [];
+    for (const id of ids) {
+      const visit = known.get(id);
+      if (visit) reordered.push(visit);
+    }
+    for (const visit of visits) {
+      if (!ids.includes(visit.id)) reordered.push(visit);
+    }
+    visits.splice(0, visits.length, ...reordered);
+    save();
+  },
+
+  /**
    * The next conversation along the strip, `null` when there is nowhere to go.
    *
    * Walks tab order, so `[` and `]` and a swipe move left and right exactly as

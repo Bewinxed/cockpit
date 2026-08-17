@@ -15,7 +15,7 @@ import type {
 } from '@cockpit/core';
 import type { SubagentState } from '$lib/utils/flow-types';
 import { getToolGlance } from '$lib/utils/tool-display';
-import type { Message, MessageMetadata, MessageType } from './types';
+import type { DelegateEvent, JsonValue, Message, MessageMetadata, MessageType } from './types';
 import { newId } from './id';
 
 type AssistantBlock = SDKAssistantMessage['message']['content'][number];
@@ -25,6 +25,7 @@ export interface ToolResult {
   toolId: string;
   result: string;
   isError: boolean;
+  structuredContent?: Record<string, unknown>;
 }
 
 /** The tool a session is running right now — the fleet view's glance line. */
@@ -74,6 +75,29 @@ export interface FrameMapping {
   echo?: { uuid: string; text: string };
   /** The tool that just went in flight on the main loop. */
   currentTool?: ToolGlance;
+  /**
+   * Which kind of content block the main loop just opened, from the partials —
+   * the only evidence there is of what the model is doing *while* it does it.
+   * A `thinking` start covers the redacted variant too: it streams no deltas,
+   * and a block whose reasoning is withheld is still a block being reasoned in.
+   */
+  blockStart?: 'thinking' | 'text' | 'tool';
+  /** Reasoning the open thinking block just streamed. */
+  thinkingDelta?: string;
+  /**
+   * The SDK signing the open thinking block — its own word that the reasoning
+   * is wrapping up, rather than a guess made from how long it has been going.
+   */
+  thinkingClosing?: boolean;
+  /** The open block closed. */
+  blockStop?: boolean;
+  /**
+   * A tool call the model has started writing, before any frame carries its
+   * input. The glance is empty on purpose: the arguments are still arriving a
+   * token at a time, and the full assistant frame supersedes this with the real
+   * one.
+   */
+  toolStarting?: ToolGlance;
   /** Text to append to the instance's streaming buffer. */
   delta: string;
   /** The streaming buffer has been superseded by a final message. */
@@ -100,6 +124,12 @@ export interface FrameMapping {
    * subtype claims. The SDK's own flag — not a reading of what was said.
    */
   failedTurn?: boolean;
+  /**
+   * The cumulative cost a `result` frame reported, in dollars. Carried on every
+   * result regardless of subtype, because only error results push a transcript
+   * line and the session needs the number from a successful turn too.
+   */
+  cost?: number;
 }
 
 /** `task_updated`'s wire statuses, in the vocabulary the branch card renders. */
@@ -125,6 +155,8 @@ const QUIET = new Set([
   'background_tasks_changed',
   'files_persisted',
   'rate_limit_event',
+  // MCP server auth plumbing — the MCP status panel shows failures.
+  'auth_status',
 ]);
 
 /**
@@ -143,11 +175,77 @@ const modelFallback = (sdk: {
 };
 
 
+/**
+ * What a partial says about the phase of the turn, beyond the text delta that
+ * `NeutralStreamMessage` names — which is the whole of what the tail knows
+ * about a session that is reasoning rather than writing.
+ *
+ * The evidence is already on the wire: the harness forwards its own frame whole
+ * (`toNeutral`, packages/agent), so a block boundary and a thinking delta are
+ * both there — the neutral type simply does not list them yet. So they are read
+ * by shape rather than by narrowing a union they are not in, the way
+ * `model_fallback` is above. The names are the SDK's own, checked against
+ * 0.3.220's `BetaRawMessageStreamEvent`: a start event carries `content_block`
+ * (not `block`), and the deltas are `thinking_delta` and `signature_delta`.
+ *
+ * `agentId` is the Task call a subagent's partials arrive under. A branch card
+ * carries its own status, so the phase reported here is the main loop's alone.
+ */
+export function streamPhase(
+  event: { type: string; content_block?: unknown; delta?: unknown },
+  agentId?: string
+): Partial<FrameMapping> | null {
+  if (agentId) return null;
+  if (event.type === 'content_block_stop') return { blockStop: true };
+
+  if (event.type === 'content_block_start') {
+    if (typeof event.content_block !== 'object' || event.content_block === null) return null;
+    const block = event.content_block as { type?: unknown; id?: unknown; name?: unknown };
+    // Redacted reasoning streams no deltas at all, and is still reasoning.
+    if (block.type === 'thinking' || block.type === 'redacted_thinking') {
+      return { blockStart: 'thinking' };
+    }
+    if (block.type === 'text') return { blockStart: 'text' };
+    if (block.type === 'tool_use' && typeof block.id === 'string' && typeof block.name === 'string') {
+      return {
+        blockStart: 'tool',
+        toolStarting: { toolId: block.id, name: block.name, glance: '' },
+      };
+    }
+    return null;
+  }
+
+  if (event.type !== 'content_block_delta') return null;
+  if (typeof event.delta !== 'object' || event.delta === null) return null;
+  const delta = event.delta as { type?: unknown; thinking?: unknown };
+  if (delta.type === 'thinking_delta' && typeof delta.thinking === 'string') {
+    return { thinkingDelta: delta.thinking };
+  }
+  if (delta.type === 'signature_delta') return { thinkingClosing: true };
+  return null;
+}
+
 /** The fleet tools whose calls are shown as hand-offs rather than tool cards. */
-const HANDOFF_TOOLS: Record<string, 'handoff' | 'start'> = {
+const HANDOFF_TOOLS: Record<string, 'handoff' | 'start' | 'delegate'> = {
   mcp__outpost__handoff: 'handoff',
   mcp__outpost__start_session: 'start',
+  mcp__outpost__delegate: 'delegate',
+  // pi registers the same tools under bare names (no MCP namespace).
+  handoff: 'handoff',
+  start_session: 'start',
+  delegate: 'delegate',
 };
+
+/**
+ * Whether a parked ask was routed to its parent session rather than to the
+ * user's attention queue. The hub tags such a frame's payload with
+ * `routedTo: 'parent'`; the attention queue reads this back to keep it out
+ * while the delegate's own transcript still shows the ask. Structural so it
+ * needs no store type and stays testable on its own.
+ */
+export function routedToParent(request: { routedTo?: string }): boolean {
+  return request.routedTo === 'parent';
+}
 
 const empty = (): FrameMapping => ({
   messages: [],
@@ -270,6 +368,13 @@ function systemLine(
   return { ...base, type, content, metadata };
 }
 
+/** A task summary folded into the ~200-char line metadata. */
+const TASK_SUMMARY_LIMIT = 200;
+function truncateSummary(summary: string | undefined): string {
+  if (!summary) return '';
+  return summary.length > TASK_SUMMARY_LIMIT ? `${summary.slice(0, TASK_SUMMARY_LIMIT)}…` : summary;
+}
+
 /** What one SDK frame does to an instance's UI state. */
 export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
   const mapping = empty();
@@ -325,6 +430,43 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
       // will render it — and it must not render as the reader's own words.
       const peer = 'origin' in sdk && sdk.origin?.kind === 'peer' ? sdk.origin : null;
       if (peer && text) {
+        // A delegate's routed ask is peer-origin too, but it is plumbing rather
+        // than speech: the marker carries the delegate's ids, and the body is
+        // the ask itself. Using the marker's instance (not `peer.fromSession`)
+        // keeps the live and stored copies carrying identical metadata.
+        const ask = delegateAsk(text);
+        if (ask) {
+          mapping.messages.push({
+            ...base,
+            type: 'user.delegate_ask',
+            content: ask.body,
+            metadata: {
+              peerFrom: peer.from,
+              peerName: peer.name,
+              peerSession: ask.instance,
+              askRequestId: ask.request,
+              askLabel: ask.label,
+            },
+          });
+          break;
+        }
+        // A delegate's auto-report carries its own header; the body alone is
+        // what the reader (and the card's Report section) should see.
+        const report = delegateReport(text);
+        if (report) {
+          mapping.messages.push({
+            ...base,
+            type: 'user.peer',
+            content: report.body,
+            metadata: {
+              peerFrom: peer.from,
+              peerName: `${report.name}#${report.short}`,
+              peerSession: peer.fromSession ?? report.short,
+              reportKind: report.failed ? 'failed' : 'report',
+            },
+          });
+          break;
+        }
         mapping.messages.push({
           ...base,
           type: 'user.peer',
@@ -351,6 +493,7 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
           toolId: block.tool_use_id,
           result: resultText(block.content),
           isError: block.is_error === true,
+          structuredContent: block.structuredContent,
         });
       }
       break;
@@ -363,6 +506,8 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
       } else if (event.type === 'message_stop') {
         mapping.clearsStream = true;
       }
+      const phase = streamPhase(event, agentId);
+      if (phase) Object.assign(mapping, phase);
       break;
     }
 
@@ -375,6 +520,10 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
       // real one. Reading only the subtype makes that a normal turn, which is
       // what left the failure to be recognised by its prose.
       mapping.failedTurn = sdk.is_error === true;
+      // Cost rides every result, not just the error line — a successful turn
+      // is the common one, and it reports cost too. `total_cost_usd` is
+      // cumulative, so the session overwrites rather than accumulates.
+      mapping.cost = sdk.total_cost_usd;
       if (sdk.subtype === 'success') break;
       mapping.messages.push(
         systemLine(base, 'result.error', sdk.subtype.replace(/_/g, ' '), {
@@ -421,54 +570,75 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
           mapping.commands = sdk.commands;
           break;
         case 'status':
-          mapping.status = sdk.status;
+          mapping.status = sdk.status as SDKStatus | undefined;
           if (sdk.compact_result) {
             mapping.compaction = { result: sdk.compact_result, error: sdk.compact_error };
           }
           break;
         case 'task_started':
-          mapping.branch = {
-            toolUseId: sdk.tool_use_id,
-            taskId: sdk.task_id,
-            subagentType: sdk.subagent_type,
-            description: sdk.description,
-            status: 'running',
-          };
+          // `subagent_type` is what separates a real Task/Agent subagent's frames
+          // from a plain tool task's: the SDK sets it only for the former
+          // (measured 0.3.220 — `local_bash` carries none, `local_agent` carries
+          // 'general-purpose'). A plain command's `task_started` must not mint a
+          // branch: its `tool.use`/`tool.result` pair already renders the call.
+          if (sdk.subagent_type) {
+            mapping.branch = {
+              toolUseId: sdk.tool_use_id,
+              taskId: sdk.task_id,
+              subagentType: sdk.subagent_type,
+              description: sdk.description,
+              status: 'running',
+            };
+          }
           break;
         case 'task_progress':
-          mapping.branch = {
-            toolUseId: sdk.tool_use_id,
-            taskId: sdk.task_id,
-            subagentType: sdk.subagent_type,
-            description: sdk.description,
-            status: 'running',
-            summary: sdk.summary,
-            lastToolName: sdk.last_tool_name,
-          };
+          if (sdk.subagent_type) {
+            mapping.branch = {
+              toolUseId: sdk.tool_use_id,
+              taskId: sdk.task_id,
+              subagentType: sdk.subagent_type,
+              description: sdk.description,
+              status: 'running',
+              summary: sdk.summary,
+              lastToolName: sdk.last_tool_name,
+            };
+          }
           break;
-        case 'task_notification':
+        case 'task_notification': {
+          const done = sdk.status === 'completed';
+          // `task_notification` carries no `subagent_type` at all (the SDK type
+          // has none), so a plain tool task and a real subagent look identical
+          // here — only a branch that already exists tells them apart, which is
+          // `applyBranchEvent`'s call. The branch event still updates a real
+          // subagent's report; the compact line keeps a plain task's completion
+          // visible without a wall of logs.
           mapping.branch = {
             toolUseId: sdk.tool_use_id,
             taskId: sdk.task_id,
-            status: sdk.status === 'completed' ? 'complete' : 'error',
+            status: done ? 'complete' : 'error',
             summary: sdk.summary,
             result: sdk.summary,
           };
+          // No system message — the branch card already shows completion/error
+          // status. A separate "task done" line below the card is pure noise.
           break;
-        case 'task_updated':
+        }
+        case 'task_updated': {
+          const patch = sdk.patch;
           mapping.branch = {
             taskId: sdk.task_id,
-            description: sdk.patch.description,
-            status: sdk.patch.status ? TASK_STATUS[sdk.patch.status] : undefined,
-            summary: sdk.patch.error,
+            description: patch?.description,
+            status: patch?.status ? TASK_STATUS[patch.status] : undefined,
+            summary: patch?.error,
           };
           break;
+        }
         case 'compact_boundary':
           mapping.messages.push(
             systemLine(base, 'system.compact_boundary', 'Context compacted', {
               subtype: 'compact_boundary',
-              preTokens: sdk.compact_metadata.pre_tokens,
-              trigger: sdk.compact_metadata.trigger,
+              preTokens: sdk.compact_metadata?.pre_tokens,
+              trigger: sdk.compact_metadata?.trigger,
             })
           );
           break;
@@ -486,7 +656,11 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
         default:
           if (!QUIET.has(sdk.subtype)) {
             mapping.messages.push(
-              systemLine(base, `system.${sdk.subtype}`, sdk.subtype.replace(/_/g, ' '), {
+              // A subtype this switch does not name still says what it came to
+              // say: harnesses put their own words in `content` (a provider's
+              // retry notice, a quota message), and losing them here is how a
+              // real error once hid behind a generic label.
+              systemLine(base, `system.${sdk.subtype}`, sdk.content ?? sdk.subtype.replace(/_/g, ' '), {
                 subtype: sdk.subtype,
               })
             );
@@ -499,13 +673,6 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
       if (!QUIET.has(sdk.type)) {
         mapping.messages.push(systemLine(base, `system.${sdk.type}`, sdk.type.replace(/_/g, ' ')));
       }
-  }
-
-  // A subagent's own text streams under its branch; letting it through here
-  // would repaint the main loop's buffer with a nested agent's sentences.
-  if (agentId) {
-    mapping.delta = '';
-    mapping.clearsStream = false;
   }
 
   return mapping;
@@ -532,6 +699,7 @@ export function branchFor(
     status: 'starting',
     startedAt: new Date(),
     messages: [],
+    streaming: '',
   };
   return branches[toolUseId];
 }
@@ -548,7 +716,17 @@ export function applyBranchEvent(
     Object.values(branches).find((branch) => branch.taskId === event.taskId)?.toolUseId;
   if (!key) return;
 
+  // A terminal-status event that names no existing branch and carries no real
+  // `subagent_type` is a plain tool task's `task_notification` (a foreground or
+  // background Bash). Minting a branch for it is the bug that turned a command
+  // into a generic "subagent" card — its tool card already tells that story, so
+  // nothing is created here.
+  const existing = branches[key];
+  const terminal = event.status === 'complete' || event.status === 'error';
+  if (!existing && !event.subagentType && terminal) return;
+
   const branch = branchFor(branches, instanceId, key);
+  branch.lastEventAt = new Date();
   if (event.taskId) branch.taskId = event.taskId;
   if (event.subagentType) branch.subagentType = event.subagentType;
   if (event.description) branch.description = event.description;
@@ -568,6 +746,23 @@ export function applyBranchEvent(
   }
 }
 
+/**
+ * Whether a `system.task` line must be dropped: it reports a `tool_use_id` whose
+ * branch already exists, so the branch card owns that task's completion — the
+ * "task done" pill is a stray for a real subagent. A plain tool task mints no
+ * branch (see `applyBranchEvent`), so its line stays. The branch key comes from
+ * the mapping's branch event, not the message: `mapFrame` is stateless and the
+ * message itself carries no `tool_use_id`.
+ */
+export function suppressesTaskLine(
+  branches: Record<string, SubagentState>,
+  message: Message,
+  toolUseId: string | undefined
+): boolean {
+  if (message.type !== 'system.task') return false;
+  return Boolean(toolUseId && branches[toolUseId]);
+}
+
 /** The one line a collapsed branch card shows for what its subagent is doing. */
 export function branchActivity(branch: SubagentState): string {
   if (branch.summary) return branch.summary;
@@ -576,6 +771,39 @@ export function branchActivity(branch: SubagentState): string {
   if (last?.type === 'tool.use') return last.metadata?.toolName ?? 'working';
   if (last?.type === 'assistant') return last.content;
   return branch.lastToolName ?? branch.description ?? '';
+}
+
+/** A gap longer than this is a clock that moved, not a model that thought. */
+const THINKING_MAX_MS = 60 * 60 * 1000;
+/**
+ * Under this the gap measures the writer rather than the model: two blocks of
+ * one assistant frame are stamped milliseconds apart, and a duration that
+ * rounds to `0.0s` is a number nobody measured.
+ */
+const THINKING_MIN_MS = 100;
+
+/**
+ * How long the thinking message at `index` stood before the turn moved on: the
+ * gap to the message after it, in milliseconds. `null` whenever there is
+ * nothing honest to report — it is still the transcript's tail, a timestamp is
+ * missing or unreadable, or the numbers are impossible.
+ *
+ * Adjacency is the whole turn model here, because a `Message` carries no turn
+ * id and needs none: only a user-role message opens a turn, so everything else
+ * that follows a thinking block is in its turn. The gap to a *user* message is
+ * the reader's own time and is refused.
+ */
+export function thinkingDurationMs(messages: Message[], index: number): number | null {
+  const message = messages[index];
+  const next = messages[index + 1];
+  if (!message || !next) return null;
+  if (next.type === 'user' || next.type.startsWith('user.')) return null;
+  const from = new Date(message.timestamp).getTime();
+  const to = new Date(next.timestamp).getTime();
+  if (!Number.isFinite(from) || !Number.isFinite(to)) return null;
+  const elapsed = to - from;
+  if (elapsed < THINKING_MIN_MS || elapsed > THINKING_MAX_MS) return null;
+  return elapsed;
 }
 
 /**
@@ -629,16 +857,39 @@ function userBody(
   return {
     type: 'ui.system_note',
     content: text,
-    metadata: { noteKind: note.kind, noteTitle: note.title },
+    metadata: {
+      noteKind: note.kind,
+      noteTitle: note.title,
+      ...(note.taskToolId ? { noteTaskToolId: note.taskToolId } : {}),
+    },
   };
 }
 
 /** Harness-injected content arrives with role "user" but is not the human. */
-function systemNote(text: string): { kind: string; title: string } | null {
+function systemNote(text: string): { kind: string; title: string; taskToolId?: string } | null {
   const head = text.trimStart().slice(0, 200);
   if (head.startsWith('[SYSTEM NOTIFICATION') || head.includes('<task-notification>')) {
     const summary = /<summary>([\s\S]*?)<\/summary>/.exec(text)?.[1]?.trim();
-    return { kind: 'Task notification', title: summary ?? firstPlainLine(text) };
+    // The tool-use id names the Task call this notification echoes. When that
+    // call's branch is in the transcript, the branch already shows the same
+    // report — the renderer folds this note away on it.
+    const taskToolId = /<tool-use-id>(\S+?)<\/tool-use-id>/.exec(text)?.[1];
+    return {
+      kind: 'Task notification',
+      title: summary ?? firstPlainLine(text),
+      ...(taskToolId ? { taskToolId } : {}),
+    };
+  }
+  // A slash command's local echo (`<local-command-caveat>`, `<command-name>`,
+  // `<local-command-stdout>`): the harness's bookkeeping, not the human's words
+  // — raw XML in a user bubble otherwise.
+  if (
+    head.startsWith('<local-command-caveat>') ||
+    head.startsWith('<command-name>') ||
+    head.startsWith('<local-command-stdout>')
+  ) {
+    const command = /<command-name>([\s\S]*?)<\/command-name>/.exec(text)?.[1]?.trim();
+    return { kind: 'Local command', title: command ?? firstPlainLine(text) };
   }
   if (head.startsWith('<system-reminder>')) {
     return { kind: 'System reminder', title: firstPlainLine(text) };
@@ -684,6 +935,262 @@ function turnStart(
   const images = transcriptUserImages(entry.message);
   if (text === null && !images) return null;
   return { text: text ?? '', images };
+}
+
+/**
+ * The hand-off brief's marker prefix (packages/agent `handoff-shared.ts`):
+ * `[Hand-off from the <name> session — another agent, not the user]`. It is the
+ * only peer signal to survive SDK storage — `getSessionMessages` returns the
+ * entry with its origin gone, so a stored hand-off is otherwise just a user
+ * turn. Reading the sender name back out of it is what lets a stored copy
+ * render as `user.peer` instead of as the reader's own words.
+ */
+const HANDOFF_MARKER = '[Hand-off from the ';
+
+function handoffFrom(text: string): string | null {
+  if (!text.startsWith(HANDOFF_MARKER)) return null;
+  const name = /^\[Hand-off from the (.*?) session/.exec(text)?.[1]?.trim();
+  return name || null;
+}
+
+/**
+ * A delegate's permission ask, routed to its parent by the hub's
+ * `deliverDelegateAsk` (packages/hub/src/server.ts). Legacy: the hub's
+ * `delegate_events` table is the record now, and this reads the same ask back
+ * out of transcripts that predate it. The marker line — the
+ * `[delegate-ask instance=… request=…]` the parent's model reads the ids back
+ * off — is the only signal that survives SDK storage: `getSessionMessages`
+ * returns the entry with its origin gone, so a stored ask is otherwise just a
+ * user turn. Reading the ids and body back out of it is what lets a stored ask
+ * render as `user.delegate_ask` instead of the reader's own words. The marker
+ * and the instruction boilerplate that follows it are dropped; `body` is what
+ * sits strictly between the opening line and the marker line.
+ */
+const DELEGATE_ASK_OPENING = /^\[Delegate ask from (.+?)\]\n/;
+const DELEGATE_ASK_MARKER = /\n\[delegate-ask instance=([0-9a-f-]{36}) request=(\S+)\]/;
+
+function delegateAsk(text: string): {
+  label: string;
+  instance: string;
+  request: string;
+  body: string;
+} | null {
+  const opening = DELEGATE_ASK_OPENING.exec(text);
+  if (!opening) return null;
+  const marker = DELEGATE_ASK_MARKER.exec(text);
+  if (!marker) return null;
+  return {
+    label: opening[1].trim(),
+    instance: marker[1],
+    request: marker[2],
+    body: text.slice(opening[0].length, marker.index).trim(),
+  };
+}
+
+/**
+ * A delegate's auto-report header, written by the hub when a parented session's
+ * turn ends (packages/hub `server.ts`): `[Report from delegate <name>#<short8>
+ * — turn complete|failed]`. Legacy, like the ask marker: a report is a
+ * `delegate_events` row now, and this reads one back off a transcript written
+ * before the table existed. The marker is the only signal that survives SDK
+ * storage — and the 8-char short id is all a stored copy carries, so consumers
+ * match it against full ids with {@link matchesSession}.
+ */
+const DELEGATE_REPORT_MARKER =
+  /^\[Report from delegate (.+?)#([0-9a-f]{8}) — turn (complete|failed)\]\n/;
+
+function delegateReport(
+  text: string
+): { name: string; short: string; failed: boolean; body: string } | null {
+  const marker = DELEGATE_REPORT_MARKER.exec(text);
+  if (!marker) return null;
+  return {
+    name: marker[1],
+    short: marker[2],
+    failed: marker[3] === 'failed',
+    body: text.slice(marker[0].length).trim(),
+  };
+}
+
+/**
+ * Whether a message's `peerSession` names this session. A live copy carries the
+ * full id; a stored report carries only its 8-char prefix — so the match is
+ * exact or by prefix, and never on anything shorter than 8 characters. Legacy
+ * with the markers it reads: `delegate_events` rows name the session outright.
+ */
+export function matchesSession(peerSession: string | undefined, id: string): boolean {
+  if (!peerSession) return false;
+  return peerSession === id || (peerSession.length >= 8 && id.startsWith(peerSession));
+}
+
+/**
+ * A routed ask's body as the hub serialises it: `<tool> — <input JSON>`
+ * (`renderDelegateAsk`, packages/hub). Question-form bodies (`Q1: …`) and
+ * anything that does not parse return null and render as plain text.
+ *
+ * Legacy: an ask's input arrives as an object on its `delegate_events` row, so
+ * this only unpacks the transcripts written before that table existed.
+ */
+export function askBodyParts(
+  body: string
+): { tool: string; input: Record<string, JsonValue> } | null {
+  const match = /^([A-Za-z_][\w-]*) — (\{.*\})$/s.exec(body);
+  if (!match) return null;
+  try {
+    const parsed: unknown = JSON.parse(match[2]);
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null;
+    return { tool: match[1], input: parsed as Record<string, JsonValue> };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A question ask's input as the hub words it (`renderDelegateAsk`): one block
+ * per question, its options listed under it. Empty for anything else, which is
+ * how the callers below tell a question ask from a tool ask.
+ */
+function questionBlocks(input: Record<string, JsonValue>): string[] {
+  const questions = input.questions;
+  if (!Array.isArray(questions)) return [];
+  return questions.map((entry, index) => {
+    const question =
+      typeof entry === 'object' && entry !== null && !Array.isArray(entry) ? entry : {};
+    const text = typeof question.question === 'string' ? question.question : '';
+    const options = Array.isArray(question.options)
+      ? question.options
+          .map((option) =>
+            typeof option === 'object' && option !== null && !Array.isArray(option)
+              ? option.label
+              : null
+          )
+          .filter((label): label is string => typeof label === 'string')
+          .map((label) => `- ${label}`)
+          .join('\n')
+      : '';
+    return `Q${index + 1}: ${text}${options ? `\n${options}` : ''}`;
+  });
+}
+
+/**
+ * An ask's one-line form: the tool plus its most telling argument, never raw
+ * JSON — the first question where the ask is a question. The tool name is what
+ * the hub recorded, and an ask that never named one still reads as an ask.
+ */
+export function askShortOf(toolName: string | null, input: Record<string, JsonValue>): string {
+  const questions = questionBlocks(input);
+  if (questions.length > 0) return questions[0].split('\n')[0];
+  const tool = toolName ?? 'ask';
+  const filepath = input.filepath ?? input.filePath ?? input.path;
+  if (typeof filepath === 'string') {
+    return `${tool} ${filepath.split('/').filter(Boolean).pop() ?? filepath}`;
+  }
+  if (typeof input.command === 'string') return `${tool} ${input.command.slice(0, 80)}`;
+  return tool;
+}
+
+/**
+ * An ask's expanded detail: a diff shown as the diff (file path above), a
+ * command as the command, a question ask as its questions and their options,
+ * anything else as formatted JSON.
+ */
+export function askDetailOf(toolName: string | null, input: Record<string, JsonValue>): string {
+  const questions = questionBlocks(input);
+  if (questions.length > 0) return questions.join('\n');
+  if (typeof input.diff === 'string') {
+    const filepath = input.filepath ?? input.filePath ?? input.path;
+    return (typeof filepath === 'string' ? `${filepath}\n\n` : '') + input.diff;
+  }
+  if (typeof input.command === 'string') return input.command;
+  return JSON.stringify(input, null, 2);
+}
+
+/**
+ * {@link askShortOf} for a transcript-derived ask: the body is parsed first,
+ * and one that never parsed (a question list) keeps its own first line.
+ */
+export function askShort(body: string): string {
+  const parts = askBodyParts(body);
+  if (!parts) return body.split('\n')[0];
+  return askShortOf(parts.tool, parts.input);
+}
+
+/** {@link askDetailOf} for a transcript-derived ask; an unparsed body is itself. */
+export function askDetail(body: string): string {
+  const parts = askBodyParts(body);
+  if (!parts) return body;
+  return askDetailOf(parts.tool, parts.input);
+}
+
+/**
+ * Files one of the hub's delegate events into a delegate's list, kept in row
+ * order. An answer also settles the ask it belongs to: a settled ask is never
+ * re-broadcast, so a reader watching the exchange live has only this to learn
+ * the verdict from — the next fresh read carries it on the ask itself.
+ */
+export function foldDelegateEvent(list: DelegateEvent[], event: DelegateEvent): void {
+  // Both sources deliver the same rows — the read on arrival and the pushes
+  // that follow it overlap by however long the read was out.
+  if (list.some((row) => row.id === event.id)) return;
+  const after = list.findIndex((row) => row.id > event.id);
+  if (after === -1) list.push(event);
+  else list.splice(after, 0, event);
+
+  if (event.kind !== 'answer' || !event.requestId) return;
+  const ask = list.find((row) => row.kind === 'ask' && row.requestId === event.requestId);
+  if (ask) ask.status = event.payload.behavior === 'deny' ? 'denied' : 'answered';
+}
+
+/**
+ * What an `answer_delegate` call did, read off its input: denied, answered
+ * with choices, or plainly approved. Malformed input reads as a plain approval
+ * with no requestId rather than a crash.
+ */
+export function answerVerdict(toolInput: JsonValue | undefined): {
+  verb: 'Approved' | 'Denied' | 'Answered';
+  requestId: string | null;
+  answers: Array<{ question: string; choice: string }>;
+} {
+  if (typeof toolInput !== 'object' || toolInput === null || Array.isArray(toolInput)) {
+    return { verb: 'Approved', requestId: null, answers: [] };
+  }
+  const requestId = typeof toolInput.requestId === 'string' ? toolInput.requestId : null;
+  if (toolInput.deny === true) return { verb: 'Denied', requestId, answers: [] };
+  const answers: Array<{ question: string; choice: string }> = [];
+  const raw = toolInput.answers;
+  if (typeof raw === 'object' && raw !== null && !Array.isArray(raw)) {
+    for (const [question, choice] of Object.entries(raw)) {
+      if (typeof choice === 'string') answers.push({ question, choice });
+    }
+  }
+  return { verb: answers.length > 0 ? 'Answered' : 'Approved', requestId, answers };
+}
+
+/**
+ * The delegate row a hand-off target names — full id, short id (≥8 chars), or
+ * the directory's last path segment, the same resolution the daemon's own
+ * harnesses use — scoped to THIS session's delegates, so a follow-up card can
+ * say who it went to instead of printing a raw uuid.
+ */
+export function delegateOf(
+  target: string,
+  parentInstanceId: string,
+  instances: ReadonlyArray<{ id: string; cwd: string; parentInstanceId?: string | null }>
+): { id: string; cwd: string } | null {
+  const needle = target.trim().toLowerCase();
+  if (!needle) return null;
+  for (const row of instances) {
+    if (row.parentInstanceId !== parentInstanceId) continue;
+    const leafName = (row.cwd.split('/').filter(Boolean).pop() ?? row.cwd).toLowerCase();
+    if (
+      row.id === needle ||
+      (needle.length >= 8 && row.id.startsWith(needle)) ||
+      leafName === needle
+    ) {
+      return { id: row.id, cwd: row.cwd };
+    }
+  }
+  return null;
 }
 
 /**
@@ -747,7 +1254,14 @@ export function mapTranscript(instanceId: string, transcript: SessionMessage[]):
   const subagents: Record<string, SubagentState> = {};
 
   for (const entry of transcript) {
-    if (entry.type === 'system') continue;
+    // System messages have no transcript lines, but the `task_*` subtypes
+    // carry branch lifecycle data that stored transcripts would otherwise lose
+    // (subagentType, description, result summary).
+    if (entry.type === 'system') {
+      const mapping = mapFrame(instanceId, entry as unknown as SDKMessage);
+      if (mapping.branch) applyBranchEvent(subagents, instanceId, mapping.branch);
+      continue;
+    }
 
     // A hand-off is a user-role message and looks exactly like one the reader
     // typed — so this branch claimed it and rendered another agent's words as
@@ -757,13 +1271,68 @@ export function mapTranscript(instanceId: string, transcript: SessionMessage[]):
       'origin' in entry && (entry as { origin?: { kind?: string } }).origin?.kind === 'peer';
     const opening = fromPeer ? null : turnStart(entry);
     if (opening) {
-      messages.push({
-        id: entry.uuid,
-        instanceId,
-        ...userBody(opening.text, opening.images),
-        timestamp: new Date(),
-        sdkUuid: entry.uuid,
-      });
+      // A stored ask's marker is all that survives storage — the `[delegate-ask
+      // …]` line names the delegate and request, and it is upgraded to a
+      // `user.delegate_ask` here rather than rendered as the reader's own turn.
+      // Storage lost the peer origin, so only the marker-derived metadata (not
+      // peerFrom/peerName) is carried.
+      const ask = delegateAsk(opening.text);
+      if (ask) {
+        messages.push({
+          id: entry.uuid,
+          instanceId,
+          type: 'user.delegate_ask',
+          content: ask.body,
+          timestamp: new Date(),
+          sdkUuid: entry.uuid,
+          metadata: { peerSession: ask.instance, askRequestId: ask.request, askLabel: ask.label },
+        });
+        continue;
+      }
+      // A stored report has only its header's short id left; `matchesSession`
+      // is how consumers pair it with the delegate's full id.
+      const report = delegateReport(opening.text);
+      if (report) {
+        messages.push({
+          id: entry.uuid,
+          instanceId,
+          type: 'user.peer',
+          content: report.body,
+          timestamp: new Date(),
+          sdkUuid: entry.uuid,
+          metadata: {
+            peerName: `${report.name}#${report.short}`,
+            peerSession: report.short,
+            reportKind: report.failed ? 'failed' : 'report',
+          },
+        });
+        continue;
+      }
+      // A stored hand-off has no origin left to say who sent it — the marker
+      // prefix is all that survives storage — so it is upgraded to a peer
+      // message here rather than rendered as the reader's own turn. Its body is
+      // the whole text, marker included, so it dedups against the live echo by
+      // exact text.
+      const peerName = handoffFrom(opening.text);
+      messages.push(
+        peerName
+          ? {
+              id: entry.uuid,
+              instanceId,
+              type: 'user.peer',
+              content: opening.text,
+              timestamp: new Date(),
+              sdkUuid: entry.uuid,
+              metadata: { peerName },
+            }
+          : {
+              id: entry.uuid,
+              instanceId,
+              ...userBody(opening.text, opening.images),
+              timestamp: new Date(),
+              sdkUuid: entry.uuid,
+            }
+      );
       continue;
     }
 
@@ -774,13 +1343,23 @@ export function mapTranscript(instanceId: string, transcript: SessionMessage[]):
       ? branchFor(subagents, instanceId, mapping.agentId).messages
       : messages;
     sink.push(...mapping.messages);
-    for (const result of mapping.toolResults) applyToolResult(sink, result);
+    for (const result of mapping.toolResults) {
+      applyToolResult(sink, result);
+      // The Task call's own tool_result is the authoritative end of its branch,
+      // mirroring what the live path does in client.svelte.ts.
+      const branch = subagents[result.toolId];
+      if (!branch) continue;
+      branch.status = result.isError ? 'error' : 'complete';
+      branch.completedAt ??= new Date();
+      if (result.isError) branch.error ??= result.result;
+      else branch.result ??= result.result;
+    }
   }
 
   // Nothing further will arrive for a stored session; anything still open ended
   // with the session rather than being live.
   for (const branch of Object.values(subagents)) {
-    if (branch.status !== 'error') branch.status = 'complete';
+    if (branch.status !== 'error' && branch.status !== 'complete') branch.status = 'complete';
   }
 
   return { messages, subagents };
@@ -836,17 +1415,107 @@ export function sessionFailedMessage(instanceId: string, reason: string): Messag
   };
 }
 
+/**
+ * Folds a `user.peer` (or `user`) message into the transcript without doubling
+ * it. A hand-off brief reaches the reader twice — once as the live echo, which
+ * carries no uuid, and once as the stored copy, which does — and both map to a
+ * peer message with the same body. Identical text is the same brief, so the
+ * second arrival merges into the first: one bubble, and the uuid (edit/fork's
+ * anchor) is attached whichever way round they arrived. A `user.delegate_ask`
+ * reaches the reader the same two ways, but its body is not the whole wire text
+ * (markers are dropped), so it is matched by its `askRequestId` instead of by
+ * exact content. Returns true when the message was folded in and must not be
+ * appended.
+ */
+export function mergePeerMessage(messages: Message[], incoming: Message): boolean {
+  if (incoming.type === 'user.delegate_ask') {
+    const requestId = incoming.metadata?.askRequestId;
+    if (!requestId) return false;
+    const existing = messages.find(
+      (message) =>
+        message.type === 'user.delegate_ask' && message.metadata?.askRequestId === requestId
+    );
+    if (!existing) return false;
+    if (!existing.sdkUuid && incoming.sdkUuid) {
+      existing.sdkUuid = incoming.sdkUuid;
+      existing.id = incoming.id;
+    }
+    return true;
+  }
+  if (incoming.type !== 'user.peer' && incoming.type !== 'user') return false;
+  const existing = messages.find(
+    (message) => message.type === 'user.peer' && message.content === incoming.content
+  );
+  if (!existing) return false;
+  if (!existing.sdkUuid && incoming.sdkUuid) {
+    existing.sdkUuid = incoming.sdkUuid;
+    existing.id = incoming.id;
+  }
+  return true;
+}
+
+/**
+ * Whether a `user.peer` is one of this transcript's own delegates reporting
+ * back, rather than a handoff handed in from another session. A delegate is an
+ * instances row whose `parentInstanceId` names the transcript holding the
+ * message; the peer's `peerSession` names the row. Pure — rows, not the store —
+ * so a bubble's fate can be decided without reading any state.
+ */
+export function isDelegateReport(
+  message: Message,
+  parentInstanceId: string,
+  instances: ReadonlyArray<{ id: string; parentInstanceId?: string | null }>
+): boolean {
+  if (message.type !== 'user.peer') return false;
+  const peerSession = message.metadata?.peerSession;
+  if (!peerSession) return false;
+  return instances.some(
+    (row) => matchesSession(peerSession, row.id) && row.parentInstanceId === parentInstanceId
+  );
+}
+
 /** Folds a tool result into the `tool.use` it answers. */
-export function applyToolResult(messages: Message[], { toolId, result, isError }: ToolResult): void {
+export function applyToolResult(messages: Message[], { toolId, result, isError, structuredContent }: ToolResult): void {
   // `tool.handoff` is a tool call too — it just renders as a receipt. Matching
   // only `tool.use` left it stuck on "sending…" with the answer never applied.
   const target = messages.find(
     (m) => (m.type === 'tool.use' || m.type === 'tool.handoff') && m.metadata?.toolId === toolId
   );
   if (!target) return;
+
+  let delegateInstanceId: string | undefined;
+  let delegateTitle: string | undefined;
+  // Claude CLI ≥2.1.233 forwards an SDK MCP tool's result as
+  // JSON.stringify(structuredContent), discarding the handler's text block — so a
+  // replayed transcript has no `structuredContent` field and the payload rides as
+  // a JSON string in `result` instead. Parse it back out when it is one.
+  let sc = structuredContent;
+  if (!sc && typeof result === 'string') {
+    try {
+      const parsed: unknown = JSON.parse(result);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        sc = parsed as Record<string, unknown>;
+      }
+    } catch {
+      // Most tool results are not JSON; there is no structured payload to read.
+    }
+  }
+  if (target.type === 'tool.handoff' && !isError && sc) {
+    if (target.metadata?.handoffKind === 'delegate' && typeof sc.delegateInstanceId === 'string') {
+      delegateInstanceId = sc.delegateInstanceId;
+    } else if (target.metadata?.handoffKind === 'start' && typeof sc.instanceId === 'string') {
+      delegateInstanceId = sc.instanceId;
+    }
+    if (typeof sc.title === 'string') {
+      delegateTitle = sc.title;
+    }
+  }
+
   target.metadata = {
     ...target.metadata,
     toolResult: result,
     toolStatus: isError ? 'error' : 'success',
+    ...(delegateInstanceId ? { delegateInstanceId } : {}),
+    ...(delegateTitle ? { delegateTitle } : {}),
   };
 }

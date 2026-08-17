@@ -6,7 +6,8 @@
    */
   import { IconChevronRight, IconSuccess, IconError, IconSpinner, IconSkill } from '$lib/icons';
   import * as Collapsible from '$lib/components/ui/collapsible';
-  import { onMount, tick } from 'svelte';
+  import { Markdown } from '$lib/components/ui/markdown';
+  import { onMount, tick, untrack } from 'svelte';
   import { fly } from 'svelte/transition';
   import { quintOut } from 'svelte/easing';
   import { branchActivity } from '$lib/cockpit/frames';
@@ -16,6 +17,7 @@
   import ChatMessage from './ChatMessage.svelte';
   import { standsAlone } from './message-renderers';
   import ToolGroup from './ToolGroup.svelte';
+  import OutputBlock from './tool-cards/OutputBlock.svelte';
 
   interface Props {
     branch: SubagentState;
@@ -43,9 +45,22 @@
       document.getElementById(`subagent-${branch.toolUseId}`)?.scrollIntoView({ block: 'center' });
     });
   }
-  onMount(openIfTargeted);
+  onMount(() => {
+    openIfTargeted();
+    // A dive from the sidebar while this session is already showing changes
+    // only the hash; without this the card stays closed because onMount has
+    // already fired.
+    window.addEventListener('hashchange', openIfTargeted);
+    return () => window.removeEventListener('hashchange', openIfTargeted);
+  });
 
   const running = $derived(branch.status === 'starting' || branch.status === 'running');
+  const settled = $derived(branch.status === 'complete' || branch.status === 'error');
+
+  // Computed once at mount so the card only slides in when it is genuinely new,
+  // not every time the virtualizer recycles its DOM node on scroll.
+  const entering = untrack(() => branch.status === 'starting' || branch.status === 'running');
+
   const activity = $derived(branchActivity(branch));
 
   /**
@@ -79,16 +94,40 @@
     return activity || 'Working';
   });
 
-  /**
-   * The clock is deliberately *not* part of what the swap keys on. Fold the
-   * seconds into that string and the line re-animates once a second forever —
-   * a card that flickers is worse than one that says nothing. The phase changes
-   * rarely and animates; the duration ticks in place beside it.
-   */
   const showsClock = $derived(Boolean(elapsed) && branch.status !== 'starting');
-  const label = $derived(branch.subagentType || spawn.metadata?.subagentType || 'subagent');
+
+  // The label prefers the real type over the branchFor default of 'subagent'.
+  const realType = $derived(
+    branch.subagentType !== 'subagent' ? branch.subagentType : ''
+  );
+  const label = $derived(
+    realType || spawn.metadata?.subagentType || branch.subagentType
+  );
   const description = $derived(branch.description || spawn.metadata?.subagentDescription);
   const model = $derived(branch.model ?? spawn.metadata?.subagentModel);
+
+  const hasMessages = $derived(branch.messages.length > 0);
+  const hasResult = $derived(Boolean(branch.result));
+
+  /**
+   * Whether the final report reads as raw log output rather than prose. A real
+   * subagent writes markdown; a tool task that surfaced as a branch dumps
+   * `key=value` runs, timestamps and command echoes. Rendered as markdown, those
+   * fold into an unreadable wall — so a log-shaped result goes to a mono `<pre>`
+   * instead. Majority-of-lines log shapes, and no markdown tokens anywhere.
+   */
+  const MARKDOWN_SIGNAL =
+    /(^|\n)\s{0,3}#{1,6}\s|```|\*\*|__|\[[^\]]+\]\([^)]*\)|(^|\n)\s*[-*+]\s+/;
+  const LOG_LINE =
+    /^\S+=\S+(\s+\S+=\S+)*$|^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}|^\d{2}:\d{2}:\d{2}|^[\[(]\d{4}-\d{2}-\d{2}|^[$>→]\s|^\[?(INFO|WARN|WARNING|ERROR|DEBUG|TRACE|FATAL)\]?\b/i;
+  const reportIsLog = $derived.by(() => {
+    const text = branch.result ?? '';
+    if (!text || MARKDOWN_SIGNAL.test(text)) return false;
+    const lines = text.split('\n').map((line) => line.trim()).filter(Boolean);
+    if (lines.length === 0) return false;
+    const logLines = lines.filter((line) => LOG_LINE.test(line));
+    return logLines.length >= lines.length * 0.6;
+  });
 
   // Grouped the way the main thread groups it, standalone renderers included:
   // a subagent writing the plan down reads as a line here too.
@@ -119,10 +158,13 @@
   });
 </script>
 
-<div class="w-full overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+<div
+  class="w-full overflow-hidden rounded-xl bg-card shadow-sm motion-reduce:transition-none"
+  in:fly={{ y: entering ? 10 : 0, duration: entering ? 250 : 0, easing: quintOut }}
+>
   <Collapsible.Root {open} onOpenChange={() => (open = !open)}>
     <Collapsible.Trigger class="w-full text-left">
-      <div class="flex cursor-pointer items-start gap-2 px-3 py-2.5 transition-colors hover:bg-muted/30">
+      <div class="flex cursor-pointer items-start gap-2 px-4 py-3 transition-colors hover:bg-muted/30">
         <IconChevronRight
           class="mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform duration-200 {open
             ? 'rotate-90'
@@ -144,21 +186,18 @@
 
         <div class="min-w-0 flex-1">
           <div class="flex items-baseline gap-2">
-            <span class="text-sm font-medium text-foreground">{label}</span>
+            <span class="text-caption font-medium text-foreground">{label}</span>
             {#if model}
-              <span class="shrink-0 font-mono text-xs text-muted-foreground/70">{modelLabel(model)}</span>
-            {/if}
-            {#if description}
-              <span class="truncate text-xs text-muted-foreground">{description}</span>
+              <span class="shrink-0 font-mono text-micro text-muted-foreground/70">{modelLabel(model)}</span>
             {/if}
           </div>
+          {#if description}
+            <p class="mt-0.5 text-caption text-muted-foreground line-clamp-2">{description}</p>
+          {/if}
           <!-- Swapped rather than rewritten in place: a line that changes
                silently is a line nobody notices changing, and "what is it doing
-               now" is the only question this card exists to answer. The old
-               state leaves upward as the new one arrives from below, both
-               blurred through the crossing, so the eye follows the change
-               instead of re-reading the row. -->
-          <div class="mt-1 flex items-baseline gap-1.5 text-xs">
+               now" is the only question this card exists to answer. -->
+          <div class="mt-1 flex items-baseline gap-1.5 text-micro">
             <span class="relative block h-4 min-w-0 flex-1 overflow-hidden">
               {#key statusLine}
                 <span
@@ -181,8 +220,8 @@
         </div>
 
         <div class="flex shrink-0 items-center gap-1.5">
-          {#if branch.messages.length > 0}
-            <span class="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-muted-foreground">
+          {#if hasMessages}
+            <span class="rounded-4xl bg-muted px-1.5 py-0.5 font-mono text-micro text-muted-foreground">
               {branch.messages.length}
             </span>
           {/if}
@@ -198,16 +237,53 @@
     </Collapsible.Trigger>
 
     <Collapsible.Content>
-      <div class="ml-[22px] space-y-3 border-t border-l border-border py-3 pr-3 pl-4">
+      <div class="space-y-3 border-t border-border/50 px-4 py-3 pl-[calc(1rem+22px)]">
+        <!-- Live transcript messages -->
         {#each groups as group (group.kind === 'tools' ? `tools-${group.at}` : group.message.id)}
           {#if group.kind === 'tools'}
             <ToolGroup tools={group.messages} />
           {:else}
             <ChatMessage message={group.message} instanceId={branch.instanceId} />
           {/if}
-        {:else}
-          <p class="text-xs text-muted-foreground">No messages forwarded yet.</p>
         {/each}
+
+        <!-- Live streaming buffer -->
+        {#if branch.streaming}
+          <div class="max-w-[min(65ch,100%)] min-w-0 text-body leading-relaxed text-foreground break-words">
+            <Markdown source={branch.streaming} /><span class="inline-block w-[3px] h-4 rounded-sm bg-primary/60 align-text-bottom animate-pulse"></span>
+          </div>
+        {/if}
+
+        <!-- Empty states and final report -->
+        {#if !hasMessages && !branch.streaming}
+          {#if running}
+            <p class="text-caption">Waiting for the first message…</p>
+          {:else if settled && hasResult}
+            <!-- Done, no transcript, but a result was captured -->
+          {:else if settled}
+            <p class="text-caption">Transcript detail is only streamed live.</p>
+          {/if}
+        {/if}
+
+        <!-- Final report: shown whenever the branch is done and has one -->
+        {#if settled && hasResult}
+          <div class="rounded-lg border border-border/50 bg-muted/30 px-3 py-2">
+            <span class="text-micro font-medium text-muted-foreground">Report</span>
+            {#if reportIsLog}
+              <!-- A log dump, not prose: capped and scrollable, mono, line breaks
+                   preserved, so the lines stay lines instead of a folded wall. -->
+              <div class="mt-1.5">
+                <OutputBlock text={branch.result ?? ''} />
+              </div>
+            {:else}
+              <div
+                class="mt-1 max-h-80 max-w-[min(65ch,100%)] min-w-0 overflow-y-auto text-caption text-foreground break-words"
+              >
+                <Markdown source={branch.result ?? ''} />
+              </div>
+            {/if}
+          </div>
+        {/if}
       </div>
     </Collapsible.Content>
   </Collapsible.Root>

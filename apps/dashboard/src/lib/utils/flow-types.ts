@@ -23,6 +23,8 @@ export interface SubagentState {
   /** Parent subagent's toolUseId, for nested branches. */
   parentSubagentId?: string;
   messages: Message[];
+  /** Partial assistant text, between `stream_event`s and the final message. */
+  streaming: string;
   result?: string;
   error?: string;
   isBackground?: boolean;
@@ -33,6 +35,8 @@ export interface SubagentState {
   lastToolName?: string;
   /** Model that answered (wire id from assistant frames), or the requested alias until the first frame arrives. */
   model?: string;
+  /** When the last branch event arrived, for recency sorting. */
+  lastEventAt?: Date;
 }
 
 // ============================================================

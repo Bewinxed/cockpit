@@ -17,10 +17,18 @@ export function permissionSummary(toolName: string, input: Record<string, unknow
     case 'Write':
     case 'Read':
       return `${toolName} ${input.file_path ?? 'unknown'}`;
-    case 'Bash': {
+    // opencode parks its asks under its own lowercase names, keyed `filepath`.
+    case 'edit':
+    case 'write':
+    case 'read':
+      return `${toolName} ${input.filepath ?? input.filePath ?? 'unknown'}`;
+    case 'Bash':
+    case 'bash': {
       const command = String(input.command ?? '');
       return `Run: ${command.length > 80 ? `${command.slice(0, 79)}…` : command}`;
     }
+    case 'webfetch':
+      return `webfetch ${input.url ?? 'unknown'}`;
     case 'Glob':
     case 'Grep':
       return `${toolName} ${input.pattern ?? 'unknown'}`;

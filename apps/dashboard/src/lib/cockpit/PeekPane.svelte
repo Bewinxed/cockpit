@@ -27,7 +27,7 @@
   import { goto } from '$app/navigation';
   import { Button } from '$lib/components/ui/button';
   import * as ContextMenu from '$lib/components/ui/context-menu';
-  import { IconClose, IconExternal, IconFork, IconStop } from '$lib/icons';
+  import { IconClose, IconExternal, IconFolderDuo, IconFork, IconStop } from '$lib/icons';
   import { smoothText } from '$lib/utils/smooth-text.svelte';
   import { getToolGlance } from '$lib/utils/tool-display';
   import { ACTIVITY_LABEL, SLEEPING_LABEL } from './activity';
@@ -49,7 +49,7 @@
     type PendingPermission,
     type PermissionAnswer,
   } from './client.svelte';
-  import { folderPrefs, identityVar } from './folder-prefs.svelte';
+  import { identityVar } from './folder-prefs.svelte';
   import { sessionTitle } from './links';
   import { machineLabel } from './machine';
   import { permissionSummary } from './permission-summary';
@@ -80,6 +80,7 @@
           machineId: next.browsing.machineId,
           sessionId: next.viewId,
           cwd: next.browsing.cwd,
+          harness: cockpit.session(next.viewId)?.harness ?? 'claude',
         });
       } else {
         openSession(next.viewId);
@@ -146,6 +147,7 @@
       machineId: machine.machineId,
       cwd,
       sessionId: forkable,
+      harness: session?.harness ?? 'claude',
       history: session?.messages ?? [],
     });
     await goto(`/session/${instanceId}`);
@@ -253,8 +255,7 @@
                     <!-- The directory's hue, the same one the card it was
                          picked from wears: the peek belongs to a project. -->
                     {#if cwd}
-                      {@const Mark = folderPrefs.mark(cwd)}
-                      <Mark class="identity-ink size-4 shrink-0" style={identityVar(cwd)} />
+                      <IconFolderDuo class="identity-ink size-4 shrink-0" style={identityVar(cwd)} />
                     {/if}
                     <span class="truncate">{title}</span>
                   </h2>
@@ -324,7 +325,7 @@
               </span>
             {/if}
             {#if running}
-              <span class="ml-auto shrink-0">
+              <span class="ml-auto flex shrink-0 items-center gap-1">
                 <ContextMeter
                   usage={session?.context ?? null}
                   status={session?.sdkStatus ?? null}

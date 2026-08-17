@@ -1,6 +1,7 @@
 import type {
   AgentRow,
   BuildInfo,
+  ClaudeLimits,
   ControlPayload,
   Envelope,
   FleetConfig,
@@ -8,23 +9,29 @@ import type {
   FleetSyncReport,
   FramePayload,
   FsPayload,
+  HarnessReport,
   InstanceRow,
   PermissionMode,
   SkillFile,
   SpawnPayload,
   ToolState,
   ToolStatus,
+  UsageBlock,
+  UsageBucket,
   Verb,
 } from '@cockpit/core';
 import {
   AGENT_BUSY,
   agentProblem,
+  ASK_USER_QUESTION,
   FLEET_STATUS,
   FLEET_SYNC,
+  identifyBlocks,
   INSPECT_CONFIG,
   parseAgentFrontMatter,
   READ_MEMORY_FILE,
   READ_SKILL_FILES,
+  RESOLVE_PERMISSION,
   TOOL_CATALOG,
   toolSpec,
   UPDATE_COCKPIT,
@@ -33,7 +40,8 @@ import { Elysia, t } from 'elysia';
 import { websocket } from 'elysia/websocket';
 import { buildInfo } from './build';
 import { HUB_VERSION } from './config';
-import type { AgentAuth, DbShape, InstanceKind } from './db';
+import type { AgentAuth, DbShape, DelegateEvent, InstanceKind } from './db';
+import { usageBucketFromRow } from './db';
 import type { PendingShape } from './pending';
 import type { HubSocket, RegistryShape } from './registry';
 import { hashFiles, resolveSkill } from './skills';
@@ -86,9 +94,9 @@ const failure = (
 /**
  * The hub routes on envelope fields and is otherwise payload-opaque (NEW.md
  * §6); `hostname`/`os`/`tools` on register, `cwd`/`options.resume`/`scratch`/
- * `projectId`/`permissionMode`/`model` on spawn, `discard` on stop, `kind` on a
- * frame, `method`/`args` on a control and a `control_result`'s `result` are the
- * sanctioned peeks.
+ * `projectId`/`title`/`permissionMode`/`model` on spawn, `discard` on stop,
+ * `kind` on a frame, `method`/`args` on a control and a `control_result`'s
+ * `result` are the sanctioned peeks.
  */
 const peek = (payload: unknown, key: string): string | undefined => {
   if (typeof payload !== 'object' || payload === null) return undefined;
@@ -96,32 +104,125 @@ const peek = (payload: unknown, key: string): string | undefined => {
   return typeof value === 'string' ? value : undefined;
 };
 
+/** The last path segment — how the rail names a session. */
+const leaf = (path: string): string => path.split('/').filter(Boolean).pop() ?? path;
+
 /**
- * The SDK session a `spawn` resumes, so the instance row records what it
- * re-opened. A fork is the exception: it *reads* the origin conversation but
- * creates a new one (`forkSession`), so claiming the origin's id here would
- * trip openInstance's one-conversation-one-row guard and the fork would never
- * get a board row. Left blank, the fork's own init frame stamps the real id
- * via noteInstanceSession.
+ * Renders a parked ask readably for the parent session that has to answer it:
+ * a question's text and option labels verbatim, or a tool's name and its input
+ * summary. The parent reads this off a peer message and answers with the
+ * `answer_delegate` tool, so the phrasing has to carry every choice it needs.
+ */
+const renderDelegateAsk = (payload: unknown): string => {
+  const toolName = peek(payload, 'toolName');
+  const input = (payload as { input?: unknown } | null)?.input;
+  const questions = (input as { questions?: unknown } | null)?.questions;
+  if (
+    (peek(payload, 'requestKind') === 'question' || toolName === ASK_USER_QUESTION) &&
+    Array.isArray(questions) &&
+    questions.length > 0
+  ) {
+    return questions
+      .map((question, index) => {
+        const q = question as { question?: unknown; options?: unknown };
+        const options = Array.isArray(q.options)
+          ? q.options
+              .map((option) => (option as { label?: unknown }).label)
+              .filter((label): label is string => typeof label === 'string')
+              .map((label) => `- ${label}`)
+              .join('\n')
+          : '';
+        const text = typeof q.question === 'string' ? q.question : '';
+        return `Q${index + 1}: ${text}${options ? `\n${options}` : ''}`;
+      })
+      .join('\n');
+  }
+  const summary =
+    input === undefined || input === null
+      ? ''
+      : typeof input === 'string'
+        ? input
+        : JSON.stringify(input);
+  return `${toolName ?? 'a tool'}${summary ? ` — ${summary}` : ''}`;
+};
+
+/**
+ * The session a `spawn` resumes, so the instance row records what it re-opened.
+ * A fork is the exception: it *reads* the origin conversation but creates a new
+ * one, so claiming the origin's id here would trip openInstance's
+ * one-conversation-one-row guard. Left blank, the fork's own init frame stamps
+ * the real id via noteInstanceSession.
  */
 const peekResume = (payload: unknown): string | undefined => {
   if (typeof payload !== 'object' || payload === null) return undefined;
-  const { options } = payload as { options?: unknown };
-  if (typeof options === 'object' && options !== null) {
-    if ((options as { forkSession?: unknown }).forkSession) return undefined;
-  }
-  return peek(options, 'resume');
+  const { resume } = payload as { resume?: unknown };
+  if (typeof resume !== 'object' || resume === null) return undefined;
+  if ((resume as { fork?: unknown }).fork) return undefined;
+  const key = (resume as { sessionKey?: unknown }).sessionKey;
+  return typeof key === 'string' ? key : undefined;
 };
 
-/** A spawn asking for scratch isolation, or for a session the SDK never stores. */
+/** A spawn asking for scratch isolation, or for a session that is never stored. */
 const peekKind = (payload: unknown): InstanceKind => {
   if (typeof payload !== 'object' || payload === null) return 'mainline';
-  const { scratch, options } = payload as { scratch?: unknown; options?: unknown };
-  const ephemeral =
-    typeof options === 'object' &&
-    options !== null &&
-    (options as { persistSession?: unknown }).persistSession === false;
-  return scratch || ephemeral ? 'scratch' : 'mainline';
+  const { scratch, persistSession } = payload as { scratch?: unknown; persistSession?: unknown };
+  return scratch || persistSession === false ? 'scratch' : 'mainline';
+};
+
+/** Which harness a spawn names; absent reads as claude. */
+const peekHarness = (payload: unknown): string | undefined => peek(payload, 'harness');
+
+/** The session a spawn is a delegate of, so its row nests under the parent. */
+const peekParent = (payload: unknown): { parentInstanceId?: string; parentToolUseId?: string } => {
+  if (typeof payload !== 'object' || payload === null) return {};
+  const { parent } = payload as { parent?: unknown };
+  if (typeof parent !== 'object' || parent === null) return {};
+  const { instanceId, toolUseId } = parent as { instanceId?: unknown; toolUseId?: unknown };
+  return {
+    ...(typeof instanceId === 'string' ? { parentInstanceId: instanceId } : {}),
+    ...(typeof toolUseId === 'string' ? { parentToolUseId: toolUseId } : {}),
+  };
+};
+
+/**
+ * A delegate's effective permission mode, resolved to the ROOT of its delegate
+ * tree. A delegate spawned by another delegate carries no `permissionMode` of
+ * its own (the opencode plugin's `delegate` tool omits it), so the daemon's
+ * `autoAllows` would park its tool asks even though the tree's root session
+ * runs under `bypassPermissions`. Walk `parentInstanceId` up to the root and
+ * inherit its mode, so the child spawns with it explicitly and the row records
+ * it. `rows` is the hub's instance table; `parentInstanceId` the spawn's
+ * immediate parent. Pure, so it is exercised directly.
+ */
+export const resolveDelegatePermissionMode = (rows: InstanceRow[], parentInstanceId: string): string | undefined => {
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  const seen = new Set<string>();
+  let current: string | undefined = parentInstanceId;
+  while (current && !seen.has(current)) {
+    seen.add(current);
+    const row = byId.get(current);
+    if (!row) break;
+    const parent = row.parentInstanceId;
+    if (parent && parent !== current) {
+      current = parent;
+      continue;
+    }
+    return row.permissionMode ?? undefined;
+  }
+  return undefined;
+};
+
+/** `register`'s word on what each harness adapter on the machine can do. */
+const peekHarnesses = (payload: unknown): HarnessReport[] | undefined => {
+  if (typeof payload !== 'object' || payload === null) return undefined;
+  const value = (payload as { harnesses?: unknown }).harnesses;
+  if (!Array.isArray(value)) return undefined;
+  return value.filter(
+    (report): report is HarnessReport =>
+      typeof report === 'object' &&
+      report !== null &&
+      typeof (report as HarnessReport).harness === 'string'
+  );
 };
 
 /** The states a daemon is allowed to claim; anything else is a daemon we do not know. */
@@ -200,6 +301,25 @@ const peekInstall = (payload: unknown): string | undefined => {
   const args = (payload as { args?: unknown }).args;
   const id = Array.isArray(args) ? args[0] : undefined;
   return typeof id === 'string' ? id : undefined;
+};
+
+/** A `control` answering a permission, and the ask it answers with what it says. */
+const peekAnswer = (payload: unknown): { requestId: string; result: unknown } | undefined => {
+  if (peek(payload, 'method') !== RESOLVE_PERMISSION) return undefined;
+  const args = (payload as { args?: unknown }).args;
+  if (!Array.isArray(args) || typeof args[0] !== 'string') return undefined;
+  return { requestId: args[0], result: args[1] };
+};
+
+/** The chosen option labels an answer to a question carries, when it is one. */
+const peekAnswers = (result: unknown): Record<string, unknown> | undefined => {
+  if (typeof result !== 'object' || result === null) return undefined;
+  const { updatedInput } = result as { updatedInput?: unknown };
+  if (typeof updatedInput !== 'object' || updatedInput === null) return undefined;
+  const { answers } = updatedInput as { answers?: unknown };
+  return typeof answers === 'object' && answers !== null
+    ? (answers as Record<string, unknown>)
+    : undefined;
 };
 
 /** And what the machine answered it with. */
@@ -341,11 +461,95 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
   };
 
   /**
+   * A parent session just died while a routed ask was still parked for one of
+   * its delegates. The user is the fallback: re-broadcast the ask untagged so
+   * it returns to the attention queue, and let Telegram hear it like any other.
+   * A routed ask must never sit unanswerable and invisible.
+   */
+  const escalateRoutedAsks = (parentInstanceId: string): void => {
+    for (const parked of pending.list()) {
+      const payload = parked.payload as { kind?: unknown; routedTo?: unknown };
+      if (payload.kind !== 'permission_request' || payload.routedTo !== 'parent') continue;
+      const delegate = parked.instanceId
+        ? db.listInstances().find((r) => r.id === parked.instanceId)
+        : undefined;
+      if (delegate?.parentInstanceId !== parentInstanceId) continue;
+      delete payload.routedTo;
+      registry.broadcast(parked);
+      telegram?.onAsk(parked);
+    }
+  };
+
+  /**
+   * Delivers a delegate's ask to its parent as a queued peer message, in the
+   * same shape the auto-report block uses: the parent reads it when its current
+   * turn ends and answers with the `answer_delegate` tool. The final line is
+   * machine-readable so the parent's model can copy the ids verbatim.
+   */
+  const deliverDelegateAsk = (
+    delegate: { id: string; machineId: string; cwd: string },
+    parent: { id: string; machineId: string },
+    ask: { requestId?: string; payload: unknown }
+  ): void => {
+    const label = `${leaf(delegate.cwd)}#${delegate.id.slice(0, 8)}`;
+    const body = renderDelegateAsk(ask.payload);
+    const marker = `[delegate-ask instance=${delegate.id} request=${ask.requestId}]`;
+    const instruction =
+      'Answer it with the answer_delegate tool: answer_delegate(target, requestId, answers) — ' +
+      'answers are keyed by the exact question text and the value is the chosen option label ' +
+      '(pass deny=true to refuse it).';
+    registry.agent(parent.machineId)?.send({
+      verb: 'send',
+      machineId: parent.machineId,
+      instanceId: parent.id,
+      payload: {
+        instanceId: parent.id,
+        message: {
+          type: 'user',
+          message: {
+            role: 'user',
+            content: `[Delegate ask from ${label}]\n\n${body}\n\n${marker}\n\n${instruction}`,
+          },
+          parent_tool_use_id: null,
+          origin: { kind: 'peer', from: delegate.id, name: leaf(delegate.cwd), fromSession: delegate.id },
+          shouldQuery: false,
+        },
+      },
+    });
+    handoffs.set(parent.id, { from: leaf(delegate.cwd), at: Date.now() });
+    publishInstances(parent.machineId);
+
+    const toolName = peek(ask.payload, 'toolName');
+    publishDelegateEvent(
+      delegate.machineId,
+      db.recordDelegateEvent({
+        instanceId: delegate.id,
+        parentInstanceId: parent.id,
+        kind: 'ask',
+        requestId: ask.requestId,
+        toolName,
+        requestKind:
+          peek(ask.payload, 'requestKind') === 'question' || toolName === ASK_USER_QUESTION
+            ? 'question'
+            : 'tool',
+        payload: { input: (ask.payload as { input?: unknown } | null)?.input },
+        status: 'pending',
+      })
+    );
+  };
+
+  /**
    * Sessions that have been handed work and have not answered it yet, kept here
    * rather than in a browser: a hand-off learnt by whichever tab happened to be
    * watching is invisible on every other device, and gone after a reload.
    */
   const handoffs = new Map<string, { from: string; at: number }>();
+  /**
+   * Each delegate session's assistant texts, accumulated while its turn runs
+   * so the report delivered to its parent carries everything it said — not
+   * just the last assistant message (a turn can produce several).
+   */
+  const lastAssistant = new Map<string, string[]>();
   /**
    * Installs somebody is waiting on, by `requestId`: what keeps a machine from
    * being sent the same install twice while the first is still running, and
@@ -423,7 +627,8 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
     const payload: SpawnPayload = {
       instanceId: row.id,
       cwd: row.cwd,
-      options: { resume: row.sessionId ?? undefined },
+      ...(row.sessionId ? { resume: { sessionKey: row.sessionId } } : {}),
+      ...(row.harness ? { harness: row.harness as SpawnPayload['harness'] } : {}),
       ...(row.permissionMode ? { permissionMode: row.permissionMode as PermissionMode } : {}),
       ...(row.model ? { model: row.model } : {}),
       ...(row.projectId ? { projectId: row.projectId } : {}),
@@ -434,6 +639,7 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
       machineId: row.machineId,
       cwd: row.cwd,
       sessionId: row.sessionId ?? undefined,
+      harness: row.harness ?? undefined,
       projectId: row.projectId ?? undefined,
       kind: row.kind === 'scratch' ? 'scratch' : 'mainline',
       permissionMode: row.permissionMode ?? undefined,
@@ -455,6 +661,59 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
       },
     });
   };
+
+  /**
+   * One line of the hub's record of a delegate's traffic, to every dashboard,
+   * the moment it is written — the same reason the instance rows are pushed:
+   * a reader watching either session should see the ask, the answer and the
+   * report as they happen rather than on their next re-fetch.
+   */
+  const publishDelegateEvent = (machineId: string, event: DelegateEvent): void => {
+    registry.broadcast({
+      verb: 'frames',
+      machineId,
+      instanceId: event.instanceId,
+      payload: { kind: 'delegate_event', instanceId: event.instanceId, event },
+    });
+  };
+
+  /**
+   * Files an answer to a delegate's ask, whichever way it arrived — the parent's
+   * `answer_delegate`, the relay route, or a reader clicking it in the dashboard
+   * once it escalated — and closes the ask it settles. An answer to anything
+   * else is an ordinary session's own permission and nobody's record.
+   */
+  const recordDelegateAnswer = (
+    machineId: string,
+    instanceId: string,
+    requestId: string,
+    result: unknown
+  ): void => {
+    const asked = db.delegateAsk(requestId);
+    const parentInstanceId =
+      asked?.parentInstanceId ??
+      db.listInstances().find((r) => r.id === instanceId)?.parentInstanceId;
+    if (!parentInstanceId) return;
+
+    const behavior = peek(result, 'behavior') ?? 'allow';
+    const answers = peekAnswers(result);
+    publishDelegateEvent(
+      machineId,
+      db.recordDelegateEvent({
+        instanceId,
+        parentInstanceId,
+        kind: 'answer',
+        requestId,
+        payload: { behavior, ...(answers ? { answers } : {}) },
+      })
+    );
+    // An ask this hub never recorded — one parked before the table existed —
+    // still gets its answer stored; there is simply nothing to close.
+    db.settleDelegateAsk(requestId, behavior === 'deny' ? 'denied' : 'answered');
+  };
+  // The Telegram bridge answers straight down the agent socket, past every
+  // recording site above — so it files its answers through this instead.
+  telegram?.setAnswerRecorder(recordDelegateAnswer);
 
   const awaitingInstall = (machineId: string, toolId: string): boolean => {
     for (const install of pendingInstalls.values())
@@ -525,11 +784,17 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
    * and a skill adopted from the rail is usable in the session that adopted
    * it seconds later (user, 2026-08-08). Fire-and-forget: a session racing
    * shutdown answers with an error nobody is waiting on.
+   *
+   * `reloadSkills`/`reloadPlugins` are Claude Code Query methods; a harness
+   * with no such verb (opencode, pi) answers with an error that reads as a
+   * session failure, so only a claude session — and a legacy row whose
+   * `harness` predates the rework and is therefore claude — is told.
    */
   const refreshSessions = (machineId: string, agent: HubSocket): void => {
     for (const row of db.listInstances()) {
       if (row.machineId !== machineId) continue;
       if (row.status !== 'running' && row.status !== 'starting') continue;
+      if (row.harness && row.harness !== 'claude') continue;
       for (const method of ['reloadSkills', 'reloadPlugins'] as const) {
         const requestId = crypto.randomUUID();
         const payload: ControlPayload = { instanceId: row.id, requestId, method, args: [] };
@@ -545,6 +810,15 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
   };
 
   const sendFleetSync = (machineId: string, agent: HubSocket): void => {
+    // Fleet sync converges each harness's own files. A daemon that predates
+    // harness reporting is assumed to be claude (fleetable); only an explicit
+    // report with no fleet-capable harness is a machine with nothing to converge.
+    const reports = db
+      .listAgents()
+      .find((row) => row.machineId === machineId)
+      ?.harnesses;
+    if (reports && reports.length > 0 && !reports.some((report) => report.capabilities.fleet)) return;
+
     const config = db.fleetConfig();
     const empty =
       !config.mcp.length &&
@@ -779,6 +1053,17 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
     // time anything else moved.
     .get('/api/handoffs', () => Object.fromEntries(handoffs))
     .get('/api/pending', () => pending.list())
+    // What a delegate and its parent said to each other, oldest first. Broadcast
+    // as it happens *and* readable here, for the same reason the hand-offs are:
+    // an exchange that finished before this tab opened is still the record.
+    .get(
+      '/api/delegate-events',
+      { query: t.Object({ parent: t.Optional(t.String()), instance: t.Optional(t.String()) }) },
+      ({ query, status }) => {
+        if (!query.parent && !query.instance) return status(400, 'name a parent or an instance');
+        return db.listDelegateEvents(query);
+      }
+    )
     // The catalog is code, so it ships with the answer rather than being stored:
     // a dashboard reads what tools exist and what the fleet has decided about
     // them here, and each machine's own status off the `instances` frame.
@@ -843,7 +1128,7 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
 
         const server = db.putMcpServer({
           name: params.name,
-          config: body.config as FleetMcpConfig,
+          config: body.config as unknown as FleetMcpConfig,
           enabled: body.enabled,
         });
         fanOutFleet();
@@ -1157,6 +1442,208 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
       db.deleteProject(params.id);
       return { ok: true };
     })
+    // A session's own hand-off tools reach the fleet over plain HTTP: the
+    // opencode plugin (and anything else outside the WebSocket tunnel) forwards
+    // its spawns and sends through here, and the hub relays them like the
+    // dashboard's own. Fire-and-forget — the tool has nothing to wait on.
+    .post('/api/relay/spawn', { body: t.Any() }, ({ body, status }) => {
+      const machineId = peek(body, 'machineId');
+      const instanceId = peek(body, 'instanceId');
+      if (!machineId || !instanceId) return status(400, 'name a machine and an instance');
+
+      // A delegate that names no permission mode inherits the ROOT of its
+      // delegate tree, so a nested delegate of a bypassing session stays
+      // autonomous instead of parking tool asks nobody is watching for.
+      const parent = peekParent(body);
+      if (!peek(body, 'permissionMode') && parent.parentInstanceId) {
+        const mode = resolveDelegatePermissionMode(db.listInstances(), parent.parentInstanceId);
+        if (mode) (body as Record<string, unknown>).permissionMode = mode;
+      }
+
+      const agent = registry.agent(machineId);
+      if (!agent) return status(404, `machine ${machineId} is not connected`);
+
+      agent.send({ verb: 'spawn', machineId, instanceId, payload: body } satisfies Envelope);
+      db.openInstance({
+        id: instanceId,
+        machineId,
+        cwd: peek(body, 'cwd') ?? '',
+        sessionId: peekResume(body),
+        harness: peekHarness(body),
+        projectId: peek(body, 'projectId'),
+        title: peek(body, 'title'),
+        kind: peekKind(body),
+        permissionMode: peek(body, 'permissionMode'),
+        model: peek(body, 'model'),
+        ...peekParent(body),
+      });
+      publishInstances(machineId);
+      return { ok: true };
+    })
+    .post('/api/relay/send', { body: t.Any() }, ({ body, status }) => {
+      const machineId = peek(body, 'machineId');
+      const instanceId = peek(body, 'instanceId');
+      if (!machineId || !instanceId) return status(400, 'name a machine and an instance');
+
+      // Urgency is only honoured toward the caller's own delegate; anything else
+      // downgrades to a normal queued send.
+      if ((body as { urgent?: unknown }).urgent === true) {
+        const from = peek(body, 'from');
+        const row = db.listInstances().find((r) => r.id === instanceId);
+        if (!from || !row || row.parentInstanceId !== from) {
+          console.warn(`[hub] downgraded urgent send to ${instanceId}: not its delegate`);
+          delete (body as Record<string, unknown>).urgent;
+        }
+      }
+
+      const agent = registry.agent(machineId);
+      if (!agent) return status(404, `machine ${machineId} is not connected`);
+
+      agent.send({ verb: 'send', machineId, instanceId, payload: body } satisfies Envelope);
+      const from = peekPeer(body);
+      if (from && !isQuerySend(body)) {
+        handoffs.set(instanceId, { from, at: Date.now() });
+      } else if (isQuerySend(body) && handoffs.has(instanceId)) {
+        handoffs.delete(instanceId);
+      }
+      publishInstances(machineId);
+      return { ok: true };
+    })
+    .post('/api/relay/stop', { body: t.Any() }, ({ body, status }) => {
+      const instanceId = peek(body, 'instanceId');
+      const from = peek(body, 'from');
+      const row = instanceId ? db.listInstances().find((r) => r.id === instanceId) : undefined;
+      if (!instanceId || !from || !row || row.parentInstanceId !== from) {
+        return status(403, 'you can only stop your own delegates');
+      }
+      const agent = registry.agent(row.machineId);
+      if (!agent) return status(404, `machine ${row.machineId} is not connected`);
+      agent.send({
+        verb: 'stop',
+        machineId: row.machineId,
+        instanceId,
+        payload: { instanceId, from },
+      } satisfies Envelope);
+      return { ok: true };
+    })
+    .post('/api/relay/interrupt', { body: t.Any() }, ({ body, status }) => {
+      const instanceId = peek(body, 'instanceId');
+      const from = peek(body, 'from');
+      const row = instanceId ? db.listInstances().find((r) => r.id === instanceId) : undefined;
+      if (!instanceId || !from || !row || row.parentInstanceId !== from) {
+        return status(403, 'you can only interrupt your own delegates');
+      }
+      const agent = registry.agent(row.machineId);
+      if (!agent) return status(404, `machine ${row.machineId} is not connected`);
+      agent.send({
+        verb: 'control',
+        machineId: row.machineId,
+        instanceId,
+        payload: { instanceId, requestId: crypto.randomUUID(), method: 'interrupt', args: [], from },
+      } satisfies Envelope);
+      return { ok: true };
+    })
+    .post('/api/relay/answer', { body: t.Any() }, ({ body, status }) => {
+      const instanceId = peek(body, 'instanceId');
+      const from = peek(body, 'from');
+      const requestId = peek(body, 'requestId');
+      const row = instanceId ? db.listInstances().find((r) => r.id === instanceId) : undefined;
+      if (!instanceId || !requestId || !from || !row || row.parentInstanceId !== from) {
+        return status(403, 'you can only answer your own delegates');
+      }
+      const agent = registry.agent(row.machineId);
+      if (!agent) return status(404, `machine ${row.machineId} is not connected`);
+      const result = (body as { result?: unknown }).result;
+      agent.send({
+        verb: 'control',
+        machineId: row.machineId,
+        instanceId,
+        requestId,
+        payload: {
+          instanceId,
+          requestId,
+          method: RESOLVE_PERMISSION,
+          args: [requestId, result],
+          from,
+        },
+      } satisfies Envelope);
+      recordDelegateAnswer(row.machineId, instanceId, requestId, result);
+      return { ok: true };
+    })
+    // ── Usage (USAGE-SPEC.md §6) ─────────────────────────────────────────────
+    // The heavy data lives behind these reads; the socket only carries the small
+    // limits frame, so the dashboard pulls aggregates when it needs them.
+    .get('/api/usage/limits', () => {
+      const agents = db.listAgents();
+      return {
+        machines: db.listUsageLimits().map((row) => ({
+          machineId: row.machineId,
+          hostname: agents.find((agent) => agent.machineId === row.machineId)?.hostname ?? row.machineId,
+          limits: row.payload,
+        })),
+      };
+    })
+    .get(
+      '/api/usage/summary',
+      {
+        query: t.Object({
+          since: t.Optional(t.Numeric()),
+          until: t.Optional(t.Numeric()),
+          harness: t.Optional(t.String()),
+          machineId: t.Optional(t.String()),
+          groupBy: t.Optional(
+            t.Union([t.Literal('day'), t.Literal('model'), t.Literal('project'), t.Literal('session')])
+          ),
+        }),
+      },
+      ({ query }) =>
+        db.usageSummary({
+          since: query.since,
+          until: query.until,
+          harness: query.harness,
+          machineId: query.machineId,
+          groupBy: query.groupBy ?? 'day',
+        })
+    )
+    .get(
+      '/api/usage/blocks',
+      {
+        query: t.Object({
+          harness: t.Optional(t.String()),
+          machineId: t.Optional(t.String()),
+          recentDays: t.Optional(t.Numeric()),
+        }),
+      },
+      ({ query }) => {
+        const since = Date.now() - (query.recentDays ?? 3) * 24 * 60 * 60 * 1000;
+        const buckets = db.listUsageBuckets({
+          since,
+          harness: query.harness,
+          machineId: query.machineId,
+        });
+
+        // A 5-hour block is ACCOUNT-wide, not per-session: the window the API
+        // reports as `five_hour` covers every session the account ran, and
+        // ccusage folds all entries into one series for the same reason.
+        // Grouping per session would fragment the window, make burn rate and
+        // projection meaningless, and mint colliding block ids. Harnesses stay
+        // apart because they bill separately.
+        const byHarness = new Map<string, UsageBucket[]>();
+        for (const row of buckets) {
+          const group = byHarness.get(row.harness) ?? [];
+          group.push(usageBucketFromRow(row));
+          byHarness.set(row.harness, group);
+        }
+
+        const now = Date.now();
+        const blocks: (UsageBlock & { harness: string })[] = [];
+        for (const [harness, group] of byHarness) {
+          for (const block of identifyBlocks(group, now)) blocks.push({ ...block, harness });
+        }
+        blocks.sort((a, b) => a.startTime - b.startTime);
+        return { blocks };
+      }
+    )
     .ws('/ws', {
       message(ws, message) {
         if (!isEnvelope(message)) {
@@ -1173,6 +1660,7 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
               os: peek(message.payload, 'os') ?? 'unknown',
               auth: peekAuth(message.payload),
               build: peekBuild(message.payload),
+              harnesses: peekHarnesses(message.payload),
             });
             db.mergeAgentTools(message.machineId, peekTools(message.payload));
             // A question parked by a process that is gone cannot be answered:
@@ -1185,6 +1673,7 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
               peekResumable(message.payload)
             )) {
               forgetPending(settled.row.id);
+              escalateRoutedAsks(settled.row.id);
               // The daemon went away and came back. A session whose conversation
               // the SDK still has is not finished — it lost its process, which is
               // this hub's problem to fix rather than the user's to notice. Put
@@ -1204,6 +1693,23 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
             db.touchAgent(message.machineId);
             ws.send(ack(message));
             break;
+          // The per-machine scanner's usage report (USAGE-SPEC.md §6.4): store
+          // the buckets and the limit reading, then push only the small limits
+          // frame — the dashboard pulls the heavy aggregates over REST.
+          case 'usage': {
+            const { buckets, limits } = message.payload as {
+              buckets?: UsageBucket[];
+              limits?: ClaudeLimits;
+            };
+            if (buckets && buckets.length > 0) db.putUsageBuckets(message.machineId, buckets);
+            if (limits) db.putUsageLimits(message.machineId, limits);
+            registry.broadcast({
+              verb: 'frames',
+              machineId: message.machineId,
+              payload: { kind: 'usage', limits: db.listUsageLimits() },
+            });
+            break;
+          }
           // A hand-off: one machine's session addressing another's. Routed on
           // `machineId` like a dashboard's `send`, because that is what it is —
           // the sender happens to be an agent rather than a reader, which the
@@ -1211,6 +1717,22 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
           // not need to know. Cross-machine falls out for free: the envelope
           // names its target's machine, and the registry has the socket.
           case 'send': {
+            // Urgency is only honoured toward the caller's own delegate; anything
+            // else downgrades to a normal queued send.
+            if (
+              typeof message.payload === 'object' &&
+              message.payload !== null &&
+              (message.payload as { urgent?: unknown }).urgent === true
+            ) {
+              const from = peek(message.payload, 'from');
+              const row = message.instanceId
+                ? db.listInstances().find((r) => r.id === message.instanceId)
+                : undefined;
+              if (!from || !row || row.parentInstanceId !== from) {
+                console.warn(`[hub] downgraded urgent send to ${message.instanceId}: not its delegate`);
+                delete (message.payload as Record<string, unknown>).urgent;
+              }
+            }
             const from = peekPeer(message.payload);
             if (!forward(message, ws) || !message.instanceId) break;
             if (from && !isQuerySend(message.payload)) {
@@ -1228,32 +1750,143 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
           // A session starting another session. Recorded exactly like a
           // dashboard's spawn — the row is what puts it in the rail, with a
           // transcript of its own the reader can open.
-          case 'spawn':
+          case 'spawn': {
+            // A delegate that names no permission mode inherits the ROOT of its
+            // delegate tree (see the relay route — same rule, same reason).
+            const parent = peekParent(message.payload);
+            if (!peek(message.payload, 'permissionMode') && parent.parentInstanceId) {
+              const mode = resolveDelegatePermissionMode(db.listInstances(), parent.parentInstanceId);
+              if (mode) (message.payload as Record<string, unknown>).permissionMode = mode;
+            }
             if (forward(message, ws) && message.instanceId) {
               db.openInstance({
                 id: message.instanceId,
                 machineId: message.machineId,
                 cwd: peek(message.payload, 'cwd') ?? '',
                 sessionId: peekResume(message.payload),
+                harness: peekHarness(message.payload),
                 projectId: peek(message.payload, 'projectId'),
+                title: peek(message.payload, 'title'),
                 kind: peekKind(message.payload),
                 permissionMode: peek(message.payload, 'permissionMode'),
                 model: peek(message.payload, 'model'),
+                ...peekParent(message.payload),
               });
               publishInstances(message.machineId);
             }
             break;
+          }
           case 'frames': {
+            // Legacy agents predating the harness rework frame their sessions as
+            // `kind: 'sdk'`. Their messages are structurally the neutral shapes,
+            // so the shim only re-tags the frame with its harness.
+            if (peek(message.payload, 'kind') === 'sdk') {
+              message.payload = {
+                ...(message.payload as object),
+                kind: 'frame',
+                harness: 'claude',
+              } as FramePayload;
+            }
             const kind = peek(message.payload, 'kind');
             if (message.requestId && kind === 'permission_request') {
               pending.remember(message.requestId, message);
-              telegram?.onAsk(message);
+              // A delegate's ask routes to its parent; the user is only the
+              // fallback. The parent must be live — otherwise the ask is the
+              // user's exactly as it was before this feature.
+              const sender = message.instanceId
+                ? db.listInstances().find((r) => r.id === message.instanceId)
+                : undefined;
+              const parentId = sender?.parentInstanceId;
+              const parent =
+                parentId && parentId !== message.instanceId
+                  ? db.listInstances().find((r) => r.id === parentId)
+                  : undefined;
+              const routed =
+                sender !== undefined &&
+                parent !== undefined &&
+                (parent.status === 'running' || parent.status === 'starting');
+              if (routed) {
+                (message.payload as Record<string, unknown>).routedTo = 'parent';
+                deliverDelegateAsk(sender, parent, message);
+              } else {
+                telegram?.onAsk(message);
+              }
             }
-            if (kind === 'sdk' && message.instanceId) {
+            if (kind === 'frame' && message.instanceId) {
               const init = peekInit(message.payload);
               if (init) {
-                db.noteInstanceSession(message.instanceId, init.sessionId, init.cwd);
+                db.noteInstanceSession(
+                  message.instanceId,
+                  init.sessionId,
+                  init.cwd,
+                  peek(message.payload, 'harness')
+                );
                 publishInstances(message.machineId);
+              }
+            }
+            // Delegate hand-back: remember each parented session's final text,
+            // and when its turn ends, auto-deliver it to the parent as a queued
+            // peer report (aborted turns are skipped — they carry no answer).
+            if (kind === 'frame' && message.instanceId) {
+              const neutral = (message.payload as FramePayload & { kind: 'frame' }).message;
+              if (neutral.type === 'assistant' && !neutral.parent_tool_use_id) {
+                const text = neutral.message.content
+                  .filter((block) => block.type === 'text')
+                  .map((block) => block.text)
+                  .join('');
+                if (text) {
+                  const acc = lastAssistant.get(message.instanceId);
+                  if (acc) acc.push(text);
+                  else lastAssistant.set(message.instanceId, [text]);
+                }
+              } else if (neutral.type === 'result') {
+                const parts = lastAssistant.get(message.instanceId);
+                lastAssistant.delete(message.instanceId);
+                const text = parts?.length ? parts.join('\n\n') : undefined;
+                const row = db.listInstances().find((r) => r.id === message.instanceId);
+                const parentId = row?.parentInstanceId;
+                if (row && parentId && parentId !== message.instanceId && neutral.subtype !== 'aborted') {
+                  const parent = db.listInstances().find((r) => r.id === parentId);
+                  if (parent) {
+                    const label = `${leaf(row.cwd)}#${row.id.slice(0, 8)}`;
+                    const header = neutral.is_error
+                      ? `[Report from delegate ${label} — turn failed]`
+                      : `[Report from delegate ${label} — turn complete]`;
+                    // A failed turn's report carries the harness's own error
+                    // words — "(no text)" once stood in for a 403 that was
+                    // sitting right in the result frame.
+                    const errors = (neutral as { errors?: string[] }).errors;
+                    const body =
+                      text ||
+                      (errors?.length ? errors.join('\n') : '(the delegate produced no text this turn)');
+                    registry.agent(parent.machineId)?.send({
+                      verb: 'send',
+                      machineId: parent.machineId,
+                      instanceId: parent.id,
+                      payload: {
+                        instanceId: parent.id,
+                        message: {
+                          type: 'user',
+                          message: { role: 'user', content: header + '\n\n' + body },
+                          parent_tool_use_id: null,
+                          origin: { kind: 'peer', from: row.id, name: leaf(row.cwd), fromSession: row.id },
+                          shouldQuery: false,
+                        },
+                      },
+                    });
+                    handoffs.set(parent.id, { from: leaf(row.cwd), at: Date.now() });
+                    publishInstances(parent.machineId);
+                    publishDelegateEvent(
+                      row.machineId,
+                      db.recordDelegateEvent({
+                        instanceId: row.id,
+                        parentInstanceId: parent.id,
+                        kind: 'report',
+                        payload: { body, failed: neutral.is_error },
+                      })
+                    );
+                  }
+                }
               }
             }
             // An agent only frames an error about a session that failed to start
@@ -1262,6 +1895,7 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
               const reason = peek(message.payload, 'message') ?? 'the session failed';
               db.failInstance(message.instanceId, reason);
               forgetPending(message.instanceId);
+              escalateRoutedAsks(message.instanceId);
               telegram?.onError(message.instanceId, reason);
               publishInstances(message.machineId);
             }
@@ -1308,6 +1942,26 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
             else registry.broadcast(message);
             break;
           }
+          // A session braking one of its own delegates, across machines. Honoured
+          // only when the caller is the target's recorded parent.
+          case 'stop':
+          case 'control': {
+            const from = peek(message.payload, 'from');
+            const row = message.instanceId
+              ? db.listInstances().find((r) => r.id === message.instanceId)
+              : undefined;
+            if (!from || !row || row.parentInstanceId !== from) {
+              console.warn(`[hub] refused ${message.verb} from ${message.machineId}: not its delegate`);
+              break;
+            }
+            registry.agent(row.machineId)?.send({ ...message, machineId: row.machineId });
+            // A parent answering its delegate's ask with `answer_delegate`.
+            const answered = peekAnswer(message.payload);
+            if (answered) {
+              recordDelegateAnswer(row.machineId, row.id, answered.requestId, answered.result);
+            }
+            break;
+          }
           default:
             console.warn(`[hub] unhandled verb ${message.verb} from ${message.machineId}`);
         }
@@ -1348,10 +2002,13 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
                 machineId: message.machineId,
                 cwd: peek(message.payload, 'cwd') ?? '',
                 sessionId: peekResume(message.payload),
+                harness: peekHarness(message.payload),
                 projectId: peek(message.payload, 'projectId'),
+                title: peek(message.payload, 'title'),
                 kind: peekKind(message.payload),
                 permissionMode: peek(message.payload, 'permissionMode'),
                 model: peek(message.payload, 'model'),
+                ...peekParent(message.payload),
               });
               publishInstances(message.machineId);
             }
@@ -1375,6 +2032,7 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
             if (forward(message, ws) && message.instanceId) {
               if (peekDiscard(message.payload)) db.discardInstance(message.instanceId);
               else db.stopInstance(message.instanceId);
+              escalateRoutedAsks(message.instanceId);
               publishInstances(message.machineId);
             }
             break;
@@ -1383,6 +2041,17 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
             registry.rememberRequester(message.requestId, ws);
             telegram?.onSettled(message.requestId);
             pending.resolve(message.requestId);
+            // A reader answering an ask that escalated to them: the parent died
+            // holding it, but it is still that delegate's ask and its record.
+            const answered = peekAnswer(message.payload);
+            if (answered && message.instanceId) {
+              recordDelegateAnswer(
+                message.machineId,
+                message.instanceId,
+                answered.requestId,
+                answered.result
+              );
+            }
             // A per-cell install or retry, clicked rather than swept: the chip
             // turns on every dashboard, not only the one that clicked it.
             const toolId = peekInstall(message.payload);

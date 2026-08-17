@@ -24,6 +24,15 @@ export interface TelegramBridge {
   readonly onSettled: (requestId: string) => void;
   readonly onError: (instanceId: string, message: string) => void;
   readonly start: () => void;
+  /**
+   * The server's delegate-answer recorder, registered after construction: the
+   * bridge sends its `resolvePermission` straight down the agent socket, so an
+   * escalated delegate ask answered from Telegram would otherwise settle
+   * without a `delegate_events` answer row.
+   */
+  readonly setAnswerRecorder: (
+    record: (machineId: string, instanceId: string, requestId: string, result: PermissionResult) => void
+  ) => void;
 }
 
 export interface TelegramServices {
@@ -274,6 +283,11 @@ export const createTelegramBridge = ({
     return true;
   };
 
+  /** Set by the server once its recorder exists; called on every resolve. */
+  let recordAnswer:
+    | ((machineId: string, instanceId: string, requestId: string, result: PermissionResult) => void)
+    | undefined;
+
   const resolve = (envelope: Envelope, requestId: string, result: PermissionResult): boolean => {
     const request = envelope.payload as PermissionRequest;
     const payload: ControlPayload = {
@@ -290,6 +304,10 @@ export const createTelegramBridge = ({
       payload,
     });
     if (!reached) return false;
+    // The control went straight down the agent socket, past the server's own
+    // recording sites — file the answer here or a Telegram-settled delegate
+    // ask stays `pending` forever.
+    recordAnswer?.(envelope.machineId, request.instanceId, requestId, result);
     settledHere.add(requestId);
     pending.resolve(requestId);
     return true;
@@ -544,5 +562,13 @@ export const createTelegramBridge = ({
     })();
   };
 
-  return { onAsk, onSettled, onError, start };
+  return {
+    onAsk,
+    onSettled,
+    onError,
+    start,
+    setAnswerRecorder(record) {
+      recordAnswer = record;
+    },
+  };
 };

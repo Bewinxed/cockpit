@@ -47,7 +47,10 @@
     const info = instance.sessionId
       ? cockpit.catalogOf(instance.machineId).find((row) => row.sessionId === instance.sessionId)
       : undefined;
-    return info ? sessionTitle(info) : 'untitled session';
+    if (info) return sessionTitle(info);
+    // What its spawn said it is for — a delegate's brief, first line — before
+    // the fallback, since a delegate is never in the catalog to begin with.
+    return instance.title ?? 'untitled session';
   });
 
   // The label swaps only when the session's state actually changes — a row that

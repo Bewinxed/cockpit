@@ -2,7 +2,25 @@
 // compacting; the mapper used to drop them on the floor.
 import { expect, test } from 'bun:test';
 import { classifyCommand } from '@cockpit/core';
-import { mapFrame } from './frames';
+import type { SDKMessage, SessionMessage } from '@cockpit/core';
+import {
+  answerVerdict,
+  applyToolResult,
+  askBodyParts,
+  askDetailOf,
+  askShort,
+  askShortOf,
+  delegateOf,
+  foldDelegateEvent,
+  isDelegateReport,
+  mapFrame,
+  mapTranscript,
+  matchesSession,
+  mergePeerMessage,
+  streamPhase,
+  thinkingDurationMs,
+} from './frames';
+import type { DelegateEvent, JsonValue, Message } from './types';
 
 const base = { type: 'system' as const, uuid: 'u1' as never, session_id: 's1' };
 
@@ -145,4 +163,605 @@ test('the model that answered wins over the alias the spawn asked for', () => {
   applyBranchEvent(branches, 'i1', { toolUseId: 't3', subagentType: 'Explore', model: 'opus' });
   applyBranchEvent(branches, 'i1', { toolUseId: 't3', model: 'claude-opus-4-6' });
   expect(branches.t3.model).toBe('claude-opus-4-6');
+});
+
+test('a successful result still reports its cost, without pushing a line', () => {
+  const mapping = mapFrame('i1', {
+    type: 'result',
+    uuid: 'uR1',
+    session_id: 's1',
+    subtype: 'success',
+    is_error: false,
+    total_cost_usd: 1.2345,
+  } as never);
+  expect(mapping.cost).toBe(1.2345);
+  // The success path pushed nothing before, and still pushes nothing now.
+  expect(mapping.messages).toEqual([]);
+  console.log(`DIAG cost-on-success: cost=${mapping.cost} lines=${mapping.messages.length}`);
+});
+
+test('an errored result carries its cost and the error line still has it', () => {
+  const mapping = mapFrame('i1', {
+    type: 'result',
+    uuid: 'uR2',
+    session_id: 's1',
+    subtype: 'error',
+    is_error: true,
+    total_cost_usd: 0.4567,
+    errors: ['model is unavailable'],
+  } as never);
+  expect(mapping.cost).toBe(0.4567);
+  expect(mapping.messages).toHaveLength(1);
+  expect(mapping.messages[0].type).toBe('result.error');
+  expect(mapping.messages[0].metadata?.totalCost).toBe(0.4567);
+  console.log(
+    `DIAG cost-on-error: cost=${mapping.cost} line=${mapping.messages[0].type} lineCost=${mapping.messages[0].metadata?.totalCost}`
+  );
+});
+
+const peer = (session: string | undefined, type: Message['type'] = 'user.peer'): Message => ({
+  instanceId: 'parent',
+  type,
+  content: 'done',
+  timestamp: new Date(),
+  metadata: session ? { peerSession: session } : undefined,
+});
+
+const row = (id: string, parent: string | null) => ({ id, parentInstanceId: parent });
+
+test('a peer from this transcript\'s own delegate is its report', () => {
+  const instances = [row('deleg1', 'parent'), row('other', 'elsewhere')];
+  const report = isDelegateReport(peer('deleg1'), 'parent', instances);
+  const notReport = isDelegateReport(peer('other'), 'parent', instances);
+  expect(report).toBe(true);
+  expect(notReport).toBe(false);
+  console.log(`DIAG delegate-report: fromDelegate=${report} fromOther=${notReport}`);
+});
+
+test('a delegate report belongs to its parent transcript only', () => {
+  const instances = [row('deleg1', 'parent')];
+  const here = isDelegateReport(peer('deleg1'), 'parent', instances);
+  const elsewhere = isDelegateReport(peer('deleg1'), 'somewhere-else', instances);
+  expect(here).toBe(true);
+  expect(elsewhere).toBe(false);
+  console.log(`DIAG report-parent-scoped: inParent=${here} inOther=${elsewhere}`);
+});
+
+test('a peer is no delegate report when its row has no parent, or it is no peer', () => {
+  const rootRow = [row('deleg1', null)];
+  const orphan = isDelegateReport(peer('deleg1'), 'parent', rootRow);
+  const notPeer = isDelegateReport(peer(undefined, 'user'), 'parent', [row('deleg1', 'parent')]);
+  const noSession = isDelegateReport(peer(undefined), 'parent', [row('deleg1', 'parent')]);
+  expect(orphan).toBe(false);
+  expect(notPeer).toBe(false);
+  expect(noSession).toBe(false);
+  console.log(`DIAG report-guards: unparented=${orphan} nonPeer=${notPeer} noSession=${noSession}`);
+});
+
+// A delegate's permission ask arrives as a peer-origin user message whose text
+// is the hub's `deliverDelegateAsk` wire format. The `[delegate-ask …]` marker
+// survives SDK storage (the origin does not), so both the live and the stored
+// path must recognise it and fold it into `user.delegate_ask`.
+const ASK_INSTANCE = '506dfafb-8160-487c-9a04-649b15983176';
+const ASK_REQUEST = 'per_0062dfacd001lfuztfQIzVhRf0';
+const ASK_LABEL = 'cockpit#506dfafb';
+const ASK_BODY = 'bash — {"command":"bun test src/lib/cockpit/ 2>&1 | tail -6"}';
+const ASK_TEXT =
+  `[Delegate ask from ${ASK_LABEL}]\n\n${ASK_BODY}\n\n` +
+  `[delegate-ask instance=${ASK_INSTANCE} request=${ASK_REQUEST}]\n\n` +
+  'Answer it with the answer_delegate tool: answer_delegate(target, requestId, answers) — ' +
+  'answers are keyed by the exact question text and the value is the chosen option label ' +
+  '(pass deny=true to refuse it).';
+
+const peerFrame = (text: string, from = 'i-sender', name = 'sender'): SDKMessage => ({
+  type: 'user',
+  message: { role: 'user', content: text },
+  origin: { kind: 'peer', from, name, fromSession: from },
+});
+
+const storedEntry = (text: string, uuid: string): SessionMessage => ({
+  type: 'user',
+  uuid,
+  session_id: 's1',
+  message: { role: 'user', content: text },
+  parent_tool_use_id: null,
+  parent_agent_id: null,
+});
+
+test('a stored delegate ask parses to user.delegate_ask, dropping marker and instruction', () => {
+  const stored = mapTranscript('i1', [storedEntry(ASK_TEXT, 'u-ask')]).messages;
+  expect(stored).toHaveLength(1);
+  expect(stored[0].type).toBe('user.delegate_ask');
+  expect(stored[0].content).toBe(ASK_BODY);
+  expect(stored[0].metadata).toEqual({
+    peerSession: ASK_INSTANCE,
+    askRequestId: ASK_REQUEST,
+    askLabel: ASK_LABEL,
+  });
+  expect(stored[0].content).not.toContain('[delegate-ask');
+  expect(stored[0].content).not.toContain('Answer it with');
+});
+
+test('a live peer ask parses to user.delegate_ask, with the peer origin attached', () => {
+  const live = mapFrame('i1', peerFrame(ASK_TEXT, ASK_INSTANCE, 'cockpit')).messages;
+  expect(live).toHaveLength(1);
+  expect(live[0].type).toBe('user.delegate_ask');
+  expect(live[0].content).toBe(ASK_BODY);
+  expect(live[0].metadata).toEqual({
+    peerFrom: ASK_INSTANCE,
+    peerName: 'cockpit',
+    peerSession: ASK_INSTANCE,
+    askRequestId: ASK_REQUEST,
+    askLabel: ASK_LABEL,
+  });
+});
+
+test('a peer message without the ask markers still maps to user.peer', () => {
+  const live = mapFrame('i1', peerFrame('just a forwarded note')).messages;
+  expect(live).toHaveLength(1);
+  expect(live[0].type).toBe('user.peer');
+  expect(live[0].content).toBe('just a forwarded note');
+});
+
+test('a stored hand-off brief still upgrades to user.peer', () => {
+  const text = '[Hand-off from the sender session — another agent, not the user]\n\nplease handle this';
+  const stored = mapTranscript('i1', [storedEntry(text, 'u-handoff')]).messages;
+  expect(stored).toHaveLength(1);
+  expect(stored[0].type).toBe('user.peer');
+  expect(stored[0].metadata?.peerName).toBe('sender');
+});
+
+test('an ask is never a delegate report, even for a delegate of the parent', () => {
+  const ask: Message = {
+    instanceId: 'parent',
+    type: 'user.delegate_ask',
+    content: ASK_BODY,
+    timestamp: new Date(),
+    metadata: { peerSession: 'deleg1', askRequestId: ASK_REQUEST, askLabel: ASK_LABEL },
+  };
+  expect(isDelegateReport(ask, 'parent', [row('deleg1', 'parent')])).toBe(false);
+});
+
+test('a second delegate ask with the same requestId merges; a different one does not', () => {
+  const ask = (requestId: string, sdkUuid?: string): Message => ({
+    instanceId: 'parent',
+    type: 'user.delegate_ask',
+    content: ASK_BODY,
+    timestamp: new Date(),
+    sdkUuid,
+    metadata: { peerSession: ASK_INSTANCE, askRequestId: requestId, askLabel: ASK_LABEL },
+  });
+  const messages = [ask(ASK_REQUEST)];
+  expect(mergePeerMessage(messages, ask(ASK_REQUEST, 'u-2'))).toBe(true);
+  expect(messages).toHaveLength(1);
+  expect(messages[0].sdkUuid).toBe('u-2');
+  expect(mergePeerMessage(messages, ask('per_other'))).toBe(false);
+  expect(messages).toHaveLength(1);
+});
+
+test('a question-form ask body survives verbatim as multi-line content', () => {
+  const body = 'Q1: Which file?\n- a.ts\n- b.ts';
+  const text =
+    `[Delegate ask from ${ASK_LABEL}]\n\n${body}\n\n` +
+    `[delegate-ask instance=${ASK_INSTANCE} request=${ASK_REQUEST}]\n\n` +
+    'Answer it with the answer_delegate tool: answer_delegate(target, requestId, answers).';
+  const stored = mapTranscript('i1', [storedEntry(text, 'u-question')]).messages;
+  expect(stored).toHaveLength(1);
+  expect(stored[0].type).toBe('user.delegate_ask');
+  expect(stored[0].content).toBe('Q1: Which file?\n- a.ts\n- b.ts');
+});
+
+// A delegate's auto-report header (hub server.ts): the marker is all that
+// survives storage, and only the 8-char short id — so a stored report upgrades
+// to user.peer with reportKind set, and consumers prefix-match the session.
+const REPORT_ID = '506dfafb-8160-487c-9a04-649b15983176';
+const REPORT_TEXT = `[Report from delegate cockpit#506dfafb — turn complete]\n\nAll gates green.`;
+
+test('a stored delegate report upgrades to user.peer with the marker stripped', () => {
+  const stored = mapTranscript('i1', [storedEntry(REPORT_TEXT, 'u-report')]).messages;
+  expect(stored).toHaveLength(1);
+  expect(stored[0].type).toBe('user.peer');
+  expect(stored[0].content).toBe('All gates green.');
+  expect(stored[0].metadata).toEqual({
+    peerName: 'cockpit#506dfafb',
+    peerSession: '506dfafb',
+    reportKind: 'report',
+  });
+});
+
+test('a failed report keeps its failed kind', () => {
+  const text = `[Report from delegate cockpit#506dfafb — turn failed]\n\nprovider_retry exhausted`;
+  const stored = mapTranscript('i1', [storedEntry(text, 'u-failed')]).messages;
+  expect(stored[0].metadata?.reportKind).toBe('failed');
+  expect(stored[0].content).toBe('provider_retry exhausted');
+});
+
+test('a live delegate report carries the full session id and the stripped body', () => {
+  const live = mapFrame('i1', peerFrame(REPORT_TEXT, REPORT_ID, 'cockpit')).messages;
+  expect(live).toHaveLength(1);
+  expect(live[0].type).toBe('user.peer');
+  expect(live[0].content).toBe('All gates green.');
+  expect(live[0].metadata?.peerSession).toBe(REPORT_ID);
+  expect(live[0].metadata?.reportKind).toBe('report');
+});
+
+test('matchesSession pairs short ids with full ids, never under 8 chars', () => {
+  expect(matchesSession('506dfafb', REPORT_ID)).toBe(true);
+  expect(matchesSession(REPORT_ID, REPORT_ID)).toBe(true);
+  expect(matchesSession('506dfaf', REPORT_ID)).toBe(false);
+  expect(matchesSession('deadbeef', REPORT_ID)).toBe(false);
+  expect(matchesSession(undefined, REPORT_ID)).toBe(false);
+});
+
+test('a stored report is a delegate report for its parent, by prefix', () => {
+  const stored = mapTranscript('parent', [storedEntry(REPORT_TEXT, 'u-r2')]).messages;
+  expect(isDelegateReport(stored[0], 'parent', [row(REPORT_ID, 'parent')])).toBe(true);
+  expect(isDelegateReport(stored[0], 'parent', [row(REPORT_ID, 'other')])).toBe(false);
+});
+
+// The hub serialises tool asks as `<tool> — <input JSON>`; the parts parser
+// unpacks them so no surface ever renders raw JSON, and questions stay text.
+test('askBodyParts unpacks an edit ask and round-trips the diff', () => {
+  const diff = 'Index: a.ts\n===\n--- a.ts\n+++ a.ts\n@@ -1 +1 @@\n-old\n+new\n';
+  const body = `edit — ${JSON.stringify({ filepath: '/repo/src/a.ts', diff })}`;
+  const parts = askBodyParts(body);
+  expect(parts?.tool).toBe('edit');
+  expect(parts?.input.filepath).toBe('/repo/src/a.ts');
+  expect(parts?.input.diff).toBe(diff);
+});
+
+test('askBodyParts parses bash, rejects questions and malformed JSON', () => {
+  expect(askBodyParts('bash — {"command":"bun test"}')?.tool).toBe('bash');
+  expect(askBodyParts('Q1: Which file?\n- a.ts')).toBe(null);
+  expect(askBodyParts('edit — {broken')).toBe(null);
+});
+
+test('askShort names the file, the command, or the first line — never raw JSON', () => {
+  expect(askShort('edit — {"filepath":"/repo/src/lib/frames.ts","diff":"x"}')).toBe(
+    'edit frames.ts'
+  );
+  expect(askShort('bash — {"command":"bun test src/"}')).toBe('bash bun test src/');
+  expect(askShort('Q1: Which file?\n- a.ts')).toBe('Q1: Which file?');
+});
+
+test('answerVerdict reads deny, answers, plain approval, and survives garbage', () => {
+  expect(answerVerdict({ target: 't', requestId: 'per_1', deny: true })).toEqual({
+    verb: 'Denied',
+    requestId: 'per_1',
+    answers: [],
+  });
+  expect(answerVerdict({ requestId: 'per_2', answers: { 'Which?': 'a.ts' } })).toEqual({
+    verb: 'Answered',
+    requestId: 'per_2',
+    answers: [{ question: 'Which?', choice: 'a.ts' }],
+  });
+  expect(answerVerdict({ target: 't', requestId: 'per_3' }).verb).toBe('Approved');
+  expect(answerVerdict(undefined)).toEqual({ verb: 'Approved', requestId: null, answers: [] });
+  expect(answerVerdict('nonsense').verb).toBe('Approved');
+});
+
+// The hub's own record of the exchange (`delegate_events`): the dashboard folds
+// the rows it reads and the ones it is pushed into one list per delegate, and a
+// settled ask is never pushed again — the answer is what closes it.
+const AT = '2026-08-15T18:25:27.459Z';
+const askRow = (id: number, requestId: string, input: Record<string, JsonValue>): DelegateEvent => ({
+  id,
+  instanceId: 'deleg1',
+  parentInstanceId: 'parent',
+  kind: 'ask',
+  requestId,
+  toolName: 'edit',
+  requestKind: 'tool',
+  payload: { input },
+  status: 'pending',
+  createdAt: AT,
+});
+const answerRow = (id: number, requestId: string, behavior: string): DelegateEvent => ({
+  id,
+  instanceId: 'deleg1',
+  parentInstanceId: 'parent',
+  kind: 'answer',
+  requestId,
+  toolName: null,
+  requestKind: null,
+  payload: { behavior },
+  status: null,
+  createdAt: AT,
+});
+const reportRow = (id: number, body: string, failed = false): DelegateEvent => ({
+  id,
+  instanceId: 'deleg1',
+  parentInstanceId: 'parent',
+  kind: 'report',
+  requestId: null,
+  toolName: null,
+  requestKind: null,
+  payload: { body, failed },
+  status: null,
+  createdAt: AT,
+});
+
+test('an ask lands once, however many times it is filed', () => {
+  const list: DelegateEvent[] = [];
+  foldDelegateEvent(list, askRow(1, 'per_1', { command: 'bun test' }));
+  foldDelegateEvent(list, askRow(1, 'per_1', { command: 'bun test' }));
+  expect(list).toHaveLength(1);
+  expect(list[0].status).toBe('pending');
+  console.log(`DIAG fold-dedup: rows=${list.length} status=${list[0].status}`);
+});
+
+test('an answer settles the ask it names — allowed answers it, denied denies it', () => {
+  const list: DelegateEvent[] = [];
+  foldDelegateEvent(list, askRow(1, 'per_1', { command: 'bun test' }));
+  foldDelegateEvent(list, askRow(2, 'per_2', { command: 'rm -rf /' }));
+  foldDelegateEvent(list, answerRow(3, 'per_1', 'allow'));
+  foldDelegateEvent(list, answerRow(4, 'per_2', 'deny'));
+  expect(list.map((row) => row.status)).toEqual(['answered', 'denied', null, null]);
+  console.log(`DIAG fold-settle: statuses=${list.map((row) => row.status).join(',')}`);
+});
+
+test('an answer to an ask nobody has is still recorded, and so is a report', () => {
+  const list: DelegateEvent[] = [];
+  foldDelegateEvent(list, answerRow(7, 'per_gone', 'allow'));
+  foldDelegateEvent(list, reportRow(8, 'All gates green.'));
+  expect(list.map((row) => row.kind)).toEqual(['answer', 'report']);
+  expect(list[1].payload).toEqual({ body: 'All gates green.', failed: false });
+});
+
+test('askShortOf and askDetailOf read an ask off its row rather than its text', () => {
+  const diff = '--- a.ts\n+++ a.ts\n@@ -1 +1 @@\n-old\n+new\n';
+  expect(askShortOf('edit', { filepath: '/repo/src/lib/frames.ts', diff })).toBe('edit frames.ts');
+  expect(askDetailOf('edit', { filepath: '/repo/src/a.ts', diff })).toBe(`/repo/src/a.ts\n\n${diff}`);
+  expect(askShortOf('bash', { command: 'bun test src/' })).toBe('bash bun test src/');
+  expect(askDetailOf('bash', { command: 'bun test src/' })).toBe('bun test src/');
+  // Nothing telling in the input: the tool names itself and the JSON expands.
+  expect(askShortOf('webfetch', { url: 'https://x.dev' })).toBe('webfetch');
+  expect(askDetailOf('webfetch', { url: 'https://x.dev' })).toBe('{\n  "url": "https://x.dev"\n}');
+});
+
+test('a question ask reads as its questions, off the row and off the text alike', () => {
+  const input = {
+    questions: [{ question: 'Which file?', options: [{ label: 'a.ts' }, { label: 'b.ts' }] }],
+  };
+  expect(askShortOf('AskUserQuestion', input)).toBe('Q1: Which file?');
+  expect(askDetailOf('AskUserQuestion', input)).toBe('Q1: Which file?\n- a.ts\n- b.ts');
+  // The hub writes that same wording into the transcript, so both paths agree.
+  expect(askShort('Q1: Which file?\n- a.ts\n- b.ts')).toBe('Q1: Which file?');
+});
+
+test('delegateOf resolves full id, short id, and directory leaf — own delegates only', () => {
+  const rows = [
+    { id: REPORT_ID, cwd: '/home/u/cockpit', parentInstanceId: 'parent' },
+    { id: 'aaaabbbb-0000-0000-0000-000000000000', cwd: '/home/u/other', parentInstanceId: 'x' },
+  ];
+  expect(delegateOf(REPORT_ID, 'parent', rows)?.id).toBe(REPORT_ID);
+  expect(delegateOf('506dfafb', 'parent', rows)?.id).toBe(REPORT_ID);
+  expect(delegateOf('cockpit', 'parent', rows)?.id).toBe(REPORT_ID);
+  expect(delegateOf('506dfaf', 'parent', rows)).toBe(null);
+  expect(delegateOf('aaaabbbb', 'parent', rows)).toBe(null);
+  expect(delegateOf('other', 'parent', rows)).toBe(null);
+});
+
+// Harness bookkeeping that arrives as user text: a task notification names the
+// Task call it echoes (so the renderer can fold it into that branch), and a
+// slash command's local echo is a note, never raw XML in a user bubble.
+test('a stored task notification carries its Task tool id for the branch fold', () => {
+  const text =
+    '<task-notification>\n<task-id>abc123</task-id>\n<tool-use-id>toolu_01XYZ</tool-use-id>\n' +
+    '<status>completed</status>\n<summary>Agent "probe" finished</summary>\n</task-notification>';
+  const stored = mapTranscript('i1', [storedEntry(text, 'u-note')]).messages;
+  expect(stored).toHaveLength(1);
+  expect(stored[0].type).toBe('ui.system_note');
+  expect(stored[0].metadata?.noteKind).toBe('Task notification');
+  expect(stored[0].metadata?.noteTaskToolId).toBe('toolu_01XYZ');
+  expect(stored[0].metadata?.noteTitle).toBe('Agent "probe" finished');
+});
+
+test('a local-command echo maps to a note titled by its command, not a user bubble', () => {
+  const text =
+    '<local-command-caveat>Caveat: the messages below were generated during a local command.</local-command-caveat>\n' +
+    '<command-name>/compact</command-name>\n<command-message>compact</command-message>';
+  const stored = mapTranscript('i1', [storedEntry(text, 'u-cmd')]).messages;
+  expect(stored).toHaveLength(1);
+  expect(stored[0].type).toBe('ui.system_note');
+  expect(stored[0].metadata?.noteKind).toBe('Local command');
+  expect(stored[0].metadata?.noteTitle).toBe('/compact');
+});
+
+// How long the block thought, which the header prints — and every case where
+// there is no measurement, because "Thought for 0s" is a number nobody took.
+const traceLine = (type: Message['type'], at: string | number): Message => ({
+  instanceId: 'i1',
+  type,
+  content: '',
+  timestamp: new Date(at),
+});
+
+test('a thinking block is timed to the message that follows it in the turn', () => {
+  const messages = [
+    traceLine('thinking', '2026-08-15T10:00:00.000Z'),
+    traceLine('tool.use', '2026-08-15T10:00:03.400Z'),
+  ];
+  expect(thinkingDurationMs(messages, 0)).toBe(3400);
+});
+
+test('the transcript tail has nothing to be timed against yet', () => {
+  const messages = [traceLine('thinking', '2026-08-15T10:00:00.000Z')];
+  expect(thinkingDurationMs(messages, 0)).toBeNull();
+});
+
+test('a stored transcript that lost its timestamps reports no duration', () => {
+  const messages = [
+    traceLine('thinking', Number.NaN),
+    traceLine('assistant', '2026-08-15T10:00:03.400Z'),
+  ];
+  expect(thinkingDurationMs(messages, 0)).toBeNull();
+});
+
+test('a clock that went backwards is refused', () => {
+  const messages = [
+    traceLine('thinking', '2026-08-15T10:00:03.400Z'),
+    traceLine('assistant', '2026-08-15T10:00:00.000Z'),
+  ];
+  expect(thinkingDurationMs(messages, 0)).toBeNull();
+});
+
+test('two blocks of one assistant frame are milliseconds apart, which is not a duration', () => {
+  const messages = [
+    traceLine('thinking', '2026-08-15T10:00:00.000Z'),
+    traceLine('thinking', '2026-08-15T10:00:00.009Z'),
+  ];
+  expect(thinkingDurationMs(messages, 0)).toBeNull();
+});
+
+test('the gap to the next user turn is the reader thinking, not the model', () => {
+  const idle = [
+    traceLine('thinking', '2026-08-15T10:00:00.000Z'),
+    traceLine('user', '2026-08-15T10:00:42.000Z'),
+  ];
+  expect(thinkingDurationMs(idle, 0)).toBeNull();
+  // The peer and delegate-ask forms open a turn the same way.
+  const handed = [
+    traceLine('thinking', '2026-08-15T10:00:00.000Z'),
+    traceLine('user.peer', '2026-08-15T10:00:42.000Z'),
+  ];
+  expect(thinkingDurationMs(handed, 0)).toBeNull();
+});
+
+test('a gap no turn could have taken is a clock jump, not a measurement', () => {
+  const messages = [
+    traceLine('thinking', '2026-08-15T10:00:00.000Z'),
+    traceLine('assistant', '2026-08-15T11:30:00.000Z'),
+  ];
+  expect(thinkingDurationMs(messages, 0)).toBeNull();
+});
+
+// What a partial says about the phase of the turn. The events are the SDK's own
+// shapes (0.3.220 `BetaRawMessageStreamEvent`), which is what the harness puts
+// on the wire whole, minus the `index` no rule here reads — the tail said
+// "Thinking…" through minutes of tool calls because every one of these was
+// being dropped on the floor.
+test('a thinking block opening is the only reason to say "thinking"', () => {
+  expect(streamPhase({ type: 'content_block_start', content_block: { type: 'thinking' } })).toEqual({
+    blockStart: 'thinking',
+  });
+});
+
+test('a redacted block is reasoning too, and streams none of it', () => {
+  expect(
+    streamPhase({ type: 'content_block_start', content_block: { type: 'redacted_thinking' } })
+  ).toEqual({ blockStart: 'thinking' });
+});
+
+test('a text block opening is the answer starting to be written', () => {
+  expect(
+    streamPhase({ type: 'content_block_start', content_block: { type: 'text', text: '' } })
+  ).toEqual({ blockStart: 'text' });
+});
+
+test('a tool block opening names the call before a single argument has arrived', () => {
+  expect(
+    streamPhase({
+      type: 'content_block_start',
+      content_block: { type: 'tool_use', id: 'toolu_7', name: 'Read', input: {} },
+    })
+  ).toEqual({
+    blockStart: 'tool',
+    // Empty on purpose: the input is still being written a token at a time, and
+    // the full assistant frame supersedes this with the real glance.
+    toolStarting: { toolId: 'toolu_7', name: 'Read', glance: '' },
+  });
+});
+
+test('a tool block with nothing to name it is no evidence at all', () => {
+  expect(
+    streamPhase({ type: 'content_block_start', content_block: { type: 'tool_use', input: {} } })
+  ).toBeNull();
+});
+
+test('reasoning arrives a delta at a time', () => {
+  expect(
+    streamPhase({
+      type: 'content_block_delta',
+      delta: { type: 'thinking_delta', thinking: 'Checking the', estimated_tokens: null },
+    })
+  ).toEqual({ thinkingDelta: 'Checking the' });
+});
+
+test('the signature is the SDK saying the thought is wrapping up', () => {
+  expect(
+    streamPhase({ type: 'content_block_delta', delta: { type: 'signature_delta', signature: 'x' } })
+  ).toEqual({ thinkingClosing: true });
+});
+
+test('a block closing says so, whichever kind it was', () => {
+  expect(streamPhase({ type: 'content_block_stop' })).toEqual({ blockStop: true });
+});
+
+test('the deltas that are not the turn’s phase say nothing about it', () => {
+  // Text is the streaming buffer's, and `mapFrame` reads it before this.
+  expect(
+    streamPhase({ type: 'content_block_delta', delta: { type: 'text_delta', text: 'Hi' } })
+  ).toBeNull();
+  expect(
+    streamPhase({ type: 'content_block_delta', delta: { type: 'input_json_delta', partial_json: '{' } })
+  ).toBeNull();
+  expect(streamPhase({ type: 'message_stop' })).toBeNull();
+});
+
+test('a subagent’s partials move its branch, never the main loop’s phase', () => {
+  const opening = { type: 'content_block_start', content_block: { type: 'thinking' } };
+  expect(streamPhase(opening)).toEqual({ blockStart: 'thinking' });
+  expect(streamPhase(opening, 'toolu_1')).toBeNull();
+});
+
+test('a partial still feeds the streaming buffer, subagent or not', () => {
+  const text = { type: 'content_block_delta' as const, delta: { type: 'text_delta' as const, text: 'Hi' } };
+  expect(mapFrame('i1', { type: 'stream_event', event: text }).delta).toBe('Hi');
+  expect(
+    mapFrame('i1', { type: 'stream_event', parent_tool_use_id: 'toolu_1', event: text }).delta
+  ).toBe('Hi');
+  expect(mapFrame('i1', { type: 'stream_event', event: { type: 'message_stop' } }).clearsStream).toBe(
+    true
+  );
+});
+
+test('applyToolResult recovers delegateInstanceId from a JSON-string result', () => {
+  const messages: Message[] = [
+    {
+      id: 'm1',
+      instanceId: 'i1',
+      type: 'tool.handoff',
+      content: 'tmp',
+      timestamp: new Date(0),
+      metadata: { toolId: 't1', toolName: 'delegate', handoffKind: 'delegate' },
+    },
+  ];
+  applyToolResult(messages, {
+    toolId: 't1',
+    result: JSON.stringify({ delegateInstanceId: 'tmp-e0f89815', title: 'leaf' }),
+    isError: false,
+  });
+  expect(messages[0].metadata?.delegateInstanceId).toBe('tmp-e0f89815');
+  expect(messages[0].metadata?.delegateTitle).toBe('leaf');
+});
+
+test('applyToolResult leaves a non-JSON hand-off result alone', () => {
+  const messages: Message[] = [
+    {
+      id: 'm2',
+      instanceId: 'i1',
+      type: 'tool.handoff',
+      content: 'cockpit#bd198d25',
+      timestamp: new Date(0),
+      metadata: { toolId: 't2', toolName: 'handoff', handoffKind: 'handoff' },
+    },
+  ];
+  applyToolResult(messages, {
+    toolId: 't2',
+    result: 'Handed to cockpit#bd198d25 (/home/bewinxed/cockpit on obelisk)',
+    isError: false,
+  });
+  expect(messages[0].metadata?.delegateInstanceId).toBeUndefined();
+  expect(messages[0].metadata?.toolStatus).toBe('success');
 });

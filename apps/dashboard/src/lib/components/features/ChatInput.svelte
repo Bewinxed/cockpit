@@ -1,10 +1,12 @@
 <script lang="ts">
-  import { IconAttach, IconClose, IconDocument, IconSpinner, IconSend, IconStop } from '$lib/icons';
+  import { IconAttach, IconClose, IconDocument, IconMic, IconSpinner, IconSend, IconStop } from '$lib/icons';
   import type { SendExtras } from '$lib/cockpit/client.svelte';
   import { tick, type Snippet } from 'svelte';
-  import { slide } from 'svelte/transition';
+  import { fade, slide } from 'svelte/transition';
   import { quintOut } from 'svelte/easing';
+  import { Button } from '$lib/components/ui/button';
   import CommandPalette from './CommandPalette.svelte';
+  import DictationButton from './DictationButton.svelte';
   import { commandAt, filterCommands, insertCommand } from './command-groups';
   import { matchPeers, mentionAt, type PeerTarget } from '$lib/cockpit/peer';
   import { newId } from '$lib/cockpit/id';
@@ -81,6 +83,10 @@
   let fileInput = $state<HTMLInputElement | null>(null);
   let showPalette = $state(false);
   let selectedIndex = $state(0);
+  let dictation = $state<ReturnType<typeof DictationButton> | null>(null);
+  /** What the microphone has heard so far — shown, and thrown away if it settles
+   *  into nothing. Only a settled phrase is allowed into `message`. */
+  let interim = $state('');
 
   /** Where the caret is, so a menu is only live while its token is being typed. */
   let caret = $state(0);
@@ -157,13 +163,58 @@
   /** An image on its own is a message; the box being empty is not the test. */
   const canSend = $derived(Boolean(message.trim()) || chipsOpen);
 
+  /** The box follows what is in it — after a keystroke, a restored draft, or a
+   *  phrase the microphone settled on. */
+  function resize() {
+    if (!textareaRef) return;
+    textareaRef.style.height = 'auto';
+    textareaRef.style.height = Math.min(textareaRef.scrollHeight, 200) + 'px';
+  }
+
   // Auto-resize textarea
   function handleInput(e: Event) {
     error = '';
     const target = e.target as HTMLTextAreaElement;
     caret = target.selectionStart ?? target.value.length;
-    target.style.height = 'auto';
-    target.style.height = Math.min(target.scrollHeight, 200) + 'px';
+    resize();
+  }
+
+  /** A settled phrase lands where the caret was left rather than at the end:
+   *  dictation is another way of typing, and typing happens at the caret. */
+  async function insertDictation(text: string) {
+    error = '';
+    const at = Math.min(caret, message.length);
+    const head = message.slice(0, at);
+    const spaced = head && !/\s$/.test(head) ? ` ${text}` : text;
+    message = head + spaced + message.slice(at);
+    caret = at + spaced.length;
+    await tick();
+    resize();
+    // The microphone holds focus while it listens; only a caret the reader can
+    // see is worth moving.
+    if (textareaRef && document.activeElement === textareaRef) {
+      textareaRef.setSelectionRange(caret, caret);
+    }
+  }
+
+  /** Attention has left the dock, so the microphone comes off with it. */
+  function handleFocusOut(e: FocusEvent) {
+    const { currentTarget, relatedTarget } = e;
+    if (currentTarget instanceof Node && relatedTarget instanceof Node) {
+      if (currentTarget.contains(relatedTarget)) return;
+    }
+    dictation?.stop();
+  }
+
+  /** A chip arrives the way the source composer's does: a short rise with a
+   *  touch of scale, so it reads as placed rather than as a jump in height. */
+  function pop(_node: Element, { duration = 180 } = {}) {
+    return {
+      duration,
+      easing: quintOut,
+      css: (t: number, u: number) =>
+        `opacity: ${t}; transform: translateY(${u * 4}px) scale(${0.96 + 0.04 * t})`,
+    };
   }
 
   /** `readAsDataURL` is the browser's own base64; the SDK wants it without the prefix. */
@@ -274,6 +325,9 @@
     error = '';
     showPalette = false;
     handoff = null;
+    // The message has gone, so nothing said after it belongs to it.
+    dictation?.stop();
+    interim = '';
 
     // A hand-off is addressed elsewhere, so it does not become a turn here.
     if (target && onHandoff) {
@@ -429,9 +483,17 @@
   export async function setDraft(text: string) {
     message = text;
     await tick();
+    resize();
+  }
+
+  /** Hands the turn back to the reader after something else wrote in the box —
+   *  a quote from the transcript — with the caret where they type next. */
+  export function focusEnd() {
     if (!textareaRef) return;
-    textareaRef.style.height = 'auto';
-    textareaRef.style.height = Math.min(textareaRef.scrollHeight, 200) + 'px';
+    const end = message.length;
+    textareaRef.focus();
+    textareaRef.setSelectionRange(end, end);
+    caret = end;
   }
 </script>
 
@@ -443,6 +505,7 @@
     ondragover={handleDragOver}
     ondragleave={handleDragLeave}
     ondrop={handleDrop}
+    onfocusout={handleFocusOut}
   >
     <!-- One card: grows to accommodate prompts and the command palette, input row at the bottom -->
     <div class="material-panel rounded-xl shadow-lg overflow-hidden
@@ -526,7 +589,11 @@
           out:slide={{ duration: 180, easing: quintOut }}
         >
           {#each attachments as chip (chip.id)}
-            <span class="flex items-center gap-1.5 rounded-md border border-border bg-muted/50 py-1 pl-2 pr-1 text-xs">
+            <span
+              class="flex items-center gap-1.5 rounded-md border border-border bg-muted/50 py-1 pl-2 pr-1 text-xs"
+              in:pop
+              out:fade={{ duration: 140 }}
+            >
               <IconDocument class="size-3.5 shrink-0 text-muted-foreground" />
               <span class="max-w-40 truncate">{chip.name}</span>
               <span class="tabular-nums text-muted-foreground">
@@ -544,7 +611,7 @@
           {/each}
 
           {#each images as chip (chip.id)}
-            <span class="group/thumb relative">
+            <span class="group/thumb relative" in:pop out:fade={{ duration: 140 }}>
               <img
                 src="data:{chip.mediaType};base64,{chip.data}"
                 alt={chip.name}
@@ -569,14 +636,42 @@
         <p class="px-3 pt-2 text-xs text-destructive" role="alert">{error}</p>
       {/if}
 
-      <div class="flex items-end gap-2 {attachmentOpen || paletteOpen || chipsOpen ? 'border-t border-border' : ''}">
+      {#if interim}
+        <!-- Heard, not settled: it sits above the box until the recogniser is
+             sure, and only then does it become text the reader can edit. -->
+        <p class="flex items-start gap-1.5 px-3 pt-2 text-caption" in:fade={{ duration: 140 }}>
+          <IconMic class="mt-0.5 size-3.5 shrink-0 animate-pulse motion-reduce:animate-none" />
+          <span class="line-clamp-2">{interim}</span>
+        </p>
+      {/if}
+
+      <!-- One row at every width. It only needed two when the controls carried
+           button chrome; stripped to bare glyphs on a single optical baseline,
+           the whole bar fits a 390pt phone with the field still the widest thing
+           in it. Attach leads on the left, state and verbs trail on the right,
+           and the only filled element is the one that sends. -->
+      <div class="flex items-end gap-1 {attachmentOpen || paletteOpen || chipsOpen ? 'border-t border-border' : ''}">
+      <button
+        type="button"
+        class="mb-1 ms-1 flex size-8 shrink-0 items-center justify-center rounded-full
+               text-muted-foreground transition-colors duration-150 ease-out
+               hover:bg-muted hover:text-foreground
+               focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring
+               disabled:cursor-not-allowed disabled:opacity-40"
+        disabled={disabled || loading}
+        title="Attach images"
+        aria-label="Attach images"
+        onclick={() => fileInput?.click()}
+      >
+        <IconAttach class="size-4" />
+      </button>
       <textarea
         bind:this={textareaRef}
         bind:value={message}
         {placeholder}
         disabled={disabled || loading}
         rows={1}
-        class="flex-1 resize-none min-h-10 max-h-[200px] py-2.5 pl-3
+        class="flex-1 min-w-0 resize-none min-h-10 max-h-[200px] py-2.5 pl-3
                bg-transparent border-none
                text-base sm:text-sm leading-5 overflow-y-hidden
                placeholder:text-muted-foreground
@@ -597,8 +692,20 @@
         onpaste={handlePaste}
       ></textarea>
 
-      <div class="flex shrink-0 items-center gap-1 m-1.5">
-        {@render meter?.()}
+      <div class="mb-1 me-1 flex shrink-0 items-center gap-1">
+        <!-- Ambient state rides where the reference bar puts its model picker:
+             quiet text on the same baseline as the verbs, never a widget. A
+             390pt phone has room for the field and its verbs but not also for
+             two readouts, and the field wins that argument every time — on a
+             phone the limits live a tap away in the rail instead. -->
+        <!-- The rail claims 288px from `md` up, so the working column is at its
+             narrowest exactly where the viewport first looks roomy. These
+             readouts follow the column, not the window: visible once the phone
+             is behind us, gone again while the rail is taking its cut, back for
+             good at `lg`. -->
+        <div class="hidden items-center gap-0.5 sm:flex md:hidden lg:flex">
+          {@render meter?.()}
+        </div>
         <input
           bind:this={fileInput}
           type="file"
@@ -608,30 +715,24 @@
           onchange={handleFiles}
         />
 
-        <button
-          type="button"
+        <DictationButton
+          bind:this={dictation}
           disabled={disabled || loading}
-          class="size-7 rounded-md
-                 flex items-center justify-center
-                 text-muted-foreground hover:bg-muted hover:text-foreground
-                 active:scale-[0.96]
-                 disabled:opacity-30 disabled:cursor-not-allowed
-                 transition-[color,background-color,opacity,scale] duration-150 ease-out"
-          title="Attach images"
-          aria-label="Attach images"
-          onclick={() => fileInput?.click()}
-        >
-          <IconAttach class="size-3.5" />
-        </button>
+          onfinal={insertDictation}
+          oninterim={(text) => (interim = text)}
+        />
 
+        <!-- 32px, not 36: the bar is a 40px pill with a 20px radius, so a control
+             only sits concentric in its corner when the gap equals 20 minus its
+             own radius. 32 + 4 + 4 lands exactly on the curve; 36 does not. -->
         <button
           type={stopping ? 'button' : 'submit'}
           disabled={!stopping && (disabled || loading || !canSend)}
-          class="size-7 rounded-md
+          class="pressable size-8 rounded-full
                  flex items-center justify-center
-                 active:scale-[0.96]
-                 disabled:opacity-30 disabled:cursor-not-allowed
-                 transition-[color,background-color,opacity,scale] duration-150 ease-out
+                 transition-colors duration-150 ease-out
+                 disabled:cursor-not-allowed
+                 disabled:bg-muted disabled:text-muted-foreground/60
                  {stopping
             ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90'
             : 'bg-primary text-primary-foreground hover:bg-primary/90'}"
@@ -640,9 +741,9 @@
           onclick={stopping ? () => onInterrupt?.() : undefined}
         >
           <span class="icon-swap">
-            <span data-active={stopping}><IconStop class="size-3.5" /></span>
-            <span data-active={!stopping && loading}><IconSpinner class="size-3.5 animate-spin" /></span>
-            <span data-active={!stopping && !loading}><IconSend class="size-3.5" /></span>
+            <span data-active={stopping}><IconStop class="size-4" /></span>
+            <span data-active={!stopping && loading}><IconSpinner class="size-4 animate-spin" /></span>
+            <span data-active={!stopping && !loading}><IconSend class="size-4" /></span>
           </span>
         </button>
       </div>

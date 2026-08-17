@@ -1,16 +1,26 @@
 <script module lang="ts">
   import type { Activity } from './activity';
+  import { readJson, writeJson } from './storage';
 
   /**
-   * Which sessions are showing the subagents they have out. Not persisted:
-   * subagents are the shortest-lived thing the rail draws, and an expansion
-   * restored onto work that finished hours ago is noise, not memory.
+   * Which sessions are showing the sub-work they have out — subagents and
+   * delegates alike, behind one fold. Not persisted: subagents are the
+   * shortest-lived thing the rail draws, and an expansion restored onto work
+   * that finished hours ago is noise, not memory.
    */
-  const unfolded = $state<Record<string, boolean>>({});
+  const subworkUnfolded = $state<Record<string, boolean>>({});
 
-  const toggleSubagents = (instanceId: string, open = !unfolded[instanceId]): void => {
-    unfolded[instanceId] = open;
+  const toggleSubwork = (instanceId: string, open = !subworkUnfolded[instanceId]): void => {
+    subworkUnfolded[instanceId] = open;
   };
+
+  /** Which branch peek is open — at most one at a time. */
+  const peeking = $state<Record<string, boolean>>({});
+
+  function setPeek(key: string, open: boolean): void {
+    if (open) for (const k of Object.keys(peeking)) peeking[k] = false;
+    peeking[key] = open;
+  }
 
   const BRANCH_DOT: Record<string, string> = {
     error: 'bg-destructive',
@@ -29,31 +39,32 @@
   const UNSEEN_TTL_MS = 24 * 60 * 60 * 1000;
 
   const readMap = <T,>(key: string): Record<string, T> => {
-    if (typeof localStorage === 'undefined') return {};
-    try {
-      const stored = JSON.parse(localStorage.getItem(key) ?? '{}') as unknown;
-      return stored && typeof stored === 'object' ? (stored as Record<string, T>) : {};
-    } catch {
-      return {};
-    }
+    const stored = readJson<unknown>(key, {});
+    return stored && typeof stored === 'object' ? (stored as Record<string, T>) : {};
   };
 
   const writeMap = (key: string, map: object): void => {
-    if (typeof localStorage === 'undefined') return;
-    localStorage.setItem(key, JSON.stringify(map));
+    writeJson(key, map);
   };
 
   /**
-   * Which folders are shut — the closed ones rather than the open ones, so a
-   * directory that starts working while you are away arrives with its work
-   * showing rather than hidden behind a chevron nobody knew to press.
+   * What the reader has said about each folder, kept rather than assumed, so a
+   * shut folder stays shut across visits. The old shape stored `true` for shut
+   * and nothing for open; it migrates on read. Without a stored answer a folder
+   * with live work or an alert arrives open and a dormant one arrives shut —
+   * what was once "a directory that starts working while you are away arrives
+   * with its work showing" now in the default rather than the storage key.
    */
-  const shut = $state<Record<string, true>>(readMap<true>(SHUT_KEY));
+  type Fold = 'open' | 'shut';
+  const fold = $state<Record<string, Fold>>(
+    Object.fromEntries(
+      Object.entries(readMap<Fold | true>(SHUT_KEY)).map(([id, v]) => [id, v === true ? 'shut' : v])
+    )
+  );
 
   function setFolder(id: string, open: boolean): void {
-    if (open) delete shut[id];
-    else shut[id] = true;
-    writeMap(SHUT_KEY, shut);
+    fold[id] = open ? 'open' : 'shut';
+    writeMap(SHUT_KEY, fold);
   }
 
   /** Which folders are showing every recent they have, rather than the first few. */
@@ -87,6 +98,7 @@
    * and sits above it; the machines themselves are a strip at the foot that
    * says which boxes there are.
    */
+  import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { flip } from 'svelte/animate';
   import { slide } from 'svelte/transition';
@@ -95,17 +107,20 @@
 
   const TOUCH_DRAG_DELAY_MS = 1200;
   import type { SDKSessionInfo } from '@cockpit/core';
-  import { Badge } from '$lib/components/ui/badge';
   import { Button } from '$lib/components/ui/button';
   import * as Sidebar from '$lib/components/ui/sidebar';
   import {
     IconChevronRight,
+    IconChevronUp,
+    IconFolderDuo,
     IconPinFilled,
     IconPlus,
     IconSparklesDuo,
     IconSubagentsDuo,
     IconTools,
+    IconUsage,
   } from '$lib/icons';
+  import { SubagentPeek } from '$lib/components/features';
   import { formatDistanceToNow } from '$lib/utils/time';
   import { SLEEPING_HINT, SLEEPING_LABEL } from './activity';
   import ActivityDot from './ActivityDot.svelte';
@@ -125,28 +140,30 @@
   import SpawnPanel from './SpawnPanel.svelte';
   import StoredSessionMenu from './StoredSessionMenu.svelte';
   import { folderPrefs, identityVar } from './folder-prefs.svelte';
-  import { sessionTitle, transcriptHref } from './links';
+  import { delegateHandle, sessionTitle, transcriptHref } from './links';
+  import ProviderLogo from '$lib/components/features/ProviderLogo.svelte';
   import { machineLabel, signInWarning } from './machine';
   import { orderMachines, rail, type PinKind } from './rail.svelte';
 
   /**
-   * 32px row, one line, the same slots wherever the rail draws one. The right
-   * inset is the folder header's "+" gutter, taken by every row rather than by
-   * that one: a tail that stops 28px short of its neighbour's is the ragged
-   * edge, and reserving the gutter once is what puts every tail on one line.
+   * 32px row, one line, the same slots wherever the rail draws one. Rows end
+   * flush at the edge: the folder header's hover "+" overlays its own tail, so
+   * nothing reserves a gutter for it any more.
    */
-  const ROW = 'h-8 gap-2 rounded-lg pr-9 pl-2 text-[13px]';
+  const ROW = 'h-8 gap-2 rounded-lg pr-2 pl-2 text-[13px]';
   const LABEL = 'h-7 gap-1.5 px-2 text-micro font-medium text-muted-foreground';
   const ITEM = 'rounded-lg focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none';
+  const SUBROW =
+    'flex h-7 w-full items-center gap-1.5 rounded-lg pr-2 pl-8 text-micro text-muted-foreground transition-colors duration-150 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground';
   /**
    * The leading slot every row shares — a 16px glyph, or a 6px dot centred in
    * the same space, so titles line up down the whole rail whatever leads them.
    *
-   * A top-level row takes two of them: state or disclosure first, then the
-   * folder's mark. A row with no mark leaves the second one empty rather than
-   * closing it up, which is what puts a session's title in the same column as
-   * the folder headers above and below it — and it is the same 24px a nested
-   * row is indented by, so the whole rail runs down one line.
+   * A row takes one slot. The folder header's slot carries the directory mark
+   * and swaps it for the disclosure chevron on hover/focus; every other row
+   * puts its own glyph in that one slot. Hierarchy is said by the folder
+   * header — its mark, font-medium and identity ink — and by the dot column,
+   * so the whole rail runs down one line.
    */
   const LEAD = 'flex w-4 shrink-0 items-center justify-center';
   /** Everything to the right of a title, in one cluster at the far edge. */
@@ -154,12 +171,6 @@
   const META = 'shrink-0 text-micro text-muted-foreground';
   /** Sections are separated by a seam, never by a gap or a box. */
   const SECTION = 'border-t border-border/50 px-2 py-2';
-  /**
-   * What a folder's contents are inset by. One lead slot plus its gap, so a
-   * session's dot sits under its folder's glyph and their titles share a
-   * column — the indent is the hierarchy, and nothing is boxed to say so.
-   */
-  const NEST = 'pl-6';
 
   const isCurrent = (href: string) => page.url.pathname === href;
   const leaf = (cwd: string) => cwd.split('/').pop() || cwd;
@@ -174,17 +185,29 @@
     const info = instance.sessionId
       ? cockpit.catalogOf(instance.machineId).find((row) => row.sessionId === instance.sessionId)
       : undefined;
-    return info
-      ? { text: sessionTitle(info), path: false }
-      : { text: leaf(instance.cwd), path: true };
+    if (info) return { text: sessionTitle(info), path: false };
+    // What its spawn said it is for — a delegate's brief, first line. Every
+    // delegate is a side quest, so the catalog will never have a title for one:
+    // without this the whole of a delegation reads as an id.
+    if (instance.title) return { text: instance.title, path: false };
+    // A delegate with no title at all gets its fleet-wide handle rather than
+    // the bare leaf: seven delegates of one session are seven different names,
+    // and each matches the "[Report from delegate <handle>]" its parent shows.
+    if (instance.parentInstanceId) return { text: delegateHandle(instance), path: true };
+    return { text: leaf(instance.cwd), path: true };
   };
 
-  const nameOf = (machineId: string): string => {
-    const machine = cockpit.machines.find((row) => row.machineId === machineId);
-    return machine ? machineLabel(machine.hostname) : machineId;
-  };
+  /**
+   * When a session's transcript was last written, from the catalog — a session
+   * with no transcript yet is the newest thing in the folder, not the oldest,
+   * so it sorts first, not last. This is what orders live rows by recency
+   * rather than by the hub's own order.
+   */
+  const lastActiveAt = (row: InstanceRow): number =>
+    cockpit.catalogOf(row.machineId).find((info) => info.sessionId === row.sessionId)?.lastModified ??
+    Number.MAX_SAFE_INTEGER;
 
-  /** With one box the chip says nothing; with two it is what tells rows apart. */
+  /** With more than one box, a folder whose rows all share one can say so once. */
   const manyMachines = $derived(cockpit.machines.length > 1);
 
   /**
@@ -201,23 +224,38 @@
   const sessions = $derived(cockpit.listedInstances.filter((row) => !isFailed(row)));
 
   /**
-   * The only red in the rail: a session parked on a permission, and one that
-   * died of something. One row per session — six requests parked on the same
-   * session is still one session to open.
+   * A delegate is a full session that names the instance that delegated to it
+   * (`parentInstanceId`). Its row folds under that parent rather than filing
+   * into a directory of its own — unless the parent is not itself listed, in
+   * which case it reads as an ordinary top-level session.
+   */
+  const parentIds = $derived(new Set(sessions.map((row) => row.id)));
+  const delegates = $derived(
+    sessions.filter((row) => row.parentInstanceId && parentIds.has(row.parentInstanceId))
+  );
+  const delegateIds = $derived(new Set(delegates.map((row) => row.id)));
+  /** The rows the rail files top-level: everything that is not a listed delegate. */
+  const topSessions = $derived(sessions.filter((row) => !delegateIds.has(row.id)));
+  const delegatesOf = (parentId: string): InstanceRow[] =>
+    delegates
+      .filter((row) => row.parentInstanceId === parentId)
+      .sort((a, b) => lastActiveAt(b) - lastActiveAt(a));
+
+  /**
+   * The only red in the rail: a session parked on a permission or a question —
+   * something with an answer the user can give from the queue. A session that
+   * died has nothing to answer, so it is not here: failure is a status its row
+   * already paints red, not a need. One row per session — six requests parked
+   * on the same session is still one session to open.
    */
   const needsYou = $derived.by(() => {
-    const rows: { instance: InstanceRow; failed: boolean }[] = [];
+    const rows: InstanceRow[] = [];
     const seen = new Set<string>();
     for (const request of cockpit.blocked) {
       const instance = cockpit.instances.find((row) => row.id === request.instanceId);
       if (!instance || seen.has(instance.id)) continue;
       seen.add(instance.id);
-      rows.push({ instance, failed: false });
-    }
-    for (const instance of cockpit.failedInstances) {
-      if (seen.has(instance.id)) continue;
-      seen.add(instance.id);
-      rows.push({ instance, failed: true });
+      rows.push(instance);
     }
     return rows;
   });
@@ -250,9 +288,11 @@
     const recents = stored
       .filter((info) => !running.has(info.sessionId))
       .sort((a, b) => b.lastModified - a.lastModified);
-    // Only the pins move: the hub's own order is stable, and a rail that
-    // re-sorts itself under the pointer is one nobody can aim at.
-    const rows = [...live].sort(pinnedFirst('session'));
+    // Pins first, then newest activity first — sorting by recency is deliberate
+    // (user decision 2026-08-17), not the hub's own order reasserting itself.
+    const rows = [...live].sort(
+      (a, b) => pinnedFirst('session')(a, b) || lastActiveAt(b) - lastActiveAt(a)
+    );
     return {
       ...seed,
       live: rows,
@@ -277,12 +317,12 @@
    * becomes a folder of its own once no project speaks for it.
    */
   const folders = $derived.by(() => {
-    const waiting = new Set(needsYou.map((row) => row.instance.id));
+    const waiting = new Set(needsYou.map((row) => row.id));
     const claimed = new Set<string>();
     const list: Folder[] = [];
 
     for (const project of cockpit.projects) {
-      const members = cockpit.liveIn(project);
+      const members = cockpit.liveIn(project).filter((row) => !delegateIds.has(row.id));
       for (const row of members) claimed.add(row.id);
       list.push(
         fill(
@@ -303,7 +343,7 @@
     }
 
     const bare = new Map<string, InstanceRow[]>();
-    for (const row of sessions) {
+    for (const row of topSessions) {
       if (claimed.has(row.id)) continue;
       const key = `${row.machineId}:${row.cwd}`;
       const found = bare.get(key);
@@ -344,9 +384,9 @@
 
   /**
    * A directory nobody registered, holding one running session and nothing
-   * that has stopped there, is not a hierarchy — the header, the chevron and
-   * the indent all say "there is more in here" about a folder with one thing
-   * in it. It draws as that session's own row instead.
+   * that has stopped there, is not a hierarchy — the header and the chevron
+   * both say "there is more in here" about a folder with one thing in it. It
+   * draws as that session's own row instead.
    */
   const isSolo = (folder: Folder): boolean =>
     !folder.project && folder.live.length === 1 && folder.stored.length === 0;
@@ -390,13 +430,30 @@
     spawnFor = { machineId: folder.machineId, cwd: folder.cwd, projectId: folder.project?.id };
   };
 
+  /**
+   * Whether a folder draws open. The reader's own say wins; without one, a
+   * folder with live work or an alert arrives open, and a dormant one arrives
+   * shut — history stays out of the way until it has something to say.
+   */
+  const isOpen = (folder: Folder): boolean => {
+    const said = fold[folder.id];
+    if (said) return said === 'open';
+    return folder.live.length > 0 || folder.alerting;
+  };
+
+  /** Whether any folder is currently open — what the collapse-all control toggles. */
+  const anyOpen = $derived(folders.some((f) => !isFlat(f) && isOpen(f)));
+
+  function foldAll(open: boolean): void {
+    for (const folder of folders) if (!isFlat(folder)) setFolder(folder.id, open);
+  }
+
   /** Everything but this one shut — how you get back to one folder at a time. */
   function collapseOthers(id: string): void {
     for (const folder of folders) {
-      if (folder.id !== id && !isFlat(folder)) shut[folder.id] = true;
+      if (folder.id !== id && !isFlat(folder)) setFolder(folder.id, false);
     }
-    delete shut[id];
-    writeMap(SHUT_KEY, shut);
+    setFolder(id, true);
   }
 
   let settled = $state(false);
@@ -462,28 +519,14 @@
         setFolder(folderId, open);
         return;
       }
-      // The only other thing a row folds open is the subagents it has out.
+      // The only other thing a row folds open is the sub-work it has out.
       const instanceId = focused?.dataset.subagents;
       if (!instanceId) return;
       event.preventDefault();
-      toggleSubagents(instanceId, open);
+      toggleSubwork(instanceId, open);
     }
   }
 </script>
-
-{#snippet machineChip(machineId: string)}
-  {#if manyMachines}
-    <!-- One fixed width, so the machines read as a column rather than as a
-         ragged edge that moves with every title. The ellipsis has to live on a
-         child: a flex box does not truncate its own text, it just clips it. -->
-    <Badge
-      variant="secondary"
-      class="h-5 w-28 shrink-0 justify-start px-1.5 text-micro font-normal"
-    >
-      <span class="min-w-0 truncate">{nameOf(machineId)}</span>
-    </Badge>
-  {/if}
-{/snippet}
 
 {#snippet machineGlyph(machineId: string)}
   {@const machine = cockpit.machines.find((row) => row.machineId === machineId)}
@@ -496,7 +539,7 @@
   {/if}
 {/snippet}
 
-{#snippet alertRow(instance: InstanceRow, failed: boolean)}
+{#snippet alertRow(instance: InstanceRow)}
   {@const current = isCurrent(`/session/${instance.id}`)}
   {@const name = titleOf(instance)}
   <Sidebar.MenuButton isActive={current} class={ROW}>
@@ -505,24 +548,16 @@
         {...props}
         href="/session/{instance.id}"
         aria-current={current ? 'page' : undefined}
-        title={failed ? (instance.lastError ?? 'Failed') : 'Waiting on you'}
+        title="Waiting on you"
         data-rail-row
         in:slide={rowIn}
         out:slide={rowOut}
       >
         <span class={LEAD}>
-          {#if failed}
-            <span class="size-1.5 rounded-full bg-error"></span>
-          {:else}
-            <ActivityDot activity="blocked" size={1.5} />
-          {/if}
+          <ActivityDot activity="blocked" size={1.5} />
         </span>
-        <span class={LEAD}></span>
         <span class="min-w-0 truncate {name.path ? 'font-mono' : ''}">{name.text}</span>
         <span class={TAIL}>
-          {#if failed}
-            <span class="text-micro font-medium text-error">Failed</span>
-          {/if}
           <!-- The glyph, not the 112px name badge: a queue row is a session
                row, and it ends where every other tail ends. -->
           {@render machineGlyph(instance.machineId)}
@@ -544,8 +579,14 @@
   {@const sleeping = isResumable(instance)}
   {@const quest = instance.kind === 'scratch'}
   {@const current = isCurrent(`/session/${instance.id}`)}
-  {@const showing = unfolded[instance.id] ?? false}
   {@const name = titleOf(instance)}
+  {@const delegateRows = delegatesOf(instance.id)}
+  {@const bgTasks = cockpit.backgroundTasksOf(instance.id)}
+  {@const subworkTotal = branches.length + delegateRows.length}
+  {@const subworkRunning =
+    branches.filter((b) => b.status === 'running' || b.status === 'starting').length +
+    delegateRows.filter((row) => cockpit.activityOf(row.id) !== 'idle').length}
+  {@const subworkOpen = subworkUnfolded[instance.id] ?? subworkRunning > 0}
   <LiveSessionMenu
     {instance}
     ongroup={flat ? () => folderPrefs.setGrouping(flat.cwd, 'grouped') : undefined}
@@ -556,9 +597,9 @@
           {...props}
           href="/session/{instance.id}"
           aria-current={current ? 'page' : undefined}
-          title={sleeping ? SLEEPING_HINT : name.text}
+          title={sleeping ? SLEEPING_HINT : handoff ? `${name.text} — handed work from ${handedFrom}` : name.text}
           data-rail-row
-          data-subagents={branches.length > 0 ? instance.id : undefined}
+          data-subagents={subworkTotal > 0 ? instance.id : undefined}
           in:slide={rowIn}
           out:slide={rowOut}
         >
@@ -572,12 +613,6 @@
               <ActivityDot {activity} size={1.5} />
             {/if}
           </span>
-          <!-- A session is not a folder, so it wears no folder mark — the slot
-               its folder's mark would take is left empty, and the directory it
-               stands for is said by the leaf in the tail instead. -->
-          {#if flat}
-            <span class={LEAD}></span>
-          {/if}
           <span
             class="min-w-0 truncate {name.path ? 'font-mono' : ''} {sleeping
               ? 'text-muted-foreground'
@@ -592,7 +627,7 @@
                while you were elsewhere, and it goes when you open it. -->
           {#if unseen[instance.id] !== undefined}
             <span
-              class="size-1.5 shrink-0 rounded-full bg-primary"
+              class="size-2 shrink-0 rounded-full bg-primary"
               title="Finished while you were away"
             ></span>
           {/if}
@@ -602,16 +637,6 @@
             <IconSparklesDuo class="size-3.5 shrink-0 text-muted-foreground" />
           {/if}
           <span class={TAIL}>
-            {#if handoff}
-              <span
-                class="flex items-center gap-1 rounded-full bg-primary/15 px-1.5 text-micro
-                       font-medium text-primary"
-                title="Handed work from {handedFrom} — waiting for this session's next turn"
-              >
-                <IconSubagentsDuo class="size-3" />
-                handed
-              </span>
-            {/if}
             {#if delegated > 0}
               <span
                 class="flex items-center gap-0.5 rounded-full bg-success/15 px-1.5 text-micro
@@ -642,7 +667,7 @@
               </span>
             {/if}
             {#if chip}
-              {@render machineChip(instance.machineId)}
+              {@render machineGlyph(instance.machineId)}
             {/if}
             {#if flat?.oneMachine}
               {@render machineGlyph(flat.machineId)}
@@ -653,50 +678,159 @@
     </Sidebar.MenuButton>
   </LiveSessionMenu>
 
-  {#if branches.length > 0}
+  {#if subworkTotal > 0}
     <button
       type="button"
-      class="flex h-7 w-full items-center gap-1.5 rounded-lg pr-2 pl-8 text-micro
-             text-muted-foreground transition-colors duration-150
-             hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-      aria-expanded={showing}
-      onclick={() => toggleSubagents(instance.id)}
+      class={SUBROW}
+      aria-expanded={subworkOpen}
+      onclick={() => toggleSubwork(instance.id)}
     >
       <IconChevronRight
-        class="size-3 shrink-0 transition-transform duration-240 {showing ? 'rotate-90' : ''}"
-        style="transition-timing-function: var(--ease-out-expo)"
+        class="size-3 shrink-0 transition-transform duration-240 ease-expo {subworkOpen
+          ? 'rotate-90'
+          : ''}"
       />
       <span>
-        {branches.length} subagent{branches.length === 1 ? '' : 's'}
+        {subworkTotal} subagent{subworkTotal === 1 ? '' : 's'}{subworkRunning > 0
+          ? ` · ${subworkRunning} running`
+          : ''}
       </span>
     </button>
 
-    {#if showing}
+    {#if subworkOpen}
       <ul class="flex flex-col gap-0.5 pl-8" transition:slide={rowIn}>
         {#each branches as branch (branch.toolUseId)}
+          {@const branchRunning = branch.status === 'running' || branch.status === 'starting'}
+          {@const branchDone = branch.status === 'complete'}
+          {@const branchError = branch.status === 'error'}
+          {@const peekKey = `${instance.id}:${branch.toolUseId}`}
           <li>
-            <a
-              href="/session/{instance.id}#subagent-{branch.toolUseId}"
-              class="flex items-start gap-1.5 rounded-lg px-2 py-1 text-micro
-                     text-muted-foreground transition-colors duration-150
-                     hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-              title={branch.description ?? branch.subagentType}
+            <SubagentPeek
+              {branch}
+              instanceId={instance.id}
+              open={peeking[peekKey] ?? false}
+              onOpenChange={(v) => setPeek(peekKey, v)}
             >
-              <span
-                class="mt-1 size-1.5 shrink-0 rounded-full {BRANCH_DOT[branch.status] ??
-                  'bg-muted-foreground/40'} {branch.status === 'running' ? 'animate-pulse' : ''}"
-              ></span>
-              <span class="min-w-0 flex-1">
-                <span class="block truncate">{branch.description ?? branch.subagentType}</span>
-                {#if branch.summary && branch.status === 'running'}
-                  <span class="block truncate text-muted-foreground">{branch.summary}</span>
-                {/if}
-              </span>
-            </a>
+              {#snippet children({ props })}
+                <a
+                  {...props}
+                  href="/session/{instance.id}#subagent-{branch.toolUseId}"
+                  class="flex items-start gap-1.5 rounded-lg px-2 py-1 text-micro
+                         transition-colors duration-150
+                         hover:bg-sidebar-accent hover:text-sidebar-accent-foreground
+                         {branchDone ? 'text-muted-foreground/60' : 'text-muted-foreground'}"
+                  title={branch.description ?? branch.subagentType}
+                  onclick={(e) => {
+                    e.preventDefault();
+                    setPeek(peekKey, !(peeking[peekKey] ?? false));
+                  }}
+                  ondblclick={(e) => {
+                    e.preventDefault();
+                    setPeek(peekKey, false);
+                    void goto(`/session/${instance.id}#subagent-${branch.toolUseId}`);
+                  }}
+                >
+                  <span
+                    class="mt-1 size-2 shrink-0 rounded-full {BRANCH_DOT[branch.status] ??
+                      'bg-muted-foreground/40'} {branchRunning
+                      ? 'animate-pulse motion-reduce:animate-none'
+                      : ''}"
+                  ></span>
+                  <span class="min-w-0 flex-1">
+                    <span class="block truncate">{branch.description ?? branch.subagentType}</span>
+                    {#if branchError}
+                      <span class="block truncate text-destructive">
+                        {branch.error ? `Failed · ${branch.error}` : 'Failed'}
+                      </span>
+                    {:else if branch.summary && branchRunning}
+                      <span class="block truncate text-muted-foreground">{branch.summary}</span>
+                    {/if}
+                  </span>
+                </a>
+              {/snippet}
+            </SubagentPeek>
           </li>
         {/each}
+        {#each delegateRows as delegate (delegate.id)}
+          <li>
+            {@render delegateRow(delegate)}
+          </li>
+        {/each}
+        {#if bgTasks > 0}
+          <li class="px-2 py-1 text-micro text-muted-foreground/50">
+            {bgTasks} background task{bgTasks === 1 ? '' : 's'}
+          </li>
+        {/if}
       </ul>
     {/if}
+  {/if}
+{/snippet}
+
+{#snippet delegateRow(instance: InstanceRow)}
+  {@const activity = cockpit.activityOf(instance.id)}
+  {@const sleeping = isResumable(instance)}
+  {@const current = isCurrent(`/session/${instance.id}`)}
+  {@const name = titleOf(instance)}
+  {@const nested = delegatesOf(instance.id)}
+  <!-- A titled row no longer shows its handle, and the handle is what its
+       reports name it by — the hover carries both, so the cross-reference to
+       the parent's transcript stays one pointer away. -->
+  {@const hover = instance.title ? `${delegateHandle(instance)} · ${instance.title}` : name.text}
+  <LiveSessionMenu {instance}>
+    <Sidebar.MenuButton isActive={current} class={ROW}>
+      {#snippet child({ props })}
+        <a
+          {...props}
+          href="/session/{instance.id}"
+          aria-current={current ? 'page' : undefined}
+          title={sleeping ? SLEEPING_HINT : hover}
+          data-rail-row
+          in:slide={rowIn}
+          out:slide={rowOut}
+        >
+          <span class={LEAD}>
+            {#if sleeping}
+              <span class="size-1.5 rounded-full bg-muted-foreground/40" title={SLEEPING_LABEL}></span>
+            {:else}
+              <ActivityDot {activity} size={1.5} />
+            {/if}
+          </span>
+          <span
+            class="min-w-0 truncate {name.path ? 'font-mono' : ''} {sleeping
+              ? 'text-muted-foreground'
+              : ''}"
+          >
+            {name.text}
+          </span>
+          <span class={TAIL}>
+            <!-- What the delegate IS, not just that it is one: the executor
+                 model's mark and leaf, with the word kept for the hover. -->
+            <span
+              class="flex shrink-0 items-center gap-1 rounded-full bg-muted px-1.5 text-micro font-medium text-muted-foreground"
+              title={instance.model ? `delegate · ${instance.model}` : 'delegate'}
+            >
+              {#if instance.model}
+                <ProviderLogo model={instance.model} size={12} />
+                <!-- A phone rail has no room for a model name; the mark alone
+                     says it, and the hover/long-press title keeps the words. -->
+                <span class="hidden max-w-24 truncate sm:inline">{instance.model.split('/').pop()}</span>
+              {:else}
+                delegate
+              {/if}
+            </span>
+          </span>
+        </a>
+      {/snippet}
+    </Sidebar.MenuButton>
+  </LiveSessionMenu>
+  {#if nested.length > 0}
+    <ul class="flex flex-col gap-0.5 pl-8" transition:slide={rowIn}>
+      {#each nested as delegate (delegate.id)}
+        <li>
+          {@render delegateRow(delegate)}
+        </li>
+      {/each}
+    </ul>
   {/if}
 {/snippet}
 
@@ -728,11 +862,10 @@
 {/snippet}
 
 {#snippet folderGroup(folder: Folder)}
-  {@const open = !shut[folder.id]}
+  {@const open = isOpen(folder)}
   {@const tinted = !open && folder.alerting}
   {@const all = showingAll[folder.id] ?? false}
   {@const recents = all ? folder.stored : folder.stored.slice(0, RECENTS)}
-  {@const Mark = folderPrefs.mark(folder.cwd)}
   <FolderMenu
     name={folder.name}
     cwd={folder.cwd}
@@ -755,22 +888,13 @@
             data-folder={folder.id}
             onclick={() => setFolder(folder.id, !open)}
           >
-            <span class={LEAD}>
-              <IconChevronRight
-                class="text-muted-foreground/70 transition-transform duration-240 {open
-                  ? 'rotate-90'
-                  : ''}"
-                style="transition-timing-function: var(--ease-out-expo)"
-              />
-            </span>
-            <!-- The directory's own hue and mark, except while it is shouting:
-                 what is waiting on a human outranks what the folder wears. In
-                 a slot of its own, so a wider mark cannot push the title out
-                 of the column the rows below it keep. -->
-            <span class={LEAD}>
-              <Mark
-                class="size-4 {tinted ? 'text-error' : 'identity-ink'}"
+            <span class="{LEAD} relative">
+              <IconFolderDuo
+                class="size-4 transition-opacity duration-150 md:group-hover/folder:opacity-0 md:group-focus-within/folder:opacity-0 {tinted ? 'text-error' : 'identity-ink'}"
                 style={tinted ? undefined : identityVar(folder.cwd)}
+              />
+              <IconChevronRight
+                class="absolute inset-0 m-auto size-4 text-muted-foreground/70 opacity-0 transition-all duration-240 ease-expo md:group-hover/folder:opacity-100 md:group-focus-within/folder:opacity-100 {open ? 'rotate-90' : ''}"
               />
             </span>
             <span class="min-w-0 truncate font-medium {folder.mono ? 'font-mono' : ''}">
@@ -779,6 +903,12 @@
             <span class={TAIL}>
               {#if folder.pinned}
                 <IconPinFilled class="size-3 text-muted-foreground/60" />
+              {/if}
+              {#if !open && folder.live.some((row) => unseen[row.id] !== undefined)}
+                <span
+                  class="size-2 shrink-0 rounded-full bg-primary"
+                  title="Something in here finished while you were away"
+                ></span>
               {/if}
               {#if folder.live.length > 0}
                 <span
@@ -798,12 +928,13 @@
           </button>
         {/snippet}
       </Sidebar.MenuButton>
-      <!-- Reserved by `pr-9` above, so nothing shifts when it fades in. A phone
-           has no hover to reveal it with, so there it simply stays. -->
+      <!-- Overlays the tail on hover: `bg-sidebar-accent` covers whatever it
+           overlaps, and a phone has no hover to reveal it with, so there it
+           simply stays. -->
       <Button
         variant="ghost"
         size="icon-sm"
-        class="absolute top-0 right-0 transition-opacity duration-150 md:opacity-0
+        class="absolute top-0 right-0 bg-sidebar-accent transition-opacity duration-150 md:opacity-0
                md:group-focus-within/folder:opacity-100 md:group-hover/folder:opacity-100
                md:focus-visible:opacity-100"
         title="New session in {folder.name}"
@@ -817,12 +948,20 @@
 
   {#if open}
     <div transition:slide={rowIn}>
-      <Sidebar.Menu class={NEST}>
+      <Sidebar.Menu>
         {#each folder.live as instance (instance.id)}
           <Sidebar.MenuItem class={ITEM}>
             {@render sessionRow(instance, !folder.oneMachine, null)}
           </Sidebar.MenuItem>
         {/each}
+        {#if recents.length > 0}
+          <li
+            class="flex h-6 items-center pr-2 pl-8 text-micro font-medium text-muted-foreground/70"
+            aria-hidden="true"
+          >
+            Recent
+          </li>
+        {/if}
         {#each recents as info (info.sessionId)}
           <Sidebar.MenuItem class={ITEM}>
             {@render recentRow(folder.machineId, info)}
@@ -832,9 +971,7 @@
           <li>
             <button
               type="button"
-              class="flex h-7 w-full items-center rounded-lg pr-2 pl-8 text-micro
-                     text-muted-foreground transition-colors duration-150
-                     hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+              class={SUBROW}
               onclick={() => (showingAll[folder.id] = !all)}
             >
               {all ? 'Show fewer' : `Show all ${folder.stored.length}`}
@@ -862,7 +999,6 @@
       <span class={LEAD}>
         <OsMark os={machine.os} class="text-muted-foreground" />
       </span>
-      <span class={LEAD}></span>
       <span class="min-w-0 truncate {online ? '' : 'text-muted-foreground'}">
         {machineLabel(machine.hostname)}
       </span>
@@ -897,28 +1033,6 @@
   bind:ref={railEl}
   onkeydown={rovingKeydown}
 >
-  <!-- No spawn button here: the board's header owns the primary one, and every
-       folder header has its own "+". A third pill in the rail was the same verb
-       said twice. -->
-  <Sidebar.Header class="p-2">
-    <Sidebar.Menu>
-      <Sidebar.MenuItem class={ITEM}>
-        {@const current = page.url.pathname === '/tools'}
-        <Sidebar.MenuButton isActive={current} class={ROW}>
-          {#snippet child({ props })}
-            <a {...props} href="/tools" aria-current={current ? 'page' : undefined} data-rail-row>
-              <span class={LEAD}>
-                <IconTools class="size-4 text-muted-foreground" />
-              </span>
-              <span class={LEAD}></span>
-              <span>Tools</span>
-            </a>
-          {/snippet}
-        </Sidebar.MenuButton>
-      </Sidebar.MenuItem>
-    </Sidebar.Menu>
-  </Sidebar.Header>
-
   <Sidebar.Content class="gap-0">
     {#if needsYou.length > 0}
       <div transition:slide={rowIn}>
@@ -933,9 +1047,9 @@
             </span>
           </Sidebar.GroupLabel>
           <Sidebar.Menu>
-            {#each needsYou as row (row.instance.id)}
+            {#each needsYou as instance (instance.id)}
               <Sidebar.MenuItem class={ITEM}>
-                {@render alertRow(row.instance, row.failed)}
+                {@render alertRow(instance)}
               </Sidebar.MenuItem>
             {/each}
           </Sidebar.Menu>
@@ -948,6 +1062,18 @@
         <Sidebar.GroupLabel class="{LABEL} h-8">
           Folders
           <span class="ml-auto flex items-center">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              class="-mr-1"
+              title={anyOpen ? 'Collapse all folders' : 'Expand all folders'}
+              aria-label={anyOpen ? 'Collapse all folders' : 'Expand all folders'}
+              onclick={() => foldAll(!anyOpen)}
+            >
+              <IconChevronUp
+                class="transition-transform duration-240 ease-expo {anyOpen ? '' : 'rotate-180'}"
+              />
+            </Button>
             <NewProjectPopover />
           </span>
         </Sidebar.GroupLabel>
@@ -990,7 +1116,13 @@
 
   {#if machines.length > 0}
     <Sidebar.Footer class="gap-0 border-t border-border/50 p-2">
-      <Sidebar.GroupLabel class={LABEL}>Machines</Sidebar.GroupLabel>
+      <Sidebar.GroupLabel class={LABEL}>
+        Machines
+        <span class="ml-auto flex items-center gap-1">
+          <a href="/tools" title="Tools" aria-label="Tools" aria-current={page.url.pathname === '/tools' ? 'page' : undefined} class="flex size-7 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-150 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"><IconTools class="size-4" /></a>
+          <a href="/usage" title="Usage" aria-label="Usage" aria-current={page.url.pathname === '/usage' ? 'page' : undefined} class="flex size-7 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-150 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"><IconUsage class="size-4" /></a>
+        </span>
+      </Sidebar.GroupLabel>
       <div
         class="flex w-full min-w-0 flex-col"
         aria-label="Machines"

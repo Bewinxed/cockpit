@@ -123,7 +123,7 @@ test('an ambiguous name is refused rather than guessed', async () => {
   // Two sessions are both called "twins" — sending to either silently is how a
   // hand-off lands somewhere nobody looks again.
   expect(handoff({ target: 'twins', message: 'x' }, {})).rejects.toThrow(
-    /more than one/
+    /matches 2 sessions/
   );
   expect(sent).toHaveLength(0);
 });

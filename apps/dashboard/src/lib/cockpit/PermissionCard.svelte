@@ -70,12 +70,22 @@
               >{command}</pre>
             {:else}
               {#each Object.entries(request.input) as [key, value]}
-                <div class="flex gap-2">
-                  <span class="font-medium text-muted-foreground shrink-0">{key}:</span>
-                  <span class="break-all"
-                    >{typeof value === 'string' ? value : JSON.stringify(value)}</span
-                  >
-                </div>
+                {@const text = typeof value === 'string' ? value : JSON.stringify(value)}
+                {#if text.length > 200}
+                  <!-- A diff or any long value inline would stretch the card past
+                       the viewport; a capped block keeps the card answerable. -->
+                  <div>
+                    <div class="font-medium text-muted-foreground">{key}:</div>
+                    <pre
+                      class="bg-background/60 px-3 py-2 rounded-md font-mono text-micro whitespace-pre-wrap break-all max-h-[200px] overflow-auto mt-1 m-0"
+                    >{text}</pre>
+                  </div>
+                {:else}
+                  <div class="flex gap-2">
+                    <span class="font-medium text-muted-foreground shrink-0">{key}:</span>
+                    <span class="break-all">{text}</span>
+                  </div>
+                {/if}
               {/each}
             {/if}
 

@@ -8,10 +8,12 @@
    */
   import {
     IconChevronRight,
+    IconFolderDuo,
     IconPlus,
   } from '$lib/icons';
   import { onMount, untrack, type Snippet } from 'svelte';
-  import { fly } from 'svelte/transition';
+  import { fly, slide } from 'svelte/transition';
+  import { flip } from 'svelte/animate';
   import { quintOut } from 'svelte/easing';
   import { MediaQuery } from 'svelte/reactivity';
   import { goto } from '$app/navigation';
@@ -28,9 +30,10 @@
   import OsMark from '$lib/cockpit/OsMark.svelte';
   import StoredSessionRow from '$lib/cockpit/StoredSessionRow.svelte';
   import AttentionQueue from '$lib/cockpit/AttentionQueue.svelte';
+  import FleetFilter, { type FleetFilterValue } from '$lib/cockpit/FleetFilter.svelte';
   import PeekPane, { type PeekTarget } from '$lib/cockpit/PeekPane.svelte';
   import SpawnPanel from '$lib/cockpit/SpawnPanel.svelte';
-  import { folderPrefs, identityVar } from '$lib/cockpit/folder-prefs.svelte';
+  import { identityVar } from '$lib/cockpit/folder-prefs.svelte';
   import { transcriptHref } from '$lib/cockpit/links';
   import { refreshTasks } from '$lib/cockpit/tasks.svelte';
   import { machineLabel, machineOs } from '$lib/cockpit/machine';
@@ -80,6 +83,82 @@
 
     return result;
   });
+
+  let filter = $state<FleetFilterValue>('all');
+
+  /**
+   * The sessions the attention queue would list: parked on a permission or a
+   * question, i.e. something with an answer the user can give. A failed session
+   * has nothing to answer, so it is never here — its row already paints red.
+   */
+  const needsYou = $derived(new Set(cockpit.blocked.map((item) => item.instanceId)));
+
+  /**
+   * Which chip a row answers to. A sleeping session is at rest, so it is idle.
+   * A filter must agree with the reader's eyes, so any row whose dot paints
+   * red files under "Needs you" — including a delegate whose ask is routed to
+   * its parent and therefore absent from the queue above. The chip's count can
+   * exceed the queue's on purpose: the queue lists what is yours to answer,
+   * the chip gathers what looks blocked.
+   */
+  function statusOf(row: InstanceRow): Exclude<FleetFilterValue, 'all'> {
+    if (needsYou.has(row.id)) return 'needs-you';
+    const activity = cockpit.activityOf(row.id);
+    if (activity === 'blocked') return 'needs-you';
+    return activity === 'working' ? 'working' : 'idle';
+  }
+
+  const counts = $derived.by((): Record<FleetFilterValue, number> => {
+    const tally: Record<FleetFilterValue, number> = {
+      all: 0,
+      working: 0,
+      'needs-you': 0,
+      idle: 0,
+    };
+    for (const group of groups) {
+      for (const row of group.live) {
+        tally.all += 1;
+        tally[statusOf(row)] += 1;
+      }
+    }
+    return tally;
+  });
+
+  /**
+   * The board under the chosen chip. Stored transcripts are history rather than
+   * state, so a filter about what a session is doing right now leaves them out
+   * entirely — and a group with nothing left folds away rather than standing as
+   * a header over nothing.
+   */
+  const shown = $derived.by((): BoardGroup[] => {
+    if (filter === 'all') return groups;
+    const kept: BoardGroup[] = [];
+    for (const group of groups) {
+      const live = group.live.filter((row) => statusOf(row) === filter);
+      if (live.length === 0) continue;
+      kept.push({ ...group, live, stored: [] });
+    }
+    return kept;
+  });
+
+  /**
+   * One chip row over a fleet that is all one state filters nothing, so it is
+   * not there — and once the reader has chosen, it stays, or there is no way
+   * back to the whole board.
+   */
+  const showFilter = $derived(
+    [counts.working, counts['needs-you'], counts.idle].filter((count) => count > 0).length >= 2 ||
+      filter !== 'all'
+  );
+
+  /**
+   * The board reflows in JS — Svelte's transitions and `flip` both are — so the
+   * reduced-motion setting has to be asked in JS. Clamped to one beat rather
+   * than zeroed: the setting asks for stillness, not for instant swaps.
+   */
+  const calm = new MediaQuery('prefers-reduced-motion: reduce');
+  const enterMs = $derived(calm.current ? 120 : 240);
+  const exitMs = $derived(calm.current ? 120 : 160);
 
   const stale = $derived(cockpit.staleInstances);
   let showStale = $state(false);
@@ -244,8 +323,15 @@
       <!-- Attention queue -->
       <AttentionQueue />
 
+      <!-- What the board is showing. A view state, not an action: the chips
+           wear the kit's quiet toggle fill rather than the olive, which means
+           "this acts on the fleet". -->
+      {#if showFilter}
+        <FleetFilter {counts} value={filter} onchange={(next) => (filter = next)} />
+      {/if}
+
       <!-- Session board: groups -->
-      {#if groups.length > 0}
+      {#if shown.length > 0}
         <!-- `auto-fit`, not `auto-fill`: an ultrawide fills with empty tracks under
              `auto-fill` and pins three cards to 480px against a bare half-screen.
              Collapsed instead, the cards take the width they are given. -->
@@ -253,7 +339,7 @@
           class="grid grid-cols-1 gap-4 md:grid-cols-[repeat(auto-fit,minmax(480px,1fr))]
                  2xl:grid-cols-[repeat(auto-fit,minmax(620px,1fr))]"
         >
-          {#each groups as group, index (group.kind === 'project' ? `p-${group.project.id}` : `m-${group.machineId}`)}
+          {#each shown as group, index (group.kind === 'project' ? `p-${group.project.id}` : `m-${group.machineId}`)}
             {@const live = group.live}
             {@const stored = group.stored}
             {@const groupCwd = group.kind === 'project' ? group.project.cwd : undefined}
@@ -261,9 +347,10 @@
             {@const hasMore = stored.length > 5}
             <section
               class="flex flex-col rounded-xl bg-card shadow-md"
+              animate:flip={{ duration: enterMs, easing: quintOut }}
               in:fly={{
                 y: 6,
-                duration: entering ? 240 : 0,
+                duration: entering ? enterMs : 0,
                 delay: entering ? index * 60 : 0,
                 easing: quintOut,
               }}
@@ -275,7 +362,6 @@
                 {@const count = live.length + stored.length}
                 <!-- Header shares the rows' max-w-3xl measure: one right edge
                      per card at ultrawide, not two (finish-review finding). -->
-                {@const Mark = folderPrefs.mark(group.project.cwd)}
                 <FolderMenu
                   name={group.project.name}
                   cwd={group.project.cwd}
@@ -286,7 +372,7 @@
                     <!-- The project's own hue and mark, the same ones its folder
                          wears in the rail: the card is recognisable before it is
                          read. -->
-                    <Mark
+                    <IconFolderDuo
                       class="identity-ink size-5 shrink-0"
                       style={identityVar(group.project.cwd)}
                     />
@@ -350,7 +436,15 @@
                   {#snippet liveRow()}
                     <LiveSessionRow {instance} {groupCwd} />
                   {/snippet}
-                  {@render peekable(liveTarget(instance), liveRow)}
+                  <!-- A row leaves by collapsing so the rows under it follow it
+                       up; the rows already on the page when the board paints
+                       arrive with their card and announce nothing. -->
+                  <div
+                    in:fly={{ y: -8, duration: entering ? 0 : enterMs, easing: quintOut }}
+                    out:slide={{ duration: exitMs, easing: quintOut }}
+                  >
+                    {@render peekable(liveTarget(instance), liveRow)}
+                  </div>
                 {:else}
                   {#if stored.length === 0}
                     <p class="px-4 pb-3 text-caption">
@@ -401,6 +495,10 @@
             </section>
           {/each}
         </div>
+      {:else if filter !== 'all'}
+        <!-- Nothing is in the state the reader asked for. The chip row above
+             already says which state that is and that it stands at zero, so a
+             card here would be a placeholder for an absence it has covered. -->
       {:else if cockpit.machines.length === 0}
         <!-- No machines onboarding -->
         <section class="rounded-xl bg-card p-6 shadow-md">

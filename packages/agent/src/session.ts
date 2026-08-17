@@ -1,21 +1,21 @@
-import {
-  deleteSession,
-  getSessionInfo,
-  getSessionMessages,
-  listSessions,
-  query,
-  renameSession,
-  tagSession,
-  type PermissionResult,
-  type Query,
-  type SDKMessage,
-  type SDKUserMessage,
-} from '@anthropic-ai/claude-agent-sdk';
+/**
+ * Owns every live session on this machine — across every harness — and pumps
+ * their neutral frames at the hub. Harness-agnostic: the git worktrees, side
+ * quests, busy tracking, bootstrap clone and the routing live here; the actual
+ * sessions are {@link HarnessSession}s produced by the adapters in
+ * `./harnesses`. Nothing here interprets a harness's own event — frames go out
+ * as neutral messages, with the harness's `raw` event riding along.
+ */
 import type {
   ControlPayload,
   Envelope,
+  FleetConfig,
+  FleetSyncReport,
   FramePayload,
   FsPayload,
+  HarnessKind,
+  NeutralSessionInfo,
+  PermissionResult,
   RepoInfo,
   ReposResult,
   SendPayload,
@@ -27,30 +27,17 @@ import {
   COCKPIT_SCRATCH_TAG,
   FLEET_STATUS,
   FLEET_SYNC,
-  INSPECT_CONFIG,
-  MARKETPLACE_CATALOG,
-  READ_MEMORY_FILE,
-  READ_SKILL_FILES,
   repoPath,
   RESOLVE_PERMISSION,
   UPDATE_COCKPIT,
 } from '@cockpit/core';
-import {
-  fleetStatus,
-  inspectConfig,
-  marketplaceCatalog,
-  readMemoryFile,
-  readSkillFiles,
-  syncFleetConfig,
-} from './fleet';
-import { handoffServer } from './handoff';
-import { probeAuth, unlockKeychain } from './auth';
-import { beginLogin, clearCredentials, completeLogin, exportCredentials, importCredentials } from './login';
+import type { Harness, HarnessContext, HarnessSession } from './harness';
+import { harness as harnessOf, harnesses } from './harnesses';
+import { installTool, probeTools } from './tools';
+import { expandHome, runFs } from './fs';
+import { updateCheckout, type UpdateOptions } from './update';
 import { Effect } from 'effect';
 import { stat } from 'node:fs/promises';
-import { expandHome, runFs } from './fs';
-import { installTool, probeTools } from './tools';
-import { updateCheckout, type UpdateOptions } from './update';
 
 /** The frames an agent has to send. The hub's own registry news is not one. */
 export type FrameSink = (frame: Exclude<FramePayload, { kind: 'instances' }>) => void;
@@ -64,124 +51,12 @@ const isDirectory = async (path: string): Promise<boolean> => {
   return info?.isDirectory() ?? false;
 };
 
-/** The blocks a user turn is made of, taken from the SDK rather than re-modelled. */
-type ContentBlock = Extract<SDKUserMessage['message']['content'], unknown[]>[number];
-type Base64Source = Extract<Extract<ContentBlock, { type: 'image' }>['source'], { type: 'base64' }>;
-
-/**
- * A turn's images and pasted text folded into the message the SDK iterates.
- * Images lead, so the model has seen them by the time it reads what was said
- * about them, and each paste is tagged: a wall of text arriving mid-sentence
- * reads as the user's own words otherwise. A turn carrying neither stays the
- * plain string it came as.
- */
-function withExtras(
-  message: SDKUserMessage,
-  attachments: SendPayload['attachments'],
-  images: SendPayload['images']
-): SDKUserMessage {
-  if (!attachments?.length && !images?.length) return message;
-
-  const typed = typeof message.message.content === 'string' ? message.message.content : '';
-  const pasted = (attachments ?? [])
-    .map(({ name, content }) => `\n\n<pasted-text name="${name}">\n${content}\n</pasted-text>`)
-    .join('');
-
-  const content: ContentBlock[] = [
-    ...(images ?? []).map(({ mediaType, data }) => ({
-      type: 'image' as const,
-      source: { type: 'base64' as const, media_type: mediaType as Base64Source['media_type'], data },
-    })),
-    { type: 'text' as const, text: typed + pasted },
-  ];
-
-  return { ...message, message: { ...message.message, content } };
-}
-
-/**
- * The prompt `query()` iterates. Staying unresolved between turns is the whole
- * point: it is what keeps one session alive across many `send`s.
- */
-class InputStream implements AsyncIterable<SDKUserMessage> {
-  #queue: SDKUserMessage[] = [];
-  #waiting: ((result: IteratorResult<SDKUserMessage>) => void) | null = null;
-  #ended = false;
-
-  push(message: SDKUserMessage): void {
-    const waiting = this.#waiting;
-    if (waiting) {
-      this.#waiting = null;
-      waiting({ done: false, value: message });
-      return;
-    }
-    this.#queue.push(message);
-  }
-
-  end(): void {
-    this.#ended = true;
-    this.#waiting?.({ done: true, value: undefined });
-    this.#waiting = null;
-  }
-
-  [Symbol.asyncIterator](): AsyncIterator<SDKUserMessage> {
-    return {
-      next: () => {
-        const queued = this.#queue.shift();
-        if (queued) return Promise.resolve({ done: false, value: queued });
-        if (this.#ended) return Promise.resolve({ done: true, value: undefined });
-        return new Promise((resolve) => {
-          this.#waiting = resolve;
-        });
-      },
-    };
-  }
-}
-
-/**
- * Whether a turn is in flight, and a way to wait for the one that is. Ending a
- * session between turns rather than in the middle of a tool call is what leaves
- * the transcript on disk coherent enough to resume from.
- */
-class Turn {
-  busy = false;
-  #ended = Promise.withResolvers<void>();
-
-  start(): void {
-    this.busy = true;
-  }
-
-  end(): void {
-    this.busy = false;
-    this.#ended.resolve();
-    this.#ended = Promise.withResolvers<void>();
-  }
-
-  /** Resolves when the turn in flight ends, or when `ms` runs out — whichever first. */
-  async settle(ms: number): Promise<void> {
-    if (!this.busy) return;
-    await Promise.race([this.#ended.promise, Bun.sleep(ms)]);
-  }
-}
-
-interface Session {
-  readonly handle: Query;
-  readonly input: InputStream;
-  /** Parked `canUseTool` resolvers, keyed by the SDK's `requestId`. */
-  readonly permissions: Map<string, (result: PermissionResult) => void>;
-  readonly turn: Turn;
-  readonly pump: Promise<void>;
-}
-
 /** How long a stop waits for the turn it interrupted to end before cutting it off. */
-const SETTLE_TIMEOUT_MS = 5_000;
-
-/** And how long every session on the machine gets, together, when the daemon exits. */
 const DRAIN_TIMEOUT_MS = 8_000;
 
 /** The checkout a side quest ran in, kept until the quest is discarded. */
 interface Worktree {
   path: string;
-  /** The repository root the worktree was added from — where it is removed from too. */
   root: string;
 }
 
@@ -189,21 +64,18 @@ interface Worktree {
 const WORKTREE_DIR = '.cockpit-worktrees';
 
 /**
- * The SDK session a side quest is writing, once its init frame names one. Kept
- * so the tag can be applied to it and so a discard can delete it — both need
- * the directory too, which is how the SDK finds a session's transcript.
+ * A side quest's transcript, kept out of the catalogs the rails read. The tag
+ * is the whole test there, so the harness that owns the session applies it.
  */
 interface Quest {
   dir: string;
+  harness: HarnessKind;
   sessionId?: string;
-  /**
-   * Whether the tag question is closed: applied here, or moved by whoever kept
-   * the quest. Either way the agent is done deciding what this session wears.
-   */
+  /** Whether the tag question is closed: applied, or moved by whoever kept it. */
   tagged?: boolean;
 }
 
-/** A `Query` method or SDK session function reached by name through `control`. */
+/** A control reached by name through `control`. */
 type ControlMethod = (...args: unknown[]) => unknown;
 
 /** How many repositories the bootstrap picker asks a machine for. */
@@ -239,20 +111,6 @@ const listRepos = async (): Promise<ReposResult> => {
   return listed.json() as RepoInfo[];
 };
 
-/**
- * Updates the Claude Code the machine's sessions run on, and answers with what
- * it said about the version it landed on. Sessions already running keep the CLI
- * they launched with, so this only ever changes what the next spawn gets.
- */
-const updateClaudeCode = async (): Promise<string> => {
-  const updated = await Bun.$`claude update`.quiet().nothrow();
-  const said = tail(updated.stdout.toString()) || tail(updated.stderr.toString());
-  if (updated.exitCode !== 0) {
-    throw new Error(said || `claude update exited ${updated.exitCode}`);
-  }
-  return said;
-};
-
 /** The same repository, under whichever of its names, is the same repository. */
 const repoIdentity = (repo: string): string => repoPath(repo).toLowerCase();
 
@@ -263,101 +121,61 @@ const repoLeaf = (repo: string): string => repoPath(repo).split('/').pop() ?? ''
 const isRepoUrl = (repo: string): boolean =>
   /^[a-z][a-z0-9+.-]*:\/\//i.test(repo.trim()) || /^[^/]+@[^:]+:/.test(repo.trim());
 
-/**
- * What a machine-scoped `control` reaches: the SDK's session catalog — module-level
- * functions rather than `Query` methods, so it is readable with nothing running on
- * this machine — the machine's repositories, for a session that starts by
- * cloning one, and its Claude Code install.
- */
-const SESSION_FUNCTIONS = {
-  listSessions,
-  getSessionInfo,
-  getSessionMessages,
-  renameSession,
-  tagSession,
-  deleteSession,
-  listRepos,
-  updateClaudeCode,
-  // The machine's workflow CLIs (NEW.md §10). Machine-scoped for the same
-  // reason the rest of this block is: a tool is a property of the machine, and
-  // no session has to be running for one to be asked about or installed.
-  listTools: probeTools,
-  installTool,
-  // And the fleet's MCP servers and skill plugins (NEW.md §11), for the same
-  // reason again: what a machine's Claude Code can reach is a property of the
-  // machine, and the sync that converges it runs with nothing else going on.
-  [FLEET_SYNC]: syncFleetConfig,
-  [FLEET_STATUS]: fleetStatus,
-  [MARKETPLACE_CATALOG]: marketplaceCatalog,
-  // The machine's own user CLAUDE.md, for the hub to adopt as the fleet's.
-  [READ_MEMORY_FILE]: readMemoryFile,
-  // And what the machine really has, fleet or not: the other half of §11, which
-  // is what lets a reader adopt a skill or a server they set up by hand.
-  [INSPECT_CONFIG]: inspectConfig,
-  [READ_SKILL_FILES]: readSkillFiles,
-  // Machine-scoped, not session-scoped: a locked keychain is a property of the
-  // machine, and the session that noticed it cannot answer anything until it
-  // is fixed. Reached over the tunnel, which is the point — nobody should have
-  // to open a terminal on the other machine to get their fleet working again.
-  // Logging a machine in from the dashboard is the fix; unlocking its keychain
-  // is the workaround for a machine that is already logged in and cannot reach
-  // what it saved. Both are here, and neither needs a terminal on that machine.
-  beginLogin,
-  completeLogin,
-  // One account, one login: a healthy machine hands its credential to a
-  // stranded one over the tunnel, instead of every machine doing OAuth alone.
-  clearCredentials,
-  exportCredentials,
-  importCredentials,
-  unlockKeychain,
-  probeAuth,
-} as Record<string, ControlMethod | undefined>;
+/** The machine-scoped session-catalog controls, routed to a harness. */
+const CATALOG_METHODS = new Set([
+  'listSessions',
+  'getSessionInfo',
+  'getSessionMessages',
+  'renameSession',
+  'tagSession',
+  'deleteSession',
+]);
 
 /**
- * The SDK sessions this machine could resume — every transcript a
- * `query({ resume })` would find. Read at register, so the hub can tell a
- * session that merely lost its process from one whose conversation went with
- * it. A catalog that will not be read answers with nothing rather than
- * declaring the machine empty, which would condemn every row it left behind.
+ * The catalog's directory argument, whichever convention carried it: new
+ * callers send a plain string, while dashboards and pre-rework callers send
+ * the SDK's `{ dir }` options object. A mixed-age fleet speaks both, so both
+ * are heard; anything else means no directory was named.
  */
-export const resumableSessions = async (): Promise<string[] | undefined> => {
-  try {
-    return (await listSessions()).map((info) => info.sessionId);
-  } catch (error) {
-    warn(`could not read the session catalog: ${error}`);
-    return undefined;
+const dirOf = (arg: unknown): string | undefined => {
+  if (typeof arg === 'string') return arg;
+  if (typeof arg === 'object' && arg !== null) {
+    const dir = (arg as { dir?: unknown }).dir;
+    if (typeof dir === 'string') return dir;
   }
+  return undefined;
+};
+
+export const resumableSessions = async (): Promise<string[] | undefined> => {
+  const ids: string[] = [];
+  let sawAny = false;
+  for (const adapter of harnesses()) {
+    try {
+      for (const info of await adapter.listSessions()) ids.push(info.sessionId);
+      sawAny = true;
+    } catch (error) {
+      warn(`could not read ${adapter.kind}'s session catalog: ${error}`);
+    }
+  }
+  return sawAny ? ids : undefined;
 };
 
 /**
- * Owns every live SDK session on this machine and pumps their messages at the
- * hub. Nothing here interprets an SDK message — frames go out verbatim.
+ * Owns every live session on this machine and pumps their messages at the hub.
  */
 export class SessionSupervisor {
-  readonly #sessions = new Map<string, Session>();
+  readonly #sessions = new Map<string, HarnessSession>();
   /** Outlives its session: a discard can arrive after the query already ended. */
   readonly #worktrees = new Map<string, Worktree>();
   /** Side quests running here, by instance — for the same reason, same lifetime. */
   readonly #quests = new Map<string, Quest>();
   /** One chain per instance, so envelopes about it are handled in arrival order. */
   readonly #queues = new Map<string, Promise<void>>();
-  /**
-   * The sessions with a turn in flight — from the `send` that starts one until
-   * the `result` frame that ends it. What tells a restart it would be cutting
-   * work in half, and the only thing on the machine that knows.
-   */
+  /** The sessions with a turn in flight — from the `send` that starts one until the turn ends. */
   readonly #busy = new Set<string>();
 
-  /**
-   * The machine-scoped controls that need this daemon rather than this machine;
-   * {@link SESSION_FUNCTIONS} is the rest of them, and needs no instance to
-   * answer from.
-   */
   readonly #daemonFunctions: Record<string, ControlMethod> = {
     [AGENT_BUSY]: () => ({ busy: this.#busy.size, instances: [...this.#busy] }),
-    // The busy count is this daemon's own word, folded in after whatever the
-    // caller asked for: an update must not be able to talk itself into
-    // restarting a machine mid-turn.
     [UPDATE_COCKPIT]: (options) =>
       updateCheckout({ ...(options as UpdateOptions), busy: this.#busy.size }),
   };
@@ -368,20 +186,11 @@ export class SessionSupervisor {
    * `control reinitialize` after it reconnects.
    */
   sink: FrameSink = () => {};
-  /**
-   * Puts an arbitrary envelope on the daemon's hub socket. The frame sink only
-   * carries `frames`, and a hand-off is a `send` addressed at another machine's
-   * session — a different verb with a different destination.
-   */
+  /** Puts an arbitrary envelope on the daemon's hub socket (hand-offs). */
   emit: (envelope: Envelope) => void = () => {};
   /** Re-registers this machine, so a changed auth state reaches the fleet. */
   reannounce: () => void = () => {};
 
-  /**
-   * Fire-and-forget: the socket callback has nowhere to put a rejection. Queued
-   * per instance because a `send` that overtakes the `spawn` it follows finds no
-   * session, and a spawn is slow whenever it has a worktree to cut first.
-   */
   dispatch(envelope: Envelope): void {
     const key = envelope.instanceId ?? '';
     const queue = (this.#queues.get(key) ?? Promise.resolve())
@@ -400,11 +209,6 @@ export class SessionSupervisor {
     return [...this.#sessions.keys()];
   }
 
-  /**
-   * Ends every session, so the daemon's scope closing leaves no child processes.
-   * Each stop settles its own turn first; the drain as a whole is bounded too,
-   * because a machine going down cannot wait on a CLI that will not answer.
-   */
   async shutdown(): Promise<void> {
     const stops = [...this.#sessions.keys()].map((instanceId) => this.#stop({ instanceId }));
     await Promise.race([Promise.allSettled(stops), Bun.sleep(DRAIN_TIMEOUT_MS)]);
@@ -427,26 +231,21 @@ export class SessionSupervisor {
     }
   }
 
-  async #spawn({
-    instanceId,
-    cwd,
-    options,
-    permissionMode,
-    model,
-    scratch,
-    bootstrap,
-    requestId: ack,
-  }: SpawnPayload): Promise<void> {
+  #adapter(kind: HarnessKind | undefined): Harness {
+    const adapter = harnessOf(kind ?? 'claude');
+    if (!adapter) throw new Error(`no harness adapter for ${kind ?? 'claude'}`);
+    return adapter;
+  }
+
+  async #spawn(payload: SpawnPayload): Promise<void> {
+    const { instanceId, cwd, harness: kind, scratch, bootstrap, requestId: ack } = payload;
+    const adapter = this.#adapter(kind);
     try {
       let workdir = bootstrap ? await this.#clone(bootstrap) : expandHome(cwd);
-      // Checked here rather than left to the SDK: a query() started in a missing
-      // directory fails as "binary exists but failed to launch", which names
-      // neither the directory nor the reason.
       if (!(await isDirectory(workdir))) {
         throw new Error(`working directory does not exist: ${workdir}`);
       }
-      // A relaunch stays in the checkout the side quest has been working in —
-      // cutting a second one would strand whatever it has done so far.
+      // A relaunch stays in the checkout the side quest has been working in.
       const cut = this.#worktrees.get(instanceId);
       if (cut) workdir = cut.path;
       else if (scratch?.worktree) {
@@ -455,77 +254,49 @@ export class SessionSupervisor {
 
       // Each spawn says for itself whether this is a side quest, so a relaunch
       // of one that has since been kept stops being tagged as scratch.
-      if (scratch) this.#quests.set(instanceId, { ...this.#quests.get(instanceId), dir: workdir });
-      else this.#quests.delete(instanceId);
+      if (scratch) {
+        this.#quests.set(instanceId, {
+          ...this.#quests.get(instanceId),
+          dir: workdir,
+          harness: adapter.kind,
+        });
+      } else this.#quests.delete(instanceId);
 
-      // A spawn for an instance that is already running is a relaunch: some
-      // options can only be chosen at launch — `bypassPermissions` is the one
-      // the dashboard offers — so the process is replaced under the same id.
-      // Settled first, or the transcript the new process reads back ends in a
-      // turn that never finished.
+      // A spawn for an instance already running is a relaunch: replace the
+      // process under the same id, settling the old one first.
       const running = this.#sessions.get(instanceId);
       if (running) {
         this.#sessions.delete(instanceId);
-        await this.#settleAndClose(running);
+        await running.stop();
       }
 
-      const input = new InputStream();
-      const permissions = new Map<string, (result: PermissionResult) => void>();
-
-      const handle = query({
-        prompt: input,
-        options: {
-          // Subagent observability is the product's first promise (NEW.md §1), so
-          // the full nested conversation and its progress summaries are on unless
-          // the spawn payload deliberately turns them off.
-          forwardSubagentText: true,
-          agentProgressSummaries: true,
-          ...options,
-          // The fleet, as tools. Merged rather than assigned, so a spawn that
-          // brings its own servers keeps them.
-          mcpServers: {
-            ...(options?.mcpServers ?? {}),
-            outpost: handoffServer({
-              instanceId,
-              cwd: workdir,
-              emit: (envelope) => this.emit(envelope),
-            }),
-          },
-          ...(permissionMode && { permissionMode }),
-          ...(model && { model }),
-          // The SDK will not bypass permissions unless it is asked twice over.
-          ...(permissionMode === 'bypassPermissions' && {
-            allowDangerouslySkipPermissions: true,
-          }),
-          cwd: workdir,
-          includePartialMessages: true,
-          canUseTool: (toolName, toolInput, { requestId, suggestions }) =>
-            new Promise<PermissionResult>((resolve) => {
-              permissions.set(requestId, resolve);
-              this.sink({
-                kind: 'permission_request',
-                instanceId,
-                requestId,
-                toolName,
-                input: toolInput,
-                suggestions,
-              });
-            }),
+      let spawned: HarnessSession | null = null;
+      const ctx: HarnessContext = {
+        instanceId,
+        cwd: workdir,
+        frame: (message) => {
+          if (message.type === 'result') this.#tagQuest(instanceId, adapter);
+          this.sink({ kind: 'frame', instanceId, harness: adapter.kind, message });
         },
-      });
-
-      const turn = new Turn();
-      const session: Session = {
-        handle,
-        input,
-        permissions,
-        turn,
-        pump: this.#pump(instanceId, handle, turn),
+        permission: (request) =>
+          this.sink({ kind: 'permission_request', instanceId, harness: adapter.kind, ...request }),
+        busy: (active) => (active ? this.#busy.add(instanceId) : this.#busy.delete(instanceId)),
+        session: (sessionId) => this.#noteQuestSession(instanceId, sessionId, adapter.kind),
+        failed: (error) => this.#fail(instanceId, error),
+        emit: (envelope) => this.emit(envelope),
+        closed: () => {
+          if (spawned && this.#sessions.get(instanceId) === spawned) {
+            this.#sessions.delete(instanceId);
+            this.#busy.delete(instanceId);
+          }
+        },
       };
+
+      const session = await adapter.spawn(payload, ctx);
+      spawned = session;
       this.#sessions.set(instanceId, session);
       // The session is in place. Worth saying out loud for a relaunch, whose
-      // caller has nothing else to wait on: the SDK holds the process back until
-      // the session is given work, so no frame of its own means it is up.
+      // caller has nothing else to wait on.
       if (ack) this.sink({ kind: 'control_result', instanceId, requestId: ack, ok: true });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -534,60 +305,27 @@ export class SessionSupervisor {
     }
   }
 
-  async #pump(instanceId: string, handle: Query, turn: Turn): Promise<void> {
-    try {
-      for await (const message of handle) {
-        if (message.type === 'system' && message.subtype === 'init') {
-          this.#noteQuest(instanceId, message);
-        }
-        if (message.type === 'result') {
-          turn.end();
-          this.#busy.delete(instanceId);
-          this.#tagQuest(instanceId);
-        }
-        this.sink({ kind: 'sdk', instanceId, message });
-      }
-    } catch (error) {
-      warn(`session ${instanceId} pump stopped: ${error}`);
-      // A deliberate stop drops the session before it closes the handle, so an
-      // error after that is the teardown, not a session that died on its own.
-      if (this.#sessions.has(instanceId)) this.#fail(instanceId, error);
-    } finally {
-      this.#sessions.delete(instanceId);
-      // However the session ended — stopped, relaunched, or died of something —
-      // it is carrying nothing now, and a machine that says otherwise is one
-      // nothing will ever restart.
-      this.#busy.delete(instanceId);
-    }
-  }
-
-  /** The SDK session a side quest turned out to be writing, from its init frame. */
-  #noteQuest(instanceId: string, init: Extract<SDKMessage, { subtype: 'init' }>): void {
+  /** The harness session a side quest turned out to be writing, from its init frame. */
+  #noteQuestSession(instanceId: string, sessionId: string, harness: HarnessKind): void {
     const quest = this.#quests.get(instanceId);
-    // Init is re-announced every turn; only a session that is new to us is news.
-    if (!quest || quest.sessionId === init.session_id) return;
-    quest.sessionId = init.session_id;
-    quest.dir = init.cwd;
+    if (!quest || quest.sessionId === sessionId) return;
+    quest.sessionId = sessionId;
+    quest.harness = harness;
     quest.tagged = false;
   }
 
   /**
-   * Keeps a side quest out of the catalogs the rails read. The tag is the whole
-   * test there — hiding by directory instead would hide the mainline sessions a
-   * user legitimately runs in the same checkout.
-   *
-   * Applied at the end of a turn rather than at init, because until the session
-   * has said something the SDK has written no transcript for a tag to live on.
-   * Fire-and-forget, and tried again next turn if it does not land: the session
-   * is running either way, and the cost of failing is a quest that shows up in
-   * the history, not a broken session.
+   * Keeps a side quest out of the catalogs the rails read. Applied at the end of
+   * the first turn rather than at init, because until the session has said
+   * something there may be no transcript for a tag to live on. Fire-and-forget,
+   * tried again next turn if it does not land.
    */
-  #tagQuest(instanceId: string): void {
+  #tagQuest(instanceId: string, adapter: Harness): void {
     const quest = this.#quests.get(instanceId);
     if (!quest?.sessionId || quest.tagged) return;
     const { sessionId, dir } = quest;
     quest.tagged = true;
-    void tagSession(sessionId, COCKPIT_SCRATCH_TAG, { dir }).catch((error: unknown) => {
+    void adapter.tagSession(sessionId, COCKPIT_SCRATCH_TAG, dir).catch((error: unknown) => {
       quest.tagged = false;
       warn(`could not tag side quest ${sessionId}: ${error}`);
     });
@@ -600,11 +338,7 @@ export class SessionSupervisor {
     }
   }
 
-  /**
-   * A session that never started, or stopped without being asked to. The frame
-   * is what a live dashboard renders; the hub reads the same one to mark the
-   * instance dead, so a tab that opens later still learns why.
-   */
+  /** A session that never started, or stopped without being asked to. */
   #fail(instanceId: string, error: unknown): void {
     this.sink({
       kind: 'error',
@@ -614,66 +348,18 @@ export class SessionSupervisor {
     });
   }
 
-  async #send({ instanceId, message, attachments, images }: SendPayload): Promise<void> {
-    const session = this.#session(instanceId);
-    const origin = (message as { origin?: { kind?: string } }).origin;
-    const queued = (message as { shouldQuery?: boolean }).shouldQuery === false;
-
-    // "Queued, so it is picked up at the end of the current turn" is only true
-    // if there *is* a current turn. Handed to a session sitting idle, a queued
-    // message waits for a turn that never comes — it lands in the transcript
-    // and is never answered, which is the one outcome a hand-off must not have.
-    // Busy: stay out of the way. Idle: this is the turn.
-    const wake = queued && !session.turn.busy;
-    // A queued hand-off appends and is answered whenever the session next takes
-    // a turn, so it is not one; the send that wakes an idle session is.
-    if (!queued || wake) this.#busy.add(instanceId);
-    const outgoing = wake
-      ? ({ ...message, shouldQuery: undefined } as typeof message)
-      : message;
-
-    session.turn.start();
-    session.input.push(withExtras(outgoing, attachments, images));
-
-    // A hand-off is queued rather than asked (`shouldQuery: false`), so the SDK
-    // appends it and emits nothing until the session next takes a turn — which
-    // can be hours. The dashboards watching that session would show no sign of
-    // it having arrived, and a hand-off nobody can see land is one nobody
-    // trusts. Echoed as the frame the SDK will not send, so it appears at once.
-    if (origin?.kind === 'peer') {
-      this.sink({ kind: 'sdk', instanceId, message: message as never });
-    }
-  }
-
-  /**
-   * Ends a session's query without cutting a turn in half: unblock it, ask it to
-   * stop, then give the turn it is in the time to end on its own. Bounded — a
-   * CLI that never answers must not hold a stop, or a relaunch behind it, open.
-   */
-  async #settleAndClose(session: Session): Promise<void> {
-    session.input.end();
-    // Unblock anything parked on a permission prompt, or the loop never ends.
-    for (const resolve of session.permissions.values()) {
-      resolve({ behavior: 'deny', message: 'session stopped' });
-    }
-    session.permissions.clear();
-
-    await session.handle.interrupt().catch(() => {});
-    await session.turn.settle(SETTLE_TIMEOUT_MS);
-    session.handle.close();
-    await session.pump;
+  async #send({ instanceId, message, attachments, images, urgent }: SendPayload): Promise<void> {
+    this.#session(instanceId).send(message, { attachments, images, urgent });
   }
 
   async #stop({ instanceId, discard, requestId }: StopPayload): Promise<void> {
     const session = this.#sessions.get(instanceId);
     if (session) {
       this.#sessions.delete(instanceId);
-      await this.#settleAndClose(session);
+      await session.stop();
     }
     if (!discard) return;
 
-    // Discarding is answered like a control call: the dashboard that asked waits
-    // on `requestId` to learn whether the worktree really went away.
     try {
       await this.#removeWorktree(instanceId);
       await this.#removeQuestSession(instanceId);
@@ -686,16 +372,6 @@ export class SessionSupervisor {
     }
   }
 
-  /**
-   * The checkout a bootstrap session works in, cloned before the session exists:
-   * a clone that fails is then a session that never started — a failure card
-   * naming what git said, rather than a first turn spent finding out.
-   *
-   * Cloning the same repository into the same place twice is a no-op, so a
-   * session started again from a bootstrap keeps working in what the first one
-   * cloned. Anything else already sitting at the target belongs to the user, and
-   * is left exactly where it is.
-   */
   async #clone({ repo, baseDir }: NonNullable<SpawnPayload['bootstrap']>): Promise<string> {
     const parent = expandHome(baseDir).replace(/(?!^)\/+$/, '');
     const target = `${parent}/${repoLeaf(repo)}`;
@@ -708,13 +384,9 @@ export class SessionSupervisor {
       return target;
     }
 
-    // `gh` is what resolves `owner/name` and what carries the credentials for a
-    // private repository; without it only a URL can be cloned, by git alone.
     const gh = await ghAvailable();
     if (!gh && !isRepoUrl(repo)) {
-      throw new Error(
-        `cloning ${repo} needs the GitHub CLI, and gh is not installed on this machine`
-      );
+      throw new Error(`cloning ${repo} needs the GitHub CLI, and gh is not installed on this machine`);
     }
 
     await Bun.$`mkdir -p ${parent}`.quiet();
@@ -727,10 +399,6 @@ export class SessionSupervisor {
     return target;
   }
 
-  /**
-   * A detached worktree of `baseCwd` for a side quest to work in — detached so a
-   * scratch session can never move the branch the mainline session is sitting on.
-   */
   async #addWorktree(instanceId: string, baseCwd: string): Promise<string> {
     const repository = await Bun.$`git -C ${baseCwd} rev-parse --show-toplevel`.quiet().nothrow();
     if (repository.exitCode !== 0) {
@@ -749,7 +417,6 @@ export class SessionSupervisor {
     return path;
   }
 
-  /** Throws away a side quest's checkout; a session that had none is a no-op. */
   async #removeWorktree(instanceId: string): Promise<void> {
     const worktree = this.#worktrees.get(instanceId);
     if (!worktree) return;
@@ -763,19 +430,14 @@ export class SessionSupervisor {
     await Bun.$`git -C ${worktree.root} worktree prune`.quiet().nothrow();
   }
 
-  /**
-   * Discarding a side quest throws its transcript away too — the quest was
-   * hidden from the history, and "discard" is the user saying it never
-   * happened. A quest that never named a session has nothing to delete.
-   */
+  /** Discarding a side quest throws its transcript away too. */
   async #removeQuestSession(instanceId: string): Promise<void> {
     const quest = this.#quests.get(instanceId);
     this.#quests.delete(instanceId);
     if (!quest?.sessionId) return;
-    await deleteSession(quest.sessionId, { dir: quest.dir });
+    await harnessOf(quest.harness)?.deleteSession(quest.sessionId, quest.dir);
   }
 
-  /** Answered like a control call, but about the machine's files, not a session. */
   async #fs(payload: FsPayload): Promise<void> {
     const { requestId } = payload;
     try {
@@ -790,9 +452,9 @@ export class SessionSupervisor {
     }
   }
 
-  async #control({ instanceId, requestId, method, args = [] }: ControlPayload): Promise<void> {
+  async #control({ instanceId, harness: kind, requestId, method, args = [] }: ControlPayload): Promise<void> {
     try {
-      const result = await this.#call(instanceId, method, args);
+      const result = await this.#call(instanceId, kind, method, args);
       this.sink({ kind: 'control_result', instanceId, requestId, ok: true, result });
     } catch (error) {
       this.sink({
@@ -805,44 +467,116 @@ export class SessionSupervisor {
     }
   }
 
-  /** No instanceId means the call is about this machine, not about a session. */
-  async #call(instanceId: string | undefined, method: string, args: unknown[]): Promise<unknown> {
+  /** The stored sessions of every harness, merged and newest-first. */
+  async #listSessions(args: unknown[]): Promise<NeutralSessionInfo[]> {    const options = (args[0] ?? {}) as { limit?: number; dir?: string };
+    const all: NeutralSessionInfo[] = [];
+    for (const adapter of harnesses()) {
+      try {
+        all.push(...(await adapter.listSessions(options.dir)));
+      } catch (error) {
+        warn(`listSessions on ${adapter.kind} failed: ${error}`);
+      }
+    }
+    all.sort((a, b) => (b.lastModified ?? 0) - (a.lastModified ?? 0));
+    return options.limit ? all.slice(0, options.limit) : all;
+  }
+
+  /** Converges the fleet across every harness that has a profile, merged into one report. */
+  async #syncFleet(
+    config: FleetConfig | undefined,
+    which: 'syncFleet' | 'fleetStatus'
+  ): Promise<FleetSyncReport> {
+    const mcp: FleetSyncReport['mcp'] = {};
+    const marketplaces: FleetSyncReport['marketplaces'] = {};
+    const plugins: FleetSyncReport['plugins'] = {};
+    const skills: Record<string, import('@cockpit/core').FleetItemState> = {};
+    let memory: FleetSyncReport['memory'];
+    for (const adapter of harnesses()) {
+      const apply = which === 'syncFleet' ? adapter.syncFleet : adapter.fleetStatus;
+      if (!apply) continue;
+      try {
+        const report = which === 'syncFleet' ? await adapter.syncFleet!(config as FleetConfig) : await adapter.fleetStatus!();
+        Object.assign(mcp, report.mcp);
+        Object.assign(marketplaces, report.marketplaces);
+        Object.assign(plugins, report.plugins);
+        Object.assign(skills, report.skills ?? {});
+        if (report.memory) memory = report.memory;
+      } catch (error) {
+        warn(`${which} on ${adapter.kind} failed: ${error}`);
+      }
+    }
+    return { mcp, marketplaces, plugins, skills, ...(memory ? { memory } : {}), at: Date.now() };
+  }
+
+  async #call(
+    instanceId: string | undefined,
+    kind: HarnessKind | undefined,
+    method: string,
+    args: unknown[]
+  ): Promise<unknown> {
     if (instanceId === undefined) {
-      const sessionFunction = this.#daemonFunctions[method] ?? SESSION_FUNCTIONS[method];
-      if (!sessionFunction) throw new Error(`unknown session function: ${method}`);
-      const result = await sessionFunction(...args);
-      // Keeping a quest clears its tag through here. Whoever asked has the last
-      // word, or the next turn to end would quietly hide the session again.
-      if (method === 'tagSession') this.#closeTagging(args[0]);
-      // An unlock changes what this machine can do, and the fleet learned the
-      // old answer at register. Say it again, or the rail keeps showing a
-      // machine that has just been fixed as one that still needs fixing.
-      if (['unlockKeychain', 'completeLogin', 'importCredentials', 'clearCredentials'].includes(method)) this.reannounce();
-      return result;
+      const daemonFn = this.#daemonFunctions[method];
+      if (daemonFn) return await daemonFn(...args);
+
+      if (method === 'listRepos') return await listRepos();
+      if (method === 'listTools') return await probeTools();
+      if (method === 'installTool') return await installTool(args[0] as string, args[1] as string | undefined);
+
+      // Fleet sync applies to every harness that has a machine profile: the hub
+      // sends one desired state, and each harness converges the parts it
+      // understands onto its own files. Reports merge into one machine word.
+      if (method === FLEET_SYNC) {
+        return await this.#syncFleet(args[0] as FleetConfig, 'syncFleet');
+      }
+      if (method === FLEET_STATUS) {
+        return await this.#syncFleet(undefined, 'fleetStatus');
+      }
+
+      if (method === 'listSessions') return await this.#listSessions(args);
+      if (CATALOG_METHODS.has(method)) {
+        const adapter = this.#adapter(kind);
+        switch (method) {
+          case 'getSessionInfo':
+            return await adapter.getSessionInfo(args[0] as string, dirOf(args[1]));
+          case 'getSessionMessages':
+            return await adapter.getSessionMessages(args[0] as string, dirOf(args[1]));
+          case 'renameSession':
+            return await adapter.renameSession(args[0] as string, args[1] as string, dirOf(args[2]));
+          case 'tagSession':
+            await adapter.tagSession(args[0] as string, (args[1] as string) ?? null, dirOf(args[2]));
+            this.#closeTagging(args[0]);
+            return undefined;
+          case 'deleteSession':
+            return await adapter.deleteSession(args[0] as string, dirOf(args[1]));
+        }
+      }
+
+      // A machine-scoped control only one harness knows: try the named harness,
+      // then every harness, until one claims it.
+      if (kind) {
+        const adapter = this.#adapter(kind);
+        if (adapter.machine) {
+          const answer = await adapter.machine(method, args);
+          if (answer !== undefined) return answer;
+        }
+      }
+      for (const adapter of harnesses()) {
+        if (adapter.machine) {
+          const answer = await adapter.machine(method, args);
+          if (answer !== undefined) return answer;
+        }
+      }
+      throw new Error(`unknown session function: ${method}`);
     }
+
     if (method === RESOLVE_PERMISSION) {
-      return this.#resolvePermission(instanceId, args as [string, PermissionResult]);
+      this.#session(instanceId).resolvePermission(args[0] as string, args[1] as PermissionResult);
+      return undefined;
     }
-    return await this.#invoke(instanceId, method, args);
+    return await this.#session(instanceId).control(method, args);
   }
 
-  async #invoke(instanceId: string, method: string, args: unknown[]): Promise<unknown> {
-    const handle = this.#session(instanceId).handle as unknown as Record<string, ControlMethod>;
-    if (typeof handle[method] !== 'function') {
-      throw new Error(`unknown control method: ${method}`);
-    }
-    return await handle[method](...args);
-  }
-
-  #resolvePermission(instanceId: string, [requestId, result]: [string, PermissionResult]): void {
-    const { permissions } = this.#session(instanceId);
-    const resolve = permissions.get(requestId);
-    if (!resolve) throw new Error(`no permission request ${requestId}`);
-    permissions.delete(requestId);
-    resolve(result);
-  }
-
-  #session(instanceId: string): Session {
+  #session(instanceId: string): HarnessSession {
     const session = this.#sessions.get(instanceId);
     if (!session) throw new Error(`no session ${instanceId}`);
     return session;

@@ -122,6 +122,26 @@
   --chart-3: oklch(0.74 0.145 78);
   --chart-4: oklch(0.577 0.215 27);
   --chart-5: oklch(0.525 0.014 62);
+
+  /* Tool ink — one hue per tool family (see tool-cards/descriptors.ts), so the
+     glyph column of a transcript reads as the shape of the turn before a word
+     of it does. Identity, exactly like a project's: it renders as a filled
+     glyph and nothing else — never a dot, a tint, or a ring — and every hue
+     keeps its distance from the four spoken ones (error 27, working 78, action
+     120, idle 160) so no tool can wear a state's colour. Lightness and chroma
+     are the identity ink's, already proven on card and canvas in both
+     appearances; only the hue moves. */
+  --tool-run: oklch(0.5 0.12 52);
+  --tool-mcp: oklch(0.5 0.12 176);
+  --tool-search: oklch(0.5 0.12 195);
+  --tool-ask: oklch(0.5 0.12 214);
+  --tool-web: oklch(0.5 0.12 234);
+  --tool-read: oklch(0.5 0.12 253);
+  --tool-agent: oklch(0.5 0.12 272);
+  --tool-edit: oklch(0.5 0.12 292);
+  --tool-write: oklch(0.5 0.12 311);
+  --tool-skill: oklch(0.5 0.12 330);
+  --tool-plan: oklch(0.5 0.12 350);
 }
 
 .dark {
@@ -186,6 +206,19 @@
   --chart-3: oklch(0.79 0.135 80);
   --chart-4: oklch(0.66 0.185 25);
   --chart-5: oklch(0.72 0.012 70);
+
+  /* The same hues, lifted for a charcoal canvas. */
+  --tool-run: oklch(0.74 0.11 52);
+  --tool-mcp: oklch(0.74 0.11 176);
+  --tool-search: oklch(0.74 0.11 195);
+  --tool-ask: oklch(0.74 0.11 214);
+  --tool-web: oklch(0.74 0.11 234);
+  --tool-read: oklch(0.74 0.11 253);
+  --tool-agent: oklch(0.74 0.11 272);
+  --tool-edit: oklch(0.74 0.11 292);
+  --tool-write: oklch(0.74 0.11 311);
+  --tool-skill: oklch(0.74 0.11 330);
+  --tool-plan: oklch(0.74 0.11 350);
 }
 
 @theme inline {
@@ -250,6 +283,18 @@
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
+
+  --color-tool-run: var(--tool-run);
+  --color-tool-mcp: var(--tool-mcp);
+  --color-tool-search: var(--tool-search);
+  --color-tool-ask: var(--tool-ask);
+  --color-tool-web: var(--tool-web);
+  --color-tool-read: var(--tool-read);
+  --color-tool-agent: var(--tool-agent);
+  --color-tool-edit: var(--tool-edit);
+  --color-tool-write: var(--tool-write);
+  --color-tool-skill: var(--tool-skill);
+  --color-tool-plan: var(--tool-plan);
 
   /* Motion vocabulary. --ease-out-expo for entrances and state changes
      (approximates a critically damped spring); --ease-inout-soft only for
@@ -364,6 +409,10 @@
   font-size: 0.75rem; /* 12px floor — nothing renders below this */
   line-height: 1.35;
   letter-spacing: 0.008em;
+}
+
+@utility ease-expo {
+  transition-timing-function: var(--ease-out-expo);
 }
 
 /* ---- Rendered markdown. @tailwindcss/typography paints its own gray palette,

@@ -177,6 +177,100 @@ Drift log (real installed types vs the summaries above; types win — §9):
   still ships the whole JSONL in one `getSessionMessages` reply — chunked
   transport over the tunnel is the known follow-up. Native find is replaced
   by store-backed Ctrl+F (virtualized DOM defeats browser find).
+- Harness-agnostic rework (2026-08-13, supersedes §1's "not multi-provider" and
+  §6's claude-only tunnel): the wire now speaks a cockpit-owned neutral spine
+  (`packages/core/src/harness.ts` — `HarnessKind = claude|opencode|pi`,
+  `NeutralMessage`, `NeutralSessionInfo`, capabilities). The agent runs one
+  `Harness` adapter per runtime (`packages/agent/src/harnesses/{claude,opencode,pi}.ts`);
+  the hub and dashboard are harness-agnostic, gated by per-harness capabilities.
+  `SpawnPayload` gains `harness`/`resume:{sessionKey,fork,atMessage}`/
+  `persistSession`; frames are `kind:'frame'` (+ a legacy `sdk`→`frame` shim in
+  the hub so a not-yet-restarted daemon keeps streaming); the `instances` row
+  gains `harness`. The SDK is now an agent-internal dep — `@cockpit/core` no
+  longer imports it (the old `SDK*` type names are neutral aliases). opencode
+  runs its server per machine via `@opencode-ai/sdk`; pi via the in-process
+  `@earendil-works/pi-coding-agent` (no permissions by design). Migrations
+  `0012`/`0013` add the `harness`/`harnesses` columns (split into two files —
+  drizzle's sqlite migrator runs only the first statement of a multi-statement
+  file).   The three "gaps" closed 2026-08-13: **fleet sync** is per-harness
+  (`Harness.syncFleet`/`fleetStatus`, shared file-sync in
+  `harnesses/fleet-common.ts` — opencode converges `~/.config/opencode/` skills/
+  memory/`opencode.json` mcp, pi `~/.pi/agent/` skills/memory); **hand-off tools**
+  are shared (`harnesses/handoff-shared.ts`) and exposed by claude's MCP server,
+  pi's `customTools`, and an opencode plugin the harness writes into
+  `~/.config/opencode/plugins/cockpit-handoff.js` (which reaches the fleet over
+  the hub's new `POST /api/relay/{spawn,send}` REST relay, reading
+  `COCKPIT_HUB_URL`/`COCKPIT_MACHINE_ID` off the env the daemon sets); **tasks**
+  translate opencode's native `todo` list through a `getTodos` control (pi has
+  none and stays off).
+- Part-carrying opencode events (`message.part.updated`) carry the session id
+  only inside `properties.part.sessionID`, never `properties.sessionID`
+  directly — routing and streaming text (`properties.delta`, while `part.text`
+  is the full accumulated text) fixed 2026-08-14.
+- opencode's own defaults allow almost every tool; cockpit injects ask-rules
+  via `createOpencode`'s `config` option (which reaches the server through
+  `OPENCODE_CONFIG_CONTENT`) and maps its permission modes in the hand-off
+  plugin's `permission.ask` hook. The `question` tool's default is **allow**
+  (not deny); when the model uses it a `question.asked` event rides the v1
+  `client.event.subscribe({query:{directory}})` stream with `properties.id` +
+  `properties.questions`. The opencode harness answers it itself via the
+  directory-scoped `POST /question/{id}/reply` (and `/reject`) REST routes, so
+  the turn completes instead of hanging — no `question` key exists on the real
+  `Config['permission']` type.
+- opencode reads `~/.claude/skills/` and falls back to the claude memory file
+  itself, so its own skills/memory fleet sync was dropped from the opencode
+  harness (`syncFleet`/`fleetStatus` now only converge MCP).
+- An abort surfaces as `session.error` with `error.name ===
+  'MessageAbortedError'` — treated as a turn ending (`result` subtype
+  `aborted`), not a session failure.
+- A live opencode server asks permissions as `permission.asked`
+  (`{id, sessionID, permission, patterns, metadata, always, tool}`), not the
+  `permission.updated` the v1 SDK types declare — verified by raw capture
+  2026-08-14; the adapter listens for both literals.
+- Delegation stays on the tunnel, not on A2A (decided 2026-08-14, functionality
+  retained in full): the fleet's own frames/verbs already carry the task
+  lifecycle A2A models (busy=working, permission/question=input-required,
+  result=completed, handoff=follow-up), and no harness speaks A2A natively — an
+  internal adoption would be a second protocol re-modeling the first (§2's
+  failure mode, imported). A2A belongs at the hub edge as an optional future
+  gateway (agent card → relay spawn/send, task status ← frames, auto-report as
+  the completed artifact), built on the delegate primitives, after a
+  current-spec research pass. ACP is likewise noted only as a possible future
+  harness adapter, not a delegation wire.
+- Delegate sessions (2026-08-14): `SpawnPayload.parent` + the `instances`
+  `parent_instance_id`/`parent_tool_use_id` columns track parentage
+  structurally. The `delegate` tool on all three harnesses spawns a scratch
+  child; the HUB auto-delivers each delegate turn's final text to its parent as
+  a queued peer report (aborted turns skipped), so no prompt protocol is
+  injected — guidance flows back through `handoff`. Parent-scoped brakes:
+  `stop_delegate`/`interrupt_delegate` on all three harnesses, guarded twice
+  (tool-side and hub-side) so a session can only brake its own delegates;
+  interrupt is the fleet's pause. Urgent hand-offs: claude injects mid-turn via
+  `streamInput`, opencode/pi interrupt-then-deliver with a factual note;
+  parent-scoped, and the hub downgrades anything else to a normal queued send.
+- opencode composer `/commands` route through `POST /session/:id/command` (the
+  body's `model` is a plain string, unlike prompt's object); `resume.atMessage`
+  without fork maps to `session.revert` (rewind capability on); the machine
+  catalog aggregates `project.list × session.list(directory)` and filters child
+  sessions (`parentID`) out of the rail.
+- opencode adapter: provider retry/status notices surface as system `provider_retry` frames; errors carry name+status+message verbatim (errorText).
+- hub: a delegate's failed turn reports the harness error text instead of "(no text)".
+- dashboard: unknown system subtypes render their `content` verbatim.
+- dashboard: hand-off briefs dedup between live peer echo and stored transcript (SDK storage strips `origin` — measured, peer-echo-proof.ts); stored briefs render as peer messages.
+- dashboard: plain harness tasks (task_type local_bash) no longer mint subagent cards; completions render as one system.task line, suppressed when a real branch exists; subagent report bodies are capped/log-aware (OutputBlock).
+- dashboard: vendor model-provider logos via unplugin-icons (`@iconify-json/logos` + `@iconify-json/thesvg-color`) — `providerOf(model)` in `models.svelte.ts` maps a model id to its lab; `ProviderLogo.svelte` renders the mark (nothing on unknown, so callers keep their fallback).
+- dashboard: delegate card upgraded — width-capped at the prose idiom, `fly` entrance, the `handoffBrief` as a two-line task line, the delegate's cumulative cost (`$0.0000`, mono/tabular), and an in-card `max-h-96` transcript that sticks to the bottom while working.
+- delegates: a delegate's `question`/`ask` routes to its parent session as `answer_delegate`; only the parent's death escalates it to the user.
+- delegates: spawned with `bypassPermissions` (a child of a session that already passed the gate).
+- dashboard: `result` frames report cost on success too — `FrameMapping.cost` lands on `SessionState.totalCost` (a successful turn's cost has no transcript line to scrape).
+- dashboard: delegate reports fold into the delegate card (Report section, log-aware via OutputBlock) instead of rendering as `user.peer` handoff bubbles; the bubble is suppressed only when the card is provably in the transcript.
+- dashboard: delegate asks now parse to `user.delegate_ask` via the `[delegate-ask …]` marker (survives SDK storage), fold into the DelegateBranch card as an Asks section with answered/denied/pending state, and never render as raw user bubbles (2026-08-15).
+- dashboard: delegate auto-reports parse via the `[Report from delegate <name>#<short8> — turn complete|failed]` header (stored copies carry only the short id — `matchesSession` prefix-matches); ask bodies unpack from `tool — {json}` (`askBodyParts`/`askShort`/`askDetail`, never raw JSON, never Markdown); `answer_delegate` calls render as readable receipts (AnswerDelegate renderer); handoffs to one's own delegate render "Follow-up to <label>" instead of a raw uuid (2026-08-15, hand-applied).
+- dashboard: the permission card knows opencode's lowercase tool names (`edit`/`bash`/`webfetch`, `filepath` key), caps long input values (diffs) in scrollable blocks, and the hover-expanded permission stack is capped at 50vh — a delegate ask storm no longer fills the viewport (2026-08-15, hand-applied).
+- delegates: the hub's `delegate_events` table is the system of record for a delegate's asks, answers and reports; the dashboard consumes it (`GET /api/delegate-events?parent=|instance=` on open, `delegate_event` frames live — a settled ask is not re-broadcast, so the client folds an `answer` into its ask's status by requestId) and transcript marker parsing (`[delegate-ask …]`, `[Report from delegate …]`) is the legacy fallback for sessions that predate the table. The daemon auto-allows tool asks under `bypassPermissions` — opencode's plugin permission hook is dead at 1.18.14, verified (2026-08-15).
+- fleet-forced web tooling: search is the Exa MCP and fetch is the firecrawl MCP (both in the fleet MCP registry, §11), so the daemon denies the built-ins — `disallowedTools: ['WebSearch','WebFetch']` merged into every Claude spawn's options, `webfetch: 'deny'` on the opencode server (a deny publishes no permission event, so `autoAllows` never sees it), and `permissions.deny` converged into `~/.claude/settings.json` at boot for the `claude` the user starts by hand (2026-08-15).
+- dashboard: the beui.dev port wave (2026-08-16) — beautifului.dev ships no code (newsletter teaser), so beui.dev's open registry was the cloned source (its `EASE_OUT` is byte-identical to `--ease-out-expo`). Landed: `AgentPresence` (3×3 pixel grid + shimmer + elapsed, shown from send until the tail is visibly alive; `showsPresence` in `presence.ts` is the rule, and a live thinking tail suppresses it), the MessageScroller follow protocol grafted onto virtua (intent-driven leave-live-edge incl. `pointerdown`, programmatic-scroll guard, smooth growth-follow), Shiki dual-theme code everywhere through one `agent-code.ts` pipeline (tool cards, markdown fences via Streamdown's `code` snippet, bash-well command lines painted / output plain, `vitesse-light`/`-dark`), ThinkingBlock live-shimmer + "Thought for Ns" (`thinkingDurationMs`; stored transcripts read plain "Thought" — `SessionMessage` carries no timestamp, fixing that is a core+daemon change awaiting an idle window), `SourcesStrip` under answers from Exa/firecrawl results (`sources.ts`, real result shapes only), composer send↔stop morph + `DictationButton` (SpeechRecognition, renders nothing where absent), FleetBoard status filter chips (`statusOf` files any red row under Needs-you, deliberately out-counting the queue), and `SelectionActions` (quote any transcript passage into the composer; Playwright-verified). New dep: `shiki@4` only — `motion@13` was staged for spring parity but every port landed on CSS/Svelte transitions/`.pressable`, so it was removed rather than shipped unused.
+- thinking is evidence, fleet-wide (2026-08-16): the dashboard's tail renders a 4-step precedence (`presence.ts` doc is normative) driven by the partial stream — `streamPhase` in `frames.ts` reads `content_block_start/stop`, `thinking_delta`, `signature_delta` ("Finishing thought…"), and tool_use starts; `LiveThinking` streams the reasoning trace (clamped 6 lines, top fade); with no evidence the presence line says "Working…"/"Running N agents", never "Thinking…". `NeutralStreamMessage.event` in core was widened with the thinking events (the opencode adapter emits them typed; the claude adapter still forwards raw SDK partials through `toNeutral`'s cast, and the dashboard reads those by shape — the union under-describes claude partials on purpose). The settled block's "Thought for Ns" prefers `metadata.thinkingDurationMs`, stamped by the client's own clock, because two blocks of one frame share a mapped timestamp and adjacency reads 0 there. Opencode's adapter streams reasoning live (start/delta/stop with prefix-diffing, main sessions only, children buffered as before) — awaiting a daemon cycle. Delegate rows carry `SpawnPayload.title` (brief's first line, hub migration 0017, `instances.title`) — daemon side also awaits the cycle; the opencode plugin's own delegate tool was left untitled deliberately, it is dead code at 1.18.14. Observed while verifying: the remote Mac's daemon predates the harness rework (`harness: null` shim rows) and emits no partials at all — its sessions have no streaming until that daemon is redeployed.
 
 ---
 

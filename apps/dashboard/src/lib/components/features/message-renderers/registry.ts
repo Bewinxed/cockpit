@@ -6,6 +6,8 @@ import TaskEvent from './TaskEvent.svelte';
 import CompactBoundary from './CompactBoundary.svelte';
 import ThinkingBlock from './ThinkingBlock.svelte';
 import ResultError from './ResultError.svelte';
+import DelegateBranch from '../DelegateBranch.svelte';
+import AnswerDelegate from './AnswerDelegate.svelte';
 
 /**
  * Registry of message renderers.
@@ -28,7 +30,13 @@ const renderers: MessageRenderer[] = [
 			return false;
 		},
 		priority: 100,
-		name: 'AskQuestionPicker'
+		name: 'AskQuestionPicker',
+		// A question is the one tool call that is addressed to the reader, so it
+		// never joins a tool group: grouping renders its rows straight from the
+		// descriptors and never asks the registry, which left a question showing
+		// as `questions [{…}]` on the params floor — the picker below was written
+		// and never reached.
+		standalone: true
 	},
 	{
 		// Writing the plan down is not work to inspect: these render as one
@@ -63,6 +71,28 @@ const renderers: MessageRenderer[] = [
 		match: (m: Message) => m.type === 'result.error',
 		priority: 85,
 		name: 'ResultError'
+	},
+
+	// A delegated session, folded out of the parent transcript into a branch the
+	// reader opens on purpose (NEW.md §1). Only the `delegate` hand-off kind is
+	// its own card; `handoff`/`start` keep the sender's receipt in ChatMessage.
+	{
+		component: DelegateBranch,
+		match: (m: Message) => m.type === 'tool.handoff' && m.metadata?.handoffKind === 'delegate',
+		priority: 100,
+		name: 'DelegateBranch',
+		standalone: true
+	},
+
+	// Answering a delegate's routed ask is bookkeeping, not work to inspect: a
+	// readable one-line receipt, standalone so tool grouping cannot swallow it.
+	{
+		component: AnswerDelegate,
+		match: (m: Message) =>
+			m.type === 'tool.use' && (m.metadata?.toolName ?? '').includes('answer_delegate'),
+		priority: 100,
+		name: 'AnswerDelegate',
+		standalone: true
 	}
 
 	// Future renderers will be added here:

@@ -5,14 +5,15 @@
 import type {
   AgentRow,
   AvailableCommand,
+  ClaudeLimits,
   ControlPayload,
   Envelope,
   FramePayload,
   FsPayload,
+  HarnessKind,
   InstanceRow,
   McpServerStatus,
   ModelInfo,
-  Options,
   PermissionMode,
   PermissionResult,
   PermissionUpdate,
@@ -23,6 +24,7 @@ import type {
   SlashCommand,
   SpawnPayload,
   StopPayload,
+  UsageLimitsReading,
 } from '@cockpit/core';
 import {
   classifyCommand,
@@ -33,7 +35,7 @@ import {
 import type { SubagentState } from '$lib/utils/flow-types';
 import type { Activity } from './activity';
 import { activityOf, runningSubagents } from './activity';
-import type { Message } from './types';
+import type { DelegateAskEvent, DelegateEvent, Message } from './types';
 import {
   CONTROL_TIMEOUT_MS,
   DISCARD_TIMEOUT_MS,
@@ -51,9 +53,13 @@ import {
   applyToolResult,
   branchFor,
   errorMessage,
+  foldDelegateEvent,
   localUserMessage,
   mapFrame,
   mapTranscript,
+  mergePeerMessage,
+  routedToParent,
+  suppressesTaskLine,
   turnBoundaries,
 } from './frames';
 import { invalidateTasks, refreshTasks, TASK_LEDGER_TOOLS } from './tasks.svelte';
@@ -125,6 +131,8 @@ export interface PendingPermission {
   toolName: string;
   input: Record<string, unknown>;
   suggestions?: PermissionUpdate[];
+  /** Set when the hub routed the ask to its parent rather than to the user. */
+  routedTo?: 'parent';
 }
 
 /** A permission parked anywhere in the fleet, with the context to act on it. */
@@ -175,14 +183,47 @@ export interface SessionState {
   cwd: string;
   /** The SDK session behind this view, once one is known. */
   sessionId: string | null;
+  /** Which harness owns {@link sessionId} — what a resume and a catalog read route on. */
+  harness: HarnessKind;
   messages: Message[];
   /** Subagent branches, keyed by the Task `tool_use_id` that spawned them. */
   subagents: Record<string, SubagentState>;
   pending: PendingPermission[];
   /** Partial assistant text, between `stream_event`s and the final message. */
   streaming: string;
+  /**
+   * Which content block the main loop has open right now, from the partials —
+   * `null` between blocks and outside a turn. This is the only evidence of what
+   * the session is doing while it does it, and the tail says nothing the
+   * partials have not shown.
+   */
+  openBlock: 'thinking' | 'text' | 'tool' | null;
+  /**
+   * What the open thinking block has reasoned so far. Left standing when the
+   * block closes — the trace stays readable until the transcript's own thinking
+   * message supersedes it — and `''` for a redacted block, which streams
+   * nothing and is still thinking.
+   */
+  thinkingStream: string;
+  /** The SDK signed the thinking block: it is wrapping up, not still going. */
+  thinkingClosing: boolean;
+  /**
+   * When the open thinking block started, epoch ms. Measured at
+   * `content_block_start`, consumed when the settled thinking message lands —
+   * the one clock that survives "thinking then a tool call in one frame",
+   * where both mapped messages share a timestamp and adjacency measures 0.
+   */
+  thinkingSince: number | null;
   /** A turn is in flight (sent, no `result` yet). */
   busy: boolean;
+  /**
+   * When this stretch of work began, epoch ms, or `null` while the session is
+   * idle. Stamped by the local send before a single frame has come back — the
+   * wait for the first one is exactly the silence the transcript's presence line
+   * exists to fill — and left alone for the rest of the turn, so a permission
+   * answered halfway through does not restart the clock.
+   */
+  workingSince: number | null;
   /** The main loop's tool in flight, cleared by its result or the turn's end. */
   currentTool: ToolGlance | null;
   lastActivityAt: Date | null;
@@ -222,6 +263,12 @@ export interface SessionState {
    */
   lastTurnFailed: boolean;
   /**
+   * The cumulative cost the latest `result` frame reported, in dollars.
+   * `undefined` until a turn has closed with one. Frames, not transcript
+   * scraping: a successful turn's cost has no transcript line.
+   */
+  totalCost?: number;
+  /**
    * The session's own word on what it is doing: `compacting` while it rewrites
    * its context — the only live signal, since the boundary frame lands after
    * the work — `requesting` while it waits on the model.
@@ -256,8 +303,21 @@ const state = $state({
   instances: [] as InstanceRow[],
   projects: [] as ProjectRow[],
   sessions: {} as Record<string, SessionState>,
+  /**
+   * The hub's record of every delegate's asks, answers and reports, keyed by
+   * the delegate they are about and oldest first. Kept apart from the session
+   * it belongs to because the reader of this traffic is the *parent* — a
+   * delegate card renders its child's exchange, not its own.
+   */
+  delegateEvents: {} as Record<string, DelegateEvent[]>,
   /** Stored sessions per machine, newest first (`listSessions` through the tunnel). */
   catalog: {} as Record<string, SDKSessionInfo[]>,
+  /**
+   * Each machine's latest Claude limit reading, by machineId — folded in from
+   * the `kind: 'usage'` frame so the pill updates live rather than polling
+   * (USAGE-SPEC.md §7.1). Empty until a machine has reported.
+   */
+  usageLimits: {} as Record<string, ClaudeLimits>,
 });
 
 interface Waiter {
@@ -338,11 +398,17 @@ function session(instanceId: string): SessionState {
     machineId: '',
     cwd: '',
     sessionId: null,
+    harness: 'claude',
     messages: [],
     subagents: {},
     pending: [],
     streaming: '',
+    openBlock: null,
+    thinkingStream: '',
+    thinkingClosing: false,
+    thinkingSince: null,
     busy: false,
+    workingSince: null,
     currentTool: null,
     lastActivityAt: null,
     loading: false,
@@ -382,6 +448,7 @@ function hydrate(target: SessionState): void {
   target.machineId = known.machineId;
   target.cwd = known.cwd;
   target.sessionId = known.sessionId;
+  target.harness = (known.harness as HarnessKind) ?? 'claude';
   target.scratch = known.kind === 'scratch';
 }
 
@@ -441,6 +508,28 @@ async function persistSettings(
 /** Opens a session's view state — the route's half of arriving at `/session/[id]`. */
 export function openSession(instanceId: string): void {
   hydrate(session(instanceId));
+  void loadDelegateEvents(instanceId);
+}
+
+/** Views whose delegates' traffic has been read back — it is read once. */
+const delegatesRead = new Set<string>();
+
+/**
+ * What this session's delegates asked it, and what it answered, before the tab
+ * opened. Broadcast as it happens *and* readable here, for the same reason the
+ * hand-offs are: an exchange that settled an hour ago is still the record, and
+ * a settled ask is never pushed again. A read that fails leaves the delegate
+ * cards on the transcript markers, and the next open tries again.
+ */
+async function loadDelegateEvents(instanceId: string): Promise<void> {
+  if (delegatesRead.has(instanceId)) return;
+  delegatesRead.add(instanceId);
+  const events = await load<DelegateEvent[]>(`/api/delegate-events?parent=${instanceId}`);
+  if (!events) {
+    delegatesRead.delete(instanceId);
+    return;
+  }
+  for (const event of events) recordDelegateEvent(event);
 }
 
 async function load<T>(path: string): Promise<T | null> {
@@ -464,9 +553,23 @@ function adoptInstances(instances: InstanceRow[]): void {
   for (const target of Object.values(state.sessions)) hydrate(target);
 }
 
+/** Replaces the whole limits map with the hub's word — a full snapshot, not a patch. */
+function adoptUsageLimits(readings: { machineId: string; limits: ClaudeLimits }[]): void {
+  const next: Record<string, ClaudeLimits> = {};
+  for (const reading of readings) next[reading.machineId] = reading.limits;
+  state.usageLimits = next;
+}
+
+/** The `kind: 'usage'` frame's readings, mapped down to a machine → limits table. */
+function usageLimitReadings(readings: UsageLimitsReading[]): Record<string, ClaudeLimits> {
+  const next: Record<string, ClaudeLimits> = {};
+  for (const reading of readings) next[reading.machineId] = reading.payload;
+  return next;
+}
+
 /** Registry reads: on connect and again after every reconnect. */
 async function refresh(): Promise<void> {
-  const [machines, instances, projects, pending, handoffs] = await Promise.all([
+  const [machines, instances, projects, pending, handoffs, usage] = await Promise.all([
     load<Machine[]>('/api/agents'),
     load<InstanceRow[]>('/api/instances'),
     load<ProjectRow[]>('/api/projects'),
@@ -474,12 +577,15 @@ async function refresh(): Promise<void> {
     // Read on connect, not only broadcast on change: a dashboard opened after
     // a hand-off went out has missed every broadcast it will ever get.
     load<Record<string, { from: string; at: number }>>('/api/handoffs'),
+    // Same reason: a dashboard opened between reports has missed the frames.
+    load<{ machines: { machineId: string; limits: ClaudeLimits }[] }>('/api/usage/limits'),
   ]);
 
   if (handoffs) state.handoffs = handoffs;
   if (machines) state.machines = machines;
   if (projects) state.projects = projects;
   if (instances) adoptInstances(instances);
+  if (usage) adoptUsageLimits(usage.machines);
   if (pending) {
     for (const envelope of pending) handleFrame(envelope.payload);
   }
@@ -502,6 +608,52 @@ function settle(requestId: string | undefined, answer: (waiter: Waiter) => void)
   return true;
 }
 
+/**
+ * The hub's delegate-traffic push (`publishDelegateEvent`, packages/hub). It is
+ * none of core's `FramePayload` kinds — the hub sends it to dashboards only —
+ * so it is read off the frame structurally, the way `routedTo` and `handoffs`
+ * are.
+ */
+function delegateEventOf(frame: FramePayload): DelegateEvent | null {
+  const candidate: { kind: string; event?: unknown } = frame;
+  if (candidate.kind !== 'delegate_event') return null;
+  const event = candidate.event;
+  if (typeof event !== 'object' || event === null) return null;
+  return event as DelegateEvent;
+}
+
+/** Files one event under the delegate it is about, pushed or freshly read. */
+function recordDelegateEvent(event: DelegateEvent): void {
+  // Written, then read back: a `$state` write lands on the proxy and never on
+  // the literal, so folding into the literal would file the row where the UI
+  // cannot see it.
+  state.delegateEvents[event.instanceId] ??= [];
+  foldDelegateEvent(state.delegateEvents[event.instanceId], event);
+}
+
+/**
+ * Keeps {@link SessionState.workingSince} in step with what the session is
+ * doing. Anything that can change {@link activityOf} calls this: the clock
+ * starts at the first sign of work and stops only where the session goes idle,
+ * so a turn that is merely blocked or waiting on a tool keeps counting.
+ */
+function trackWorking(target: SessionState): void {
+  if (activityOf(target) === 'idle') target.workingSince = null;
+  else target.workingSince ??= Date.now();
+}
+
+/**
+ * Forgets the live turn phase. Called wherever the partials that painted it
+ * stop being the truth: the turn ended, the process behind it was replaced, or
+ * a stored transcript has taken the transcript's place.
+ */
+function clearTurnPhase(target: SessionState): void {
+  target.openBlock = null;
+  target.thinkingStream = '';
+  target.thinkingClosing = false;
+  target.thinkingSince = null;
+}
+
 /** Which tool a result answers, from the call it lands on. */
 const nameOfCall = (messages: Message[], toolId: string): string =>
   messages.findLast((message) => message.metadata?.toolId === toolId)?.metadata?.toolName ?? '';
@@ -517,6 +669,12 @@ function handleFrame(frame: FramePayload): void {
     state.handoffs = (frame as { handoffs?: Record<string, { from: string; at: number }> })
       .handoffs ?? {};
     adoptInstances(frame.instances);
+    return;
+  }
+
+  if (frame.kind === 'usage') {
+    // The small limits frame the hub pushes on each report (USAGE-SPEC.md §6.4).
+    state.usageLimits = usageLimitReadings(frame.limits);
     return;
   }
 
@@ -548,6 +706,16 @@ function handleFrame(frame: FramePayload): void {
     return;
   }
 
+  // The hub's own record of what a delegate asked and was answered. Filed
+  // before the session below, not behind it: the reader of this traffic is the
+  // parent's delegate card, so it has no business waiting out the delegate's
+  // own backfill.
+  const delegateEvent = delegateEventOf(frame);
+  if (delegateEvent) {
+    recordDelegateEvent(delegateEvent);
+    return;
+  }
+
   const target = session(frame.instanceId);
 
   // A backfill owns the transcript until it lands. Frames that arrive meanwhile
@@ -559,9 +727,13 @@ function handleFrame(frame: FramePayload): void {
   }
 
   switch (frame.kind) {
-    case 'sdk': {
+    case 'frame': {
+      target.harness = frame.harness;
       const mapping = mapFrame(frame.instanceId, frame.message);
       if (mapping.branch) applyBranchEvent(target.subagents, frame.instanceId, mapping.branch);
+      // Cost rides every result frame, cumulative across the run. It has no
+      // transcript line on success, so it lives on the session instead.
+      if (mapping.cost !== undefined) target.totalCost = mapping.cost;
 
       // A subagent's turns belong to its branch, not to the main transcript —
       // interleaving them is what buries the conversation the user is reading.
@@ -637,6 +809,15 @@ function handleFrame(frame: FramePayload): void {
           });
           continue;
         }
+        // A hand-off brief arrives twice — the uuid-less live echo and the
+        // uuid-bearing stored copy, both mapping to `user.peer` — and identical
+        // body text means it is one brief, not two.
+        if (mergePeerMessage(sink, message)) continue;
+        // A real subagent's `task_notification` names a `tool_use_id` whose
+        // branch already exists — its completion is the branch card. The branch
+        // event above ran first, so the registry already answers whether this
+        // line is redundant; a plain tool task has no branch and keeps its line.
+        if (suppressesTaskLine(target.subagents, message, mapping.branch?.toolUseId)) continue;
         sink.push(message);
       }
       // The frame for a turn the reader typed: stamp their local copy with the
@@ -667,8 +848,10 @@ function handleFrame(frame: FramePayload): void {
         if (!branch) continue;
         branch.status = result.isError ? 'error' : 'complete';
         branch.completedAt ??= new Date();
-        if (result.isError) branch.error ??= result.result;
-        else branch.result ??= result.result;
+        // The tool_result carries the full report; task_notification only had
+        // a short summary, so this overwrites unconditionally.
+        if (result.isError) branch.error = result.result;
+        else branch.result = result.result;
       }
 
       // A push the SDK sends when the commands on disk changed: the full list,
@@ -696,24 +879,71 @@ function handleFrame(frame: FramePayload): void {
         if (target.machineId) void refreshContext(frame.instanceId, target.machineId);
       }
 
-      if (mapping.currentTool) target.currentTool = mapping.currentTool;
+      if (mapping.currentTool && !mapping.agentId) target.currentTool = mapping.currentTool;
+      // What the partials say the model is writing right now. Only ever the
+      // main loop's — `mapFrame` files nothing here for a subagent's frames.
+      if (mapping.blockStart) {
+        target.openBlock = mapping.blockStart;
+        // A fresh block of reasoning, not a continuation of the last one.
+        if (mapping.blockStart === 'thinking') {
+          target.thinkingStream = '';
+          target.thinkingClosing = false;
+          target.thinkingSince = Date.now();
+        }
+      }
+      if (mapping.thinkingDelta) target.thinkingStream += mapping.thinkingDelta;
+      if (mapping.thinkingClosing) target.thinkingClosing = true;
+      if (mapping.blockStop) target.openBlock = null;
+      // The glance is empty until the full frame lands, so it never overwrites
+      // one that already has the arguments in it.
+      if (mapping.toolStarting && !target.currentTool) target.currentTool = mapping.toolStarting;
+      // The turn's own thinking message has landed in the transcript, which is
+      // where the reasoning is read from now — same frame, so the live trace
+      // gives way without a gap between the two. Before it does, the measured
+      // start of that block becomes the message's duration: two blocks of one
+      // frame share a mapped timestamp, so adjacency reads 0 there and only
+      // this clock knows. One thinking message consumes it; more than one in a
+      // frame shares no honest split, so none of them gets a number.
+      if (frame.message.type === 'assistant' && !mapping.agentId) {
+        if (target.thinkingSince !== null) {
+          const settled = mapping.messages.filter((message) => message.type === 'thinking');
+          if (settled.length === 1 && settled[0].metadata) {
+            settled[0].metadata.thinkingDurationMs = Date.now() - target.thinkingSince;
+          }
+        }
+        clearTurnPhase(target);
+      }
       const answered = target.currentTool?.toolId;
       if (mapping.toolResults.some((result) => result.toolId === answered)) {
         target.currentTool = null;
       }
-      if (mapping.delta) target.streaming += mapping.delta;
-      if (mapping.clearsStream) target.streaming = '';
+      // A subagent's deltas feed its branch's buffer, not the main loop's.
+      if (mapping.agentId) {
+        const branch = branchFor(target.subagents, frame.instanceId, mapping.agentId);
+        if (mapping.delta) branch.streaming += mapping.delta;
+        if (mapping.clearsStream) branch.streaming = '';
+      } else {
+        if (mapping.delta) target.streaming += mapping.delta;
+        if (mapping.clearsStream) target.streaming = '';
+      }
       if (mapping.failedTurn !== undefined) target.lastTurnFailed = mapping.failedTurn;
       if (mapping.endsTurn) {
         target.busy = false;
         target.currentTool = null;
         target.sdkStatus = null;
+        clearTurnPhase(target);
         // The turn just changed how full the window is; ask rather than guess.
         if (target.machineId) void refreshContext(frame.instanceId, target.machineId);
       } else if (
         mapping.delta ||
         mapping.currentTool ||
-        mapping.messages.some((message) => message.type === 'assistant')
+        // A turn that opens on a long reasoning block sends neither text nor a
+        // tool call for minutes; the block itself is the evidence.
+        mapping.blockStart ||
+        mapping.thinkingDelta ||
+        mapping.messages.some(
+          (message) => message.type === 'assistant' || message.type === 'thinking'
+        )
       ) {
         // A tab that joined after the turn started never sent anything, so nothing
         // ever set `busy` — the frames themselves are the evidence it is working.
@@ -723,18 +953,28 @@ function handleFrame(frame: FramePayload): void {
     }
 
     case 'permission_request': {
-      if (target.pending.some((p) => p.requestId === frame.requestId)) break;
+      const routedTo = (frame as { routedTo?: 'parent' }).routedTo;
+      const existing = target.pending.find((p) => p.requestId === frame.requestId);
+      if (existing) {
+        // A re-broadcast (the parent died) clears the tag, so the ask returns
+        // to the user's queue; a fresh arrival keeps it out. Either way the
+        // stored entry follows the latest word from the hub.
+        existing.routedTo = routedTo;
+        break;
+      }
       target.pending.push({
         requestId: frame.requestId,
         instanceId: frame.instanceId,
         toolName: frame.toolName,
         input: frame.input,
         suggestions: frame.suggestions,
+        routedTo,
       });
       break;
     }
   }
 
+  trackWorking(target);
   target.lastActivityAt = new Date();
 }
 
@@ -947,9 +1187,10 @@ function start({ machineId, ...spawn }: Omit<SpawnPayload, 'instanceId'> & { mac
   const created = session(instanceId);
   created.machineId = machineId;
   created.cwd = spawn.cwd;
+  created.harness = spawn.harness ?? 'claude';
   created.permissionMode = spawn.permissionMode ?? null;
   // What the form chose, so the header shows it during the wait for the first
-  // init — which then corrects it to whatever the SDK resolved it to.
+  // init — which then corrects it to whatever the harness resolved it to.
   created.model = spawn.model ?? null;
   created.scratch = Boolean(spawn.scratch);
   return created;
@@ -960,7 +1201,7 @@ export function spawnSession({
   machineId,
   cwd,
   prompt,
-  options = {},
+  harness,
   permissionMode,
   model,
   scratch,
@@ -970,7 +1211,7 @@ export function spawnSession({
   machineId: string;
   cwd: string;
   prompt?: string;
-  options?: Options;
+  harness?: HarnessKind;
   permissionMode?: PermissionMode;
   model?: string;
   scratch?: SpawnPayload['scratch'];
@@ -980,7 +1221,7 @@ export function spawnSession({
   const created = start({
     machineId,
     cwd,
-    options,
+    harness,
     permissionMode,
     model,
     scratch,
@@ -1000,32 +1241,27 @@ export function resumeSession({
   machineId,
   cwd,
   sessionId,
+  harness = 'claude',
   history = [],
-  options = {},
 }: {
   machineId: string;
   cwd: string;
   sessionId: string;
+  harness?: HarnessKind;
   history?: Message[];
-  options?: Options;
 }): string {
   // Already running? Then this is not a resume, it is a way back to it.
-  //
-  // Resuming regardless spawns a second process onto the same SDK session: two
-  // rows in the rail, two live processes, one conversation — both writing to
-  // the same transcript, and the reader looking at what seems to be a duplicate
-  // of a chat they are already in. The catalog cannot tell a stored session
-  // from a running one, so this is the check that does.
   const live = state.instances.find((row) => row.sessionId === sessionId && isLive(row));
   if (live) {
     const existing = session(live.id);
     existing.machineId ||= live.machineId;
     existing.cwd ||= live.cwd;
     existing.sessionId = sessionId;
+    existing.harness = (live.harness as HarnessKind) ?? harness;
     return live.id;
   }
 
-  const created = start({ machineId, cwd, options: { ...options, resume: sessionId } });
+  const created = start({ machineId, cwd, harness, resume: { sessionKey: sessionId } });
   created.sessionId = sessionId;
   created.messages = history.map((message) => ({ ...message, instanceId: created.instanceId }));
   void refresh();
@@ -1042,12 +1278,14 @@ export function forkSession({
   machineId,
   cwd,
   sessionId,
+  harness = 'claude',
   history = [],
   at,
 }: {
   machineId: string;
   cwd: string;
   sessionId: string;
+  harness?: HarnessKind;
   history?: Message[];
   /** Branch from this assistant turn rather than from the end — see {@link rewindPoint}. */
   at?: string;
@@ -1055,7 +1293,8 @@ export function forkSession({
   const created = start({
     machineId,
     cwd,
-    options: { resume: sessionId, forkSession: true, ...(at && { resumeSessionAt: at }) },
+    harness,
+    resume: { sessionKey: sessionId, fork: true, ...(at && { atMessage: at }) },
     scratch: {},
   });
   created.messages = history.map((message) => ({ ...message, instanceId: created.instanceId }));
@@ -1078,6 +1317,8 @@ export function sendText(
   const target = session(instanceId);
   target.messages.push(localUserMessage(instanceId, text, extras));
   target.busy = true;
+  // Before any frame: the whole point of the clock is the wait for the first one.
+  trackWorking(target);
 }
 
 /**
@@ -1100,7 +1341,8 @@ export async function ensureAlive(instanceId: string, machineId: string): Promis
     const payload: SpawnPayload = {
       instanceId,
       cwd: target.cwd,
-      options: { resume: target.sessionId },
+      harness: target.harness,
+      resume: { sessionKey: target.sessionId },
       scratch: target.scratch ? {} : undefined,
       // The new process answers the way the old one did: a revive nobody asked
       // for is not the moment to hand the session back on other settings.
@@ -1217,13 +1459,15 @@ export async function keepSession(instanceId: string): Promise<void> {
 
   target.scratch = false;
   if (target.sessionId && target.machineId) {
-    // `null` is how the SDK clears a tag; the catalog is re-read for the entry
-    // that has just stopped being hidden.
-    await machineControl(target.machineId, 'tagSession', [
-      target.sessionId,
-      null,
-      { dir: target.cwd || undefined },
-    ]);
+    // `null` is how the harness clears a tag; the catalog is re-read for the
+    // entry that has just stopped being hidden.
+    await machineControl(
+      target.machineId,
+      'tagSession',
+      [target.sessionId, null, { dir: target.cwd || undefined }],
+      CONTROL_TIMEOUT_MS,
+      target.harness
+    );
     await loadCatalog(target.machineId);
   }
 }
@@ -1233,9 +1477,11 @@ function settleStopped(instanceId: string): void {
   const target = session(instanceId);
   target.busy = false;
   target.currentTool = null;
+  clearTurnPhase(target);
   // The agent denies whatever was parked as it tears the session down, so these
   // answer to nobody — leaving them would pin a dead session to the fleet rail.
   target.pending = [];
+  trackWorking(target);
 }
 
 function control(instanceId: string, machineId: string, method: string, args: unknown[]): void {
@@ -1252,11 +1498,12 @@ export async function machineControl<T>(
   machineId: string,
   method: string,
   args: unknown[] = [],
-  replyTimeoutMs = CONTROL_TIMEOUT_MS
+  replyTimeoutMs = CONTROL_TIMEOUT_MS,
+  harness?: HarnessKind
 ): Promise<T> {
   await waitForOpen();
   const requestId = newId();
-  const payload: ControlPayload = { requestId, method, args };
+  const payload: ControlPayload = { requestId, method, args, ...(harness && { harness }) };
   return ask<T>(requestId, method, replyTimeoutMs, () =>
     send({ verb: 'control', machineId, requestId, payload })
   );
@@ -1422,16 +1669,19 @@ export async function openTranscript({
   machineId,
   sessionId,
   cwd,
+  harness = 'claude',
 }: {
   viewId: string;
   machineId: string;
   sessionId: string;
   cwd: string;
+  harness?: HarnessKind;
 }): Promise<void> {
   const target = session(viewId);
   target.machineId = machineId;
   target.cwd = cwd;
   target.sessionId = sessionId;
+  target.harness = harness;
   // A stored session's plan is still on its machine, and no frame will ever
   // arrive to say so — opening it is the only moment there is to ask.
   refreshTasks(viewId);
@@ -1442,10 +1692,13 @@ export async function openTranscript({
   const epoch = claimTranscript(viewId);
   target.loading = true;
   try {
-    const transcript = await machineControl<SessionMessage[]>(machineId, 'getSessionMessages', [
-      sessionId,
-      { dir: cwd || undefined },
-    ]);
+    const transcript = await machineControl<SessionMessage[]>(
+      machineId,
+      'getSessionMessages',
+      [sessionId, { dir: cwd || undefined }],
+      CONTROL_TIMEOUT_MS,
+      harness
+    );
     await ingestTranscript(viewId, target, transcript, epoch);
   } catch (error) {
     // The newest turns may already be on screen; a failure reading the rest
@@ -1490,19 +1743,41 @@ export async function backfillSession(instanceId: string): Promise<void> {
   const epoch = claimTranscript(instanceId);
   target.loading = true;
   try {
-    const transcript = await machineControl<SessionMessage[]>(machineId, 'getSessionMessages', [
-      sessionId,
-      { dir: cwd || undefined },
-    ]);
+    const transcript = await machineControl<SessionMessage[]>(
+      machineId,
+      'getSessionMessages',
+      [sessionId, { dir: cwd || undefined }],
+      CONTROL_TIMEOUT_MS,
+      target.harness
+    );
     const seeded = new Set(transcript.map((entry) => entry.uuid));
     await ingestTranscript(instanceId, target, transcript, epoch, () => {
       target.streaming = '';
+      clearTurnPhase(target);
       // Anything seen live that the stored transcript does not carry yet — the
       // newest turn is written to disk a moment after it is streamed, so this
       // is what stops the last thing on screen vanishing on a switch.
+      const absorbed = new Set<Message>();
       for (const message of live) {
         if (message.sdkUuid && seeded.has(message.sdkUuid)) continue;
         if (target.messages.some((existing) => existing.id === message.id)) continue;
+        // An unstamped local echo of a turn the transcript already carries.
+        // Its stamping frame is about to be dropped by replayHeld (the uuid is
+        // seeded), so left here it would double the stored turn — the "first
+        // prompt shows twice" bug. Absorbed one-to-one by content so a genuine
+        // repeated send keeps both bubbles.
+        const echoOfStored =
+          message.type === 'user' &&
+          !message.sdkUuid &&
+          target.messages.find(
+            (m) =>
+              m.type === 'user' && m.sdkUuid && !absorbed.has(m) && m.content === message.content
+          );
+        if (echoOfStored) {
+          absorbed.add(echoOfStored);
+          continue;
+        }
+        if (mergePeerMessage(target.messages, message)) continue;
         target.messages.push(message);
       }
       // What was held belongs to the end of the transcript, which is now on
@@ -1523,7 +1798,7 @@ function replayHeld(instanceId: string, seeded: Set<string>): void {
   const held = backfilling.get(instanceId) ?? [];
   backfilling.delete(instanceId);
   for (const frame of held) {
-    if (frame.kind === 'sdk') {
+    if (frame.kind === 'frame') {
       // A partial paints text whose final message may already be seeded. The
       // turn's own frames land right behind it, so dropping these costs nothing.
       if (frame.message.type === 'stream_event') continue;
@@ -1536,7 +1811,13 @@ function replayHeld(instanceId: string, seeded: Set<string>): void {
 
 export function interrupt(instanceId: string, machineId: string): void {
   control(instanceId, machineId, 'interrupt', []);
-  session(instanceId).busy = false;
+  const target = session(instanceId);
+  target.busy = false;
+  // The block the partials were painting is not being finished, and a session
+  // with a subagent still out stays "working" — long enough for a trace nobody
+  // is writing any more to read as one that is.
+  clearTurnPhase(target);
+  trackWorking(target);
 }
 
 /**
@@ -1800,7 +2081,8 @@ export async function relaunchSession(
   const payload: SpawnPayload = {
     instanceId,
     cwd: target.cwd,
-    options: { resume: target.sessionId },
+    harness: target.harness,
+    resume: { sessionKey: target.sessionId },
     // A relaunch is a spawn like any other, so it has to say what it is: a quest
     // that stayed silent about it would come back as mainline work, untagged.
     scratch: target.scratch ? {} : undefined,
@@ -1920,7 +2202,8 @@ export async function editAndResend(
   const payload: SpawnPayload = {
     instanceId,
     cwd: target.cwd,
-    options: { resume: target.sessionId, resumeSessionAt: point.at },
+    harness: target.harness,
+    resume: { sessionKey: target.sessionId, atMessage: point.at },
     // The same three a relaunch carries: a rewind changes what the session has
     // said, not what it is.
     scratch: target.scratch ? {} : undefined,
@@ -1981,6 +2264,7 @@ export function forkFrom(instanceId: string, sdkUuid: string): string {
     machineId: target.machineId,
     cwd: target.cwd,
     sessionId: target.sessionId,
+    harness: target.harness,
     history: target.messages.slice(0, point.cut),
     at: point.at,
   });
@@ -2022,6 +2306,7 @@ export function resolvePermission(
 
   const target = session(instanceId);
   target.pending = target.pending.filter((p) => p.requestId !== requestId);
+  trackWorking(target);
 }
 
 /**
@@ -2039,6 +2324,9 @@ function blockedRequests(): BlockedRequest[] {
     if (target.pending.length === 0 || stopped.has(target.instanceId)) continue;
     const machine = state.machines.find((row) => row.machineId === target.machineId);
     for (const request of target.pending) {
+      // A delegate's ask is the parent's to answer, not the user's: it stays on
+      // the delegate's own transcript but never lands in this queue.
+      if (routedToParent(request)) continue;
       rows.push({
         instanceId: target.instanceId,
         machineId: target.machineId,
@@ -2092,6 +2380,26 @@ function availableCommands({ names, skills, detailed }: CommandState): Available
     .sort((a, b) => COMMAND_ORDER[a.type] - COMMAND_ORDER[b.type] || a.name.localeCompare(b.name));
 }
 
+/**
+ * A branch is a real subagent iff it was spawned with a `subagent_type` that is
+ * not the `branchFor` placeholder default. Background Bash tasks fire
+ * `task_started` without a `subagent_type`, so they keep the default and are
+ * filtered out of the rail's subagent list.
+ */
+const isRealSubagent = (branch: SubagentState): boolean =>
+  branch.subagentType !== 'subagent';
+
+/** Running first, then starting, then error, then complete; within each, newest activity first. */
+const STATUS_RANK: Record<string, number> = { running: 0, starting: 1, error: 2, complete: 3 };
+const branchOrder = (a: SubagentState, b: SubagentState): number => {
+  const rankA = STATUS_RANK[a.status] ?? 3;
+  const rankB = STATUS_RANK[b.status] ?? 3;
+  if (rankA !== rankB) return rankA - rankB;
+  const timeA = (a.lastEventAt ?? a.startedAt).getTime();
+  const timeB = (b.lastEventAt ?? b.startedAt).getTime();
+  return timeB - timeA;
+};
+
 export const cockpit = {
   get status() {
     return state.status;
@@ -2108,6 +2416,18 @@ export const cockpit = {
   get onlineMachines() {
     return state.machines.filter((machine) => machine.status === 'online');
   },
+  /** One machine's latest Claude limit reading, or null until it has reported. */
+  usageLimitsFor: (machineId: string): ClaudeLimits | null => state.usageLimits[machineId] ?? null,
+  /**
+   * Any machine's reading. Limits belong to the account, not the host: every
+   * machine signed in to the same account reports the same percentages, so the
+   * app chrome shows the first real reading it has and prefers one without an
+   * error over a machine that is merely signed out.
+   */
+  usageLimitsAny: (): ClaudeLimits | null => {
+    const readings = Object.values(state.usageLimits);
+    return readings.find((r) => r.error === null) ?? readings[0] ?? null;
+  },
   get instances() {
     return state.instances;
   },
@@ -2117,10 +2437,6 @@ export const cockpit = {
   /** Sessions the hub lost track of — shown apart, never as live work. */
   get staleInstances(): InstanceRow[] {
     return state.instances.filter(isStale);
-  },
-  /** Sessions that died of something: the other half of "what needs me". */
-  get failedInstances(): InstanceRow[] {
-    return state.instances.filter(isFailed);
   },
   /** Mainline sessions on one machine — what the sidebar groups under it. */
   listedOn,
@@ -2166,6 +2482,21 @@ export const cockpit = {
       (info) => listedInHistory(info) && info.cwd && under(project.cwd, info.cwd)
     ),
   session: (instanceId: string): SessionState | null => state.sessions[instanceId] ?? null,
+  /**
+   * The hub's record of one delegate's exchange with its parent, oldest first.
+   * Empty for a delegate whose traffic predates the table — its card falls back
+   * to reading the markers out of the parent's transcript.
+   */
+  delegateEventsOf: (instanceId: string): DelegateEvent[] =>
+    state.delegateEvents[instanceId] ?? [],
+  /** The ask a permission requestId belongs to, whichever delegate raised it. */
+  delegateAskOf: (requestId: string): DelegateAskEvent | null => {
+    for (const events of Object.values(state.delegateEvents)) {
+      const ask = events.find((event) => event.kind === 'ask' && event.requestId === requestId);
+      if (ask?.kind === 'ask') return ask;
+    }
+    return null;
+  },
   /** What a session needs from you — `idle` for one nothing has been heard from. */
   activityOf: (instanceId: string): Activity => {
     const target = state.sessions[instanceId];
@@ -2178,12 +2509,17 @@ export const cockpit = {
     const target = state.sessions[instanceId];
     return target ? availableCommands(target.commands) : [];
   },
-  /** The subagents a session still has out, newest last — what the rail expands to. */
+  /** The subagents a session has out, sorted by state then recency. */
   subagentsOf: (instanceId: string): SubagentState[] =>
-    Object.values(state.sessions[instanceId]?.subagents ?? {}).sort(
-      (a, b) => a.startedAt.getTime() - b.startedAt.getTime()
-    ),
-  /** Just the count, for the badge that does not need the list to draw itself. */
+    Object.values(state.sessions[instanceId]?.subagents ?? {})
+      .filter(isRealSubagent)
+      .sort(branchOrder),
+  /** Background tasks that are not real subagents. */
+  backgroundTasksOf: (instanceId: string): number =>
+    Object.values(state.sessions[instanceId]?.subagents ?? {}).filter(
+      (branch) => !isRealSubagent(branch)
+    ).length,
+  /** Just the count of running *real* subagents, for the badge. */
   runningSubagentsOf: (instanceId: string): number =>
     runningSubagents(state.sessions[instanceId]?.subagents),
   get blocked(): BlockedRequest[] {

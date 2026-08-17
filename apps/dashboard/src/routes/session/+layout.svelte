@@ -32,6 +32,7 @@
     id: string;
     browsing: string | null;
     cwd: string;
+    harness: string;
   }
 
   /** Empty on the board, which is the one tab that is not a conversation. */
@@ -40,6 +41,7 @@
   /** A `machine` in the query means this id is a stored session, not a live one. */
   const browsing = $derived(page.url.searchParams.get('machine'));
   const browsingCwd = $derived(page.url.searchParams.get('cwd') ?? '');
+  const browsingHarness = $derived(page.url.searchParams.get('harness') ?? 'claude');
 
   /**
    * Insertion order, and it never re-ranks. A keyed block that reordered would
@@ -55,11 +57,12 @@
     if (!id) return;
     const machineId = browsing;
     const cwd = browsingCwd;
+    const harness = browsingHarness;
     untrack(() => {
       // Being on screen is what puts a conversation in the working set — and
       // the set's own limit is what bounds how many panes are kept alive.
       workingSet.visit(id);
-      if (!panes.some((pane) => pane.id === id)) panes.push({ id, browsing: machineId, cwd });
+      if (!panes.some((pane) => pane.id === id)) panes.push({ id, browsing: machineId, cwd, harness });
     });
   });
 
@@ -93,7 +96,7 @@
   {#each panes as pane (pane.id)}
     {@const active = pane.id === viewId}
     <div class="absolute inset-0 flex" class:invisible={!active} inert={!active}>
-      <SessionPane viewId={pane.id} browsing={pane.browsing} browsingCwd={pane.cwd} {active} />
+      <SessionPane viewId={pane.id} browsing={pane.browsing} browsingCwd={pane.cwd} browsingHarness={pane.harness} {active} />
     </div>
   {/each}
   <!-- `[[id]]` is a declaration: what the URL names is drawn above. Rendered so

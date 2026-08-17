@@ -6,6 +6,7 @@
  */
 import { browser } from '$app/environment';
 import type { Machine } from './client.svelte';
+import { FLIP_MS, flipDurationMs, reducedMotion } from './motion.svelte';
 
 export const RAIL_LAYOUT_KEY = 'cockpit-rail-layout';
 
@@ -52,16 +53,6 @@ const layout = $state<RailLayout>(read());
 
 const save = () => localStorage.setItem(RAIL_LAYOUT_KEY, JSON.stringify(layout));
 
-const FLIP_MS = 160;
-
-// The drag library animates in JS, so the media query has to be asked in JS.
-let reduced = $state(false);
-if (browser) {
-  const query = window.matchMedia('(prefers-reduced-motion: reduce)');
-  reduced = query.matches;
-  query.addEventListener('change', (event) => (reduced = event.matches));
-}
-
 export const rail = {
   get pins(): Pin[] {
     return layout.pins;
@@ -70,7 +61,7 @@ export const rail = {
     return layout.machines;
   },
   get flipDurationMs(): number {
-    return reduced ? 0 : FLIP_MS;
+    return flipDurationMs();
   },
   isPinned: (kind: PinKind, id: string): boolean =>
     layout.pins.some((pin) => pin.kind === kind && pin.id === id),

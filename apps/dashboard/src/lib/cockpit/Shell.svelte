@@ -17,6 +17,7 @@
   import SessionTabs from './SessionTabs.svelte';
   import ShortcutSheet from './ShortcutSheet.svelte';
   import Sidebar from './Sidebar.svelte';
+  import UsageMeter from './UsageMeter.svelte';
   import ThumbBar from './ThumbBar.svelte';
 
   let { children }: { children: Snippet } = $props();
@@ -198,6 +199,11 @@
         <span class="hidden sm:inline">Jump</span>
         <Kbd class="hidden sm:inline-flex">⌘K</Kbd>
       </Button>
+
+      <!-- Account state, so it lives with the other account state rather than in
+           any one session's composer: the same percentages in every tab, on
+           every route, at every width. -->
+      <UsageMeter />
 
       <a
         href="/session"

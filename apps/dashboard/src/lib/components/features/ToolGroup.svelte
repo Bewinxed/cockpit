@@ -18,7 +18,7 @@
   } from './tool-cards/descriptors';
   import { untrack } from 'svelte';
   import { SvelteSet } from 'svelte/reactivity';
-  import { scale } from 'svelte/transition';
+  import { fly, scale } from 'svelte/transition';
   import { quintOut } from 'svelte/easing';
 
   interface Props {
@@ -89,38 +89,43 @@
 </script>
 
 <div class="w-full overflow-hidden rounded-xl bg-card shadow-md">
-  <div class="flex items-center gap-2 px-3 py-2">
-    <span class="flex shrink-0 -space-x-1">
-      {#each glyphs as family (family.id)}
-        {@const Glyph = family.icon}
-        <span class="flex size-5 items-center justify-center rounded-full bg-card">
-          <Glyph class="size-4 text-muted-foreground" />
-        </span>
-      {/each}
-    </span>
+  {#if tools.length > 1}
+    <div
+      class="flex items-center gap-2 px-3 py-2"
+      in:fly={{ y: -4, duration: 160, easing: quintOut }}
+    >
+      <span class="flex shrink-0 -space-x-1">
+        {#each glyphs as family (family.id)}
+          {@const Glyph = family.icon}
+          <span class="flex size-5 items-center justify-center rounded-full bg-card">
+            <Glyph class="size-4 {family.color}" />
+          </span>
+        {/each}
+      </span>
 
-    <span class="text-caption">{tools.length} step{tools.length === 1 ? '' : 's'}</span>
-    {#if summary}
-      <span class="hidden truncate text-micro text-muted-foreground sm:inline">{summary}</span>
-    {/if}
-
-    <div class="ml-auto flex shrink-0 items-center gap-1.5">
-      {#if pendingCount > 0}
-        <IconSpinner class="size-4 animate-spin text-warning motion-reduce:animate-none" />
-        <span class="text-micro text-warning">{pendingCount} running</span>
-      {:else if errorCount > 0}
-        <IconError class="size-4 text-error" />
-        <span class="text-micro text-error">{errorCount} failed</span>
-      {:else}
-        <span in:scale={{ duration: startedPending ? 260 : 0, start: 0.25, easing: quintOut }}>
-          <IconSuccess class="size-4 text-success" />
-        </span>
-        <span class="text-micro text-success">Complete</span>
+      <span class="text-caption">{tools.length} step{tools.length === 1 ? '' : 's'}</span>
+      {#if summary}
+        <span class="hidden truncate text-micro text-muted-foreground sm:inline">{summary}</span>
       {/if}
-    </div>
-  </div>
 
-  <div class="divide-y divide-border/50 border-t border-border/50">
+      <div class="ml-auto flex shrink-0 items-center gap-1.5">
+        {#if pendingCount > 0}
+          <IconSpinner class="size-4 animate-spin text-warning motion-reduce:animate-none" />
+          <span class="text-micro text-warning">{pendingCount} running</span>
+        {:else if errorCount > 0}
+          <IconError class="size-4 text-error" />
+          <span class="text-micro text-error">{errorCount} failed</span>
+        {:else}
+          <span in:scale={{ duration: startedPending ? 260 : 0, start: 0.25, easing: quintOut }}>
+            <IconSuccess class="size-4 text-success" />
+          </span>
+          <span class="text-micro text-success">Complete</span>
+        {/if}
+      </div>
+    </div>
+  {/if}
+
+  <div class="divide-y divide-border/50 {tools.length > 1 ? 'border-t border-border/50' : ''}">
     {#each tools as tool, i (tool.id)}
       {@const toolId = tool.id || `tool-${i}`}
       <ToolRow

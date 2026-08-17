@@ -11,7 +11,14 @@
   import { fade, slide } from 'svelte/transition';
   import { quintOut } from 'svelte/easing';
   import { goto } from '$app/navigation';
-  import type { ConfigInspection, FsEntry, PermissionMode, RepoInfo, ReposResult } from '@cockpit/core';
+  import type {
+    ConfigInspection,
+    FsEntry,
+    HarnessKind,
+    PermissionMode,
+    RepoInfo,
+    ReposResult,
+  } from '@cockpit/core';
   import { repoPath } from '@cockpit/core';
   import {
     cockpit,
@@ -42,9 +49,12 @@
     prefill?: { machineId?: string; cwd?: string; projectId?: string };
     /** Called to close the panel. */
     onclose: () => void;
+    /** An external element to anchor the popover to. When absent, a fixed point
+     *  near the top-right corner is used (the fleet view's default). */
+    anchor?: HTMLElement | null;
   }
 
-  let { open, prefill, onclose }: SpawnPanelProps = $props();
+  let { open, prefill, onclose, anchor }: SpawnPanelProps = $props();
 
   /** Where the session works: a directory that is already there, or a fresh clone. */
   const SOURCES = [
@@ -57,6 +67,8 @@
   const isMobile = new IsMobile();
 
   let machineId = $state('');
+  /** Which harness runs the session. Defaults to the first the machine has. */
+  let harness = $state<HarnessKind>('claude');
   let source = $state<Source>('directory');
   let cwd = $state('');
   let repo = $state('');
@@ -96,6 +108,40 @@
 
   const machineRow = $derived(cockpit.machines.find((row) => row.machineId === machineId) ?? null);
   const hostnameOf = (id: string) => cockpit.machines.find((row) => row.machineId === id)?.hostname ?? id;
+
+  /** The harnesses this machine can actually run, in a stable order. */
+  const HARNESS_ORDER: HarnessKind[] = ['claude', 'opencode', 'pi'];
+  const availableHarnesses = $derived(
+    HARNESS_ORDER.filter((kind) =>
+      (machineRow?.harnesses ?? []).some((report) => report.harness === kind && report.installed)
+    )
+  );
+  const harnessReport = $derived(
+    machineRow?.harnesses?.find((report) => report.harness === harness) ?? null
+  );
+  /** The permission modes this harness can honour; empty hides the picker. */
+  const offeredModes = $derived(
+    harnessReport
+      ? PERMISSION_MODES.filter((mode) => harnessReport.capabilities.permissionModes.includes(mode.value))
+      : PERMISSION_MODES
+  );
+  /** Choosing a harness that cannot take the current mode walks it back. */
+  $effect(() => {
+    if (offeredModes.length === 0) return;
+    if (!offeredModes.some((mode) => mode.value === permissionMode)) {
+      permissionMode = offeredModes[0].value;
+    }
+  });
+
+  /** A machine switched to may not run the harness the form still names. */
+  let lastMachine = $state('');
+  $effect(() => {
+    if (machineId === lastMachine) return;
+    lastMachine = machineId;
+    if (!availableHarnesses.includes(harness)) {
+      harness = availableHarnesses[0] ?? 'claude';
+    }
+  });
 
   /** The field the last submit tripped over — drives its border and one shake. */
   let invalid = $state<'machine' | 'cwd' | 'repo' | null>(null);
@@ -346,6 +392,7 @@
     projectQuery = seededProject?.name ?? '';
     machineId =
       prefill?.machineId || seededProject?.machineId || cockpit.onlineMachines[0]?.machineId || '';
+    harness = 'claude';
     source = 'directory';
     cwd = prefill?.cwd || seededProject?.cwd || '';
     repo = '';
@@ -428,6 +475,7 @@
         machineId,
         cwd: workdir,
         prompt,
+        harness,
         permissionMode,
         model: model || undefined,
         scratch: sideQuest ? { worktree, baseCwd: workdir } : undefined,
@@ -723,6 +771,26 @@
 
     <div class="grid grid-cols-2 gap-2">
       <div class="flex flex-col gap-1">
+        <span id="spawn-harness-label" class="text-micro text-muted-foreground">Harness</span>
+        <Select.Root
+          type="single"
+          value={harness}
+          onValueChange={(value) => (harness = value as HarnessKind)}
+        >
+          <Select.Trigger aria-labelledby="spawn-harness-label" size="sm" class="w-full capitalize">
+            {harness}
+          </Select.Trigger>
+          <Select.Content>
+            {#each availableHarnesses as kind (kind)}
+              <Select.Item value={kind} label={kind}>
+                <span class="capitalize">{kind}</span>
+              </Select.Item>
+            {/each}
+          </Select.Content>
+        </Select.Root>
+      </div>
+
+      <div class="flex flex-col gap-1">
         <span class="text-micro text-muted-foreground">Model</span>
         <ModelCombobox
           value={model}
@@ -734,7 +802,9 @@
           class="w-full text-foreground"
         />
       </div>
+    </div>
 
+    {#if offeredModes.length > 0}
       <div class="flex flex-col gap-1">
         <span id="spawn-permissions-label" class="text-micro text-muted-foreground">Permissions</span>
         <Select.Root
@@ -750,7 +820,7 @@
             {permissionModeLabel(permissionMode)}
           </Select.Trigger>
           <Select.Content>
-            {#each PERMISSION_MODES as mode (mode.value)}
+            {#each offeredModes as mode (mode.value)}
               <Select.Item value={mode.value} label={mode.label}>
                 <span class="flex flex-col">
                   <span class={mode.value === 'bypassPermissions' ? 'text-warning' : ''}>
@@ -763,7 +833,7 @@
           </Select.Content>
         </Select.Root>
       </div>
-    </div>
+    {/if}
 
     <div class="flex flex-col gap-1">
       <label for="spawn-prompt" class="text-micro text-muted-foreground">First prompt (optional)</label>
@@ -854,17 +924,19 @@
     <!--
       This popover has no visible trigger of its own — it is opened from
       wherever the fleet view puts its "new session" affordance, over the
-      `open` prop. `customAnchor` gives floating-ui something to anchor
-      against without needing a real button: a 1px point pinned near where
-      that affordance conventionally sits.
+      `open` prop. When an external `anchor` element is provided (the tab
+      strip's "+" button, for instance), the popover anchors to it. Otherwise
+      a fixed 1px point near the top-right corner serves as the fallback.
     -->
+    {#if !anchor}
     <span
       bind:this={anchorEl}
       class="pointer-events-none fixed top-4 right-6 size-px"
       aria-hidden="true"
     ></span>
+    {/if}
     <Popover.Content
-      customAnchor={anchorEl}
+      customAnchor={anchor ?? anchorEl}
       side="bottom"
       align="end"
       sideOffset={10}

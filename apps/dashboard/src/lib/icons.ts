@@ -1,5 +1,6 @@
 export { default as IconAgent } from '~icons/solar/ghost-smile-linear';
 export { default as IconTools } from '~icons/solar/sledgehammer-linear';
+export { default as IconUsage } from '~icons/solar/chart-2-linear';
 export { default as IconSubagent } from '~icons/solar/branching-paths-down-linear';
 export { default as IconSend } from '~icons/solar/plain-2-linear';
 export { default as IconStop } from '~icons/solar/stop-linear';
@@ -15,6 +16,7 @@ export { default as IconHistory } from '~icons/solar/history-linear';
 export { default as IconChevronRight } from '~icons/solar/alt-arrow-right-linear';
 export { default as IconChevronDown } from '~icons/solar/alt-arrow-down-linear';
 export { default as IconChevronUp } from '~icons/solar/alt-arrow-up-linear';
+export { default as IconUnfold } from '~icons/solar/sort-vertical-linear';
 export { default as IconArrowRight } from '~icons/solar/arrow-right-linear';
 export { default as IconArrowUp } from '~icons/solar/arrow-up-linear';
 export { default as IconArrowDown } from '~icons/solar/arrow-down-linear';
@@ -39,6 +41,7 @@ export { default as IconCodeFile } from '~icons/solar/code-file-linear';
 export { default as IconTerminal } from '~icons/solar/code-square-linear';
 export { default as IconDocument } from '~icons/solar/document-text-linear';
 export { default as IconAttach } from '~icons/solar/paperclip-linear';
+export { default as IconMic } from '~icons/solar/microphone-linear';
 export { default as IconGallery } from '~icons/solar/gallery-linear';
 export { default as IconCopy } from '~icons/solar/copy-linear';
 export { default as IconTrash } from '~icons/solar/trash-bin-minimalistic-linear';
@@ -77,11 +80,11 @@ export { default as IconPin } from '~icons/solar/pin-linear';
 export { default as IconPinList } from '~icons/solar/pin-list-linear';
 /** A pressed pin, not a kind of thing — hence bold rather than duotone. */
 export { default as IconPinFilled } from '~icons/solar/pin-bold';
-/* The tool-card families that had no glyph yet (see tool-cards/descriptors.ts). */
+/* The linear cut of four shapes the tool vocabulary at the foot of this file
+   now wears in duotone. Nothing claims them today. */
 export { default as IconFolderFiles } from '~icons/solar/folder-with-files-linear';
 export { default as IconCompass } from '~icons/solar/compass-linear';
 export { default as IconCursor } from '~icons/solar/cursor-linear';
-/** An MCP server whose name never resolved to a site to take a favicon from. */
 export { default as IconPlug } from '~icons/solar/plug-circle-linear';
 
 /*
@@ -119,3 +122,30 @@ export { default as IconPlanetDuo } from '~icons/solar/planet-bold-duotone';
 export { default as IconFireDuo } from '~icons/solar/fire-bold-duotone';
 export { default as IconGhostDuo } from '~icons/solar/ghost-smile-bold-duotone';
 export { default as IconPaletteDuo } from '~icons/solar/pallete-2-bold-duotone';
+
+/*
+ * The tool vocabulary: one face per family of tool call (see the map in
+ * tool-cards/descriptors.ts, which pairs each with its `--tool-*` ink).
+ * Duotone, because a tool row's glyph says what the step *is* — the linear cut
+ * above is what you can do to something, and a row offers nothing to do.
+ * Deliberately its own set even where a glyph repeats one above: a folder mark
+ * is hand-picked, and picking one must never move a tool's face.
+ */
+export { default as IconToolTerminal } from '~icons/solar/code-square-bold-duotone';
+export { default as IconToolRead } from '~icons/solar/document-text-bold-duotone';
+export { default as IconToolEdit } from '~icons/solar/pen-2-bold-duotone';
+export { default as IconToolWrite } from '~icons/solar/pen-new-square-bold-duotone';
+export { default as IconToolSearch } from '~icons/solar/magnifer-bold-duotone';
+export { default as IconToolFiles } from '~icons/solar/folder-with-files-bold-duotone';
+export { default as IconToolWeb } from '~icons/solar/global-bold-duotone';
+export { default as IconToolTask } from '~icons/solar/users-group-rounded-bold-duotone';
+export { default as IconToolMessage } from '~icons/solar/plain-2-bold-duotone';
+export { default as IconToolScreen } from '~icons/solar/cursor-bold-duotone';
+export { default as IconToolNavigate } from '~icons/solar/compass-bold-duotone';
+export { default as IconToolCode } from '~icons/solar/code-2-bold-duotone';
+export { default as IconToolMcp } from '~icons/solar/plug-circle-bold-duotone';
+export { default as IconToolTodo } from '~icons/solar/checklist-bold-duotone';
+export { default as IconToolNotebook } from '~icons/solar/notebook-bold-duotone';
+export { default as IconToolSkill } from '~icons/solar/bolt-bold-duotone';
+export { default as IconToolQuestion } from '~icons/solar/question-circle-bold-duotone';
+export { default as IconToolGeneric } from '~icons/solar/sledgehammer-bold-duotone';

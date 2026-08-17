@@ -6,9 +6,8 @@
    * through verbatim, which is the only way a legacy id is reachable at all.
    */
   import { tick } from 'svelte';
-  import { HugeiconsIcon } from '@hugeicons/svelte';
-  import { UnfoldMoreIcon } from '@hugeicons/core-free-icons';
-  import { IconRefresh } from '$lib/icons';
+  import { IconRefresh, IconUnfold } from '$lib/icons';
+  import ProviderLogo from '$lib/components/features/ProviderLogo.svelte';
   import * as Command from '$lib/components/ui/command';
   import * as Popover from '$lib/components/ui/popover';
   import { Button, type ButtonSize } from '$lib/components/ui/button';
@@ -112,7 +111,7 @@
         class="justify-between gap-2 {className}"
       >
         <span class="truncate">{unreported ? '—' : modelLabel(value)}</span>
-        <HugeiconsIcon icon={UnfoldMoreIcon} strokeWidth={2} class="size-4 shrink-0 opacity-50" />
+        <IconUnfold class="size-4 shrink-0 opacity-50" />
       </Button>
     {/snippet}
   </Popover.Trigger>
@@ -121,6 +120,20 @@
     <Command.Root>
       <Command.Input bind:value={typed} placeholder="Search, or type a model id…" />
       <Command.List>
+        {#if custom}
+          <Command.Group heading="Custom">
+            <Command.Item forceMount value={trimmed} onSelect={() => void choose(trimmed, true)}>
+              <ProviderLogo model={trimmed} />
+              <span class="flex flex-col">
+                <span>Use <span class="font-mono">{trimmed}</span></span>
+                <span class="text-xs text-muted-foreground">
+                  Sent to Claude Code exactly as typed
+                </span>
+              </span>
+            </Command.Item>
+          </Command.Group>
+        {/if}
+
         {#if !custom}
           <Command.Empty>No model here goes by that.</Command.Empty>
         {/if}
@@ -134,6 +147,7 @@
                 data-checked={id === value}
                 onSelect={() => void choose(id)}
               >
+                <ProviderLogo model={id} />
                 <span class="truncate font-mono text-xs">{id}</span>
               </Command.Item>
             {/each}
@@ -164,6 +178,7 @@
               data-checked={covers(row, value)}
               onSelect={() => void choose(row.value)}
             >
+              <ProviderLogo model={row.value} />
               <span class="flex flex-col">
                 <span>{row.displayName}</span>
                 <span class="text-xs text-muted-foreground">{row.description}</span>
@@ -171,19 +186,6 @@
             </Command.Item>
           {/each}
         </Command.Group>
-
-        {#if custom}
-          <Command.Group heading="Custom">
-            <Command.Item forceMount value={trimmed} onSelect={() => void choose(trimmed, true)}>
-              <span class="flex flex-col">
-                <span>Use <span class="font-mono">{trimmed}</span></span>
-                <span class="text-xs text-muted-foreground">
-                  Sent to Claude Code exactly as typed
-                </span>
-              </span>
-            </Command.Item>
-          </Command.Group>
-        {/if}
 
         <Command.Separator />
         <Command.Group>

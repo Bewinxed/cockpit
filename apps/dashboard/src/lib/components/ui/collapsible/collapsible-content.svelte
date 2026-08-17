@@ -24,13 +24,16 @@
 		<div
 			{...props}
 			class={cn(
-				"overflow-hidden data-[state=closed]:animate-collapsible-up data-[state=closed]:fill-mode-forwards data-[state=open]:animate-collapsible-down",
+				"overflow-hidden grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none",
+				open ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
 				className
 			)}
 			data-state={open ? "open" : "closed"}
 			inert={!open}
 		>
-			<CollapsibleLazy {open} {children} />
+			<div class="min-h-0 overflow-hidden">
+				<CollapsibleLazy {open} {children} />
+			</div>
 		</div>
 	{/snippet}
 </CollapsiblePrimitive.Content>

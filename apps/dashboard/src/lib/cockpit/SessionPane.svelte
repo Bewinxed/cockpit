@@ -24,7 +24,6 @@
     IconSpinner,
     IconStop,
     IconSubagent,
-    IconTools,
     IconTrash,
   } from '$lib/icons';
   import { toast } from 'svelte-sonner';
@@ -39,7 +38,7 @@
   import type { VirtualizerHandle } from 'virtua/svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
-  import type { PermissionMode, PermissionResult } from '@cockpit/core';
+  import type { HarnessKind, PermissionMode, PermissionResult } from '@cockpit/core';
   import {
     ChatInput,
     ChatMessage,
@@ -49,6 +48,9 @@
   } from '$lib/components/features';
   import { standsAlone } from '$lib/components/features/message-renderers';
   import { FlowView } from '$lib/components/features/flow';
+  import AgentPresence from '$lib/components/features/AgentPresence.svelte';
+  import LiveThinking from '$lib/components/features/LiveThinking.svelte';
+  import SelectionActions from '$lib/components/features/SelectionActions.svelte';
   import ModelCombobox from '$lib/cockpit/ModelCombobox.svelte';
   import ContextMeter from '$lib/cockpit/ContextMeter.svelte';
   import { targetsFrom, type PeerTarget } from '$lib/cockpit/peer';
@@ -66,7 +68,9 @@
   import { refreshTasks, taskProgress, tasksOf } from '$lib/cockpit/tasks.svelte';
   import { questionsOf } from '$lib/cockpit/question';
   import { ACTIVITY_LABEL } from '$lib/cockpit/activity';
+  import { showsPresence } from '$lib/cockpit/presence';
   import { sessionTitle } from '$lib/cockpit/links';
+  import { quoteBlock } from '$lib/cockpit/selection';
   import type {
     InstanceRow,
     PendingPermission,
@@ -100,7 +104,6 @@
     setPermissionMode,
     stopSession,
   } from '$lib/cockpit/client.svelte';
-  import { isTyping } from '$lib/utils/typing';
   import type { SendExtras } from '$lib/cockpit/client.svelte';
   import { PERMISSION_MODES, permissionModeLabel } from '$lib/cockpit/permission-modes';
   import * as AlertDialog from '$lib/components/ui/alert-dialog';
@@ -113,6 +116,8 @@
   import * as ToggleGroup from '$lib/components/ui/toggle-group';
   import * as Tooltip from '$lib/components/ui/tooltip';
   import { sessionFailedMessage } from '$lib/cockpit/frames';
+  import { computeMessageHints, type MessageHints } from '$lib/cockpit/message-hints';
+  import { contextRail } from '$lib/cockpit/context-rail.svelte';
   import type { Message, TranscriptGroup } from '$lib/cockpit/types';
   import type { SubagentState } from '$lib/utils/flow-types';
 
@@ -129,12 +134,14 @@
      *  session — the `?machine=` the route arrived with. */
     browsing: string | null;
     browsingCwd: string;
+    /** Which harness owns the stored session being browsed — `?harness=`. */
+    browsingHarness: string;
     /** Whether this is the pane on screen. The keyboard, the polling and the
      *  gestures belong to that one; the rest only keep their place. */
     active: boolean;
   }
 
-  let { viewId, browsing, browsingCwd, active }: Props = $props();
+  let { viewId, browsing, browsingCwd, browsingHarness, active }: Props = $props();
 
   // Opening writes to the store, so it stays in an effect; the read is derived.
   // Untracked, or the store reads it makes would re-arm this effect against the
@@ -147,7 +154,7 @@
       // A session being returned to is not opening at its end, so the pass that
       // would take it there stands down and the remembered offset is restored.
       anchored = scrollMemory.get(id)?.atBottom === false;
-      if (machineId) void openTranscript({ viewId: id, machineId, sessionId: id, cwd });
+      if (machineId) void openTranscript({ viewId: id, machineId, sessionId: id, cwd, harness: browsingHarness as HarnessKind });
       else openSession(id);
     });
   });
@@ -180,6 +187,36 @@
   // pin and the unseen flag below still read `session.streaming` itself.
   const stream = smoothText(() => session?.streaming ?? '');
 
+  // ── Streaming buffer trailing state ──────────────────────────────────
+  // The grid-template-rows collapse transition needs content in the DOM to
+  // animate FROM — without it, `1fr` of empty content resolves to 0 and the
+  // row snaps instead of transitioning. These hold the last non-empty text
+  // and visibility past the moment streaming stops, giving the row real
+  // height during the 150ms collapse animation.
+  let bufferText = $state('');
+  let bufferOpen = $state(false);
+  let bufferCloseTimer: ReturnType<typeof setTimeout>;
+
+  $effect(() => {
+    const text = stream.text;
+    const live = !!session?.streaming;
+
+    if (text) {
+      bufferText = text;
+      bufferOpen = true;
+      clearTimeout(bufferCloseTimer);
+    } else if (!live && untrack(() => bufferOpen)) {
+      // Streaming ended and smoothText drained. Collapse the grid row —
+      // old text stays in the DOM behind overflow:hidden so the row has
+      // real height to animate FROM.
+      bufferOpen = false;
+      clearTimeout(bufferCloseTimer);
+      bufferCloseTimer = setTimeout(() => { bufferText = ''; }, 200);
+    }
+
+    return () => clearTimeout(bufferCloseTimer);
+  });
+
   // A live session this browser did not start has already said things, and frames
   // only carry what comes next — so read it back the moment the registry names
   // the SDK session behind it. Re-arms on `sessionId`, which is what arrives late.
@@ -203,9 +240,24 @@
   let followHold = 0;
   /** Whether this transcript has been parked at its end since it opened. */
   let anchored = false;
+  /** Following growth is travel, and the setting asks for none of it. */
+  const stillness = new MediaQuery('prefers-reduced-motion: reduce');
+
+  /**
+   * A scroll this pane asked for, still in flight.
+   *
+   * beui's `programmaticScrollRef`: a smooth pin passes through every distance
+   * on its way down, and reading follow state out of those scroll events is how
+   * a transcript decides mid-animation that the reader has left the live edge.
+   * The guard is dropped 320ms after a smooth scroll — its duration — and on the
+   * next tick after an instant one, which is only as long as it takes the write
+   * to deliver its event.
+   */
+  let programmatic = false;
+  let programmaticUntil: ReturnType<typeof setTimeout>;
 
   function trackScroll() {
-    if (!scroller) return;
+    if (!scroller || programmatic) return;
     atBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 80;
     if (atBottom) unseen = false;
     // Recorded as it moves rather than on the way out: by the time a switch has
@@ -214,20 +266,46 @@
     if (viewId) scrollMemory.set(viewId, { top: scroller.scrollTop, atBottom });
   }
 
-  // Always the raw write. `scrollToIndex(last, 'end')` parks on the end of the
-  // last virtualised group, and everything rendered after the list — the
-  // streaming reply, the local echo, the permission stack — then sits below the
-  // fold, which is the whole bug: the gap grew by one message height per turn
-  // and never closed. scrollHeight is the true bottom of the real layout, and
-  // the ResizeObserver re-applies it as virtua's estimates settle.
-  function pinToLatest() {
+  // Always the true bottom, never `scrollToIndex(last, 'end')`. That parks on the
+  // end of the last virtualised group, and everything rendered after the list —
+  // the streaming reply, the local echo, the presence line, the permission stack
+  // — then sits below the fold, which is the whole bug: the gap grew by one
+  // message height per turn and never closed. scrollHeight is the bottom of the
+  // real layout, and the ResizeObserver re-applies it as virtua's estimates
+  // settle. Growth follows smoothly and everything else lands instantly.
+  function pinToLatest(behavior: ScrollBehavior = 'auto') {
     if (!scroller) return;
-    scroller.scrollTop = scroller.scrollHeight;
+    programmatic = true;
+    if (behavior === 'smooth') scroller.scrollTo({ top: scroller.scrollHeight, behavior });
+    else scroller.scrollTop = scroller.scrollHeight;
+    clearTimeout(programmaticUntil);
+    programmaticUntil = setTimeout(
+      () => (programmatic = false),
+      behavior === 'smooth' ? 320 : 0
+    );
   }
 
   function jumpToLatest() {
     pinToLatest();
+    // Said rather than measured: the scroll this asked for is guarded, so the
+    // event it fires is not the thing that gets to decide where the reader is.
+    atBottom = true;
     unseen = false;
+  }
+
+  /**
+   * The reader took hold of the transcript — beui's `leaveLiveEdge`.
+   *
+   * A gesture outranks a scroll this pane started, so the guard is dropped and
+   * the live edge given up at once; where the reader ends up is re-measured on
+   * the next frame, because distance alone decides whether following resumes and
+   * a flick that moved nothing has no scroll event to say so.
+   */
+  function leaveLiveEdge() {
+    clearTimeout(programmaticUntil);
+    programmatic = false;
+    atBottom = false;
+    requestAnimationFrame(trackScroll);
   }
 
   /**
@@ -356,7 +434,7 @@
     const follow = new ResizeObserver(() => {
       if (!scroller) return;
       if (performance.now() < followHold) return;
-      if (atBottom) pinToLatest();
+      if (atBottom) pinToLatest('auto');
     });
     const noteToggle = (event: MouseEvent) => {
       const target = event.target as HTMLElement;
@@ -385,12 +463,20 @@
 
     // A gesture, not a scroll event: only these mean the reader moved the
     // transcript themselves. Everything else that scrolls it is us.
-    const grab = () => (grabbed = true);
-    const grabKey = (event: KeyboardEvent) => {
-      if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End'].includes(event.key)) {
-        grabbed = true;
-      }
+    const grab = () => {
+      grabbed = true;
+      leaveLiveEdge();
     };
+    const grabKey = (event: KeyboardEvent) => {
+      if (!['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End'].includes(event.key)) return;
+      grabbed = true;
+      // Only the keys that read backwards give up the edge; the rest are on
+      // their way to it.
+      if (['ArrowUp', 'PageUp', 'Home'].includes(event.key)) leaveLiveEdge();
+    };
+    // A scrollbar drag says nothing else — no wheel, no touch, no key — and the
+    // guard would otherwise swallow every scroll event it produces.
+    node.addEventListener('pointerdown', leaveLiveEdge);
     node.addEventListener('wheel', grab, { passive: true });
     node.addEventListener('touchstart', grab, { passive: true });
     node.addEventListener('keydown', grabKey);
@@ -398,7 +484,9 @@
     node.addEventListener('click', noteToggle, true);
     return () => {
       follow.disconnect();
+      clearTimeout(programmaticUntil);
       viewport?.removeEventListener('resize', onViewport);
+      node.removeEventListener('pointerdown', leaveLiveEdge);
       node.removeEventListener('wheel', grab);
       node.removeEventListener('touchstart', grab);
       node.removeEventListener('keydown', grabKey);
@@ -408,13 +496,6 @@
 
   // Chasing the bottom while the user is reading further up yanks the transcript
   // out from under them — so growth behind their scroll position is flagged instead.
-  //
-  // This also pins. The ResizeObserver above is the smooth path, frame by frame,
-  // but its delivery rides the rendering lifecycle and simply stops in a
-  // throttled or backgrounded tab — measured: the column grew 240px and the
-  // observer fired zero times, so the transcript stopped following. Content
-  // changes are a signal that always arrives, so they pin too; both write the
-  // same value, which makes the duplication harmless.
   $effect(() => {
     const count = session?.messages.length ?? 0;
     const streaming = session?.streaming ?? '';
@@ -423,8 +504,6 @@
       unseen = true;
       return;
     }
-    if (performance.now() < followHold) return;
-    void tick().then(pinToLatest);
   });
 
   // A call whose renderer draws the whole thing is not folded into a group —
@@ -508,6 +587,18 @@
     return result;
   });
 
+  // Per-message reactive hints — a single derivation that subscribes to
+  // `cockpit.instances` and `session.messages` once, instead of N mounted
+  // ChatMessages each running 6 independent store-reading derivations.
+  const messageHints = $derived.by((): Map<string, MessageHints> =>
+    computeMessageHints(
+      session?.messages ?? [],
+      viewId,
+      cockpit.instances,
+      session?.subagents ?? {},
+    ),
+  );
+
   // Keyed by what a group holds rather than where it sits: hydrating a long
   // transcript prepends older turns to the front, and a key that moved with the
   // index would remount every group below it and lose its measured height.
@@ -516,6 +607,17 @@
     if (group.kind === 'subagent') return `subagent-${group.branch.toolUseId}`;
     return `tools-${group.messages[0].id ?? group.index}`;
   };
+
+  // The virtualizer recycles DOM nodes on scroll, and Svelte `in:` transitions
+  // fire on every recycle. Every group is marked seen after its first render so
+  // only genuinely new arrivals animate. Effects run after the template, so a
+  // new group's first paint still sees `isNew = true`; the `.add()` that follows
+  // prevents the animation from replaying on recycle. Before `painted` flips
+  // (the initial mount), the set is seeded synchronously so nothing on the
+  // stored transcript animates at all.
+  $effect(() => {
+    for (const g of groups) seenGroups.add(groupKey(g));
+  });
 
   // A transcript opens on its last line. Virtua revises its estimated heights
   // over the first few frames, so a single landing can end up thousands of
@@ -538,15 +640,10 @@
 
   let view = $state<'chat' | 'flow'>('chat');
 
-  /** The memory dock, beside the chat rather than over it. */
-  let memoryOpen = $state(false);
-
-  // Past this width the session has room for three columns, so the rail is
-  // docked rather than summoned: the transcript keeps its measure centred in
-  // what is left instead of floating in half a screen of nothing. Still the
-  // reader's to close — this only sets where each width starts.
-  const roomForRail = new MediaQuery('min-width: 1920px');
-  $effect(() => void (memoryOpen = roomForRail.current));
+  // Sync the shared rail state to the viewport threshold.  Only one pane
+  // needs to do this (the media query fires in every mounted component, so
+  // the first `$effect` to run writes the shared value for all of them).
+  $effect(() => contextRail.syncToViewport());
 
   let searchOpen = $state(false);
   let search = $state<ReturnType<typeof TranscriptSearch> | null>(null);
@@ -560,14 +657,22 @@
     // them. Find and the permission keys are aimed at what the reader is
     // looking at, not at the four transcripts standing behind it.
     if (!active) return;
-    // Find belongs to the transcript, so it only takes the key over the chat pane —
-    // and unlike Cmd+K it takes it mid-typing too, as the native find would.
+    // Ctrl+F is a modifier combination — it works regardless of focus.
     if (event.key === 'f' && (event.metaKey || event.ctrlKey) && view === 'chat') {
       event.preventDefault();
       if (searchOpen) search?.focus();
       else searchOpen = true;
       return;
     }
+    // Everything below is a bare key belonging to the transcript or the
+    // permission stack. It stands down whenever ANY interactive element has
+    // focus — a widget's own keyboard behaviour takes priority. Only the
+    // body (nothing focused) and the scroller (transcript clicked into) are
+    // surfaces these shortcuts own. No element-type enumeration: if it can
+    // receive focus and it is not the transcript, it is not ours.
+    const focused = document.activeElement;
+    if (focused && focused !== document.body && focused !== scroller) return;
+
     if (scrollTranscript(event)) {
       event.preventDefault();
       return;
@@ -583,7 +688,7 @@
    * still settling. Returns whether the key was one of ours.
    */
   function scrollTranscript(event: KeyboardEvent): boolean {
-    if (!scroller || event.metaKey || event.ctrlKey || event.altKey || isTyping()) return false;
+    if (!scroller || event.metaKey || event.ctrlKey || event.altKey) return false;
     switch (event.key) {
       case 'PageDown':
         scroller.scrollBy({ top: scroller.clientHeight * 0.85 });
@@ -638,7 +743,7 @@
    */
   function answerPending(event: KeyboardEvent) {
     const request = answerable[0];
-    if (!request || event.metaKey || event.ctrlKey || event.altKey || isTyping()) return;
+    if (!request || event.metaKey || event.ctrlKey || event.altKey) return;
     // A question is answered on its own card, by its own keys: "y" is not a
     // choice it offers, and approving it would run it unanswered.
     if (questionsOf(request.toolName, request.input)) return;
@@ -668,6 +773,11 @@
   // changes the reader caused or needs to notice, not for the page showing up.
   let painted = $state(false);
   onMount(() => void (painted = true));
+  // Plain Set, not SvelteSet: the template reads `.has()` during render, and
+  // the $effect that watches `groups` writes `.add()` after render. A reactive
+  // set would invalidate the read it just answered — and mutating a SvelteSet
+  // inside a template expression is a `state_unsafe_mutation` crash in Svelte 5.
+  const seenGroups = new Set<string>();
 
   /** The tool in flight, named in the header's live region while it runs. */
   const runningTool = $derived(session?.currentTool ? ` · ${session.currentTool.name}` : '');
@@ -691,8 +801,68 @@
   const doingNow = $derived(
     activity === 'working' ? (progress?.current?.activeForm ?? null) : null
   );
+
   /** The phone's ledger, which has nowhere to put a popover. */
   let planSheet = $state(false);
+
+  /**
+   * Whether the partials have the session reasoning right now: a thinking block
+   * still open, or the trace one left with nothing opened over it. The trace is
+   * kept standing after the block closes so it stays readable until the
+   * transcript's own thinking message supersedes it.
+   */
+  const thinkingLive = $derived(
+    !browsing &&
+      (session?.openBlock === 'thinking' ||
+        Boolean(session?.thinkingStream && session.openBlock === null))
+  );
+
+  /** Whether the transcript ends on tool rows still waiting for their results. */
+  const tailToolPending = $derived.by((): boolean => {
+    const tail = groups.at(-1);
+    if (tail?.kind !== 'tools') return false;
+    return tail.messages.some((message) => message.metadata?.toolStatus === 'pending');
+  });
+
+  /**
+   * When the turn the presence line is timing began, or `null` where the
+   * transcript needs no line at all.
+   *
+   * The line is what stands between a message leaving and the first frame
+   * coming back — the stretch where nothing on screen said the send had landed.
+   * `workingSince` is stamped by the send itself, so it is there before any
+   * frame is, and it is the real start of the turn rather than the moment this
+   * pane happened to look: a tab opened mid-turn says how long it has actually
+   * been running. The whole precedence the tail resolves lives in `presence.ts`.
+   */
+  const presenceSince = $derived.by((): number | null => {
+    if (browsing || !session?.workingSince) return null;
+    return showsPresence({
+      activity,
+      streaming: session.streaming,
+      toolInFlight: Boolean(session.currentTool),
+      tailToolPending,
+      thinkingLive,
+      tailIsThinking: session.messages.at(-1)?.type === 'thinking' && session.busy,
+    })
+      ? session.workingSince
+      : null;
+  });
+
+  /**
+   * What that line is allowed to claim, in order of how much is known: the step
+   * the session's own plan says it is on, then the subagents it has out — which
+   * is where the minutes go on a turn whose main loop has gone quiet — and
+   * otherwise nothing, so the line shimmers its honest "Working…". Never
+   * "Thinking": this is the one place with no evidence of what the model is
+   * doing, and a turn that is genuinely reasoning renders its trace instead.
+   */
+  const presenceLabel = $derived.by((): string | null => {
+    if (doingNow) return doingNow;
+    const running = cockpit.runningSubagentsOf(viewId);
+    if (running === 0) return null;
+    return `Running ${running} ${running === 1 ? 'agent' : 'agents'}`;
+  });
 
   const branches = $derived(new Map(Object.entries(subagents)));
   const totalCostUsd = $derived(
@@ -718,6 +888,17 @@
         else drafts.delete(id);
       });
   });
+
+  /**
+   * A passage the reader picked out of the transcript, put in the composer as a
+   * quote with the reply written under it. Appended rather than substituted:
+   * whatever was half-typed there is theirs, and the caret lands at the end so
+   * the next thing typed is the answer to what was quoted.
+   */
+  async function quoteSelection(text: string) {
+    await chatInputRef?.setDraft?.(quoteBlock(text, chatInputRef?.draft?.() ?? ''));
+    chatInputRef?.focusEnd?.();
+  }
 
   async function handleSend(text: string, extras: SendExtras) {
     if (!session) return;
@@ -975,6 +1156,7 @@
       machineId: browsing,
       cwd: browsingCwd,
       sessionId: viewId,
+      harness: (browsingHarness as HarnessKind) ?? session?.harness ?? 'claude',
       history: session?.messages ?? [],
     });
     await goto(`/session/${instanceId}`);
@@ -993,6 +1175,7 @@
       machineId: browsing ?? session.machineId,
       cwd: browsing ? browsingCwd : session.cwd,
       sessionId: forkable,
+      harness: (browsingHarness as HarnessKind) ?? session.harness ?? 'claude',
       history: session.messages,
     });
     await goto(`/session/${instanceId}`);
@@ -1147,12 +1330,13 @@
   <MachineLogin {machine} bind:open={loggingIn} />
 {/if}
 
-<!-- `relative`, so the rail anchors to the session rather than to the window,
-     and `overflow-hidden`, so it is clipped while it is slid out. -->
+<!-- The sidebar is a flow element inside this flex wrapper — no absolute
+     positioning, so no overflow-hidden needed for clipping. The sidebar's
+     own overflow-hidden handles its collapsed state. -->
 <Sidebar.Provider
-  bind:open={memoryOpen}
+  bind:open={contextRail.open}
   style="--sidebar-width: 26rem"
-  class="relative h-full min-h-0 flex-1 overflow-hidden"
+  class="h-full min-h-0 flex-1"
 >
   <div
     class="flex h-full min-w-0 flex-1 flex-col overflow-hidden"
@@ -1486,9 +1670,21 @@
             bind:this={scroller}
             onscroll={trackScroll}
             tabindex="-1"
-            class="h-full space-y-4 overflow-y-auto overflow-x-hidden px-4 pt-4 pb-44 [overflow-anchor:none] focus:outline-none"
+            class="h-full space-y-4 overflow-y-auto overflow-x-hidden overscroll-contain px-4 pt-4 pb-44 [overflow-anchor:none] [scrollbar-gutter:stable] focus:outline-none"
           >
-            <div class="mx-auto max-w-4xl">
+            <!-- The transcript is a log, and a turn arriving is an addition to
+                 it: the reader who is not looking at the screen is told by their
+                 screen reader instead of by nothing. -->
+            <!-- Named, because the selection bar has to know a passage of the
+                 transcript from the chrome around it. -->
+            <div
+              class="mx-auto max-w-4xl"
+              data-transcript-content
+              role="log"
+              aria-live="polite"
+              aria-relevant="additions text"
+              aria-busy={activity === 'working'}
+            >
               {#if session?.hydrating}
                 <div class="sticky top-0 z-10">
                   <div class="h-0.5 w-full overflow-hidden bg-muted">
@@ -1515,14 +1711,16 @@
                   shift={session?.hydrating ?? false}
                 >
                   {#snippet children(group)}
-                    <div class="pb-4 {groupKey(group) === flashKey ? 'transcript-flash' : ''}">
+                    {@const key = groupKey(group)}
+                    {@const isNew = painted && !seenGroups.has(key)}
+                    <div
+                      class="pb-4 {key === flashKey ? 'transcript-flash' : ''}"
+                      in:fly={{ y: isNew && !stillness.current ? 10 : 0, duration: isNew && !stillness.current ? 220 : 0, easing: quintOut }}
+                    >
                       {#if group.kind === 'tools'}
-                        <div class="flex justify-start gap-3">
-                          <div
-                            class="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl border border-border bg-secondary"
-                          >
-                            <IconTools class="size-[18px] text-muted-foreground" />
-                          </div>
+                        <!-- No wrench avatar: every row in the group already
+                             wears its tool family's duotone glyph. -->
+                        <div class="flex justify-start">
                           <div class="w-full max-w-[85%] min-w-0">
                             <ToolGroup tools={group.messages} />
                           </div>
@@ -1548,6 +1746,7 @@
                         <ChatMessage
                           message={group.message}
                           instanceId={viewId}
+                          hints={group.message.id ? messageHints.get(group.message.id) : undefined}
                           canEdit={rewind && canRewind}
                           canFork={rewind && canBranch}
                           onEditMessage={handleEditMessage}
@@ -1593,16 +1792,61 @@
                 </p>
               {/if}
 
-              {#if session?.streaming}
-                <div class="max-w-[min(65ch,100%)] min-w-0 text-body leading-relaxed text-foreground break-words">
-                  <Markdown source={stream.text} /><span class="inline-block w-[3px] h-4 rounded-sm bg-primary/60 align-text-bottom animate-pulse"></span>
+              <!-- Streaming buffer. Always in the DOM; the grid row collapses
+                   smoothly when the buffer empties. `bufferText` holds the last
+                   non-empty text past the moment streaming stops, so the row has
+                   real content to animate its height FROM — without it, the
+                   grid-template-rows transition from 1fr to 0fr snaps. -->
+              <div
+                class="grid transition-[grid-template-rows] duration-150 ease-out motion-reduce:transition-none
+                  {bufferOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}"
+              >
+                <div class="min-h-0 overflow-hidden">
+                  <div class="max-w-[min(65ch,100%)] min-w-0 text-body leading-relaxed text-foreground break-words">
+                    <Markdown source={bufferText} streaming={bufferOpen} />{#if bufferOpen}<span class="inline-block w-[3px] h-4 rounded-sm bg-primary/60 align-text-bottom animate-pulse"></span>{/if}
+                  </div>
                 </div>
-              {/if}
+              </div>
+
+              <!-- The tail: thinking and presence in separate always-rendered
+                   grid wrappers. The components stay mounted so the grid row has
+                   real content to animate FROM on collapse — a conditional {#if}
+                   removes the DOM in the same frame the class changes to 0fr,
+                   making 1fr resolve to 0 and snapping the height. -->
+              <div
+                class="grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none
+                  {thinkingLive ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}"
+              >
+                <div class="min-h-0 overflow-hidden">
+                  <div class="flex justify-start py-2">
+                    <LiveThinking
+                      stream={session?.thinkingStream ?? ''}
+                      closing={session?.thinkingClosing ?? false}
+                    />
+                  </div>
+                </div>
+              </div>
+              <div
+                class="grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none
+                  {!thinkingLive && presenceSince !== null ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}"
+              >
+                <div class="min-h-0 overflow-hidden">
+                  <div class="flex justify-start py-2">
+                    <AgentPresence label={presenceLabel} startedAt={presenceSince ?? Date.now()} />
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
           {#if searchOpen}
             <TranscriptSearch bind:this={search} {groups} onJump={jumpToMatch} onClose={closeSearch} />
+          {/if}
+
+          <!-- A stored transcript has no composer to quote into, so it has no
+               bar: the one action it could still offer is the browser's own. -->
+          {#if !browsing}
+            <SelectionActions {scroller} onQuote={quoteSelection} />
           {/if}
 
           {#if unseen}
@@ -1621,13 +1865,12 @@
         </div>
       {/if}
 
-      <!-- Content blurs and dissolves as it slides under the floating dock -->
+      <!-- Content dissolves as it slides under the floating dock.
+           A solid gradient instead of backdrop-blur: same visual fade, but no
+           per-frame GPU recomposite during scrolling (measured: the blur element
+           was 1148×128px and always rendered). -->
       <div class="pointer-events-none absolute inset-x-0 bottom-0 h-32">
-        <div
-          class="absolute inset-0 backdrop-blur-sm"
-          style="mask-image: linear-gradient(to bottom, transparent, black 70%); -webkit-mask-image: linear-gradient(to bottom, transparent, black 70%);"
-        ></div>
-        <div class="absolute inset-0 bg-linear-to-t from-background/80 via-background/25 to-transparent"></div>
+        <div class="absolute inset-0 bg-linear-to-t from-background via-background/85 to-transparent"></div>
       </div>
 
       <div class="pointer-events-none absolute inset-x-0 bottom-0 px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">

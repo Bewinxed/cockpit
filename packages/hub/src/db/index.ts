@@ -1,6 +1,7 @@
 import type {
   AgentRow,
   BuildInfo,
+  ClaudeLimits,
   FleetAgent,
   FleetConfig,
   FleetMarketplace,
@@ -8,19 +9,23 @@ import type {
   FleetPlugin,
   FleetSkillMeta,
   FleetSyncReport,
+  HarnessReport,
   SkillFile,
   ToolPolicy,
   ToolStatus,
+  UsageBucket,
 } from '@cockpit/core';
-import { RESTART_LOST, RESTART_RESUMABLE } from '@cockpit/core';
+import { RESTART_LOST, RESTART_RESUMABLE, resolveRates } from '@cockpit/core';
 import { Context, Effect, Layer } from 'effect';
-import { and, desc, eq, gt, inArray, ne, notInArray, or } from 'drizzle-orm';
+import { and, desc, eq, gt, gte, inArray, lte, ne, notInArray, or, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
 import { migrate } from 'drizzle-orm/bun-sqlite/migrator';
 import { DB_PATH } from '../config';
+import type { DelegateAskStatus, DelegateEventKind, DelegateEventPayload } from './schema';
 import {
   agents,
   credentials,
+  delegateEvents,
   fleetAgents,
   fleetMemory,
   fleetMemoryHistory,
@@ -31,6 +36,8 @@ import {
   projects,
   skills,
   tools,
+  usageBuckets,
+  usageLimits,
 } from './schema';
 
 /** Shipped with the package so a fresh boot never needs a drizzle-kit step. */
@@ -53,6 +60,9 @@ const STALE_AFTER_MS = 24 * 60 * 60 * 1000;
 
 export type AgentAuth = (typeof agents.$inferSelect)['auth'];
 
+/** One line of what a delegate and its parent said, as everything reads it. */
+export type DelegateEvent = typeof delegateEvents.$inferSelect;
+
 /** One superseded version of the fleet's memory, as a listing reads it. */
 export interface MemoryVersion {
   id: number;
@@ -60,6 +70,45 @@ export interface MemoryVersion {
   source: string;
   bytes: number;
   createdAt: Date;
+}
+
+/** A stored usage bucket, one (machine, session, model, hour) cell (USAGE-SPEC.md §6). */
+export type UsageBucketRow = typeof usageBuckets.$inferSelect;
+
+/** A stored limit reading, one per machine (USAGE-SPEC.md §6). */
+export type UsageLimitRow = typeof usageLimits.$inferSelect;
+
+/** How `/api/usage/summary` folds the buckets it returns (USAGE-SPEC.md §6.3). */
+export type UsageGroupBy = 'day' | 'model' | 'project' | 'session';
+
+/** One aggregated group in a usage summary. */
+export interface UsageSummaryRow {
+  key: string | number;
+  input: number;
+  output: number;
+  cacheCreation: number;
+  cacheRead: number;
+  reasoning: number;
+  costUsd: number;
+  messages: number;
+}
+
+/** The whole-window sums a summary's groups roll up to. */
+export interface UsageTotals {
+  input: number;
+  output: number;
+  cacheCreation: number;
+  cacheRead: number;
+  reasoning: number;
+  costUsd: number;
+  messages: number;
+}
+
+/** What `/api/usage/summary` returns: the groups, their totals, and unpriced models. */
+export interface UsageSummary {
+  rows: UsageSummaryRow[];
+  totals: UsageTotals;
+  missingPricing: string[];
 }
 
 export interface DbShape {
@@ -70,6 +119,7 @@ export interface DbShape {
     auth: AgentAuth;
     /** Absent from a register with nothing new to say about it; the row keeps what it had. */
     build?: BuildInfo;
+    harnesses?: HarnessReport[];
   }) => void;
   readonly touchAgent: (machineId: string) => void;
   readonly markAgentOffline: (machineId: string) => void;
@@ -78,7 +128,12 @@ export interface DbShape {
     machineId: string;
     cwd: string;
     sessionId?: string;
+    harness?: string;
     projectId?: string;
+    parentInstanceId?: string;
+    parentToolUseId?: string;
+    /** What the spawn said the session is for; a row without one keeps whatever it had. */
+    title?: string;
     kind: InstanceKind;
     permissionMode?: string;
     model?: string;
@@ -102,7 +157,7 @@ export interface DbShape {
    * with the directory it really opened in, which is the agent's word on where
    * the spawn's `cwd` resolved to.
    */
-  readonly noteInstanceSession: (id: string, sessionId: string, cwd?: string) => void;
+  readonly noteInstanceSession: (id: string, sessionId: string, cwd?: string, harness?: string) => void;
   /**
    * Marks every running instance on the machine that `liveIds` does not name as
    * unknown: those belong to a daemon that is gone, and the hub cannot tell
@@ -205,6 +260,49 @@ export interface DbShape {
   readonly deleteProject: (id: string) => void;
   readonly getCredential: (id: string) => Record<string, unknown> | undefined;
   readonly putCredential: (id: string, blob: Record<string, unknown>) => void;
+  /** Files one exchange between a delegate and its parent, and hands back the row. */
+  readonly recordDelegateEvent: (event: {
+    instanceId: string;
+    parentInstanceId: string;
+    kind: DelegateEventKind;
+    requestId?: string;
+    toolName?: string;
+    requestKind?: 'question' | 'tool';
+    payload: DelegateEventPayload;
+    status?: DelegateAskStatus;
+  }) => DelegateEvent;
+  /** The ask a `requestId` opened, so its answer is filed under the same parent. */
+  readonly delegateAsk: (requestId: string) => DelegateEvent | undefined;
+  /** Closes it. An ask this hub never recorded is nothing to close. */
+  readonly settleDelegateAsk: (requestId: string, status: DelegateAskStatus) => void;
+  /** Oldest first: what one delegate did, or what every delegate of one parent did. */
+  readonly listDelegateEvents: (filter: { parent?: string; instance?: string }) => DelegateEvent[];
+  /**
+   * Stores a machine's usage buckets (USAGE-SPEC.md §6.2). Idempotent: the
+   * bucket's id is its (machine, harness, session, model, hour) key, and an
+   * upsert sets absolute totals — a re-report of the same bucket overwrites,
+   * never accumulates.
+   */
+  readonly putUsageBuckets: (machineId: string, buckets: UsageBucket[]) => void;
+  /** Stores the machine's latest limit reading; one row per machine. */
+  readonly putUsageLimits: (machineId: string, limits: ClaudeLimits) => void;
+  /** The buckets in the window, oldest first — the rows the blocks route folds. */
+  readonly listUsageBuckets: (q: {
+    since?: number;
+    until?: number;
+    harness?: string;
+    machineId?: string;
+  }) => UsageBucketRow[];
+  /** Every machine's latest limit reading. */
+  readonly listUsageLimits: () => UsageLimitRow[];
+  /** Aggregates buckets in SQL (SUM/GROUP BY) and names the unpriced models. */
+  readonly usageSummary: (q: {
+    since?: number;
+    until?: number;
+    harness?: string;
+    machineId?: string;
+    groupBy: UsageGroupBy;
+  }) => UsageSummary;
 }
 
 export class Db extends Context.Service<Db, DbShape>()('Db') {}
@@ -226,6 +324,32 @@ const agentFile = (row: typeof fleetAgents.$inferSelect): FleetAgent => ({
   hash: row.hash,
   bytes: row.bytes,
   at: row.updatedAt.getTime(),
+});
+
+/**
+ * A stored bucket row back into the shared `UsageBucket` shape the blocks
+ * algorithm consumes (USAGE-SPEC.md §4.4): the flattened token columns are
+ * re-nested under `tokens`.
+ */
+export const usageBucketFromRow = (row: UsageBucketRow): UsageBucket => ({
+  harness: row.harness,
+  hourStart: row.hourStart,
+  firstTs: row.firstTs,
+  lastTs: row.lastTs,
+  sessionId: row.sessionId,
+  project: row.project,
+  projectPath: row.projectPath,
+  model: row.model,
+  provider: row.provider,
+  tokens: {
+    input: row.inputTokens,
+    output: row.outputTokens,
+    cacheCreation: row.cacheCreationTokens,
+    cacheRead: row.cacheReadTokens,
+    reasoning: row.reasoningTokens,
+  },
+  costUsd: row.costUsd,
+  messages: row.messages,
 });
 
 /** The one row the fleet's memory ever takes: there is one document, not a list. */
@@ -255,14 +379,31 @@ const make = (path: string): DbShape => {
     return row ? { content: row.content, hash: row.hash, updatedAt: row.updatedAt } : undefined;
   };
 
+  /** The window a usage query names, or nothing — the filters fold into one AND. */
+  const usageWhere = (q: { since?: number; until?: number; harness?: string; machineId?: string }) =>
+    and(
+      q.since !== undefined ? gte(usageBuckets.hourStart, q.since) : undefined,
+      q.until !== undefined ? lte(usageBuckets.hourStart, q.until) : undefined,
+      q.harness !== undefined ? eq(usageBuckets.harness, q.harness as 'claude' | 'opencode') : undefined,
+      q.machineId !== undefined ? eq(usageBuckets.machineId, q.machineId) : undefined
+    );
+
   return {
-    upsertAgent: ({ machineId, hostname, os, auth, build }) => {
+    upsertAgent: ({ machineId, hostname, os, auth, build, harnesses }) => {
       const lastSeenAt = new Date();
       db.insert(agents)
-        .values({ machineId, hostname, os, auth, status: 'online', lastSeenAt, build })
+        .values({ machineId, hostname, os, auth, status: 'online', lastSeenAt, build, harnesses })
         .onConflictDoUpdate({
           target: agents.machineId,
-          set: { hostname, os, auth, status: 'online', lastSeenAt, ...(build ? { build } : {}) },
+          set: {
+            hostname,
+            os,
+            auth,
+            status: 'online',
+            lastSeenAt,
+            ...(build ? { build } : {}),
+            ...(harnesses ? { harnesses } : {}),
+          },
         })
         .run();
     },
@@ -278,17 +419,14 @@ const make = (path: string): DbShape => {
         .where(eq(agents.machineId, machineId))
         .run();
     },
-    openInstance: ({ id, machineId, cwd, sessionId, projectId, kind, permissionMode, model }) => {
+    openInstance: ({ id, machineId, cwd, sessionId, harness, projectId, parentInstanceId, parentToolUseId, title, kind, permissionMode, model }) => {
       const now = new Date();
 
       // One conversation, one live row.
       //
-      // An SDK session already being answered by a live process must not get a
+      // A session already being answered by a live process must not get a
       // second one: two rows in the rail for the same chat, two processes
       // writing one transcript, and a reader who cannot tell which is which.
-      // It happens whenever a session is resumed while it is already running —
-      // the catalog cannot tell a stored session from a live one — and again
-      // when a returning daemon restores a row somebody had already replaced.
       if (sessionId) {
         const live = db
           .select()
@@ -309,7 +447,11 @@ const make = (path: string): DbShape => {
           machineId,
           cwd,
           sessionId,
+          harness,
           projectId,
+          parentInstanceId,
+          parentToolUseId,
+          title,
           kind,
           permissionMode,
           model,
@@ -319,17 +461,6 @@ const make = (path: string): DbShape => {
         })
         .onConflictDoUpdate({
           target: instances.id,
-          // A respawn keeps whatever it does not name — session, project, and
-          // the two settings the user chose.
-          //
-          // These used to be cleared on silence, on the reasoning that a
-          // relaunch is how settings change. That reads the wrong meaning into
-          // silence: a revive after a dropped daemon names no mode because it
-          // has nothing to say about it, not because the user wants the default
-          // back. The result was a session that quietly returned to asking
-          // permission for everything, and the user setting bypass again by
-          // hand. Changing a setting is an explicit value, which every caller
-          // that means it already sends.
           set: {
             cwd,
             kind,
@@ -339,7 +470,11 @@ const make = (path: string): DbShape => {
             lastError: null,
             updatedAt: now,
             ...(sessionId ? { sessionId } : {}),
+            ...(harness ? { harness } : {}),
             ...(projectId ? { projectId } : {}),
+            ...(parentInstanceId ? { parentInstanceId } : {}),
+            ...(parentToolUseId ? { parentToolUseId } : {}),
+            ...(title ? { title } : {}),
           },
         })
         .run();
@@ -371,9 +506,14 @@ const make = (path: string): DbShape => {
         .where(eq(instances.id, id))
         .returning()
         .get(),
-    noteInstanceSession: (id, sessionId, cwd) => {
+    noteInstanceSession: (id, sessionId, cwd, harness) => {
       db.update(instances)
-        .set({ sessionId, updatedAt: new Date(), ...(cwd ? { cwd } : {}) })
+        .set({
+          sessionId,
+          updatedAt: new Date(),
+          ...(cwd ? { cwd } : {}),
+          ...(harness ? { harness } : {}),
+        })
         .where(eq(instances.id, id))
         .run();
     },
@@ -676,10 +816,11 @@ const make = (path: string): DbShape => {
         .select()
         .from(agents)
         .all()
-        .map(({ fleet, build, ...agent }) => ({
+        .map(({ fleet, build, harnesses, ...agent }) => ({
           ...agent,
           ...(fleet ? { fleet } : {}),
           ...(build ? { build } : {}),
+          ...(harnesses ? { harnesses } : {}),
         })),
     // A discarded side quest is gone for good, and a row that has not moved in a
     // day is history no rail has a use for — a running one stays whatever its age.
@@ -714,6 +855,180 @@ const make = (path: string): DbShape => {
           set: { blob, updatedAt: new Date() },
         })
         .run();
+    },
+    recordDelegateEvent: (event) => db.insert(delegateEvents).values(event).returning().get(),
+    delegateAsk: (requestId) =>
+      db
+        .select()
+        .from(delegateEvents)
+        .where(and(eq(delegateEvents.kind, 'ask'), eq(delegateEvents.requestId, requestId)))
+        .get(),
+    settleDelegateAsk: (requestId, status) => {
+      db.update(delegateEvents)
+        .set({ status })
+        .where(and(eq(delegateEvents.kind, 'ask'), eq(delegateEvents.requestId, requestId)))
+        .run();
+    },
+    // By id after the timestamp: an ask and the answer it settles can land in
+    // the same millisecond, and a reader who sees the answer first sees a
+    // conversation that runs backwards.
+    listDelegateEvents: ({ parent, instance }) =>
+      db
+        .select()
+        .from(delegateEvents)
+        .where(
+          and(
+            parent ? eq(delegateEvents.parentInstanceId, parent) : undefined,
+            instance ? eq(delegateEvents.instanceId, instance) : undefined
+          )
+        )
+        .orderBy(delegateEvents.createdAt, delegateEvents.id)
+        .all(),
+    putUsageBuckets: (machineId, buckets) => {
+      if (buckets.length === 0) return;
+      // One transaction for the batch: the agent may send hundreds per tick, and
+      // a half-written report is worse than a deferred one.
+      db.transaction((tx) => {
+        for (const bucket of buckets) {
+          const id = `${machineId}:${bucket.harness}:${bucket.sessionId}:${bucket.model}:${bucket.hourStart}`;
+          const row = {
+            id,
+            machineId,
+            harness: bucket.harness,
+            hourStart: bucket.hourStart,
+            firstTs: bucket.firstTs,
+            lastTs: bucket.lastTs,
+            sessionId: bucket.sessionId,
+            project: bucket.project,
+            projectPath: bucket.projectPath,
+            model: bucket.model,
+            provider: bucket.provider,
+            inputTokens: bucket.tokens.input,
+            outputTokens: bucket.tokens.output,
+            cacheCreationTokens: bucket.tokens.cacheCreation,
+            cacheReadTokens: bucket.tokens.cacheRead,
+            reasoningTokens: bucket.tokens.reasoning,
+            costUsd: bucket.costUsd,
+            messages: bucket.messages,
+          };
+          tx.insert(usageBuckets)
+            .values(row)
+            .onConflictDoUpdate({
+              target: usageBuckets.id,
+              // Absolute, not additive: the agent reports bucket totals, so a
+              // re-send must overwrite rather than double-count.
+              set: {
+                hourStart: row.hourStart,
+                firstTs: row.firstTs,
+                lastTs: row.lastTs,
+                project: row.project,
+                projectPath: row.projectPath,
+                model: row.model,
+                provider: row.provider,
+                inputTokens: row.inputTokens,
+                outputTokens: row.outputTokens,
+                cacheCreationTokens: row.cacheCreationTokens,
+                cacheReadTokens: row.cacheReadTokens,
+                reasoningTokens: row.reasoningTokens,
+                costUsd: row.costUsd,
+                messages: row.messages,
+                updatedAt: new Date(),
+              },
+            })
+            .run();
+        }
+      });
+    },
+    putUsageLimits: (machineId, limits) => {
+      db.insert(usageLimits)
+        .values({ machineId, payload: limits })
+        .onConflictDoUpdate({
+          target: usageLimits.machineId,
+          set: { payload: limits, fetchedAt: new Date() },
+        })
+        .run();
+    },
+    listUsageBuckets: (q) =>
+      db.select().from(usageBuckets).where(usageWhere(q)).orderBy(usageBuckets.hourStart).all(),
+    listUsageLimits: () => db.select().from(usageLimits).all(),
+    usageSummary: ({ since, until, harness, machineId, groupBy }) => {
+      const key =
+        groupBy === 'day'
+          ? sql<number>`(${usageBuckets.hourStart} / 86400000) * 86400000`
+          : groupBy === 'model'
+            ? usageBuckets.model
+            : groupBy === 'project'
+              ? usageBuckets.project
+              : usageBuckets.sessionId;
+
+      const rows = db
+        .select({
+          key,
+          input: sql<number>`sum(${usageBuckets.inputTokens})`,
+          output: sql<number>`sum(${usageBuckets.outputTokens})`,
+          cacheCreation: sql<number>`sum(${usageBuckets.cacheCreationTokens})`,
+          cacheRead: sql<number>`sum(${usageBuckets.cacheReadTokens})`,
+          reasoning: sql<number>`sum(${usageBuckets.reasoningTokens})`,
+          costUsd: sql<number>`sum(${usageBuckets.costUsd})`,
+          messages: sql<number>`sum(${usageBuckets.messages})`,
+        })
+        .from(usageBuckets)
+        .where(usageWhere({ since, until, harness, machineId }))
+        .groupBy(key)
+        .orderBy(key)
+        .all()
+        .map((group) => ({
+          key: group.key,
+          input: group.input ?? 0,
+          output: group.output ?? 0,
+          cacheCreation: group.cacheCreation ?? 0,
+          cacheRead: group.cacheRead ?? 0,
+          reasoning: group.reasoning ?? 0,
+          costUsd: group.costUsd ?? 0,
+          messages: group.messages ?? 0,
+        }));
+
+      const totals: UsageTotals = {
+        input: 0,
+        output: 0,
+        cacheCreation: 0,
+        cacheRead: 0,
+        reasoning: 0,
+        costUsd: 0,
+        messages: 0,
+      };
+      for (const group of rows) {
+        totals.input += group.input;
+        totals.output += group.output;
+        totals.cacheCreation += group.cacheCreation;
+        totals.cacheRead += group.cacheRead;
+        totals.reasoning += group.reasoning;
+        totals.costUsd += group.costUsd;
+        totals.messages += group.messages;
+      }
+
+      // Models the pricing snapshot cannot price at all. Ask the pricing module
+      // rather than inferring from a $0 total: a genuinely free model (say
+      // `deepseek-v4-flash-free`, published at 0/0/0) also totals $0, and
+      // calling that "no published price" is a lie. `resolveRates` returns null
+      // only on a real miss. Scoped by harness/machine but not by time — a
+      // model's missing price does not come and go.
+      const missingPricing = db
+        .select({ model: usageBuckets.model })
+        .from(usageBuckets)
+        .where(
+          and(
+            sql`${usageBuckets.inputTokens} + ${usageBuckets.outputTokens} + ${usageBuckets.cacheCreationTokens} + ${usageBuckets.cacheReadTokens} + ${usageBuckets.reasoningTokens} > 0`,
+            harness !== undefined ? eq(usageBuckets.harness, harness as 'claude' | 'opencode') : undefined,
+            machineId !== undefined ? eq(usageBuckets.machineId, machineId) : undefined
+          )
+        )
+        .groupBy(usageBuckets.model)
+        .all()
+        .map((row) => row.model)
+        .filter((model) => resolveRates(model) === null);
+
+      return { rows, totals, missingPricing };
     },
   };
 };

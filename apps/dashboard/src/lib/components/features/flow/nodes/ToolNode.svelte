@@ -1,7 +1,8 @@
 <script lang="ts">
-  import { IconTools, IconCheck, IconClose, IconSpinner, IconDocument, IconTerminal, IconSearch, IconFolderOpen, IconPen } from '$lib/icons';
+  import { IconCheck, IconClose, IconSpinner } from '$lib/icons';
   import { Handle, Position, useStore } from '@xyflow/svelte';
   import { getToolGlance, getToolStatus, getResultGlimpse } from '$lib/utils/tool-display';
+  import { toolFamily } from '../../tool-cards/descriptors';
   import * as Collapsible from '$lib/components/ui/collapsible';
   import type { Message } from '$lib/cockpit/types';
 
@@ -40,19 +41,8 @@
     isStreaming ? 'Running' : toolStatus === 'success' ? 'Done' : toolStatus === 'error' ? 'Failed' : 'Pending'
   );
 
-  // Get tool icon based on name
-  const ToolIcon = $derived.by(() => {
-    switch (toolName.toLowerCase()) {
-      case 'read': return IconDocument;
-      case 'write':
-      case 'edit': return IconPen;
-      case 'bash': return IconTerminal;
-      case 'grep':
-      case 'glob': return IconSearch;
-      case 'ls': return IconFolderOpen;
-      default: return IconTools;
-    }
-  });
+  // The face and ink a tool wears everywhere else in the app.
+  const family = $derived(toolFamily(toolName));
 
   // Status styling
   const statusClass = $derived.by(() => {
@@ -104,8 +94,8 @@
 <div class="tool-node rounded-xl shadow-sm bg-card p-3 w-[320px]">
   {#if zoomLevel === 'overview'}
     <div class="flex items-center justify-center gap-2">
-      <div class="rounded-full bg-warning/20 p-2">
-        <ToolIcon class="h-4 w-4 text-warning" />
+      <div class="rounded-full bg-muted p-2">
+        <family.icon class="h-4 w-4 {family.color}" />
       </div>
       <div
         class="w-2 h-2 rounded-full {statusColor === 'text-success'
@@ -121,7 +111,7 @@
     </div>
   {:else if zoomLevel === 'summary'}
     <div class="flex items-center gap-2">
-      <ToolIcon class="h-4 w-4 text-warning shrink-0" />
+      <family.icon class="h-4 w-4 {family.color} shrink-0" />
       <span class="text-sm font-medium">{toolName}</span>
       {#if glance}
         <span class="text-xs text-muted-foreground truncate">{glance}</span>
@@ -131,7 +121,7 @@
   {:else}
     <div class="space-y-2">
       <div class="flex items-center gap-2">
-        <ToolIcon class="h-4 w-4 text-warning shrink-0" />
+        <family.icon class="h-4 w-4 {family.color} shrink-0" />
         <span class="text-sm font-medium">{toolName}</span>
         <StatusIcon class="h-4 w-4 ml-auto {statusColor} {isStreaming ? 'animate-spin' : ''}" />
       </div>

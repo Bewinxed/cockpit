@@ -6,19 +6,24 @@
  */
 import type { Component } from 'svelte';
 import {
-  IconCode,
-  IconCompass,
-  IconCursor,
-  IconDocument,
-  IconFolderFiles,
-  IconGlobe,
-  IconPen,
-  IconPlug,
-  IconSearch,
-  IconSend,
-  IconSkill,
-  IconTerminal,
-  IconTools,
+  IconToolCode,
+  IconToolEdit,
+  IconToolFiles,
+  IconToolGeneric,
+  IconToolMcp,
+  IconToolMessage,
+  IconToolNavigate,
+  IconToolNotebook,
+  IconToolQuestion,
+  IconToolRead,
+  IconToolScreen,
+  IconToolSearch,
+  IconToolSkill,
+  IconToolTask,
+  IconToolTerminal,
+  IconToolTodo,
+  IconToolWeb,
+  IconToolWrite,
 } from '$lib/icons';
 
 export type ToolStatus = 'pending' | 'success' | 'error';
@@ -28,6 +33,8 @@ export type ExpandedKind = 'bash' | 'diff' | 'read' | 'web' | 'code' | 'params';
 
 export interface ToolDescriptor {
   icon: Component;
+  /** The family's ink — a `--tool-*` class. What the step is, never how it went. */
+  color: string;
   /** The verb, in the UI face. Empty when the object is the whole sentence. */
   label: string;
   /** What the verb acted on. */
@@ -63,34 +70,50 @@ export type FamilyId =
   | 'navigate'
   | 'js'
   | 'mcp'
+  | 'task'
+  | 'todo'
+  | 'notebook'
+  | 'question'
   | 'other';
 
 export interface ToolFamily {
   id: FamilyId;
   icon: Component;
+  color: string;
   /** What one call of this kind is, for a group's kind summary. */
   one: string;
   many: string;
 }
 
+/**
+ * A face and an ink per family. Families that are one act under two names
+ * share an ink on purpose — reading and searching are one colour of work,
+ * the browser and the network another — so the glyph column groups at a
+ * glance instead of reading as nineteen unrelated hues.
+ */
 const FAMILIES: Record<FamilyId, Omit<ToolFamily, 'id'>> = {
-  bash: { icon: IconTerminal, one: 'command', many: 'commands' },
-  read: { icon: IconDocument, one: 'read', many: 'reads' },
-  edit: { icon: IconPen, one: 'edit', many: 'edits' },
-  write: { icon: IconPen, one: 'write', many: 'writes' },
-  grep: { icon: IconSearch, one: 'search', many: 'searches' },
-  glob: { icon: IconFolderFiles, one: 'listing', many: 'listings' },
-  web: { icon: IconGlobe, one: 'fetch', many: 'fetches' },
-  toolsearch: { icon: IconSearch, one: 'lookup', many: 'lookups' },
-  skill: { icon: IconSkill, one: 'skill', many: 'skills' },
-  message: { icon: IconSend, one: 'message', many: 'messages' },
-  screen: { icon: IconCursor, one: 'screen step', many: 'screen steps' },
-  navigate: { icon: IconCompass, one: 'page', many: 'pages' },
-  js: { icon: IconCode, one: 'script', many: 'scripts' },
-  mcp: { icon: IconPlug, one: 'call', many: 'calls' },
+  bash: { icon: IconToolTerminal, color: 'text-tool-run', one: 'command', many: 'commands' },
+  read: { icon: IconToolRead, color: 'text-tool-read', one: 'read', many: 'reads' },
+  edit: { icon: IconToolEdit, color: 'text-tool-edit', one: 'edit', many: 'edits' },
+  write: { icon: IconToolWrite, color: 'text-tool-write', one: 'write', many: 'writes' },
+  grep: { icon: IconToolSearch, color: 'text-tool-search', one: 'search', many: 'searches' },
+  glob: { icon: IconToolFiles, color: 'text-tool-search', one: 'listing', many: 'listings' },
+  web: { icon: IconToolWeb, color: 'text-tool-web', one: 'fetch', many: 'fetches' },
+  toolsearch: { icon: IconToolSearch, color: 'text-tool-search', one: 'lookup', many: 'lookups' },
+  skill: { icon: IconToolSkill, color: 'text-tool-skill', one: 'skill', many: 'skills' },
+  message: { icon: IconToolMessage, color: 'text-tool-agent', one: 'message', many: 'messages' },
+  screen: { icon: IconToolScreen, color: 'text-tool-web', one: 'screen step', many: 'screen steps' },
+  navigate: { icon: IconToolNavigate, color: 'text-tool-web', one: 'page', many: 'pages' },
+  js: { icon: IconToolCode, color: 'text-tool-run', one: 'script', many: 'scripts' },
+  mcp: { icon: IconToolMcp, color: 'text-tool-mcp', one: 'call', many: 'calls' },
+  task: { icon: IconToolTask, color: 'text-tool-agent', one: 'delegation', many: 'delegations' },
+  todo: { icon: IconToolTodo, color: 'text-tool-plan', one: 'plan', many: 'plans' },
+  notebook: { icon: IconToolNotebook, color: 'text-tool-edit', one: 'cell edit', many: 'cell edits' },
+  question: { icon: IconToolQuestion, color: 'text-tool-ask', one: 'question', many: 'questions' },
   // Not "step": the header already counts steps, and a summary that repeats
-  // the count's own word ("3 steps · 2 steps") says nothing.
-  other: { icon: IconTools, one: 'action', many: 'actions' },
+  // the count's own word ("3 steps · 2 steps") says nothing. An unknown tool
+  // has no family to be, so it takes the muted ink rather than borrowing one.
+  other: { icon: IconToolGeneric, color: 'text-muted-foreground', one: 'action', many: 'actions' },
 };
 
 const EDIT_TOOLS = new Set(['edit', 'str_replace_editor', 'str_replace', 'file_edit']);
@@ -117,6 +140,11 @@ export function familyId(toolName: string | undefined): FamilyId {
   if (name === 'webfetch' || name === 'websearch') return 'web';
   if (name === 'toolsearch') return 'toolsearch';
   if (name === 'skill') return 'skill';
+  // The same call is the Task tool and the Agent tool, depending on the harness.
+  if (name === 'task' || name === 'agent') return 'task';
+  if (name === 'todowrite') return 'todo';
+  if (name === 'notebookedit') return 'notebook';
+  if (name === 'askuserquestion') return 'question';
   if (name === 'sendmessage') return 'message';
   if (name === 'computer') return 'screen';
   if (name === 'navigate') return 'navigate';
@@ -317,7 +345,12 @@ function sentence(
   const name = toolName ?? 'Tool';
   const output = status === 'success' ? result : undefined;
   const family = familyId(name);
-  const base = { objectIsMono: true, detailIsMono: false, icon: FAMILIES[family].icon } as const;
+  const base = {
+    objectIsMono: true,
+    detailIsMono: false,
+    icon: FAMILIES[family].icon,
+    color: FAMILIES[family].color,
+  } as const;
 
   switch (family) {
     case 'bash': {

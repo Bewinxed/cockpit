@@ -269,14 +269,10 @@
   </span>
 {/snippet}
 
-<!-- Offcanvas, so the kit animates the gap the chat shrinks into rather than
-     the chat snapping to width when the rail mounts.
-
-     The kit's desktop container is `fixed … h-svh`, which would lay the rail
-     over the app's own header; anchored to the provider instead, it is exactly
-     as tall as the session. Only from `md`, which is where the kit stops
-     rendering the mobile sheet — that one is portalled and must stay fixed. -->
-<Sidebar.Root side="right" collapsible="offcanvas" class="md:absolute md:h-full">
+<!-- Offcanvas: the sidebar transitions its own inline-size inside the
+     Provider's flex layout. No absolute positioning — it flows beside the
+     chat and the parent's overflow-hidden clips it when collapsed. -->
+<Sidebar.Root side="right" collapsible="offcanvas">
   <Tabs.Root bind:value={tab} class="flex min-h-0 flex-1 flex-col gap-0">
     <!-- The kit's header stacks; this one is a row. -->
     <Sidebar.Header class="material-chrome flex-row items-center gap-2 border-b border-border px-4 py-2">

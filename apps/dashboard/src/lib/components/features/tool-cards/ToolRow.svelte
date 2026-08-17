@@ -4,8 +4,9 @@
    * back. The same row serves a group of calls and a call standing on its own,
    * so a transcript only ever teaches the reader one tool grammar.
    *
-   * Success is silent. A finished step earns no colour — only a step that is
-   * still running, or one that failed, says anything in a hue.
+   * The glyph's hue is the tool's family, not its outcome. Success stays
+   * silent: a finished step earns no colour of its own — only a step that is
+   * still running, or one that failed, says anything about how it went.
    */
   import { untrack } from 'svelte';
   import { fade, fly } from 'svelte/transition';
@@ -14,16 +15,20 @@
   import * as Collapsible from '$lib/components/ui/collapsible';
   import { Button } from '$lib/components/ui/button';
   import DiffView from '../DiffView.svelte';
+  import AgentCode from './AgentCode.svelte';
   import OutputBlock from './OutputBlock.svelte';
   import ParamsTable from './ParamsTable.svelte';
   import {
     codeOf,
     describeTool,
     errorLine,
+    familyId,
     getDiffInfo,
     isErrorLine,
+    pathLeaf,
     type ToolStatus,
   } from './descriptors';
+  import { languageForPath } from './agent-code';
 
   interface Props {
     toolName?: string;
@@ -46,6 +51,17 @@
   const command = $derived(typeof input?.command === 'string' ? input.command : '');
   const code = $derived(codeOf(input));
   const url = $derived(typeof input?.url === 'string' ? input.url : undefined);
+
+  /**
+   * The file a Read answered with, which is the only body in the `read` shape
+   * that is a file at all — grep and glob answer with matches and names, and
+   * painting those in some file's grammar would be a guess.
+   */
+  const readPath = $derived.by(() => {
+    if (familyId(toolName) !== 'read') return undefined;
+    const path = input?.file_path ?? input?.path;
+    return typeof path === 'string' && path.length > 0 ? path : undefined;
+  });
 
   /** What went wrong, which replaces the tail on a failed row. */
   const failure = $derived(status === 'error' ? errorLine(result) : undefined);
@@ -106,7 +122,7 @@
           />
         {:else}
           {@const Glyph = descriptor.icon}
-          <Glyph class="size-4 text-muted-foreground" />
+          <Glyph class="size-4 {descriptor.color}" />
         {/if}
       </span>
 
@@ -194,9 +210,20 @@
     <div class="ml-[22px] space-y-2 border-l border-border/50 py-2 pr-3 pl-4">
       {#if descriptor.expanded === 'bash'}
         <div class="max-h-[320px] overflow-auto rounded-lg bg-muted/50 p-3 font-mono text-micro">
+          <!-- Every line of `command` is command, continuations and heredoc
+               body included, so the whole of it is painted. The sigil is the
+               well's own punctuation, not part of what was run. -->
           <div class="whitespace-pre-wrap break-all text-muted-foreground">
-            <span class="select-none">$&nbsp;</span>{command}
+            <span class="select-none">$&nbsp;</span><AgentCode
+              code={command}
+              language="bash"
+              inline
+            />
           </div>
+          <!-- What came back is data, not code: run through the same grammar,
+               a log's prose would light up wherever it happened to say `do` or
+               `in`, and a path would read as an operator. Output stays plain
+               mono, tinted only where the line itself reports a failure. -->
           {#if result && status === 'error'}
             <div class="mt-1.5">
               {#each result.split('\n') as line, i (i)}
@@ -232,12 +259,16 @@
           </div>
         {/if}
       {:else if descriptor.expanded === 'code'}
-        {#if code}<OutputBlock text={code} caption="Code" />{/if}
+        {#if code}<OutputBlock text={code} caption="Code" language="javascript" />{/if}
         {#if result}<OutputBlock text={result} caption="Output" />{/if}
       {:else if descriptor.expanded === 'web' && result}
         <OutputBlock text={result} caption={url} captionIsMono />
       {:else if descriptor.expanded === 'read' && result}
-        <OutputBlock text={result} />
+        <OutputBlock
+          text={result}
+          language={readPath ? (languageForPath(readPath) ?? undefined) : undefined}
+          filename={readPath ? pathLeaf(readPath) : undefined}
+        />
       {:else}
         <ParamsTable {input} {result} />
       {/if}

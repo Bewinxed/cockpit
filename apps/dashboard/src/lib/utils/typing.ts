@@ -10,3 +10,4 @@ export function isTyping(): boolean {
     focused instanceof HTMLElement && (TYPING.has(focused.tagName) || focused.isContentEditable)
   );
 }
+
