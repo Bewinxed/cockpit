@@ -817,6 +817,30 @@
         Boolean(session?.thinkingStream && session.openBlock === null))
   );
 
+  /**
+   * The thinking row does not snap shut. The store clears the stream the
+   * moment the next block starts, and a tall surface closing in the same
+   * frame is a jump the reader feels. So the row holds the last trace for a
+   * beat after the block ends, then eases shut on a slower clock than it
+   * opened with.
+   */
+  let thinkingShown = $state(false);
+  let heldThinking = $state('');
+  let thinkingHold: ReturnType<typeof setTimeout> | undefined;
+  $effect(() => {
+    const stream = session?.thinkingStream;
+    if (stream) heldThinking = stream;
+  });
+  $effect(() => {
+    if (thinkingLive) {
+      clearTimeout(thinkingHold);
+      thinkingShown = true;
+    } else {
+      thinkingHold = setTimeout(() => (thinkingShown = false), 600);
+      return () => clearTimeout(thinkingHold);
+    }
+  });
+
   /** Whether the transcript ends on tool rows still waiting for their results. */
   const tailToolPending = $derived.by((): boolean => {
     const tail = groups.at(-1);
@@ -1844,21 +1868,21 @@
                    removes the DOM in the same frame the class changes to 0fr,
                    making 1fr resolve to 0 and snapping the height. -->
               <div
-                class="grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none
-                  {thinkingLive ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}"
+                class="grid transition-[grid-template-rows] ease-out motion-reduce:transition-none
+                  {thinkingShown ? 'grid-rows-[1fr] duration-200' : 'grid-rows-[0fr] duration-500'}"
               >
                 <div class="min-h-0 overflow-hidden">
                   <div class="flex justify-start py-2">
                     <LiveThinking
-                      stream={session?.thinkingStream ?? ''}
-                      closing={session?.thinkingClosing ?? false}
+                      stream={session?.thinkingStream || heldThinking}
+                      closing={(session?.thinkingClosing ?? false) || (thinkingShown && !thinkingLive)}
                     />
                   </div>
                 </div>
               </div>
               <div
                 class="grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none
-                  {!thinkingLive && presenceSince !== null ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}"
+                  {!thinkingShown && presenceSince !== null ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}"
               >
                 <div class="min-h-0 overflow-hidden">
                   <div class="flex justify-start py-2">
