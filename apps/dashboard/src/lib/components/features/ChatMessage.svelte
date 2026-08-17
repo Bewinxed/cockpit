@@ -515,7 +515,7 @@
 			{#if message.type === 'tool.use' || message.type === 'tool.result'}
 				<!-- One tool call standing on its own: the same row a group holds,
 				     in a card of its own. -->
-				<div class="w-full overflow-hidden rounded-xl bg-card shadow-md">
+				<div class="w-full overflow-hidden rounded-xl bg-card shadow-sm">
 					<ToolRow
 						toolName={toolInfo?.name}
 						input={toolInfo?.input as Record<string, unknown> | undefined}
@@ -737,7 +737,7 @@
 			{:else if message.type === 'ui.system_note'}
 				{#if !suppressedAsTaskEcho}
 				<!-- Harness-injected note that arrived as a user turn - collapsible card -->
-				<div class="w-full bg-muted/30 border border-border rounded-xl overflow-hidden">
+				<div class="w-full border border-border/60 bg-muted/20 rounded-xl overflow-hidden">
 					<Collapsible.Root open={isExpanded} onOpenChange={toggleExpanded}>
 						<Collapsible.Trigger class="w-full text-left">
 							<div

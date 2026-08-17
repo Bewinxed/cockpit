@@ -88,7 +88,7 @@
   }
 </script>
 
-<div class="w-full overflow-hidden rounded-xl bg-card shadow-md">
+<div class="w-full overflow-hidden rounded-xl bg-card shadow-sm">
   {#if tools.length > 1}
     <div
       class="flex items-center gap-2 px-3 py-2"

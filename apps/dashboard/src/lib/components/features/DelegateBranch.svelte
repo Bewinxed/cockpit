@@ -26,10 +26,6 @@
   import ToolGroup from './ToolGroup.svelte';
   import OutputBlock from './tool-cards/OutputBlock.svelte';
   import ReportBody from './tool-cards/ReportBody.svelte';
-  import { fly } from 'svelte/transition';
-  import { quintOut } from 'svelte/easing';
-  import { untrack } from 'svelte';
-
   let { message }: MessageRendererProps = $props();
 
   const leaf = (path: string): string => path.split('/').filter(Boolean).pop() ?? path;
@@ -75,10 +71,6 @@
   );
   /** Actively in flight — spawning or the delegate is working. */
   const working = $derived(status === 'working' || status === 'spawning');
-
-  // Computed once at mount so the card only slides in when it is genuinely new,
-  // not every time the virtualizer recycles its DOM node on scroll.
-  const entering = untrack(() => row?.status === 'starting' || row?.status === 'running');
 
   const label = $derived(row ? leaf(row.cwd) : message.content ? leaf(message.content) : 'delegate');
 
@@ -244,10 +236,7 @@
   });
 </script>
 
-  <div
-    class="w-full max-w-[min(65ch,100%)] overflow-hidden rounded-xl bg-card shadow-sm motion-reduce:transition-none"
-    in:fly={{ y: entering ? 10 : 0, duration: entering ? 250 : 0, easing: quintOut }}
-  >
+  <div class="w-full overflow-hidden rounded-xl bg-card shadow-sm motion-reduce:transition-none">
     <Collapsible.Root {open} onOpenChange={() => (open = !open)}>
       <Collapsible.Trigger class="group/delegate w-full text-left">
         <div class="flex cursor-pointer items-start gap-2 px-4 py-3 transition-colors hover:bg-muted/30">
