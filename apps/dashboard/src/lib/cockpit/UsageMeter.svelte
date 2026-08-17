@@ -91,9 +91,18 @@
     if (limits === null) return 'No limit reading yet.';
     if (limits.error === 'not signed in') return 'No limit reading — this machine is not signed in to Claude.';
     if (limits.error === 'token expired') return 'The Claude login on this machine has expired.';
-    if (limits.error) return limits.error;
+    if (limits.error) {
+      // A stale reading still has its windows; show them and flag the age.
+      if (limits.stale && windows.length > 0) return null;
+      return limits.error;
+    }
     return null;
   });
+
+  /** Surfaced only when the windows shown are a stale last-good reading. */
+  const staleNote = $derived(
+    limits?.stale && limits.error ? `last good reading · ${limits.error}` : null
+  );
 
   /** There are real windows to show; anything else is an empty state. */
   const hasReading = $derived(emptyReason === null);
@@ -137,11 +146,12 @@
   let spend = $state<{ today: number; total: number } | null>(null);
 
   async function refreshSpend(): Promise<void> {
-    if (!machineId) return;
     const day = new Date();
     day.setUTCHours(0, 0, 0, 0);
     const since = day.getTime();
-    const query = `harness=opencode&machineId=${encodeURIComponent(machineId)}`;
+    const query = machineId
+      ? `harness=opencode&machineId=${encodeURIComponent(machineId)}`
+      : 'harness=opencode';
     try {
       const [totalRes, todayRes] = await Promise.all([
         fetch(`/api/usage/summary?${query}`).then((r) => (r.ok ? r.json() : null)),
@@ -172,10 +182,10 @@
       ? TEXT[band(bindingPct)]
       : 'text-muted-foreground'}"
     title={hasReading && binding
-      ? `${windowLabel(binding)} limit — ${Math.round(binding.percent)}% used, ${resetsIn(binding.resetsAt, now)}`
+      ? `${windowLabel(binding)} limit — ${Math.round(binding.percent)}% used, ${resetsIn(binding.resetsAt, now)}${staleNote ? ` · ${staleNote}` : ''}`
       : 'Claude usage limits'}
     aria-label={hasReading && binding
-      ? `Claude limits. ${windowLabel(binding)} window ${Math.round(binding.percent)} percent used, the fullest of ${windows.length}. Show them all.`
+      ? `Claude limits. ${windowLabel(binding)} window ${Math.round(binding.percent)} percent used, the fullest of ${windows.length}. Show them all.${staleNote ? ` ${staleNote}.` : ''}`
       : `Claude usage limits. ${emptyReason}`}
   >
     {#if hasReading && binding}
@@ -203,6 +213,10 @@
         <Badge variant="outline" class="ml-auto font-mono text-micro">{planLabel(limits.planTier)}</Badge>
       {/if}
     </div>
+
+    {#if staleNote}
+      <p class="border-b border-border px-3 py-1.5 text-[11px] text-muted-foreground">{staleNote}</p>
+    {/if}
 
     {#if emptyReason}
       <p class="px-3 py-4 text-micro text-muted-foreground">{emptyReason}</p>

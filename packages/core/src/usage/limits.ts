@@ -14,6 +14,9 @@ import type { ClaudeLimits, LimitWindow } from './types';
 const USAGE_URL = 'https://api.anthropic.com/api/oauth/usage';
 const TIMEOUT_MS = 10_000;
 const CACHE_TTL_MS = 60_000;
+const NON_429_BACKOFF_MS = 2 * 60_000;
+/** 429 escalation by consecutive-failure streak: 5m → 15m → 60m (cap). */
+const BACKOFF_STEPS_MS = [5 * 60_000, 15 * 60_000, 60 * 60_000];
 
 interface OauthCreds {
   accessToken?: string;
@@ -43,9 +46,22 @@ interface UsageResponse {
 }
 
 let cached: { at: number; value: ClaudeLimits } | null = null;
+/** The last successful reading, kept to serve (stale) through a later failure. */
+let lastGood: ClaudeLimits | null = null;
+/** Failure retention: the error result to return and how long it is valid for. */
+let lastFailure: { at: number; until: number; streak: number; value: ClaudeLimits } | null =
+  null;
 
 export async function fetchClaudeLimits(opts?: { configDir?: string }): Promise<ClaudeLimits> {
-  if (cached && Date.now() - cached.at < CACHE_TTL_MS) {
+  const now = Date.now();
+
+  // A recent failure is still cooling down: return its cached error result
+  // without hitting the API again (backoff). Streak resets on the next success.
+  if (lastFailure && now < lastFailure.until) {
+    return lastFailure.value;
+  }
+
+  if (cached && now - cached.at < CACHE_TTL_MS) {
     return cached.value;
   }
 
@@ -84,7 +100,7 @@ export async function fetchClaudeLimits(opts?: { configDir?: string }): Promise<
   });
 
   if (!res.ok) {
-    return errorResult(`HTTP ${res.status}`);
+    return failureResult(res.status, res.headers.get('retry-after'));
   }
 
   const body = (await res.json()) as UsageResponse;
@@ -142,6 +158,8 @@ export async function fetchClaudeLimits(opts?: { configDir?: string }): Promise<
   };
 
   cached = { at: Date.now(), value: result };
+  lastGood = result;
+  lastFailure = null;
   return result;
 }
 
@@ -155,4 +173,36 @@ function errorResult(error: string): ClaudeLimits {
     spendLimit: null,
     error,
   };
+}
+
+/**
+ * Records a failed request and returns what to serve for the backoff window.
+ * For a 429, honours a numeric `Retry-After` (seconds) when present, else
+ * escalates by streak (5m → 15m → 60m). Other failures cool down 2m. If a good
+ * reading was ever fetched, that is returned stale rather than empty windows.
+ */
+function failureResult(status: number, retryAfter: string | null): ClaudeLimits {
+  const now = Date.now();
+  const streak = (lastFailure?.streak ?? 0) + 1;
+
+  let until: number;
+  if (status === 429) {
+    const seconds = retryAfter === null ? NaN : Number(retryAfter);
+    if (Number.isFinite(seconds) && seconds > 0) {
+      until = now + seconds * 1000;
+    } else {
+      const step = BACKOFF_STEPS_MS[Math.min(streak - 1, BACKOFF_STEPS_MS.length - 1)];
+      until = now + step;
+    }
+  } else {
+    until = now + NON_429_BACKOFF_MS;
+  }
+
+  const error = `HTTP ${status}`;
+  const value: ClaudeLimits = lastGood
+    ? { ...lastGood, stale: true, error }
+    : errorResult(error);
+
+  lastFailure = { at: now, until, streak, value };
+  return value;
 }

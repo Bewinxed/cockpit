@@ -15,6 +15,8 @@
   import IconOpenCode from '~icons/solar/code-square-bold-duotone';
   import IconWindow from '~icons/solar/hourglass-line-duotone';
   import { compactNumber, usd, type UsageSummaryRow } from '$lib/cockpit/usage';
+  import DailyChart from '$lib/cockpit/usage/DailyChart.svelte';
+  import BreakdownTable from '$lib/cockpit/usage/BreakdownTable.svelte';
 
   let { data }: { data: PageData } = $props();
 
@@ -24,7 +26,11 @@
    * reading speaks for all of them.
    */
   const reading = $derived(
-    data.limits?.machines.find((m) => m.limits.error === null)?.limits ?? null
+    data.limits?.machines.find((m) => m.limits.error === null)?.limits ??
+      // A stale reading beats an empty room: backoff keeps the last good
+      // windows with the error attached, and old numbers outrank "HTTP 429".
+      data.limits?.machines.find((m) => m.limits.stale && m.limits.windows.length > 0)?.limits ??
+      null
   );
   const readingError = $derived(
     reading === null ? (data.limits?.machines[0]?.limits.error ?? null) : null
@@ -287,6 +293,8 @@
       </div>
 
       <!-- The windows themselves, as they actually fell. -->
+      <DailyChart />
+
       {#if dayGroups.length > 0}
         <section class="rounded-xl bg-card shadow-md">
           <header class="flex items-center gap-2 px-4 py-3">
@@ -332,6 +340,8 @@
           {/each}
         </section>
       {/if}
+
+      <BreakdownTable />
 
       {#if missing.length > 0}
         <p class="text-micro text-muted-foreground">

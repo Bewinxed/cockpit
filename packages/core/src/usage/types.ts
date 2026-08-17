@@ -47,6 +47,8 @@ export interface ClaudeLimits {
   spendUsed: number | null; // dollars
   spendLimit: number | null;
   error: string | null;
+  /** Set when a fetch failed and the caller is served the last good reading. */
+  stale?: boolean;
 }
 
 /**
