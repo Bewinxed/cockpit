@@ -14,7 +14,7 @@
   import type { FleetAgent, FleetConfig, FleetSkillMeta } from '@cockpit/core';
   import * as Tabs from '$lib/components/ui/tabs';
   import { cockpit } from '$lib/cockpit/client.svelte';
-  import type { FleetMemoryRow } from '$lib/cockpit/fleet';
+  import type { FleetMemoryDocRow, FleetMemoryRow } from '$lib/cockpit/fleet';
   import FleetAgents from '$lib/cockpit/FleetAgents.svelte';
   import FleetMcp from '$lib/cockpit/FleetMcp.svelte';
   import FleetMemory from '$lib/cockpit/FleetMemory.svelte';
@@ -48,6 +48,7 @@
   let skills = $state<FleetSkillMeta[]>(untrack(() => data.skills));
   let agents = $state<FleetAgent[]>(untrack(() => data.agents));
   let memory = $state<FleetMemoryRow | null>(untrack(() => data.memory));
+  let memoryDocs = $state<FleetMemoryDocRow[]>(untrack(() => data.memoryDocs));
 
   /** Re-seed from the load when `data` changes on navigation. The identity of
    *  `data.config` is new on every load, so it doubles as a change token.
@@ -62,6 +63,7 @@
       skills = data.skills;
       agents = data.agents;
       memory = data.memory;
+      memoryDocs = data.memoryDocs;
     }
   });
 
@@ -116,7 +118,7 @@
       </Tabs.Content>
 
       <Tabs.Content value="memory" class="flex flex-col gap-4 pt-4">
-        <FleetMemory bind:memory {machines} {settling} error={data.fleetError} />
+        <FleetMemory bind:memory bind:docs={memoryDocs} {machines} {settling} error={data.fleetError} />
       </Tabs.Content>
     </Tabs.Root>
   </div>

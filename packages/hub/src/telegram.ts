@@ -17,12 +17,17 @@ import { carriesMedia, createMediaIntake } from './telegram-media';
 /** The parked ask, as the bridge reads it out of the envelope the hub kept. */
 type PermissionRequest = Extract<FramePayload, { kind: 'permission_request' }>;
 
+/** A session's message to the owner, off the envelope the hub handed over. */
+type UserMessage = Extract<FramePayload, { kind: 'user_message' }>;
+
 export interface TelegramBridge {
   /** A session is blocked on the reader; put it in their pocket. */
   readonly onAsk: (envelope: Envelope) => void;
   /** Answered somewhere else, or died with its process: the buttons are stale. */
   readonly onSettled: (requestId: string) => void;
   readonly onError: (instanceId: string, message: string) => void;
+  /** A session's own words to the owner — no ask, no buttons, no answer. */
+  readonly onUserMessage: (envelope: Envelope) => void;
   readonly start: () => void;
   /**
    * The server's delegate-answer recorder, registered after construction: the
@@ -406,6 +411,16 @@ export const createTelegramBridge = ({
     });
   };
 
+  const onUserMessage = (envelope: Envelope): void => {
+    if (chatId === undefined) return;
+    const { instanceId, text: raw } = envelope.payload as UserMessage;
+    const text = esc(clip(raw, MESSAGE_LIMIT));
+    void send(text).then((sent) => {
+      if (sent)
+        track(sent.message_id, { instanceId, machineId: envelope.machineId, text });
+    });
+  };
+
   const onCallback = async (query: NonNullable<TelegramUpdate['callback_query']>): Promise<void> => {
     const [tag, requestId, arg] = (query.data ?? '').split(':');
     const envelope = requestId ? pending.get(requestId) : undefined;
@@ -566,6 +581,7 @@ export const createTelegramBridge = ({
     onAsk,
     onSettled,
     onError,
+    onUserMessage,
     start,
     setAnswerRecorder(record) {
       recordAnswer = record;

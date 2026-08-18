@@ -19,6 +19,12 @@ export * from './fleet';
 // subpath instead.
 export * from './usage';
 
+// Standing instructions the hub enforces on every session: a phrase to watch
+// for, a reply to send back, and an acknowledgement that has to come from the
+// session before the rule goes quiet. The matcher lives here so the hub and the
+// editor's test box decide identically.
+export * from './rules';
+
 /** The whole agent↔hub↔dashboard protocol. Adding a verb is a design decision. */
 export type Verb =
   | 'register'
@@ -73,6 +79,14 @@ export interface SpawnPayload {
    * reason as `permissionMode`. Absent leaves the choice to the harness.
    */
   model?: string;
+  /**
+   * How hard that model thinks, and how much it spends doing it. Hoisted for
+   * the same reason again — and it is the third setting a `setEffort`
+   * {@link ControlPayload} can still move mid-session. Absent leaves the level
+   * to the harness, which is not the same as asking for its default: only the
+   * model knows which stops it has.
+   */
+  effort?: import('./harness').EffortLevel;
   /** The project this session was started from, when it was started from one. */
   projectId?: string;
   /**
@@ -338,6 +352,12 @@ export interface InstanceRow {
    */
   permissionMode?: string | null;
   model?: string | null;
+  /**
+   * The effort level its last spawn or switch asked for. No `init` frame reports
+   * effort back, so unlike its two neighbours this row is the only record of it
+   * — and what a restart has to read to hand the session back as it was.
+   */
+  effort?: string | null;
   /** What killed the session, on a row the agent reported as `error`. */
   lastError?: string | null;
   /** When the row last moved. */
@@ -428,6 +448,17 @@ export type FramePayload =
       requestId?: string;
       verb?: Verb;
       message: string;
+    }
+  | {
+      /**
+       * Daemon-originated: a session pushing text straight to the owner's
+       * Telegram, with no ask to settle and nothing to answer. The hub hands it
+       * to the bridge; the owner replying to it reaches the session, as with
+       * any bridged message.
+       */
+      kind: 'user_message';
+      instanceId: string;
+      text: string;
     }
   | {
       /**

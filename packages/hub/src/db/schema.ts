@@ -5,6 +5,10 @@ import type {
   FleetMcpConfig,
   FleetSyncReport,
   HarnessReport,
+  RuleMatchKind,
+  RuleScope,
+  RuleTiming,
+  RuleWatch,
   SkillFile,
   ToolStatus,
 } from '@cockpit/core';
@@ -84,13 +88,19 @@ export const instances = sqliteTable('instances', {
   /** `scratch`: a side quest (NEW.md §1), shown apart from mainline work. */
   kind: text('kind').$type<'mainline' | 'scratch'>().notNull().default('mainline'),
   /**
-   * How the session answers tool permissions, and which model answers: the two
-   * settings the user keeps changing, so a dashboard that was not open when they
-   * chose still shows what the session is really running. Null until a spawn or
-   * a session's own `init` says.
+   * How the session answers tool permissions, and which model answers: two of
+   * the three settings the user keeps changing, so a dashboard that was not open
+   * when they chose still shows what the session is really running. Null until a
+   * spawn or a session's own `init` says.
    */
   permissionMode: text('permission_mode'),
   model: text('model'),
+  /**
+   * The third: how hard that model thinks. No `init` reports it back, so this
+   * column is the only place it is written down — and what a restart reads to
+   * hand the session back at the level it was working at.
+   */
+  effort: text('effort'),
   /** `unknown`: the agent socket dropped, so the hub can no longer see the session. */
   status: text('status')
     .$type<'starting' | 'running' | 'stopped' | 'discarded' | 'unknown' | 'error'>()
@@ -229,6 +239,21 @@ export const fleetMemory = sqliteTable('fleet_memory', {
 });
 
 /**
+ * The documents the main memory links (NEW.md §11): one row per path under
+ * `~/.claude/memories/`, which is the same string on every machine. Separate
+ * rows rather than a blob on the memory, because the set converges file by
+ * file — a hash per document is what lets one of them drift alone.
+ */
+export const fleetMemoryDocs = sqliteTable('fleet_memory_docs', {
+  /** `models/claude-opus-5.md` — relative, forward-slashed, and the key. */
+  path: text('path').primaryKey(),
+  content: text('content').notNull(),
+  /** sha256 hex of the content, which is what a machine compares before writing. */
+  hash: text('hash').notNull(),
+  updatedAt: timestamp('updated_at').notNull().$defaultFn(() => new Date()),
+});
+
+/**
  * What the fleet's memory used to say. Every change records the version it
  * replaced — including the copy an overwrite is about to destroy on a machine —
  * so a document nobody else has is never one click away from being gone.
@@ -239,6 +264,11 @@ export const fleetMemoryHistory = sqliteTable('fleet_memory_history', {
   hash: text('hash').notNull(),
   /** `fleet` for the hub's own row; `machine:<machineId>` for a copy taken off one. */
   source: text('source').notNull(),
+  /**
+   * Which document of the set this was a version of; null is the main
+   * CLAUDE.md, which is every row written before the set existed.
+   */
+  path: text('path'),
   createdAt: timestamp('created_at').notNull().$defaultFn(() => new Date()),
 });
 
@@ -297,3 +327,74 @@ export const usageLimits = sqliteTable('usage_limits', {
   payload: text('payload', { mode: 'json' }).$type<ClaudeLimits>().notNull(),
   fetchedAt: timestamp('fetched_at').notNull().$defaultFn(() => new Date()),
 });
+
+/**
+ * Standing instructions the hub enforces on every session it watches: a phrase
+ * to look for in what a session says, and a reply to send back when it shows
+ * up. The hub is the only component that sees every frame from every machine,
+ * so it is the only one that can do this without a per-harness hook.
+ *
+ * The matching fields mirror `Rule` in `@cockpit/core` one-for-one; the matcher
+ * itself is shared with the dashboard so the editor's test box and the fleet
+ * agree on what fires.
+ */
+export const rules = sqliteTable('rules', {
+  id: text('id').primaryKey(),
+  /** What the rule is called in the list, and in the reply the session reads. */
+  name: text('name').notNull(),
+  /** A disabled rule stays here, keeps its history, and stops firing. */
+  enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+  pattern: text('pattern').notNull(),
+  matchKind: text('match_kind').$type<RuleMatchKind>().notNull().default('phrase'),
+  caseSensitive: integer('case_sensitive', { mode: 'boolean' }).notNull().default(false),
+  wholeWord: integer('whole_word', { mode: 'boolean' }).notNull().default(false),
+  /** Whether the rule reads the session's answer, its reasoning, or both. */
+  watch: text('watch').$type<RuleWatch>().notNull().default('text'),
+  reply: text('reply').notNull(),
+  /** `turn` wakes an idle session, `message` queues, `immediate` cuts in. */
+  timing: text('timing').$type<RuleTiming>().notNull().default('turn'),
+  /** `immediate` only: deliver mid-turn instead of waiting for a boundary. */
+  interrupt: integer('interrupt', { mode: 'boolean' }).notNull().default(false),
+  /**
+   * The teeth. On, a fired rule stays pending and fires again on every further
+   * match until the session calls `acknowledge_rule`. Off, it fires once per
+   * session and goes quiet — which is a nudge a model can simply walk past.
+   */
+  requireAck: integer('require_ack', { mode: 'boolean' }).notNull().default(true),
+  /** Optional narrowing — machine, project, harness, model. Empty means everywhere. */
+  scope: text('scope', { mode: 'json' }).$type<RuleScope>().notNull().default({}),
+  createdAt: timestamp('created_at').notNull().$defaultFn(() => new Date()),
+  updatedAt: timestamp('updated_at').notNull().$defaultFn(() => new Date()),
+});
+
+/**
+ * Where one rule stands with one session: the state machine behind the nagging.
+ * `armed` fires on the next match; `pending` has fired and is waiting to be
+ * acknowledged, and fires again every time it matches until it is.
+ *
+ * Rows are keyed by `${ruleId}:${instanceId}` rather than a composite primary
+ * key so the upsert path is the same single-column `onConflictDoUpdate` every
+ * other table here uses.
+ */
+export const ruleState = sqliteTable(
+  'rule_state',
+  {
+    /** `${ruleId}:${instanceId}` */
+    id: text('id').primaryKey(),
+    ruleId: text('rule_id').notNull(),
+    instanceId: text('instance_id').notNull(),
+    status: text('status').$type<'armed' | 'pending'>().notNull().default('armed'),
+    /** Fires since the last acknowledgement — what makes the reminder escalate. */
+    fireCount: integer('fire_count').notNull().default(0),
+    /** Fires over the session's whole life, which acknowledging does not reset. */
+    totalFires: integer('total_fires').notNull().default(0),
+    lastFiredAt: timestamp('last_fired_at'),
+    ackedAt: timestamp('acked_at'),
+    /** What the session said it did about it, in its own words. */
+    ackNote: text('ack_note'),
+  },
+  (table) => [
+    index('rule_state_rule_idx').on(table.ruleId),
+    index('rule_state_instance_idx').on(table.instanceId),
+  ]
+);

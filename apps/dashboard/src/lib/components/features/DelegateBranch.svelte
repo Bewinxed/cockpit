@@ -268,7 +268,11 @@
                 {status === 'failed' ? 'bg-destructive/10 text-destructive' : working ? 'bg-primary/10 text-primary' : 'bg-success/10'}"
             >
               {#if providerOf(model)}
-                <ProviderLogo model={model} />
+                <!-- Sized to the glyph it stands in for, not left on the 16px
+                     default: the two swap into the same 24px well, and a mark
+                     that arrives 2px larger than the icon it replaces eats the
+                     well's padding and reads as though it is bursting out. -->
+                <ProviderLogo model={model} size={14} />
               {:else}
                 <IconSubagentsDuo
                   class="size-3.5 {status === 'failed'
@@ -330,7 +334,7 @@
 
           <div class="flex shrink-0 items-center gap-1.5">
             {#if totalCost > 0}
-              <span class="shrink-0 font-mono text-micro tabular-nums text-muted-foreground/70">
+              <span class="shrink-0 font-mono text-micro tabular-nums text-faint">
                 ${totalCost.toFixed(4)}
               </span>
             {/if}

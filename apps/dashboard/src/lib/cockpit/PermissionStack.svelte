@@ -63,8 +63,20 @@
   role="group"
   aria-label="Permissions waiting on you"
   tabindex="0"
-  onclick={() => (clicked = !clicked)}
+  onclick={(e) => {
+    // Only the band itself expands the stack. The cards inside it are full of
+    // controls the reader is aiming at — an answer field, option buttons — and
+    // a bare `clicked = !clicked` here collapses the stack out from under the
+    // thing they just clicked.
+    if (e.target !== e.currentTarget) return;
+    clicked = !clicked;
+  }}
   onkeydown={(e) => {
+    // Same rule, and load-bearing: this fires on keys that bubbled up from a
+    // focused descendant, so an unguarded `preventDefault()` on Space ate every
+    // space typed into a question's "answer in your own words" field, and stole
+    // Space and Enter from the option buttons' own activation.
+    if (e.target !== e.currentTarget) return;
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
       clicked = !clicked;

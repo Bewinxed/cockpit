@@ -36,6 +36,8 @@ export const load: PageLoad = async ({ fetch }) => {
     skills: fleet instanceof Error ? [] : (fleet.skills ?? []),
     agents: fleet instanceof Error ? [] : (fleet.agents ?? []),
     memory: fleet instanceof Error ? null : (fleet.memory ?? null),
+    // Absent from a hub that predates the set, which is a fleet of one document.
+    memoryDocs: fleet instanceof Error ? [] : (fleet.memoryDocs ?? []),
     fleetError: fleet instanceof Error ? `Could not read the fleet's setup — ${fleet.message}.` : null,
   };
 };

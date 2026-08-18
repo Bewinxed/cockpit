@@ -13,6 +13,7 @@
   import { goto } from '$app/navigation';
   import type {
     ConfigInspection,
+    EffortLevel,
     FsEntry,
     HarnessKind,
     PermissionMode,
@@ -30,7 +31,9 @@
   } from './client.svelte';
   import { inspectMachine } from './fleet';
   import ModelCombobox from './ModelCombobox.svelte';
-  import { MODEL_DEFAULT } from './models.svelte';
+  import EffortSlider from './EffortSlider.svelte';
+  import { covers, modelLabel, models, MODEL_DEFAULT } from './models.svelte';
+  import { effortStops, hasEffortScale } from './effort-levels';
   import { rememberSpawn, spawnPrefs } from './spawnPrefs.svelte';
   import { PERMISSION_MODES, permissionModeLabel } from './permission-modes';
   import DirectoryPicker from '$lib/components/features/DirectoryPicker.svelte';
@@ -76,6 +79,8 @@
   let permissionMode = $state<PermissionMode>(spawnPrefs.permissionMode);
   /** Empty is a choice: the spawn leaves `model` out and the SDK picks. */
   let model = $state(spawnPrefs.model || MODEL_DEFAULT);
+  /** Same again for effort: `null` leaves the level to the harness. */
+  let effort = $state<EffortLevel | null>(spawnPrefs.effort);
   let sideQuest = $state(false);
   let worktree = $state(false);
   let saveAsProject = $state(false);
@@ -131,6 +136,28 @@
     if (!offeredModes.some((mode) => mode.value === permissionMode)) {
       permissionMode = offeredModes[0].value;
     }
+  });
+
+  /** The offered row for the model in the field, which is what carries its scale. */
+  const chosenModel = $derived(models.offered.find((row) => covers(row, model)) ?? null);
+  /**
+   * The effort control is offered only when both halves are known to have one:
+   * the harness, and the model. An unreported harness or a model nothing has
+   * described is not a reason to draw a scale and hope.
+   */
+  const showEffort = $derived(
+    harnessReport?.capabilities.effort === true && hasEffortScale(chosenModel)
+  );
+  const effortStopsForModel = $derived(effortStops(chosenModel));
+
+  /**
+   * A model that does not reach the chosen level clears it rather than sliding
+   * it down to one that fits: a spawn quietly sent at `high` because the new
+   * model has no `max` is a session running at a level nobody picked.
+   */
+  $effect(() => {
+    if (!effort) return;
+    if (!effortStopsForModel.some((stop) => stop.reachable && stop.value === effort)) effort = null;
   });
 
   /** A machine switched to may not run the harness the form still names. */
@@ -399,6 +426,7 @@
     prompt = '';
     permissionMode = spawnPrefs.permissionMode;
     model = spawnPrefs.model || MODEL_DEFAULT;
+    effort = spawnPrefs.effort;
     sideQuest = false;
     worktree = false;
     saveAsProject = false;
@@ -459,7 +487,7 @@
     invalid = null;
     submitting = true;
     try {
-      rememberSpawn({ model, permissionMode });
+      rememberSpawn({ model, permissionMode, effort });
 
       let toAttach = projectId ?? undefined;
       if (saveAsProject && !toAttach) {
@@ -478,6 +506,7 @@
         harness,
         permissionMode,
         model: model || undefined,
+        effort: effort ?? undefined,
         scratch: sideQuest ? { worktree, baseCwd: workdir } : undefined,
         bootstrap: source === 'repo' ? { repo: repo.trim(), baseDir: cwd.trim() } : undefined,
         projectId: toAttach,
@@ -832,6 +861,17 @@
             {/each}
           </Select.Content>
         </Select.Root>
+      </div>
+    {/if}
+
+    {#if showEffort}
+      <div transition:slide={{ duration: 160 }}>
+        <EffortSlider
+          stops={effortStopsForModel}
+          value={effort}
+          modelName={modelLabel(model)}
+          onchange={(level) => (effort = level)}
+        />
       </div>
     {/if}
 

@@ -139,6 +139,15 @@ export interface HandoffActions {
     answers?: Record<string, string>,
     deny?: boolean
   ): Promise<string>;
+  /** Pushes a note to the owner's Telegram — no peer, no ask, fire-and-forget. */
+  sendToUser(message: string): Promise<string>;
+  /**
+   * Records what the session did about a concern the user raised. It is
+   * session-scoped on purpose: the caller is never told which rule fired, or
+   * that a rule fired at all, so it has no id to name — the hub settles
+   * everything outstanding for the session from the note alone.
+   */
+  acknowledgeConcern(note: string): Promise<string>;
 }
 
 /** The structured result of startSession / delegate — the id, title, and the model-facing prose. */
@@ -364,5 +373,29 @@ export const handoffActions = ({ instanceId, cwd, emit }: HandoffDeps): HandoffA
     return deny
       ? `Denied your delegate ${peer.label}'s ask (${requestId}).`
       : `Answered your delegate ${peer.label}'s ask (${requestId}).`;
+  },
+
+  async sendToUser(message: string): Promise<string> {
+    emit({
+      verb: 'frames',
+      machineId: '',
+      instanceId,
+      payload: { kind: 'user_message', instanceId, text: message },
+    });
+    return 'Sent to the user — it lands in their Telegram when the hub has a bridge, and is dropped otherwise.';
+  },
+
+  async acknowledgeConcern(note: string): Promise<string> {
+    const res = await fetch(`${hubHttpUrl()}/api/rules/ack`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ instanceId, note }),
+      signal: AbortSignal.timeout(5000),
+    });
+    // A refusal comes back as the hub's own bare sentence; it says the useful
+    // thing better than anything this side could invent, so pass it through.
+    if (res.status === 400) return await res.text();
+    if (!res.ok) throw new Error(`the hub answered ${res.status}`);
+    return 'Recorded. The user sees this note in their dashboard.';
   },
 });

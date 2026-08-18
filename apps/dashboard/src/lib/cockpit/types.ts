@@ -10,6 +10,7 @@ import type {
   SDKResultMessage,
   SDKStatus,
   SDKSystemMessage,
+  UserQuestionResult,
 } from '@cockpit/core';
 import type { SubagentState } from '$lib/utils/flow-types';
 
@@ -63,7 +64,13 @@ export interface MessageMetadata {
   toolInput?: JsonValue;
   toolResult?: JsonValue;
   toolStatus?: 'pending' | 'success' | 'error';
-  toolUseResult?: JsonValue;
+  /**
+   * The reader's answers to an `AskUserQuestion` tool result, normalised by the
+   * harness adapter (`UserQuestionResult`: questions + answers keyed by question
+   * text, plus any freeform `response` and per-question `annotations`). Written
+   * once, in `applyToolResult`, and read only by the question renderer.
+   */
+  toolUseResult?: UserQuestionResult;
   // System messages
   subtype?: string;
   command?: string;
@@ -86,6 +93,13 @@ export interface MessageMetadata {
   peerFrom?: string;
   /** Its display name, as the sender's host asserted it. */
   peerName?: string;
+  /**
+   * Set when the message is a rule firing rather than another session speaking.
+   * It rides the `user.peer` type because that type already means "not the
+   * reader's own words", which is the property that matters; this field is what
+   * lets the bubble say so accurately.
+   */
+  ruleName?: string;
   /** The sender's host-openable session, so the card can link back to it. */
   peerSession?: string;
   /** Set when a `user.peer` is a delegate's auto-report rather than a hand-off. */

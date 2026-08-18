@@ -38,7 +38,7 @@
   import type { VirtualizerHandle } from 'virtua/svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
-  import type { HarnessKind, PermissionMode, PermissionResult } from '@cockpit/core';
+  import type { EffortLevel, HarnessKind, PermissionMode, PermissionResult } from '@cockpit/core';
   import {
     ChatInput,
     ChatMessage,
@@ -52,6 +52,8 @@
   import LiveThinking from '$lib/components/features/LiveThinking.svelte';
   import SelectionActions from '$lib/components/features/SelectionActions.svelte';
   import ModelCombobox from '$lib/cockpit/ModelCombobox.svelte';
+  import EffortSlider from '$lib/cockpit/EffortSlider.svelte';
+  import EffortThrottle from '$lib/cockpit/EffortThrottle.svelte';
   import ContextMeter from '$lib/cockpit/ContextMeter.svelte';
   import { targetsFrom, type PeerTarget } from '$lib/cockpit/peer';
   import { swipeBetween } from '$lib/cockpit/swipe';
@@ -100,12 +102,15 @@
     peerTargets,
     sendToPeer,
     sendOrRevive,
+    setEffort,
     setModel,
     setPermissionMode,
     stopSession,
   } from '$lib/cockpit/client.svelte';
   import type { SendExtras } from '$lib/cockpit/client.svelte';
   import { PERMISSION_MODES, permissionModeLabel } from '$lib/cockpit/permission-modes';
+  import { effortStops, hasEffortScale } from '$lib/cockpit/effort-levels';
+  import { covers, modelLabel, models } from '$lib/cockpit/models.svelte';
   import * as AlertDialog from '$lib/components/ui/alert-dialog';
   import { Button, type ButtonVariant } from '$lib/components/ui/button';
   import * as ButtonGroup from '$lib/components/ui/button-group';
@@ -1321,6 +1326,37 @@
       error = err instanceof Error ? err.message : String(err);
     }
   }
+
+  /** What this session's harness, on this machine, says it can be asked for. */
+  const harnessReport = $derived(
+    machine?.harnesses?.find((report) => report.harness === (session?.harness ?? 'claude')) ?? null
+  );
+  /** The offered row for the model in force — where its effort scale is written down. */
+  const currentModelRow = $derived(models.offered.find((row) => covers(row, currentModel)) ?? null);
+  /**
+   * The effort control appears only where both the harness and the model have a
+   * scale. Neither is inferred: a harness that has not reported, or a model this
+   * browser has never been told about, leaves the header as it was.
+   */
+  const showEffort = $derived(
+    harnessReport?.capabilities.effort === true && hasEffortScale(currentModelRow)
+  );
+  const effortStopsForModel = $derived(effortStops(currentModelRow));
+  // Null until something asked for a level. Nothing stands in for it: the API's
+  // own default is the model's business, and naming it here would present a
+  // number nobody chose as this session's setting.
+  const effort = $derived(session?.effort ?? null);
+
+  // Same shape as `chooseModel`: the store moves first and puts it back itself.
+  async function chooseEffort(level: EffortLevel) {
+    if (!session) return;
+    error = null;
+    try {
+      await setEffort(viewId, session.machineId, level);
+    } catch (err) {
+      error = err instanceof Error ? err.message : String(err);
+    }
+  }
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
@@ -1597,7 +1633,10 @@
       </ToggleGroup.Root>
 
       {#if !browsing}
-        <!-- How the session is configured: two pickers, read as one control. -->
+        <!-- How the session is configured: the settings that can still change
+             mid-flight, read as one control. The effort slider needs room a
+             header does not have, so it keeps its place in the group as a
+             trigger and opens beneath it. -->
         <ButtonGroup.Root class="shrink-0">
           <Select.Root type="single" value={permissionMode ?? ''} onValueChange={chooseMode}>
             <Select.Trigger
@@ -1642,6 +1681,30 @@
             onchoose={chooseModel}
             class="text-xs text-muted-foreground"
           />
+
+          {#if showEffort}
+            <Popover.Root>
+              <Popover.Trigger
+                class="flex min-h-8 shrink-0 items-center rounded-md border border-border px-2.5
+                  font-mono text-xs text-muted-foreground transition-colors duration-150 ease-out
+                  hover:bg-accent hover:text-foreground"
+                title={effort
+                  ? 'How hard this session thinks, and how much it spends doing it'
+                  : 'No effort level has been asked for — this session is running at its model’s own'}
+                aria-label="Reasoning effort"
+              >
+                {effort ?? '—'}
+              </Popover.Trigger>
+              <Popover.Content class="material-panel w-[320px] p-3" align="end">
+                <EffortSlider
+                  stops={effortStopsForModel}
+                  value={effort}
+                  modelName={modelLabel(currentModel)}
+                  onchange={chooseEffort}
+                />
+              </Popover.Content>
+            </Popover.Root>
+          {/if}
         </ButtonGroup.Root>
 
         <!-- What you can do to the session itself. -->
@@ -2009,6 +2072,18 @@
             onHandoff={handleHandoff}
           >
             {#snippet meter()}
+              <!-- Effort sits with the context meter because they are the same
+                   kind of fact: what the next turn will cost. The settings
+                   popover keeps the full slider for deciding; this is the
+                   glance and the quick change, where the sending happens. -->
+              {#if showEffort}
+                <EffortThrottle
+                  stops={effortStopsForModel}
+                  value={effort}
+                  onchange={chooseEffort}
+                  disabled={machineOffline}
+                />
+              {/if}
               {#if handoffNote}
                 <span
                   class="mr-1 shrink-0 rounded-md bg-primary/10 px-2 py-1 text-xs text-primary"

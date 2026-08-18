@@ -45,6 +45,7 @@ const build = () => {
     list: handlerOf('list_sessions'),
     handoff: handlerOf('handoff'),
     start: handlerOf('start_session'),
+    sendToUser: handlerOf('send_to_user'),
     sent,
   };
 };
@@ -163,4 +164,23 @@ test('a plain session carries no scratch tag', async () => {
   const { start, sent } = build();
   await start({ cwd: '/home/o/center.ai', prompt: 'x' } as never, {});
   expect((sent[0].payload as { scratch?: unknown }).scratch).toBeUndefined();
+});
+
+test('a user message goes up as a frames envelope with no target and no ask', async () => {
+  const { sendToUser, sent } = build();
+  const text = textOf(await sendToUser({ message: 'the build passed' }, {}));
+
+  expect(sent).toHaveLength(1);
+  const envelope = sent[0];
+  // Frames travel session → hub, so the hub routes them on `kind`, not a verb
+  // like `send`. No machine and no peer: this is the session's own word.
+  expect(envelope.verb).toBe('frames');
+  expect(envelope.machineId).toBe('');
+  expect(envelope.instanceId).toBe('self');
+  expect(envelope.payload).toEqual({
+    kind: 'user_message',
+    instanceId: 'self',
+    text: 'the build passed',
+  });
+  expect(text).toContain('Sent to the user');
 });

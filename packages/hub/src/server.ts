@@ -3,6 +3,7 @@ import type {
   BuildInfo,
   ClaudeLimits,
   ControlPayload,
+  EffortLevel,
   Envelope,
   FleetConfig,
   FleetMcpConfig,
@@ -11,7 +12,10 @@ import type {
   FsPayload,
   HarnessReport,
   InstanceRow,
+  MachineMemorySet,
   PermissionMode,
+  Rule,
+  RuleDraft,
   SkillFile,
   SpawnPayload,
   ToolState,
@@ -28,6 +32,9 @@ import {
   FLEET_SYNC,
   identifyBlocks,
   INSPECT_CONFIG,
+  RULE_TEMPLATES,
+  ruleProblem,
+  memoryDocProblem,
   parseAgentFrontMatter,
   READ_MEMORY_FILE,
   READ_SKILL_FILES,
@@ -40,6 +47,7 @@ import { Elysia, t } from 'elysia';
 import { websocket } from 'elysia/websocket';
 import { buildInfo } from './build';
 import { HUB_VERSION } from './config';
+import { RuleEngine } from './rules';
 import type { AgentAuth, DbShape, DelegateEvent, InstanceKind } from './db';
 import { usageBucketFromRow } from './db';
 import type { PendingShape } from './pending';
@@ -382,18 +390,34 @@ const HOME_PREFIX = /^(\/(?:home|Users)\/[^/]+)/;
 /** Whether a machine's last report says it still has anything of the fleet's on it. */
 const holdsFleet = (report: FleetSyncReport | undefined): boolean =>
   report !== undefined &&
-  ([report.mcp, report.marketplaces, report.plugins, report.skills].some((states) =>
-    Object.values(states ?? {}).some((item) => item.state !== 'removed')
+  ([report.mcp, report.marketplaces, report.plugins, report.skills, report.memoryDocs].some(
+    (states) => Object.values(states ?? {}).some((item) => item.state !== 'removed')
   ) ||
     (report.memory !== undefined && report.memory.state !== 'removed'));
 
-/** What a machine answered `readMemoryFile` with: its own CLAUDE.md, or nothing. */
-type MachineMemory = { content: string; hash: string } | null;
+/** What a machine answered `readMemoryFile` with: its own memory set, or nothing. */
+type MachineMemory = MachineMemorySet | null;
 
+/**
+ * The answer, read defensively — a daemon that predates the set answers with
+ * the main file alone, and `docs` absent there is a machine that links none
+ * rather than a machine that could not be read.
+ */
 const peekMemoryFile = (result: unknown): MachineMemory => {
   if (typeof result !== 'object' || result === null) return null;
-  const { content, hash } = result as { content?: unknown; hash?: unknown };
-  return typeof content === 'string' && typeof hash === 'string' ? { content, hash } : null;
+  const { content, hash, docs } = result as { content?: unknown; hash?: unknown; docs?: unknown };
+  if (typeof content !== 'string' || typeof hash !== 'string') return null;
+
+  const read = Array.isArray(docs)
+    ? docs.flatMap((doc: unknown) => {
+        if (typeof doc !== 'object' || doc === null) return [];
+        const { path, content: text, hash: of } = doc as Record<string, unknown>;
+        return typeof path === 'string' && typeof text === 'string' && typeof of === 'string'
+          ? [{ path, content: text, hash: of }]
+          : [];
+      })
+    : undefined;
+  return { content, hash, ...(read ? { docs: read } : {}) };
 };
 
 /** A read of a machine's memory, or the status the route should answer with. */
@@ -448,6 +472,16 @@ const isQuerySend = (payload: unknown): boolean => {
 };
 
 export const createServer = ({ registry, db, pending, telegram }: HubServices) => {
+  /**
+   * Standing instructions, enforced on the frame stream this server already
+   * carries. Constructed here so it shares the request's `db` and reaches
+   * machines through the same registry every other injection uses.
+   */
+  const ruleEngine = new RuleEngine({
+    db,
+    agent: (machineId) => registry.agent(machineId),
+  });
+
   /**
    * Drops a dead process's parked questions, telling whoever carried them
    * elsewhere that they are over — a Telegram message whose buttons still work
@@ -631,6 +665,7 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
       ...(row.harness ? { harness: row.harness as SpawnPayload['harness'] } : {}),
       ...(row.permissionMode ? { permissionMode: row.permissionMode as PermissionMode } : {}),
       ...(row.model ? { model: row.model } : {}),
+      ...(row.effort ? { effort: row.effort as EffortLevel } : {}),
       ...(row.projectId ? { projectId: row.projectId } : {}),
     };
     agent.send({ verb: 'spawn', machineId: row.machineId, instanceId: row.id, payload });
@@ -644,10 +679,14 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
       kind: row.kind === 'scratch' ? 'scratch' : 'mainline',
       permissionMode: row.permissionMode ?? undefined,
       model: row.model ?? undefined,
+      effort: row.effort ?? undefined,
     });
   };
 
   const publishInstances = (machineId: string): void => {
+    // A session's model, project or harness can move under a live rule; every
+    // move republishes, so this is the one place that has to drop the cache.
+    ruleEngine.forgetFacts();
     const instances: InstanceRow[] = db.listInstances();
     const agents: AgentRow[] = db.listAgents();
     registry.broadcast({
@@ -860,6 +899,24 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
     }
   };
 
+  /** The same for one linked document, under its own path in the history. */
+  const keepReplacedDoc = (path: string, content: string): void => {
+    const current = db.getFleetMemoryDoc(path);
+    if (current && current.content !== content) {
+      db.recordFleetMemory({ content: current.content, hash: current.hash, source: 'fleet', path });
+    }
+  };
+
+  /** A document leaving the set, kept whole — nothing else has a copy of it. */
+  const keepRemovedDoc = (doc: { path: string; content: string; hash: string }): void => {
+    db.recordFleetMemory({
+      content: doc.content,
+      hash: doc.hash,
+      source: 'fleet',
+      path: doc.path,
+    });
+  };
+
   /**
    * Machines the subagents could not be written to, by machineId → why. Read
    * back in the fleet response, so a definition that is going nowhere says so
@@ -1036,14 +1093,20 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
           // the session reported it is answering with, whatever that grows into.
           permissionMode: t.Optional(t.String()),
           model: t.Optional(t.String()),
+          effort: t.Optional(t.String()),
         }),
       },
       ({ params, body, status }) => {
-        const { kind, permissionMode, model } = body;
-        if (kind === undefined && permissionMode === undefined && model === undefined) {
+        const { kind, permissionMode, model, effort } = body;
+        if (
+          kind === undefined &&
+          permissionMode === undefined &&
+          model === undefined &&
+          effort === undefined
+        ) {
           return status(400, 'name a field to change');
         }
-        const row = db.patchInstance(params.id, { kind, permissionMode, model });
+        const row = db.patchInstance(params.id, { kind, permissionMode, model, effort });
         if (row) publishInstances(row.machineId);
         return row;
       }
@@ -1109,6 +1172,10 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
         skills: db.listSkills(),
         agents: db.listFleetAgents(),
         memory: db.getFleetMemory() ?? null,
+        // The linked documents carry their files for the same reason the
+        // subagents do: each one is a page of markdown, and the panel that
+        // lists them is the panel that edits them.
+        memoryDocs: db.listFleetMemoryDocs(),
         unpushable: Object.fromEntries(unpushable),
       };
     })
@@ -1140,6 +1207,159 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
       fanOutFleet();
       return { ok: true };
     })
+    /**
+     * Rules: standing instructions the hub enforces on the frame stream. The
+     * shape is validated loosely here and strictly by `ruleProblem`, which is
+     * the same validator the editor refuses with — one set of sentences, so the
+     * form and the hub never disagree about what is wrong.
+     */
+    .get('/api/rules', () => {
+      const stats = new Map(db.ruleStats().map((row) => [row.ruleId, row]));
+      return {
+        rules: db.listRules().map((rule) => ({
+          ...rule,
+          stats: stats.get(rule.id) ?? {
+            ruleId: rule.id,
+            pending: 0,
+            totalFires: 0,
+            lastFiredAt: null,
+          },
+        })),
+        templates: RULE_TEMPLATES,
+      };
+    })
+    .put(
+      '/api/rules/:id',
+      {
+        body: t.Object({
+          name: t.String(),
+          enabled: t.Boolean(),
+          pattern: t.String(),
+          matchKind: t.Union([t.Literal('phrase'), t.Literal('regex')]),
+          caseSensitive: t.Boolean(),
+          wholeWord: t.Boolean(),
+          watch: t.Union([t.Literal('text'), t.Literal('thinking'), t.Literal('both')]),
+          reply: t.String(),
+          timing: t.Union([t.Literal('turn'), t.Literal('message'), t.Literal('immediate')]),
+          interrupt: t.Boolean(),
+          requireAck: t.Boolean(),
+          scope: t.Object({
+            machineId: t.Optional(t.String()),
+            projectId: t.Optional(t.String()),
+            harness: t.Optional(t.String()),
+            model: t.Optional(t.String()),
+          }),
+        }),
+      },
+      ({ params, body, status }) => {
+        const draft = body as unknown as RuleDraft;
+        const wrong = ruleProblem(draft);
+        const first = Object.values(wrong)[0];
+        if (first) return status(400, first);
+        const existing = db.getRule(params.id);
+        const rule: Rule = {
+          ...draft,
+          id: params.id,
+          createdAt: existing?.createdAt ?? Date.now(),
+        };
+        db.putRule(rule);
+        ruleEngine.reload();
+        return rule;
+      }
+    )
+    .delete('/api/rules/:id', ({ params }) => {
+      db.deleteRule(params.id);
+      ruleEngine.reload();
+      return { ok: true };
+    })
+    /**
+     * What one session still owes an answer for, and the acknowledgement
+     * itself. The agent's `acknowledge_rule` tool is the only real caller —
+     * a rule is cleared by the session that tripped it, never from the UI,
+     * because being answered by the model is the whole point of the mechanism.
+     */
+    .get('/api/rules/pending/:instanceId', ({ params }) => {
+      const rules = new Map(db.listRules().map((rule) => [rule.id, rule]));
+      return {
+        pending: db.pendingRuleStates(params.instanceId).map((state) => ({
+          ...state,
+          name: rules.get(state.ruleId)?.name ?? 'a deleted rule',
+          reply: rules.get(state.ruleId)?.reply ?? '',
+        })),
+      };
+    })
+    /**
+     * What a rule has actually been doing, per session: fires, and what each
+     * session said it did about it.
+     *
+     * The sessions are told nothing about any of this, so this listing is the
+     * only window onto it. It is also what makes the tool the sessions call
+     * honest — it promises the note reaches the user, and this is where.
+     */
+    .get('/api/rules/:id/activity', ({ params, status }) => {
+      const rule = db.getRule(params.id);
+      if (!rule) return status(404, 'That rule no longer exists.');
+      const named = new Map(db.listInstances().map((row) => [row.id, row]));
+      return {
+        activity: db.ruleStatesFor(params.id).map((state) => {
+          const row = named.get(state.instanceId);
+          return {
+            ...state,
+            where: row ? leaf(row.cwd) : 'a session that is gone',
+            harness: row?.harness ?? null,
+          };
+        }),
+      };
+    })
+    /**
+     * Acknowledge everything this session still owes an answer for, without
+     * naming a rule.
+     *
+     * The session is never told which rule fired, or that a rule fired at all —
+     * a model that can see the detector games the phrase instead of changing
+     * the habit. So the tool it calls cannot take a rule id, and this settles
+     * whatever is pending for the caller. The note is what the reader sees in
+     * the dashboard, which is the only place any of this is visible.
+     */
+    .post(
+      '/api/rules/ack',
+      { body: t.Object({ instanceId: t.String(), note: t.String() }) },
+      ({ body, status }) => {
+        const note = body.note.trim();
+        if (note.length < 10) {
+          return status(
+            400,
+            'Say what you actually did about it — an acknowledgement of under ten characters is not one.'
+          );
+        }
+        const pending = db.pendingRuleStates(body.instanceId);
+        if (pending.length === 0) {
+          return status(400, 'There is nothing outstanding for this session.');
+        }
+        const settled = pending
+          .map((state) => db.ackRule(state.ruleId, body.instanceId, note))
+          .filter((state) => state !== undefined);
+        return { acknowledged: settled.length };
+      }
+    )
+    .post(
+      '/api/rules/:id/ack',
+      { body: t.Object({ instanceId: t.String(), note: t.String() }) },
+      ({ params, body, status }) => {
+        const note = body.note.trim();
+        if (note.length < 10) {
+          return status(
+            400,
+            'Say what you actually did about it — an acknowledgement of under ten characters is not one.'
+          );
+        }
+        const state = db.ackRule(params.id, body.instanceId, note);
+        if (!state) {
+          return status(400, 'That rule is not waiting on this session, so there is nothing to acknowledge.');
+        }
+        return state;
+      }
+    )
     .put(
       '/api/fleet/marketplaces/:name',
       { body: t.Object({ source: t.String() }) },
@@ -1308,8 +1528,10 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
       await Promise.all(registry.machineIds().map((machineId) => pushAgents(machineId)));
       return { ok: true, unpushable: Object.fromEntries(unpushable) };
     })
-    // The fleet's user-scope CLAUDE.md (NEW.md §11): one document, hash-synced
-    // to every machine like a skill's files are.
+    // The fleet's user-scope memory (NEW.md §11): the main CLAUDE.md every
+    // session loads flat, and the documents it links under
+    // `~/.claude/memories/` — each hash-synced to every machine like a skill's
+    // files are, and each drifting on its own.
     //
     // `expectedHash` is what the writer had in front of them. A save against a
     // row somebody else has moved answers with what is really there rather than
@@ -1330,9 +1552,52 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
       }
     )
     // The machines take back only what their own sidecar says cockpit wrote:
-    // one edited by hand on a machine stays there, unmanaged.
+    // one edited by hand on a machine stays there, unmanaged. The set goes with
+    // it — a linked document with no main file to link it is not a memory, and
+    // the machines would keep converging on documents nothing points at.
     .delete('/api/fleet/memory', () => {
+      for (const doc of db.listFleetMemoryDocs()) {
+        keepRemovedDoc(doc);
+        db.deleteFleetMemoryDoc(doc.path);
+      }
       db.clearFleetMemory();
+      fanOutFleet();
+      return { ok: true };
+    })
+    // One linked document. Same save as the main file's, keyed by the path it
+    // lands at — `models/claude-opus-5.md` is the same string on every machine,
+    // which is what makes it the row's identity.
+    .put(
+      '/api/fleet/memory/docs',
+      {
+        body: t.Object({
+          path: t.String(),
+          content: t.String(),
+          expectedHash: t.Optional(t.String()),
+        }),
+      },
+      ({ body, status }) => {
+        const problem = memoryDocProblem(body.path);
+        if (problem) return status(400, problem);
+
+        const current = db.getFleetMemoryDoc(body.path);
+        if (body.expectedHash !== undefined && current && current.hash !== body.expectedHash) {
+          return status(409, current);
+        }
+        keepReplacedDoc(body.path, body.content);
+        const doc = db.putFleetMemoryDoc({ path: body.path, content: body.content });
+        fanOutFleet();
+        return doc;
+      }
+    )
+    // Kept before it goes, like every other version this hub replaces: the
+    // machines give the file back, and the fleet's copy of it was the last one.
+    .delete('/api/fleet/memory/docs', { body: t.Object({ path: t.String() }) }, ({ body, status }) => {
+      const current = db.getFleetMemoryDoc(body.path);
+      if (!current) return status(404, `the fleet keeps no ${body.path}`);
+
+      keepRemovedDoc(current);
+      db.deleteFleetMemoryDoc(body.path);
       fanOutFleet();
       return { ok: true };
     })
@@ -1349,15 +1614,50 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
     // The first document has to come from somewhere, and a machine that has been
     // collecting one for a year is where it is. Read off that machine and stored
     // as the fleet's, which every other machine then gets.
+    //
+    // Whole set by default: the main file and every document beside it, with
+    // the fleet's own leftovers taken away — an adoption that left them behind
+    // would push them straight back at the machine they were adopted from.
+    // `path` narrows it to the one document, for the drifted row that is the
+    // only thing being settled.
     .post(
       '/api/fleet/memory/adopt',
-      { body: t.Object({ machineId: t.String() }) },
+      { body: t.Object({ machineId: t.String(), path: t.Optional(t.String()) }) },
       async ({ body, status }) => {
         const read = await readMachineMemory(body.machineId);
         if (!read.ok) return status(read.code, read.said);
         if (!read.copy) return status(404, `machine ${body.machineId} has no user CLAUDE.md`);
 
+        if (body.path !== undefined) {
+          const problem = memoryDocProblem(body.path);
+          if (problem) return status(400, problem);
+
+          const theirs = (read.copy.docs ?? []).find((doc) => doc.path === body.path);
+          if (!theirs) return status(404, `machine ${body.machineId} has no ${body.path}`);
+
+          keepReplacedDoc(body.path, theirs.content);
+          const doc = db.putFleetMemoryDoc({ path: body.path, content: theirs.content });
+          fanOutFleet();
+          return doc;
+        }
+
         keepReplacedMemory(read.copy.content);
+        // A daemon that predates the set answers without `docs`, and taking
+        // that for "this machine links none" would quietly empty the fleet's.
+        for (const doc of read.copy.docs ?? []) {
+          if (memoryDocProblem(doc.path)) continue;
+          keepReplacedDoc(doc.path, doc.content);
+          db.putFleetMemoryDoc({ path: doc.path, content: doc.content });
+        }
+        if (read.copy.docs) {
+          const theirs = new Set(read.copy.docs.map((doc) => doc.path));
+          for (const doc of db.listFleetMemoryDocs()) {
+            if (theirs.has(doc.path)) continue;
+            keepRemovedDoc(doc);
+            db.deleteFleetMemoryDoc(doc.path);
+          }
+        }
+
         const memory = db.setFleetMemory(read.copy.content);
         fanOutFleet();
         return memory;
@@ -1368,10 +1668,12 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
     //
     // The machine is read first, and a machine that will not answer stops the
     // push: what an overwrite destroys exists nowhere else, so it is kept here
-    // before it goes rather than mourned afterwards.
+    // before it goes rather than mourned afterwards. `path` forces the one
+    // document, so settling a drifted `models/…` does not also overwrite a main
+    // file the reader never looked at.
     .post(
       '/api/fleet/memory/push',
-      { body: t.Object({ machineId: t.String() }) },
+      { body: t.Object({ machineId: t.String(), path: t.Optional(t.String()) }) },
       async ({ body, status }) => {
         const agent = registry.agent(body.machineId);
         if (!agent) return status(404, `machine ${body.machineId} is not connected`);
@@ -1381,17 +1683,38 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
 
         const read = await readMachineMemory(body.machineId);
         if (!read.ok) return status(read.code, read.said);
-        if (read.copy && read.copy.hash !== config.memory.hash) {
+
+        const kept = (path: string | undefined, hash: string, content: string): void => {
           db.recordFleetMemory({
-            content: read.copy.content,
-            hash: read.copy.hash,
+            content,
+            hash,
             source: `machine:${body.machineId}`,
+            ...(path ? { path } : {}),
           });
+        };
+        const forced = body.path;
+        if (read.copy && forced === undefined && read.copy.hash !== config.memory.hash) {
+          kept(undefined, read.copy.hash, read.copy.content);
+        }
+        for (const theirs of read.copy?.docs ?? []) {
+          if (forced !== undefined && theirs.path !== forced) continue;
+          const ours = config.memory.docs?.find((doc) => doc.path === theirs.path);
+          if (ours && ours.hash !== theirs.hash) kept(theirs.path, theirs.hash, theirs.content);
         }
 
         pushFleetConfig(body.machineId, agent, {
           ...config,
-          memory: { ...config.memory, force: true },
+          memory: {
+            ...config.memory,
+            ...(forced === undefined ? { force: true } : {}),
+            ...(config.memory.docs
+              ? {
+                  docs: config.memory.docs.map((doc) =>
+                    forced === undefined || doc.path === forced ? { ...doc, force: true } : doc
+                  ),
+                }
+              : {}),
+          },
         });
         publishInstances(body.machineId);
         return { ok: true };
@@ -1399,16 +1722,30 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
     )
     // What the memory used to say, newest first. Without the content: the list
     // is read on every open of the panel, and a version is read on a click.
-    .get('/api/fleet/memory/history', () => db.listFleetMemoryHistory())
+    //
+    // One document at a time: `?path=` for a linked one, and the main file when
+    // nothing is named — which is what every version written before the set is.
+    .get('/api/fleet/memory/history', ({ query }) =>
+      db.listFleetMemoryHistory(typeof query.path === 'string' ? query.path : undefined)
+    )
     .get('/api/fleet/memory/history/:id', ({ params, status }) => {
       const version = db.fleetMemoryVersion(Number(params.id));
       return version ?? status(404, `no memory version ${params.id}`);
     })
     // Undo, through the same door as a save — so what restoring replaces is
     // itself kept, and a restore of the wrong version is undone the same way.
+    // A version goes back where it came from: the document it was a version of,
+    // or the main file, which is what a version with no path is.
     .post('/api/fleet/memory/restore', { body: t.Object({ id: t.Number() }) }, ({ body, status }) => {
       const version = db.fleetMemoryVersion(body.id);
       if (!version) return status(404, `no memory version ${body.id}`);
+
+      if (version.path !== undefined) {
+        keepReplacedDoc(version.path, version.content);
+        const doc = db.putFleetMemoryDoc({ path: version.path, content: version.content });
+        fanOutFleet();
+        return doc;
+      }
 
       keepReplacedMemory(version.content);
       const memory = db.setFleetMemory(version.content);
@@ -1475,6 +1812,7 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
         kind: peekKind(body),
         permissionMode: peek(body, 'permissionMode'),
         model: peek(body, 'model'),
+        effort: peek(body, 'effort'),
         ...peekParent(body),
       });
       publishInstances(machineId);
@@ -1568,6 +1906,24 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
         },
       } satisfies Envelope);
       recordDelegateAnswer(row.machineId, instanceId, requestId, result);
+      return { ok: true };
+    })
+    // A session's message to the owner, over plain HTTP like the other relay
+    // verbs (the opencode plugin's `send_to_user`). No target machine — the hub
+    // hands it to the bridge and nobody waits on an answer.
+    .post('/api/relay/message', { body: t.Any() }, ({ body, status }) => {
+      const machineId = peek(body, 'machineId');
+      const instanceId = peek(body, 'instanceId');
+      const text = peek(body, 'text');
+      if (!machineId || !instanceId || !text) {
+        return status(400, 'name a machine, an instance and a message');
+      }
+      telegram?.onUserMessage({
+        verb: 'frames',
+        machineId,
+        instanceId,
+        payload: { kind: 'user_message', instanceId, text },
+      });
       return { ok: true };
     })
     // ── Usage (USAGE-SPEC.md §6) ─────────────────────────────────────────────
@@ -1770,6 +2126,7 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
                 kind: peekKind(message.payload),
                 permissionMode: peek(message.payload, 'permissionMode'),
                 model: peek(message.payload, 'model'),
+                effort: peek(message.payload, 'effort'),
                 ...peekParent(message.payload),
               });
               publishInstances(message.machineId);
@@ -1823,6 +2180,16 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
                 );
                 publishInstances(message.machineId);
               }
+            }
+            // Standing instructions read the same frames the dashboards do.
+            // Deliberately before the delegate hand-back below: a rule that
+            // wakes a session should be queued ahead of the report that would
+            // otherwise be the only thing waiting for it.
+            if (kind === 'frame' && message.instanceId) {
+              ruleEngine.observe(
+                message.instanceId,
+                (message.payload as FramePayload & { kind: 'frame' }).message
+              );
             }
             // Delegate hand-back: remember each parented session's final text,
             // and when its turn ends, auto-deliver it to the parent as a queued
@@ -1898,6 +2265,11 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
               escalateRoutedAsks(message.instanceId);
               telegram?.onError(message.instanceId, reason);
               publishInstances(message.machineId);
+            }
+            // A session's message to the owner, pushed without an ask: straight
+            // to the bridge, tracked so a reply reaches the session that wrote it.
+            if (kind === 'user_message') {
+              telegram?.onUserMessage(message);
             }
             // An install answering, whoever asked for it: the cell is the hub's
             // to keep, and the reply still goes wherever it was going.
@@ -2014,6 +2386,7 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
                 kind: peekKind(message.payload),
                 permissionMode: peek(message.payload, 'permissionMode'),
                 model: peek(message.payload, 'model'),
+                effort: peek(message.payload, 'effort'),
                 ...peekParent(message.payload),
               });
               publishInstances(message.machineId);

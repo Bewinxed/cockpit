@@ -54,8 +54,12 @@ import type {
   SessionMessage,
   SlashCommand,
   SpawnPayload,
+  UserAnswers,
+  UserQuestion,
+  UserQuestionResult,
 } from '@cockpit/core';
 import {
+  ASK_USER_QUESTION,
   CONTROL_CONTEXT_USAGE,
   CONTROL_GET_TODOS,
   CONTROL_INTERRUPT,
@@ -66,7 +70,7 @@ import {
   CONTROL_SET_PERMISSION_MODE,
   CONTROL_SUPPORTED_COMMANDS,
   CONTROL_SUPPORTED_MODELS,
-} from '@cockpit/core';
+  isInjected,} from '@cockpit/core';
 import { resolveBin } from '../tools';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -416,6 +420,48 @@ export const CockpitHandoff = async () => {
           return deny ? \`Denied your delegate \${peer.label}'s ask.\` : \`Answered your delegate \${peer.label}'s ask.\`;
         },
       }),
+      send_to_user: tool({
+        description:
+          "Display a message directly to the user (delivered to their Telegram). Use this for " +
+          "progress updates, partial results, or content the user must see exactly as written " +
+          "before the task finishes.",
+        args: {
+          message: tool.schema.string().describe("The text to show the user, exactly as it should read."),
+        },
+        async execute({ message }, context) {
+          const me = (await roster()).find((p) => p.row.sessionId === context.sessionID);
+          if (!me) throw new Error("this session is not registered on the fleet yet");
+          await relay("message", { machineId: me.row.machineId, instanceId: me.row.id, text: message });
+          return "Sent to the user — it lands in their Telegram when the hub has a bridge, and is dropped otherwise.";
+        },
+      }),
+      note_for_user: tool({
+        description:
+          "Record a note for the user about a concern they raised, saying what you actually did " +
+          "about it. Use this after you have acted on something the user pushed back on: which " +
+          "file you fixed, what you ran, what you found. The note is shown to the user, so write " +
+          "what changed, not that you understood.",
+        args: {
+          note: tool.schema.string().describe("What you actually did about it, in a sentence or two. Ten characters minimum."),
+        },
+        async execute({ note }, context) {
+          const me = (await roster()).find((p) => p.row.sessionId === context.sessionID);
+          if (!me) throw new Error("this session is not registered on the fleet yet");
+          // Session-scoped, with no id: the caller is never told which rule fired, so the hub
+          // settles everything outstanding for this session from the note alone.
+          const res = await fetch(\`\${HUB}/api/rules/ack\`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ instanceId: me.row.id, note }),
+            signal: AbortSignal.timeout(5000),
+          });
+          // A refusal comes back as the hub's own bare sentence; it says the useful thing better
+          // than anything this side could invent, so pass it through.
+          if (res.status === 400) return await res.text();
+          if (!res.ok) throw new Error(\`the hub answered \${res.status}\`);
+          return "Recorded. The user sees this note in their dashboard.";
+        },
+      }),
     },
   };
 };
@@ -431,6 +477,71 @@ export const CockpitHandoff = async () => {
 export function autoAllows(permissionMode: string | undefined, kind: 'question' | 'tool'): boolean {
   if (kind === 'question') return false;
   return permissionMode === 'bypassPermissions';
+}
+
+/** opencode's own name for the tool a question rides on. */
+const QUESTION_TOOL = 'question';
+
+/**
+ * What a question part is written down as. opencode calls the tool `question`;
+ * the rest of the fleet calls it {@link ASK_USER_QUESTION}, and the renderer
+ * keys off that name, so the rename happens here rather than in the dashboard.
+ */
+const toolNameOf = (tool: string): string => (tool === QUESTION_TOOL ? ASK_USER_QUESTION : tool);
+
+/** opencode's question shape, which says `multiple` where the fleet says `multiSelect`. */
+const questionsOf = (raw: unknown): UserQuestion[] | null => {
+  if (!Array.isArray(raw)) return null;
+  const questions: UserQuestion[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') return null;
+    const q = item as { question?: unknown; header?: unknown; options?: unknown; multiple?: unknown };
+    if (typeof q.question !== 'string' || !Array.isArray(q.options)) return null;
+    questions.push({
+      question: q.question,
+      header: typeof q.header === 'string' ? q.header : q.question,
+      options: q.options as UserQuestion['options'],
+      multiSelect: q.multiple === true,
+    });
+  }
+  return questions;
+};
+
+/**
+ * How a question ended, read off the part opencode already keeps: the asked
+ * questions live in `state.input`, and the reader's choices in
+ * `state.metadata.answers` as one label array per question, in the order they
+ * were asked.
+ *
+ * Taking it from the part rather than from the `question.*` events is what
+ * makes every route agree. The part completes whether the answer came through
+ * cockpit, through opencode's own TUI, or from any other client on the server —
+ * and because opencode stores it, a reloaded transcript replays it too. Events
+ * would have covered only the live case, and only the routes we thought of.
+ *
+ * `null` for any part that is not a question, which is every other tool.
+ */
+function questionResultOf(part: {
+  tool: string;
+  state: { status: string; input?: unknown; metadata?: unknown };
+}): UserQuestionResult | null {
+  if (part.tool !== QUESTION_TOOL) return null;
+  const questions = questionsOf((part.state.input as { questions?: unknown } | undefined)?.questions);
+  if (!questions) return null;
+  const raw = (part.state.metadata as { answers?: unknown } | undefined)?.answers;
+  // A question that completed carrying no answers is one the reader walked away
+  // from; it is not an answered question with an empty map, and saying so is the
+  // whole reason the outcome is a union.
+  if (!Array.isArray(raw)) return { outcome: 'dismissed', questions };
+  const answers: UserAnswers = {};
+  questions.forEach((question, i) => {
+    const picked = Array.isArray(raw[i]) ? (raw[i] as string[]) : [];
+    // opencode answers uniformly in arrays. The array is kept only where the
+    // question allowed several — a lone choice stored as a one-element array
+    // would draw as a list of one.
+    answers[question.question] = question.multiSelect ? picked : (picked[0] ?? '');
+  });
+  return { outcome: 'answered', questions, answers };
 }
 
 /** A fleet MCP definition, in opencode's `opencode.json` `mcp` shape. */
@@ -474,6 +585,10 @@ export const OPENCODE_CAPABILITIES: HarnessCapabilities = {
   interrupt: true,
   permissionModes: ['default', 'acceptEdits', 'plan', 'bypassPermissions'],
   setModel: true,
+  // No effort scale anywhere in opencode's API: a model is chosen and that is
+  // the whole of it. Nothing here emulates one — a slider that moved and
+  // changed nothing would be worse than no slider.
+  effort: false,
   contextUsage: true,
   supportedModels: true,
   supportedCommands: true,
@@ -575,14 +690,6 @@ interface ThinkingStreamFrame {
     | { type: 'content_block_stop' };
 }
 
-/** One question a `question.asked` event carries, in the neutral shape the dashboard renders. */
-interface AskedQuestion {
-  question: string;
-  header: string;
-  options: { label: string; description: string }[];
-  multiSelect: boolean;
-}
-
 /** A child (subagent) session's own pipeline state, kept apart from the parent's. */
 interface ChildState {
   roles: Map<string, 'user' | 'assistant'>;
@@ -616,7 +723,7 @@ export class OpencodeSession implements HarnessSession {
   #providersCache: Promise<{ providers?: Provider[] } | undefined> | undefined;
   #commandNames: Promise<Set<string>> | null = null;
   #questions = new Set<string>();
-  #questionData = new Map<string, AskedQuestion[]>();
+  #questionData = new Map<string, UserQuestion[]>();
   #childInfo = new Map<string, { agent?: string; title?: string }>();
   #childState = new Map<string, ChildState>();
   #boundCalls = new Set<string>();
@@ -751,7 +858,12 @@ export class OpencodeSession implements HarnessSession {
         });
         break;
       }
-      case 'question.asked': {
+      // opencode carries two generations of this event with byte-identical
+      // payloads, and the server's own spec publishes both. Naming only the
+      // older one is a silent failure waiting for the day it stops firing:
+      // questions would simply stop appearing, with nothing raised anywhere.
+      case 'question.asked':
+      case 'question.v2.asked': {
         if (sid !== this.sessionId) return;
         const asked = event.properties as unknown as {
           id: string;
@@ -764,19 +876,48 @@ export class OpencodeSession implements HarnessSession {
           }[];
         };
         this.#questions.add(asked.id);
-        const questions: AskedQuestion[] = asked.questions.map((q) => ({
+        const questions: UserQuestion[] = asked.questions.map((q) => ({
           question: q.question,
           header: q.header,
           options: q.options,
           multiSelect: q.multiple === true,
         }));
         this.#questionData.set(asked.id, questions);
+        // Only the parked permission is raised here. The transcript row comes
+        // from the `question` tool part this ask rides on, which opencode emits
+        // and stores like any other tool — writing a second row from this event
+        // would draw the same question twice, under two different ids.
         this.#ctx.permission({
           requestId: asked.id,
-          toolName: 'AskUserQuestion',
+          toolName: ASK_USER_QUESTION,
           input: { questions },
           requestKind: 'question',
         });
+        break;
+      }
+      // A question can also be settled where cockpit cannot see it — in
+      // opencode's own TUI, or by any other client on the same server. Without
+      // these the `tool_use` the ask emitted never closes, and the row sits on
+      // "waiting for your answer" for the rest of the session while the model
+      // has long since moved on.
+      //
+      // `#questionData` is the guard against answering twice: `resolvePermission`
+      // clears the entry before it replies, so the echo of cockpit's own reply
+      // finds nothing here and falls through. Only a settlement cockpit did not
+      // make still has its questions on hand.
+      // A settlement cockpit did not make — opencode's own TUI, or any other
+      // client on the server. The transcript needs nothing here, because the
+      // `question` tool part completes on every route and carries the answers
+      // with it; this only lets go of the parked request so a later
+      // `resolvePermission` for the same id cannot reply to a closed question.
+      case 'question.replied':
+      case 'question.v2.replied':
+      case 'question.rejected':
+      case 'question.v2.rejected': {
+        if (sid !== this.sessionId) return;
+        const settled = event.properties as unknown as { requestID: string };
+        this.#questions.delete(settled.requestID);
+        this.#questionData.delete(settled.requestID);
         break;
       }
       case 'session.status': {
@@ -895,7 +1036,9 @@ export class OpencodeSession implements HarnessSession {
           this.#ctx.frame({
             type: 'assistant',
             message: {
-              content: [{ type: 'tool_use', id: part.callID, name: part.tool, input: part.state.input }],
+              content: [
+                { type: 'tool_use', id: part.callID, name: toolNameOf(part.tool), input: part.state.input },
+              ],
             },
           });
           this.#toolsEmitted.set(part.callID, 'called');
@@ -907,6 +1050,7 @@ export class OpencodeSession implements HarnessSession {
             ? (part.state as { metadata?: Record<string, unknown> }).metadata
             : undefined;
           const structuredContent = metadata && Object.keys(metadata).length > 0 ? metadata : undefined;
+          const questionResult = questionResultOf(part);
           this.#ctx.frame({
             type: 'user',
             message: {
@@ -918,6 +1062,7 @@ export class OpencodeSession implements HarnessSession {
                   content: output,
                   is_error: status === 'error',
                   ...(structuredContent ? { structuredContent } : {}),
+                  ...(questionResult ? { questionResult } : {}),
                 },
               ],
             },
@@ -1225,7 +1370,7 @@ export class OpencodeSession implements HarnessSession {
 
     // A hand-off is queued rather than asked, so the server emits nothing until
     // it is drained. Echoed as the frame the dashboard reads, the moment it lands.
-    if (message.origin?.kind === 'peer') {
+    if (isInjected(message.origin)) {
       this.#ctx.frame({ ...message, session_id: this.sessionId ?? undefined });
     }
   }
@@ -1410,13 +1555,20 @@ export class OpencodeSession implements HarnessSession {
       this.#questions.delete(requestId);
       const questions = this.#questionData.get(requestId) ?? [];
       this.#questionData.delete(requestId);
+      // Nothing is framed on either branch: replying settles the `question`
+      // tool part, and that part is what writes the row. Framing here as well
+      // drew the answer twice, once under the request id and once under the
+      // tool's own call id.
       if (result.behavior === 'deny') {
         void this.#rejectQuestion(requestId);
         return;
       }
+      // The reader's choices arrive keyed by question text (QuestionCard builds
+      // `UserAnswers` that way); opencode's reply API wants one label array per
+      // question, in the order `question.asked` published them — so the join is
+      // the question text on both sides.
       const answersByQuestion =
-        (result as { updatedInput?: { answers?: Record<string, string | string[]> } }).updatedInput
-          ?.answers ?? {};
+        (result as { updatedInput?: { answers?: UserAnswers } }).updatedInput?.answers ?? {};
       const answers = questions.map((q) => {
         const raw = answersByQuestion[q.question];
         if (Array.isArray(raw)) return raw;
@@ -1879,7 +2031,12 @@ export class OpencodeHarness implements Harness {
 }
 
 /** opencode `{info, parts}` → the neutral transcript entries the folder reads. */
-function toTranscript(
+/**
+ * Exported for its own sake as well as the session's: this is the whole of what
+ * a reopened transcript is, so it is the one place a reload's fidelity can be
+ * checked against parts a real server stored.
+ */
+export function toTranscript(
   sessionKey: string,
   rows: { info: Message; parts: Part[] }[]
 ): SessionMessage[] {
@@ -1912,7 +2069,7 @@ function toTranscript(
       } else if (part.type === 'reasoning') {
         blocks.push({ type: 'thinking', thinking: part.text });
       } else if (part.type === 'tool') {
-        blocks.push({ type: 'tool_use', id: part.callID, name: part.tool, input: part.state.input });
+        blocks.push({ type: 'tool_use', id: part.callID, name: toolNameOf(part.tool), input: part.state.input });
       }
     }
     if (blocks.length) {
@@ -1946,6 +2103,11 @@ function toTranscript(
                 content: output,
                 is_error: part.state.status === 'error',
                 ...(structuredContent ? { structuredContent } : {}),
+                // Replay says what the live stream said: opencode keeps the
+                // asked questions and the chosen answers on the part itself, so
+                // a reopened transcript draws the answered card rather than
+                // losing the exchange.
+                ...(questionResultOf(part) ? { questionResult: questionResultOf(part) } : {}),
               },
             ],
           },

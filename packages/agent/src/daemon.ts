@@ -101,6 +101,20 @@ const connection = (url: string) =>
 /** Never succeeds — it fails when the hub goes away, which is what drives the retry. */
 const closed = (socket: WebSocket, url: string) =>
   Effect.callback<never, ConnectionLost>((resume) => {
+    // The state is read before the event is waited for, because between `open`
+    // dropping its own close listener and this one going on, `attach` registers:
+    // it probes every harness and every tool, which spawns processes and takes
+    // real time. A hub that goes away inside that window fires `close` at nobody
+    // — and a listener added afterwards waits for an event that has already
+    // been and gone. That wait is silent and permanent: `send` on a dead socket
+    // throws nothing, so the register is logged as if it landed, no
+    // `ConnectionLost` is ever raised, and the retry below never gets its turn.
+    // The daemon keeps its sessions and looks healthy while the hub stops
+    // hearing from it altogether.
+    if (socket.readyState === WebSocket.CLOSING || socket.readyState === WebSocket.CLOSED) {
+      resume(Effect.fail(new ConnectionLost({ url, reason: 'closed while registering' })));
+      return;
+    }
     const onClose = (event: CloseEvent) =>
       resume(Effect.fail(new ConnectionLost({ url, reason: closeReason(event) })));
     socket.addEventListener('close', onClose, { once: true });

@@ -160,6 +160,10 @@
     if (!project) return;
     const perm = spawnPrefs.permissionMode;
     const mod = spawnPrefs.model;
+    // This start has no pickers of its own — it runs on what the new-session
+    // form was last set to, effort included, since the level was chosen against
+    // that same model.
+    const level = spawnPrefs.effort;
     const prompt = spawnPrompt.trim() || undefined;
     const instanceId = spawnSession({
       machineId: project.machineId,
@@ -167,10 +171,11 @@
       projectId: project.id,
       permissionMode: perm,
       model: mod,
+      effort: level ?? undefined,
       prompt,
       scratch: scratch ? {} : undefined,
     });
-    rememberSpawn({ model: mod, permissionMode: perm });
+    rememberSpawn({ model: mod, permissionMode: perm, effort: level });
     spawnPrompt = '';
     spawnOpen = false;
     void goto(`/session/${instanceId}`);

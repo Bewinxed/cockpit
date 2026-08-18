@@ -17,13 +17,17 @@ import type {
   FleetMcpConfig,
   FleetMcpServer,
   FleetMemory,
+  FleetMemoryDoc,
   FleetScope,
   FleetSkillPayload,
   FleetSyncReport,
+  MachineMemoryDoc,
+  MachineMemorySet,
   MarketplacePluginInfo,
   SkillFile,
 } from '@cockpit/core';
-import { readdir, rename, rm, stat } from 'node:fs/promises';
+import { memoryDocProblem } from '@cockpit/core';
+import { chmod, readdir, rename, rm, rmdir, stat } from 'node:fs/promises';
 import { platform } from 'node:os';
 import { isAbsolute, join } from 'node:path';
 import { expandHome } from './fs';
@@ -45,6 +49,24 @@ const SKILLS_DIR = expandHome('~/.claude/skills');
 /** The user-scope memory every session on this machine reads (NEW.md §11). */
 const MEMORY_PATH = expandHome('~/.claude/CLAUDE.md');
 
+/**
+ * The documents the main memory links, one file per path the set names. All of
+ * it cockpit's, like a skill's directory — nothing under here was ever written
+ * by anything else, so a file the set stops carrying is a file that goes.
+ */
+const MEMORIES_DIR = expandHome('~/.claude/memories');
+
+/**
+ * The hook that puts a model's own document in front of the session running
+ * that model. Cockpit's own machinery rather than a document of the user's, so
+ * it lives beside the sidecar and is written whenever it is not what this
+ * version of cockpit generates.
+ */
+const MEMORY_HOOK_PATH = expandHome('~/.claude/cockpit-model-memory.sh');
+
+/** Where Claude Code reads a user's hooks; the same file the user's own are in. */
+const SETTINGS_PATH = expandHome('~/.claude/settings.json');
+
 const PLUGINS_DIR = expandHome('~/.claude/plugins');
 /** The CLI's own account of what is linked and what is installed. */
 const KNOWN_MARKETPLACES = join(PLUGINS_DIR, 'known_marketplaces.json');
@@ -65,14 +87,36 @@ const tail = (output: string): string => output.trim().split('\n').slice(-TAIL_L
 
 const said = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
+/**
+ * One marketplace cockpit linked, under both of the names it answers to.
+ * `name` is the hub config's; `linkedAs` is the one the CLI chose, out of the
+ * marketplace's own manifest. They are routinely different — cockpit adds
+ * `ryanthedev/rtd-claude-inn` and the CLI links it as `rtd` — so a sidecar that
+ * kept one bare string left every later sync guessing which of the two it had.
+ * Written only once something really is linked, which is what lets `linkedAs`
+ * be a name the CLI is known to answer to rather than a hopeful one.
+ */
+interface ManagedMarketplace {
+  name: string;
+  linkedAs: string;
+}
+
 interface Sidecar {
   mcp: string[];
-  marketplaces: string[];
+  marketplaces: ManagedMarketplace[];
   plugins: string[];
   /** Skill name → the hash of the files written, which is what makes a sync a no-op. */
   skills: Record<string, string>;
   /** The hash cockpit last wrote to `~/.claude/CLAUDE.md`; absent = unmanaged. */
   memory?: string;
+  /**
+   * Set path → the hash cockpit last wrote there, under `~/.claude/memories/`.
+   * Per file, because drift is per file: one document edited on this machine
+   * holds up itself and leaves the rest of the set converging.
+   */
+  memoryDocs: Record<string, string>;
+  /** The SessionStart command cockpit registered; only this one is ever removed. */
+  memoryHook?: string;
 }
 
 const readJson = async <T>(path: string): Promise<T | undefined> => {
@@ -96,16 +140,41 @@ const writeJson = async (path: string, value: unknown): Promise<void> => {
   await rename(temp, path);
 };
 
+/**
+ * A sidecar written before a marketplace carried both its names has one bare
+ * string and no way to tell whose name it is. Kept only when the CLI still
+ * lists something under it, because that is the only reading under which it
+ * names something on this machine — a leftover cockpit name owns nothing, and
+ * treating it as a link is what would have a later sync remove a name that was
+ * never linked. Config puts the entry back, in full, on the same sync.
+ */
+export const upgradeMarketplaces = (
+  stored: (string | ManagedMarketplace)[] | undefined,
+  linked: Record<string, KnownMarketplace>
+): ManagedMarketplace[] =>
+  (stored ?? []).flatMap((one) => {
+    if (typeof one !== 'string') return [one];
+    return linked[one] ? [{ name: one, linkedAs: one }] : [];
+  });
+
 /** What cockpit put here last time; unreadable is the same as never written. */
 const readSidecar = async (): Promise<Sidecar> => {
-  const stored = await readJson<Partial<Sidecar>>(SIDECAR);
+  // Typed to admit the older shape too, so the upgrade is a fact of the type
+  // rather than a cast: what is on disk may predate a marketplace's two names.
+  const stored = await readJson<
+    Partial<Omit<Sidecar, 'marketplaces'>> & { marketplaces?: (string | ManagedMarketplace)[] }
+  >(SIDECAR);
   return {
     mcp: stored?.mcp ?? [],
-    marketplaces: stored?.marketplaces ?? [],
+    marketplaces: upgradeMarketplaces(stored?.marketplaces, await linkedMarketplaces()),
     plugins: stored?.plugins ?? [],
     // A sidecar written before skills existed names none, which is the truth.
     skills: stored?.skills ?? {},
     ...(stored?.memory ? { memory: stored.memory } : {}),
+    // Likewise one written before the memory was a set: no linked document on
+    // this machine is cockpit's, so none of them is cockpit's to take away.
+    memoryDocs: stored?.memoryDocs ?? {},
+    ...(stored?.memoryHook ? { memoryHook: stored.memoryHook } : {}),
   };
 };
 
@@ -236,6 +305,57 @@ const runClaude = async (bin: string, args: string[]): Promise<Ran> => {
 const isLinked = async (name: string): Promise<boolean> =>
   (await readJson<Record<string, unknown>>(KNOWN_MARKETPLACES))?.[name] !== undefined;
 
+/** One entry of the CLI's own account of what is linked, and where it came from. */
+export interface KnownMarketplace {
+  source?: { source?: string; repo?: string; url?: string; path?: string };
+}
+
+const linkedMarketplaces = async (): Promise<Record<string, KnownMarketplace>> =>
+  (await readJson<Record<string, KnownMarketplace>>(KNOWN_MARKETPLACES)) ?? {};
+
+/**
+ * `owner/repo`, an ssh remote, an https clone URL and a `marketplace.json` URL
+ * can all name the same link. Compared on the part that identifies it, so the
+ * spelling cockpit stores still matches whatever the CLI wrote down.
+ */
+const sourceKey = (source: string): string =>
+  source
+    .trim()
+    .toLowerCase()
+    .replace(/^git\+/, '')
+    .replace(/^git@github\.com:/, '')
+    .replace(/^(https?|ssh):\/\/([^@]*@)?(www\.)?github\.com\//, '')
+    .replace(/\.git$/, '')
+    .replace(/\/+$/, '');
+
+const sourceKeysOf = (entry: KnownMarketplace): string[] =>
+  [entry.source?.repo, entry.source?.url, entry.source?.path]
+    .filter((one): one is string => typeof one === 'string')
+    .map(sourceKey);
+
+/**
+ * The name the CLI linked a marketplace under, which comes from the
+ * marketplace's own `marketplace.json` and is not necessarily the name cockpit
+ * calls it: `ryanthedev/rtd-claude-inn` is added and comes back as `rtd`.
+ * Everything downstream — the clone's directory, a `plugin@marketplace` id,
+ * `marketplace remove` — speaks the CLI's name, so a sync that kept cockpit's
+ * would report a successful add as a failure and never install a plugin from
+ * it. Matched on the source when the name does not hit, because the source is
+ * the one thing both sides agree on.
+ */
+export const linkedNameIn = (
+  linked: Record<string, KnownMarketplace>,
+  name: string,
+  source: string
+): string | undefined => {
+  if (linked[name]) return name;
+  const wanted = sourceKey(source);
+  return Object.keys(linked).find((key) => sourceKeysOf(linked[key]).includes(wanted));
+};
+
+const linkedNameFor = async (name: string, source: string): Promise<string | undefined> =>
+  linkedNameIn(await linkedMarketplaces(), name, source);
+
 interface InstalledPlugins {
   /** Plugin id → one entry per scope it is installed at, with its unpacked copy. */
   plugins?: Record<string, { scope?: string; installPath?: string }[]>;
@@ -249,6 +369,25 @@ const isInstalled = async (id: string): Promise<boolean> => {
 
 /** `plugin@marketplace` is the CLI's own form, and the half after the `@` is the link. */
 const marketplaceOf = (id: string): string => id.split('@').pop() ?? '';
+
+/**
+ * Which of the marketplaces cockpit linked last time are cockpit's to unlink
+ * now. What goes is a link, so what is compared is the link: renaming a
+ * marketplace in the hub's config changes cockpit's name for it and nothing on
+ * the machine, and comparing the names instead would unlink the marketplace
+ * this same sync just linked. A name config still asks for is not a removal
+ * either — nothing linked under it means the add failed, which is its own
+ * report and not something to take away.
+ */
+export const toUnlink = (
+  managed: ManagedMarketplace[],
+  kept: ManagedMarketplace[],
+  config: Pick<FleetConfig, 'marketplaces'>
+): ManagedMarketplace[] => {
+  const keeping = new Set(kept.map(({ linkedAs }) => linkedAs));
+  const asked = new Set(config.marketplaces.map(({ name }) => name));
+  return managed.filter(({ name, linkedAs }) => !keeping.has(linkedAs) && !asked.has(name));
+};
 
 /**
  * Links the marketplaces and installs the plugins, in that order — a plugin
@@ -272,27 +411,43 @@ const syncPlugins = async (
     return { marketplaces: managed.marketplaces, plugins: managed.plugins };
   }
 
+  /**
+   * The report stays keyed by cockpit's name, because that is the row the
+   * dashboard has; everything that acts on the machine uses the CLI's.
+   */
+  const marketplaces: ManagedMarketplace[] = [];
+
   for (const { name, source } of config.marketplaces) {
-    if (await isLinked(name)) {
+    const already = await linkedNameFor(name, source);
+    if (already) {
+      marketplaces.push({ name, linkedAs: already });
       report.marketplaces[name] = { state: 'applied' };
       continue;
     }
     const ran = await runClaude(bin, ['plugin', 'marketplace', 'add', source]);
-    report.marketplaces[name] = (await isLinked(name))
-      ? { state: 'applied' }
-      : { state: 'failed', detail: ran.output };
+    const linkedAs = await linkedNameFor(name, source);
+    if (!linkedAs) {
+      // Nothing was linked, so there is nothing for a later sync to take away.
+      report.marketplaces[name] = { state: 'failed', detail: ran.output };
+      continue;
+    }
+    marketplaces.push({ name, linkedAs });
+    report.marketplaces[name] = { state: 'applied' };
   }
 
-  const marketplaces = config.marketplaces.map(({ name }) => name);
-  for (const name of managed.marketplaces) {
-    if (marketplaces.includes(name)) continue;
-    await runClaude(bin, ['plugin', 'marketplace', 'remove', name]);
-    report.marketplaces[name] = { state: 'removed' };
+  for (const { name, linkedAs } of toUnlink(managed.marketplaces, marketplaces, config)) {
+    const ran = await runClaude(bin, ['plugin', 'marketplace', 'remove', linkedAs]);
+    report.marketplaces[name] = (await isLinked(linkedAs))
+      ? { state: 'failed', detail: ran.output }
+      : { state: 'removed' };
   }
 
+  const linked = await linkedMarketplaces();
   for (const { id } of wantedPlugins) {
     const marketplace = marketplaceOf(id);
-    if (report.marketplaces[marketplace]?.state === 'failed') {
+    // The CLI's own account, not this run's report: a plugin id names the
+    // marketplace the CLI's way, which is not the key the report is under.
+    if (!linked[marketplace]) {
       report.plugins[id] = { state: 'failed', detail: `marketplace ${marketplace} is not linked` };
       continue;
     }
@@ -398,11 +553,14 @@ const syncSkillFiles = async (
 const hashText = (content: string): string =>
   new Bun.CryptoHasher('sha256').update(content).digest('hex');
 
-/** What is really at `~/.claude/CLAUDE.md`; null is a machine that has none. */
-const memoryFileHash = async (): Promise<string | null> => {
-  const file = Bun.file(MEMORY_PATH);
+/** What is really at a memory file; null is a machine that has none. */
+const fileHashAt = async (path: string): Promise<string | null> => {
+  const file = Bun.file(path);
   return (await file.exists()) ? hashText(await file.text()) : null;
 };
+
+/** What is really at `~/.claude/CLAUDE.md`; null is a machine that has none. */
+const memoryFileHash = (): Promise<string | null> => fileHashAt(MEMORY_PATH);
 
 export type MemoryPlan = 'write' | 'skip' | 'drift' | 'remove' | 'unmanage' | 'none';
 
@@ -475,14 +633,295 @@ const syncMemory = async (
   }
 };
 
+/**
+ * Every document really under `~/.claude/memories/`, by the path the set keys
+ * it under. Markdown only, and depth is whatever the set uses — `models/` is
+ * the one this version writes, and a reader should still see the rest.
+ */
+const memoryDocPaths = async (root: string = MEMORIES_DIR, prefix = ''): Promise<string[]> => {
+  const entries = await readdir(root, { withFileTypes: true }).catch(() => []);
+  const paths: string[] = [];
+  for (const entry of entries) {
+    const relative = `${prefix}${entry.name}`;
+    if (entry.isDirectory()) {
+      paths.push(...(await memoryDocPaths(join(root, entry.name), `${relative}/`)));
+    } else if (entry.isFile() && entry.name.endsWith('.md')) {
+      paths.push(relative);
+    }
+  }
+  return paths.sort();
+};
+
+/**
+ * The directories a removal emptied, taken away bottom-up. `rmdir` refuses a
+ * directory with anything in it, which is exactly the check wanted: a folder
+ * still holding a document of somebody's own stays where it is.
+ */
+const pruneEmptyDirs = async (): Promise<void> => {
+  const dirs = new Set<string>();
+  const walk = async (root: string, prefix: string): Promise<void> => {
+    for (const entry of await readdir(root, { withFileTypes: true }).catch(() => [])) {
+      if (!entry.isDirectory()) continue;
+      dirs.add(`${prefix}${entry.name}`);
+      await walk(join(root, entry.name), `${prefix}${entry.name}/`);
+    }
+  };
+  await walk(MEMORIES_DIR, '');
+
+  // Deepest first, so a parent is only tried once its children are gone.
+  for (const relative of [...dirs].sort((a, b) => b.split('/').length - a.split('/').length)) {
+    await rmdir(join(MEMORIES_DIR, relative)).catch(() => {});
+  }
+  await rmdir(MEMORIES_DIR).catch(() => {});
+};
+
+/**
+ * What to do about every document of the set, from hashes alone: one
+ * {@link memoryPlan} per path the fleet carries, and one per path only the
+ * sidecar still names — which is a document the fleet has stopped carrying.
+ *
+ * Pure, and separate from the writing for the same reason `memoryPlan` is: this
+ * is where "cockpit overwrote what I wrote" is caught, and a decision that only
+ * exists inside a filesystem walk is a decision nothing can ask about.
+ *
+ * A hub that predates the set sends no documents at all, which arrives here as
+ * an empty `desired` — every managed document is then given back, exactly as
+ * the fleet keeping no memory gives back the main file.
+ */
+export function memorySetPlan(
+  desired: readonly { path: string; hash: string; force?: boolean }[],
+  onDisk: Readonly<Record<string, string | null>>,
+  managed: Readonly<Record<string, string>>
+): Record<string, MemoryPlan> {
+  const plans: Record<string, MemoryPlan> = {};
+  for (const doc of desired) {
+    plans[doc.path] = memoryPlan(doc, onDisk[doc.path] ?? null, managed[doc.path]);
+  }
+  for (const [path, hash] of Object.entries(managed)) {
+    if (plans[path] !== undefined) continue;
+    plans[path] = memoryPlan(undefined, onDisk[path] ?? null, hash);
+  }
+  return plans;
+}
+
+/**
+ * The linked documents, {@link memorySetPlan} applied. Every rule the single
+ * document has, held per file: one edited on this machine is reported and left
+ * alone, the rest of the set converges around it, and a document the fleet
+ * stops carrying is only deleted while it is still exactly what cockpit wrote.
+ */
+const syncMemoryDocs = async (
+  desired: FleetMemoryDoc[],
+  managed: Record<string, string>,
+  report: Record<string, FleetItemState>
+): Promise<Record<string, string>> => {
+  const written: Record<string, string> = {};
+
+  // The hub refuses these at the door; a set that reached here with one anyway
+  // is not something to trust with a write, so it is turned away here too.
+  const safe: FleetMemoryDoc[] = [];
+  for (const doc of desired) {
+    const problem = memoryDocProblem(doc.path);
+    if (!problem) {
+      safe.push(doc);
+      continue;
+    }
+    // Nothing is written, so the machine keeps whatever it already had.
+    if (managed[doc.path] !== undefined) written[doc.path] = managed[doc.path];
+    report[doc.path] = { state: 'failed', detail: problem };
+  }
+
+  const onDisk: Record<string, string | null> = {};
+  for (const path of new Set([...safe.map((doc) => doc.path), ...Object.keys(managed)])) {
+    onDisk[path] = await fileHashAt(join(MEMORIES_DIR, path));
+  }
+
+  const plans = memorySetPlan(safe, onDisk, managed);
+  const wanted = new Map(safe.map((doc) => [doc.path, doc]));
+  let removed = false;
+
+  for (const [path, plan] of Object.entries(plans)) {
+    const doc = wanted.get(path);
+    if (!doc) {
+      if (plan === 'remove') {
+        await rm(join(MEMORIES_DIR, path), { force: true });
+        report[path] = { state: 'removed' };
+        removed = true;
+      } else {
+        // An edited one outlives the fleet's row, unmanaged and where it is.
+        report[path] = { state: 'removed', detail: 'kept: edited on this machine' };
+      }
+      continue;
+    }
+
+    if (plan === 'drift') {
+      report[path] = { state: 'failed', detail: DRIFTED };
+      if (managed[path] !== undefined) written[path] = managed[path];
+      continue;
+    }
+    if (plan === 'skip') {
+      written[path] = managed[path];
+      report[path] = { state: 'applied' };
+      continue;
+    }
+
+    try {
+      await Bun.write(join(MEMORIES_DIR, path), doc.content);
+      written[path] = doc.hash;
+      report[path] = { state: 'applied' };
+    } catch (error) {
+      // The machine keeps the hash it had, so the next sync writes again rather
+      // than believing this one landed.
+      if (managed[path] !== undefined) written[path] = managed[path];
+      report[path] = { state: 'failed', detail: tail(said(error)) };
+    }
+  }
+  if (removed) await pruneEmptyDirs();
+
+  return written;
+};
+
+/**
+ * The SessionStart hook, verbatim. Claude Code hands the hook its JSON on
+ * stdin, and SessionStart is the only event that carries the model at all — no
+ * environment variable names it and CLAUDE.md itself is loaded flat, so this is
+ * the whole of how a document reaches only the sessions it is for.
+ *
+ * POSIX sh and nothing else: it runs on every machine the fleet has, including
+ * the ones where the daemon's own Bun is the only Bun there is.
+ *
+ * Exported so a test can run the real text under a real `sh` — the escaping in
+ * here is the kind that is wrong quietly, on somebody else's machine.
+ */
+export const MEMORY_HOOK = `#!/bin/sh
+# Written by cockpit. Edits are overwritten — the fleet's documents are in
+# ~/.claude/memories/, and this only decides which one a session is shown.
+set -u
+
+dir="\${HOME}/.claude/memories/models"
+[ -d "$dir" ] || exit 0
+
+input=$(cat)
+# The model id, whether it arrives as a string or as an object with an \`id\`.
+# It is not guaranteed to be there at all, and a session without one is shown
+# nothing: the main CLAUDE.md carries the pointer for that case.
+flat=$(printf '%s' "$input" | tr -d '\\n')
+model=$(printf '%s' "$flat" | sed -n 's/.*"model"[[:space:]]*:[[:space:]]*"\\([^"]*\\)".*/\\1/p')
+[ -n "$model" ] || model=$(printf '%s' "$flat" | sed -n 's/.*"model"[[:space:]]*:[[:space:]]*{[^}]*"id"[[:space:]]*:[[:space:]]*"\\([^"]*\\)".*/\\1/p')
+[ -n "$model" ] || exit 0
+
+# Longest prefix wins, so \`claude-opus-5-20260315\` takes claude-opus-5.md over
+# a claude.md beside it, and an id nothing is named for takes nothing.
+best=''
+for file in "$dir"/*.md; do
+  [ -f "$file" ] || continue
+  name=\${file##*/}
+  name=\${name%.md}
+  case "$model" in
+    "$name"*)
+      if [ \${#name} -gt \${#best} ]; then best=$name; fi
+      ;;
+  esac
+done
+
+[ -n "$best" ] || exit 0
+
+# Stdout from a SessionStart hook is added to the session's context.
+cat "$dir/$best.md"
+exit 0
+`;
+
+/** One command entry of a hook, as `~/.claude/settings.json` writes them. */
+interface HookCommand {
+  type?: string;
+  command?: string;
+}
+
+/** One matcher's worth of hooks; an absent `matcher` is every session start. */
+interface HookMatcher {
+  matcher?: string;
+  hooks?: HookCommand[];
+}
+
+/**
+ * The same list without cockpit's own command. A matcher entry that held
+ * anything else comes back holding it, and one that is left with nothing goes —
+ * but only when it was ours that emptied it.
+ */
+export function withoutHook(entries: HookMatcher[], command: string): HookMatcher[] {
+  return entries.flatMap((entry) => {
+    const hooks = entry.hooks ?? [];
+    const kept = hooks.filter((hook) => hook.command !== command);
+    if (kept.length === hooks.length) return [entry];
+    return kept.length > 0 ? [{ ...entry, hooks: kept }] : [];
+  });
+}
+
+/**
+ * Registers the hook while the set carries a `models/` document, and takes it
+ * back out when it stops. `~/.claude/settings.json` is the user's own file, so
+ * only the one command the sidecar names is ever removed and the file is only
+ * written when this actually changes something.
+ */
+const syncMemoryHook = async (
+  desired: FleetMemoryDoc[],
+  managed: string | undefined,
+  report: FleetSyncReport
+): Promise<string | undefined> => {
+  const wanted = desired.some(
+    (doc) => doc.path.startsWith('models/') && memoryDocProblem(doc.path) === undefined
+  );
+  if (!wanted && managed === undefined) return undefined;
+
+  const stored = await readJson<Record<string, unknown>>(SETTINGS_PATH);
+  // Nothing is written over a file that cannot be read: the rest of it is the
+  // user's permissions and plugins, and a rewrite would take them with it.
+  if (stored === undefined && (await Bun.file(SETTINGS_PATH).exists())) {
+    report.memoryHook = { state: 'failed', detail: 'could not parse ~/.claude/settings.json' };
+    return managed;
+  }
+
+  const root = stored ?? {};
+  const hooks = { ...((root.hooks as Record<string, unknown> | undefined) ?? {}) };
+  const starts = (hooks.SessionStart as HookMatcher[] | undefined) ?? [];
+  const command = MEMORY_HOOK_PATH;
+  const next = wanted
+    ? [...withoutHook(starts, command), { hooks: [{ type: 'command', command }] }]
+    : withoutHook(starts, managed ?? command);
+
+  if (next.length > 0) hooks.SessionStart = next;
+  else delete hooks.SessionStart;
+  const settings = { ...root };
+  if (Object.keys(hooks).length > 0) settings.hooks = hooks;
+  else delete settings.hooks;
+
+  try {
+    if (wanted && (await Bun.file(MEMORY_HOOK_PATH).text().catch(() => '')) !== MEMORY_HOOK) {
+      await Bun.write(MEMORY_HOOK_PATH, MEMORY_HOOK);
+      // Claude Code spawns the command itself, so it has to be executable.
+      await chmod(MEMORY_HOOK_PATH, 0o755);
+    }
+    if (JSON.stringify(settings) !== JSON.stringify(root)) await writeJson(SETTINGS_PATH, settings);
+    if (!wanted) await rm(MEMORY_HOOK_PATH, { force: true });
+  } catch (error) {
+    report.memoryHook = { state: 'failed', detail: tail(said(error)) };
+    return managed;
+  }
+
+  report.memoryHook = wanted ? { state: 'applied' } : { state: 'removed' };
+  return wanted ? command : undefined;
+};
+
 const converge = async (config: FleetConfig): Promise<FleetSyncReport> => {
   const managed = await readSidecar();
   const skillStates: Record<string, FleetItemState> = {};
+  const docStates: Record<string, FleetItemState> = {};
   const report: FleetSyncReport = {
     mcp: {},
     marketplaces: {},
     plugins: {},
     skills: skillStates,
+    memoryDocs: docStates,
     at: Date.now(),
   };
 
@@ -490,11 +929,18 @@ const converge = async (config: FleetConfig): Promise<FleetSyncReport> => {
   const installed = await syncPlugins(config, managed, report);
   const skills = await syncSkillFiles(config.skills ?? [], managed.skills, skillStates);
   const memory = await syncMemory(config.memory, managed.memory, report);
+  // A hub that predates the set sends no `docs`, which reads as a fleet that
+  // links none — and the machine gives back the ones cockpit wrote it.
+  const docs = config.memory?.docs ?? [];
+  const memoryDocs = await syncMemoryDocs(docs, managed.memoryDocs, docStates);
+  const memoryHook = await syncMemoryHook(docs, managed.memoryHook, report);
   await writeJson(SIDECAR, {
     mcp,
     ...installed,
     skills,
     ...(memory ? { memory } : {}),
+    memoryDocs,
+    ...(memoryHook ? { memoryHook } : {}),
   } satisfies Sidecar);
 
   return { ...report, at: Date.now() };
@@ -530,11 +976,13 @@ export const syncFleetConfig = (config: FleetConfig): Promise<FleetSyncReport> =
 export const fleetStatus = async (): Promise<FleetSyncReport> => {
   const managed = await readSidecar();
   const skills: Record<string, FleetItemState> = {};
+  const memoryDocs: Record<string, FleetItemState> = {};
   const report: FleetSyncReport = {
     mcp: {},
     marketplaces: {},
     plugins: {},
     skills,
+    memoryDocs,
     at: Date.now(),
   };
 
@@ -545,10 +993,10 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
       ? { state: 'applied' }
       : { state: 'failed', detail: file.ok ? 'not in ~/.claude.json' : file.detail };
   }
-  for (const name of managed.marketplaces) {
-    report.marketplaces[name] = (await isLinked(name))
+  for (const { name, linkedAs } of managed.marketplaces) {
+    report.marketplaces[name] = (await isLinked(linkedAs))
       ? { state: 'applied' }
-      : { state: 'failed', detail: 'not in known_marketplaces.json' };
+      : { state: 'failed', detail: `${linkedAs} is not in known_marketplaces.json` };
   }
   for (const id of managed.plugins) {
     report.plugins[id] = (await isInstalled(id))
@@ -567,19 +1015,40 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
         ? { state: 'applied' }
         : { state: 'failed', detail: fileHash === null ? 'not on disk' : DRIFTED };
   }
+  for (const [path, hash] of Object.entries(managed.memoryDocs)) {
+    const fileHash = await fileHashAt(join(MEMORIES_DIR, path));
+    memoryDocs[path] =
+      fileHash === hash
+        ? { state: 'applied' }
+        : { state: 'failed', detail: fileHash === null ? 'not on disk' : DRIFTED };
+  }
+  if (managed.memoryHook !== undefined) {
+    report.memoryHook = (await Bun.file(managed.memoryHook).exists())
+      ? { state: 'applied' }
+      : { state: 'failed', detail: 'not on disk' };
+  }
   return report;
 };
 
 /**
- * This machine's own user CLAUDE.md, whoever wrote it. What adoption reads: a
- * memory a machine has been collecting for a year is where the fleet's first
- * document comes from.
+ * This machine's own memory set, whoever wrote it: the user CLAUDE.md and every
+ * document beside it. What adoption reads — a memory a machine has been
+ * collecting for a year is where the fleet's first document comes from, and a
+ * machine somebody split into a set by hand is where the rest of it does.
  */
-export const readMemoryFile = async (): Promise<{ content: string; hash: string } | null> => {
+export const readMemoryFile = async (): Promise<MachineMemorySet | null> => {
   const file = Bun.file(MEMORY_PATH);
-  if (!(await file.exists())) return null;
+  const docs: MachineMemoryDoc[] = [];
+  for (const path of await memoryDocPaths()) {
+    const content = await Bun.file(join(MEMORIES_DIR, path)).text();
+    docs.push({ path, content, hash: hashText(content) });
+  }
+  // A machine with documents but no main file still has a set worth adopting,
+  // and an empty main file is what the fleet's own row would have been anyway.
+  if (!(await file.exists())) return docs.length > 0 ? { content: '', hash: hashText(''), docs } : null;
+
   const content = await file.text();
-  return { content, hash: hashText(content) };
+  return { content, hash: hashText(content), docs };
 };
 
 /**
@@ -733,6 +1202,12 @@ export const inspectConfig = async (cwd?: string): Promise<ConfigInspection> => 
 
   const memoryHash = await memoryFileHash();
   const memoryFile = Bun.file(MEMORY_PATH);
+  const docs: NonNullable<ConfigInspection['memory']>['docs'] = [];
+  for (const path of await memoryDocPaths()) {
+    const doc = Bun.file(join(MEMORIES_DIR, path));
+    const hash = hashText(await doc.text());
+    docs.push({ path, hash, bytes: doc.size, managed: managed.memoryDocs[path] === hash });
+  }
 
   return {
     ...(cwd ? { cwd } : {}),
@@ -750,7 +1225,7 @@ export const inspectConfig = async (cwd?: string): Promise<ConfigInspection> => 
       .map(([id]) => id),
     marketplaces: Object.keys(linked),
     memory: memoryHash
-      ? { hash: memoryHash, bytes: memoryFile.size, managed: managed.memory === memoryHash }
+      ? { hash: memoryHash, bytes: memoryFile.size, managed: managed.memory === memoryHash, docs }
       : null,
     at: Date.now(),
   };

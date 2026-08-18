@@ -1,449 +1,118 @@
 <script lang="ts">
-	import { IconHelp, IconCheck, IconChecklist, IconSend, IconClose, IconPenLine, IconChevronDown, IconChevronRight } from '$lib/icons';
+	import { IconHelp, IconCheck, IconChecklist, IconChevronDown, IconChevronRight, IconPenLine, IconClose } from '$lib/icons';
 	import * as Collapsible from '$lib/components/ui/collapsible';
-	import type { MessageMetadata } from '$lib/cockpit/types';
-	import { isTyping } from '$lib/utils/typing';
+	import type { UserQuestionResult } from '@cockpit/core';
 	import type { MessageRendererProps } from './types';
 
-	type Question = NonNullable<MessageMetadata['questions']>[number];
+	let { message }: MessageRendererProps = $props();
 
-	let {
-		message,
-		isActive = false,
-		onQuestionSubmit,
-		onQuestionCancel,
-		onDismissMessage
-	}: MessageRendererProps = $props();
+	// The one source for how a question ended: the harness-normalised result the
+	// folding layer wrote onto the tool message. Absent means the shape nobody
+	// produced landed here — rendered as a visible fault below, never as a
+	// friendly "Question answered" pill that hides it.
+	let result = $derived(message.metadata?.toolUseResult);
 
-	// Extract questions from message metadata
-	// Supports both system messages (live) and tool.use/tool.result messages (from DB)
-	let questions = $derived.by<Question[]>(() => {
-		let rawQuestions: unknown[] = [];
+	// A question still on screen has no outcome yet, which is not the same as an
+	// outcome that went missing: the reader is looking at the card that will
+	// produce it.
+	let open = $derived(message.metadata?.toolStatus === 'pending');
 
-		// System message format (live conversation)
-		if (message.metadata?.questions && Array.isArray(message.metadata.questions)) {
-			rawQuestions = message.metadata.questions;
-		}
-		// Tool use/result format (from DB after refresh)
-		else {
-			const toolInput = message.metadata?.toolInput as { questions?: unknown[] } | undefined;
-			if (toolInput?.questions && Array.isArray(toolInput.questions)) {
-				rawQuestions = toolInput.questions;
-			}
-		}
-
-		// Normalize and filter valid questions
-		return rawQuestions
-			.filter((q): q is Record<string, unknown> => q != null && typeof q === 'object')
-			.map(q => ({
-				question: String(q.question || ''),
-				header: String(q.header || 'Question'),
-				options: Array.isArray(q.options)
-					? q.options.filter((o): o is { label: string; description: string } =>
-							o != null && typeof o === 'object' && 'label' in o
-						).map(o => ({
-							label: String(o.label || ''),
-							description: String(o.description || ''),
-						}))
-					: [],
-				multiSelect: Boolean(q.multiSelect),
-			}));
-	});
-
-	let requestId = $derived.by<string>(() => {
-		// System message format
-		if (message.metadata?.questionRequestId) {
-			return message.metadata.questionRequestId as string;
-		}
-		// Tool use format - use toolId or sdkUuid
-		return (message.metadata?.toolId as string) || message.sdkUuid || '';
-	});
-
-	// For tool messages, extract the answers that were provided
-	// Note: DB-loaded messages are type 'tool.use' but have toolResult in metadata
-	let storedAnswers = $derived.by((): Record<string, string> | null => {
-		// System message format (answers stored after submission in-memory)
-		const questionAnswers = message.metadata?.questionAnswers;
-		if (questionAnswers && typeof questionAnswers === 'object' && !Array.isArray(questionAnswers)) {
-			return questionAnswers;
-		}
-		// PRIMARY: Check toolInput.answers (persisted to DB when question is answered)
-		// This is the most robust source - answers are stored directly in toolInput
-		const toolInput = message.metadata?.toolInput as { answers?: Record<string, string> } | undefined;
-		if (toolInput?.answers && typeof toolInput.answers === 'object') {
-			const keys = Object.keys(toolInput.answers);
-			if (keys.length > 0 && keys.every(k => /^\d+$/.test(k))) {
-				return toolInput.answers;
-			}
-		}
-		// FALLBACK: Tool use/result format - check for toolResult in metadata
-		// The SDK returns a human-readable string, parse it as last resort
-		if (message.metadata?.toolResult) {
-			const result = message.metadata.toolResult;
-			// Skip if it's a string (SDK's human-readable format)
-			if (typeof result === 'string') {
-				// Try to parse answers from the string format: "0"="answer"
-				// Note: This is fragile - if SDK format changes, this will break
-				const parsed: Record<string, string> = {};
-				const regex = /"(\d+)"="([^"]*)"/g;
-				let match;
-				while ((match = regex.exec(result)) !== null) {
-					parsed[match[1]] = match[2];
-				}
-				if (Object.keys(parsed).length > 0) {
-					return parsed;
-				}
-				return null;
-			}
-			// If it's an object, try to extract answers
-			if (typeof result === 'object' && result !== null) {
-				const obj = result as Record<string, unknown>;
-				// Could be { answers: {...} } or directly {...}
-				const answers = obj.answers;
-				if (answers && typeof answers === 'object') {
-					return answers as Record<string, string>;
-				}
-				// If it's a record with numeric keys, it's the answers directly
-				const keys = Object.keys(obj);
-				if (keys.length > 0 && keys.every(k => /^\d+$/.test(k))) {
-					return obj as Record<string, string>;
-				}
-			}
-		}
-		return null;
-	});
-
-	// Selection state: Map<questionIndex, selectedLabels[]>
-	let selections = $state<Map<number, string[]>>(new Map());
-	// "Other" text inputs: Map<questionIndex, text>
-	let otherTexts = $state<Map<number, string>>(new Map());
-	// Whether "Other" is selected for each question
-	let otherSelected = $state<Map<number, boolean>>(new Map());
-
-	let isSubmitting = $state(false);
-	let submitError = $state<string | null>(null);
-
-	// Current tab index for multi-question display
-	let activeTab = $state(0);
-
-	// Expandable state for answered questions
 	let isExpanded = $state(false);
 
-	// Initialize selections when questions change (for active state)
-	$effect(() => {
-		if (isActive && questions.length > 0 && selections.size === 0) {
-			const newSelections = new Map<number, string[]>();
-			questions.forEach((_, idx) => newSelections.set(idx, []));
-			selections = newSelections;
-		}
-	});
+	type Question = UserQuestionResult['questions'][number];
 
-	// Initialize selections from storedAnswers for expanded view (answered questions)
-	$effect(() => {
-		if (!isActive && storedAnswers && questions.length > 0 && selections.size === 0) {
-			const newSelections = new Map<number, string[]>();
-			const newOtherTexts = new Map<number, string>();
-			const newOtherSelected = new Map<number, boolean>();
-
-			questions.forEach((question, idx) => {
-				const answer = storedAnswers[String(idx)];
-				if (!answer) {
-					newSelections.set(idx, []);
-					return;
-				}
-
-				// Check if answer matches any option label
-				const matchingOption = question.options.find(opt => opt.label === answer);
-				if (matchingOption) {
-					newSelections.set(idx, [matchingOption.label]);
-				} else if (question.multiSelect) {
-					// For multiselect, try to match comma-separated values
-					const parts = answer.split(', ').map(s => s.trim());
-					const matched = parts.filter(p => question.options.some(opt => opt.label === p));
-					if (matched.length > 0) {
-						newSelections.set(idx, matched);
-					} else {
-						// Custom answer
-						newSelections.set(idx, []);
-						newOtherTexts.set(idx, answer);
-						newOtherSelected.set(idx, true);
-					}
-				} else {
-					// Custom "Other" answer
-					newSelections.set(idx, []);
-					newOtherTexts.set(idx, answer);
-					newOtherSelected.set(idx, true);
-				}
-			});
-
-			selections = newSelections;
-			otherTexts = newOtherTexts;
-			otherSelected = newOtherSelected;
-		}
-	});
-
-	// Check if a specific question has been answered
-	function isQuestionAnswered(qIdx: number): boolean {
-		const hasSelection = (selections.get(qIdx)?.length || 0) > 0;
-		const hasOther = !!otherSelected.get(qIdx) && (otherTexts.get(qIdx)?.trim().length || 0) > 0;
-		return hasSelection || hasOther;
-	}
-
-	function toggleOption(questionIdx: number, label: string) {
-		const question = questions[questionIdx];
-		if (!question) return;
-
-		const current = selections.get(questionIdx) || [];
-
-		if (question.multiSelect) {
-			// Toggle in array
-			if (current.includes(label)) {
-				selections.set(questionIdx, current.filter((l) => l !== label));
-			} else {
-				selections.set(questionIdx, [...current, label]);
-			}
-			// Deselect "Other" if selecting a regular option
-			otherSelected.set(questionIdx, false);
-		} else {
-			// Single select - replace
-			selections.set(questionIdx, [label]);
-			otherSelected.set(questionIdx, false);
-		}
-		// Force reactivity
-		selections = new Map(selections);
-		otherSelected = new Map(otherSelected);
-	}
-
-	function selectOther(questionIdx: number) {
-		const question = questions[questionIdx];
-		if (!question) return;
-
-		if (!question.multiSelect) {
-			// Single select - clear regular selections
-			selections.set(questionIdx, []);
-		}
-		otherSelected.set(questionIdx, true);
-		otherSelected = new Map(otherSelected);
-		selections = new Map(selections);
-	}
-
-	function isOptionSelected(questionIdx: number, label: string): boolean {
-		return selections.get(questionIdx)?.includes(label) || false;
-	}
-
-	function getAnswerForQuestion(questionIdx: number): string {
-		if (otherSelected.get(questionIdx)) {
-			return otherTexts.get(questionIdx) || '';
-		}
-		return selections.get(questionIdx)?.join(', ') || '';
-	}
-
-	function canSubmit(): boolean {
-		return questions.every((_, idx) => {
-			const hasSelection = (selections.get(idx)?.length || 0) > 0;
-			const hasOther = otherSelected.get(idx) && (otherTexts.get(idx)?.trim().length || 0) > 0;
-			return hasSelection || hasOther;
+	// Answers are keyed by question text, and a value is `string | string[]`
+	// that need not equal any option label — freeform "Other" text lands inside
+	// `answers`. Splitting into labels that match an option and text that does
+	// not is what lets the read-only card show both.
+	let answered = $derived.by(() => {
+		if (result?.outcome !== 'answered') return [];
+		return result.questions.map((question) => {
+			const raw = result.answers[question.question];
+			const values: string[] = raw == null ? [] : Array.isArray(raw) ? raw : [raw];
+			const labels = question.options.map((option) => option.label);
+			return {
+				question,
+				selected: values.filter((value) => labels.includes(value)),
+				freeform: values.filter((value) => !labels.includes(value)),
+			};
 		});
-	}
-
-	async function handleSubmit() {
-		if (!canSubmit() || !onQuestionSubmit) return;
-
-		isSubmitting = true;
-		submitError = null;
-
-		try {
-			// Build answers object: { "0": "answer", "1": "answer", ... }
-			const answers: Record<string, string> = {};
-			questions.forEach((_, idx) => {
-				answers[String(idx)] = getAnswerForQuestion(idx);
-			});
-
-			await onQuestionSubmit(requestId, answers);
-		} catch (err) {
-			submitError = err instanceof Error ? err.message : 'Failed to submit answer';
-		} finally {
-			isSubmitting = false;
-		}
-	}
-
-	function handleKeydown(e: KeyboardEvent) {
-		if (!isActive || isSubmitting) return;
-
-		// Don't capture shortcuts when typing — the custom answer is an input
-		const typing = isTyping();
-
-		// Number keys 1-9 for quick selection (when not typing)
-		if (!typing && e.key >= '1' && e.key <= '9') {
-			e.preventDefault();
-			const optionIdx = parseInt(e.key) - 1;
-			const currentQ = questions.length > 1 ? activeTab : 0;
-			const question = questions[currentQ];
-			if (question && optionIdx < question.options.length) {
-				toggleOption(currentQ, question.options[optionIdx].label);
-			}
-			return;
-		}
-
-		// 'O' for Other (when not typing)
-		if (!typing && (e.key === 'o' || e.key === 'O')) {
-			e.preventDefault();
-			const currentQ = questions.length > 1 ? activeTab : 0;
-			selectOther(currentQ);
-			return;
-		}
-
-		// Left/Right arrow keys to switch tabs (when multiple questions and not typing)
-		if (!typing && questions.length > 1 && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
-			e.preventDefault();
-			if (e.key === 'ArrowLeft') {
-				activeTab = activeTab === 0 ? questions.length - 1 : activeTab - 1;
-			} else {
-				activeTab = (activeTab + 1) % questions.length;
-			}
-			return;
-		}
-
-		// Enter to submit (inputs and textareas handle their own Enter)
-		if (e.key === 'Enter' && !e.shiftKey && !typing && canSubmit()) {
-			e.preventDefault();
-			handleSubmit();
-			return;
-		}
-
-		// Escape to cancel
-		if (e.key === 'Escape') {
-			e.preventDefault();
-			onQuestionCancel?.();
-		}
-	}
-
-	// Get display info for answered questions (inactive state)
-	// Uses storedAnswers which handles both system message and tool.result formats
-	let answeredSummary = $derived.by(() => {
-		const answers = storedAnswers;
-		if (!answers) return null;
-		return questions.map((q, idx) => ({
-			header: q.header,
-			answer: answers[String(idx)] || 'No answer'
-		}));
 	});
+
+	// One pill per question for the collapsed summary.
+	let summary = $derived(
+		answered.map(({ question, selected, freeform }) => ({
+			header: question.header,
+			answer: selected.length > 0 ? selected.join(', ') : freeform.join(' '),
+		}))
+	);
 </script>
 
-<svelte:window onkeydown={handleKeydown} />
-
-<!-- Option row content (shared by the interactive and read-only variants) -->
-{#snippet optionBody(
-	question: Question,
-	qIdx: number,
-	option: Question['options'][number],
-	optIdx: number,
-	showShortcuts: boolean
-)}
-	<!-- Selection indicator -->
-	<div
-		class="shrink-0 w-5 h-5 mt-0.5 rounded-{question.multiSelect
-			? 'sm'
-			: 'full'} border-2 flex items-center justify-center transition-colors
-		{isOptionSelected(qIdx, option.label)
-			? 'border-primary bg-primary text-primary-foreground'
-			: 'border-muted-foreground/30'}"
-	>
-		{#if isOptionSelected(qIdx, option.label)}
-			<IconCheck class="w-3 h-3 text-primary-foreground" />
-		{/if}
-	</div>
-
-	<div class="flex-1 min-w-0">
-		<div class="flex items-center gap-2">
-			<span class="font-medium text-sm text-foreground">{option.label}</span>
-			{#if showShortcuts && optIdx < 9}
-				<kbd
-					class="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-mono"
-					>{optIdx + 1}</kbd
-				>
-			{/if}
-		</div>
-		{#if option.description}
-			<p class="text-xs text-muted-foreground mt-0.5 leading-relaxed">
-				{option.description}
-			</p>
-		{/if}
-	</div>
-{/snippet}
-
-<!-- Single question content (reusable snippet) -->
-{#snippet questionContent(question: Question, qIdx: number, showShortcuts: boolean, readOnly: boolean = false)}
-	<!-- Question header -->
-	<div class="flex items-start gap-3 mb-3">
-		<div
-			class="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0"
-		>
-			{#if question.multiSelect}
-				<IconChecklist class="w-4 h-4 text-primary" />
-			{:else}
-				<IconHelp class="w-4 h-4 text-primary" />
-			{/if}
-		</div>
-		<div class="flex-1 min-w-0">
-			<div class="flex items-center gap-2 mb-1">
-				<span
-					class="text-xs font-semibold px-2 py-0.5 rounded-full bg-primary/15 text-primary text-primary uppercase tracking-wider"
-				>
-					{question.header}
-				</span>
+{#snippet questionBlock(question: Question, selected: string[], freeform: string[])}
+	<div>
+		<div class="flex items-start gap-3 mb-2">
+			<div
+				class="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0"
+			>
 				{#if question.multiSelect}
-					<span class="text-xs text-muted-foreground">Select multiple</span>
+					<IconChecklist class="w-4 h-4" />
+				{:else}
+					<IconHelp class="w-4 h-4" />
 				{/if}
 			</div>
-			<p class="text-sm text-foreground font-medium leading-snug">
-				{question.question}
-			</p>
+			<div class="flex-1 min-w-0">
+				<div class="flex items-center gap-2 mb-1">
+					<span
+						class="text-xs font-semibold px-2 py-0.5 rounded-full bg-primary/15 text-primary uppercase tracking-wider"
+					>
+						{question.header}
+					</span>
+					{#if question.multiSelect}
+						<span class="text-xs text-muted-foreground">Select multiple</span>
+					{/if}
+				</div>
+				<p class="text-sm text-foreground font-medium leading-snug">
+					{question.question}
+				</p>
+			</div>
 		</div>
-	</div>
 
-	<!-- Options grid -->
-	<div
-		class="space-y-2 ml-11"
-		role={question.multiSelect ? 'group' : 'radiogroup'}
-		aria-label={question.question}
-	>
-		{#each question.options as option, optIdx (option.label)}
-			{#if readOnly}
+		<div class="space-y-2 ml-11">
+			{#each question.options as option (option.label)}
+				{@const chosen = selected.includes(option.label)}
 				<div
-					class="w-full text-left px-3 py-2.5 rounded-lg transition-[background-color,border-color,box-shadow] duration-150 ease-out flex items-start gap-3 border
-						{isOptionSelected(qIdx, option.label)
-						? 'bg-primary/10 text-primary border-primary/40 shadow-sm'
+					class="w-full text-left px-3 py-2.5 rounded-lg transition-[background-color,border-color] duration-150 ease-out flex items-start gap-3 border
+						{chosen
+						? 'bg-primary/10 text-primary border-primary/40'
 						: 'bg-background/50 border-transparent'}"
 				>
-					{@render optionBody(question, qIdx, option, optIdx, showShortcuts)}
+					<div
+						class="shrink-0 w-5 h-5 mt-0.5 rounded-{question.multiSelect
+							? 'sm'
+							: 'full'} border-2 flex items-center justify-center
+						{chosen
+							? 'border-primary bg-primary text-primary-foreground'
+							: 'border-muted-foreground/30'}"
+					>
+						{#if chosen}
+							<IconCheck class="w-3 h-3 text-primary-foreground" />
+						{/if}
+					</div>
+					<div class="flex-1 min-w-0">
+						<span class="font-medium text-sm text-foreground">{option.label}</span>
+						{#if option.description}
+							<p class="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+								{option.description}
+							</p>
+						{/if}
+					</div>
 				</div>
-			{:else}
-				<button
-					type="button"
-					role={question.multiSelect ? 'checkbox' : 'radio'}
-					aria-checked={isOptionSelected(qIdx, option.label)}
-					class="w-full text-left px-3 py-2.5 rounded-lg transition-[background-color,border-color,box-shadow] duration-150 ease-out flex items-start gap-3 border cursor-pointer
-						{isOptionSelected(qIdx, option.label)
-						? 'bg-primary/10 text-primary border-primary/40 shadow-sm'
-						: 'bg-background/50 border-transparent hover:border-border hover:bg-accent hover:text-accent-foreground/50'}"
-					onclick={() => toggleOption(qIdx, option.label)}
-				>
-					{@render optionBody(question, qIdx, option, optIdx, showShortcuts)}
-				</button>
-			{/if}
-		{/each}
+			{/each}
 
-		<!-- Other option -->
-		<div
-			class="w-full text-left px-3 py-2.5 rounded-lg transition-[background-color,border-color] duration-150 ease-out border
-			{otherSelected.get(qIdx)
-				? 'bg-primary/10 text-primary border-primary/40'
-				: 'bg-background/50 border-transparent'}
-			{!readOnly && !otherSelected.get(qIdx) ? 'hover:border-border hover:bg-accent hover:text-accent-foreground/50' : ''}"
-		>
-			{#if otherSelected.get(qIdx)}
-				<div class="flex items-start gap-3">
+			{#if freeform.length > 0}
+				<div
+					class="flex items-start gap-3 px-3 py-2.5 rounded-lg border bg-primary/10 text-primary border-primary/40"
+				>
 					<div
 						class="shrink-0 w-5 h-5 mt-0.5 rounded-{question.multiSelect
 							? 'sm'
@@ -452,80 +121,12 @@
 						<IconCheck class="w-3 h-3 text-primary-foreground" />
 					</div>
 					<div class="flex-1 min-w-0">
-						<div class="flex items-center gap-2 mb-2">
+						<div class="flex items-center gap-2 mb-1">
 							<IconPenLine class="w-3.5 h-3.5 text-muted-foreground" />
 							<span class="text-xs text-muted-foreground">Custom answer</span>
-							{#if !readOnly}
-								<button
-									type="button"
-									class="ml-auto p-0.5 rounded hover:bg-accent hover:text-accent-foreground"
-										aria-label="Clear custom answer"
-									onclick={() => {
-										otherSelected.set(qIdx, false);
-										otherSelected = new Map(otherSelected);
-									}}
-								>
-									<IconClose class="w-3.5 h-3.5 text-muted-foreground" />
-								</button>
-							{/if}
 						</div>
-						{#if readOnly}
-							<div class="w-full px-2 py-1.5 text-sm text-foreground">
-								{otherTexts.get(qIdx) || ''}
-							</div>
-						{:else}
-							<input
-								type="text"
-								aria-label="Custom answer"
-								class="w-full px-2 py-1.5 text-sm bg-background border border-border rounded-md
-									focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
-								placeholder="Type your answer..."
-								value={otherTexts.get(qIdx) || ''}
-								oninput={(e) => {
-									otherTexts.set(qIdx, e.currentTarget.value);
-									otherTexts = new Map(otherTexts);
-								}}
-								onkeydown={(e) => {
-									e.stopPropagation();
-									if (e.key === 'Enter' && canSubmit()) {
-										e.preventDefault();
-										handleSubmit();
-									}
-								}}
-							/>
-						{/if}
+						<div class="text-sm text-foreground">{freeform.join(' ')}</div>
 					</div>
-				</div>
-			{:else if !readOnly}
-				<button
-					type="button"
-					class="flex items-center gap-3 w-full cursor-pointer"
-					onclick={() => selectOther(qIdx)}
-				>
-					<div
-						class="shrink-0 w-5 h-5 rounded-{question.multiSelect
-							? 'sm'
-							: 'full'} border-2 border-dashed border-muted-foreground/30"
-					></div>
-					<div class="flex items-center gap-2">
-						<span class="text-sm text-muted-foreground">Other...</span>
-						{#if showShortcuts}
-							<kbd
-								class="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-mono"
-								>O</kbd
-							>
-						{/if}
-					</div>
-				</button>
-			{:else}
-				<!-- Read-only "Other" not selected - show nothing or empty state -->
-				<div class="flex items-center gap-3">
-					<div
-						class="shrink-0 w-5 h-5 rounded-{question.multiSelect
-							? 'sm'
-							: 'full'} border-2 border-dashed border-muted-foreground/30"
-					></div>
-					<span class="text-sm text-muted-foreground">Other...</span>
 				</div>
 			{/if}
 		</div>
@@ -534,195 +135,75 @@
 
 <div class="flex justify-start gap-3 group w-full">
 	<div class="flex flex-col gap-1 items-start w-full max-w-lg">
-		{#if isActive}
-			<!-- Active: Show question picker form -->
+		{#if result?.outcome === 'answered'}
 			<div class="w-full">
-				<div class="border border-border rounded-xl bg-card/50 backdrop-blur-sm overflow-hidden">
-					{#if questions.length > 1}
-						<!-- Multi-question: Tab navigation -->
-						<div class="flex border-b border-border/50 bg-muted/20">
-							{#each questions as question, qIdx (qIdx)}
-								<button
-									type="button"
-									class="flex-1 px-3 py-2.5 text-sm font-medium transition-colors duration-150 ease-out relative
-										{activeTab === qIdx
-											? 'text-primary bg-card/50'
-											: 'hover:text-foreground hover:bg-accent hover:text-accent-foreground/30'}"
-									onclick={() => activeTab = qIdx}
-								>
-									<div class="flex items-center justify-center gap-2">
-										<span class="truncate max-w-[100px]">{question.header}</span>
-										{#if isQuestionAnswered(qIdx)}
-											<IconCheck class="w-3.5 h-3.5 text-success shrink-0" />
-										{/if}
-									</div>
-									{#if activeTab === qIdx}
-										<div class="absolute bottom-0 left-0 right-0 h-0.5 bg-primary text-primary-foreground"></div>
-									{/if}
-								</button>
-							{/each}
-						</div>
-
-						<!-- Tab content -->
-						<div class="p-4">
-							{@render questionContent(questions[activeTab], activeTab, true, false)}
-						</div>
-					{:else}
-						<!-- Single question: Simple view -->
-						<div class="p-4">
-							{@render questionContent(questions[0], 0, true, false)}
-						</div>
-					{/if}
-
-					<!-- Error -->
-					{#if submitError}
-						<div
-							class="mx-4 mb-3 flex items-center gap-2 text-sm text-destructive bg-destructive/10 text-destructive rounded-md px-3 py-2"
-						>
-							<IconClose class="w-4 h-4 shrink-0" />
-							<span>{submitError}</span>
-						</div>
-					{/if}
-
-					<!-- Actions footer -->
-					<div
-						class="flex items-center justify-between gap-3 px-4 py-3 bg-muted/30 border-t border-border/50"
-					>
-						<p class="text-xs text-muted-foreground">
-							{#if questions.length > 1}
-								<kbd class="px-1 py-0.5 rounded bg-muted font-mono">←/→</kbd> switch •
-								<kbd class="px-1 py-0.5 rounded bg-muted font-mono">1-9</kbd> select •
-								<kbd class="px-1 py-0.5 rounded bg-muted font-mono">Enter</kbd> submit
-							{:else}
-								<kbd class="px-1 py-0.5 rounded bg-muted font-mono">1-9</kbd> select •
-								<kbd class="px-1 py-0.5 rounded bg-muted font-mono">O</kbd> other •
-								<kbd class="px-1 py-0.5 rounded bg-muted font-mono">Enter</kbd> submit
-							{/if}
-						</p>
-
-						<div class="flex items-center gap-2">
-							<button
-								onclick={onQuestionCancel}
-								disabled={isSubmitting}
-								class="px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-							>
-								Skip
-							</button>
-							<button
-								onclick={handleSubmit}
-								disabled={!canSubmit() || isSubmitting}
-								class="flex items-center gap-1.5 px-4 py-1.5 bg-primary text-primary-foreground rounded-md text-sm font-medium
-									hover:bg-primary/90 hover:text-primary disabled:opacity-40 disabled:cursor-not-allowed transition-[background-color,opacity] duration-150 ease-out"
-							>
-								{#if isSubmitting}
-									<div
-										class="w-3.5 h-3.5 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin"
-									></div>
-									<span>Sending...</span>
+				<Collapsible.Root open={isExpanded} onOpenChange={() => (isExpanded = !isExpanded)}>
+					<!-- Compact summary (clickable to expand) -->
+					<div class="flex items-center gap-2 w-full">
+						<Collapsible.Trigger class="flex items-center gap-2 flex-1 text-left">
+							<div class="flex items-center gap-1 text-muted-foreground">
+								{#if isExpanded}
+									<IconChevronDown class="w-4 h-4" />
 								{:else}
-									<IconSend class="w-3.5 h-3.5" />
-									<span>Submit</span>
-								{/if}
-							</button>
-						</div>
-					</div>
-				</div>
-			</div>
-		{:else}
-			<!-- Inactive: Expandable answered state -->
-			<div class="w-full">
-				{#if answeredSummary}
-					<Collapsible.Root open={isExpanded} onOpenChange={() => isExpanded = !isExpanded}>
-						<!-- Compact summary (clickable to expand) -->
-						<div class="flex items-center gap-2 w-full">
-							<Collapsible.Trigger class="flex items-center gap-2 flex-1 text-left">
-								<div class="flex items-center gap-1 text-muted-foreground">
-									{#if isExpanded}
-										<IconChevronDown class="w-4 h-4" />
-									{:else}
-										<IconChevronRight class="w-4 h-4" />
-									{/if}
-								</div>
-								<div class="flex flex-wrap gap-2 flex-1">
-									{#each answeredSummary || [] as { header, answer }, idx (idx)}
-										<div
-											class="inline-flex items-center gap-2 px-3 py-1.5 bg-accent/50 text-foreground border border-border/50 rounded-full text-sm"
-										>
-											<span class="text-xs font-semibold text-primary uppercase">{header}</span>
-											<span class="text-muted-foreground">→</span>
-											<span class="text-foreground font-medium truncate max-w-[200px]">{answer}</span>
-										</div>
-									{/each}
-								</div>
-							</Collapsible.Trigger>
-							{#if onDismissMessage}
-								<button
-									onclick={() => onDismissMessage?.()}
-									class="p-1 rounded-full hover:bg-accent hover:text-accent-foreground transition-colors opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100"
-									title="Dismiss"
-									aria-label="Dismiss"
-								>
-									<IconClose class="w-3.5 h-3.5 text-muted-foreground" />
-								</button>
-							{/if}
-						</div>
-
-						<!-- Expanded view: Show full question UI (read-only) -->
-						<Collapsible.Content>
-							<div class="mt-3 border border-border/50 rounded-xl bg-card/30 overflow-hidden">
-								{#if questions.length > 1}
-									<!-- Multi-question: Tab navigation (read-only) -->
-									<div class="flex border-b border-border/50 bg-muted/10">
-										{#each questions as question, qIdx (qIdx)}
-											<button
-												type="button"
-												class="flex-1 px-3 py-2 text-xs font-medium transition-colors duration-150 ease-out relative
-													{activeTab === qIdx
-														? 'text-primary bg-card/50'
-														: 'text-muted-foreground hover:text-foreground'}"
-												onclick={() => activeTab = qIdx}
-											>
-												<div class="flex items-center justify-center gap-1.5">
-													<span class="truncate max-w-[80px]">{question.header}</span>
-													<IconCheck class="w-3 h-3 text-success shrink-0" />
-												</div>
-												{#if activeTab === qIdx}
-													<div class="absolute bottom-0 left-0 right-0 h-0.5 bg-primary/50 text-primary"></div>
-												{/if}
-											</button>
-										{/each}
-									</div>
-									<div class="p-3 opacity-75">
-										{@render questionContent(questions[activeTab], activeTab, false, true)}
-									</div>
-								{:else}
-									<div class="p-3 opacity-75">
-										{@render questionContent(questions[0], 0, false, true)}
-									</div>
+									<IconChevronRight class="w-4 h-4" />
 								{/if}
 							</div>
-						</Collapsible.Content>
-					</Collapsible.Root>
-				{:else}
-					<div class="flex items-center gap-2">
-						<div
-							class="inline-flex items-center gap-2 px-3 py-1.5 bg-accent/50 text-foreground border border-border/50 rounded-full text-sm"
-						>
-							<IconHelp class="w-3.5 h-3.5 text-muted-foreground" />
-							<span class="text-muted-foreground">Question answered</span>
-						</div>
-						{#if onDismissMessage}
-							<button
-								onclick={onDismissMessage}
-								class="p-1 rounded-full hover:bg-accent hover:text-accent-foreground transition-colors opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100"
-								title="Dismiss"
-								aria-label="Dismiss"
-							>
-								<IconClose class="w-3.5 h-3.5 text-muted-foreground" />
-							</button>
-						{/if}
+							<div class="flex flex-wrap gap-2 flex-1">
+								{#each summary as row, idx (idx)}
+									<div
+										class="inline-flex items-center gap-2 px-3 py-1.5 bg-accent/50 text-foreground border border-border/50 rounded-full text-sm"
+									>
+										<span class="text-xs font-semibold text-primary uppercase">{row.header}</span>
+										<span class="text-muted-foreground">→</span>
+										<span class="text-foreground font-medium truncate max-w-[200px]">{row.answer || '—'}</span>
+									</div>
+								{/each}
+							</div>
+						</Collapsible.Trigger>
 					</div>
-				{/if}
+
+					<!-- Expanded view: the questions, options, and the reader's choices -->
+					<Collapsible.Content>
+						<div class="mt-3 border border-border/50 rounded-xl bg-card/30 overflow-hidden">
+							<div class="p-3 opacity-75 space-y-4">
+								{#each answered as { question, selected, freeform } (question.question)}
+									{@render questionBlock(question, selected, freeform)}
+								{/each}
+							</div>
+						</div>
+					</Collapsible.Content>
+				</Collapsible.Root>
+			</div>
+		{:else if result?.outcome === 'dismissed'}
+			<!-- Nothing went wrong here: the reader was asked and walked away, and
+			     the transcript should say so plainly. Naming the headers keeps the
+			     row worth reading without pretending an answer exists. -->
+			<div
+				class="inline-flex items-center gap-2 px-3 py-1.5 bg-muted/50 text-muted-foreground border border-border/50 rounded-full text-sm"
+			>
+				<IconClose class="w-3.5 h-3.5" />
+				<span>Dismissed without answering — {result.questions.map((q) => q.header).join(', ')}</span>
+			</div>
+		{:else if open}
+			<!-- The question is live; its outcome is being decided on the permission
+			     card right now. Saying "missing" here would cry fault at the one
+			     moment the data is legitimately not written yet. -->
+			<div
+				class="inline-flex items-center gap-2 px-3 py-1.5 bg-accent/50 text-muted-foreground border border-border/50 rounded-full text-sm"
+			>
+				<IconHelp class="w-3.5 h-3.5" />
+				<span>Waiting for your answer</span>
+			</div>
+		{:else}
+			<!-- Deliberately not graceful: a message the renderer was asked to draw
+			     but whose canonical data never arrived is a shape nobody handled,
+			     so it is made loud for a developer to find and file rather than
+			     reduced to a "Question answered" pill. -->
+			<div
+				class="inline-flex items-center gap-2 px-3 py-1.5 bg-destructive/10 text-destructive border border-destructive/40 rounded-full text-sm"
+			>
+				<IconClose class="w-3.5 h-3.5" />
+				<span>AskUserQuestion result missing (no `toolUseResult` on this message)</span>
 			</div>
 		{/if}
 	</div>

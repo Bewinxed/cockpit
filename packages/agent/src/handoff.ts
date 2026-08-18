@@ -190,6 +190,35 @@ export function handoffTools(deps: HandoffDeps, onStructured?: OnStructuredResul
         ],
       })
     ),
+    tool(
+      'send_to_user',
+      'Display a message directly to the user (delivered to their Telegram). Use this for ' +
+        'progress updates, partial results, or content the user must see exactly as written ' +
+        'before the task finishes.',
+      {
+        message: z
+          .string()
+          .describe('The text to show the user, exactly as it should read.'),
+      },
+      async ({ message }) => ({
+        content: [{ type: 'text' as const, text: await actions.sendToUser(message) }],
+      })
+    ),
+    tool(
+      'note_for_user',
+      'Record a note for the user about a concern they raised, saying what you actually did ' +
+        'about it. Use this after you have acted on something the user pushed back on: which ' +
+        'file you fixed, what you ran, what you found. The note is shown to the user, so write ' +
+        'what changed, not that you understood.',
+      {
+        note: z
+          .string()
+          .describe('What you actually did about it, in a sentence or two. Ten characters minimum.'),
+      },
+      async ({ note }) => ({
+        content: [{ type: 'text' as const, text: await actions.acknowledgeConcern(note) }],
+      })
+    ),
   ];
 }
 

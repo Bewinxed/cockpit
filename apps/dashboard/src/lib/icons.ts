@@ -32,6 +32,8 @@ export { default as IconWarningTriangle } from '~icons/solar/danger-triangle-lin
 export { default as IconHelp } from '~icons/solar/question-circle-linear';
 export { default as IconInfo } from '~icons/solar/info-circle-linear';
 export { default as IconShield } from '~icons/solar/shield-linear';
+/** Rules: a standing guard over what sessions say, distinct from bare `shield`. */
+export { default as IconRules } from '~icons/solar/shield-check-linear';
 export { default as IconKey } from '~icons/solar/key-minimalistic-linear';
 export { default as IconSearch } from '~icons/solar/magnifer-linear';
 export { default as IconSettings } from '~icons/solar/settings-linear';

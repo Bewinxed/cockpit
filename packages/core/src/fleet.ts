@@ -258,13 +258,68 @@ export const agentProblem = (front: AgentFrontMatter, expected?: string): string
   return undefined;
 };
 
-/** The user-scope memory (`~/.claude/CLAUDE.md`), one document for the whole fleet. */
+/**
+ * Why this path cannot be a linked document, in a sentence, or nothing when it
+ * can. One rule for the hub's refusal and the daemon's write, so nothing is
+ * ever stored that a machine would then have to turn away — and nothing under
+ * `~/.claude/memories/` is ever a write anywhere else.
+ */
+export const memoryDocProblem = (path: string): string | undefined => {
+  if (!path.endsWith('.md')) return 'a linked document is markdown — its path has to end in .md';
+  if (path.startsWith('/') || /^[A-Za-z]:/.test(path)) {
+    return `“${path}” is absolute — a document's path is relative to ~/.claude/memories/`;
+  }
+  if (path.includes('\\')) {
+    return `“${path}” uses backslashes — the path is the same string on every machine, so it is forward-slashed`;
+  }
+  const parts = path.split('/');
+  if (parts.some((part) => part === '' || part === '.' || part === '..')) {
+    return `“${path}” is not a usable path — no empty, “.” or “..” segments`;
+  }
+  if (parts.some((part) => part.startsWith('.'))) {
+    return `“${path}” hides a segment behind a dot — the set is documents, not dotfiles`;
+  }
+  return undefined;
+};
+
+/**
+ * One document the main memory links, by its path under `~/.claude/memories/`
+ * (`models/claude-opus-5.md`). Its own hash, because a set converges file by
+ * file: a doc edited on a machine holds up itself and nothing else.
+ *
+ * The path is relative and always forward-slashed — it is the same string on
+ * every machine, and it is what the hub's row is keyed by.
+ */
+export interface FleetMemoryDoc {
+  path: string;
+  /** sha256 hex of `content` (UTF-8) — what a machine compares before writing. */
+  hash: string;
+  content: string;
+  /** Set on a targeted push only: overwrite a machine copy that drifted. */
+  force?: boolean;
+}
+
+/**
+ * The user-scope memory: `~/.claude/CLAUDE.md` and the documents it links.
+ *
+ * The main file is loaded flat into every session, so it stays the part every
+ * model should read. The linked ones are read on purpose — a SessionStart hook
+ * puts `models/<model>.md` in front of the session that is actually running
+ * that model, which is the only conditional loading Claude Code has.
+ */
 export interface FleetMemory {
   /** sha256 hex of `content` (UTF-8) — what a machine compares before writing. */
   hash: string;
   content: string;
   /** Set on a targeted push only: overwrite a machine copy that drifted. */
   force?: boolean;
+  /**
+   * The linked documents. Absent from a hub that predates the set, which is a
+   * fleet of exactly one document — and a daemon that predates it ignores the
+   * field and still converges the main file, which is the whole of what it
+   * knew how to do.
+   */
+  docs?: FleetMemoryDoc[];
 }
 
 /** The whole desired state — what the hub sends a machine to converge on. */
@@ -312,6 +367,18 @@ export interface FleetSyncReport {
    * overwritten.
    */
   memory?: FleetItemState;
+  /**
+   * The linked documents, by the same path the set keyed them under. Absent
+   * from a daemon that predates the set; one drifted document says so on its
+   * own row, with the main file still `applied` beside it.
+   */
+  memoryDocs?: Record<string, FleetItemState>;
+  /**
+   * The SessionStart hook that shows a session the document for the model it is
+   * running. Absent from a daemon that predates the set, and from one the set
+   * gave nothing to register.
+   */
+  memoryHook?: FleetItemState;
   /** When the sync ran, ms epoch. */
   at: number;
 }
@@ -371,10 +438,36 @@ export interface ConfigInspection {
   marketplaces: string[];
   /**
    * The machine's own user CLAUDE.md, or null when it has none. `managed` says
-   * cockpit wrote what is there — an unmanaged one is worth adopting.
+   * cockpit wrote what is there — an unmanaged one is worth adopting. `docs`
+   * is whatever the machine has under `~/.claude/memories/`, read the same way
+   * and absent from a daemon that predates the set.
    */
-  memory?: { hash: string; bytes: number; managed: boolean } | null;
+  memory?: {
+    hash: string;
+    bytes: number;
+    managed: boolean;
+    docs?: { path: string; hash: string; bytes: number; managed: boolean }[];
+  } | null;
   at: number;
+}
+
+/** One linked document as a machine really has it, whoever wrote it. */
+export interface MachineMemoryDoc {
+  path: string;
+  hash: string;
+  content: string;
+}
+
+/**
+ * A machine's own memory set: the user CLAUDE.md and whatever is under
+ * `~/.claude/memories/`. What {@link READ_MEMORY_FILE} answers with, and what a
+ * peek and an adoption read. A daemon that predates the set answers without
+ * `docs`, which reads as a machine that keeps none.
+ */
+export interface MachineMemorySet {
+  content: string;
+  hash: string;
+  docs?: MachineMemoryDoc[];
 }
 
 /**
@@ -391,8 +484,8 @@ export interface ConfigInspection {
  * - `readSkillFiles(name: string, cwd?: string) => SkillFile[]` — the files
  *   of a skill that is already on the machine, so the hub can adopt it into
  *   the fleet and hand it to every other machine.
- * - `readMemoryFile() => { content: string; hash: string } | null` — the
- *   machine's current user CLAUDE.md, for adoption.
+ * - `readMemoryFile() => MachineMemorySet | null` — the machine's current user
+ *   CLAUDE.md and the documents beside it, for adoption.
  */
 export const FLEET_SYNC = 'syncFleetConfig';
 export const FLEET_STATUS = 'fleetStatus';

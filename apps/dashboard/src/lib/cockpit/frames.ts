@@ -12,6 +12,7 @@ import type {
   SendPayload,
   SessionMessage,
   SlashCommand,
+  UserQuestionResult,
 } from '@cockpit/core';
 import type { SubagentState } from '$lib/utils/flow-types';
 import { getToolGlance } from '$lib/utils/tool-display';
@@ -26,6 +27,8 @@ export interface ToolResult {
   result: string;
   isError: boolean;
   structuredContent?: Record<string, unknown>;
+  /** The answer payload of an `AskUserQuestion`, normalised by the harness adapter. */
+  questionResult?: UserQuestionResult;
 }
 
 /** The tool a session is running right now — the fleet view's glance line. */
@@ -428,6 +431,21 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
       const text = transcriptUserText(sdk.message);
       // A message from another session is nobody's local echo, so nothing else
       // will render it — and it must not render as the reader's own words.
+      // Cockpit's own word rather than another session's: a rule that fired.
+      // Nothing else will ever render it — the reader never typed it, so there
+      // is no local copy — and it must not read as the reader's own sentence.
+      // It borrows the peer machinery for exactly that reason, minus the
+      // session ids, so no delegate branch tries to claim it as its own.
+      const rule = 'origin' in sdk && sdk.origin?.kind === 'system' ? sdk.origin : null;
+      if (rule && text) {
+        mapping.messages.push({
+          ...base,
+          type: 'user.peer',
+          content: text,
+          metadata: { peerName: ruleLabel(rule.name), ruleName: ruleLabel(rule.name) },
+        });
+        break;
+      }
       const peer = 'origin' in sdk && sdk.origin?.kind === 'peer' ? sdk.origin : null;
       if (peer && text) {
         // A delegate's routed ask is peer-origin too, but it is plumbing rather
@@ -543,6 +561,7 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
           result: resultText(block.content),
           isError: block.is_error === true,
           structuredContent: block.structuredContent,
+          questionResult: block.questionResult,
         });
       }
       break;
@@ -1005,6 +1024,13 @@ export interface Transcript {
  * results arriving for a `tool.use` that is on the other side of the cut. A turn
  * that was nothing but an image still opened one.
  */
+/**
+ * The rule's own name, out of the `rule:<name>` the origin carries. Falls back
+ * to something honest rather than empty when a hub predates the naming.
+ */
+const ruleLabel = (name?: string): string =>
+  name?.replace(/^rule:/, '').trim() || 'a rule';
+
 function turnStart(
   entry: SessionMessage
 ): { text: string; images?: MessageMetadata['images'] } | null {
@@ -1366,8 +1392,12 @@ export function mapTranscript(instanceId: string, transcript: SessionMessage[]):
     // typed — so this branch claimed it and rendered another agent's words as
     // the reader's own, which is the one thing the peer origin exists to stop.
     // `mapFrame` below knows the difference; let it have them.
-    const fromPeer =
-      'origin' in entry && (entry as { origin?: { kind?: string } }).origin?.kind === 'peer';
+    // Anything cockpit injected — another session's hand-off, or a rule — is not
+    // the reader opening a turn, and claiming it as one renders it as their own.
+    const injectedKind = 'origin' in entry
+      ? (entry as { origin?: { kind?: string } }).origin?.kind
+      : undefined;
+    const fromPeer = injectedKind === 'peer' || injectedKind === 'system';
     const opening = fromPeer ? null : turnStart(entry);
     if (opening) {
       // A stored ask's marker is all that survives storage — the `[delegate-ask
@@ -1580,7 +1610,10 @@ export function isDelegateReport(
 }
 
 /** Folds a tool result into the `tool.use` it answers. */
-export function applyToolResult(messages: Message[], { toolId, result, isError, structuredContent }: ToolResult): void {
+export function applyToolResult(
+  messages: Message[],
+  { toolId, result, isError, structuredContent, questionResult }: ToolResult
+): void {
   // `tool.handoff` is a tool call too — it just renders as a receipt. Matching
   // only `tool.use` left it stuck on "sending…" with the answer never applied.
   const target = messages.find(
@@ -1620,6 +1653,7 @@ export function applyToolResult(messages: Message[], { toolId, result, isError, 
     ...target.metadata,
     toolResult: result,
     toolStatus: isError ? 'error' : 'success',
+    ...(questionResult ? { toolUseResult: questionResult } : {}),
     ...(delegateInstanceId ? { delegateInstanceId } : {}),
     ...(delegateTitle ? { delegateTitle } : {}),
   };

@@ -7,6 +7,7 @@ import type {
   AvailableCommand,
   ClaudeLimits,
   ControlPayload,
+  EffortLevel,
   Envelope,
   FramePayload,
   FsPayload,
@@ -243,6 +244,13 @@ export interface SessionState {
   permissionMode: PermissionMode | null;
   /** Which model answers the next turn, learnt and corrected the same way. */
   model: string | null;
+  /**
+   * How hard that model thinks. Learnt the same way with one difference that
+   * matters: no `init` reports effort back, so nothing ever corrects this — it
+   * is the last level asked for, and `null` means nobody has asked, not that the
+   * session is running at the API default.
+   */
+  effort: EffortLevel | null;
   /** Started again in place for a mode it could not switch into; ends at the next init. */
   relaunching: boolean;
   /** A side quest (NEW.md §1) — kept visually apart until it is kept or discarded. */
@@ -425,6 +433,7 @@ function session(instanceId: string): SessionState {
     initialized: false,
     permissionMode: null,
     model: null,
+    effort: null,
     relaunching: false,
     scratch: false,
     context: null,
@@ -479,6 +488,9 @@ function adoptSettings(target: SessionState, row: InstanceRow): void {
     target.permissionMode = row.permissionMode as PermissionMode;
   }
   if (target.model === null && row.model) target.model = row.model;
+  // The row is the *only* source for effort — no init carries it — so this is
+  // not a blank being filled ahead of the session's own word, it is the record.
+  if (target.effort === null && row.effort) target.effort = row.effort as EffortLevel;
 }
 
 /**
@@ -488,7 +500,7 @@ function adoptSettings(target: SessionState, row: InstanceRow): void {
  */
 async function persistSettings(
   instanceId: string,
-  settings: { permissionMode?: PermissionMode; model?: string }
+  settings: { permissionMode?: PermissionMode; model?: string; effort?: EffortLevel }
 ): Promise<void> {
   const row = state.instances.find((candidate) => candidate.id === instanceId);
   if (!row) return;
@@ -498,6 +510,7 @@ async function persistSettings(
     patch.permissionMode = settings.permissionMode;
   }
   if (settings.model && settings.model !== row.model) patch.model = settings.model;
+  if (settings.effort && settings.effort !== row.effort) patch.effort = settings.effort;
   if (Object.keys(patch).length === 0) return;
 
   try {
@@ -1282,6 +1295,7 @@ function start({ machineId, ...spawn }: Omit<SpawnPayload, 'instanceId'> & { mac
   // What the form chose, so the header shows it during the wait for the first
   // init — which then corrects it to whatever the harness resolved it to.
   created.model = spawn.model ?? null;
+  created.effort = spawn.effort ?? null;
   created.scratch = Boolean(spawn.scratch);
   return created;
 }
@@ -1294,6 +1308,7 @@ export function spawnSession({
   harness,
   permissionMode,
   model,
+  effort,
   scratch,
   bootstrap,
   projectId,
@@ -1304,6 +1319,7 @@ export function spawnSession({
   harness?: HarnessKind;
   permissionMode?: PermissionMode;
   model?: string;
+  effort?: EffortLevel;
   scratch?: SpawnPayload['scratch'];
   bootstrap?: SpawnPayload['bootstrap'];
   projectId?: string;
@@ -1314,6 +1330,7 @@ export function spawnSession({
     harness,
     permissionMode,
     model,
+    effort,
     scratch,
     bootstrap,
     projectId,
@@ -1445,6 +1462,7 @@ export async function ensureAlive(instanceId: string, machineId: string): Promis
         | PermissionMode
         | undefined,
       model: target.model ?? row?.model ?? undefined,
+      effort: (target.effort ?? row?.effort ?? undefined) as EffortLevel | undefined,
       requestId,
     };
     target.relaunching = true;
@@ -2151,6 +2169,37 @@ export async function setModel(
 }
 
 /**
+ * Changes how hard the session thinks, from the next turn on. Awaited like the
+ * model and the permission mode, and for the same reason — but with one more:
+ * the row is the only record effort has, so a switch the machine refused must
+ * not be written down as one it took.
+ */
+export async function setEffort(
+  instanceId: string,
+  machineId: string,
+  effort: EffortLevel
+): Promise<void> {
+  // Switching a setting on a session whose process died must not fail:
+  // revive it first, then apply.
+  await ensureAlive(instanceId, machineId);
+  const target = session(instanceId);
+  const previous = target.effort;
+  target.effort = effort;
+
+  const requestId = newId();
+  const payload: ControlPayload = { instanceId, requestId, method: 'setEffort', args: [effort] };
+  try {
+    await ask<void>(requestId, 'setEffort', CONTROL_TIMEOUT_MS, () =>
+      send({ verb: 'control', machineId, instanceId, requestId, payload })
+    );
+  } catch (error) {
+    target.effort = previous;
+    throw error;
+  }
+  void persistSettings(instanceId, { effort });
+}
+
+/**
  * `bypassPermissions` is a launch decision — the SDK refuses to switch a running
  * session into it — so a session that wants it now is started again in place:
  * same instance id, same hub row, its own SDK session resumed, so the new
@@ -2178,8 +2227,10 @@ export async function relaunchSession(
     scratch: target.scratch ? {} : undefined,
     permissionMode,
     // Only the mode is being changed, so the model the session was answering on
-    // carries over — the spawn is the row's new word on both.
+    // and the level it was thinking at both carry over — the spawn is the row's
+    // new word on all three.
     model: target.model ?? undefined,
+    effort: target.effort ?? undefined,
     requestId,
   };
 
@@ -2294,11 +2345,12 @@ export async function editAndResend(
     cwd: target.cwd,
     harness: target.harness,
     resume: { sessionKey: target.sessionId, atMessage: point.at },
-    // The same three a relaunch carries: a rewind changes what the session has
+    // The same four a relaunch carries: a rewind changes what the session has
     // said, not what it is.
     scratch: target.scratch ? {} : undefined,
     permissionMode: target.permissionMode ?? undefined,
     model: target.model ?? undefined,
+    effort: target.effort ?? undefined,
     requestId,
   };
 

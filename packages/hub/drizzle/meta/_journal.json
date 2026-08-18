@@ -162,6 +162,27 @@
       "when": 1788000000010,
       "tag": "0022_usage_buckets_session",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "6",
+      "when": 1788000000011,
+      "tag": "0023_fleet_memory_docs",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1788000000012,
+      "tag": "0024_instances_effort",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "6",
+      "when": 1788000000013,
+      "tag": "0025_rules",
+      "breakpoints": true
     }
   ]
 }

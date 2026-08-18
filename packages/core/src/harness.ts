@@ -34,6 +34,20 @@ export type PermissionMode =
   | 'dontAsk'
   | 'auto';
 
+/**
+ * How hard the model thinks, and how much it spends doing it: Claude Code's
+ * effort scale, in its own order. Hand-written rather than tunnelled from the
+ * SDK — nothing in this file imports a harness SDK, and `@cockpit/core` has no
+ * dependencies at all — but it is the SDK's `EffortLevel` verbatim, so the
+ * claude adapter hands it straight on.
+ *
+ * Effort is not only thinking depth. A lower level also buys fewer and more
+ * consolidated tool calls, less preamble and terser confirmations; a higher one
+ * spends tokens in all of those places. A harness with no such knob reports
+ * `effort: false` rather than mapping onto this.
+ */
+export type EffortLevel = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+
 /** A session's own word on what it is doing right now. */
 export type NeutralStatus = 'compacting' | 'requesting' | null;
 
@@ -83,8 +97,14 @@ export interface ModelInfo {
   resolvedModel?: string;
   displayName: string;
   description?: string;
+  /**
+   * Whether this model has an effort scale, and which of its stops it reaches.
+   * The pair is the *only* thing that decides what an effort control offers —
+   * `xhigh` and `max` are model-dependent, and a hardcoded list of which models
+   * have them is a list that is wrong by the next release.
+   */
   supportsEffort?: boolean;
-  supportedEffortLevels?: string[];
+  supportedEffortLevels?: EffortLevel[];
   supportsAdaptiveThinking?: boolean;
   supportsFastMode?: boolean;
   supportsAutoMode?: boolean;
@@ -151,6 +171,49 @@ export interface UserQuestion {
 /** The reader's choices, back the way the tool reads them. */
 export type UserAnswers = Record<string, string | string[]>;
 
+/**
+ * A question the reader answered: the questions asked and the choices made,
+ * keyed by question text.
+ *
+ * `answers` values are `string | string[]` by wire truth: the Claude SDK types
+ * them `string` ("multi-select answers are comma-separated") but a real
+ * transcript carries an array for a multi-select answer, and freeform "Other"
+ * text lands inside `answers` too — so a value is not guaranteed to match any
+ * option `label`. The union is the truth; nothing coerces it.
+ */
+export interface UserQuestionAnswered {
+  outcome: 'answered';
+  questions: UserQuestion[];
+  answers: UserAnswers;
+  /** Freeform text the reader typed instead of selecting a structured option. */
+  response?: string;
+  /** Per-question notes (preview selections), keyed by question text. */
+  annotations?: Record<string, { notes?: string; preview?: string }>;
+}
+
+/**
+ * A question the reader walked away from. Every harness expresses this as a
+ * denial of the question's permission, and it carries no answers at all — so
+ * it is a separate member rather than an answered result with an empty map,
+ * which would let a consumer draw a card with blank choices and call it an
+ * answer.
+ */
+export interface UserQuestionDismissed {
+  outcome: 'dismissed';
+  questions: UserQuestion[];
+}
+
+/**
+ * How an `AskUserQuestion`-shaped prompt ended. This is the answer-side
+ * counterpart to {@link UserQuestion}; a harness adapter produces it from its
+ * own native payload so the dashboard never branches on harness.
+ *
+ * `outcome` is what separates the two ways a question legitimately ends from
+ * the third case nobody writes down — the field being absent, which means a
+ * shape no adapter produced and is a fault to surface, not a state to draw.
+ */
+export type UserQuestionResult = UserQuestionAnswered | UserQuestionDismissed;
+
 /* ------------------------------------------------------------- sessions — */
 
 /** A stored session as the catalog lists it. `harness` says who owns the id. */
@@ -203,7 +266,15 @@ export type NeutralContentBlock =
   | { type: 'thinking'; thinking: string; signature?: string }
   | { type: 'redacted_thinking' }
   | { type: 'tool_use'; id: string; name: string; input: Record<string, unknown> }
-  | { type: 'tool_result'; tool_use_id: string; content: unknown; is_error?: boolean; structuredContent?: Record<string, unknown> }
+  | {
+      type: 'tool_result';
+      tool_use_id: string;
+      content: unknown;
+      is_error?: boolean;
+      structuredContent?: Record<string, unknown>;
+      /** The answer payload of an `AskUserQuestion` tool result, normalised by the harness adapter. */
+      questionResult?: UserQuestionResult;
+    }
   | { type: 'image'; source: { type: 'base64'; media_type: string; data: string } };
 
 export type NeutralAssistantBlock = Extract<
@@ -213,7 +284,28 @@ export type NeutralAssistantBlock = Extract<
 
 export type NeutralOrigin =
   | { kind: 'human' }
-  | { kind: 'peer'; from?: string; name?: string; fromSession?: string; body?: string };
+  | { kind: 'peer'; from?: string; name?: string; fromSession?: string; body?: string }
+  /**
+   * Cockpit's own word, not the user's and not another session's: today, a rule
+   * that fired. `name` is what fired it, e.g. `rule:Honest caveat`. Kept apart
+   * from `peer` so a transcript can say who is really talking — a model that
+   * mistakes a rule for the user apologises to nobody.
+   */
+  | { kind: 'system'; name?: string };
+
+/**
+ * Whether a user message was put into the session by cockpit rather than typed
+ * by the reader.
+ *
+ * This is what decides whether a harness echoes the message back as a frame.
+ * The reader's own words already have a local copy in the dashboard, added when
+ * they hit send; anything cockpit injects has no such copy, so unless the
+ * harness frames it, it does not appear until the transcript is re-read from
+ * disk. That was exactly the bug: rule messages arrived, the session acted on
+ * them, and the chat stayed empty until a refresh.
+ */
+export const isInjected = (origin?: NeutralOrigin): boolean =>
+  origin?.kind === 'peer' || origin?.kind === 'system';
 
 export interface NeutralAssistantMessage {
   type: 'assistant';
@@ -352,6 +444,8 @@ export interface HarnessCapabilities {
   interrupt: boolean;
   permissionModes: PermissionMode[];
   setModel: boolean;
+  /** The reasoning-effort scale, at spawn and mid-session. */
+  effort: boolean;
   contextUsage: boolean;
   supportedModels: boolean;
   supportedCommands: boolean;
@@ -397,6 +491,7 @@ export const CAPABILITIES_NONE: HarnessCapabilities = {
   interrupt: false,
   permissionModes: [],
   setModel: false,
+  effort: false,
   contextUsage: false,
   supportedModels: false,
   supportedCommands: false,
@@ -431,6 +526,14 @@ export const CAPABILITIES_NONE: HarnessCapabilities = {
 export const CONTROL_INTERRUPT = 'interrupt';
 export const CONTROL_SET_PERMISSION_MODE = 'setPermissionMode';
 export const CONTROL_SET_MODEL = 'setModel';
+/**
+ * The one verb here that is not a `Query` method: claude spends it on
+ * `applyFlagSettings({ effortLevel })`, where `max` is session-scoped and never
+ * written to a settings file — which is the lifetime a mid-session switch
+ * wants. Named after the setting, like `setModel`, because that is what the
+ * dashboard is asking for.
+ */
+export const CONTROL_SET_EFFORT = 'setEffort';
 export const CONTROL_CONTEXT_USAGE = 'getContextUsage';
 export const CONTROL_SUPPORTED_MODELS = 'supportedModels';
 export const CONTROL_SUPPORTED_COMMANDS = 'supportedCommands';

@@ -22,13 +22,6 @@
     peeking[key] = open;
   }
 
-  const BRANCH_DOT: Record<string, string> = {
-    error: 'bg-destructive',
-    running: 'bg-success',
-    starting: 'bg-warning',
-    complete: 'bg-muted-foreground/40',
-  };
-
   /** How many finished sessions a folder offers before it asks to be asked. */
   const RECENTS = 3;
 
@@ -127,13 +120,15 @@
     IconPlus,
     IconSparklesDuo,
     IconSubagentsDuo,
+    IconRules,
     IconTools,
     IconUsage,
   } from '$lib/icons';
   import { SubagentPeek } from '$lib/components/features';
   import { formatDistanceToNow } from '$lib/utils/time';
-  import { SLEEPING_HINT, SLEEPING_LABEL } from './activity';
-  import ActivityDot from './ActivityDot.svelte';
+  import { SLEEPING_HINT } from './activity';
+  import ModelIndicator from './ModelIndicator.svelte';
+  import AgentSwarm, { type SwarmMark } from './AgentSwarm.svelte';
   import {
     cockpit,
     isFailed,
@@ -151,8 +146,6 @@
   import StoredSessionMenu from './StoredSessionMenu.svelte';
   import { folderPrefs, identityVar } from './folder-prefs.svelte';
   import { delegateHandle, sessionTitle, transcriptHref } from './links';
-  import { providerOf } from './models.svelte';
-  import ProviderLogo from '$lib/components/features/ProviderLogo.svelte';
   import { machineLabel, signInWarning } from './machine';
   import { orderMachines, rail, type PinKind } from './rail.svelte';
   import type { DelegateReportEvent } from './types';
@@ -308,6 +301,33 @@
         unseen[row.id] !== undefined ||
         Date.now() - lastActiveAt(row) < DELEGATE_AGE_OUT_MS
     );
+
+  /**
+   * Every agent a session has out, branches and delegates in one list, in the
+   * one shape the strip draws. A branch reports a lifecycle and a delegate
+   * reports an activity; both collapse to the same five words here so the
+   * strip does not have to know which kind it is holding.
+   */
+  const swarmOf = (instance: InstanceRow): SwarmMark[] => [
+    ...cockpit.subagentsOf(instance.id).map((branch) => ({
+      key: branch.toolUseId,
+      state:
+        branch.status === 'error'
+          ? ('failed' as const)
+          : branch.status === 'complete'
+            ? ('idle' as const)
+            : ('working' as const),
+      model: branch.model ?? null,
+      // What it is doing beats what it was asked to do, while it is doing it.
+      label: branch.summary ?? branch.description ?? branch.subagentType,
+    })),
+    ...delegatesOf(instance.id).map((row) => ({
+      key: row.id,
+      state: isResumable(row) ? ('sleeping' as const) : cockpit.activityOf(row.id),
+      model: row.model ?? null,
+      label: delegateTitleOf(row).text,
+    })),
+  ];
 
   /**
    * The only red in the rail: a session parked on a permission or a question —
@@ -622,7 +642,7 @@
         out:slide={rowOut}
       >
         <span class={LEAD}>
-          <ActivityDot activity="blocked" size={1.5} />
+          <ModelIndicator model={instance.model} state="blocked" />
         </span>
         <span class="min-w-0 truncate {name.path ? 'font-mono' : ''}">{name.text}</span>
         <span class={TAIL}>
@@ -677,14 +697,7 @@
           out:slide={rowOut}
         >
           <span class={LEAD}>
-            {#if sleeping}
-              <span
-                class="size-1.5 rounded-full bg-muted-foreground/40"
-                title={SLEEPING_LABEL}
-              ></span>
-            {:else}
-              <ActivityDot {activity} size={1.5} />
-            {/if}
+            <ModelIndicator model={instance.model} state={sleeping ? 'sleeping' : activity} />
           </span>
           <span
             class="min-w-0 truncate {name.path ? 'font-mono' : ''} {sleeping
@@ -752,23 +765,11 @@
   </LiveSessionMenu>
 
   {#if subworkTotal > 0}
-    <button
-      type="button"
-      class={SUBROW}
-      aria-expanded={subworkOpen}
-      onclick={() => toggleSubwork(instance.id)}
-    >
-      <IconChevronRight
-        class="size-3 shrink-0 transition-transform duration-240 ease-expo {subworkOpen
-          ? 'rotate-90'
-          : ''}"
-      />
-      <span>
-        {subworkTotal} subagent{subworkTotal === 1 ? '' : 's'}{subworkRunning > 0
-          ? ` · ${subworkRunning} running`
-          : ''}
-      </span>
-    </button>
+    <AgentSwarm
+      marks={swarmOf(instance)}
+      open={subworkOpen}
+      onToggle={() => toggleSubwork(instance.id)}
+    />
 
     {#if subworkOpen}
       <ul class="flex flex-col gap-0.5 pl-8" transition:slide={rowIn}>
@@ -788,7 +789,7 @@
                 <a
                   {...props}
                   href="/session/{instance.id}#subagent-{branch.toolUseId}"
-                  class="flex items-start gap-1.5 rounded-lg px-2 py-1 text-micro
+                  class="flex items-start gap-2 rounded-lg px-2 py-1 text-micro
                          transition-colors duration-150
                          hover:bg-sidebar-accent hover:text-sidebar-accent-foreground
                          {branchDone ? 'text-faint' : 'text-muted-foreground'}"
@@ -803,12 +804,12 @@
                     void goto(`/session/${instance.id}#subagent-${branch.toolUseId}`);
                   }}
                 >
-                  <span
-                    class="mt-1 size-2 shrink-0 rounded-full {BRANCH_DOT[branch.status] ??
-                      'bg-muted-foreground/40'} {branchRunning
-                      ? 'animate-pulse motion-reduce:animate-none'
-                      : ''}"
-                  ></span>
+                  <span class={LEAD}>
+                    <ModelIndicator
+                      state={branchError ? 'failed' : branchRunning ? 'working' : 'idle'}
+                      label={branch.description ?? branch.subagentType}
+                    />
+                  </span>
                   <span class="min-w-0 flex-1">
                     <span class="block truncate">{branch.description ?? branch.subagentType}</span>
                     {#if branchError}
@@ -865,17 +866,6 @@
   {@const activity = cockpit.activityOf(instance.id)}
   {@const sleeping = isResumable(instance)}
   {@const model = instance.model}
-  {@const provider = model ? providerOf(model) : null}
-  {@const ringClass =
-    !provider
-      ? ''
-      : sleeping
-        ? 'ring-1 ring-muted-foreground/30 opacity-60'
-        : activity === 'working'
-          ? 'ring-2 ring-success animate-pulse motion-reduce:animate-none'
-          : activity === 'blocked'
-            ? 'ring-2 ring-error'
-            : 'ring-1 ring-muted-foreground/30'}
   {@const current = isCurrent(`/session/${instance.id}`)}
   {@const name = delegateTitleOf(instance)}
   {@const base = titleOf(instance)}
@@ -900,20 +890,7 @@
           out:slide={rowOut}
         >
           <span class={LEAD}>
-            {#if provider && model}
-              <!-- A filled-disc mark (DeepSeek) needs real air inside the ring:
-                   an 8px glyph in the 16px circle leaves ~4px of annulus, so the
-                   ring reads as an enclosure, not a second concentric circle.
-                   The ring still carries its own weight per state — hairline at
-                   rest, 2px only when it has news. -->
-              <span class="flex size-4 items-center justify-center rounded-full {ringClass}">
-                <ProviderLogo {model} size={8} />
-              </span>
-            {:else if sleeping}
-              <span class="size-1.5 rounded-full bg-muted-foreground/40" title={SLEEPING_LABEL}></span>
-            {:else}
-              <ActivityDot {activity} size={1.5} />
-            {/if}
+            <ModelIndicator model={instance.model} state={sleeping ? 'sleeping' : activity} />
           </span>
           <span
             class="min-w-0 truncate {name.path ? 'font-mono' : ''} {sleeping
@@ -1234,6 +1211,7 @@
         Machines
         <span class="ml-auto flex items-center gap-1">
           <a href="/tools" title="Tools" aria-label="Tools" aria-current={page.url.pathname === '/tools' ? 'page' : undefined} class="flex size-7 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-150 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"><IconTools class="size-4" /></a>
+          <a href="/rules" title="Rules" aria-label="Rules" aria-current={page.url.pathname.startsWith('/rules') ? 'page' : undefined} class="flex size-7 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-150 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"><IconRules class="size-4" /></a>
           <a href="/usage" title="Usage" aria-label="Usage" aria-current={page.url.pathname === '/usage' ? 'page' : undefined} class="flex size-7 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-150 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"><IconUsage class="size-4" /></a>
         </span>
       </Sidebar.GroupLabel>

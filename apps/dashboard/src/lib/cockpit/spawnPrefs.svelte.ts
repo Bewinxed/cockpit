@@ -1,4 +1,4 @@
-import type { PermissionMode } from '@cockpit/core';
+import type { EffortLevel, PermissionMode } from '@cockpit/core';
 import { MODEL_DEFAULT } from './models.svelte';
 
 /**
@@ -13,9 +13,15 @@ const KEY = 'outpost-spawn-prefs';
 interface SpawnPrefs {
   model: string;
   permissionMode: PermissionMode;
+  /**
+   * `null` is a choice too, and the one to start from: only the model knows
+   * which stops it has, so a form that opened on a level would be asserting one
+   * before it has anything to assert it against.
+   */
+  effort: EffortLevel | null;
 }
 
-const FALLBACK: SpawnPrefs = { model: MODEL_DEFAULT, permissionMode: 'default' };
+const FALLBACK: SpawnPrefs = { model: MODEL_DEFAULT, permissionMode: 'default', effort: null };
 
 const load = (): SpawnPrefs => {
   if (typeof localStorage === 'undefined') return FALLBACK;
@@ -29,6 +35,7 @@ const load = (): SpawnPrefs => {
         typeof parsed.permissionMode === 'string'
           ? (parsed.permissionMode as PermissionMode)
           : FALLBACK.permissionMode,
+      effort: typeof parsed.effort === 'string' ? (parsed.effort as EffortLevel) : FALLBACK.effort,
     };
   } catch {
     return FALLBACK;
@@ -44,12 +51,16 @@ export const spawnPrefs = {
   get permissionMode(): PermissionMode {
     return store.permissionMode;
   },
+  get effort(): EffortLevel | null {
+    return store.effort;
+  },
 };
 
 /** Called when a spawn actually goes out, so a form the user abandoned teaches nothing. */
 export function rememberSpawn(prefs: SpawnPrefs): void {
   store.model = prefs.model;
   store.permissionMode = prefs.permissionMode;
+  store.effort = prefs.effort;
   if (typeof localStorage === 'undefined') return;
   try {
     localStorage.setItem(KEY, JSON.stringify(store));

@@ -22,8 +22,11 @@ import {
   type SDKMessage,
   type SDKUserMessage,
 } from '@anthropic-ai/claude-agent-sdk';
+import { access, readFile, readdir, realpath } from 'node:fs/promises';
+import { join } from 'node:path';
 import type {
   AuthState,
+  EffortLevel,
   HarnessCapabilities,
   HarnessReport,
   NeutralMessage,
@@ -32,13 +35,19 @@ import type {
   SendPayload,
   SessionMessage,
   SpawnPayload,
+  UserAnswers,
+  UserQuestion,
+  UserQuestionAnswered,
+  UserQuestionResult,
 } from '@cockpit/core';
 import {
+  ASK_USER_QUESTION,
+  CONTROL_SET_EFFORT,
   INSPECT_CONFIG,
   MARKETPLACE_CATALOG,
   READ_MEMORY_FILE,
   READ_SKILL_FILES,
-} from '@cockpit/core';
+  isInjected,} from '@cockpit/core';
 import {
   fleetStatus,
   inspectConfig,
@@ -52,6 +61,7 @@ import { handoffServer } from '../handoff';
 import { probeAuth, unlockKeychain } from '../auth';
 import { beginLogin, clearCredentials, completeLogin, exportCredentials, importCredentials } from '../login';
 import { resolveBin } from '../tools';
+import { claudeConfigDirs } from '../usage/scan-claude';
 import type { Harness, HarnessContext, HarnessSession } from '../harness';
 
 /** The neutral frame is the SDK frame re-tagged: same fields, plus the original. */
@@ -80,10 +90,176 @@ export const toNeutral = (sdk: SDKMessage): NeutralMessage => {
   return { type: 'raw', harness: 'claude', uuid: sdk.uuid, message: sdk };
 };
 
+/**
+ * The Claude SDK's `AskUserQuestionOutput` (`tool_use_result` on a user
+ * message), normalised into the neutral {@link UserQuestionResult}. The SDK
+ * types `answers` values as `string` ("multi-select answers are
+ * comma-separated"), but a real transcript carries `string[]` for a multi-select
+ * answer, and freeform "Other" text also lands inside `answers` — so the values
+ * are passed through as `string | string[]` rather than coerced. `null` when the
+ * payload is not a question result, which the caller treats as absent, never as
+ * an empty answer.
+ */
+function normalizeQuestionResult(raw: unknown): UserQuestionResult | null {
+  if (typeof raw !== 'object' || raw === null) return null;
+  const { questions, answers, response, annotations } = raw as {
+    questions?: unknown;
+    answers?: unknown;
+    response?: unknown;
+    annotations?: unknown;
+  };
+  if (typeof answers !== 'object' || answers === null || Array.isArray(answers)) return null;
+  const normalized = normalizeQuestions(questions);
+  if (!normalized) return null;
+  return {
+    outcome: 'answered',
+    questions: normalized,
+    answers: answers as UserAnswers,
+    ...(typeof response === 'string' ? { response } : {}),
+    ...(annotations && typeof annotations === 'object' && !Array.isArray(annotations)
+      ? { annotations: annotations as UserQuestionAnswered['annotations'] }
+      : {}),
+  };
+}
+
+/**
+ * The `questions` array of an `AskUserQuestion`, normalised. Shared by the
+ * answered payload and by the tool's own input, which is all a dismissal has
+ * left to say what was asked. `null` when the array is not questions at all.
+ */
+function normalizeQuestions(raw: unknown): UserQuestion[] | null {
+  if (!Array.isArray(raw)) return null;
+  const normalized: UserQuestion[] = [];
+  for (const question of raw) {
+    if (typeof question !== 'object' || question === null) return null;
+    const q = question as { question?: unknown; header?: unknown; options?: unknown; multiSelect?: unknown };
+    if (typeof q.question !== 'string' || !Array.isArray(q.options)) return null;
+    const options: UserQuestion['options'] = [];
+    for (const option of q.options) {
+      if (typeof option !== 'object' || option === null) continue;
+      const o = option as { label?: unknown; description?: unknown };
+      if (typeof o.label !== 'string') continue;
+      options.push({ label: o.label, description: typeof o.description === 'string' ? o.description : '' });
+    }
+    normalized.push({
+      question: q.question,
+      header: typeof q.header === 'string' ? q.header : 'Question',
+      options,
+      multiSelect: q.multiSelect === true,
+    });
+  }
+  return normalized;
+}
+
+/**
+ * Folds a question result onto the `tool_result` block of a stored entry's
+ * inner message. `getSessionMessages` returns `message` as the raw MessageParam,
+ * so this is where the dashboard's folding layer finds `questionResult` — the
+ * same place the live path writes it.
+ */
+function attachQuestionResult(message: unknown, result: UserQuestionResult): unknown {
+  if (typeof message !== 'object' || message === null) return message;
+  const content = (message as { content?: unknown }).content;
+  if (!Array.isArray(content)) return message;
+  return {
+    ...(message as object),
+    content: content.map((block) =>
+      block && typeof block === 'object' && (block as { type?: string }).type === 'tool_result'
+        ? { ...(block as object), questionResult: result }
+        : block
+    ),
+  };
+}
+
+/**
+ * The CLI writes each `tool_result`'s structured output as a top-level
+ * `toolUseResult` sidecar on the transcript line, but the SDK's
+ * `getSessionMessages` maps a stored entry to `{type, uuid, session_id, message,
+ * parent_tool_use_id, parent_agent_id}` and drops it — so an `AskUserQuestion`'s
+ * answers are gone from a transcript read back after the fact. This reads the
+ * session file the SDK would have read and lifts the sidecars back, keyed by
+ * uuid, so the answer survives a reload the way it survives the live stream.
+ */
+async function readQuestionSidecars(sessionId: string, dir?: string): Promise<Map<string, UserQuestionResult>> {
+  const file = await claudeSessionFile(sessionId, dir);
+  if (!file) return new Map();
+  let text: string;
+  try {
+    text = await readFile(file, 'utf8');
+  } catch {
+    return new Map();
+  }
+  const sidecars = new Map<string, UserQuestionResult>();
+  for (const line of text.split('\n')) {
+    if (!line.includes('"toolUseResult"')) continue;
+    let entry: unknown;
+    try {
+      entry = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (typeof entry !== 'object' || entry === null) continue;
+    const { uuid, toolUseResult } = entry as { uuid?: unknown; toolUseResult?: unknown };
+    if (typeof uuid !== 'string') continue;
+    const result = normalizeQuestionResult(toolUseResult);
+    if (result) sidecars.set(uuid, result);
+  }
+  return sidecars;
+}
+
+/** The session file the CLI stores a session under, or null when it is not found. */
+async function claudeSessionFile(sessionId: string, dir?: string): Promise<string | null> {
+  const projects = claudeConfigDirs().map((config) => join(config, 'projects'));
+  const fileName = `${sessionId}.jsonl`;
+  // The CLI names the project dir from the session's cwd: realpath, then every
+  // non-alphanumeric byte becomes '-'. Try that first — it is the exact file
+  // `getSessionMessages` reads — and only scan when the cwd is gone or the slug
+  // no longer resolves (a cwd that has since moved).
+  let slug: string | null = null;
+  if (dir) {
+    try {
+      slug = (await realpath(dir)).replace(/[^a-zA-Z0-9]/g, '-');
+    } catch {
+      slug = null;
+    }
+  }
+  if (slug) {
+    for (const projectsDir of projects) {
+      const candidate = join(projectsDir, slug, fileName);
+      try {
+        await access(candidate);
+        return candidate;
+      } catch {
+        // not under this config dir
+      }
+    }
+  }
+  for (const projectsDir of projects) {
+    let entries;
+    try {
+      entries = await readdir(projectsDir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const candidate = join(projectsDir, entry.name, fileName);
+      try {
+        await access(candidate);
+        return candidate;
+      } catch {
+        // not in this project
+      }
+    }
+  }
+  return null;
+}
+
 export const CLAUDE_CAPABILITIES: HarnessCapabilities = {
   interrupt: true,
   permissionModes: ['default', 'acceptEdits', 'plan', 'bypassPermissions'],
   setModel: true,
+  effort: true,
   contextUsage: true,
   supportedModels: true,
   supportedCommands: true,
@@ -220,6 +396,17 @@ class ClaudeSession implements HarnessSession {
    * before the frame leaves the daemon.
    */
   readonly #pendingStructured = new Map<string, Record<string, unknown>>();
+  /**
+   * The open `AskUserQuestion` permissions, keyed by request id, holding the
+   * tool call they park and the questions they ask. A dismissal is a denial,
+   * and the CLI answers a denied tool call with prose and no `toolUseResult`
+   * sidecar — indistinguishable, from the block alone, from an answer that went
+   * missing. Remembering the ask is what lets {@link #pumpMessages} say which
+   * of the two it is.
+   */
+  readonly #openQuestions = new Map<string, { toolUseID: string; questions: UserQuestion[] }>();
+  /** Denied questions, keyed by tool call, until their `tool_result` goes past. */
+  readonly #dismissedQuestions = new Map<string, UserQuestionResult>();
 
   constructor(
     readonly instanceId: string,
@@ -228,6 +415,7 @@ class ClaudeSession implements HarnessSession {
     options: unknown,
     permissionMode: string | undefined,
     model: string | undefined,
+    effort: EffortLevel | undefined,
     resume: SpawnPayload['resume'],
     persistSession: boolean | undefined,
     skills?: string[]
@@ -275,6 +463,10 @@ class ClaudeSession implements HarnessSession {
         ...(persistSession === false ? { persistSession: false } : {}),
         ...(permissionMode ? { permissionMode: permissionMode as import('@anthropic-ai/claude-agent-sdk').PermissionMode } : {}),
         ...(model && { model }),
+        // Left out entirely when nobody chose: the SDK's own default is the
+        // model's, and writing a level here would put cockpit's guess in its
+        // place on every model whose scale we cannot see.
+        ...(effort && { effort }),
         ...(permissionMode === 'bypassPermissions' && {
           allowDangerouslySkipPermissions: true,
           // Bypass mode must also let the model run commands outside the sandbox
@@ -287,9 +479,13 @@ class ClaudeSession implements HarnessSession {
         }),
         cwd: workdir,
         includePartialMessages: true,
-        canUseTool: (toolName, toolInput, { requestId, suggestions }) =>
+        canUseTool: (toolName, toolInput, { requestId, suggestions, toolUseID }) =>
           new Promise<PermissionResult>((resolve) => {
             this.#permissions.set(requestId, resolve);
+            if (toolName === ASK_USER_QUESTION) {
+              const questions = normalizeQuestions((toolInput as { questions?: unknown }).questions);
+              if (questions) this.#openQuestions.set(requestId, { toolUseID, questions });
+            }
             ctx.permission({ requestId, toolName, input: toolInput, suggestions });
           }),
       },
@@ -317,6 +513,33 @@ class ClaudeSession implements HarnessSession {
     try {
       for await (const message of handle) {
         const neutral = toNeutral(message);
+        // The Claude SDK emits `AskUserQuestion`'s structured output as a
+        // top-level `tool_use_result` on the user message (the prose alone is
+        // what lands in the `tool_result` block's `content`). Normalise it onto
+        // the block so the dashboard reads one neutral shape and never parses
+        // prose.
+        if (neutral.type === 'user') {
+          const result = normalizeQuestionResult((message as SDKUserMessage).tool_use_result);
+          if (result && Array.isArray(neutral.message.content)) {
+            for (const block of neutral.message.content) {
+              if (block.type === 'tool_result') block.questionResult = result;
+            }
+          }
+        }
+        // A dismissed question has no sidecar to normalise — the denial was
+        // recorded when it was made, and this is the block it belongs to.
+        if (neutral.type === 'user' && this.#dismissedQuestions.size > 0) {
+          const content = neutral.message.content;
+          if (Array.isArray(content)) {
+            for (const block of content) {
+              if (block.type !== 'tool_result') continue;
+              const dismissed = this.#dismissedQuestions.get(block.tool_use_id);
+              if (!dismissed) continue;
+              this.#dismissedQuestions.delete(block.tool_use_id);
+              block.questionResult = dismissed;
+            }
+          }
+        }
         // The Claude SDK strips `structuredContent` from MCP CallToolResults
         // before forwarding tool_result blocks. The tool handlers stored their
         // structured data in #pendingStructured keyed by result text; inject it
@@ -379,7 +602,7 @@ class ClaudeSession implements HarnessSession {
       void this.#handle.streamInput(stream).catch(() => {
         this.#input.push(outgoing);
       });
-      if (message.origin?.kind === 'peer') {
+      if (isInjected(message.origin)) {
         this.#ctx.frame(toNeutral(message as unknown as SDKMessage));
       }
       return;
@@ -397,12 +620,22 @@ class ClaudeSession implements HarnessSession {
     // A hand-off is queued rather than asked (`shouldQuery: false`), so the SDK
     // appends it and emits nothing until the session next takes a turn. Echoed
     // as the frame the SDK will not send, so it appears the moment it lands.
-    if (message.origin?.kind === 'peer') {
+    // The same is true of anything else cockpit injects — a rule's message has
+    // no local copy in any dashboard, so without this echo it stays invisible
+    // until the transcript is read back from disk.
+    if (isInjected(message.origin)) {
       this.#ctx.frame(toNeutral(message as unknown as SDKMessage));
     }
   }
 
   async control(method: string, args: unknown[]): Promise<unknown> {
+    // Effort is the one neutral verb with no `Query` method behind it: it is a
+    // flag setting, applied over user/project/local settings and never written
+    // to any of them, which is exactly a session-scoped switch. `max` is only
+    // reachable this way — the persisted setting excludes it.
+    if (method === CONTROL_SET_EFFORT) {
+      return await this.#handle.applyFlagSettings({ effortLevel: args[0] as EffortLevel });
+    }
     const handle = this.#handle as unknown as Record<string, (...a: unknown[]) => unknown>;
     if (typeof handle[method] !== 'function') throw new Error(`unknown control method: ${method}`);
     return await handle[method](...args);
@@ -412,6 +645,19 @@ class ClaudeSession implements HarnessSession {
     const resolve = this.#permissions.get(requestId);
     if (!resolve) throw new Error(`no permission request ${requestId}`);
     this.#permissions.delete(requestId);
+    const question = this.#openQuestions.get(requestId);
+    if (question) {
+      this.#openQuestions.delete(requestId);
+      // Answering runs the tool, and the CLI writes the answers itself; walking
+      // away leaves nothing behind, so the dismissal is recorded here for the
+      // `tool_result` that is about to carry the CLI's denial prose.
+      if (result.behavior === 'deny') {
+        this.#dismissedQuestions.set(question.toolUseID, {
+          outcome: 'dismissed',
+          questions: question.questions,
+        });
+      }
+    }
     resolve(result);
   }
 
@@ -423,6 +669,9 @@ class ClaudeSession implements HarnessSession {
     this.#input.end();
     for (const resolve of this.#permissions.values()) resolve({ behavior: 'deny', message: 'session stopped' });
     this.#permissions.clear();
+    // Not dismissals: the session is going away, and no `tool_result` will
+    // arrive for these to be folded onto.
+    this.#openQuestions.clear();
     await this.#handle.interrupt().catch(() => {});
     await this.#turn.settle(SETTLE_TIMEOUT_MS);
     this.#handle.close();
@@ -497,6 +746,7 @@ export class ClaudeHarness implements Harness {
       spec.options,
       spec.permissionMode,
       spec.model,
+      spec.effort,
       spec.resume,
       spec.persistSession,
       spec.skills
@@ -514,7 +764,23 @@ export class ClaudeHarness implements Harness {
 
   async getSessionMessages(sessionKey: string, dir?: string): Promise<SessionMessage[]> {
     const rows = await getSessionMessages(sessionKey, { ...(dir ? { dir } : {}) });
-    return rows.map(toEntry);
+    // Only a transcript that asked the reader has a `toolUseResult` sidecar to
+    // recover — skip the extra file read for everything else.
+    const asksQuestion = rows.some((entry) => {
+      const content = (entry.message as { content?: unknown } | null)?.content;
+      return (
+        Array.isArray(content) &&
+        content.some((block) => (block as { type?: string; name?: string }).type === 'tool_use' && (block as { name?: string }).name === 'AskUserQuestion')
+      );
+    });
+    if (!asksQuestion) return rows.map(toEntry);
+    const sidecars = await readQuestionSidecars(sessionKey, dir);
+    if (sidecars.size === 0) return rows.map(toEntry);
+    return rows.map((entry) => {
+      const result = sidecars.get(entry.uuid);
+      if (!result) return toEntry(entry);
+      return { ...toEntry(entry), message: attachQuestionResult(entry.message, result) };
+    });
   }
 
   renameSession(sessionKey: string, title: string, dir?: string): Promise<void> {

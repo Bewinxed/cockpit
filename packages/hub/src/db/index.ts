@@ -10,6 +10,9 @@ import type {
   FleetSkillMeta,
   FleetSyncReport,
   HarnessReport,
+  Rule,
+  RuleState,
+  RuleStats,
   SkillFile,
   ToolPolicy,
   ToolStatus,
@@ -17,7 +20,7 @@ import type {
 } from '@cockpit/core';
 import { RESTART_LOST, RESTART_RESUMABLE, resolveRates } from '@cockpit/core';
 import { Context, Effect, Layer } from 'effect';
-import { and, desc, eq, gt, gte, inArray, lte, ne, notInArray, or, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, gte, inArray, isNull, lte, ne, notInArray, or, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
 import { migrate } from 'drizzle-orm/bun-sqlite/migrator';
 import { DB_PATH } from '../config';
@@ -28,12 +31,15 @@ import {
   delegateEvents,
   fleetAgents,
   fleetMemory,
+  fleetMemoryDocs,
   fleetMemoryHistory,
   instances,
   marketplaces,
   mcpServers,
   plugins,
   projects,
+  ruleState,
+  rules,
   skills,
   tools,
   usageBuckets,
@@ -68,8 +74,23 @@ export interface MemoryVersion {
   id: number;
   hash: string;
   source: string;
+  /** Which document of the set it was a version of; absent is the main one. */
+  path?: string;
   bytes: number;
   createdAt: Date;
+}
+
+/**
+ * One document the main memory links, as the dashboard reads it. Like a
+ * subagent's file and unlike a skill's, the content rides the listing: a
+ * document is a page of markdown, and an editor that has to fetch each one
+ * again is a round trip for nothing.
+ */
+export interface MemoryDocRow {
+  path: string;
+  content: string;
+  hash: string;
+  updatedAt: Date;
 }
 
 /** A stored usage bucket, one (machine, session, model, hour) cell (USAGE-SPEC.md §6). */
@@ -137,6 +158,7 @@ export interface DbShape {
     kind: InstanceKind;
     permissionMode?: string;
     model?: string;
+    effort?: string;
   }) => void;
   readonly stopInstance: (id: string) => void;
   /** The agent reported the session dead: what killed it, kept for late readers. */
@@ -145,12 +167,12 @@ export interface DbShape {
   readonly discardInstance: (id: string) => void;
   /**
    * The fields a dashboard may move on a live row: "Keep" — a side quest that
-   * earned its place stops being treated as scratch — and the two settings the
+   * earned its place stops being treated as scratch — and the three settings the
    * user keeps changing on a session that is already running.
    */
   readonly patchInstance: (
     id: string,
-    patch: { kind?: InstanceKind; permissionMode?: string; model?: string }
+    patch: { kind?: InstanceKind; permissionMode?: string; model?: string; effort?: string }
   ) => typeof instances.$inferSelect | undefined;
   /**
    * The SDK session an `init` frame named, so the row can be read back from —
@@ -229,18 +251,30 @@ export interface DbShape {
   /** Stores the document and the hash the machines compare against. */
   readonly setFleetMemory: (content: string) => { content: string; hash: string; updatedAt: Date };
   readonly clearFleetMemory: () => void;
+  /** Every document the main memory links, by path — the set, in one read. */
+  readonly listFleetMemoryDocs: () => MemoryDocRow[];
+  readonly getFleetMemoryDoc: (path: string) => MemoryDocRow | undefined;
+  /** Upsert of one document; the hash is read off the content, as everywhere. */
+  readonly putFleetMemoryDoc: (doc: { path: string; content: string }) => MemoryDocRow;
+  readonly deleteFleetMemoryDoc: (path: string) => void;
   /**
    * Keeps a version that is about to be replaced or destroyed. `source` is
    * `fleet` for the hub's own row and `machine:<machineId>` for a copy an
-   * overwrite is taking off a machine.
+   * overwrite is taking off a machine; `path` names the document of the set it
+   * belonged to, and its absence is the main CLAUDE.md.
    */
   readonly recordFleetMemory: (version: {
     content: string;
     hash: string;
     source: string;
+    path?: string;
   }) => void;
-  /** Newest first, without the content: a list should not weigh what it lists. */
-  readonly listFleetMemoryHistory: () => MemoryVersion[];
+  /**
+   * Newest first, without the content: a list should not weigh what it lists.
+   * One document's history, or the main file's when no path is named — the two
+   * are never mixed, because the panel asks about one document at a time.
+   */
+  readonly listFleetMemoryHistory: (path?: string) => MemoryVersion[];
   readonly fleetMemoryVersion: (id: number) => (MemoryVersion & { content: string }) | undefined;
   /** A machine's own account of what it came to, from the sync it just answered. */
   readonly setAgentFleet: (machineId: string, report: FleetSyncReport) => void;
@@ -303,9 +337,73 @@ export interface DbShape {
     machineId?: string;
     groupBy: UsageGroupBy;
   }) => UsageSummary;
+
+  /** Every rule, newest first — what the engine reloads and the editor lists. */
+  readonly listRules: () => Rule[];
+  /** One rule, or nothing when it has been deleted out from under a caller. */
+  readonly getRule: (id: string) => Rule | undefined;
+  /** Upsert by id. The caller mints the id; this never invents one. */
+  readonly putRule: (rule: Rule) => Rule;
+  /** Removes the rule and every session's standing with it. */
+  readonly deleteRule: (id: string) => void;
+  /** Per-rule totals for the list, aggregated in SQL rather than per row. */
+  readonly ruleStats: () => RuleStats[];
+  /**
+   * Records a fire and returns the session's new standing. `pending` is set
+   * whenever the rule wants an acknowledgement; `fireCount` is what makes the
+   * reminder escalate, and only an acknowledgement resets it.
+   */
+  readonly noteRuleFire: (ruleId: string, instanceId: string, requireAck: boolean) => RuleState;
+  /** Where a rule stands with a session; absent means it has never fired there. */
+  readonly ruleStateFor: (ruleId: string, instanceId: string) => RuleState | undefined;
+  /** Every rule one session still owes an answer for — what the ack tool lists. */
+  readonly pendingRuleStates: (instanceId: string) => RuleState[];
+  /**
+   * Re-arms the rule for that session and files what it said it did. Returns
+   * nothing when the session had nothing pending, so the tool can say so.
+   */
+  readonly ackRule: (ruleId: string, instanceId: string, note: string) => RuleState | undefined;
+  /**
+   * Every session's standing with one rule, most recently active first.
+   *
+   * This is the only place the mechanism is visible to anybody. The session is
+   * told nothing, so the reader has to be told everything: which sessions
+   * tripped it, how often, and what each said it did about it.
+   */
+  readonly ruleStatesFor: (ruleId: string) => RuleState[];
 }
 
 export class Db extends Context.Service<Db, DbShape>()('Db') {}
+
+/** A stored rule row back into the shape the fleet and the dashboard share. */
+const ruleOf = (row: typeof rules.$inferSelect): Rule => ({
+  id: row.id,
+  name: row.name,
+  enabled: row.enabled,
+  pattern: row.pattern,
+  matchKind: row.matchKind,
+  caseSensitive: row.caseSensitive,
+  wholeWord: row.wholeWord,
+  watch: row.watch,
+  reply: row.reply,
+  timing: row.timing,
+  interrupt: row.interrupt,
+  requireAck: row.requireAck,
+  scope: row.scope,
+  createdAt: row.createdAt.getTime(),
+});
+
+/** And a standing row, with the dates flattened to the numbers the wire carries. */
+const ruleStateOf = (row: typeof ruleState.$inferSelect): RuleState => ({
+  ruleId: row.ruleId,
+  instanceId: row.instanceId,
+  status: row.status,
+  fireCount: row.fireCount,
+  totalFires: row.totalFires,
+  lastFiredAt: row.lastFiredAt?.getTime() ?? null,
+  ackedAt: row.ackedAt?.getTime() ?? null,
+  ackNote: row.ackNote,
+});
 
 /** A skill row as everything outside the hub reads it: the row, minus its files. */
 const skillMeta = (row: Omit<typeof skills.$inferSelect, 'files' | 'createdAt'>): FleetSkillMeta => ({
@@ -362,6 +460,18 @@ const HISTORY_LIMIT = 20;
 const hashText = (content: string): string =>
   new Bun.CryptoHasher('sha256').update(content).digest('hex');
 
+/**
+ * Opens (and migrates) a database at `path`.
+ *
+ * Exported for tests. Going through `COCKPIT_DB_PATH` instead is a trap:
+ * `DB_PATH` is read once, when `../config` is first imported, and `bun test`
+ * runs every test file in one process — so a test that sets the variable only
+ * gets its own database if it happens to be the file that loads `config`
+ * first. Whichever test loses that race writes to the fleet's real
+ * `cockpit.db`. Naming the path leaves nothing to load order.
+ */
+export const makeDb = (path: string): DbShape => make(path);
+
 const make = (path: string): DbShape => {
   const db = drizzle(path);
   migrate(db, { migrationsFolder: MIGRATIONS_DIR });
@@ -378,6 +488,14 @@ const make = (path: string): DbShape => {
     const row = db.select().from(fleetMemory).where(eq(fleetMemory.id, MEMORY_ID)).get();
     return row ? { content: row.content, hash: row.hash, updatedAt: row.updatedAt } : undefined;
   };
+
+  const listFleetMemoryDocs = (): MemoryDocRow[] =>
+    db
+      .select()
+      .from(fleetMemoryDocs)
+      .orderBy(fleetMemoryDocs.path)
+      .all()
+      .map(({ path, content, hash, updatedAt }) => ({ path, content, hash, updatedAt }));
 
   /** The window a usage query names, or nothing — the filters fold into one AND. */
   const usageWhere = (q: { since?: number; until?: number; harness?: string; machineId?: string }) =>
@@ -419,7 +537,7 @@ const make = (path: string): DbShape => {
         .where(eq(agents.machineId, machineId))
         .run();
     },
-    openInstance: ({ id, machineId, cwd, sessionId, harness, projectId, parentInstanceId, parentToolUseId, title, kind, permissionMode, model }) => {
+    openInstance: ({ id, machineId, cwd, sessionId, harness, projectId, parentInstanceId, parentToolUseId, title, kind, permissionMode, model, effort }) => {
       const now = new Date();
 
       // One conversation, one live row.
@@ -455,6 +573,7 @@ const make = (path: string): DbShape => {
           kind,
           permissionMode,
           model,
+          effort,
           status: 'running',
           createdAt: now,
           updatedAt: now,
@@ -466,6 +585,7 @@ const make = (path: string): DbShape => {
             kind,
             ...(permissionMode ? { permissionMode } : {}),
             ...(model ? { model } : {}),
+            ...(effort ? { effort } : {}),
             status: 'running',
             lastError: null,
             updatedAt: now,
@@ -645,10 +765,16 @@ const make = (path: string): DbShape => {
         .all()
         .flatMap(({ name, hash, files }) => (hash && files ? [{ name, hash, files }] : [])),
       // Null rather than absent: a fleet that keeps no memory is what has a
-      // machine give back the copy cockpit wrote it.
+      // machine give back the copy cockpit wrote it — the linked documents
+      // included, since a set with no main file is not a set.
       memory: (() => {
         const stored = getFleetMemory();
-        return stored ? { hash: stored.hash, content: stored.content } : null;
+        if (!stored) return null;
+        return {
+          hash: stored.hash,
+          content: stored.content,
+          docs: listFleetMemoryDocs().map(({ path, hash, content }) => ({ path, hash, content })),
+        };
       })(),
     }),
     putMcpServer: ({ name, config, enabled }) => {
@@ -767,27 +893,54 @@ const make = (path: string): DbShape => {
     clearFleetMemory: () => {
       db.delete(fleetMemory).where(eq(fleetMemory.id, MEMORY_ID)).run();
     },
-    recordFleetMemory: ({ content, hash, source }) => {
-      db.insert(fleetMemoryHistory).values({ content, hash, source }).run();
+    listFleetMemoryDocs,
+    getFleetMemoryDoc: (path) => {
+      const row = db.select().from(fleetMemoryDocs).where(eq(fleetMemoryDocs.path, path)).get();
+      return row
+        ? { path: row.path, content: row.content, hash: row.hash, updatedAt: row.updatedAt }
+        : undefined;
+    },
+    putFleetMemoryDoc: ({ path, content }) => {
+      const row = { path, content, hash: hashText(content), updatedAt: new Date() };
+      db.insert(fleetMemoryDocs)
+        .values(row)
+        .onConflictDoUpdate({
+          target: fleetMemoryDocs.path,
+          set: { content: row.content, hash: row.hash, updatedAt: row.updatedAt },
+        })
+        .run();
+      return row;
+    },
+    deleteFleetMemoryDoc: (path) => {
+      db.delete(fleetMemoryDocs).where(eq(fleetMemoryDocs.path, path)).run();
+    },
+    recordFleetMemory: ({ content, hash, source, path }) => {
+      db.insert(fleetMemoryHistory).values({ content, hash, source, path: path ?? null }).run();
+      // Pruned within the one document's own history: a set of ten would
+      // otherwise have each save evict the main file's past nine times over.
+      const of = path === undefined ? isNull(fleetMemoryHistory.path) : eq(fleetMemoryHistory.path, path);
       const keep = db
         .select({ id: fleetMemoryHistory.id })
         .from(fleetMemoryHistory)
+        .where(of)
         .orderBy(desc(fleetMemoryHistory.id))
         .limit(HISTORY_LIMIT)
         .all()
         .map((row) => row.id);
-      db.delete(fleetMemoryHistory).where(notInArray(fleetMemoryHistory.id, keep)).run();
+      db.delete(fleetMemoryHistory).where(and(of, notInArray(fleetMemoryHistory.id, keep))).run();
     },
-    listFleetMemoryHistory: () =>
+    listFleetMemoryHistory: (path) =>
       db
         .select()
         .from(fleetMemoryHistory)
+        .where(path === undefined ? isNull(fleetMemoryHistory.path) : eq(fleetMemoryHistory.path, path))
         .orderBy(desc(fleetMemoryHistory.id))
         .all()
-        .map(({ id, hash, source, content, createdAt }) => ({
+        .map(({ id, hash, source, content, createdAt, path: of }) => ({
           id,
           hash,
           source,
+          ...(of ? { path: of } : {}),
           bytes: Buffer.byteLength(content),
           createdAt,
         })),
@@ -802,6 +955,7 @@ const make = (path: string): DbShape => {
             id: row.id,
             hash: row.hash,
             source: row.source,
+            ...(row.path ? { path: row.path } : {}),
             bytes: Buffer.byteLength(row.content),
             createdAt: row.createdAt,
             content: row.content,
@@ -1029,6 +1183,155 @@ const make = (path: string): DbShape => {
         .filter((model) => resolveRates(model) === null);
 
       return { rows, totals, missingPricing };
+    },
+
+    listRules: () => db.select().from(rules).orderBy(desc(rules.createdAt)).all().map(ruleOf),
+
+    getRule: (id) => {
+      const row = db.select().from(rules).where(eq(rules.id, id)).get();
+      return row ? ruleOf(row) : undefined;
+    },
+
+    putRule: (rule) => {
+      const values = {
+        id: rule.id,
+        name: rule.name,
+        enabled: rule.enabled,
+        pattern: rule.pattern,
+        matchKind: rule.matchKind,
+        caseSensitive: rule.caseSensitive,
+        wholeWord: rule.wholeWord,
+        watch: rule.watch,
+        reply: rule.reply,
+        timing: rule.timing,
+        interrupt: rule.interrupt,
+        requireAck: rule.requireAck,
+        scope: rule.scope,
+        createdAt: new Date(rule.createdAt),
+        updatedAt: new Date(),
+      };
+      db.insert(rules)
+        .values(values)
+        // `createdAt` is deliberately absent from the update set: editing a rule
+        // must not reorder the list under the person editing it.
+        .onConflictDoUpdate({
+          target: rules.id,
+          set: {
+            name: values.name,
+            enabled: values.enabled,
+            pattern: values.pattern,
+            matchKind: values.matchKind,
+            caseSensitive: values.caseSensitive,
+            wholeWord: values.wholeWord,
+            watch: values.watch,
+            reply: values.reply,
+            timing: values.timing,
+            interrupt: values.interrupt,
+            requireAck: values.requireAck,
+            scope: values.scope,
+            updatedAt: values.updatedAt,
+          },
+        })
+        .run();
+      return rule;
+    },
+
+    deleteRule: (id) => {
+      db.delete(rules).where(eq(rules.id, id)).run();
+      db.delete(ruleState).where(eq(ruleState.ruleId, id)).run();
+    },
+
+    ruleStats: () => {
+      const rows = db
+        .select({
+          ruleId: ruleState.ruleId,
+          pending: sql<number>`sum(case when ${ruleState.status} = 'pending' then 1 else 0 end)`,
+          totalFires: sql<number>`sum(${ruleState.totalFires})`,
+          lastFiredAt: sql<number | null>`max(${ruleState.lastFiredAt})`,
+        })
+        .from(ruleState)
+        .groupBy(ruleState.ruleId)
+        .all();
+      return rows.map((row) => ({
+        ruleId: row.ruleId,
+        pending: Number(row.pending ?? 0),
+        totalFires: Number(row.totalFires ?? 0),
+        lastFiredAt: row.lastFiredAt === null ? null : Number(row.lastFiredAt),
+      }));
+    },
+
+    noteRuleFire: (ruleId, instanceId, requireAck) => {
+      const id = `${ruleId}:${instanceId}`;
+      const now = new Date();
+      const before = db.select().from(ruleState).where(eq(ruleState.id, id)).get();
+      const next = {
+        id,
+        ruleId,
+        instanceId,
+        // A rule that wants no acknowledgement still records the fire; it just
+        // stays armed-looking, and the engine's own once-per-session check is
+        // what keeps it quiet afterwards.
+        status: (requireAck ? 'pending' : 'armed') as 'armed' | 'pending',
+        fireCount: (before?.fireCount ?? 0) + 1,
+        totalFires: (before?.totalFires ?? 0) + 1,
+        lastFiredAt: now,
+        ackedAt: before?.ackedAt ?? null,
+        ackNote: before?.ackNote ?? null,
+      };
+      db.insert(ruleState)
+        .values(next)
+        .onConflictDoUpdate({
+          target: ruleState.id,
+          set: {
+            status: next.status,
+            fireCount: next.fireCount,
+            totalFires: next.totalFires,
+            lastFiredAt: next.lastFiredAt,
+          },
+        })
+        .run();
+      return ruleStateOf(next as typeof ruleState.$inferSelect);
+    },
+
+    ruleStateFor: (ruleId, instanceId) => {
+      const row = db
+        .select()
+        .from(ruleState)
+        .where(eq(ruleState.id, `${ruleId}:${instanceId}`))
+        .get();
+      return row ? ruleStateOf(row) : undefined;
+    },
+
+    pendingRuleStates: (instanceId) =>
+      db
+        .select()
+        .from(ruleState)
+        .where(and(eq(ruleState.instanceId, instanceId), eq(ruleState.status, 'pending')))
+        .all()
+        .map(ruleStateOf),
+
+    ruleStatesFor: (ruleId) =>
+      db
+        .select()
+        .from(ruleState)
+        .where(eq(ruleState.ruleId, ruleId))
+        .orderBy(desc(ruleState.lastFiredAt))
+        .all()
+        .map(ruleStateOf),
+
+    ackRule: (ruleId, instanceId, note) => {
+      const id = `${ruleId}:${instanceId}`;
+      const row = db.select().from(ruleState).where(eq(ruleState.id, id)).get();
+      if (!row || row.status !== 'pending') return undefined;
+      const now = new Date();
+      db.update(ruleState)
+        // Re-armed, not retired: the same rule can catch the same habit again
+        // later in the same session, and `fireCount` starts the next escalation
+        // from zero. `totalFires` is the history and is left alone.
+        .set({ status: 'armed', fireCount: 0, ackedAt: now, ackNote: note })
+        .where(eq(ruleState.id, id))
+        .run();
+      return ruleStateOf({ ...row, status: 'armed', fireCount: 0, ackedAt: now, ackNote: note });
     },
   };
 };

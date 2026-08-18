@@ -837,3 +837,45 @@ test('applyToolResult leaves a non-JSON hand-off result alone', () => {
   expect(messages[0].metadata?.delegateInstanceId).toBeUndefined();
   expect(messages[0].metadata?.toolStatus).toBe('success');
 });
+
+/**
+ * A rule's message arrives as a `user` frame with a `system` origin — cockpit's
+ * own word, not the reader's and not another session's.
+ *
+ * Two things went wrong before this was covered. The harness only echoed
+ * `peer`-origin messages, so a rule firing never reached an open dashboard at
+ * all and appeared only after a refresh re-read the transcript from disk. And
+ * the mapper only treated `peer` as somebody-else's-words, so once echoed it
+ * would have rendered as a sentence the reader had typed themselves.
+ */
+const ruleFrame = (text: string, name = 'rule:Honest caveat'): SDKMessage =>
+  ({
+    type: 'user',
+    message: { role: 'user', content: text },
+    origin: { kind: 'system', name },
+  }) as unknown as SDKMessage;
+
+test('a rule firing renders as a rule, never as the reader own words', () => {
+  const messages = mapFrame('i1', ruleFrame('your work is not done yet')).messages ?? [];
+
+  expect(messages).toHaveLength(1);
+  expect(messages[0].type).toBe('user.peer');
+  expect(messages[0].content).toBe('your work is not done yet');
+  // The label the bubble shows, with the `rule:` prefix stripped.
+  expect(messages[0].metadata?.ruleName).toBe('Honest caveat');
+  // No session ids: a rule is not a delegate, and no branch should claim it.
+  expect(messages[0].metadata?.peerSession).toBeUndefined();
+  expect(messages[0].metadata?.peerFrom).toBeUndefined();
+});
+
+test('a rule with no name still says what it is', () => {
+  // Built inline rather than through the helper: a default parameter would
+  // swallow the very absence this is checking.
+  const nameless = {
+    type: 'user',
+    message: { role: 'user', content: 'do the thing' },
+    origin: { kind: 'system' },
+  } as unknown as SDKMessage;
+  const messages = mapFrame('i1', nameless).messages ?? [];
+  expect(messages[0].metadata?.ruleName).toBe('a rule');
+});

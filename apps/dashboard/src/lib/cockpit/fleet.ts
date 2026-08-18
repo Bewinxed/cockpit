@@ -18,6 +18,7 @@ import {
   type FleetPlugin,
   type FleetSkillMeta,
   type FsEntry,
+  type MachineMemorySet,
   type MarketplacePluginInfo,
   type McpHttpServerConfig,
   type McpSSEServerConfig,
@@ -35,6 +36,14 @@ export interface FleetMemoryRow {
 }
 
 /**
+ * One document the main memory links, as the hub stores it: the path it lands
+ * at under `~/.claude/memories/`, and the markdown that goes there.
+ */
+export interface FleetMemoryDocRow extends FleetMemoryRow {
+  path: string;
+}
+
+/**
  * What `GET /api/fleet` answers with. The skills are a sibling of the config
  * rather than part of it: what the machines get carries every skill's files,
  * and a catalog read should not weigh megabytes.
@@ -49,6 +58,12 @@ export interface FleetSnapshot {
   agents: FleetAgent[];
   /** Null while the fleet keeps no memory, which is where every fleet starts. */
   memory: FleetMemoryRow | null;
+  /**
+   * The documents the main memory links, by path. Empty until somebody splits
+   * the memory into a set, and carried with their files for the same reason the
+   * subagents are — each one is a page of markdown.
+   */
+  memoryDocs: FleetMemoryDocRow[];
   /** Machines the hub could not write the subagents to, by machineId → why. */
   unpushable: Record<string, string>;
 }
@@ -268,8 +283,18 @@ const put = <T>(url: string, body: unknown, attempt: string): Promise<T> =>
     attempt
   );
 
-async function erase(url: string, attempt: string): Promise<void> {
-  const response = await fetch(url, { method: 'DELETE' });
+/**
+ * `body` is for the one row whose identity will not fit in a path: a linked
+ * document is keyed by `models/claude-opus-5.md`, and a slash in a route
+ * parameter is a route somewhere else.
+ */
+async function erase(url: string, attempt: string, body?: unknown): Promise<void> {
+  const response = await fetch(url, {
+    method: 'DELETE',
+    ...(body === undefined
+      ? {}
+      : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
+  });
   if (!response.ok) throw new Error(`Could not ${attempt} — ${await said(response)}.`);
 }
 
@@ -435,6 +460,8 @@ export interface FleetMemoryVersion {
   hash: string;
   /** `fleet`, or `machine:<machineId>` for a copy an overwrite took off one. */
   source: string;
+  /** Which document of the set it was a version of; absent is the main file. */
+  path?: string;
   bytes: number;
   createdAt: string;
 }
@@ -466,9 +493,7 @@ export async function saveMemory(content: string, expectedHash?: string): Promis
  * not a failure. `send` would choke parsing that empty answer as JSON, and the
  * memory tab would report the fetch's own exception as what the machine said.
  */
-export async function peekMemory(
-  machineId: string
-): Promise<{ content: string; hash: string } | null> {
+export async function peekMemory(machineId: string): Promise<MachineMemorySet | null> {
   const response = await fetch('/api/fleet/memory/peek', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -478,12 +503,21 @@ export async function peekMemory(
     throw new Error(`Could not read this machine's memory — ${await said(response)}.`);
   }
   const body = await response.text();
-  return body ? (JSON.parse(body) as { content: string; hash: string }) : null;
+  return body ? (JSON.parse(body) as MachineMemorySet) : null;
 }
 
-/** What the memory used to say, newest first and without the content. */
-export const memoryHistory = (): Promise<FleetMemoryVersion[]> =>
-  send('/api/fleet/memory/history', {}, 'read the memory history');
+/**
+ * What the memory used to say, newest first and without the content. One
+ * document at a time: a `path` for a linked one, the main file without.
+ */
+export const memoryHistory = (path?: string): Promise<FleetMemoryVersion[]> =>
+  send(
+    path === undefined
+      ? '/api/fleet/memory/history'
+      : `/api/fleet/memory/history?path=${encodeURIComponent(path)}`,
+    {},
+    'read the memory history'
+  );
 
 export const memoryVersion = (
   id: number
@@ -506,8 +540,34 @@ export const restoreMemory = (id: number): Promise<FleetMemoryRow> =>
 export const removeMemory = (): Promise<void> => erase('/api/fleet/memory', 'remove the memory');
 
 /**
- * Takes one machine's own CLAUDE.md as the fleet's. Where the first document
- * comes from, and how a machine that drifted has its version win.
+ * Stores one linked document; every machine gets it under `~/.claude/memories/`.
+ * The same save the main file gets, keyed by the path it lands at.
+ */
+export async function saveMemoryDoc(
+  path: string,
+  content: string,
+  expectedHash?: string
+): Promise<{ ok: true; doc: FleetMemoryDocRow } | { ok: false; latest: FleetMemoryDocRow }> {
+  const response = await fetch('/api/fleet/memory/docs', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path, content, expectedHash }),
+  });
+  if (response.status === 409) {
+    return { ok: false, latest: (await response.json()) as FleetMemoryDocRow };
+  }
+  if (!response.ok) throw new Error(`Could not save ${path} — ${await said(response)}.`);
+  return { ok: true, doc: (await response.json()) as FleetMemoryDocRow };
+}
+
+/** Drops one document, and with it the copy on every machine that has cockpit's. */
+export const removeMemoryDoc = (path: string): Promise<void> =>
+  erase('/api/fleet/memory/docs', `remove ${path}`, { path });
+
+/**
+ * Takes one machine's whole memory as the fleet's — the main file and every
+ * document beside it. Where the first document comes from, and how a machine
+ * that drifted has its version win.
  */
 export const adoptMemory = (machineId: string): Promise<FleetMemoryRow> =>
   send(
@@ -520,14 +580,30 @@ export const adoptMemory = (machineId: string): Promise<FleetMemoryRow> =>
     "adopt this machine's memory"
   );
 
-/** The other direction: the fleet's document over a machine copy that drifted. */
-export const pushMemory = (machineId: string): Promise<unknown> =>
+/** The same for one document of the set, for the drifted row being settled. */
+export const adoptMemoryDoc = (machineId: string, path: string): Promise<FleetMemoryDocRow> =>
+  send(
+    '/api/fleet/memory/adopt',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ machineId, path }),
+    },
+    `adopt this machine's ${path}`
+  );
+
+/**
+ * The other direction: the fleet's document over a machine copy that drifted.
+ * A `path` forces the one document, so settling a drifted `models/…` does not
+ * also overwrite a main file nobody looked at.
+ */
+export const pushMemory = (machineId: string, path?: string): Promise<unknown> =>
   send(
     '/api/fleet/memory/push',
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ machineId }),
+      body: JSON.stringify({ machineId, path }),
     },
     'overwrite this machine'
   );

@@ -19,6 +19,7 @@
 		IconDownload,
 		IconGallery,
 		IconWarningTriangle,
+		IconRules,
 		IconSubagentsDuo,
 	} from '$lib/icons';
 	import { Markdown } from '$lib/components/ui/markdown';
@@ -661,12 +662,35 @@
 				     this is reported speech, and a reader who mistakes it for
 				     their own instruction loses track of who asked for what. -->
 				{#if !suppressedAsDelegateTraffic}
-				<div class="w-full overflow-hidden rounded-xl border border-primary/30 bg-primary/5">
-					<div class="flex items-center gap-2 border-b border-primary/20 px-3 py-2">
+				<!-- A rule wears the warning hue rather than the peer primary: it is not
+				     another session talking, it is a standing instruction the reader
+				     themselves set, and the two should never be confused at a glance. -->
+				<div
+					class="w-full overflow-hidden rounded-xl border {message.metadata?.ruleName
+						? 'border-warning/30 bg-warning/5'
+						: 'border-primary/30 bg-primary/5'}"
+				>
+					<div
+						class="flex items-center gap-2 border-b px-3 py-2 {message.metadata?.ruleName
+							? 'border-warning/20'
+							: 'border-primary/20'}"
+					>
 						<!-- The kind glyph; the sender's model mark is the gutter avatar. -->
-						<IconSubagentsDuo class="size-4 shrink-0 text-primary" />
-						<span class="min-w-0 flex-1 truncate text-xs font-medium text-primary">
-							{#if message.metadata?.reportKind}
+						{#if message.metadata?.ruleName}
+							<IconRules class="size-4 shrink-0 text-warning" />
+						{:else}
+							<IconSubagentsDuo class="size-4 shrink-0 text-primary" />
+						{/if}
+						<span
+							class="min-w-0 flex-1 truncate text-xs font-medium {message.metadata?.ruleName
+								? 'text-warning'
+								: 'text-primary'}"
+						>
+							{#if message.metadata?.ruleName}
+								<a href="/rules" class="underline-offset-2 hover:underline">
+									Your rule · {message.metadata.ruleName}
+								</a>
+							{:else if message.metadata?.reportKind}
 								{#if sessionHref}
 									<a href={sessionHref} class="underline-offset-2 hover:underline">
 										← Report from {message.metadata?.peerName ?? 'a delegate'}{message
@@ -751,7 +775,7 @@
 								<span class="text-xs font-medium text-muted-foreground">
 									{message.metadata?.noteKind}
 								</span>
-								<span class="truncate text-xs text-muted-foreground/70">
+								<span class="truncate text-xs text-faint">
 									{message.metadata?.noteTitle}
 								</span>
 							</div>

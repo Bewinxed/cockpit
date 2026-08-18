@@ -1,6 +1,8 @@
 <script lang="ts">
+  import { tick } from 'svelte';
   import { toast } from 'svelte-sonner';
-  import { IconCheck, IconChevronDown, IconChevronRight, IconSpinner, IconTrash, IconWarningTriangle } from '$lib/icons';
+  import { memoryDocProblem } from '@cockpit/core';
+  import { IconCheck, IconChevronDown, IconChevronRight, IconPlus, IconSpinner, IconTrash, IconWarningTriangle } from '$lib/icons';
   import { Button } from '$lib/components/ui/button';
   import { Skeleton } from '$lib/components/ui/skeleton';
   import * as Tooltip from '$lib/components/ui/tooltip';
@@ -8,11 +10,11 @@
   import MemoryCard from '$lib/components/features/MemoryCard.svelte';
   import { formatDistanceToNow } from '$lib/utils/time';
   import type { Machine } from './client.svelte';
-  import { adoptMemory, formatBytes, memoryHistory, memoryVersion, peekMemory, pushMemory, removeMemory, restoreMemory, saveMemory, type FleetMemoryRow, type FleetMemoryVersion } from './fleet';
+  import { adoptMemory, adoptMemoryDoc, formatBytes, memoryHistory, memoryVersion, peekMemory, pushMemory, removeMemory, removeMemoryDoc, restoreMemory, saveMemory, saveMemoryDoc, type FleetMemoryDocRow, type FleetMemoryRow, type FleetMemoryVersion } from './fleet';
   import { machineLabel } from './machine';
 
-  let { memory = $bindable(), machines, settling, error }: {
-    memory: FleetMemoryRow | null; machines: Machine[]; settling: boolean; error: string | null;
+  let { memory = $bindable(), docs = $bindable(), machines, settling, error }: {
+    memory: FleetMemoryRow | null; docs: FleetMemoryDocRow[]; machines: Machine[]; settling: boolean; error: string | null;
   } = $props();
 
   let editing = $state(false);
@@ -114,6 +116,100 @@
     try { landed(await restoreMemory(row.id)); shown = null; toast.success('Restored — every machine gets it.'); }
     catch (error) { toast.error(message(error)); } finally { restoring = null; }
   }
+
+  /**
+   * The linked documents. Every rule the main file has, held per document: a
+   * machine that edited one of them says so on that document's own row, and
+   * settling it settles that document alone.
+   */
+  let docBusy = $state<Record<string, boolean>>({});
+
+  const docState = (machine: Machine, path: string) => machine.fleet?.memoryDocs?.[path];
+  const inSync = (path: string) => machines.filter((row) => docState(row, path)?.state === 'applied');
+  const kept = (path: string) => machines.filter((row) => docState(row, path)?.state === 'failed');
+  const docBytes = (doc: FleetMemoryDocRow) => new TextEncoder().encode(doc.content).length;
+
+  function stored(row: FleetMemoryDocRow) {
+    docs = docs.some((doc) => doc.path === row.path)
+      ? docs.map((doc) => (doc.path === row.path ? row : doc))
+      : [...docs, row].sort((a, b) => a.path.localeCompare(b.path));
+  }
+
+  const saveDoc = (path: string) => async (text: string) => {
+    const doc = docs.find((row) => row.path === path);
+    const result = await saveMemoryDoc(path, text, doc?.hash);
+    if (result.ok) { stored(result.doc); return true; }
+    // The same document moved under the writer: what is really there wins the
+    // card back, rather than either copy winning by being second.
+    stored(result.latest);
+    toast.error(`${path} changed elsewhere while you edited. Nothing was overwritten.`);
+    return false;
+  };
+
+  async function forgetDoc(path: string) {
+    docBusy[path] = true;
+    try { await removeMemoryDoc(path); docs = docs.filter((doc) => doc.path !== path); }
+    catch (error) { toast.error(message(error)); } finally { delete docBusy[path]; }
+  }
+
+  async function adoptDoc(machine: Machine, path: string) {
+    docBusy[path] = true;
+    try { stored(await adoptMemoryDoc(machine.machineId, path)); toast.success(`The fleet now keeps ${machineLabel(machine.hostname)}'s ${path}.`); }
+    catch (error) { toast.error(message(error)); } finally { delete docBusy[path]; }
+  }
+
+  async function overwriteDoc(machine: Machine, path: string) {
+    docBusy[path] = true;
+    try { await pushMemory(machine.machineId, path); toast.success(`${machineLabel(machine.hostname)} takes the fleet's ${path}.`); }
+    catch (error) { toast.error(message(error)); } finally { delete docBusy[path]; }
+  }
+
+  /**
+   * A document that isn't there yet. The path is the one thing a new one has
+   * that an existing one doesn't — under it is the same card, the same editor
+   * and the same save, because a write to a path the hub has never seen is
+   * already how a document comes into being.
+   */
+  let drafting = $state(false);
+  let draftPath = $state('');
+  /** A path is only wrong once it has been asked for: nobody is told off for an empty field. */
+  let asked = $state(false);
+  let pathField = $state<HTMLInputElement | null>(null);
+
+  const trimmed = $derived(draftPath.trim());
+  const taken = $derived(docs.some((doc) => doc.path === trimmed));
+  // The hub judges this same string with this same function; running it here
+  // only buys the answer before the round trip. What the server says still wins,
+  // and it says it through the toast a refused save throws.
+  const pathProblem = $derived.by(() => {
+    if (trimmed === '') return asked ? 'A document needs a path — models/deepseek-v4.md, say.' : undefined;
+    if (taken) return `“${trimmed}” is already a linked document. Its own card is the place to edit it.`;
+    const problem = memoryDocProblem(trimmed);
+    return problem === undefined ? undefined : `${problem.charAt(0).toUpperCase()}${problem.slice(1)}.`;
+  });
+
+  const docAnchor = (path: string) => `memory-doc-${path}`;
+  const showDoc = (path: string) => document.getElementById(docAnchor(path))?.scrollIntoView({ block: 'center' });
+
+  function startDoc() {
+    draftPath = ''; asked = false; drafting = true;
+    void tick().then(() => pathField?.focus());
+  }
+
+  const createDoc = async (text: string) => {
+    asked = true;
+    if (trimmed === '' || pathProblem !== undefined) return false;
+    // No expected hash, because there is nothing here to be second to — which is
+    // why the taken check above has to hold: a write over a path that does exist
+    // would land on it without a word.
+    const result = await saveMemoryDoc(trimmed, text);
+    // The conflict arm belongs to the type, not to this form; a save that
+    // expected nothing has nothing to have moved under it.
+    if (!result.ok) { stored(result.latest); return false; }
+    stored(result.doc);
+    toast.success(`${trimmed} is on its way to every machine that is online.`);
+    return true;
+  };
 </script>
 
 {#snippet driftedRow(machine: Machine)}
@@ -152,6 +248,83 @@
       </div>
     {/if}
   </li>
+{/snippet}
+
+{#snippet docCard(doc: FleetMemoryDocRow)}
+  {@const synced = inSync(doc.path)}
+  {@const drifted = kept(doc.path)}
+  <MemoryCard path="~/.claude/memories/{doc.path}" content={doc.content} save={saveDoc(doc.path)}>
+    {#snippet meta()}
+      <span class="flex min-w-0 shrink items-baseline gap-x-3 text-micro text-muted-foreground">
+        <span class="font-mono" title={doc.hash}>{doc.hash.slice(0, 8)}</span>
+        <span>{formatBytes(docBytes(doc))}</span>
+        <span class="truncate">saved {formatDistanceToNow(new Date(doc.updatedAt))}</span>
+        {#if synced.length > 0}<span class="truncate" title={names(synced)}>in sync on {synced.length}</span>{/if}
+      </span>
+    {/snippet}
+    {#snippet actions()}
+      <Tooltip.Root>
+        <Tooltip.Trigger>
+          {#snippet child({ props })}
+            <Button {...props} variant="ghost" size="icon-sm" class="text-muted-foreground hover:text-destructive" aria-label="Delete {doc.path}" disabled={docBusy[doc.path] === true} onclick={() => forgetDoc(doc.path)}><IconTrash /></Button>
+          {/snippet}
+        </Tooltip.Trigger>
+        <Tooltip.Content>Takes it off every machine that still has Outpost's copy</Tooltip.Content>
+      </Tooltip.Root>
+    {/snippet}
+    {#snippet footer()}
+      {#if drifted.length > 0}
+        <div class="flex flex-col gap-2 border-t border-border p-4">
+          {#each drifted as machine (machine.machineId)}
+            {@const online = machine.status === 'online'}
+            <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+              <span class="flex min-w-0 items-center gap-1.5">
+                <IconWarningTriangle class="size-3.5 shrink-0 text-warning" />
+                <span class="truncate text-caption font-medium {online ? 'text-foreground' : 'text-muted-foreground'}">{machineLabel(machine.hostname)}</span>
+              </span>
+              <span class="min-w-0 flex-1 text-micro text-muted-foreground">Kept its own copy.{online ? '' : ' Offline — it syncs when it comes back.'}</span>
+              <Button variant="outline" size="xs" class="shrink-0" disabled={!online || docBusy[doc.path] === true} onclick={() => adoptDoc(machine, doc.path)}>Adopt</Button>
+              <Button variant="outline" size="xs" class="shrink-0" disabled={!online || docBusy[doc.path] === true} onclick={() => overwriteDoc(machine, doc.path)}>Overwrite</Button>
+            </div>
+          {/each}
+        </div>
+      {/if}
+    {/snippet}
+  </MemoryCard>
+{/snippet}
+
+{#snippet draftCard()}
+  <MemoryCard path="~/.claude/memories/" content="" bind:editing={drafting} save={createDoc}>
+    {#snippet meta()}
+      <!-- The header already says where the file goes; this is only its last
+           part, typed where the rest of it is written. `.input` is unlayered, so
+           its own padding and size beat any utility written here — only what it
+           leaves alone is worth setting. -->
+      <input
+        bind:this={pathField}
+        bind:value={draftPath}
+        placeholder="models/deepseek-v4.md"
+        autocomplete="off"
+        spellcheck="false"
+        aria-label="Path under ~/.claude/memories/"
+        aria-invalid={pathProblem === undefined ? undefined : 'true'}
+        class="input min-w-0 max-w-80 flex-1 font-mono"
+      />
+    {/snippet}
+    {#snippet footer()}
+      {#if pathProblem}
+        <div class="flex flex-col gap-2 border-t border-border p-4">
+          <div class="flex items-start gap-2 rounded-lg bg-warning/10 px-3 py-2">
+            <IconWarningTriangle class="mt-0.5 size-4 shrink-0 text-warning" />
+            <p class="text-caption text-warning" role="alert">{pathProblem}</p>
+          </div>
+          {#if taken}
+            <Button variant="outline" size="xs" class="self-start" onclick={() => showDoc(trimmed)}>Show that document</Button>
+          {/if}
+        </div>
+      {/if}
+    {/snippet}
+  </MemoryCard>
 {/snippet}
 
 <p class="max-w-prose text-caption">
@@ -203,6 +376,23 @@
       {/if}
     {/snippet}
   </MemoryCard>
+
+  <p class="max-w-prose text-caption text-muted-foreground">
+    And the documents it links, under <span class="font-mono">~/.claude/memories/</span>. The main file is loaded flat into every session; a <span class="font-mono">models/&lt;model&gt;.md</span> is put in front of the session actually running that model, so what only one model needs stays off every other one's context.
+  </p>
+  <!-- Wrapped so a form that refuses a path already taken can send the reader
+       to the card that has it. -->
+  {#each docs as doc (doc.path)}
+    <div id={docAnchor(doc.path)} class="min-w-0 scroll-mt-4">{@render docCard(doc)}</div>
+  {/each}
+  {#if drafting}
+    {@render draftCard()}
+  {:else}
+    <Button variant="outline" size="xs" class="self-start" onclick={startDoc}>
+      <IconPlus class="shrink-0" />
+      New document
+    </Button>
+  {/if}
 
   {#if historyOpen}
     {#if loadingHistory && versions === null}
