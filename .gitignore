@@ -4,7 +4,8 @@ node_modules
 # output
 out
 dist
-build
+# Anchored: a bare `build` also swallows .design-foundations/build, which is tracked.
+/build
 *.tgz
 .svelte-kit
 apps/dashboard/build

@@ -700,9 +700,14 @@
    the setting asks for is stillness, not instant swaps — zeroing every duration
    takes the fades with it. So durations clamp to one quick beat, loops stop,
    presses stop scaling, and the page transitions swap their travelling
-   keyframes for ones that only fade. */
+   keyframes for ones that only fade.
+
+   `data-motion-loop` opts one element out of the clamp. It is for indicators
+   whose looping *is* the information — an indeterminate spinner held on a
+   single frame reads as a progress fraction it cannot know. Decorative loops
+   and anything that travels do not qualify. */
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
+  *:not([data-motion-loop]), *::before, *::after {
     animation-duration: 120ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 120ms !important;

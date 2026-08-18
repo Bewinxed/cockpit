@@ -55,6 +55,7 @@
       />
       <circle
         class="spin"
+        data-motion-loop
         cx={box / 2}
         cy={box / 2}
         r={radius}
@@ -143,15 +144,6 @@
 
     .task-ring g[data-shown='false'] {
       scale: 1;
-    }
-
-    /* App-wide, reduced motion clamps every animation to one 120ms pass, so a
-       turning arc is not on offer here — and a single arc held still is exactly
-       the fraction this ring must not claim. A ring of dashes all the way round
-       says the same "alive, unmeasured" without moving and without a reading. */
-    .task-ring .spin {
-      animation: none;
-      stroke-dasharray: 1.5 2.5;
     }
   }
 </style>
