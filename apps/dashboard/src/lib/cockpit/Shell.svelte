@@ -12,7 +12,7 @@
   import * as Sheet from '$lib/components/ui/sheet';
   import * as SidebarPrimitive from '$lib/components/ui/sidebar';
   import ThemeSwitcher from '$lib/components/ui/ThemeSwitcher.svelte';
-  import { cockpit, reconnectNow } from './client.svelte';
+  import { cockpit, hubSocketUrl, reconnectNow } from './client.svelte';
   import JumpPalette from './JumpPalette.svelte';
   import SessionTabs from './SessionTabs.svelte';
   import ShortcutSheet from './ShortcutSheet.svelte';
@@ -90,22 +90,24 @@
     palette = true;
   }
 
+  /* A hub that cannot be reached is a fault whether the socket closed cleanly or
+     errored, so the dot reads the coarser {@link HubState} rather than the
+     socket's four words — a grey dot for "your fleet is unreachable" was the
+     quiet half of the same misreading the banner below fixes. */
   const dot = $derived(
     {
       connected: 'bg-success',
       connecting: 'bg-warning animate-pulse',
-      disconnected: 'bg-muted-foreground',
-      error: 'bg-error',
-    }[cockpit.status]
+      unreachable: 'bg-error',
+    }[cockpit.hub]
   );
 
   const dotLabel = $derived(
     {
-      connected: 'Connected',
-      connecting: 'Connecting',
-      disconnected: 'Disconnected',
-      error: 'Connection error',
-    }[cockpit.status]
+      connected: 'Connected to the hub',
+      connecting: 'Connecting to the hub',
+      unreachable: 'Cannot reach the hub',
+    }[cockpit.hub]
   );
 
   const blocked = $derived(cockpit.blockedCount);
@@ -119,7 +121,8 @@
   let countdown = $state(0);
   let bannerVisible = $state(false);
   let recoveryFlash = $state(false);
-  /** The first connection is not a recovery; the banner only shows after a drop. */
+  /** Whether this tab ever reached the hub — a drop, or a hub that was already
+   *  down when the page loaded. Only the first is a recovery worth flashing. */
   let wasConnected = $state(false);
 
   $effect(() => {
@@ -136,7 +139,11 @@
       wasConnected = true;
       return;
     }
-    if (wasConnected && (cockpit.status === 'disconnected' || cockpit.status === 'error')) {
+    // A cold load against a hub that is off never satisfied `wasConnected`, so
+    // the banner used to stay away in exactly the case it was written for: the
+    // hub is a process on a machine that may simply not be running. The gate is
+    // the attempt, not the success — `connecting` is still nobody's fault.
+    if (cockpit.hub === 'unreachable') {
       bannerVisible = true;
       recoveryFlash = false;
     }
@@ -246,20 +253,33 @@
     </div>
   </header>
 
-  <!-- Reconnect banner -->
+  <!-- Reconnect banner. A hub that dropped is amber — it was there a moment ago
+       and the backoff will most likely get it back. A hub this tab has never
+       reached is red and says where it looked, because that is the difference
+       between "start the hub" and "you are on the wrong host". -->
   {#if bannerVisible}
     <div
-      class="relative z-20 flex items-center justify-center gap-3 px-4 py-1.5 text-[13px]
-             {recoveryFlash ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning'}"
+      role={wasConnected || recoveryFlash ? 'status' : 'alert'}
+      class="relative z-20 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 px-4 py-1.5 text-[13px]
+             {recoveryFlash
+        ? 'bg-success/10 text-success'
+        : wasConnected
+          ? 'bg-warning/10 text-warning'
+          : 'bg-error/10 text-error'}"
       transition:slide={{ duration: 160, easing: quintOut }}
     >
       {#if recoveryFlash}
         Connected
-      {:else}
+      {:else if wasConnected}
         <span>Hub connection lost{countdown > 0 ? ` — retrying in ${countdown}s` : ' — retrying…'}</span>
         <Button variant="ghost" size="xs" class="h-6" onclick={reconnectNow}>
           Reconnect now
         </Button>
+      {:else}
+        <span class="font-medium">Can't reach the hub</span>
+        <span class="font-mono text-micro opacity-80">{hubSocketUrl()}</span>
+        <span class="opacity-80">{countdown > 0 ? `retrying in ${countdown}s` : 'retrying…'}</span>
+        <Button variant="ghost" size="xs" class="h-6" onclick={reconnectNow}>Retry now</Button>
       {/if}
     </div>
   {/if}

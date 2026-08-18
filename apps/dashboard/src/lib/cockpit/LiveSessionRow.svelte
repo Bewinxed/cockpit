@@ -1,9 +1,27 @@
+<script module lang="ts">
+  /**
+   * One clock for the whole board. A row that ticked for itself would put a
+   * timer per session on a card of thirty, and they all read the same second.
+   */
+  let now = $state(Date.now());
+  let watchers = 0;
+  let ticker: ReturnType<typeof setInterval> | undefined;
+
+  function watchClock(): () => void {
+    if (watchers++ === 0) ticker = setInterval(() => (now = Date.now()), 1000);
+    return () => {
+      if (--watchers === 0) clearInterval(ticker);
+    };
+  }
+</script>
+
 <script lang="ts">
   /** One live session, as the session index and a project home both list it. */
   import { onMount } from 'svelte';
   import { fly } from 'svelte/transition';
   import { quintOut } from 'svelte/easing';
   import { Badge } from '$lib/components/ui/badge';
+  import { formatDuration } from '$lib/utils/time';
   import { ACTIVITY_LABEL, SLEEPING_HINT, SLEEPING_LABEL } from './activity';
   import ActivityDot from './ActivityDot.svelte';
   import { cockpit, isFailed, isResumable, type InstanceRow } from './client.svelte';
@@ -42,6 +60,26 @@
   // of thirty sessions thirty round trips in one frame.
   const plan = $derived(tasksOf(instance.id));
   const progress = $derived(plan && plan.tasks.length > 0 ? taskProgress(plan) : null);
+
+  /**
+   * A session running an open-ended ask writes no plan, and a run of any length
+   * still owes the reader a reading. What it gets is the honest one: a ring that
+   * turns to say the session is alive, and how long it has been on the step it
+   * is on. No fraction is invented — there is nothing to take a fraction of.
+   */
+  const unmeasured = $derived(!progress && !failed && !sleeping && activity === 'working');
+
+  $effect(() => {
+    if (!unmeasured) return;
+    return watchClock();
+  });
+
+  // The daemon stamps the pulse from its own clock, so a machine a few seconds
+  // out from this browser must not read as a run that started in the future.
+  const pulseAt = $derived(cockpit.pulseAt(instance.id));
+  const onStepFor = $derived(
+    unmeasured && pulseAt !== undefined ? formatDuration(Math.max(0, now - pulseAt)) : null
+  );
 
   const title = $derived.by(() => {
     const info = instance.sessionId
@@ -117,11 +155,27 @@
           </span>
           {progress.done}/{progress.total}
         </span>
+        <!-- No plan to measure, but the session is running: a turning arc and how
+             long it has been on this step, which is what is actually known. -->
+      {:else if unmeasured}
+        <span
+          class="ml-auto flex shrink-0 items-center gap-1.5 text-micro text-muted-foreground tabular-nums"
+          data-tabular
+          title={onStepFor
+            ? `Working — no task plan; ${onStepFor} on this step`
+            : 'Working — no task plan'}
+        >
+          <span class="identity-ink flex items-center" style={identityVar(instance.cwd)}>
+            <TaskRing indeterminate size="sm" />
+          </span>
+          {#if onStepFor}{onStepFor}{/if}
+        </span>
       {/if}
       <!-- The state word keeps its colour until the row goes dark under the
            pointer, where only the surface's own foreground stays legible. -->
       <span
-        class="inline-grid shrink-0 justify-items-end text-micro tabular-nums group-hover:text-accent-foreground {progress
+        class="inline-grid shrink-0 justify-items-end text-micro tabular-nums group-hover:text-accent-foreground {progress ||
+        unmeasured
           ? 'ml-2'
           : 'ml-auto'} {failed || activity === 'blocked'
           ? 'font-medium text-error'

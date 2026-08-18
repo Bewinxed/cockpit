@@ -104,15 +104,42 @@
         </Collapsible.Content>
       </Collapsible.Root>
 
-      <div class="flex items-center gap-2 mt-3">
+      <!-- The three answers are not one row of buttons. A standing grant
+           outlives this ask, so it sits on its own line above the two answers
+           to it, held clear of Allow by more than the thumb that would cross
+           into it; Deny and Allow then take opposite ends of the row below.
+           Travel cost to a costly target is the point (Fitts 1954) — buttons
+           set side by side make a rushed thumb a permanent permission. -->
+      {#if rule}
+        <div class="mt-3 flex justify-end">
+          <button
+            type="button"
+            disabled={!!resolved}
+            class="inline-flex min-h-11 min-w-0 items-center gap-1.5 rounded-lg bg-secondary px-3.5 py-2 text-micro font-medium text-secondary-foreground
+                   transition-[color,background-color,opacity] duration-[160ms] ease-[var(--ease-out-expo)]
+                   hover:bg-secondary/80 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:opacity-40"
+            title={rule.full}
+            aria-label="Always allow {rule.full} — a standing grant on {rule.scope}, not just this time"
+            onclick={() => answer('always')}
+          >
+            <span class="truncate">Always allow {rule.short} ({rule.scope})</span>
+            {#if shortcuts}
+              <kbd class="{kbd} shrink-0">⇧Y</kbd>
+            {/if}
+          </button>
+        </div>
+      {/if}
+
+      <div class="flex items-center gap-2 {rule ? 'mt-6 border-t border-border/50 pt-6' : 'mt-3'}">
         {#if shortcuts}
           <kbd class={kbd}>N</kbd>
         {/if}
         <button
           type="button"
           disabled={!!resolved}
-          class="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-micro font-medium
+          class="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-border px-4 py-2 text-micro font-medium
                  transition-[color,background-color,border-color,opacity] duration-[160ms] ease-[var(--ease-out-expo)]
+                 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none
                  {resolved === 'deny'
             ? 'bg-error/10 text-error border-error/20'
             : resolved
@@ -127,38 +154,22 @@
 
         <div class="flex-1"></div>
 
-        {#if rule}
-          <button
-            type="button"
-            disabled={!!resolved}
-            class="inline-flex items-center gap-1.5 min-w-0 rounded-lg bg-secondary text-secondary-foreground px-3 py-1.5 text-micro font-medium
-                   transition-[color,background-color,opacity] duration-[160ms] ease-[var(--ease-out-expo)]
-                   hover:bg-secondary/80 disabled:opacity-40"
-            title={rule.full}
-            onclick={() => answer('always')}
-          >
-            <span class="truncate">Always allow {rule.short} ({rule.scope})</span>
-            {#if shortcuts}
-              <kbd class="{kbd} shrink-0">⇧Y</kbd>
-            {/if}
-          </button>
-        {/if}
-
         {#if shortcuts}
           <kbd class={kbd}>Y</kbd>
         {/if}
         <button
           type="button"
           disabled={!!resolved}
-          class="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-micro font-medium
+          class="inline-flex min-h-11 items-center gap-1.5 rounded-lg px-4 py-2 text-micro font-medium
                  transition-[color,background-color,opacity] duration-[160ms] ease-[var(--ease-out-expo)]
+                 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none
                  {resolved === 'allow'
             ? 'bg-success text-success-foreground'
             : resolved
               ? 'opacity-0'
               : 'bg-primary text-primary-foreground hover:bg-primary/90'}"
           onclick={() => answer('allow')}
-          aria-label="Allow"
+          aria-label="Allow once"
         >
           {#key resolved}
             <span in:scale={{ duration: resolved ? 260 : 0, start: 0.25, easing: quintOut }}>

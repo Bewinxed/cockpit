@@ -1197,10 +1197,20 @@
 
     {#if cockpit.machines.length === 0}
       <div class="px-4 py-6 text-center">
-        <p class="text-caption">No machines connected yet.</p>
-        <a href="/session" class="mt-1 inline-block text-[13px] text-primary hover:underline">
-          How to connect one
-        </a>
+        <!-- An empty rail against an unreachable hub is not an empty fleet, and
+             the rail must not say it is: the board carries the fault and what to
+             do about it, so this only says which of the two it is looking at. -->
+        {#if cockpit.hub === 'unreachable'}
+          <p class="text-caption text-error">Can't reach the hub.</p>
+          <p class="mt-1 text-micro text-muted-foreground">Nothing here is a reading of your fleet.</p>
+        {:else if cockpit.hub === 'connecting'}
+          <p class="text-caption">Connecting to the hub…</p>
+        {:else}
+          <p class="text-caption">No machines connected yet.</p>
+          <a href="/session" class="mt-1 inline-block text-[13px] text-primary hover:underline">
+            How to connect one
+          </a>
+        {/if}
       </div>
     {/if}
   </Sidebar.Content>

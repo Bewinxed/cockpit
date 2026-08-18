@@ -69,6 +69,14 @@ import { workingSet } from './working-set.svelte';
 
 export type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'error';
 
+/**
+ * What to *tell a reader* about the hub, which is coarser than the socket's own
+ * state on purpose. `connecting` is the transient every cold load passes
+ * through and is never a fault; `unreachable` is one — the hub is a process on
+ * somebody's machine, and it being off is the ordinary case, not the exotic one.
+ */
+export type HubState = 'connected' | 'connecting' | 'unreachable';
+
 /** A machine from the hub registry (`GET /api/agents`, and `instances` frames). */
 export type Machine = AgentRow;
 
@@ -300,6 +308,12 @@ export interface SessionState {
 
 const state = $state({
   status: 'disconnected' as ConnectionStatus,
+  /**
+   * Whether a socket has ever been opened for this document. A dashboard that
+   * has not tried yet reads `disconnected` off the socket exactly like one whose
+   * attempt failed, and only the second of those is a fault worth shouting.
+   */
+  attempted: false,
   /** When the next reconnect attempt fires, so the banner can count it down. */
   retryAt: null as number | null,
   machines: [] as Machine[],
@@ -1130,13 +1144,24 @@ export function reconnectNow(): void {
  */
 let claimed = false;
 
+/**
+ * The address this dashboard's socket points at. Exported because a hub it
+ * cannot reach is the one moment the address matters to a reader: it is what
+ * separates "the hub is not running" from "this page is served from the wrong
+ * host", and the two have different fixes.
+ */
+export function hubSocketUrl(): string {
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${protocol}//${window.location.host}/ws/dashboard`;
+}
+
 function connect(): void {
   globalThis.__cockpitDisposing = false;
   teardown();
   state.status = 'connecting';
+  state.attempted = true;
 
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const socket = new WebSocket(`${protocol}//${window.location.host}/ws/dashboard`);
+  const socket = new WebSocket(hubSocketUrl());
 
   socket.onopen = () => {
     state.status = 'connected';
@@ -1195,6 +1220,7 @@ export function ensureConnected(): void {
     // has already fired for an open socket and will never fire again, so the
     // status has to be read off the socket instead of waited for.
     claimed = true;
+    state.attempted = true;
     bind(socket);
     if (socket.readyState === WebSocket.OPEN) {
       state.status = 'connected';
@@ -2545,6 +2571,12 @@ const branchOrder = (a: SubagentState, b: SubagentState): number => {
 export const cockpit = {
   get status() {
     return state.status;
+  },
+  /** {@link HubState} — the socket's state as something worth saying out loud. */
+  get hub(): HubState {
+    if (state.status === 'connected') return 'connected';
+    if (state.status === 'connecting' || !state.attempted) return 'connecting';
+    return 'unreachable';
   },
   get retryAt() {
     return state.retryAt;

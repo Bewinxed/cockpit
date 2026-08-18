@@ -21,6 +21,8 @@
   import type { SDKSessionInfo } from '@cockpit/core';
   import {
     cockpit,
+    hubSocketUrl,
+    reconnectNow,
     type InstanceRow,
     type ProjectRow,
   } from '$lib/cockpit/client.svelte';
@@ -302,14 +304,18 @@
       <!-- Page header -->
       <header class="flex items-center gap-3">
         <h1 class="text-title">Fleet</h1>
-        {#if cockpit.status !== 'connected'}
-          <span class="text-caption">hub {cockpit.status}</span>
+        {#if cockpit.hub === 'connecting'}
+          <span class="text-caption">connecting to the hub…</span>
         {/if}
         <!-- Machines, and only machines: the board's cards are projects too, so a
-             bare "2/2" over three of them read as a count of what is on screen. -->
-        <span class="text-micro text-muted-foreground">
-          {onlineCount} of {machineCount} machine{machineCount === 1 ? '' : 's'} online
-        </span>
+             bare "2/2" over three of them read as a count of what is on screen.
+             A hub the board cannot reach knows no machines, so the count is not
+             a fact about the fleet and is not stated as one. -->
+        {#if cockpit.hub !== 'unreachable'}
+          <span class="text-micro text-muted-foreground">
+            {onlineCount} of {machineCount} machine{machineCount === 1 ? '' : 's'} online
+          </span>
+        {/if}
         <!-- The thumb bar owns this verb on a phone; two of it on one 390pt
              screen is the same duplication the rail's pill was. -->
         <div class="ml-auto hidden sm:block">
@@ -499,6 +505,31 @@
         <!-- Nothing is in the state the reader asked for. The chip row above
              already says which state that is and that it stands at zero, so a
              card here would be a placeholder for an absence it has covered. -->
+      {:else if cockpit.hub === 'unreachable'}
+        <!-- The hub is down, or is not where this page thinks it is. Either way
+             the board knows nothing about the fleet, so it says that instead of
+             "No machines yet" — which claims the fleet is idle, the one thing
+             this dashboard cannot currently know. -->
+        <!-- Not a live region: the chrome's banner is the one that announces
+             this, and saying it twice assertively is noise, not emphasis. -->
+        <section class="rounded-xl bg-card p-6 shadow-md">
+          <h2 class="text-sm font-semibold text-error">Can't reach the hub</h2>
+          <p class="mt-2 text-caption">
+            This dashboard has never connected, so nothing below is a reading of your fleet — your
+            agents may well be running. The hub is a process on a machine you control; check that it
+            is up, then retry.
+          </p>
+          <p class="mt-3 text-micro text-muted-foreground">
+            Tried <span class="font-mono text-foreground">{hubSocketUrl()}</span>
+          </p>
+          <Button size="sm" class="pressable mt-3" onclick={reconnectNow}>Retry now</Button>
+        </section>
+      {:else if cockpit.hub === 'connecting' && cockpit.machines.length === 0}
+        <!-- The ordinary first second of a cold load. Nothing is known yet, and
+             an absence that has not been established is not reported as one. -->
+        <section class="rounded-xl bg-card p-6 shadow-md">
+          <p class="text-caption">Connecting to the hub…</p>
+        </section>
       {:else if cockpit.machines.length === 0}
         <!-- No machines onboarding -->
         <section class="rounded-xl bg-card p-6 shadow-md">
