@@ -140,7 +140,7 @@
 					{isRedacted ? 'italic' : ''} {expanded ? 'reveal-open' : ''}"
 			>
 				{#if isRedacted}
-					<span class="text-muted-foreground/60"
+					<span class="text-faint"
 						>The reasoning for this response has been redacted.</span
 					>
 				{:else}

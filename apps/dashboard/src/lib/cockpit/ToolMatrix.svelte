@@ -127,7 +127,7 @@
   {:else}
     <span class="flex items-center gap-1">
       <Tooltip.Root>
-        <Tooltip.Trigger class="{CHIP} text-muted-foreground/70">Unknown</Tooltip.Trigger>
+        <Tooltip.Trigger class="{CHIP} text-faint">Unknown</Tooltip.Trigger>
         <Tooltip.Content>The daemon has not reported this tool</Tooltip.Content>
       </Tooltip.Root>
       <Button variant="ghost" size="xs" class="text-muted-foreground" disabled={!online} onclick={() => install(machine, spec)}>Install</Button>

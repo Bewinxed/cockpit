@@ -61,7 +61,7 @@
 			<TextShimmer duration={1.8}>Working…</TextShimmer>
 		{/if}
 	</span>
-	<span aria-hidden="true" class="font-mono text-micro tabular-nums text-muted-foreground/70">
+	<span aria-hidden="true" class="font-mono text-micro tabular-nums text-faint">
 		{formatElapsed((now - startedAt) / 1000)}
 	</span>
 </span>

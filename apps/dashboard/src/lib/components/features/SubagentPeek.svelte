@@ -136,7 +136,7 @@
         <div class="flex items-baseline gap-2">
           <span class="text-caption font-medium text-foreground">{label}</span>
           {#if model}
-            <span class="shrink-0 font-mono text-micro text-muted-foreground/70">{modelLabel(model)}</span>
+            <span class="shrink-0 font-mono text-micro text-faint">{modelLabel(model)}</span>
           {/if}
         </div>
         {#if description}
@@ -159,7 +159,7 @@
             {/key}
           </span>
           {#if showsClock}
-            <span class="shrink-0 tabular-nums text-muted-foreground/70">{elapsed}</span>
+            <span class="shrink-0 tabular-nums text-faint">{elapsed}</span>
           {/if}
           {#if branch.status === 'error'}
             <IconError class="size-4 shrink-0 text-destructive" />

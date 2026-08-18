@@ -79,7 +79,7 @@
 {#if inline}
   <code>{@render flow()}</code>
 {:else if lineNumbers}
-  <pre class="{PRE} min-w-max"><code>{#each lines as line, index (line.offset)}<span class="grid min-h-5 grid-cols-[2.75rem_minmax(0,1fr)]"><span class="pr-3 text-right tabular-nums text-muted-foreground/60 select-none">{index + 1}</span><span class="pl-1">{@render paint(index, line.content)}</span></span>{/each}</code></pre>
+  <pre class="{PRE} min-w-max"><code>{#each lines as line, index (line.offset)}<span class="grid min-h-5 grid-cols-[2.75rem_minmax(0,1fr)]"><span class="pr-3 text-right tabular-nums text-faint select-none">{index + 1}</span><span class="pl-1">{@render paint(index, line.content)}</span></span>{/each}</code></pre>
 {:else}
   <pre class={PRE}><code>{@render flow()}</code></pre>
 {/if}

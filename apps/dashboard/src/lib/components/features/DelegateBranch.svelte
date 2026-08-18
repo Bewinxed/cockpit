@@ -300,10 +300,10 @@
                 <span class="text-caption font-medium text-foreground">{label}</span>
               {/if}
               {#if harness}
-                <span class="shrink-0 font-mono text-micro text-muted-foreground/70">{harness}</span>
+                <span class="shrink-0 font-mono text-micro text-faint">{harness}</span>
               {/if}
               {#if model}
-                <span class="shrink-0 font-mono text-micro text-muted-foreground/70">{modelLabel(model)}</span>
+                <span class="shrink-0 font-mono text-micro text-faint">{modelLabel(model)}</span>
               {/if}
             </div>
             {#if brief}

@@ -791,7 +791,7 @@
                   class="flex items-start gap-1.5 rounded-lg px-2 py-1 text-micro
                          transition-colors duration-150
                          hover:bg-sidebar-accent hover:text-sidebar-accent-foreground
-                         {branchDone ? 'text-muted-foreground/60' : 'text-muted-foreground'}"
+                         {branchDone ? 'text-faint' : 'text-muted-foreground'}"
                   title={branch.description ?? branch.subagentType}
                   onclick={(e) => {
                     e.preventDefault();
@@ -852,7 +852,7 @@
           </li>
         {/if}
         {#if bgTasks > 0}
-          <li class="px-2 py-1 text-micro text-muted-foreground/50">
+          <li class="px-2 py-1 text-micro text-faint">
             {bgTasks} background task{bgTasks === 1 ? '' : 's'}
           </li>
         {/if}
@@ -1070,7 +1070,7 @@
         {/each}
         {#if recents.length > 0}
           <li
-            class="flex h-6 items-center pr-2 pl-8 text-micro font-medium text-muted-foreground/70"
+            class="flex h-6 items-center pr-2 pl-8 text-micro font-medium text-faint"
             aria-hidden="true"
           >
             Recent

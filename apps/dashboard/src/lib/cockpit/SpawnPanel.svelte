@@ -725,7 +725,7 @@
       }}
     />
     {#if source === 'repo' && cloneInto}
-      <span class="truncate font-mono text-micro text-muted-foreground/70">{cloneInto}</span>
+      <span class="truncate font-mono text-micro text-faint">{cloneInto}</span>
     {/if}
   </div>
 {/snippet}

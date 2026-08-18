@@ -147,7 +147,7 @@
 
 			<!-- Original content if different from error details -->
 			{#if message.content && !errors.includes(message.content)}
-				<div class="text-xs text-muted-foreground/80 italic">
+				<div class="text-xs text-faint italic">
 					{message.content}
 				</div>
 			{/if}

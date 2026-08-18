@@ -210,7 +210,7 @@
         class="flex min-h-6 items-center gap-1.5 rounded-lg px-1.5 py-0.5 text-xs transition-colors {blocked >
         0
           ? 'bg-error/10 text-error hover:bg-error/20'
-          : 'text-muted-foreground/50 hover:text-muted-foreground'}"
+          : 'text-faint hover:text-muted-foreground'}"
         title="{blocked} session{blocked === 1 ? '' : 's'} awaiting approval"
       >
         <IconShield class="size-3" />

@@ -32,7 +32,7 @@
     {@const item = machine.fleet?.[kind]?.[name]}
     {@const online = machine.status === 'online'}
     {@const os = machineOs(machine.os)}
-    {@const tone = item?.state === 'applied' ? 'text-success hover:bg-success/10' : item?.state === 'failed' ? 'bg-warning/10 text-warning hover:bg-warning/20' : 'text-muted-foreground/80 hover:bg-muted'}
+    {@const tone = item?.state === 'applied' ? 'text-success hover:bg-success/10' : item?.state === 'failed' ? 'bg-warning/10 text-warning hover:bg-warning/20' : 'text-faint hover:bg-muted'}
     <Popover.Root>
       <Popover.Trigger class="{CHIP} {tone} {online ? '' : 'opacity-50'}" aria-label="{machineLabel(machine.hostname)}: {item?.state ?? 'not reported'}">
         {#if item?.state === 'applied'}<IconCheck class="size-3 shrink-0" />{:else if item?.state === 'failed'}<IconWarningTriangle class="size-3 shrink-0" />{/if}

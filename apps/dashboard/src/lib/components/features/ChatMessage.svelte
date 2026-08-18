@@ -628,7 +628,7 @@
 						</span>
 						</span>
 						{#if followUpModel}
-							<span class="shrink-0 font-mono text-micro text-muted-foreground/70">
+							<span class="shrink-0 font-mono text-micro text-faint">
 								{modelLabel(followUpModel)}
 							</span>
 						{/if}

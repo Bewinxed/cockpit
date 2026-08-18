@@ -81,7 +81,7 @@
 					</p>
 				{/each}
 				{#if verdict.requestId}
-					<p class="font-mono text-micro text-muted-foreground/70">{verdict.requestId}</p>
+					<p class="font-mono text-micro text-faint">{verdict.requestId}</p>
 				{/if}
 				{#if message.metadata?.toolStatus === 'error' && message.metadata?.toolResult}
 					<p class="text-micro text-destructive/70">
