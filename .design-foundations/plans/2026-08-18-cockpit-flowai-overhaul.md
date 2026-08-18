@@ -1,6 +1,10 @@
 # Design Plan — Cockpit visual overhaul from FlowAI comps
 
 **Date:** 2026-08-18
+**Status:** in-progress
+**Started:** 2026-08-18 16:41
+**Current Phase:** 1
+**Workspace:** `main` (user-directed; no worktree — per-phase commits are the rollback boundary)
 **Track:** Full
 **Entry stage:** Discover (no DESIGN.md, no JOURNEY.md, no prior `.design-foundations/`)
 **Reference set (closed):** `/tmp/flowai/flowai-table.png`, `/tmp/flowai/flowai-assistant.png`
@@ -1004,3 +1008,39 @@ measured with `ui-observer` against a rendered page; the rest are reviewed again
 | **Colour scoped to chips, badges, and small marks** | User asked for colour after seeing the greyscale wireframe, then narrowed it: chips/badges and tasteful accents, not a repainted UI. An earlier draft over-specced this as a generated wayfinding hue ramp with quarantine arcs — cut, as it built a system for a preference. What survives is the scope rule (highlight channel, not a wash), the status/non-status distinction, and the hue-removed legibility check the wireframe already achieved. New item DW-3.12. |
 | **`checklists` over `foundations` for the table material** | Re-check found `foundations.md` is Kadavy ch. 1–2 and contains **zero** table content; the ornamentation-reduction pattern lives in `chapter-07-visual-hierarchy.md`, which has **no resolver name**. `checklists.md:182` carries the condensed row and already resolves. Appending a resolver row was rejected because §5 lives in a versioned plugin cache that is replaced on update, so the row would silently disappear. `foundations` stays on Phase 3, where register-before-DNA is exactly its purpose. |
 | **The heuristic gate names both assessments** | The review pass is dual-blind (cross-pillar critique **plus** `detect.mjs`); the plan consumed a `detect.mjs` finding while scheduling only the critique. |
+
+---
+
+## Execution log
+
+Build started 2026-08-18 16:41 on branch `main` (user-directed; no worktree). Pre-build snapshot
+commit: `6a4ee2d` — "chore(repo): snapshot the pre-overhaul state and the approved design plan".
+Per-phase commits are the rollback boundary.
+
+### Model resolution — deviation from the command's ladder (user-directed, 2026-08-18 16:45)
+
+The `/design-for-ai:build` command downgrades each REVIEW one tier below its BUILD
+("prover-verifier asymmetry"). **That rule is dropped for this build.** The asymmetry argument
+holds only where review is *checking* (literal tokens, column counts, contrast arithmetic); the
+`design-review-agent`'s other half is cross-pillar critique on rendered pixels, which is a
+generation-shaped task where a weaker reviewer is not a real gate. Two changes:
+
+- **Every REVIEW runs on `opus`, on all ten phases** — inverting the ladder rather than merely
+  flattening it. The gate is the expensive half; a build phase can be re-run cheaply, a defect that
+  clears the gate ships. `haiku` is not used anywhere in this build.
+- **Phase 6 BUILD moves `sonnet` → `opus`.** It was the only Gate-Full phase built on sonnet, and it
+  owns a success criterion plus WCAG 1.4.1 and CVD compliance — under the original ladder its
+  reviewer would have been `haiku`.
+
+| Phase | BUILD | REVIEW | | Phase | BUILD | REVIEW |
+|---|---|---|---|---|---|---|
+| 1 | sonnet | **opus** | | 6 | **opus** (was sonnet) | **opus** |
+| 2 | sonnet | **opus** | | 7 | sonnet | **opus** |
+| 3 | opus | **opus** | | 8 | opus | **opus** |
+| 4 | opus | **opus** | | 9a | opus | **opus** |
+| 5 | opus | **opus** | | 9b | opus | **opus** |
+
+Note this makes several phases *reviewed above the tier they were built at* (1, 2, 7) — the reverse
+of the command's asymmetry. That is deliberate: on those phases the reviewer is cheap to over-power
+and the artifacts it gates (JOURNEY.md, the page specs, the microcopy) are read by every later phase.
+
