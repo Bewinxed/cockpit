@@ -1044,3 +1044,24 @@ Note this makes several phases *reviewed above the tier they were built at* (1, 
 of the command's asymmetry. That is deliberate: on those phases the reviewer is cheap to over-power
 and the artifacts it gates (JOURNEY.md, the page specs, the microcopy) are read by every later phase.
 
+### Phase 1: Jobs, journey & IA (Gate: Standard)
+- [x] BUILD: Discovery + design + production complete. Four passes — three on `sonnet`, final on `opus`.
+- [x] REVIEW: three independent `opus` reviews (FAIL, FAIL, FAIL), each on a fresh reviewer with no
+      intent-framing. Every failure was DW-1.7 (citation accuracy); DW-1.1–1.6 and 1.8 passed from
+      review 2 onward, and all four edge cases passed throughout. The final blocker — the job-story
+      sentence form misattributed to Moesta — was fixed on the opus pass with primary-source
+      verification, and orchestrator-verified by grep. **A fourth review was waived** as a recorded
+      gate override: three reviews had already cleared 7/8 items and the eighth was fixed with
+      quoted primary sources.
+- [x] Committed
+Commit: `79a896e`
+Summary: JOURNEY.md now fixes the operator's job story, a six-phase journey map, and a hub-and-spoke
+IA whose sitemap reconciles against the 7 routes on disk; CLAUDE.md is recreated with the Design
+Context block. Two items route forward: `routes/project/` has **no list route**, so the journey's
+"start a new session against a project" step has no entry point in the app today (Phase 2 owns it),
+and the plan's own **DW-1.2 is unsatisfiable as literally written** alongside DW-1.3 — resolved here
+by treating the DW-1.3-mandated sentence form as notation carrying its true attribution rather than
+as a second analytic school. Also confirmed: the plugin's `journey-stack.md` ships two wrong
+citations (L129 Edelman year, L156 4th-ed title); both were inherited into an early draft and are
+corrected in the shipped document.
+
