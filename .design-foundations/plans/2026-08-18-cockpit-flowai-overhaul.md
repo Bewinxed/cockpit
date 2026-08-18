@@ -1065,3 +1065,49 @@ as a second analytic school. Also confirmed: the plugin's `journey-stack.md` shi
 citations (L129 Edelman year, L156 4th-ed title); both were inherited into an early draft and are
 corrected in the shipped document.
 
+### Phase 2: Flows & page specs (Gate: Standard)
+- [x] BUILD: Discovery + design + production complete (`opus`). Grounded against the running app,
+      not the plan's assumptions — four first-draft claims were falsified against source and
+      corrected before shipping.
+- [x] REVIEW: **PASS** (`opus`, no intent-framing). 7/7 DW items, 4/4 edge cases, 5/5 constraints
+      (one partial). 13/13 citations verified against primary sources, zero fabrications — the
+      failure mode that cost Phase 1 four passes did not recur, because the executor refused to
+      repeat five doctrine citations it could not independently verify. All 29 on-disk claims
+      checked by the reviewer. Four Major findings (three factual misreads of the codebase, one
+      backwards pattern derivation) were fixed and re-verified before commit.
+- [x] Committed
+Commit: `80c2f50`
+Summary: JOURNEY.md now carries `## Flows` (6), `## Page specs` (7 surfaces × 5 states × explicit
+narrow-width behaviour), a density class per surface (1 compact / 6 comfortable), and a 12-row
+heuristic findings table. `git diff --numstat` = `599 0`, so Phase 1's gate-passed sections are
+provably untouched. Three confirmed defects in the shipped UI carry into the Design phases:
+`PermissionCard.svelte` L107 puts Deny / Always allow / Allow in one flex container (destructive
+adjacent to primary, at the journey's peak-pressure moment); `Shell.svelte` L139 gates the hub-down
+banner on `wasConnected`, so a cold load against a dead hub states the fault only as quiet caption
+text (`FleetBoard.svelte` L305–307); and `LiveSessionRow.svelte` L44 yields no determinate reading
+for a plan-less open-ended run — exactly the Tier-4 case. The `project/[id]` gap resolves without an
+eighth route: `SpawnPanel.svelte` L583–588 already has a project picker, so what is missing is a
+visible index, delivered as a named content block of `session`.
+
+### Standing directives (user, 2026-08-18)
+
+- **Nothing is left unfixed before moving on.** Every Critical and Major finding is fixed inside the
+  phase that surfaced it, and re-verified, before that phase commits. "Follow-up" is not an outcome.
+  The final REPORT's Follow-up section should read "None identified" or the build has not finished.
+- **Light ramp first** (Phase 3): light is measured from the comps and is primary; dark is re-solved
+  against the dark lightness spec as its twin. Both ship, both pass AA.
+- **No mid-phase checkpoints in Phase 3** — the agent runs straight through to rendered mocks. The
+  DW-3.11 lock is taken to the user after the review gate rather than at converge (recorded
+  deviation: the plan places it at converge; the user chose to see gate-passed pixels).
+
+### Open defects carried from Phase 2 — must be closed before the build ends
+
+Confirmed on disk by two independent agents. Each is assigned to the phase that owns its surface;
+none may be closed by documenting it.
+
+| # | Defect | Evidence | Owner |
+|---|--------|----------|-------|
+| D1 | Deny / Always allow / Allow share one flex container — destructive adjacent to primary, at the journey's peak-pressure moment, on the surface most used from a phone | `PermissionCard.svelte` L107 | Phase 5 (agent surface) |
+| D2 | Hub-down banner gated on `wasConnected`, so a cold load against a dead hub states the fault only as quiet caption text | `Shell.svelte` L139; `FleetBoard.svelte` L305–307 | Phase 8 (workspace shell) |
+| D3 | A plan-less open-ended run gets no determinate progress reading at board level — the Tier-4 case | `LiveSessionRow.svelte` L44; `TaskRing.svelte` | Phase 6 (data surfaces) |
+

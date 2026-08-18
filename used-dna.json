@@ -1,0 +1,330 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "seed": "x|2026-08-18|0",
+      "output": {
+        "seed": "x|2026-08-18|0",
+        "project": "x",
+        "date": "2026-08-18",
+        "reroll": 0,
+        "candidates": 5,
+        "baseHue": 0.44,
+        "goldenAngle": 137.50776405003785,
+        "constraintTier": 1,
+        "cellSpace": {
+          "families": 12,
+          "disciplines": 9,
+          "cells": 108,
+          "banned": 6,
+          "excluded": 0,
+          "available": 102
+        },
+        "hands": [
+          {
+            "index": 1,
+            "family": {
+              "id": "terminal-mono",
+              "name": "Terminal / Mono-Core"
+            },
+            "composition": {
+              "id": "frieze-bands",
+              "name": "Frieze Bands",
+              "variance": 4,
+              "scale": "band-sized — each band sets its own scale",
+              "density": "alternating: packed band, breathing band",
+              "symmetry": "horizontal banding, full-width",
+              "hierarchy": "band order + band height carry importance",
+              "ground": "each band is its own ground; edges are hard",
+              "dominantElement": "the rhythm of varied band heights"
+            },
+            "hue": {
+              "deg": 0.44,
+              "name": "red",
+              "paletteCommand": "node scripts/palette.mjs --seed 0.44 --chroma balanced --harmony mono"
+            },
+            "signature": {
+              "id": "accent-scarcity",
+              "text": "The accent color appears ONLY on the current nav item and the primary CTA — nowhere else"
+            }
+          },
+          {
+            "index": 2,
+            "family": {
+              "id": "cinematic-dark",
+              "name": "Cinematic Dark"
+            },
+            "composition": {
+              "id": "poster-bleed",
+              "name": "Poster Bleed",
+              "variance": 8,
+              "scale": "one full-bleed image or letterform at viewport scale",
+              "density": "minimal copy pinned to edges and corners",
+              "symmetry": "edge-anchored, center deliberately vacant or occupied by the bleed",
+              "hierarchy": "the bleed is the message; text is caption-rank",
+              "ground": "the bleed IS the ground",
+              "dominantElement": "the full-bleed image/letterform"
+            },
+            "hue": {
+              "deg": 137.95,
+              "name": "lime",
+              "paletteCommand": "node scripts/palette.mjs --seed 137.95 --chroma balanced --harmony mono"
+            },
+            "signature": {
+              "id": "marginalia-stamps",
+              "text": "Small rubber-stamp-style status marks live in the margins"
+            }
+          },
+          {
+            "index": 3,
+            "family": {
+              "id": "organic-natural",
+              "name": "Organic / Natural"
+            },
+            "composition": {
+              "id": "marginalia",
+              "name": "Marginalia",
+              "variance": 5,
+              "scale": "steady text column, small margin apparatus",
+              "density": "dense column beside an airy margin",
+              "symmetry": "asymmetric two-track: column + active margin",
+              "hierarchy": "main column leads; margin annotates and cross-references",
+              "ground": "book page — the margin is working space, not padding",
+              "dominantElement": "the primary text column"
+            },
+            "hue": {
+              "deg": 275.46,
+              "name": "violet",
+              "paletteCommand": "node scripts/palette.mjs --seed 275.46 --chroma balanced --harmony mono"
+            },
+            "signature": {
+              "id": "baseline-ruler",
+              "text": "A visible baseline ruler runs down one edge and content demonstrably sits on it"
+            }
+          },
+          {
+            "index": 4,
+            "family": {
+              "id": "playful-geometric",
+              "name": "Playful Geometric"
+            },
+            "composition": {
+              "id": "ledger-grid",
+              "name": "Ledger Grid",
+              "variance": 2,
+              "scale": "uniform small type, few size jumps",
+              "density": "high and even — tabular rows and columns",
+              "symmetry": "columnar, ruled",
+              "hierarchy": "flat with rank cues (position, weight), not size",
+              "ground": "ruled paper — hairlines structure everything",
+              "dominantElement": "the table/ruling system itself"
+            },
+            "hue": {
+              "deg": 52.97,
+              "name": "amber",
+              "paletteCommand": "node scripts/palette.mjs --seed 52.97 --chroma balanced --harmony mono"
+            },
+            "signature": {
+              "id": "duotone-images",
+              "text": "All imagery is a strict duotone built from the two palette anchors"
+            }
+          },
+          {
+            "index": 5,
+            "family": {
+              "id": "art-deco-luxury",
+              "name": "Art Deco / Luxury"
+            },
+            "composition": {
+              "id": "fractured-grid",
+              "name": "Fractured Grid",
+              "variance": 9,
+              "scale": "colliding scales — fragments at different sizes",
+              "density": "clustered collisions with open counter-space",
+              "symmetry": "deliberate misalignment; diagonal flow",
+              "hierarchy": "the collision point leads; layers order the rest",
+              "ground": "layers overlap the ground and each other",
+              "dominantElement": "the collision point where layers meet"
+            },
+            "hue": {
+              "deg": 190.47,
+              "name": "teal",
+              "paletteCommand": "node scripts/palette.mjs --seed 190.47 --chroma balanced --harmony mono"
+            },
+            "signature": {
+              "id": "oversize-punctuation",
+              "text": "Pull quotes and brackets set at display scale act as structural elements"
+            }
+          }
+        ],
+        "contract": "The model justifies and executes this dealt hand — it does not re-choose. Rejected hand: re-deal with --reroll N+1; both deals stay recorded in used-dna.json."
+      }
+    },
+    {
+      "seed": "cockpit-outpost|2026-08-18|0|pin:chroma=muted,discipline=ledger-grid,family=data-dense-professional,hue=263,signature=accent-scarcity",
+      "output": {
+        "seed": "cockpit-outpost|2026-08-18|0|pin:chroma=muted,discipline=ledger-grid,family=data-dense-professional,hue=263,signature=accent-scarcity",
+        "project": "cockpit-outpost",
+        "date": "2026-08-18",
+        "reroll": 0,
+        "candidates": 5,
+        "pins": {
+          "family": "data-dense-professional",
+          "discipline": "ledger-grid",
+          "hue": 263,
+          "chroma": "muted",
+          "signature": "accent-scarcity"
+        },
+        "baseHue": 155.32,
+        "goldenAngle": 137.50776405003785,
+        "constraintTier": 0,
+        "cellSpace": {
+          "families": 12,
+          "disciplines": 9,
+          "cells": 108,
+          "banned": 6,
+          "excluded": 0,
+          "available": 1
+        },
+        "hands": [
+          {
+            "index": 1,
+            "family": {
+              "id": "data-dense-professional",
+              "name": "Data-Dense Professional"
+            },
+            "composition": {
+              "id": "ledger-grid",
+              "name": "Ledger Grid",
+              "variance": 2,
+              "scale": "uniform small type, few size jumps",
+              "density": "high and even — tabular rows and columns",
+              "symmetry": "columnar, ruled",
+              "hierarchy": "flat with rank cues (position, weight), not size",
+              "ground": "ruled paper — hairlines structure everything",
+              "dominantElement": "the table/ruling system itself"
+            },
+            "hue": {
+              "deg": 263,
+              "name": "blue",
+              "paletteCommand": "node scripts/palette.mjs --seed 263 --chroma muted --harmony mono"
+            },
+            "signature": {
+              "id": "accent-scarcity",
+              "text": "The accent color appears ONLY on the current nav item and the primary CTA — nowhere else"
+            }
+          },
+          {
+            "index": 2,
+            "family": {
+              "id": "data-dense-professional",
+              "name": "Data-Dense Professional"
+            },
+            "composition": {
+              "id": "ledger-grid",
+              "name": "Ledger Grid",
+              "variance": 2,
+              "scale": "uniform small type, few size jumps",
+              "density": "high and even — tabular rows and columns",
+              "symmetry": "columnar, ruled",
+              "hierarchy": "flat with rank cues (position, weight), not size",
+              "ground": "ruled paper — hairlines structure everything",
+              "dominantElement": "the table/ruling system itself"
+            },
+            "hue": {
+              "deg": 263,
+              "name": "blue",
+              "paletteCommand": "node scripts/palette.mjs --seed 263 --chroma muted --harmony mono"
+            },
+            "signature": {
+              "id": "accent-scarcity",
+              "text": "The accent color appears ONLY on the current nav item and the primary CTA — nowhere else"
+            }
+          },
+          {
+            "index": 3,
+            "family": {
+              "id": "data-dense-professional",
+              "name": "Data-Dense Professional"
+            },
+            "composition": {
+              "id": "ledger-grid",
+              "name": "Ledger Grid",
+              "variance": 2,
+              "scale": "uniform small type, few size jumps",
+              "density": "high and even — tabular rows and columns",
+              "symmetry": "columnar, ruled",
+              "hierarchy": "flat with rank cues (position, weight), not size",
+              "ground": "ruled paper — hairlines structure everything",
+              "dominantElement": "the table/ruling system itself"
+            },
+            "hue": {
+              "deg": 263,
+              "name": "blue",
+              "paletteCommand": "node scripts/palette.mjs --seed 263 --chroma muted --harmony mono"
+            },
+            "signature": {
+              "id": "accent-scarcity",
+              "text": "The accent color appears ONLY on the current nav item and the primary CTA — nowhere else"
+            }
+          },
+          {
+            "index": 4,
+            "family": {
+              "id": "data-dense-professional",
+              "name": "Data-Dense Professional"
+            },
+            "composition": {
+              "id": "ledger-grid",
+              "name": "Ledger Grid",
+              "variance": 2,
+              "scale": "uniform small type, few size jumps",
+              "density": "high and even — tabular rows and columns",
+              "symmetry": "columnar, ruled",
+              "hierarchy": "flat with rank cues (position, weight), not size",
+              "ground": "ruled paper — hairlines structure everything",
+              "dominantElement": "the table/ruling system itself"
+            },
+            "hue": {
+              "deg": 263,
+              "name": "blue",
+              "paletteCommand": "node scripts/palette.mjs --seed 263 --chroma muted --harmony mono"
+            },
+            "signature": {
+              "id": "accent-scarcity",
+              "text": "The accent color appears ONLY on the current nav item and the primary CTA — nowhere else"
+            }
+          },
+          {
+            "index": 5,
+            "family": {
+              "id": "data-dense-professional",
+              "name": "Data-Dense Professional"
+            },
+            "composition": {
+              "id": "ledger-grid",
+              "name": "Ledger Grid",
+              "variance": 2,
+              "scale": "uniform small type, few size jumps",
+              "density": "high and even — tabular rows and columns",
+              "symmetry": "columnar, ruled",
+              "hierarchy": "flat with rank cues (position, weight), not size",
+              "ground": "ruled paper — hairlines structure everything",
+              "dominantElement": "the table/ruling system itself"
+            },
+            "hue": {
+              "deg": 263,
+              "name": "blue",
+              "paletteCommand": "node scripts/palette.mjs --seed 263 --chroma muted --harmony mono"
+            },
+            "signature": {
+              "id": "accent-scarcity",
+              "text": "The accent color appears ONLY on the current nav item and the primary CTA — nowhere else"
+            }
+          }
+        ],
+        "contract": "The model justifies and executes this dealt hand — it does not re-choose. Rejected hand: re-deal with --reroll N+1; both deals stay recorded in used-dna.json. Pinned axes are user law — dealt around, never re-chosen."
+      }
+    }
+  ]
+}

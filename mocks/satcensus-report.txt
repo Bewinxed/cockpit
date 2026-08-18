@@ -1,0 +1,8 @@
+v2-fleet.png
+  saturated pixels :    34290 / 1473120  = 2.328% of the surface
+  saturated regions:     3921
+  largest region   :     1770 px = 0.1202% of the surface  (OK — chip/mark scale)
+v2-dark.png
+  saturated pixels :    35551 / 1473120  = 2.413% of the surface
+  saturated regions:     3321
+  largest region   :     1495 px = 0.1015% of the surface  (OK — chip/mark scale)

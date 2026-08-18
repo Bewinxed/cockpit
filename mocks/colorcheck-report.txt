@@ -1,0 +1,84 @@
+
+=== LIGHT — DW-3.3 pairs palette.mjs does not verify (target 4.5:1) ===
+  error-11         on surface          #86534f on #f8f9fa   5.92:1  PASS
+  error-11         on surface-hover    #86534f on #eff0f3   5.48:1  PASS
+  warning-11       on surface          #6f6144 on #f8f9fa   5.74:1  PASS
+  warning-11       on surface-hover    #6f6144 on #eff0f3   5.31:1  PASS
+  success-11       on surface          #486e49 on #f8f9fa   5.53:1  PASS
+  success-11       on surface-hover    #486e49 on #eff0f3   5.12:1  PASS
+  info-11          on surface          #4c677a on #f8f9fa   5.65:1  PASS
+  info-11          on surface-hover    #4c677a on #eff0f3   5.22:1  PASS
+  text-secondary   on surface-hover    #60636a on #eff0f3   5.28:1  PASS
+  text-secondary   on surface-active   #60636a on #e6e8ec   4.90:1  PASS
+  accent-solid     on background       #4466ac on #fcfdfd   5.51:1  PASS (>=3 non-text)
+--- light: status pill text-on-tint (target 4.5:1) ---
+  error-11         on error-3          #86534f on #ffebe9   5.44:1  PASS
+  warning-11       on warning-3        #6f6144 on #f6f0e4   5.33:1  PASS
+  success-11       on success-3        #486e49 on #e6f6e6   5.19:1  PASS
+  info-11          on info-3           #4c677a on #e7f2fa   5.24:1  PASS
+--- light: DW-3.7 distance from the banned purple triplet (CIEDE2000) ---
+  accent-9        #4466ac   indigo-500 dE  11.2   violet-500 dE  17.4   purple-500 dE  22.4   PASS
+  accent-10       #365596   indigo-500 dE  15.4   violet-500 dE  20.4   purple-500 dE  25.0   PASS
+  accent-11       #4e638c   indigo-500 dE  14.0   violet-500 dE  18.6   purple-500 dE  22.9   PASS
+  accent-solid    #4466ac   indigo-500 dE  11.2   violet-500 dE  17.4   purple-500 dE  22.4   PASS
+--- light: DW-3.12 non-status accent vs the four functional hues (CIEDE2000) ---
+  brand-solid #2c2e31 vs error-9   #c56c65  dE  39.7  PASS
+  brand-solid #2c2e31 vs warning-9 #ceb47e  dE  57.9  PASS
+  brand-solid #2c2e31 vs success-9 #84cc86  dE  61.6  PASS
+  brand-solid #2c2e31 vs info-9    #7aabce  dE  47.5  PASS
+--- light: status chip fills pairwise separable (CIEDE2000 >= 12) ---
+  status-live-bg  vs status-attn-bg  dE  15.3  PASS
+  status-live-bg  vs status-done-bg  dE  16.1  PASS
+  status-live-bg  vs status-fail-bg  dE  20.3  PASS
+  status-attn-bg  vs status-done-bg  dE  12.5  PASS
+  status-attn-bg  vs status-fail-bg  dE  14.0  PASS
+  status-done-bg  vs status-fail-bg  dE  27.7  PASS
+--- light: status chip text-on-fill (target 4.5:1) ---
+  status-live-ink on status-live-bg  #3d4b56 on #d8e8f4   7.17:1  PASS
+  status-attn-ink on status-attn-bg  #4e483c on #f0e8d6   7.43:1  PASS
+  status-done-ink on status-done-bg  #3b4e3e on #d9f0d9   7.43:1  PASS
+  status-fail-ink on status-fail-bg  #5a4141 on #f8d9d6   7.01:1  PASS
+  status-idle-ink on surface-raised  #60636a on #fcfdfd   5.90:1  PASS  (no fill)
+
+=== DARK — DW-3.3 pairs palette.mjs does not verify (target 4.5:1) ===
+  error-11         on surface          #e0a7a1 on #19191a   8.54:1  PASS
+  error-11         on surface-hover    #e0a7a1 on #212224   7.74:1  PASS
+  warning-11       on surface          #c5b696 on #19191a   8.79:1  PASS
+  warning-11       on surface-hover    #c5b696 on #212224   7.97:1  PASS
+  success-11       on surface          #9bc49b on #19191a   9.00:1  PASS
+  success-11       on surface-hover    #9bc49b on #212224   8.16:1  PASS
+  info-11          on surface          #9fbcd1 on #19191a   8.86:1  PASS
+  info-11          on surface-hover    #9fbcd1 on #212224   8.03:1  PASS
+  text-secondary   on surface-hover    #b4b7be on #212224   7.93:1  PASS
+  text-secondary   on surface-active   #b4b7be on #292a2d   7.15:1  PASS
+  accent-solid     on background       #4466ac on #121313   3.32:1  PASS (>=3 non-text)
+--- dark: status pill text-on-tint (target 4.5:1) ---
+  error-11         on error-3          #e0a7a1 on #2d1d1c   7.83:1  PASS
+  warning-11       on warning-3        #c5b696 on #262219   7.93:1  PASS
+  success-11       on success-3        #9bc49b on #1a261a   8.06:1  PASS
+  info-11          on info-3           #9fbcd1 on #1b2329   8.03:1  PASS
+--- dark: DW-3.7 distance from the banned purple triplet (CIEDE2000) ---
+  accent-9        #4466ac   indigo-500 dE  11.2   violet-500 dE  17.4   purple-500 dE  22.4   PASS
+  accent-10       #5679bd   indigo-500 dE  10.1   violet-500 dE  16.5   purple-500 dE  21.2   PASS
+  accent-11       #a0b8e6   indigo-500 dE  23.6   violet-500 dE  25.1   purple-500 dE  26.7   PASS
+  accent-solid    #4466ac   indigo-500 dE  11.2   violet-500 dE  17.4   purple-500 dE  22.4   PASS
+--- dark: DW-3.12 non-status accent vs the four functional hues (CIEDE2000) ---
+  brand-solid #e6e8ec vs error-9   #c56c65  dE  36.3  PASS
+  brand-solid #e6e8ec vs warning-9 #ceb47e  dE  23.7  PASS
+  brand-solid #e6e8ec vs success-9 #84cc86  dE  27.7  PASS
+  brand-solid #e6e8ec vs info-9    #7aabce  dE  22.3  PASS
+--- dark: status chip fills pairwise separable (CIEDE2000 >= 12) ---
+  status-live-bg  vs status-attn-bg  dE  15.3  PASS
+  status-live-bg  vs status-done-bg  dE  16.8  PASS
+  status-live-bg  vs status-fail-bg  dE  21.1  PASS
+  status-attn-bg  vs status-done-bg  dE  13.2  PASS
+  status-attn-bg  vs status-fail-bg  dE  14.5  PASS
+  status-done-bg  vs status-fail-bg  dE  29.3  PASS
+--- dark: status chip text-on-fill (target 4.5:1) ---
+  status-live-ink on status-live-bg  #c1d1de on #27343d   8.17:1  PASS
+  status-attn-ink on status-attn-bg  #d5cebf on #3a3426   7.89:1  PASS
+  status-done-ink on status-done-bg  #bfd5c2 on #273a27   7.85:1  PASS
+  status-fail-ink on status-fail-bg  #e4c6c5 on #402725   8.59:1  PASS
+  status-idle-ink on surface-raised  #b4b7be on #212224   7.93:1  PASS  (no fill)
+
+ALL CHECKS PASS

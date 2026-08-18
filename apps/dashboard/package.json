@@ -12,6 +12,8 @@
 	"dependencies": {
 		"@cockpit/core": "workspace:*",
 		"@dagrejs/dagre": "^1.1.8",
+		"@fontsource-variable/geist": "^5.3.0",
+		"@fontsource-variable/geist-mono": "^5.3.0",
 		"@pierre/diffs": "^1.0.4",
 		"@xyflow/svelte": "^1.5.0",
 		"bits-ui": "^2.16.3",

@@ -17,10 +17,9 @@
 </style>
 
 <h1>Cockpit — FlowAI overhaul</h1>
-<p class="sub">All values measured from the comps cropped to their real 1440&times;1023. Type: Geist Variable, self-hosted.</p>
+<p class="sub">All values measured from the comps cropped to their real 1440&times;1023. Every colour now resolves through <code>tokens.css</code> &mdash; <b>zero raw hex in all three mocks</b>. Type: Geist Variable, self-hosted.</p>
 
-<p class="gate">fidelity.py &rarr; PASS (23 quantities) &nbsp;·&nbsp; ui-observer &rarr; 23 observations (from 938)
-&nbsp;·&nbsp; no overflow 320&ndash;1440px</p>
+<p class="gate">fidelity.py &rarr; PASS (26 quantities, 2&times; render) &nbsp;·&nbsp; colorcheck.py &rarr; PASS (69 assertions, both schemes) &nbsp;·&nbsp; measure.mjs &rarr; PASS (16 DOM assertions) &nbsp;·&nbsp; detect.mjs &rarr; 18 nested-cards, 18 verified false positives, 0 real<br>reproduce: <code>bash mocks/verify.sh</code></p>
 
 <h2>Session transcript — compact density</h2>
 <p class="meta">
