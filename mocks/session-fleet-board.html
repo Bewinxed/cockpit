@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<!--
+  No DESIGN.md found — wireframe mode: greyscale defaults.
+  Run /design-for-ai to establish tokens.
+
+  Page A — /session — Fleet board.   Density class: COMFORTABLE.
+  Structural rules honoured in this file (see also session-transcript.html):
+    * ONE card level. `.panel` is the only bordered/filled container; nothing
+      bordered or filled nests inside another. Rows are hairline-separated,
+      not boxed. No nested cards.
+    * Destructive actions are spatially separated from primary CTAs
+      (peek pane: "Interrupt run" sits above the excerpt block, the primary
+      "Open session" sits in the footer — separated by the excerpt + a rule).
+    * Status is never carried by fill alone: every state has a distinct glyph
+      AND a text label AND a distinct weight. Greyscale, so hue is unavailable
+      by construction — which is the point of testing it here.
+    * The dimension ramp is the only thing that changes between the two pages.
+      Colour tokens are byte-identical across both files.
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Outpost — Fleet board (/session) — wireframe</title>
+<style>
+/* ============================================================
+   TOKENS — wireframe greyscale (no DESIGN.md; nothing invented)
+   ============================================================ */
+:root{
+  --background:#ffffff;
+  --surface:#f5f5f5;
+  --surface-hover:#ebebeb;
+  --border-subtle:#e0e0e0;
+  --border:#bdbdbd;
+  --border-strong:#9e9e9e;
+  --text-secondary:#616161;
+  --text:#212121;
+  --accent-solid:#424242;
+  --accent-on-solid:#ffffff;
+  --accent-text:#212121;
+
+  /* --- dimension ramp: COMFORTABLE --- */
+  --fs-base:.875rem;    /* 14px */
+  --fs-sm:.8125rem;     /* 13px */
+  --fs-xs:.75rem;       /* 12px */
+  --lh:1.5;
+  --row-py:.625rem;     /* 10px */
+  --row-min:2.5rem;     /* 40px */
+  --pad:1rem;           /* 16px */
+  --pad-sm:.75rem;      /* 12px */
+  --gap:.75rem;
+  --gap-sm:.375rem;
+  --radius:6px;
+
+  --rail-w:236px;
+  --peek-w:320px;
+}
+
+/* ============================================================
+   BASE
+   ============================================================ */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{font-size:16px}
+body{
+  font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+  font-size:var(--fs-base);line-height:var(--lh);
+  background:var(--background);color:var(--text);
+  height:100vh;overflow:hidden;
+  display:grid;grid-template-columns:var(--rail-w) 1fr;
+  -webkit-font-smoothing:antialiased;
+}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;text-align:left}
+:focus-visible{outline:2px solid var(--text);outline-offset:2px}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-variant-ligatures:none}
+.num{font-variant-numeric:tabular-nums}
+.trunc{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important;scroll-behavior:auto!important}
+}
+
+/* ============================================================
+   SHARED STRUCTURAL LANGUAGE  (identical in both pages)
+   ============================================================ */
+
+/* --- status pill: glyph + label + weight. never hue alone. --- */
+.pill{
+  display:inline-flex;align-items:center;gap:.3em;flex:0 0 auto;
+  font-size:var(--fs-xs);line-height:1.4;
+  padding:.15em .55em .15em .45em;border-radius:999px;
+  border:1px solid transparent;white-space:nowrap;
+}
+.pill .g{font-size:.9em;line-height:1}
+.pill-idle    {border-color:var(--border);color:var(--text-secondary)}
+.pill-working {background:var(--surface-hover);border-color:var(--border-subtle);color:var(--text)}
+.pill-needs   {background:var(--accent-solid);color:var(--accent-on-solid);font-weight:600}
+.pill-error   {background:var(--background);border:1.5px solid var(--text);color:var(--text);font-weight:600}
+
+/* --- item mark --- */
+.mark{
+  flex:0 0 auto;display:grid;place-items:center;
+  width:1.5rem;height:1.5rem;border-radius:var(--radius);
+  background:var(--surface-hover);border:1px solid var(--border-subtle);
+  font-size:var(--fs-xs);font-weight:600;color:var(--text-secondary);
+}
+.mark-lg{width:1.875rem;height:1.875rem}
+
+/* --- row: the universal list item. hairline, never a box. --- */
+.row{
+  display:flex;align-items:center;gap:var(--gap);width:100%;
+  min-height:var(--row-min);padding:var(--row-py) var(--pad);
+  border-bottom:1px solid var(--border-subtle);
+}
+.row:last-child{border-bottom:0}
+.row-btn:hover{background:var(--surface-hover)}
+.row-sel{background:var(--surface-hover);box-shadow:inset 3px 0 0 0 var(--accent-solid)}
+.meta{color:var(--text-secondary);font-size:var(--fs-sm)}
+.meta-xs{color:var(--text-secondary);font-size:var(--fs-xs)}
+.spacer{flex:1 1 auto;min-width:0}
+
+/* --- panel: the ONLY bordered/filled container. never nested. --- */
+.panel{
+  background:var(--background);
+  border:1px solid var(--border-subtle);border-radius:var(--radius);
+  display:flex;flex-direction:column;min-height:0;overflow:hidden;
+}
+.panel-h{
+  display:flex;align-items:center;gap:var(--gap);
+  padding:var(--pad-sm) var(--pad);
+  border-bottom:1px solid var(--border-subtle);
+  background:var(--surface);
+}
+.panel-t{font-size:var(--fs-sm);font-weight:600;letter-spacing:.01em}
+.panel-b{overflow:auto;min-height:0}
+
+/* --- buttons --- */
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:.4em;
+  font-size:var(--fs-sm);min-height:2rem;padding:0 .75rem;
+  border:1px solid var(--border);border-radius:var(--radius);
+  background:var(--background);color:var(--text);white-space:nowrap;
+}
+.btn:hover{background:var(--surface-hover)}
+.btn-solid{background:var(--accent-solid);color:var(--accent-on-solid);border-color:var(--accent-solid)}
+.btn-solid:hover{background:var(--text)}
+.btn-quiet{border-color:transparent;background:transparent;color:var(--text-secondary)}
+.btn-quiet:hover{background:var(--surface-hover);color:var(--text)}
+.btn-w{width:100%}
+
+/* ============================================================
+   LEFT RAIL — persistent workspace chrome (comfortable on every route)
+   ============================================================ */
+.rail{
+  background:var(--surface);border-right:1px solid var(--border-subtle);
+  display:flex;flex-direction:column;min-height:0;overflow:hidden;
+}
+.rail-h{
+  font-size:var(--fs-xs);text-transform:uppercase;letter-spacing:.07em;
+  color:var(--text-secondary);padding:var(--pad-sm) var(--pad) .25rem;
+  display:flex;align-items:center;gap:var(--gap-sm);
+}
+.rail-h .spacer{flex:1}
+.nav{padding:var(--pad-sm) .5rem;border-bottom:1px solid var(--border-subtle)}
+.nav-i{
+  display:flex;align-items:center;gap:var(--gap-sm);width:100%;
+  min-height:2rem;padding:.375rem .5rem;border-radius:var(--radius);
+  font-size:var(--fs-base);color:var(--text);
+}
+.nav-i:hover{background:var(--surface-hover)}
+.nav-i[aria-current="page"]{background:var(--surface-hover);font-weight:600;box-shadow:inset 2px 0 0 0 var(--accent-solid)}
+.nav-g{width:1.125rem;text-align:center;color:var(--text-secondary);font-size:var(--fs-sm)}
+.nav-i[aria-current="page"] .nav-g{color:var(--text)}
+.nav-c{font-size:var(--fs-xs);color:var(--text-secondary)}
+
+.live{flex:1 1 auto;overflow:auto;min-height:0;padding-bottom:var(--pad)}
+.folder-h{
+  display:flex;align-items:center;gap:var(--gap-sm);
+  padding:.5rem var(--pad) .25rem;font-size:var(--fs-xs);
+  color:var(--text-secondary);
+}
+.live-i{
+  display:flex;align-items:center;gap:var(--gap-sm);width:100%;
+  min-height:1.875rem;padding:.25rem var(--pad) .25rem 1.75rem;
+  font-size:var(--fs-sm);
+}
+.live-i:hover{background:var(--surface-hover)}
+.live-i.sel{background:var(--surface-hover);font-weight:600}
+.dot{flex:0 0 auto;width:.75rem;text-align:center;font-size:.7rem;color:var(--text-secondary)}
+.dot-needs{color:var(--text)}
+
+.rail-f{border-top:1px solid var(--border-subtle);padding:var(--pad-sm)}
+
+/* ============================================================
+   APP COLUMN
+   ============================================================ */
+.app{display:grid;grid-template-rows:auto 1fr;min-height:0;min-width:0}
+
+/* --- top chrome strip --- */
+.chrome{
+  display:flex;align-items:center;gap:var(--gap);
+  padding:var(--pad-sm) var(--pad);
+  border-bottom:1px solid var(--border-subtle);background:var(--background);
+}
+.wordmark{font-size:1rem;font-weight:700;letter-spacing:-.01em}
+.jump{
+  display:flex;align-items:center;gap:.5rem;
+  min-width:260px;min-height:2rem;padding:0 .625rem;
+  border:1px solid var(--border);border-radius:var(--radius);
+  background:var(--surface);color:var(--text-secondary);font-size:var(--fs-sm);
+}
+.jump:hover{background:var(--surface-hover)}
+.kbd{
+  margin-left:auto;font-size:var(--fs-xs);padding:.05em .35em;
+  border:1px solid var(--border);border-radius:4px;color:var(--text-secondary);
+  background:var(--background);
+}
+.chrome-r{display:flex;align-items:center;gap:var(--pad);margin-left:auto}
+.chrome-sep{width:1px;height:1.5rem;background:var(--border-subtle)}
+
+/* usage meter — bullet shape (bar + target mark), never a gauge */
+.usage{display:flex;flex-direction:column;gap:.25rem;min-width:150px}
+.usage-l{display:flex;justify-content:space-between;gap:.5rem;font-size:var(--fs-xs);color:var(--text-secondary)}
+.usage-bar{position:relative;height:.375rem;background:var(--surface-hover);border-radius:999px;overflow:hidden}
+.usage-fill{position:absolute;inset:0 auto 0 0;width:37%;background:var(--accent-solid);border-radius:999px}
+.usage-target{position:absolute;top:-2px;bottom:-2px;left:80%;width:1.5px;background:var(--text)}
+
+.counter{display:inline-flex;align-items:center;gap:.4em;font-size:var(--fs-sm);min-height:2rem;padding:0 .625rem;border:1px solid var(--text);border-radius:var(--radius);font-weight:600}
+.counter:hover{background:var(--surface-hover)}
+.conn{display:inline-flex;align-items:center;gap:.4em;font-size:var(--fs-sm);color:var(--text-secondary)}
+
+/* --- board --- */
+.board{
+  display:grid;grid-template-columns:1fr var(--peek-w);
+  gap:var(--pad);padding:var(--pad);min-height:0;background:var(--surface);
+}
+.col{display:grid;grid-template-rows:auto 1fr;gap:var(--pad);min-height:0}
+
+/* attention queue — sibling of the tree panel, never inside it */
+.att-row{display:flex;align-items:center;gap:var(--gap);width:100%;min-height:var(--row-min);padding:var(--row-py) var(--pad);border-bottom:1px solid var(--border-subtle)}
+.att-row:last-child{border-bottom:0}
+.att-row:hover{background:var(--surface-hover)}
+.ask{font-size:var(--fs-sm)}
+.ask-l{color:var(--text-secondary)}
+
+/* tree */
+.tree-machine{
+  display:flex;align-items:center;gap:var(--gap);width:100%;
+  min-height:var(--row-min);padding:var(--row-py) var(--pad);
+  background:var(--surface);border-bottom:1px solid var(--border-subtle);
+  position:sticky;top:0;z-index:1;
+}
+.tree-machine .name{font-weight:600;font-size:var(--fs-sm)}
+.tree-folder{
+  display:flex;align-items:center;gap:var(--gap-sm);width:100%;
+  min-height:1.875rem;padding:.375rem var(--pad) .375rem 2rem;
+  border-bottom:1px solid var(--border-subtle);
+  font-size:var(--fs-sm);color:var(--text-secondary);
+}
+.tree-session{
+  display:flex;align-items:center;gap:var(--gap);width:100%;
+  min-height:var(--row-min);padding:var(--row-py) var(--pad) var(--row-py) 2.75rem;
+  border-bottom:1px solid var(--border-subtle);
+}
+.tree-session:hover{background:var(--surface-hover)}
+.sess-t{display:flex;flex-direction:column;gap:.0625rem;min-width:0;flex:1 1 auto}
+.sess-n{font-size:var(--fs-base);font-weight:500}
+.sess-a{font-size:var(--fs-sm);color:var(--text-secondary)}
+.harness{flex:0 0 auto;width:6.5rem;font-size:var(--fs-xs);color:var(--text-secondary)}
+.state{flex:0 0 auto;width:7rem;display:flex}
+.age{flex:0 0 auto;width:4rem;text-align:right;font-size:var(--fs-xs);color:var(--text-secondary)}
+.tree-unreachable{display:flex;align-items:center;gap:var(--gap);padding:var(--row-py) var(--pad) var(--row-py) 2rem;border-bottom:1px solid var(--border-subtle);font-size:var(--fs-sm);color:var(--text-secondary)}
+
+/* peek pane */
+.peek-b{padding:0;display:flex;flex-direction:column;min-height:0}
+.peek-id{padding:var(--pad);border-bottom:1px solid var(--border-subtle);display:flex;gap:var(--gap);align-items:flex-start}
+.peek-facts{padding:var(--pad-sm) var(--pad);display:grid;grid-template-columns:auto 1fr;gap:.375rem var(--pad);font-size:var(--fs-sm);border-bottom:1px solid var(--border-subtle)}
+.peek-facts dt{color:var(--text-secondary)}
+.peek-facts dd{text-align:right}
+/* destructive control lives HERE — far from the primary CTA in the footer,
+   with the excerpt block and two rules between them (Fitts, 1954). */
+.peek-run{padding:var(--pad-sm) var(--pad);border-bottom:1px solid var(--border-subtle);display:flex;align-items:center;gap:var(--gap)}
+.peek-x{padding:var(--pad);flex:1 1 auto;overflow:auto;min-height:0}
+.peek-x h3{font-size:var(--fs-xs);text-transform:uppercase;letter-spacing:.07em;color:var(--text-secondary);font-weight:600;margin-bottom:.5rem}
+.excerpt{font-size:var(--fs-sm);color:var(--text);white-space:pre-wrap}
+.peek-f{padding:var(--pad);border-top:1px solid var(--border-subtle);background:var(--surface)}
+</style>
+</head>
+
+<body>
+
+<!-- ========== PERSISTENT LEFT RAIL ========== -->
+<aside class="rail">
+  <nav class="nav" aria-label="Workspace">
+    <button class="nav-i" aria-current="page"><span class="nav-g">▤</span> Fleet <span class="spacer"></span><span class="nav-c num">6</span></button>
+    <button class="nav-i"><span class="nav-g">⚒</span> Tools</button>
+    <button class="nav-i"><span class="nav-g">§</span> Rules <span class="spacer"></span><span class="nav-c num">14</span></button>
+    <button class="nav-i"><span class="nav-g">◫</span> Usage</button>
+  </nav>
+
+  <div class="live">
+    <p class="rail-h">Running now <span class="spacer"></span><span class="num">6</span></p>
+
+    <p class="folder-h">▾ <span class="mono">~/cockpit</span> <span class="spacer"></span><span class="num">3</span></p>
+    <button class="live-i sel"><span class="dot dot-needs">!</span> <span class="trunc">wire delegate row outcomes</span></button>
+    <button class="live-i"><span class="dot">◐</span> <span class="trunc">table system spike</span></button>
+    <button class="live-i"><span class="dot">✕</span> <span class="trunc">flaky ws reconnect</span></button>
+
+    <p class="folder-h">▾ <span class="mono">~/outpost-web</span> <span class="spacer"></span><span class="num">1</span></p>
+    <button class="live-i"><span class="dot">○</span> <span class="trunc">landing copy pass</span></button>
+
+    <p class="folder-h">▾ <span class="mono">~/dotfiles</span> <span class="spacer"></span><span class="num">2</span></p>
+    <button class="live-i"><span class="dot">◐</span> <span class="trunc">nix flake bump</span></button>
+    <button class="live-i"><span class="dot dot-needs">!</span> <span class="trunc">tmux keybinds</span></button>
+  </div>
+
+  <div class="rail-f">
+    <button class="btn btn-w"><span aria-hidden="true">＋</span> Start session</button>
+  </div>
+</aside>
+
+<div class="app">
+
+  <!-- ========== TOP CHROME STRIP ========== -->
+  <header class="chrome">
+    <span class="wordmark">Outpost</span>
+    <button class="jump"><span aria-hidden="true">⌕</span> Jump to a session, folder, or rule <span class="kbd">⌘K</span></button>
+
+    <div class="chrome-r">
+      <div class="usage">
+        <span class="usage-l"><span>Today</span> <span class="num">$18.40 / $50</span></span>
+        <div class="usage-bar" role="img" aria-label="18.40 dollars of a 50 dollar daily cap; alert threshold at 40 dollars">
+          <span class="usage-fill"></span><span class="usage-target"></span>
+        </div>
+      </div>
+      <span class="chrome-sep"></span>
+      <button class="counter"><span aria-hidden="true">!</span> <span class="num">2</span> blocked</button>
+      <span class="chrome-sep"></span>
+      <span class="conn"><span aria-hidden="true">◉</span> Hub connected · 2 of 3 machines</span>
+    </div>
+  </header>
+
+  <!-- ========== BOARD ========== -->
+  <main class="board">
+
+    <div class="col">
+
+      <!-- attention queue — sibling panel, not nested -->
+      <section class="panel" aria-labelledby="att-t">
+        <header class="panel-h">
+          <h2 class="panel-t" id="att-t">Needs you</h2>
+          <span class="meta-xs num">3 waiting</span>
+          <span class="spacer"></span>
+          <button class="btn btn-quiet">Mute for 1h</button>
+        </header>
+        <div class="panel-b">
+          <div class="att-row">
+            <span class="mark mark-lg" aria-hidden="true">CC</span>
+            <span class="sess-t">
+              <span class="sess-n trunc">wire delegate row outcomes</span>
+              <span class="ask trunc"><span class="ask-l">approve —</span> <span class="mono">rm -rf apps/dashboard/.svelte-kit</span></span>
+            </span>
+            <span class="meta-xs trunc" style="width:11rem">nixbox · ~/cockpit</span>
+            <span class="state"><span class="pill pill-needs"><span class="g" aria-hidden="true">!</span> needs you</span></span>
+            <span class="age num">2m</span>
+            <button class="btn">Review</button>
+          </div>
+
+          <div class="att-row">
+            <span class="mark mark-lg" aria-hidden="true">OC</span>
+            <span class="sess-t">
+              <span class="sess-n trunc">tmux keybinds</span>
+              <span class="ask trunc"><span class="ask-l">question —</span> target fish or zsh for the new binds?</span>
+            </span>
+            <span class="meta-xs trunc" style="width:11rem">mba-m3 · ~/dotfiles</span>
+            <span class="state"><span class="pill pill-needs"><span class="g" aria-hidden="true">!</span> needs you</span></span>
+            <span class="age num">1m</span>
+            <button class="btn">Answer</button>
+          </div>
+
+          <div class="att-row">
+            <span class="mark mark-lg" aria-hidden="true">CC</span>
+            <span class="sess-t">
+              <span class="sess-n trunc">flaky ws reconnect</span>
+              <span class="ask trunc"><span class="ask-l">error —</span> hub dropped the socket at 14:02, 4 retries failed</span>
+            </span>
+            <span class="meta-xs trunc" style="width:11rem">nixbox · ~/cockpit</span>
+            <span class="state"><span class="pill pill-error"><span class="g" aria-hidden="true">✕</span> error</span></span>
+            <span class="age num">26m</span>
+            <button class="btn">Open</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- machine → folder → session tree — sibling panel, not nested -->
+      <section class="panel" aria-labelledby="tree-t">
+        <header class="panel-h">
+          <h2 class="panel-t" id="tree-t">Fleet</h2>
+          <span class="meta-xs">3 machines · 6 sessions</span>
+          <span class="spacer"></span>
+          <button class="btn btn-quiet">All states ▾</button>
+          <button class="btn btn-quiet">All harnesses ▾</button>
+          <button class="btn btn-quiet">Group: machine ▾</button>
+        </header>
+
+        <div class="panel-b">
+
+          <!-- machine -->
+          <div class="tree-machine">
+            <span aria-hidden="true">▾</span>
+            <span class="name mono">nixbox</span>
+            <span class="meta-xs">linux · 2 folders · 4 sessions</span>
+            <span class="spacer"></span>
+            <span class="meta-xs num">$11.90 today</span>
+            <span class="conn meta-xs"><span aria-hidden="true">◉</span> connected</span>
+          </div>
+
+          <div class="tree-folder">▾ <span class="mono">~/cockpit</span> <span class="spacer"></span><span class="meta-xs num">3</span></div>
+
+          <div class="tree-session row-sel">
+            <span class="mark" aria-hidden="true">CC</span>
+            <span class="sess-t">
+              <span class="sess-n trunc">wire delegate row outcomes</span>
+              <span class="sess-a trunc">waiting on you — approve <span class="mono">rm -rf apps/dashboard/.svelte-kit</span></span>
+            </span>
+            <span class="harness">Claude Code</span>
+            <span class="state"><span class="pill pill-needs"><span class="g" aria-hidden="true">!</span> needs you</span></span>
+            <span class="age num">2m</span>
+          </div>
+
+          <div class="tree-session">
+            <span class="mark" aria-hidden="true">OC</span>
+            <span class="sess-t">
+              <span class="sess-n trunc">table system spike</span>
+              <span class="sess-a trunc">reading <span class="mono">src/lib/components/ui/table/index.ts</span></span>
+            </span>
+            <span class="harness">OpenCode</span>
+            <span class="state"><span class="pill pill-working"><span class="g" aria-hidden="true">◐</span> working</span></span>
+            <span class="age num">12m</span>
+          </div>
+
+          <div class="tree-session">
+            <span class="mark" aria-hidden="true">CC</span>
+            <span class="sess-t">
+              <span class="sess-n trunc">flaky ws reconnect</span>
+              <span class="sess-a trunc">stopped — hub dropped the socket at 14:02, 4 retries failed</span>
+            </span>
+            <span class="harness">Claude Code</span>
+            <span class="state"><span class="pill pill-error"><span class="g" aria-hidden="true">✕</span> error</span></span>
+            <span class="age num">26m</span>
+          </div>
+
+          <div class="tree-folder">▾ <span class="mono">~/outpost-web</span> <span class="spacer"></span><span class="meta-xs num">1</span></div>
+
+          <div class="tree-session">
+            <span class="mark" aria-hidden="true">pi</span>
+            <span class="sess-t">
+              <span class="sess-n trunc">landing copy pass</span>
+              <span class="sess-a trunc">idle — last output 40m ago</span>
+            </span>
+            <span class="harness">pi</span>
+            <span class="state"><span class="pill pill-idle"><span class="g" aria-hidden="true">○</span> idle</span></span>
+            <span class="age num">1h 04m</span>
+          </div>
+
+          <!-- machine -->
+          <div class="tree-machine">
+            <span aria-hidden="true">▾</span>
+            <span class="name mono">mba-m3</span>
+            <span class="meta-xs">macos · 1 folder · 2 sessions</span>
+            <span class="spacer"></span>
+            <span class="meta-xs num">$6.50 today</span>
+            <span class="conn meta-xs"><span aria-hidden="true">◉</span> connected</span>
+          </div>
+
+          <div class="tree-folder">▾ <span class="mono">~/dotfiles</span> <span class="spacer"></span><span class="meta-xs num">2</span></div>
+
+          <div class="tree-session">
+            <span class="mark" aria-hidden="true">CC</span>
+            <span class="sess-t">
+              <span class="sess-n trunc">nix flake bump</span>
+              <span class="sess-a trunc">running <span class="mono">nix build .#darwinConfigurations</span></span>
+            </span>
+            <span class="harness">Claude Code</span>
+            <span class="state"><span class="pill pill-working"><span class="g" aria-hidden="true">◐</span> working</span></span>
+            <span class="age num">4m</span>
+          </div>
+
+          <div class="tree-session">
+            <span class="mark" aria-hidden="true">OC</span>
+            <span class="sess-t">
+              <span class="sess-n trunc">tmux keybinds</span>
+              <span class="sess-a trunc">waiting on you — target fish or zsh for the new binds?</span>
+            </span>
+            <span class="harness">OpenCode</span>
+            <span class="state"><span class="pill pill-needs"><span class="g" aria-hidden="true">!</span> needs you</span></span>
+            <span class="age num">1m</span>
+          </div>
+
+          <!-- machine, unreachable -->
+          <div class="tree-machine">
+            <span aria-hidden="true">▸</span>
+            <span class="name mono">hetzner-01</span>
+            <span class="meta-xs">linux · last seen 3h ago</span>
+            <span class="spacer"></span>
+            <span class="state"><span class="pill pill-error"><span class="g" aria-hidden="true">✕</span> unreachable</span></span>
+          </div>
+          <div class="tree-unreachable">
+            Not on the tailnet since 11:38. Sessions on this machine keep running; the board can't read them.
+            <span class="spacer"></span>
+            <button class="btn">Retry</button>
+          </div>
+
+        </div>
+      </section>
+    </div>
+
+    <!-- ========== SIDE PEEK PANE ========== -->
+    <aside class="panel" aria-labelledby="peek-t">
+      <header class="panel-h">
+        <h2 class="panel-t" id="peek-t">Peek</h2>
+        <span class="spacer"></span>
+        <button class="btn btn-quiet" aria-label="Close peek">✕</button>
+      </header>
+
+      <div class="panel-b peek-b">
+        <div class="peek-id">
+          <span class="mark mark-lg" aria-hidden="true">CC</span>
+          <span class="sess-t">
+            <span class="sess-n">wire delegate row outcomes</span>
+            <span class="sess-a mono">nixbox : ~/cockpit</span>
+          </span>
+        </div>
+
+        <div class="peek-facts">
+          <span class="pill pill-needs" style="grid-column:1/-1;justify-self:start"><span class="g" aria-hidden="true">!</span> needs you · 2m</span>
+          <dt>Harness</dt><dd>Claude Code</dd>
+          <dt>Started</dt><dd class="num">14:06 · 41m ago</dd>
+          <dt>Turns</dt><dd class="num">28</dd>
+          <dt>Context</dt><dd class="num">104k / 200k</dd>
+          <dt>Cost</dt><dd class="num">$4.12</dd>
+        </div>
+
+        <!-- destructive: kept up here, away from the footer's primary CTA -->
+        <div class="peek-run">
+          <span class="meta-xs spacer">Run control</span>
+          <button class="btn">Interrupt run</button>
+        </div>
+
+        <div class="peek-x">
+          <h3>Last activity</h3>
+          <p class="excerpt">Asked to approve a shell command before continuing.
+
+The build cache is stale after the token rename, so the next step clears it and re-runs <span class="mono">vite build</span>. Nothing outside the repo is touched.</p>
+        </div>
+
+        <div class="peek-f">
+          <button class="btn btn-solid btn-w">Open session</button>
+        </div>
+      </div>
+    </aside>
+
+  </main>
+</div>
+
+</body>
+</html>

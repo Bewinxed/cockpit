@@ -1111,8 +1111,19 @@
   let handoffNote = $state<string | null>(null);
   let handoffTimer: ReturnType<typeof setTimeout>;
 
-  /** Every conversation that still exists — the bound on where a swipe may go. */
-  const reachable = $derived(cockpit.listedInstances.map((row) => row.id));
+  /**
+   * The bound on where a swipe may go: the tabs that are actually open.
+   *
+   * This used to be every conversation that still exists, which meant a swipe
+   * walked into sessions the reader had never opened — the strip showed four
+   * tabs and the gesture reached forty. `workingSet.order` is the open set (the
+   * session layout keeps exactly these panes alive), intersected with what the
+   * hub still lists so a closed-out session is not a destination.
+   */
+  const reachable = $derived.by(() => {
+    const exists = new Set(cockpit.listedInstances.map((row) => row.id));
+    return workingSet.order.filter((id) => exists.has(id));
+  });
 
   function step(by: number) {
     // Ordered by what the reader has been working between, not by the rail's

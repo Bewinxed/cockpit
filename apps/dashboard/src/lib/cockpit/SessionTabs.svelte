@@ -118,10 +118,22 @@ import { workingSet } from './working-set.svelte';
    * reset the scroll or move the focus, which is the rest of the "full
    * navigation" feel — and Fleet, left as a plain link, was taking both.
    */
+  /**
+   * Sequence token, because `pending` is optimistic and `goto` is not ordered.
+   * Clicking A then B quickly used to resolve A *after* B was set, and A's
+   * `finally` cleared B's pending — the highlight snapped back to whatever
+   * `page.url` still said. Last-resolved was winning over last-clicked, which
+   * is the switch firing at random. Only the newest navigation may clear.
+   */
+  let navSeq = 0;
+
   function navigate(path: string) {
     if (path === currentPath) return;
+    const seq = ++navSeq;
     pending = path;
-    void goto(path, { noScroll: true, keepFocus: true }).finally(() => (pending = null));
+    void goto(path, { noScroll: true, keepFocus: true }).finally(() => {
+      if (seq === navSeq) pending = null;
+    });
   }
 
   const open = (id: string) => navigate(`/session/${id}`);

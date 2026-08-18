@@ -1,0 +1,53 @@
+<!doctype html>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cockpit — mocks</title>
+<style>
+  :root{color-scheme:light dark}
+  body{font:15px/1.55 system-ui,sans-serif;margin:0;padding:26px 22px 90px;max-width:1500px;margin-inline:auto}
+  h1{font-size:21px;margin:0 0 3px} .sub{color:#666;margin:0 0 22px}
+  h2{font-size:17px;margin:34px 0 3px} .meta{color:#666;margin:0 0 10px;font-size:13px}
+  img{width:100%;height:auto;display:block;border:1px solid #ddd;border-radius:8px}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
+  figure{margin:0} figcaption{font-size:12px;color:#777;padding:6px 2px}
+  .old{opacity:.4} code{font:13px ui-monospace,monospace;background:#f0f0f0;padding:1px 5px;border-radius:4px}
+  .gate{font:12px ui-monospace,monospace;background:#f6f6f6;padding:10px 12px;border-radius:8px;color:#444}
+  @media (prefers-color-scheme:dark){body{background:#141414;color:#e8e8e8}
+    .sub,.meta,figcaption{color:#999} img{border-color:#333} code,.gate{background:#262626;color:#bbb}}
+  @media (max-width:760px){.two{grid-template-columns:1fr}}
+</style>
+
+<h1>Cockpit — FlowAI overhaul</h1>
+<p class="sub">All values measured from the comps cropped to their real 1440&times;1023. Type: Geist Variable, self-hosted.</p>
+
+<p class="gate">fidelity.py &rarr; PASS (23 quantities) &nbsp;·&nbsp; ui-observer &rarr; 23 observations (from 938)
+&nbsp;·&nbsp; no overflow 320&ndash;1440px</p>
+
+<h2>Session transcript — compact density</h2>
+<p class="meta">
+  The core surface. Tool rows 24px vs the management surfaces' 44px &mdash; <b>1.83&times; denser</b> from the
+  same tokens, marks, pills and radii. Approve/Deny 132&times;32 identical, nothing autofocused,
+  scope-widening 45px below the pair and after it in tab order.
+  <a href="v4-transcript.html">live HTML</a>
+</p>
+<img src="v4-transcript.png" alt="Session transcript">
+
+<h2>Assistant panel</h2>
+<p class="meta">Panel 380&times;899, inset 24/40, scrim <code>rgba(0,0,0,.06)</code>, suggestion pitch 44 &mdash; all matching the comp. <a href="v3-assistant.html">live HTML</a></p>
+<div class="two">
+  <figure><img src="v3-assistant.png" alt="Cockpit assistant"><figcaption>Cockpit</figcaption></figure>
+  <figure><img src="ref-assistant.png" alt="reference"><figcaption>Reference</figcaption></figure>
+</div>
+
+<h2>Fleet board — comfortable density</h2>
+<p class="meta">Sidebar 228 · card padding 11 · stat card 280&times;90 with 7px recessed well · band 32 · row pitch 44 · ruler strip 17px @ 6px tick pitch. <a href="v2-fleet.html">live HTML</a> · <a href="v2-mobile.png">mobile</a></p>
+<div class="two">
+  <figure><img src="v2-fleet.png" alt="Cockpit fleet"><figcaption>Cockpit</figcaption></figure>
+  <figure><img src="ref-table.png" alt="reference"><figcaption>Reference</figcaption></figure>
+</div>
+
+<h2 class="old">v1 — greyscale wireframe (superseded)</h2>
+<p class="meta old">Built before the crop; inherited a phantom floating window and 1.68&times; inflated measurements.</p>
+<div class="two old">
+  <figure><img src="session-fleet-board.png" alt="v1"><figcaption>v1 fleet</figcaption></figure>
+  <figure><img src="session-transcript.png" alt="v1"><figcaption>v1 transcript</figcaption></figure>
+</div>

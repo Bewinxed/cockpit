@@ -39,6 +39,18 @@ export interface SwipeOptions {
  * going — a code block already scrolled to its right edge has nothing left to
  * give, so a further leftward swipe belongs to the page.
  */
+const scrollableAncestor = (target: EventTarget | null): HTMLElement | null => {
+  let node = target as HTMLElement | null;
+  while (node && node !== document.body) {
+    const overflowX = getComputedStyle(node).overflowX;
+    if ((overflowX === 'auto' || overflowX === 'scroll') && node.scrollWidth - node.clientWidth > 4) {
+      return node;
+    }
+    node = node.parentElement;
+  }
+  return null;
+};
+
 const consumesSwipe = (target: EventTarget | null, dx: number): boolean => {
   let node = target as HTMLElement | null;
   while (node && node !== document.body) {
@@ -70,6 +82,16 @@ export function swipeBetween(node: HTMLElement, options: SwipeOptions) {
   let tracking = false;
   /** Kept from the start, because the direction is only known at the end. */
   let startTarget: EventTarget | null = null;
+  /**
+   * The nearest sideways-scrolling ancestor and where it sat when the finger
+   * landed. `consumesSwipe` asks whether that element still has room to travel,
+   * but it was being asked at touchend — by which point the element had already
+   * scrolled, so a code block swiped *to its edge* reported no room left and the
+   * page took the gesture. Sampling here and comparing at the end asks the only
+   * question that actually settles it: did something else already consume this?
+   */
+  let startScroller: HTMLElement | null = null;
+  let startScrollLeft = 0;
 
   const start = (event: TouchEvent) => {
     if (event.touches.length !== 1) return;
@@ -78,6 +100,8 @@ export function swipeBetween(node: HTMLElement, options: SwipeOptions) {
     startX = touch.clientX;
     startY = touch.clientY;
     startTarget = event.target;
+    startScroller = scrollableAncestor(event.target);
+    startScrollLeft = startScroller ? startScroller.scrollLeft : 0;
     startedAt = performance.now();
     tracking = true;
   };
@@ -93,6 +117,8 @@ export function swipeBetween(node: HTMLElement, options: SwipeOptions) {
     const elapsed = performance.now() - startedAt;
 
     if (Math.abs(dy) > Math.abs(dx) * SLOPE) return; // a scroll
+    // Something under the finger already moved: the gesture was spent on it.
+    if (startScroller && Math.abs(startScroller.scrollLeft - startScrollLeft) > 1) return;
     if (consumesSwipe(startTarget, dx)) return; // something under it wants this
     const far = Math.abs(dx) > DISTANCE;
     const flicked = elapsed < FLICK_MS && Math.abs(dx) > FLICK_DISTANCE;
@@ -103,7 +129,10 @@ export function swipeBetween(node: HTMLElement, options: SwipeOptions) {
     else options.onPrevious();
   };
 
-  const cancel = () => (tracking = false);
+  const cancel = () => {
+    tracking = false;
+    startScroller = null;
+  };
 
   node.addEventListener('touchstart', start, { passive: true });
   node.addEventListener('touchend', end, { passive: true });

@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<!--
+  No DESIGN.md found — wireframe mode: greyscale defaults.
+  Run /design-for-ai to establish tokens.
+
+  Page B — /session/[id] — Session transcript.   Density class: COMPACT.
+
+  The two-density claim under test:
+    * The colour tokens in this file are BYTE-IDENTICAL to session-fleet-board.html.
+      The only difference is the dimension ramp (:root vs .density-compact) —
+      one structural language, two scales.
+    * Persistent app chrome (left rail + top strip) stays COMFORTABLE on both
+      routes; it is the same component and does not resize on navigation.
+      COMPACT applies to the content region. This is a decision to confirm.
+
+  Structural rules honoured:
+    * ONE card level. The transcript itself is NOT a surface — it sits on the
+      page background — so the human-in-the-loop cards are the only bordered
+      boxes on the page, at exactly one level deep. Tool-call groups and
+      subagent folds use indent + a left rail, never a nested box. Inside a
+      card there is no second bordered or filled box (the command block is a
+      rail, not a panel). No nested cards.
+    * Approve and Deny are one class, one size, one weight, one border, one
+      background. Neither is filled, neither is preselected, nothing carries
+      autofocus, and there is no countdown anywhere in the approval path.
+    * The composer input and the Stop control are fixed anchors: they occupy
+      the same box in every agent state. Stop is present and reachable while
+      the approval card is open.
+    * Destructive/widening options are spatially separated from the primary
+      pair by a rule and a full gap.
+
+  Mock-only liberty: a live question card and a live permission card are shown
+  at once so both patterns can be judged in one pass. A real session blocks on
+  one at a time.
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Outpost — Session transcript (/session/[id]) — wireframe</title>
+<style>
+/* ============================================================
+   TOKENS — wireframe greyscale (no DESIGN.md; nothing invented)
+   Identical block to session-fleet-board.html.
+   ============================================================ */
+:root{
+  --background:#ffffff;
+  --surface:#f5f5f5;
+  --surface-hover:#ebebeb;
+  --border-subtle:#e0e0e0;
+  --border:#bdbdbd;
+  --border-strong:#9e9e9e;
+  --text-secondary:#616161;
+  --text:#212121;
+  --accent-solid:#424242;
+  --accent-on-solid:#ffffff;
+  --accent-text:#212121;
+
+  /* --- dimension ramp: COMFORTABLE (persistent chrome) --- */
+  --fs-base:.875rem;
+  --fs-sm:.8125rem;
+  --fs-xs:.75rem;
+  --lh:1.5;
+  --row-py:.625rem;
+  --row-min:2.5rem;
+  --pad:1rem;
+  --pad-sm:.75rem;
+  --gap:.75rem;
+  --gap-sm:.375rem;
+  --radius:6px;
+
+  --rail-w:236px;
+}
+
+/* --- dimension ramp: COMPACT --------------------------------
+   Dimension-typed values only. Zero colour or structural
+   differences from the comfortable ramp above.              */
+.density-compact{
+  --fs-base:.8125rem;   /* 14px -> 13px */
+  --fs-sm:.75rem;       /* 13px -> 12px */
+  --fs-xs:.6875rem;     /* 12px -> 11px */
+  --lh:1.4;             /* 1.5  -> 1.4  */
+  --row-py:.25rem;      /* 10px -> 4px  */
+  --row-min:1.5rem;     /* 40px -> 24px */
+  --pad:.625rem;        /* 16px -> 10px */
+  --pad-sm:.5rem;       /* 12px -> 8px  */
+  --gap:.375rem;        /* 12px -> 6px  */
+  --gap-sm:.1875rem;
+  --radius:5px;
+  font-size:var(--fs-base);
+  line-height:var(--lh);
+}
+
+/* ============================================================
+   BASE
+   ============================================================ */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{font-size:16px}
+body{
+  font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+  font-size:var(--fs-base);line-height:var(--lh);
+  background:var(--background);color:var(--text);
+  height:100vh;overflow:hidden;
+  display:grid;grid-template-columns:var(--rail-w) 1fr;
+  -webkit-font-smoothing:antialiased;
+}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;text-align:left}
+:focus-visible{outline:2px solid var(--text);outline-offset:2px}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-variant-ligatures:none}
+.num{font-variant-numeric:tabular-nums}
+.trunc{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.spacer{flex:1 1 auto;min-width:0}
+.meta{color:var(--text-secondary);font-size:var(--fs-sm)}
+.meta-xs{color:var(--text-secondary);font-size:var(--fs-xs)}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important;scroll-behavior:auto!important}
+}
+
+/* ============================================================
+   SHARED STRUCTURAL LANGUAGE (identical rules to page A)
+   ============================================================ */
+.pill{
+  display:inline-flex;align-items:center;gap:.3em;flex:0 0 auto;
+  font-size:var(--fs-xs);line-height:1.4;
+  padding:.15em .55em .15em .45em;border-radius:999px;
+  border:1px solid transparent;white-space:nowrap;
+}
+.pill .g{font-size:.9em;line-height:1}
+.pill-idle    {border-color:var(--border);color:var(--text-secondary)}
+.pill-working {background:var(--surface-hover);border-color:var(--border-subtle);color:var(--text)}
+.pill-needs   {background:var(--accent-solid);color:var(--accent-on-solid);font-weight:600}
+.pill-error   {background:var(--background);border:1.5px solid var(--text);color:var(--text);font-weight:600}
+
+.mark{
+  flex:0 0 auto;display:grid;place-items:center;
+  width:1.5rem;height:1.5rem;border-radius:var(--radius);
+  background:var(--surface-hover);border:1px solid var(--border-subtle);
+  font-size:var(--fs-xs);font-weight:600;color:var(--text-secondary);
+}
+.mark-sm{width:1.125rem;height:1.125rem;font-size:.625rem;border-radius:4px}
+
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:.4em;
+  font-size:var(--fs-sm);min-height:2rem;padding:0 .75rem;
+  border:1px solid var(--border);border-radius:var(--radius);
+  background:var(--background);color:var(--text);white-space:nowrap;
+}
+.btn:hover{background:var(--surface-hover)}
+.btn-solid{background:var(--accent-solid);color:var(--accent-on-solid);border-color:var(--accent-solid)}
+.btn-solid:hover{background:var(--text)}
+.btn-quiet{border-color:transparent;background:transparent;color:var(--text-secondary)}
+.btn-quiet:hover{background:var(--surface-hover);color:var(--text)}
+.btn-w{width:100%}
+
+/* ============================================================
+   LEFT RAIL — persistent, comfortable, identical to page A
+   ============================================================ */
+.rail{background:var(--surface);border-right:1px solid var(--border-subtle);display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.rail-h{font-size:var(--fs-xs);text-transform:uppercase;letter-spacing:.07em;color:var(--text-secondary);padding:var(--pad-sm) var(--pad) .25rem;display:flex;align-items:center;gap:var(--gap-sm)}
+.nav{padding:var(--pad-sm) .5rem;border-bottom:1px solid var(--border-subtle)}
+.nav-i{display:flex;align-items:center;gap:var(--gap-sm);width:100%;min-height:2rem;padding:.375rem .5rem;border-radius:var(--radius);font-size:var(--fs-base);color:var(--text)}
+.nav-i:hover{background:var(--surface-hover)}
+.nav-i[aria-current="page"]{background:var(--surface-hover);font-weight:600;box-shadow:inset 2px 0 0 0 var(--accent-solid)}
+.nav-g{width:1.125rem;text-align:center;color:var(--text-secondary);font-size:var(--fs-sm)}
+.nav-i[aria-current="page"] .nav-g{color:var(--text)}
+.nav-c{font-size:var(--fs-xs);color:var(--text-secondary)}
+.live{flex:1 1 auto;overflow:auto;min-height:0;padding-bottom:var(--pad)}
+.folder-h{display:flex;align-items:center;gap:var(--gap-sm);padding:.5rem var(--pad) .25rem;font-size:var(--fs-xs);color:var(--text-secondary)}
+.live-i{display:flex;align-items:center;gap:var(--gap-sm);width:100%;min-height:1.875rem;padding:.25rem var(--pad) .25rem 1.75rem;font-size:var(--fs-sm)}
+.live-i:hover{background:var(--surface-hover)}
+.live-i.sel{background:var(--surface-hover);font-weight:600;box-shadow:inset 2px 0 0 0 var(--accent-solid)}
+.dot{flex:0 0 auto;width:.75rem;text-align:center;font-size:.7rem;color:var(--text-secondary)}
+.dot-needs{color:var(--text)}
+.rail-f{border-top:1px solid var(--border-subtle);padding:var(--pad-sm)}
+
+/* ============================================================
+   APP COLUMN — chrome / session header / transcript / composer
+   ============================================================ */
+.app{display:grid;grid-template-rows:auto auto 1fr auto;min-height:0;min-width:0}
+
+.chrome{display:flex;align-items:center;gap:var(--gap);padding:var(--pad-sm) var(--pad);border-bottom:1px solid var(--border-subtle);background:var(--background)}
+.wordmark{font-size:1rem;font-weight:700;letter-spacing:-.01em}
+.jump{display:flex;align-items:center;gap:.5rem;min-width:260px;min-height:2rem;padding:0 .625rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text-secondary);font-size:var(--fs-sm)}
+.jump:hover{background:var(--surface-hover)}
+.kbd{margin-left:auto;font-size:var(--fs-xs);padding:.05em .35em;border:1px solid var(--border);border-radius:4px;color:var(--text-secondary);background:var(--background)}
+.chrome-r{display:flex;align-items:center;gap:var(--pad);margin-left:auto}
+.chrome-sep{width:1px;height:1.5rem;background:var(--border-subtle)}
+.usage{display:flex;flex-direction:column;gap:.25rem;min-width:150px}
+.usage-l{display:flex;justify-content:space-between;gap:.5rem;font-size:var(--fs-xs);color:var(--text-secondary)}
+.usage-bar{position:relative;height:.375rem;background:var(--surface-hover);border-radius:999px;overflow:hidden}
+.usage-fill{position:absolute;inset:0 auto 0 0;width:37%;background:var(--accent-solid);border-radius:999px}
+.usage-target{position:absolute;top:-2px;bottom:-2px;left:80%;width:1.5px;background:var(--text)}
+.counter{display:inline-flex;align-items:center;gap:.4em;font-size:var(--fs-sm);min-height:2rem;padding:0 .625rem;border:1px solid var(--text);border-radius:var(--radius);font-weight:600}
+.counter:hover{background:var(--surface-hover)}
+.conn{display:inline-flex;align-items:center;gap:.4em;font-size:var(--fs-sm);color:var(--text-secondary)}
+
+/* --- session header: first compact element --- */
+.sess-h{display:flex;align-items:center;gap:var(--gap);padding:var(--row-py) var(--pad);border-bottom:1px solid var(--border-subtle);background:var(--surface)}
+.sess-h .name{font-size:var(--fs-base);font-weight:600}
+.sess-h .path{font-size:var(--fs-xs);color:var(--text-secondary)}
+
+/* ============================================================
+   TRANSCRIPT — no surface, no border: cards sit on the background
+   ============================================================ */
+.transcript{overflow:auto;min-height:0;padding:var(--pad) var(--pad) 2rem}
+.thread{max-width:62rem}
+
+.turn{padding:var(--gap) 0}
+.turn + .turn{border-top:1px solid var(--border-subtle)}
+.turn-h{display:flex;align-items:center;gap:var(--gap);min-height:var(--row-min)}
+.turn-w{font-size:var(--fs-xs);font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text-secondary)}
+.turn-b{padding-left:calc(1.125rem + var(--gap))}
+.turn-b p{margin:.35em 0}
+.turn-b p:first-child{margin-top:0}
+.turn-b code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.94em}
+.turn-b ul{margin:.35em 0 .35em 1.1em}
+
+/* --- thinking row: streams, then eases shut --- */
+.think{display:flex;align-items:center;gap:var(--gap-sm);min-height:var(--row-min);font-size:var(--fs-sm);color:var(--text-secondary);font-style:italic}
+.think-b{padding-left:var(--pad-sm);border-left:1px solid var(--border-subtle);margin-left:.25rem;font-size:var(--fs-sm);color:var(--text-secondary);font-style:italic}
+.caret{display:inline-block;width:.45em;height:1.05em;background:var(--text-secondary);vertical-align:-.18em;animation:blink 1.1s steps(1,end) infinite}
+@keyframes blink{0%,49.9%{opacity:1}50%,100%{opacity:0}}
+
+/* --- tool-call group: indent + rail, never a box --- */
+.tg{margin:var(--gap) 0;border-left:1px solid var(--border);padding-left:var(--pad-sm)}
+.tg-h{display:flex;align-items:center;gap:var(--gap-sm);width:100%;min-height:var(--row-min);font-size:var(--fs-sm)}
+.tg-h .fam{font-weight:600}
+.tg-h .cnt{color:var(--text-secondary);font-variant-numeric:tabular-nums}
+.tr{display:flex;align-items:center;gap:var(--gap-sm);min-height:var(--row-min);font-size:var(--fs-sm);padding-left:.9rem}
+.tr:hover{background:var(--surface-hover)}
+.tr .op{font-weight:500;flex:0 0 auto}
+.tr .arg{color:var(--text-secondary);min-width:0}
+.tr .res{flex:0 0 auto;color:var(--text-secondary);font-size:var(--fs-xs);font-variant-numeric:tabular-nums;text-align:right}
+
+/* --- subagent / delegate branch: nested FOLD, not a nested card --- */
+.br{margin:var(--gap) 0;border-left:2px solid var(--border-strong);padding-left:var(--pad-sm)}
+.br .br{border-left-width:1px;border-left-style:dashed}
+.br-h{display:flex;align-items:center;gap:var(--gap-sm);width:100%;min-height:var(--row-min);font-size:var(--fs-sm)}
+.br-h .who{font-weight:600}
+.br-b{font-size:var(--fs-sm)}
+.br-b p{margin:.3em 0}
+
+/* ============================================================
+   HUMAN-IN-THE-LOOP CARDS — the ONLY bordered box on the page
+   ============================================================ */
+.card{
+  border:1.5px solid var(--text);border-radius:var(--radius);
+  background:var(--background);
+  padding:var(--pad);margin:var(--gap) 0;max-width:46rem;
+}
+.card-h{display:flex;align-items:center;gap:var(--gap-sm);margin-bottom:var(--gap)}
+.card-t{font-size:var(--fs-base);font-weight:700}
+.card-q{font-size:var(--fs-base);margin-bottom:var(--gap)}
+.card-c{font-size:var(--fs-sm);margin-bottom:var(--gap)}
+/* command block: a rail, deliberately not a filled/bordered panel */
+.card-cmd{border-left:2px solid var(--border);padding:.15rem 0 .15rem var(--pad-sm);margin-bottom:var(--gap);font-size:var(--fs-sm);overflow-x:auto;white-space:nowrap}
+.card-d{display:grid;grid-template-columns:auto 1fr;gap:.15rem var(--gap);font-size:var(--fs-xs);margin-bottom:var(--gap)}
+.card-d dt{color:var(--text-secondary)}
+.card-d dd{min-width:0}
+
+/* Approve and Deny: one class, one size, one weight. Symmetric by
+   construction — no filled variant, no preselection, no autofocus. */
+.card-actions{display:flex;gap:var(--gap);align-items:center;flex-wrap:wrap}
+.card-actions .btn{min-width:8rem;min-height:2.125rem;font-weight:600;flex:0 0 auto}
+/* widening / escape-hatch options, separated from the symmetric pair */
+.card-more{margin-top:var(--pad);padding-top:var(--pad-sm);border-top:1px solid var(--border-subtle);display:flex;align-items:center;gap:var(--gap);flex-wrap:wrap}
+.card-more .btn{min-height:1.875rem;font-size:var(--fs-xs)}
+.card-warn{font-size:var(--fs-xs);color:var(--text-secondary)}
+.card-free{display:flex;align-items:center;gap:var(--gap);margin-top:var(--gap)}
+.card-free input{flex:1 1 auto;min-width:0;font:inherit;font-size:var(--fs-sm);min-height:2.125rem;padding:0 .625rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--background);color:var(--text)}
+
+/* ============================================================
+   COMPOSER — fixed anchor. Same box in every agent state.
+   ============================================================ */
+.composer{border-top:1px solid var(--border-subtle);background:var(--background);padding:var(--pad-sm) var(--pad)}
+.composer-in{
+  width:100%;min-height:3.25rem;max-width:62rem;
+  border:1px solid var(--border);border-radius:var(--radius);
+  padding:.5rem .625rem;font-size:var(--fs-base);color:var(--text-secondary);
+  background:var(--background);
+}
+.composer-bar{display:flex;align-items:center;gap:var(--gap-sm);max-width:62rem;margin-top:var(--gap-sm)}
+.aff{display:inline-flex;align-items:center;justify-content:center;gap:.3em;min-width:2rem;min-height:2rem;padding:0 .45rem;border-radius:var(--radius);color:var(--text-secondary);font-size:var(--fs-sm)}
+.aff:hover{background:var(--surface-hover);color:var(--text)}
+.aff .mono{font-weight:700}
+.composer-hint{font-size:var(--fs-xs);color:var(--text-secondary);margin-left:var(--gap)}
+/* fixed slot: identical box whether it reads Stop or Send */
+.composer-send{
+  margin-left:auto;flex:0 0 auto;
+  width:5.75rem;height:2.125rem;
+  display:inline-flex;align-items:center;justify-content:center;gap:.35em;
+  border:1px solid var(--text);border-radius:var(--radius);
+  background:var(--background);color:var(--text);
+  font-size:var(--fs-sm);font-weight:600;
+}
+.composer-send:hover{background:var(--surface-hover)}
+</style>
+</head>
+
+<body>
+
+<!-- ========== PERSISTENT LEFT RAIL (comfortable — identical to page A) ========== -->
+<aside class="rail">
+  <nav class="nav" aria-label="Workspace">
+    <button class="nav-i" aria-current="page"><span class="nav-g">▤</span> Fleet <span class="spacer"></span><span class="nav-c num">6</span></button>
+    <button class="nav-i"><span class="nav-g">⚒</span> Tools</button>
+    <button class="nav-i"><span class="nav-g">§</span> Rules <span class="spacer"></span><span class="nav-c num">14</span></button>
+    <button class="nav-i"><span class="nav-g">◫</span> Usage</button>
+  </nav>
+
+  <div class="live">
+    <p class="rail-h">Running now <span class="spacer"></span><span class="num">6</span></p>
+
+    <p class="folder-h">▾ <span class="mono">~/cockpit</span> <span class="spacer"></span><span class="num">3</span></p>
+    <button class="live-i sel"><span class="dot dot-needs">!</span> <span class="trunc">wire delegate row outcomes</span></button>
+    <button class="live-i"><span class="dot">◐</span> <span class="trunc">table system spike</span></button>
+    <button class="live-i"><span class="dot">✕</span> <span class="trunc">flaky ws reconnect</span></button>
+
+    <p class="folder-h">▾ <span class="mono">~/outpost-web</span> <span class="spacer"></span><span class="num">1</span></p>
+    <button class="live-i"><span class="dot">○</span> <span class="trunc">landing copy pass</span></button>
+
+    <p class="folder-h">▾ <span class="mono">~/dotfiles</span> <span class="spacer"></span><span class="num">2</span></p>
+    <button class="live-i"><span class="dot">◐</span> <span class="trunc">nix flake bump</span></button>
+    <button class="live-i"><span class="dot dot-needs">!</span> <span class="trunc">tmux keybinds</span></button>
+  </div>
+
+  <div class="rail-f">
+    <button class="btn btn-w"><span aria-hidden="true">＋</span> Start session</button>
+  </div>
+</aside>
+
+<div class="app">
+
+  <!-- ========== TOP CHROME STRIP (comfortable — identical to page A) ========== -->
+  <header class="chrome">
+    <span class="wordmark">Outpost</span>
+    <button class="jump"><span aria-hidden="true">⌕</span> Jump to a session, folder, or rule <span class="kbd">⌘K</span></button>
+    <div class="chrome-r">
+      <div class="usage">
+        <span class="usage-l"><span>Today</span> <span class="num">$18.40 / $50</span></span>
+        <div class="usage-bar" role="img" aria-label="18.40 dollars of a 50 dollar daily cap; alert threshold at 40 dollars">
+          <span class="usage-fill"></span><span class="usage-target"></span>
+        </div>
+      </div>
+      <span class="chrome-sep"></span>
+      <button class="counter"><span aria-hidden="true">!</span> <span class="num">2</span> blocked</button>
+      <span class="chrome-sep"></span>
+      <span class="conn"><span aria-hidden="true">◉</span> Hub connected · 2 of 3 machines</span>
+    </div>
+  </header>
+
+  <!-- ========== SESSION HEADER (compact) ========== -->
+  <div class="sess-h density-compact">
+    <button class="btn btn-quiet" aria-label="Back to fleet">←</button>
+    <span class="mark" aria-hidden="true">CC</span>
+    <span>
+      <span class="name">wire delegate row outcomes</span>
+      <span class="path mono">&nbsp; nixbox : ~/cockpit</span>
+    </span>
+    <span class="pill pill-needs"><span class="g" aria-hidden="true">!</span> needs you</span>
+    <span class="spacer"></span>
+    <span class="meta-xs num">28 turns</span>
+    <span class="meta-xs num">104k / 200k ctx</span>
+    <span class="meta-xs num">$4.12</span>
+    <button class="btn btn-quiet" aria-label="Session options">⋯</button>
+  </div>
+
+  <!-- ========== TRANSCRIPT (compact) ========== -->
+  <main class="transcript density-compact">
+    <div class="thread">
+
+      <!-- ---- user turn ---- -->
+      <article class="turn">
+        <header class="turn-h">
+          <span class="mark mark-sm" aria-hidden="true">Y</span>
+          <span class="turn-w">You</span>
+          <span class="spacer"></span>
+          <span class="meta-xs num">14:41</span>
+        </header>
+        <div class="turn-b">
+          <p>The delegate rows still read “done” for runs that errored out. Fix the outcome mapping, and make the age column sort by real time instead of the formatted string.</p>
+        </div>
+      </article>
+
+      <!-- ---- assistant turn ---- -->
+      <article class="turn">
+        <header class="turn-h">
+          <span class="mark mark-sm" aria-hidden="true">CC</span>
+          <span class="turn-w">Claude Code</span>
+          <span class="spacer"></span>
+          <span class="meta-xs num">14:41</span>
+        </header>
+        <div class="turn-b">
+
+          <!-- completed thinking row, eased shut -->
+          <button class="think"><span aria-hidden="true">▸</span> Thought for 8s <span class="meta-xs num">· 412 tokens</span></button>
+
+          <p>Two separate bugs. The outcome comes from <code>delegate.status</code>, which only ever holds the transport state — the run result lives on <code>delegate.result.kind</code>. The age column sorts the rendered label, so “2m” sorts after “10m”.</p>
+
+          <!-- tool group, expanded -->
+          <div class="tg">
+            <button class="tg-h"><span aria-hidden="true">▾</span> <span class="fam">Read</span> <span class="cnt">4 files</span> <span class="spacer"></span><span class="meta-xs num">1.2s</span></button>
+            <div class="tg-b">
+              <div class="tr"><span class="op mono">Read</span> <span class="arg mono trunc">apps/dashboard/src/lib/components/DelegateRow.svelte</span> <span class="spacer"></span><span class="res num">184 lines</span></div>
+              <div class="tr"><span class="op mono">Read</span> <span class="arg mono trunc">apps/dashboard/src/lib/state/delegates.svelte.ts</span> <span class="spacer"></span><span class="res num">96 lines</span></div>
+              <div class="tr"><span class="op mono">Read</span> <span class="arg mono trunc">packages/protocol/src/delegate.ts</span> <span class="spacer"></span><span class="res num">61 lines</span></div>
+              <div class="tr"><span class="op mono">Read</span> <span class="arg mono trunc">apps/dashboard/src/lib/format/age.ts</span> <span class="spacer"></span><span class="res num">24 lines</span></div>
+            </div>
+          </div>
+
+          <!-- tool group, collapsed -->
+          <div class="tg">
+            <button class="tg-h"><span aria-hidden="true">▸</span> <span class="fam">Search</span> <span class="cnt">2 queries · 31 matches</span> <span class="spacer"></span><span class="meta-xs num">0.4s</span></button>
+          </div>
+
+          <p>The mapping is used in three more places, so I sent a delegate to sweep them while I patch the row.</p>
+
+          <!-- ---- subagent / delegate branch: nested folds ---- -->
+          <section class="br">
+            <button class="br-h">
+              <span aria-hidden="true">▾</span>
+              <span class="mark mark-sm" aria-hidden="true">D</span>
+              <span class="who">delegate · outcome-sweep</span>
+              <span class="meta-xs">opencode · 6 steps</span>
+              <span class="spacer"></span>
+              <span class="pill pill-idle"><span class="g" aria-hidden="true">✓</span> finished</span>
+              <span class="meta-xs num">38s</span>
+            </button>
+            <div class="br-b">
+              <div class="tg">
+                <button class="tg-h"><span aria-hidden="true">▾</span> <span class="fam">Grep</span> <span class="cnt">3 patterns</span> <span class="spacer"></span><span class="meta-xs num">0.3s</span></button>
+                <div class="tg-b">
+                  <div class="tr"><span class="op mono">Grep</span> <span class="arg mono trunc">delegate\.status\s*===</span> <span class="spacer"></span><span class="res num">7 hits</span></div>
+                  <div class="tr"><span class="op mono">Grep</span> <span class="arg mono trunc">outcomeLabel\(</span> <span class="spacer"></span><span class="res num">3 hits</span></div>
+                </div>
+              </div>
+              <p>Three real call sites: <code>FleetBoard.svelte</code>, <code>SessionPane.svelte</code>, <code>fleet-memory.ts</code>. The fourth hit is a test fixture.</p>
+
+              <!-- a fold inside a fold — indentation, still no nested card -->
+              <section class="br">
+                <button class="br-h">
+                  <span aria-hidden="true">▾</span>
+                  <span class="mark mark-sm" aria-hidden="true">D</span>
+                  <span class="who">delegate · fixture-check</span>
+                  <span class="meta-xs">pi · 2 steps</span>
+                  <span class="spacer"></span>
+                  <span class="pill pill-idle"><span class="g" aria-hidden="true">✓</span> finished</span>
+                  <span class="meta-xs num">9s</span>
+                </button>
+                <div class="br-b">
+                  <p>Fixture asserts the old shape on purpose. Left it alone and flagged it.</p>
+                </div>
+              </section>
+            </div>
+          </section>
+
+          <!-- ---- QUESTION CARD (live) ---- -->
+          <section class="card" aria-labelledby="q-t">
+            <header class="card-h">
+              <span class="pill pill-needs"><span class="g" aria-hidden="true">?</span> needs you</span>
+              <span class="card-t" id="q-t">Question from the agent</span>
+              <span class="spacer"></span>
+              <span class="meta-xs num">14:43</span>
+            </header>
+
+            <p class="card-q">Two delegate rows can finish in the same second. What should break the tie in the age column?</p>
+            <p class="card-c meta">Either is one line. I'll apply the same rule to the fleet board so the two lists stay in step.</p>
+
+            <div class="card-actions">
+              <button class="btn">Start time</button>
+              <button class="btn">Session id</button>
+              <button class="btn">Machine, then time</button>
+            </div>
+
+            <div class="card-free">
+              <label class="meta-xs" for="q-free">Or answer in your own words</label>
+              <input id="q-free" type="text" placeholder="Type an answer…">
+              <button class="btn">Send answer</button>
+            </div>
+          </section>
+
+          <p>Patching the row component and the shared formatter now.</p>
+
+          <!-- tool group, expanded -->
+          <div class="tg">
+            <button class="tg-h"><span aria-hidden="true">▾</span> <span class="fam">Edit</span> <span class="cnt">3 files</span> <span class="spacer"></span><span class="meta-xs num">0.9s</span></button>
+            <div class="tg-b">
+              <div class="tr"><span class="op mono">Edit</span> <span class="arg mono trunc">DelegateRow.svelte</span> <span class="spacer"></span><span class="res num">+14 −6</span></div>
+              <div class="tr"><span class="op mono">Edit</span> <span class="arg mono trunc">lib/format/age.ts</span> <span class="spacer"></span><span class="res num">+9 −2</span></div>
+              <div class="tr"><span class="op mono">Edit</span> <span class="arg mono trunc">lib/state/delegates.svelte.ts</span> <span class="spacer"></span><span class="res num">+21 −11</span></div>
+            </div>
+          </div>
+
+          <!-- live thinking row, streaming -->
+          <div class="think"><span aria-hidden="true">▾</span> Thinking</div>
+          <p class="think-b">The token rename landed in the same branch, so the build cache is holding the old CSS custom properties and the dev server keeps serving them<span class="caret" aria-hidden="true"></span></p>
+
+          <!-- ---- PERMISSION CARD (live) ---- -->
+          <section class="card" aria-labelledby="p-t">
+            <header class="card-h">
+              <span class="pill pill-needs"><span class="g" aria-hidden="true">!</span> needs you</span>
+              <span class="card-t" id="p-t">Permission — run a shell command</span>
+              <span class="spacer"></span>
+              <span class="meta-xs num">14:44</span>
+            </header>
+
+            <p class="card-c">This deletes the SvelteKit build cache so the next build picks up the renamed tokens. The next build regenerates it, so the change is reversible. Nothing outside <code>apps/dashboard</code> is touched.</p>
+
+            <p class="card-cmd mono">rm -rf apps/dashboard/.svelte-kit</p>
+
+            <dl class="card-d">
+              <dt>Machine</dt>            <dd class="mono">nixbox <span class="meta-xs">— mba-m3 and hetzner-01 are not affected</span></dd>
+              <dt>Path</dt>               <dd class="mono trunc">/home/bewinxed/cockpit/apps/dashboard/.svelte-kit</dd>
+              <dt>Network</dt>            <dd>No network access requested.</dd>
+              <dt>Undo</dt>               <dd>Regenerated by the next <code>vite build</code>. No checkpoint needed.</dd>
+              <dt>Future permissions</dt> <dd>Approving covers this one command. It does not widen what the agent may run later.</dd>
+            </dl>
+
+            <!-- symmetric pair: same class, same size, same weight, same border,
+                 same background. nothing preselected, nothing autofocused,
+                 no countdown. -->
+            <div class="card-actions">
+              <button class="btn">Approve</button>
+              <button class="btn">Deny</button>
+            </div>
+
+            <!-- widening option, spatially separated from the pair above -->
+            <div class="card-more">
+              <button class="btn">Always allow <span class="mono">rm -rf</span> in <span class="mono">~/cockpit</span></button>
+              <span class="card-warn">Widens future permissions for every session in this folder, on every machine. Reviewable under Rules.</span>
+            </div>
+          </section>
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- ========== COMPOSER — fixed anchor ========== -->
+  <footer class="composer density-compact">
+    <div class="composer-in" role="textbox" aria-label="Message the agent" tabindex="0">Message the agent…</div>
+    <div class="composer-bar">
+      <button class="aff" aria-label="Slash commands"><span class="mono">/</span> commands</button>
+      <button class="aff" aria-label="Mention a file or session"><span class="mono">@</span> mention</button>
+      <button class="aff" aria-label="Attach a file"><span aria-hidden="true">⊕</span></button>
+      <button class="aff" aria-label="Dictate"><span aria-hidden="true">◎</span></button>
+      <span class="composer-hint">Enter sends · Shift+Enter for a new line</span>
+      <!-- same box in every state: Stop while a run is active, Send when idle.
+           Reachable right now, with the approval card open. -->
+      <button class="composer-send" aria-label="Stop the run"><span aria-hidden="true">■</span> Stop</button>
+    </div>
+  </footer>
+
+</div>
+
+<script>
+  // A live transcript pins to the latest message. Without this the mock opens
+  // at turn 1 and the card the operator is blocked on is below the fold.
+  // Honour ?top=1 to inspect the head of the thread instead.
+  (() => {
+    const t = document.querySelector('.transcript');
+    if (t && !location.search.includes('top=1')) t.scrollTop = t.scrollHeight;
+  })();
+</script>
+
+</body>
+</html>

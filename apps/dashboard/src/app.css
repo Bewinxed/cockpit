@@ -52,42 +52,59 @@
 }
 
 :root {
-  /* Airbnb-soft radius ladder: controls 10, cards 14, sheets 20. */
+  /* Radius ladder: item marks 6, controls/nav/inputs 10, cards 14, window 20. */
   --radius: 0.625rem;
+  /* The app window's own corner, and the field it floats in. */
+  --radius-window: 20px;
+  --window-inset: 20px;
 
-  /* ---- Light: daylight studio. Warm-white canvas, white surfaces float. */
-  --background: oklch(0.977 0.003 84);
-  --foreground: oklch(0.235 0.01 55);
+  /* ---- Light: a white app window floating in a plain grey field.
+     The neutrals are neutral: chroma rounds to nothing, so nothing in the
+     chrome can read as a hue. Colour is reserved for the three places that
+     mean something — a project's identity mark, a state pill, a severity
+     number. */
+  --background: oklch(0.9521 0.001 264); /* the field the window floats in */
+  --foreground: oklch(0.2178 0 0);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.235 0.01 55);
+  --card-foreground: oklch(0.2178 0 0);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.235 0.01 55);
+  --popover-foreground: oklch(0.2178 0 0);
 
-  /* Action olive — the one color that means "this acts". */
+  /* The working surface inside the window, and the fill a table header takes. */
+  --surface-content: oklch(0.9761 0 0);
+  --surface-header: oklch(0.9851 0 0);
+
+  /* The one filled action per view is near-black, not a hue: a brand colour on
+     a button competes with the state pills, which are the only saturated thing
+     on the board that carries meaning. */
+  --action: oklch(0.2178 0 0);
+  --action-foreground: oklch(0.99 0 0);
+
+  /* Accent olive — links, focus, selection. Never chrome. */
   --primary: oklch(0.52 0.1 120);
   --primary-foreground: oklch(0.995 0.002 84);
 
-  --secondary: oklch(0.945 0.005 78);
-  --secondary-foreground: oklch(0.32 0.012 55);
+  --secondary: oklch(0.9612 0 0);
+  --secondary-foreground: oklch(0.2178 0 0);
 
-  --muted: oklch(0.955 0.004 80);
+  --muted: oklch(0.9761 0 0);
   /* Three ink steps, not two: foreground carries identity, muted-foreground
      carries metadata, faint carries the asides (section dividers, overflow
      counts, finished work). Each is a real value rather than an alpha on the
      one above it — alpha put the third step at 2.78:1, which is not a step,
      it is unreadable. Every value clears 4.5:1 on the row's hover background
      (--sidebar-accent), which is the tightest surface any of them lands on. */
-  --muted-foreground: oklch(0.485 0.014 62);
-  --faint: oklch(0.52 0.014 62);
+  --muted-foreground: oklch(0.495 0 0);
+  --faint: oklch(0.535 0 0);
 
-  --accent: oklch(0.945 0.008 74);
-  --accent-foreground: oklch(0.28 0.012 55);
+  --accent: oklch(0.9686 0 0);
+  --accent-foreground: oklch(0.2178 0 0);
 
-  --destructive: oklch(0.577 0.215 27);
+  --destructive: oklch(0.53 0.2 27);
   --destructive-foreground: oklch(0.995 0.002 84);
 
-  --border: oklch(0.912 0.006 78);
-  --input: oklch(0.912 0.006 78);
+  --border: oklch(0.931 0 0);
+  --input: oklch(0.906 0 0);
   --ring: oklch(0.52 0.1 120);
 
   /* Session/status semantics: idle=success hue at rest, working=warning hue,

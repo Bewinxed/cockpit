@@ -40,6 +40,10 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 # IntelliJ based IDEs
 .idea
 
+# scratch / backup files
+*.bak
+*.new
+
 # Finder (MacOS) folder config
 .DS_Store
 

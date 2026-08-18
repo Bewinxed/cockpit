@@ -1,0 +1,661 @@
+{
+  "detector": "detect.mjs",
+  "version": 1,
+  "attribution": "Rule subset ported from Impeccable (pbakaus/impeccable), Apache-2.0, with modifications — see file header. Catalog: references/visual/ai-tells.md.",
+  "status": "ran",
+  "sources": [
+    "/home/bewinxed/cockpit/mocks/session-fleet-board.html",
+    "/home/bewinxed/cockpit/mocks/session-transcript.html"
+  ],
+  "rules": 16,
+  "findings": [
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-fleet-board.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<button class=\"btn btn-w\"> is a card inside a card ancestor",
+      "line": 316
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-fleet-board.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<button class=\"jump\"> is a card inside a card ancestor",
+      "line": 325
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-fleet-board.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<span class=\"kbd\"> is a card inside a card ancestor",
+      "line": 325
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-fleet-board.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<button class=\"counter\"> is a card inside a card ancestor",
+      "line": 335
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-fleet-board.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<header class=\"panel-h\"> is a card inside a card ancestor",
+      "line": 348
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-fleet-board.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<button class=\"btn btn-quiet\"> is a card inside a card ancestor",
+      "line": 352
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-fleet-board.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<span class=\"mark mark-lg\"> is a card inside a card ancestor",
+      "line": 356
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-fleet-board.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<span class=\"pill pill-needs\"> is a card inside a card ancestor",
+      "line": 362
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-fleet-board.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<button class=\"btn\"> is a card inside a card ancestor",
+      "line": 364
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-fleet-board.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<span class=\"mark mark-lg\"> is a card inside a card ancestor",
+      "line": 368
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-fleet-board.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<span class=\"pill pill-needs\"> is a card inside a card ancestor",
+      "line": 374
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-fleet-board.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<button class=\"btn\"> is a card inside a card ancestor",
+      "line": 376
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-fleet-board.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<span class=\"mark mark-lg\"> is a card inside a card ancestor",
+      "line": 380
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-fleet-board.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<span class=\"pill pill-error\"> is a card inside a card ancestor",
+      "line": 386
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-fleet-board.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<button class=\"btn\"> is a card inside a card ancestor",
+      "line": 388
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-fleet-board.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<header class=\"panel-h\"> is a card inside a card ancestor",
+      "line": 395
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-fleet-board.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<button class=\"btn btn-quiet\"> is a card inside a card ancestor",
+      "line": 399
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-fleet-board.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<button class=\"btn btn-quiet\"> is a card inside a card ancestor",
+      "line": 400
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-fleet-board.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<button class=\"btn btn-quiet\"> is a card inside a card ancestor",
+      "line": 401
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-fleet-board.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<div class=\"tree-machine\"> is a card inside a card ancestor",
+      "line": 407
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-fleet-board.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<div class=\"tree-session row-sel\"> is a card inside a card ancestor",
+      "line": 418
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-fleet-board.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<span class=\"mark\"> is a card inside a card ancestor",
+      "line": 419
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-fleet-board.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<span class=\"pill pill-needs\"> is a card inside a card ancestor",
+      "line": 425
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-fleet-board.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<span class=\"mark\"> is a card inside a card ancestor",
+      "line": 430
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-fleet-board.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<span class=\"pill pill-working\"> is a card inside a card ancestor",
+      "line": 436
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-fleet-board.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<span class=\"mark\"> is a card inside a card ancestor",
+      "line": 441
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-fleet-board.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<span class=\"pill pill-error\"> is a card inside a card ancestor",
+      "line": 447
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-fleet-board.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<span class=\"mark\"> is a card inside a card ancestor",
+      "line": 454
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-fleet-board.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<span class=\"pill pill-idle\"> is a card inside a card ancestor",
+      "line": 460
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-fleet-board.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<div class=\"tree-machine\"> is a card inside a card ancestor",
+      "line": 465
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-fleet-board.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<span class=\"mark\"> is a card inside a card ancestor",
+      "line": 477
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-fleet-board.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<span class=\"pill pill-working\"> is a card inside a card ancestor",
+      "line": 483
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-fleet-board.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<span class=\"mark\"> is a card inside a card ancestor",
+      "line": 488
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-fleet-board.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<span class=\"pill pill-needs\"> is a card inside a card ancestor",
+      "line": 494
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-fleet-board.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<div class=\"tree-machine\"> is a card inside a card ancestor",
+      "line": 499
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-fleet-board.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<span class=\"pill pill-error\"> is a card inside a card ancestor",
+      "line": 504
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-fleet-board.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<button class=\"btn\"> is a card inside a card ancestor",
+      "line": 509
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-fleet-board.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<header class=\"panel-h\"> is a card inside a card ancestor",
+      "line": 518
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-fleet-board.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<button class=\"btn btn-quiet\"> is a card inside a card ancestor",
+      "line": 521
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-fleet-board.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<span class=\"mark mark-lg\"> is a card inside a card ancestor",
+      "line": 526
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-fleet-board.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<span class=\"pill pill-needs\"> is a card inside a card ancestor",
+      "line": 534
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-fleet-board.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<button class=\"btn\"> is a card inside a card ancestor",
+      "line": 545
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-fleet-board.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<div class=\"peek-f\"> is a card inside a card ancestor",
+      "line": 555
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-fleet-board.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<button class=\"btn btn-solid btn-w\"> is a card inside a card ancestor",
+      "line": 556
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-fleet-board.html",
+      "rule": "em-dash-overuse",
+      "category": "copy",
+      "severity": "medium",
+      "evidence": "9 em-dashes in body copy",
+      "line": null
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-fleet-board.html",
+      "rule": "numbered-section-markers",
+      "category": "copy",
+      "severity": "advisory",
+      "evidence": "decorative sequence: 01, 02, 06, 11, 12",
+      "line": null
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-transcript.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<button class=\"btn btn-w\"> is a card inside a card ancestor",
+      "line": 328
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-transcript.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<button class=\"jump\"> is a card inside a card ancestor",
+      "line": 337
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-transcript.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<span class=\"kbd\"> is a card inside a card ancestor",
+      "line": 337
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-transcript.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<button class=\"counter\"> is a card inside a card ancestor",
+      "line": 346
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-transcript.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<button class=\"btn btn-quiet\"> is a card inside a card ancestor",
+      "line": 354
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-transcript.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<span class=\"mark\"> is a card inside a card ancestor",
+      "line": 355
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-transcript.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<span class=\"pill pill-needs\"> is a card inside a card ancestor",
+      "line": 360
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-transcript.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<button class=\"btn btn-quiet\"> is a card inside a card ancestor",
+      "line": 365
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-transcript.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<header class=\"card-h\"> is a card inside a card ancestor",
+      "line": 459
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-transcript.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<span class=\"pill pill-needs\"> is a card inside a card ancestor",
+      "line": 460
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-transcript.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<span class=\"card-t\"> is a card inside a card ancestor",
+      "line": 461
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-transcript.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<p class=\"card-q\"> is a card inside a card ancestor",
+      "line": 466
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-transcript.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<p class=\"card-c meta\"> is a card inside a card ancestor",
+      "line": 467
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-transcript.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<div class=\"card-actions\"> is a card inside a card ancestor",
+      "line": 469
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-transcript.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<button class=\"btn\"> is a card inside a card ancestor",
+      "line": 470
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-transcript.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<button class=\"btn\"> is a card inside a card ancestor",
+      "line": 471
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-transcript.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<button class=\"btn\"> is a card inside a card ancestor",
+      "line": 472
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-transcript.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<div class=\"card-free\"> is a card inside a card ancestor",
+      "line": 475
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-transcript.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<button class=\"btn\"> is a card inside a card ancestor",
+      "line": 478
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-transcript.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<header class=\"card-h\"> is a card inside a card ancestor",
+      "line": 500
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-transcript.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<span class=\"pill pill-needs\"> is a card inside a card ancestor",
+      "line": 501
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-transcript.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<span class=\"card-t\"> is a card inside a card ancestor",
+      "line": 502
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-transcript.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<p class=\"card-c\"> is a card inside a card ancestor",
+      "line": 507
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-transcript.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<p class=\"card-cmd mono\"> is a card inside a card ancestor",
+      "line": 509
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-transcript.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<dl class=\"card-d\"> is a card inside a card ancestor",
+      "line": 511
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-transcript.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<div class=\"card-actions\"> is a card inside a card ancestor",
+      "line": 522
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-transcript.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<button class=\"btn\"> is a card inside a card ancestor",
+      "line": 523
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-transcript.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<button class=\"btn\"> is a card inside a card ancestor",
+      "line": 524
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-transcript.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<div class=\"card-more\"> is a card inside a card ancestor",
+      "line": 528
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-transcript.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<button class=\"btn\"> is a card inside a card ancestor",
+      "line": 529
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-transcript.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<span class=\"card-warn\"> is a card inside a card ancestor",
+      "line": 530
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-transcript.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<div class=\"composer-in\"> is a card inside a card ancestor",
+      "line": 542
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-transcript.html",
+      "rule": "nested-cards",
+      "category": "layout",
+      "severity": "high",
+      "evidence": "<button class=\"composer-send\"> is a card inside a card ancestor",
+      "line": 551
+    },
+    {
+      "source": "/home/bewinxed/cockpit/mocks/session-transcript.html",
+      "rule": "em-dash-overuse",
+      "category": "copy",
+      "severity": "medium",
+      "evidence": "5 em-dashes in body copy",
+      "line": null
+    }
+  ],
+  "counts": {
+    "total": 80,
+    "byRule": {
+      "nested-cards": 77,
+      "em-dash-overuse": 2,
+      "numbered-section-markers": 1
+    }
+  }
+}
