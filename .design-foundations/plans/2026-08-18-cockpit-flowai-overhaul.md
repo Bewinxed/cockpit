@@ -3,7 +3,7 @@
 **Date:** 2026-08-18
 **Status:** in-progress
 **Started:** 2026-08-18 16:41
-**Current Phase:** 7
+**Current Phase:** 8
 **Workspace:** `main` (user-directed; no worktree — per-phase commits are the rollback boundary)
 **Track:** Full
 **Entry stage:** Discover (no DESIGN.md, no JOURNEY.md, no prior `.design-foundations/`)
@@ -1211,7 +1211,7 @@ blind.
       per-value breakpoint classification, opener-exists+toggles, every-chart-has-the-bundle);
       re-review confirmed 10/10 DW PASS with measured numbers.
 - [x] Committed
-Commit: `PENDING`
+Commit: `2b5a0e0`
 Summary: Data encoded truthfully at both densities: bars start at zero, meters are bullets (no
 gauges), threshold ink is discrete + carries a non-colour cue and switches at named breakpoints,
 tables drop full borders for alignment + whitespace (Tufte 1+1=3), the chart palette is Okabe-Ito
@@ -1222,6 +1222,31 @@ grounded review is what caught status-hued cost arrows and an unreachable drawer
 gate-covered so it cannot regress. Also: on a slash command, the skill's own files are loaded via
 the tool (workflow-conventions, the review-agent dual-blind protocol, the §5 doctrine), not
 paraphrased — the reviewer now runs `scripts/detect.mjs` blind as Assessment B.
+
+### Phase 7: Words (Gate: Standard)
+- [x] BUILD: `WORDS.md` (repo root) — voice chart (**Precise · Calm · Commanding · Honest**, each with
+      in/out-of-range examples + punctuation/contraction/humor rules; explicitly rejects the
+      "friendly, helpful, clear" anti-pattern), a 7-moment tone map, and a terminology table that
+      resolves the tangle the plan flagged: **subagent** = in-session child branch, **delegate** = a
+      separate fleet session (grounded in the codebase's `SubagentBranch` vs `DelegateBranch`).
+      Microcopy reconciled into all 7 JOURNEY.md page specs (empty/error states to formula) and across
+      the mocks (branch tags, sub-counts, destructive-confirm copy). New gate `mocks/wordcheck.mjs`
+      (DW-7.3/7.4/7.5/7.7/7.8/7.9, 35 assertions).
+- [x] REVIEW: **PASS** (single-sample, Standard gate, by the real protocol: content-design doctrine
+      loaded, Assessment B = `scripts/detect.mjs` blind, DW-7.1..7.9 verbatim). 0 blockers; the voice
+      chart cleared the "concrete & differentiating" scrutiny bar. Two **Minor, accepted** notes: the
+      spawn project-picker no-results paraphrases rather than echoes the query verbatim (DW-7.6), and
+      the assistant greeting carries one `!` (excused by the assistant-summon expressive register).
+      Confirmed the `v5agentcheck.mjs` label change (Delegate→Subagent branch) is a terminology
+      reconciliation with the structural `rows===6` assertion intact — not a weakened gate.
+- [x] Committed
+Commit: `2f3e963`
+Summary: Every surface and state now has words governed by a voice chart, not per-string
+improvisation. The lasting artifact is WORDS.md + the terminology table that makes session/run/agent/
+subagent/delegate mean five distinct things everywhere, plus a machine gate (wordcheck) that keeps
+banned strings, blame framing, placeholder-only labels, non-Verb+Object buttons, and delegate/
+subagent conflation out. Accepted follow-ups: echo the typed query verbatim in the project-picker
+no-results; drop the `!` from the assistant greeting if the summon register is later tightened.
 
 ### Audit of user-attributed claims (2026-08-19)
 

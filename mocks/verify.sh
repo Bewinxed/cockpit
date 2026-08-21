@@ -225,6 +225,13 @@ say "v5 component library — computed-style + rendered-pixel verification"
 node mocks/v5check.mjs > /tmp/v5check.log 2>&1 && python3 mocks/v5pixels.py >> /tmp/v5check.log 2>&1
 ok $? "v5 states, density=dims-only, focus rings, 16px inputs, >=44px targets, painted pixels"
 
+say "Phase 7 Words — voice/tone/terminology over the built mocks"
+node mocks/wordcheck.mjs > /tmp/wordcheck.log 2>&1
+wcrc=$?
+# echo a compact wordcheck summary to the progress stream (the full log is kept)
+grep 'wordcheck:' /tmp/wordcheck.log | sed 's/^/  /'
+ok $wcrc "wordcheck: banned strings, terminology, labels, buttons, error-fix all clean"
+
 say "RESULT"
-[ $fail = 0 ] && echo "  ALL DESIGN CHECKS PASS (P3+P4+P5+P6)" || echo "  $fail CHECK GROUPS FAILED"
+[ $fail = 0 ] && echo "  ALL DESIGN CHECKS PASS (P3+P4+P5+P6+P7)" || echo "  $fail CHECK GROUPS FAILED"
 exit $fail

@@ -130,7 +130,7 @@ ok((raw.match(/<strong>Handoff:<\/strong>/g) || []).length >= 5,
 // 8-states: every agent-specific interactive control shows 8 specimens at
 // compact density (default hover focus active disabled loading error success).
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-const G8 = ['Approve (grant)', 'Deny (refuse)', 'Question option', 'Stop / interrupt', 'Scope-widen (consequential)', 'Delegate branch (expand)'];
+const G8 = ['Approve (grant)', 'Deny (refuse)', 'Question option', 'Stop / interrupt', 'Scope-widen (consequential)', 'Subagent branch (expand)'];
 for (const label of G8) {
   ok(new RegExp(esc(label)).test(raw), `8-states: "${label}" gallery present`);
 }
