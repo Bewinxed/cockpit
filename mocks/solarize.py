@@ -117,7 +117,7 @@ def transform(path: Path):
 
 if __name__ == '__main__':
     total = 0
-    for name in ('v2-fleet.html', 'v3-assistant.html', 'v4-transcript.html'):
+    for name in ('v2-fleet.html', 'v3-assistant.html', 'v4-transcript.html', 'v5-components.html'):
         c = transform(HERE / name)
         n = sum(c.values())
         total += n

@@ -91,7 +91,7 @@ def scan(path: Path):
 
 
 def main():
-    files = sys.argv[1:] or ['v2-fleet.html', 'v3-assistant.html', 'v4-transcript.html']
+    files = sys.argv[1:] or ['v2-fleet.html', 'v3-assistant.html', 'v4-transcript.html', 'v5-components.html']
     total = 0
     for name in files:
         p = HERE / name if not Path(name).is_absolute() else Path(name)
