@@ -21,6 +21,7 @@ cd "$(dirname "$0")"
 cp src/v5-components.html v5-components.html
 cp src/v5-agent.html v5-agent.html
 cp src/v5-data.html v5-data.html
+cp src/v5-workspace.html v5-workspace.html
 for f in v2-fleet.html v3-assistant.html v4-transcript.html; do cp "src/$f" "$f"; done
 python3 retoken.py
 python3 statuschips.py
@@ -43,4 +44,11 @@ node render.mjs v5-agent.html v5-agent-mobile.png --viewport 390x5200
 node render.mjs v5-data.html v5-data.png --viewport 1440x1800
 node render.mjs v5-data.html v5-data-dark.png --dark --viewport 1440x1800
 node render.mjs v5-data.html v5-data-mobile.png --viewport 390x3600
-echo "built 6 mocks from mocks/src/"
+# render the v5 workspace surface (tab strip / split view / mobile shell) in
+# light, dark, and the coarse-pointer mobile view for the DW-8.4 sweep; the
+# split desktop view and the tall mobile shell are separate viewports.
+node render.mjs v5-workspace.html v5-workspace.png --viewport 1440x1200
+node render.mjs v5-workspace.html v5-workspace-dark.png --dark --viewport 1440x1200
+node render.mjs v5-workspace.html v5-workspace-split.png --viewport 1440x820
+node render.mjs v5-workspace.html v5-workspace-mobile.png --viewport 390x1200
+echo "built 7 mocks from mocks/src/"

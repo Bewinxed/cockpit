@@ -12,9 +12,9 @@ say "mocks reproduce from source (mocks/src -> mocks/*.html)"
 # The pipeline was two commands run by hand against sources in /tmp. A
 # rebuild that skipped the second step shipped mocks with no status glyphs
 # and nothing noticed. Sources are in the repo now and a stale build fails.
-before=$(cat mocks/v2-fleet.html mocks/v3-assistant.html mocks/v4-transcript.html mocks/v5-components.html mocks/v5-agent.html mocks/v5-data.html | md5sum | cut -d" " -f1)
+before=$(cat mocks/v2-fleet.html mocks/v3-assistant.html mocks/v4-transcript.html mocks/v5-components.html mocks/v5-agent.html mocks/v5-data.html mocks/v5-workspace.html | md5sum | cut -d" " -f1)
 bash mocks/build-mocks.sh > /tmp/rebuild.log 2>&1 || echo "  rebuild FAILED (see /tmp/rebuild.log)"
-after=$(cat mocks/v2-fleet.html mocks/v3-assistant.html mocks/v4-transcript.html mocks/v5-components.html mocks/v5-agent.html mocks/v5-data.html | md5sum | cut -d" " -f1)
+after=$(cat mocks/v2-fleet.html mocks/v3-assistant.html mocks/v4-transcript.html mocks/v5-components.html mocks/v5-agent.html mocks/v5-data.html mocks/v5-workspace.html | md5sum | cut -d" " -f1)
 echo "  checked-in $before   fresh build $after"
 [ "$before" = "$after" ]
 ok $? "a fresh build reproduces the checked-in mocks byte for byte"
@@ -38,7 +38,7 @@ say "checked-in PNGs match the HTML (a stale image misleads a reviewer)"
 # The byte-identity gate covered the HTML only. A reviewer looking at a
 # stale PNG is looking at the past — which is how the fidelity gate passed
 # on a screenshot in round one.
-pbefore=$(md5sum mocks/v2-fleet.png mocks/v3-assistant.png mocks/v4-transcript.png mocks/v2-dark.png mocks/v5-components.png mocks/v5-components-dark.png mocks/v5-components-mobile.png mocks/v5-agent.png mocks/v5-agent-dark.png mocks/v5-agent-mobile.png mocks/v5-data.png mocks/v5-data-dark.png mocks/v5-data-mobile.png | md5sum | cut -d" " -f1)
+pbefore=$(md5sum mocks/v2-fleet.png mocks/v3-assistant.png mocks/v4-transcript.png mocks/v2-dark.png mocks/v5-components.png mocks/v5-components-dark.png mocks/v5-components-mobile.png mocks/v5-agent.png mocks/v5-agent-dark.png mocks/v5-agent-mobile.png mocks/v5-data.png mocks/v5-data-dark.png mocks/v5-data-mobile.png mocks/v5-workspace.png mocks/v5-workspace-dark.png mocks/v5-workspace-split.png mocks/v5-workspace-mobile.png | md5sum | cut -d" " -f1)
 for a in "v2-fleet.html v2-fleet.png" "v3-assistant.html v3-assistant.png" "v4-transcript.html v4-transcript.png"; do
   set -- $a; node mocks/render.mjs "mocks/$1" "mocks/$2" > /dev/null 2>&1; done
 node mocks/render.mjs mocks/v2-fleet.html mocks/v2-dark.png --dark > /dev/null 2>&1
@@ -51,7 +51,11 @@ node mocks/render.mjs mocks/v5-agent.html mocks/v5-agent-mobile.png --viewport 3
 node mocks/render.mjs mocks/v5-data.html mocks/v5-data.png --viewport 1440x1800 > /dev/null 2>&1
 node mocks/render.mjs mocks/v5-data.html mocks/v5-data-dark.png --dark --viewport 1440x1800 > /dev/null 2>&1
 node mocks/render.mjs mocks/v5-data.html mocks/v5-data-mobile.png --viewport 390x3600 > /dev/null 2>&1
-pafter=$(md5sum mocks/v2-fleet.png mocks/v3-assistant.png mocks/v4-transcript.png mocks/v2-dark.png mocks/v5-components.png mocks/v5-components-dark.png mocks/v5-components-mobile.png mocks/v5-agent.png mocks/v5-agent-dark.png mocks/v5-agent-mobile.png mocks/v5-data.png mocks/v5-data-dark.png mocks/v5-data-mobile.png | md5sum | cut -d" " -f1)
+node mocks/render.mjs mocks/v5-workspace.html mocks/v5-workspace.png --viewport 1440x1200 > /dev/null 2>&1
+node mocks/render.mjs mocks/v5-workspace.html mocks/v5-workspace-dark.png --dark --viewport 1440x1200 > /dev/null 2>&1
+node mocks/render.mjs mocks/v5-workspace.html mocks/v5-workspace-split.png --viewport 1440x820 > /dev/null 2>&1
+node mocks/render.mjs mocks/v5-workspace.html mocks/v5-workspace-mobile.png --viewport 390x1200 > /dev/null 2>&1
+pafter=$(md5sum mocks/v2-fleet.png mocks/v3-assistant.png mocks/v4-transcript.png mocks/v2-dark.png mocks/v5-components.png mocks/v5-components-dark.png mocks/v5-components-mobile.png mocks/v5-agent.png mocks/v5-agent-dark.png mocks/v5-agent-mobile.png mocks/v5-data.png mocks/v5-data-dark.png mocks/v5-data-mobile.png mocks/v5-workspace.png mocks/v5-workspace-dark.png mocks/v5-workspace-split.png mocks/v5-workspace-mobile.png | md5sum | cut -d" " -f1)
 echo "  checked-in $pbefore   fresh render $pafter"
 [ "$pbefore" = "$pafter" ]
 ok $? "the checked-in PNGs are a fresh render of the checked-in HTML"
@@ -193,6 +197,14 @@ say "v5 data surfaces — DW-6 gate: tables, stat cards, threshold ink, charts, 
 node mocks/v5datacheck.mjs
 ok $? "bar zero-baseline, stat triplet, no gauge, threshold non-colour cue + discrete, table alignment, chart alt/aria-describedby, CVD encoding, <=7 metrics"
 
+say "v5 workspace surface — token discipline"
+python3 mocks/literalcheck.py v5-workspace.html > /tmp/v5w-literal.log 2>&1
+ok $? "v5-workspace carries zero hand-typed colours ($(grep 'literal(s)' /tmp/v5w-literal.log | awk '{print $2}') hits)"
+
+say "v5 workspace surface — Phase 8 gate: tabs/split/mobile shell, DW-8.1..8.9"
+node mocks/v5workspacecheck.mjs
+ok $? "CSS-order reorder, one-workspace split with non-colour active cue, fixed anchors, mobile-defect checklist, no pan-y transcript, gesture non-equivalents, reachable set open tabs"
+
 say "type conformance — DESIGN.md's own weight/size/leading claims, on the render"
 node mocks/typecheck.mjs
 ok $? "weights in 400/450/500, sizes on the nine steps, no unspecified line box, action pair distinct"
@@ -233,5 +245,5 @@ grep 'wordcheck:' /tmp/wordcheck.log | sed 's/^/  /'
 ok $wcrc "wordcheck: banned strings, terminology, labels, buttons, error-fix all clean"
 
 say "RESULT"
-[ $fail = 0 ] && echo "  ALL DESIGN CHECKS PASS (P3+P4+P5+P6+P7)" || echo "  $fail CHECK GROUPS FAILED"
+[ $fail = 0 ] && echo "  ALL DESIGN CHECKS PASS (P3+P4+P5+P6+P7+P8)" || echo "  $fail CHECK GROUPS FAILED"
 exit $fail
