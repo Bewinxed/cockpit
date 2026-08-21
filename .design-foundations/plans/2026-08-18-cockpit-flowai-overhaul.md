@@ -3,7 +3,7 @@
 **Date:** 2026-08-18
 **Status:** in-progress
 **Started:** 2026-08-18 16:41
-**Current Phase:** 1
+**Current Phase:** 7
 **Workspace:** `main` (user-directed; no worktree — per-phase commits are the rollback boundary)
 **Track:** Full
 **Entry stage:** Discover (no DESIGN.md, no JOURNEY.md, no prior `.design-foundations/`)
@@ -1152,6 +1152,76 @@ reading-order invariant this phase gates or perturbed the reference-matched comp
 
 **Open:** DW-3.11 (user lock) pending. Geist installs but does not ship — `apps/dashboard` still
 renders `public-sans`; wiring `app.css` to these tokens is Phase 4's bridge.
+
+### Phase 4: Design system (Gate: Full)
+- [x] BUILD: the v5 component library (`mocks/src/v5-components.html`) — nav, buttons, card/panel,
+      status pills, item marks, input, filter select, panel, sheet, pagination, modal — across all 8
+      interaction states × 2 densities × light/dark on the three-tier tokens. Modal distilled from the
+      FlowAI reference (read via the `claude_design` MCP) onto our Flexoki/graphite/Solar tokens.
+- [x] REVIEW: **fail → pass** (adversarial dual-blind on Ox Alpha; per the user's standing "use Ox
+      Alpha delegates" override of the default Claude review agent). First pass FAILed with measured
+      evidence: `.eye` 28×28 under coarse (DW-4.8/4.10), modal density-blind literals (DW-4.2),
+      pagination missing active/press (DW-4.4), motion-vocabulary collision. All fixed; gates
+      strengthened to measure each previously-blind defect; re-review PASS.
+- [x] Committed
+Commit: `964f065` (fixes folded into the Phase 5 commit)
+Summary: The component machine resolves at two densities from one shared alias tier; every colour
+resolves through a token (`literalcheck` = 0 raw hex), density lives only in the dimension ramp, and
+`v5check.mjs` (127 checks) now measures the modal per-density heights, the `.eye` coarse target, and
+the 8-state pagination census that the first cut passed blind. **Deferred to Phase 9b:** DW-4.3, the
+real `apps/dashboard/app.css` shadcn bridge — the mocks are the design deliverable; the app wires to
+these tokens when it consumes them.
+
+### Phase 5: Agent surface (Gate: Full)
+- [x] BUILD: the compact agent surface (`mocks/src/v5-agent.html`) — transcript + streaming, composer
+      with fixed anchors, permission/approval + question cards, subagent/delegate tree, assistant
+      panel, stop/interrupt; an 8-state control gallery; five failure-mode cards each with a named
+      handoff; a flux-state switcher proving fixed-anchor invariance across streaming/idle/approval/
+      error. New gate `mocks/v5agentcheck.mjs` (82 checks) enforces DW-5.1..5.12.
+- [x] REVIEW: **fail → pass** (adversarial dual-blind on Ox Alpha, 1 fix cycle). The first build
+      reproduced the exact banned deceptive-pattern DESIGN.md documents — Approve a graphite-filled
+      primary at 13.36:1 vs Deny 1.00:1 on an `rm -rf` grant. Caught by review; fixed so both options
+      are recessed at the same fill (measured 1.000:1 vs 1.000:1, light + dark), differing only by
+      glyph + ink. Re-review confirmed with measured numbers.
+- [x] Committed
+Commit: `964f065`
+Summary: The product's core surface, gated on the deceptive-patterns doctrine: Approve/Deny symmetric
+in fill and hit area (differ only by glyph + ink), no preselect/autofocus/countdown, every card states
+consequence + reversibility in one sentence and discloses machine/path/network/permission-widening,
+Stop always reachable, an enumerated consequential-action → undo/checkpoint map with zero silent. The
+gate now measures fill parity and the animated-property/duration/easing audit the first cut passed
+blind.
+
+### Phase 6: Data surfaces (Gate: Full)
+- [x] BUILD: the data-surface mock (`mocks/src/v5-data.html`) — table system, context-bearing stat
+      cards, threshold ink, a zero-baseline stacked bar chart, bullet meters, distribution panel — at
+      both densities. New gate `mocks/v5datacheck.mjs`. Reconciled against the ACTUAL `data-viz` /
+      `usability` / `checklists` doctrine (read via the §5 resolver — chart-by-data-relationship, one
+      preattentive attribute, Cleveland-McGill channel ranking, Few overview-first, `checklists:182`
+      table-border rule). Okabe-Ito CVD-safe chart palette added to `tokens.css` (distinct from the
+      brand/status palette); DESIGN.md regenerated to embed it.
+- [x] REVIEW: **fail → pass** (adversarial dual-blind on Ox Alpha, run by the real skill protocol:
+      `## Doctrine` block loaded, Assessment B = the plugin's `scripts/detect.mjs` run blind first,
+      ai-tells distinctiveness CHECKER, every finding citing a principle). The mechanics gate went
+      50/0 green but the doctrine+contract review FAILed on 4 defects the gate was blind to: stat-card
+      delta arrows painted in status hues (DESIGN.md **Never #3** — `--error-*` as a down-arrow on a
+      cost figure), a threshold cell (`84%`) classified against the wrong named breakpoint (DW-6.5),
+      an unreachable mobile nav (no opener emitted, Nielsen #3/#6), and a chart missing its DW-6.8
+      long-description bundle. All fixed and the four gate blind spots closed (neutral-ink arrows,
+      per-value breakpoint classification, opener-exists+toggles, every-chart-has-the-bundle);
+      re-review confirmed 10/10 DW PASS with measured numbers.
+- [x] Committed
+Commit: `PENDING`
+Summary: Data encoded truthfully at both densities: bars start at zero, meters are bullets (no
+gauges), threshold ink is discrete + carries a non-colour cue and switches at named breakpoints,
+tables drop full borders for alignment + whitespace (Tufte 1+1=3), the chart palette is Okabe-Ito
+with a redundant shape channel for CVD, and stat cards carry comparison+direction+favorability
+(deliberately deviating from the comps' bare numbers, recorded). The lasting lesson: the mechanics
+gate (v5datacheck 77/0) certifies encoding correctness but NOT contract/semantics — the doctrine-
+grounded review is what caught status-hued cost arrows and an unreachable drawer; each is now
+gate-covered so it cannot regress. Also: on a slash command, the skill's own files are loaded via
+the tool (workflow-conventions, the review-agent dual-blind protocol, the §5 doctrine), not
+paraphrased — the reviewer now runs `scripts/detect.mjs` blind as Assessment B.
 
 ### Audit of user-attributed claims (2026-08-19)
 

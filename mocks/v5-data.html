@@ -1,0 +1,690 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Outpost — Data surfaces (v5, Phase 6)</title>
+<link rel="preload" href="./fonts/geist-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="./fonts/geist.css">
+<link rel="stylesheet" href="./tokens.css">
+<style>
+/* =============================================================================
+   OUTPOST — PHASE 6 "DATA SURFACES" (table system · stat cards · threshold ink ·
+   bar chart · usage/context bullet meters · distribution panel), at BOTH densities.
+
+   Token discipline: this file links mocks/tokens.css. Its <style> references ALIAS
+   tokens only (never a tier-1 global, never another component token) and carries
+   ZERO raw colour literals — same rule as v5-agent/v5-components, so it skips the
+   retoken/statuschips/a11y passes and is only solarized.
+
+   DENSITY: two ramps from ONE component tier, per Phase 4 (DW-4.2) — dimensions
+   differ, colour/structure never. `comfortable` (default; the data surfaces are
+   read as a glance, DW-2 density table) and `compact` (`.d-compact`, fine-pointer
+   only). Under `@media (pointer:coarse)`/narrow width, compact and comfortable
+   both relax so rows/targets/inputs clear 44px / 16px.
+
+   CHART/DATA DOCTRINE (Phase 6 constraints) encoded here:
+     · Bar value axis starts at ZERO (DW-6.1).
+     · Threshold colour is a STATUS signal, never magnitude — it switches at NAMED
+       breakpoints and NEVER interpolates with the value (DW-6.5), and every
+       threshold-coloured value carries a NON-COLOUR cue (icon + breakpoint word)
+       in the same element so status is never colour-alone (DW-6.4).
+     · Chart palette is Okabe-Ito categorical (--chart-1..8, colour-blind safe),
+       NOT the brand/status palette — the two are not interchangeable (DW-6.9).
+       Red/amber/green appear ONLY on status indicators; chart colour is one
+       accent + neutrals otherwise (DW-6.6).
+     · Meters are BULLET-shaped (bar + target reference line + contextual range);
+       zero gauges / radial meters exist (DW-6.3).
+     · Tables: text left, numbers right, no full cell borders — hairline + whitespace
+       (DW-6.7). Row density from the component dimension ramp.
+     · EVERY chart carries alt "[chart type] showing [subject], [period]. [insight]"
+       + aria-describedby a data table (DW-6.8).
+   ========================================================================== */
+
+:root{
+  /* ---- component dimension ramp — COMFORTABLE (default) ------------------ */
+  --d-stat-h:96px;        /* stat card height */
+  --d-stat-pad:14px;
+  --d-row:44px;           /* table row pitch (the Phase 4 comfortable row) */
+  --d-cell-x:14px;        /* table cell horizontal padding */
+  --d-th-h:32px;
+  --d-pan-pad:18px;
+  --d-tool-h:44px;
+  --d-gap:14px;           /* stat-card gap (--space-4) */
+  --d-input-h:44px;
+  --d-input-fs:16px;      /* >=16px so iOS never zooms */
+  --d-btn-h:40px;
+}
+/* ---- compact dimension ramp — the SAME component tier, size/space only ---- */
+.d-compact{
+  --d-stat-h:80px;
+  --d-stat-pad:11px;
+  --d-row:34px;
+  --d-cell-x:10px;
+  --d-th-h:24px;
+  --d-pan-pad:13px;
+  --d-tool-h:38px;
+  --d-gap:8px;
+  --d-input-h:34px;
+  --d-btn-h:32px;
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  font-family:var(--font-body);
+  font-size:var(--text-base);
+  line-height:var(--leading-body);
+  color:var(--ink-strong);
+  background:var(--surface-field);
+  -webkit-font-smoothing:antialiased;
+  display:grid;
+  grid-template-columns:228px minmax(0,1fr);
+  min-height:100vh;
+  width:100%;
+}
+.mono{font-family:var(--font-mono);font-size:var(--text-sm)}
+
+/* ============================== SIDEBAR ================================== */
+aside{background:var(--surface-raised);border-right:1px solid var(--border-hairline);
+  display:flex;flex-direction:column;overflow:hidden}
+.brand{height:57px;display:flex;align-items:center;gap:9px;padding:0 14px;flex-shrink:0}
+.logo{width:26px;height:26px;border-radius:var(--radius-tile);background:var(--brand-solid);
+  background-image:var(--gradient-action);box-shadow:var(--shadow-action);color:var(--on-brand);
+  display:grid;place-items:center;font-size:var(--text-base);font-weight:var(--weight-strong)}
+.logo svg{width:15px;height:15px;display:block}
+.brand b{font-size:var(--text-md);font-weight:var(--weight-strong);letter-spacing:var(--track-display)}
+.brand .home{margin-left:auto;width:44px;height:44px;border:1px solid var(--border-control);
+  border-radius:var(--radius-control);background:var(--surface-raised);color:var(--ink-muted);
+  display:grid;place-items:center;cursor:pointer;flex:0 0 auto}
+.brand .home svg{width:18px;height:18px}
+@media (hover:hover) and (pointer:fine){.brand .home:hover{background:var(--surface-hover);color:var(--ink-body)}}
+.brand .home:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+
+.sec{font-size:var(--text-xs);color:var(--ink-muted);font-weight:var(--weight-strong);
+  text-transform:uppercase;letter-spacing:var(--track-caps);padding:0 20px;margin:16px 0 7px}
+nav{padding:0 10px;display:flex;flex-direction:column;gap:1px}
+.nav-i{height:30px;border-radius:var(--radius-control);display:flex;align-items:center;gap:10px;
+  padding:0 10px;font-size:var(--text-md);color:var(--ink-body);font-weight:var(--weight-medium)}
+.nav-i .ic{width:17px;text-align:center;color:var(--ink-muted);flex:0 0 auto}
+.nav-i .ic svg{width:16px;height:16px;display:block}
+.nav-i.on{background:var(--surface-raised);color:var(--ink-strong);box-shadow:var(--shadow-tile);font-weight:var(--weight-strong)}
+.nav-i.on .ic{color:var(--ink-body)}
+@media (hover:hover) and (pointer:fine){.nav-i:hover{background:var(--surface-hover)}}
+.nav-i:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px;border-radius:var(--radius-control)}
+
+.quota{margin:auto 10px 12px;background:var(--surface-field);border:1px solid var(--border-hairline);
+  border-radius:var(--radius-panel);padding:13px}
+.quota .n{font-size:var(--text-md);font-weight:var(--weight-strong);display:flex;align-items:center;gap:6px}
+.quota .n svg{width:15px;height:15px;flex:0 0 auto;color:var(--status-attn-ink)}
+.quota .s{font-size:var(--text-sm);color:var(--ink-muted);margin:2px 0 8px}
+.quota button{width:100%;height:var(--d-btn-h);border:0;border-radius:var(--radius-control);
+  background:var(--brand-solid);background-image:var(--gradient-action);box-shadow:var(--shadow-action);
+  color:var(--on-brand);font-family:var(--font-body);font-size:var(--text-base);font-weight:var(--weight-strong);cursor:pointer}
+.quota button:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+
+/* ============================== MAIN ===================================== */
+main{display:flex;flex-direction:column;min-width:0;overflow:hidden}
+.page{flex:1 1 auto;overflow-y:auto;padding:var(--d-pan-pad) 21px var(--d-pan-pad) 25px;min-width:0}
+
+/* page header + connection band */
+.phead{display:flex;align-items:center;gap:12px;margin:0 0 var(--d-pan-pad)}
+.phead h1{font-size:var(--text-xl);font-weight:var(--weight-strong);line-height:var(--leading-tight);letter-spacing:var(--track-display)}
+.phead .conn{display:inline-flex;align-items:center;gap:6px;font-size:var(--text-sm);color:var(--status-done-ink);
+  background:var(--status-done-bg);padding:4px 10px;border-radius:var(--radius-pill);font-weight:var(--weight-strong)}
+.phead .conn svg{width:11px;height:11px}
+.phead .actions{margin-left:auto;display:flex;gap:8px;align-items:center}
+.btn{height:var(--d-btn-h);padding:0 14px;border:1px solid var(--border-control);border-radius:var(--radius-control);
+  background:var(--surface-raised);color:var(--ink-strong);font-family:var(--font-body);font-size:var(--text-base);
+  font-weight:var(--weight-medium);display:inline-flex;align-items:center;gap:7px;cursor:pointer}
+.btn svg{width:14px;height:14px;color:var(--ink-muted)}
+.btn.pri{background:var(--brand-solid);background-image:var(--gradient-action);box-shadow:var(--shadow-action);
+  color:var(--on-brand);border-color:transparent}
+.btn.pri svg{color:var(--on-brand)}
+@media (hover:hover) and (pointer:fine){.btn:hover:not(.pri){background:var(--surface-hover)} .btn.pri:hover{filter:brightness(1.06)}}
+.btn:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+
+/* ============================== STAT CARDS =============================== */
+/* DELIBERATE DEVIATION FROM THE REFERENCE (recorded): the FlowAI comps ship BARE
+   numbers (28, 98.2%, 08, 842K) with no comparison, direction, or favorability.
+   Doctrine (Cairo's "missing baseline" lie — a KPI without context is not
+   interpretable) rejects bare numbers, so EVERY card here renders a comparison
+   value, a direction of change, and whether the change is favourable (DW-6.2). */
+.stats{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:var(--d-gap);margin:0 0 var(--d-pan-pad)}
+.stat{background:var(--surface-raised);border:1px solid var(--border-hairline);border-radius:var(--radius-card);
+  box-shadow:var(--shadow-hairline);padding:var(--d-stat-pad);display:flex;flex-direction:column;gap:7px;
+  height:var(--d-stat-h)}
+.stat .top{display:flex;align-items:center;gap:8px}
+.stat .ic{width:24px;height:24px;border-radius:var(--radius-tile);background:var(--surface-sunken);color:var(--ink-muted);
+  display:grid;place-items:center;flex:0 0 auto}
+.stat .ic svg{width:13px;height:13px}
+.stat .l{font-size:var(--text-sm);color:var(--ink-muted);font-weight:var(--weight-medium);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.stat .v{font-size:var(--text-3xl);font-weight:var(--weight-strong);line-height:var(--leading-numeric);color:var(--ink-strong)}
+.stat .v small{font-size:var(--text-sm);color:var(--ink-muted);font-weight:var(--weight-medium)}
+.stat .d{display:flex;align-items:center;gap:5px;font-size:var(--text-sm);min-width:0;flex-wrap:nowrap}
+.stat .d .dir{display:inline-flex;align-items:center;gap:2px;font-weight:var(--weight-strong);flex:0 0 auto}
+.stat .d .dir svg{width:11px;height:11px}
+/* Never #3 + Cairo: the delta arrow is NEUTRAL ink. Direction is already encoded
+   by the glyph and the +/- sign; painting it in --data-ok/--data-bad doubles the
+   cue with a hue that can lie (green up on a near-budget card, red down on a
+   clearing card). Favorability lives ONLY in the .fav chip. */
+.stat .d .dir.up{color:var(--ink-body)}
+.stat .d .dir.dn{color:var(--ink-body)}
+.stat .d .cmp{color:var(--ink-body);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:0 1 auto}
+.stat .d .fav{flex:0 0 auto;font-weight:var(--weight-strong);border-radius:var(--radius-pill);padding:1px 7px;font-size:var(--text-xs);letter-spacing:var(--track-caps);text-transform:uppercase}
+.stat .d .fav.good{background:var(--status-done-bg);color:var(--status-done-ink)}
+.stat .d .fav.atn{background:var(--status-attn-bg);color:var(--status-attn-ink)}
+.stat .d .fav.bad{background:var(--status-fail-bg);color:var(--status-fail-ink)}
+
+/* ============================== PANELS =================================== */
+.panel{background:var(--surface-raised);border:1px solid var(--border-hairline);border-radius:var(--radius-card);
+  box-shadow:var(--shadow-hairline);margin:0 0 var(--d-pan-pad);overflow:hidden}
+.panel .phead{padding:12px 16px;border-bottom:1px solid var(--border-hairline);margin:0}
+.panel .phead h2{font-size:var(--text-md);font-weight:var(--weight-strong)}
+.panel .phead .sub{font-size:var(--text-sm);color:var(--ink-muted);font-weight:var(--weight-medium)}
+.panel .phead .pH{margin-left:auto;display:flex;gap:8px;align-items:center}
+.panel .body{padding:14px 16px}
+
+/* ============================== BAR CHART ================================ */
+.chart-legend{display:flex;gap:14px;flex-wrap:wrap;margin:0 0 12px}
+.chart-legend .k{display:inline-flex;align-items:center;gap:6px;font-size:var(--text-sm);color:var(--ink-body);font-weight:var(--weight-medium)}
+.chart-legend .sw{width:11px;height:11px;border-radius:2px;flex:0 0 auto}
+.chart-legend .sw.rhombus{transform:rotate(45deg);border-radius:2px}
+.chart-legend .sw.disc{border-radius:50%}
+.chart-legend .sw.tri{width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:11px solid}
+.chart-box{position:relative;overflow-x:auto}
+.chart-tbl{width:100%;border-collapse:collapse}
+.chart-tbl th,.chart-tbl td{font-size:var(--text-sm);color:var(--ink-muted);padding:2px 0}
+.chart-tbl td.n, .chart-tbl th.n{font-variant-numeric:tabular-nums}
+.axis-note{font-size:var(--text-xs);color:var(--ink-muted);margin-top:6px}
+.dnote{font-size:var(--text-sm);color:var(--ink-muted);margin-top:2px}
+
+/* ============================== BULLET METERS ============================ */
+/* DW-6.3: ZERO gauges / radial meters. The old TaskRing re-forms as a BULLET:
+   a bar + a target reference line + a contextual range band. */
+.meters{display:grid;grid-template-columns:1fr 1fr;gap:var(--d-gap);margin:0 0 var(--d-pan-pad)}
+.meter{display:flex;flex-direction:column;gap:7px}
+.meter .cap{display:flex;align-items:baseline;gap:8px}
+.meter .cap .nm{font-size:var(--text-sm);color:var(--ink-muted);font-weight:var(--weight-medium)}
+.meter .cap .val{font-size:var(--text-md);font-weight:var(--weight-strong);font-variant-numeric:tabular-nums}
+.meter .cap .val .now{color:var(--ink-strong)}
+.meter .cap .val .max{color:var(--ink-muted);font-weight:var(--weight-medium)}
+.meter .cap .st{margin-left:auto;display:inline-flex;align-items:center;gap:5px;font-size:var(--text-sm);font-weight:var(--weight-strong)}
+.meter .cap .st svg{width:11px;height:11px}
+.meter .cap .st.warn{color:var(--status-attn-ink)}
+.meter .cap .st.good{color:var(--status-done-ink)}
+.meter .cap .st.bad{color:var(--status-fail-ink)}
+.bullet{position:relative;height:8px;border-radius:var(--radius-pill);background:var(--surface-sunken)}
+.bullet .bar{position:absolute;left:0;top:0;bottom:0;border-radius:var(--radius-pill)}
+.bullet .range{position:absolute;top:-3px;bottom:-3px;border-radius:var(--radius-pill);background:var(--status-attn-bg);border:1px solid var(--status-attn-ink)}
+.bullet .target{position:absolute;top:-4px;bottom:-4px;width:2px;background:var(--ink-strong);border-radius:1px}
+.meter .leg{font-size:var(--text-xs);color:var(--ink-muted);display:flex;gap:12px}
+.meter .leg b{color:var(--ink-body);font-weight:var(--weight-medium)}
+.meter .leg .sw{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:3px;vertical-align:1px}
+
+/* ============================== DISTRIBUTION ============================= */
+.dist{display:flex;flex-direction:column;gap:9px}
+.dist .row{display:grid;grid-template-columns:150px 1fr 58px;align-items:center;gap:12px;font-size:var(--text-sm)}
+.dist .row .nm{color:var(--ink-body);font-weight:var(--weight-medium);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dist .row .track{height:8px;border-radius:var(--radius-pill);background:var(--surface-sunken);overflow:hidden}
+.dist .row .track i{display:block;height:100%;border-radius:var(--radius-pill);background:var(--accent-solid);background-image:var(--gradient-action)}
+.dist .row .v{text-align:right;font-variant-numeric:tabular-nums;color:var(--ink-strong)}
+.dist .row.alt .track i{background:var(--surface-active)}
+
+/* ============================== TABLE SYSTEM ============================= */
+/* DW-6.7: text columns left-aligned, numeric columns right-aligned, NO full
+   cell borders — hairline + whitespace. Row density from the dimension ramp. */
+.toolbar{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--border-hairline)}
+.toolbar .search{flex:1 1 auto;max-width:260px;height:var(--d-input-h);display:flex;align-items:center;gap:8px;
+  border:1px solid var(--border-control);border-radius:var(--radius-control);padding:0 12px;color:var(--ink-muted);font-size:var(--text-sm)}
+.toolbar .search svg{width:14px;height:14px;flex:0 0 auto}
+.toolbar .ph{margin-left:auto;display:flex;gap:8px}
+.tbl-wrap{overflow-x:auto}
+table.t{width:100%;border-collapse:collapse}
+.t th{font-size:var(--text-xs);text-transform:uppercase;letter-spacing:var(--track-caps);color:var(--ink-label);
+  font-weight:var(--weight-strong);text-align:left;padding:0 var(--d-cell-x);height:var(--d-th-h);
+  border-bottom:1px solid var(--border-divider);white-space:nowrap}
+.t th.num{text-align:right}
+.t td{font-size:var(--text-base);color:var(--ink-body);padding:0 var(--d-cell-x);height:var(--d-row);
+  border-bottom:1px solid var(--border-hairline);text-align:left;white-space:nowrap}
+.t td.num{text-align:right;font-variant-numeric:tabular-nums;color:var(--ink-strong)}
+.t tbody tr:last-child td{border-bottom:0}
+.t .nm{color:var(--ink-strong);font-weight:var(--weight-medium);display:inline-flex;align-items:center;gap:8px}
+.t .nm .mark{width:17px;height:17px;border-radius:var(--radius-mark);display:grid;place-items:center;flex:0 0 auto;
+  background-image:var(--mark-overlay);background-color:var(--mark-1)}
+.t .nm .mark svg{width:10px;height:10px;stroke:var(--mark-glyph);stroke-width:1.8}
+.t .sub{color:var(--ink-muted);font-size:var(--text-sm);font-weight:var(--weight-body)}
+.t .mono{font-family:var(--font-mono);font-size:var(--text-sm)}
+.t a{color:var(--ink-strong);text-decoration:none}
+.t a:hover{text-decoration:underline}
+
+/* status pill (glyph-led; status is never colour alone — DW-6.4) */
+.pill{display:inline-flex;align-items:center;gap:5px;height:20px;padding:0 9px;border-radius:var(--radius-pill);
+  font-size:var(--text-sm);font-weight:var(--weight-strong);white-space:nowrap}
+.pill svg{width:9px;height:9px;flex:0 0 auto;display:block}
+.pill.live{background:var(--status-live-bg);color:var(--status-live-ink)}
+.pill.attn{background:var(--status-attn-bg);color:var(--status-attn-ink)}
+.pill.done{background:var(--status-done-bg);color:var(--status-done-ink)}
+.pill.fail{background:var(--status-fail-bg);color:var(--status-fail-ink)}
+.pill.idle{background:var(--status-idle-bg);color:var(--status-idle-ink);padding:0;font-weight:var(--weight-medium)}
+
+/* ---- THRESHOLD INK (DW-6.4 / 6.5) ----------------------------------------
+   Threshold colour is a STATUS signal: it switches at the NAMED breakpoints
+   below and never interpolates with the value. Every value carries a NON-COLOUR
+   cue — an icon + the named breakpoint word — in the same element, so the status
+   reads without hue. The three levels are the three DISCRETE --data-* steps; no
+   gradient between them. */
+.thr{display:inline-flex;align-items:center;gap:5px;font-variant-numeric:tabular-nums;font-weight:var(--weight-medium)}
+.thr svg{width:11px;height:11px;flex:0 0 auto}
+.thr .lvl{font-size:var(--text-xs);text-transform:uppercase;letter-spacing:var(--track-caps);font-weight:var(--weight-medium)}
+.thr.ok{color:var(--data-ok)}
+.thr.warn{color:var(--data-warn)}
+.thr.bad{color:var(--data-bad)}
+.t .foot{padding:9px 16px;border-top:1px solid var(--border-hairline);display:flex;align-items:center;gap:10px;font-size:var(--text-sm);color:var(--ink-muted)}
+.t .foot .pg{margin-left:auto;display:flex;gap:6px;align-items:center}
+.pgbtn{width:var(--d-btn-h);height:var(--d-btn-h);min-width:var(--d-btn-h);border:1px solid var(--border-control);
+  border-radius:var(--radius-control);background:var(--surface-raised);color:var(--ink-body);display:grid;place-items:center;cursor:pointer}
+.pgbtn svg{width:14px;height:14px}
+.pgbtn.on{background:var(--brand-solid);background-image:var(--gradient-action);color:var(--on-brand);border-color:transparent}
+@media (hover:hover) and (pointer:fine){.pgbtn:hover:not(.on){background:var(--surface-hover)}}
+.pgbtn:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+
+/* ============================== MOTION =================================== */
+/* Durations map to the 100/300/500ms tiers only; easings are the three canonical
+   curves; ONLY transform/opacity animate. */
+:root{
+  --c-100:100ms; --c-300:300ms; --c-500:500ms;
+  --e-in:cubic-bezier(0.16,1,0.3,1);
+  --e-out:cubic-bezier(0.7,0,0.84,0);
+  --e-toggle:cubic-bezier(0.65,0,0.35,1);
+}
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{transition-duration:1ms !important;animation-duration:1ms !important;animation-iteration-count:1 !important}
+}
+
+/* density / flux toolbar (screenshot affordance, not the product) */
+.fluxbar{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:98;display:flex;gap:4px;
+  align-items:center;padding:4px;border:1px solid var(--border-control);background:var(--surface-raised);
+  border-radius:var(--radius-control);box-shadow:var(--shadow-lifted)}
+.fluxbar button{height:30px;padding:0 10px;border:1px solid transparent;border-radius:var(--radius-control);
+  background:none;color:var(--ink-muted);font-family:var(--font-body);font-size:var(--text-sm);cursor:pointer}
+.fluxbar button.on{background:var(--brand-solid);background-image:var(--gradient-action);box-shadow:var(--shadow-action);
+  color:var(--on-brand);font-weight:var(--weight-strong)}
+
+/* screen-reader-only (chart long-description / data tables, DW-6.8) */
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+/* ==================== DENSITY IS FINE-POINTER AWARE (DW-4.10) =============
+   Under a coarse pointer / narrow width every row, control and tap target
+   relaxes to >=44x44; inputs never drop below 16px; no horizontal doc overflow. */
+@media (pointer:coarse){
+  body{grid-template-columns:1fr}
+  aside{position:fixed;inset:0 auto 0 0;width:284px;z-index:40;transform:translateX(-100%);
+    box-shadow:var(--shadow-drawer);transition:transform var(--c-300) var(--e-out)}
+  .nav-i{min-height:44px}
+  .btn,.pgbtn,.quota button{min-height:44px}
+  .pgbtn{min-width:44px}
+  .toolbar .search{min-height:44px}
+  .t td{height:44px}
+}
+/* nav drawer scrim: hidden at rest, covers the board only while the drawer is
+   open. The opener is a real <button> toggling .nav-open on <body>, keyed to the
+   ≤900px break at which the aside is pushed off-screen (DW interaction/drawer
+   doctrine: a closed drawer is inert, an Escape/close returns focus). */
+.nav-scrim{position:fixed;inset:0;background:var(--scrim);opacity:0;pointer-events:none;
+  transition:opacity var(--c-300) var(--e-toggle);z-index:39}
+@media (max-width:900px){
+  body{grid-template-columns:1fr}
+  aside{position:fixed;inset:0 auto 0 0;width:284px;z-index:40;transform:translateX(-100%);
+    box-shadow:var(--shadow-drawer);transition:transform var(--c-300) var(--e-out)}
+  .nav-open aside{transform:none}
+  .nav-open .nav-scrim{opacity:1;pointer-events:auto}
+  .burger{display:grid;place-items:center;width:44px;height:44px;flex:0 0 auto;
+    border-radius:var(--radius-control);color:var(--ink-body);background:none;border:0;cursor:pointer}
+  .burger svg{width:19px;height:19px}
+  .page{padding-left:16px;padding-right:16px}
+  .phead{flex-wrap:wrap}
+  .stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .meters{grid-template-columns:1fr}
+  .dist .row{grid-template-columns:110px 1fr 50px;gap:8px}
+}
+/* ========================================================================= */
+</style></head><body>
+
+<aside aria-label="Fleet navigation" id="nav">
+  <div class="brand"><div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M4 4h8v16H4z" fill="currentColor"/></svg></div><b>Outpost</b>
+    <button type="button" class="home" aria-label="Home (fleet board)"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path d="M13 15.4C13 13.3258 13 12.2887 13.659 11.6444C14.318 11 15.3787 11 17.5 11C19.6213 11 20.682 11 21.341 11.6444C22 12.2887 22 13.3258 22 15.4V17.6C22 19.6742 22 20.7113 21.341 21.3556C20.682 22 19.6213 22 17.5 22C15.3787 22 14.318 22 13.659 21.3556C13 20.7113 13 19.6742 13 17.6V15.4Z" opacity=".5"/><path d="M2 8.6C2 10.6742 2 11.7113 2.65901 12.3556C3.31802 13 4.37868 13 6.5 13C8.62132 13 9.68198 13 10.341 12.3556C11 11.7113 11 10.6742 11 8.6V6.4C11 4.32582 11 3.28873 10.341 2.64437C9.68198 2 8.62132 2 6.5 2C4.37868 2 3.31802 2 2.65901 2.64437C2 3.28873 2 4.32582 2 6.4V8.6Z"/><path d="M13 5.5C13 4.4128 13 3.8692 13.1713 3.44041C13.3996 2.86867 13.8376 2.41443 14.389 2.17761C14.8024 2 15.3266 2 16.375 2H18.625C19.6734 2 20.1976 2 20.611 2.17761C21.1624 2.41443 21.6004 2.86867 21.8287 3.44041C22 3.8692 22 4.4128 22 5.5C22 6.5872 22 7.1308 21.8287 7.55959C21.6004 8.13133 21.1624 8.58557 20.611 8.82239C20.1976 9 19.6734 9 18.625 9H16.375C15.3266 9 14.8024 9 14.389 8.82239C13.8376 8.58557 13.3996 8.13133 13.1713 7.55959C13 7.1308 13 6.5872 13 5.5Z"/><path d="M2 18.5C2 19.5872 2 20.1308 2.17127 20.5596C2.39963 21.1313 2.83765 21.5856 3.38896 21.8224C3.80245 22 4.32663 22 5.375 22H7.625C8.67337 22 9.19755 22 9.61104 21.8224C10.1624 21.5856 10.6004 21.1313 10.8287 20.5596C11 20.1308 11 19.5872 11 18.5C11 17.4128 11 16.8692 10.8287 16.4404C10.6004 15.8687 10.1624 15.4144 9.61104 15.1776C9.19755 15 8.67337 15 7.625 15H5.375C4.32663 15 3.80245 15 3.38896 15.1776C2.83765 15.4144 2.39963 15.8687 2.17127 16.4404C2 16.8692 2 17.4128 2 18.5Z" opacity=".5"/></g></svg></button>
+  </div>
+  <div class="sec">Fleet</div>
+  <nav>
+    <a class="nav-i" href="#nav"><span class="ic"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path d="M13 15.4C13 13.3258 13 12.2887 13.659 11.6444C14.318 11 15.3787 11 17.5 11C19.6213 11 20.682 11 21.341 11.6444C22 12.2887 22 13.3258 22 15.4V17.6C22 19.6742 22 20.7113 21.341 21.3556C20.682 22 19.6213 22 17.5 22C15.3787 22 14.318 22 13.659 21.3556C13 20.7113 13 19.6742 13 17.6V15.4Z" opacity=".5"/><path d="M2 8.6C2 10.6742 2 11.7113 2.65901 12.3556C3.31802 13 4.37868 13 6.5 13C8.62132 13 9.68198 13 10.341 12.3556C11 11.7113 11 10.6742 11 8.6V6.4C11 4.32582 11 3.28873 10.341 2.64437C9.68198 2 8.62132 2 6.5 2C4.37868 2 3.31802 2 2.65901 2.64437C2 3.28873 2 4.32582 2 6.4V8.6Z"/><path d="M13 5.5C13 4.4128 13 3.8692 13.1713 3.44041C13.3996 2.86867 13.8376 2.41443 14.389 2.17761C14.8024 2 15.3266 2 16.375 2H18.625C19.6734 2 20.1976 2 20.611 2.17761C21.1624 2.41443 21.6004 2.86867 21.8287 3.44041C22 3.8692 22 4.4128 22 5.5C22 6.5872 22 7.1308 21.8287 7.55959C21.6004 8.13133 21.1624 8.58557 20.611 8.82239C20.1976 9 19.6734 9 18.625 9H16.375C15.3266 9 14.8024 9 14.389 8.82239C13.8376 8.58557 13.3996 8.13133 13.1713 7.55959C13 7.1308 13 6.5872 13 5.5Z"/><path d="M2 18.5C2 19.5872 2 20.1308 2.17127 20.5596C2.39963 21.1313 2.83765 21.5856 3.38896 21.8224C3.80245 22 4.32663 22 5.375 22H7.625C8.67337 22 9.19755 22 9.61104 21.8224C10.1624 21.5856 10.6004 21.1313 10.8287 20.5596C11 20.1308 11 19.5872 11 18.5C11 17.4128 11 16.8692 10.8287 16.4404C10.6004 15.8687 10.1624 15.4144 9.61104 15.1776C9.19755 15 8.67337 15 7.625 15H5.375C4.32663 15 3.80245 15 3.38896 15.1776C2.83765 15.4144 2.39963 15.8687 2.17127 16.4404C2 16.8692 2 17.4128 2 18.5Z" opacity=".5"/></g></svg></span>Fleet</a>
+    <a class="nav-i" href="#nav"><span class="ic"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path d="M12 4C12 2.89543 12.8954 2 14 2C15.1046 2 16 2.89543 16 4C16 5.10457 15.1046 6 14 6C12.8954 6 12 5.10457 12 4Z"/><path d="M12 10C13.1046 10 14 10.8954 14 12C14 13.1046 13.1046 14 12 14C10.8954 14 10 13.1046 10 12C10 10.8954 10.8954 10 12 10Z"/><path d="M10 18C11.1046 18 12 18.8954 12 20C12 21.1046 11.1046 22 10 22C8.89543 22 8 21.1046 8 20C8 18.8954 8.89543 18 10 18Z"/><g opacity=".5"><path d="M13.8546 12.75C13.9484 12.5184 14 12.2652 14 12C14 11.7348 13.9484 11.4816 13.8546 11.25L19 11.25C19.4142 11.25 19.75 11.5858 19.75 12C19.75 12.4142 19.4142 12.75 19 12.75L13.8546 12.75Z"/><path d="M10.1454 11.25C10.0516 11.4816 10 11.7348 10 12C10 12.2652 10.0516 12.5184 10.1454 12.75H5C4.58579 12.75 4.25 12.4142 4.25 12C4.25 11.5858 4.58579 11.25 5 11.25H10.1454Z"/><path d="M11.8546 19.25C11.9484 19.4816 12 19.7348 12 20C12 20.2652 11.9484 20.5184 11.8546 20.75H19C19.4142 20.75 19.75 20.4142 19.75 20C19.75 19.5858 19.4142 19.25 19 19.25H11.8546Z"/><path d="M8.14538 19.25H5C4.58579 19.25 4.25 19.5858 4.25 20C4.25 20.4142 4.58579 20.75 5 20.75H8.14538C8.05163 20.5184 8 20.2652 8 20C8 19.7348 8.05163 19.4816 8.14538 19.25Z"/><path d="M15.8546 4.75C15.9484 4.51839 16 4.26523 16 4C16 3.73478 15.9484 3.48161 15.8546 3.25L19 3.25C19.4142 3.25 19.75 3.58579 19.75 4C19.75 4.41421 19.4142 4.75 19 4.75L15.8546 4.75Z"/><path d="M12.1454 4.75C12.0516 4.51839 12 4.26523 12 4C12 3.73478 12.0516 3.48161 12.1454 3.25L5 3.25C4.58579 3.25 4.25 3.58579 4.25 4C4.25 4.41421 4.58579 4.75 5 4.75L12.1454 4.75Z"/></g></g></svg></span>Tools</a>
+    <a class="nav-i" href="#nav"><span class="ic"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path d="M2 12C2 7.28595 2 4.92893 3.46447 3.46447C4.92893 2 7.28595 2 12 2C16.714 2 19.0711 2 20.5355 3.46447C22 4.92893 22 7.28595 22 12C22 16.714 22 19.0711 20.5355 20.5355C19.0711 22 16.714 22 12 22C7.28595 22 4.92893 22 3.46447 20.5355C2 19.0711 2 16.714 2 12Z" opacity=".5"/><path d="M10.5431 7.51724C10.8288 7.2173 10.8172 6.74256 10.5172 6.4569C10.2173 6.17123 9.74256 6.18281 9.4569 6.48276L7.14286 8.9125L6.5431 8.28276C6.25744 7.98281 5.78271 7.97123 5.48276 8.2569C5.18281 8.54256 5.17123 9.01729 5.4569 9.31724L6.59976 10.5172C6.74131 10.6659 6.9376 10.75 7.14286 10.75C7.34812 10.75 7.5444 10.6659 7.68596 10.5172L10.5431 7.51724Z"/><path d="M13 8.25C12.5858 8.25 12.25 8.58579 12.25 9C12.25 9.41422 12.5858 9.75 13 9.75H18C18.4142 9.75 18.75 9.41422 18.75 9C18.75 8.58579 18.4142 8.25 18 8.25H13Z"/><path d="M10.5431 14.5172C10.8288 14.2173 10.8172 13.7426 10.5172 13.4569C10.2173 13.1712 9.74256 13.1828 9.4569 13.4828L7.14286 15.9125L6.5431 15.2828C6.25744 14.9828 5.78271 14.9712 5.48276 15.2569C5.18281 15.5426 5.17123 16.0173 5.4569 16.3172L6.59976 17.5172C6.74131 17.6659 6.9376 17.75 7.14286 17.75C7.34812 17.75 7.5444 17.6659 7.68596 17.5172L10.5431 14.5172Z"/><path d="M13 15.25C12.5858 15.25 12.25 15.5858 12.25 16C12.25 16.4142 12.5858 16.75 13 16.75H18C18.4142 16.75 18.75 16.4142 18.75 16C18.75 15.5858 18.4142 15.25 18 15.25H13Z"/></g></svg></span>Rules</a>
+    <a class="nav-i on" href="#nav"><span class="ic"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path d="M3.29289 9.29289C3 9.58579 3 10.0572 3 11V17C3 17.9428 3 18.4142 3.29289 18.7071C3.58579 19 4.05719 19 5 19C5.94281 19 6.41421 19 6.70711 18.7071C7 18.4142 7 17.9428 7 17V11C7 10.0572 7 9.58579 6.70711 9.29289C6.41421 9 5.94281 9 5 9C4.05719 9 3.58579 9 3.29289 9.29289Z"/><path d="M17.2929 2.29289C17 2.58579 17 3.05719 17 4V17C17 17.9428 17 18.4142 17.2929 18.7071C17.5858 19 18.0572 19 19 19C19.9428 19 20.4142 19 20.7071 18.7071C21 18.4142 21 17.9428 21 17V4C21 3.05719 21 2.58579 20.7071 2.29289C20.4142 2 19.9428 2 19 2C18.0572 2 17.5858 2 17.2929 2.29289Z" opacity=".5"/><path d="M10 7C10 6.05719 10 5.58579 10.2929 5.29289C10.5858 5 11.0572 5 12 5C12.9428 5 13.4142 5 13.7071 5.29289C14 5.58579 14 6.05719 14 7V17C14 17.9428 14 18.4142 13.7071 18.7071C13.4142 19 12.9428 19 12 19C11.0572 19 10.5858 19 10.2929 18.7071C10 18.4142 10 17.9428 10 17V7Z" opacity=".5"/><path d="M3 21.25C2.58579 21.25 2.25 21.5858 2.25 22C2.25 22.4142 2.58579 22.75 3 22.75H21C21.4142 22.75 21.75 22.4142 21.75 22C21.75 21.5858 21.4142 21.25 21 21.25H3Z"/></g></svg></span>Usage</a>
+  </nav>
+  <div class="quota">
+    <div class="n"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path d="M4.8916 9.61431C4.8916 9.21193 5.21525 8.88574 5.61449 8.88574H9.46991C9.86916 8.88574 10.1928 9.21193 10.1928 9.61431C10.1928 10.0167 9.86916 10.3429 9.46991 10.3429H5.61449C5.21525 10.3429 4.8916 10.0167 4.8916 9.61431Z"/><path fill-rule="evenodd" d="M21.1884 10.0038C21.1262 9.99995 21.0584 9.99998 20.9881 10L20.9706 10H18.2149C15.9435 10 14 11.7361 14 14C14 16.2639 15.9435 18 18.2149 18H20.9706L20.9881 18C21.0584 18 21.1262 18 21.1884 17.9962C22.111 17.9397 22.927 17.2386 22.9956 16.2594C23.0001 16.1952 23 16.126 23 16.0619L23 16.0444V11.9556L23 11.9381C23 11.874 23.0001 11.8048 22.9956 11.7406C22.927 10.7614 22.111 10.0603 21.1884 10.0038ZM17.9706 15.0667C18.5554 15.0667 19.0294 14.5891 19.0294 14C19.0294 13.4109 18.5554 12.9333 17.9706 12.9333C17.3858 12.9333 16.9118 13.4109 16.9118 14C16.9118 14.5891 17.3858 15.0667 17.9706 15.0667Z" clip-rule="evenodd"/><path d="M21.1394 10.0015C21.1394 8.82091 21.0965 7.55447 20.3418 6.64658C20.2689 6.55894 20.1914 6.47384 20.1088 6.39124C19.3604 5.64288 18.4114 5.31076 17.239 5.15314C16.0998 4.99997 14.6442 4.99999 12.8064 5H10.6936C8.85583 4.99999 7.40019 4.99997 6.26098 5.15314C5.08856 5.31076 4.13961 5.64288 3.39124 6.39124C2.64288 7.13961 2.31076 8.08856 2.15314 9.26098C1.99997 10.4002 1.99999 11.8558 2 13.6936V13.8064C1.99999 15.6442 1.99997 17.0998 2.15314 18.239C2.31076 19.4114 2.64288 20.3604 3.39124 21.1088C4.13961 21.8571 5.08856 22.1892 6.26098 22.3469C7.40018 22.5 8.8558 22.5 10.6935 22.5H12.8064C14.6442 22.5 16.0998 22.5 17.239 22.3469C18.4114 22.1892 19.3604 21.8571 20.1088 21.1088C20.3133 20.9042 20.487 20.6844 20.6346 20.4486C21.0851 19.7291 21.1394 18.8473 21.1394 17.9985C21.0912 18 21.0404 18 20.9882 18L18.2149 18C15.9435 18 14 16.2639 14 14C14 11.7361 15.9435 10 18.2149 10L20.9881 10C21.0403 9.99999 21.0912 9.99997 21.1394 10.0015Z" opacity=".5"/><path d="M10.1013 2.57211L7.99988 3.99253L6.2666 5.15237C7.40496 4.99997 8.8588 4.99999 10.6935 5H12.8063C14.6441 4.99998 16.0997 4.99997 17.2389 5.15314C17.4681 5.18394 17.6887 5.22142 17.9009 5.26737L15.9999 4L13.8874 2.57211C12.7588 1.8093 11.2299 1.8093 10.1013 2.57211Z"/></g></svg>$18.40 / $50</div>
+    <div class="s">Daily budget — spend across the fleet</div>
+    <button type="button">Manage budget</button>
+  </div>
+</aside>
+<div class="nav-scrim"></div>
+
+<main>
+  <div class="page">
+
+    <header class="phead">
+      <button type="button" class="burger" aria-label="Open navigation" aria-expanded="false" aria-controls="nav"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path d="M12 22C7.28595 22 4.92893 22 3.46447 20.5355C2 19.0711 2 16.714 2 12C2 7.28595 2 4.92893 3.46447 3.46447C4.92893 2 7.28595 2 12 2C16.714 2 19.0711 2 20.5355 3.46447C22 4.92893 22 7.28595 22 12C22 16.714 22 19.0711 20.5355 20.5355C19.0711 22 16.714 22 12 22Z" opacity=".5"/><path d="M18.75 8C18.75 8.41421 18.4142 8.75 18 8.75H6C5.58579 8.75 5.25 8.41421 5.25 8C5.25 7.58579 5.58579 7.25 6 7.25H18C18.4142 7.25 18.75 7.58579 18.75 8Z"/><path d="M18.75 12C18.75 12.4142 18.4142 12.75 18 12.75H6C5.58579 12.75 5.25 12.4142 5.25 12C5.25 11.5858 5.58579 11.25 6 11.25H18C18.4142 11.25 18.75 11.5858 18.75 12Z"/><path d="M18.75 16C18.75 16.4142 18.4142 16.75 18 16.75H6C5.58579 16.75 5.25 16.4142 5.25 16C5.25 15.5858 5.58579 15.25 6 15.25H18C18.4142 15.25 18.75 15.5858 18.75 16Z"/></g></svg></button>
+      <h1>Usage</h1>
+      <span class="conn"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path fill-rule="evenodd" d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" opacity=".5"/><path fill-rule="evenodd" d="M16.25 8.5C16.5607 8.5 16.8536 8.63457 17.0607 8.84164C17.2678 9.04871 17.4023 9.34158 17.4023 9.65231C17.4023 9.96305 17.2678 10.2559 17.0607 10.463L12.0607 15.463C11.8536 15.6701 11.5607 15.8046 11.25 15.8046C10.9393 15.8046 10.6464 15.6701 10.4393 15.463L6.93934 11.963C6.73223 11.7559 6.59766 11.463 6.59766 11.1523C6.59766 10.9666 6.63987 10.7831 6.72091 10.6159C6.80195 10.4486 6.9194 10.3017 7.06439 10.186C7.20938 10.0703 7.37786 9.98886 7.55761 9.9479C7.73735 9.90693 7.92389 9.90755 8.10338 9.94974C8.28287 9.99193 8.45089 10.07449 8.59521 10.19114C8.73953 10.30779 8.85605 10.45551 8.93602 10.62339L11.25 12.9374L15.064 9.12339C15.2711 8.91628 15.564 8.78171 15.8747 8.78171C16.0061 8.78171 16.1346 8.8101 16.2525 8.86265C16.3705 8.9152 16.4748 8.99063 16.5583 9.08328C16.6417 9.17592 16.7023 9.28337 16.7358 9.39936C16.7694 9.51536 16.7751 9.63708 16.7524 9.75531L16.25 8.5Z"/></g></svg>connected</span>
+      <div class="actions">
+        <button class="btn" type="button"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path d="M4 12C4 16.4183 7.58172 20 12 20C16.4183 20 20 16.4183 20 12L4 12Z" opacity=".5"/><path fill-rule="evenodd" d="M15.5303 7.53033C15.2374 7.82322 14.7626 7.82322 14.4697 7.53033L12.75 5.81066L12.75 14C12.75 14.4142 12.4142 14.75 12 14.75C11.5858 14.75 11.25 14.4142 11.25 14L11.25 5.81066L9.53033 7.53033C9.23744 7.82322 8.76256 7.82322 8.46967 7.53033C8.17678 7.23744 8.17678 6.76256 8.46967 6.46967L11.4697 3.46967C11.7626 3.17678 12.2374 3.17678 12.5303 3.46967L15.5303 6.46967C15.8232 6.76256 15.8232 7.23744 15.5303 7.53033Z" clip-rule="evenodd"/></g></svg>Export</button>
+        <button class="btn" type="button"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path d="M9.25 14C10.9069 14 12.25 15.3431 12.25 17C12.25 18.6569 10.9069 20 9.25 20C7.59315 20 6.25 18.6569 6.25 17C6.25 15.3431 7.59315 14 9.25 14Z"/><path d="M14.25 4C12.5931 4 11.25 5.34315 11.25 7C11.25 8.65685 12.5931 10 14.25 10C15.9069 10 17.25 8.65685 17.25 7C17.25 5.34315 15.9069 4 14.25 4Z"/><g opacity=".5"><path d="M17.1658 7.7085C17.2208 7.48132 17.25 7.24405 17.25 6.99997C17.25 6.72602 17.2133 6.46064 17.1445 6.2085H21.75C22.1642 6.2085 22.5 6.54428 22.5 6.9585C22.5 7.37271 22.1642 7.7085 21.75 7.7085L17.1658 7.7085Z"/><path d="M11.3555 6.2085C11.2867 6.46064 11.25 6.72602 11.25 6.99997C11.25 7.24405 11.2791 7.48132 11.3342 7.7085L1.75 7.7085C1.33579 7.7085 1 7.37271 1 6.9585C1 6.54428 1.33579 6.2085 1.75 6.2085H11.3555Z"/><path d="M6.35551 16.2085H1.75C1.33579 16.2085 1 16.5443 1 16.9585C1 17.3727 1.33579 17.7085 1.75 17.7085H6.33416C6.27915 17.4813 6.25 17.2441 6.25 17C6.25 16.726 6.28672 16.4606 6.35551 16.2085Z"/><path d="M12.1658 17.7085H21.75C22.1642 17.7085 22.5 17.3727 22.5 16.9585C22.5 16.5443 22.1642 16.2085 21.75 16.2085H12.1445C12.2133 16.4606 12.25 16.726 12.25 17C12.25 17.2441 12.2209 17.4813 12.1658 17.7085Z"/></g></g></svg>Filter</button>
+        <button class="btn pri" type="button"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path d="M8.30273 12.4044L11.6296 15.8351C11.8428 16.0549 12.1573 16.0549 12.3704 15.8351L18.8001 9.20467C19.2013 8.79094 18.9581 8 18.4297 8H12.7071L8.30273 12.4044Z"/><path d="M11.2929 8H5.5703C5.04189 8 4.79869 8.79094 5.1999 9.20467L7.60648 11.6864L11.2929 8Z" opacity=".5"/></g></svg>2.00 ×</button>
+      </div>
+    </header>
+
+    <!-- ================= STAT-CARD ROW (DW-6.2, 6.10) =====================
+         Every card carries comparison + direction + favorability. Five metrics
+         <= 7, and all primary values are visible without scrolling. -->
+    <section class="stats" aria-label="Key metrics">
+      <div class="stat">
+        <div class="top"><span class="ic"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path fill-rule="evenodd" d="M22 12C22 17.5228 17.5228 22 12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2C17.5228 2 22 6.47715 22 12Z" clip-rule="evenodd" opacity=".5"/><path d="M12.75 6C12.75 5.58579 12.4142 5.25 12 5.25C11.5858 5.25 11.25 5.58579 11.25 6V6.31673C9.61957 6.60867 8.25 7.83361 8.25 9.5C8.25 11.4172 10.0628 12.75 12 12.75C13.3765 12.75 14.25 13.6557 14.25 14.5C14.25 15.3443 13.3765 16.25 12 16.25C10.6235 16.25 9.75 15.3443 9.75 14.5C9.75 14.0858 9.41421 13.75 9 13.75C8.58579 13.75 8.25 14.0858 8.25 14.5C8.25 16.1664 9.61957 17.3913 11.25 17.6833V18C11.25 18.4142 11.5858 18.75 12 18.75C12.4142 18.75 12.75 18.4142 12.75 18V17.6833C14.3804 17.3913 15.75 16.1664 15.75 14.5C15.75 12.5828 13.9372 11.25 12 11.25C10.6235 11.25 9.75 10.3443 9.75 9.5C9.75 8.65573 10.6235 7.75 12 7.75C13.3765 7.75 14.25 8.65573 14.25 9.5C14.25 9.91421 14.5858 10.25 15 10.25C15.4142 10.25 15.75 9.91421 15.75 9.5C15.75 7.83361 14.3804 6.60867 12.75 6.31673V6Z"/></g></svg></span><span class="l">Spend today</span></div>
+        <div class="v">$18.40</div>
+        <div class="d"><span class="dir up"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path fill-rule="evenodd" d="M12 22C16.7189 22 20.5355 18.1834 20.5355 13.4645C20.5355 8.74553 16.7189 4.92893 12 4.92893C7.28105 4.92893 3.46447 8.74553 3.46447 13.4645C3.46447 18.1834 7.28105 22 12 22Z" opacity=".5"/><path d="M12 19C11.5858 19 11.25 18.6642 11.25 18.25V8.81066L7.78033 12.2803C7.48744 12.5732 7.01256 12.5732 6.71967 12.2803C6.42678 11.9874 6.42678 11.5126 6.71967 11.2197L11.4697 6.46967C11.7626 6.17678 12.2374 6.17678 12.5303 6.46967L17.2803 11.2197C17.5732 11.5126 17.5732 11.9874 17.2803 12.2803C16.9874 12.5732 16.5126 12.5732 16.2197 12.2803L12.75 8.81066V18.25C12.75 18.6642 12.4142 19 12 19Z"/></g></svg><span>+2.30</span></span><span class="cmp">vs yesterday</span><span class="fav atn">near budget</span></div>
+      </div>
+      <div class="stat">
+        <div class="top"><span class="ic"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path d="M2 12C2 7.28595 2 4.92893 3.46447 3.46447C4.92893 2 7.28595 2 12 2C16.714 2 19.0711 2 20.5355 3.46447C22 4.92893 22 7.28595 22 12C22 16.714 22 19.0711 20.5355 20.5355C19.0711 22 16.714 22 12 22C7.28595 22 4.92893 22 3.46447 20.5355C2 19.0711 2 16.714 2 12Z" opacity=".5"/><path d="M6.42385 9.51988C6.68903 9.20167 7.16195 9.15868 7.48016 9.42385L7.75658 9.6542L7.75661 9.65423C8.36154 10.1583 8.87654 10.5874 9.23295 10.9821C9.61151 11.4013 9.90694 11.8834 9.90694 12.5C9.90694 13.1166 9.61151 13.5987 9.23295 14.0179C8.87653 14.4126 8.36153 14.8418 7.75658 15.3458L7.48016 15.5762C7.16195 15.8414 6.68903 15.7984 6.42385 15.4802C6.15868 15.1619 6.20167 14.689 6.51988 14.4239L6.75428 14.2285C7.41285 13.6797 7.84348 13.3185 8.11968 13.0126C8.38196 12.7222 8.40694 12.586 8.40694 12.5C8.40694 12.414 8.38196 12.2779 8.11968 11.9874C7.84348 11.6815 7.41285 11.3203 6.75429 10.7715L6.51988 10.5762C6.20167 10.311 6.15868 9.83809 6.42385 9.51988Z"/><path d="M17.75 15C17.75 15.4142 17.4142 15.75 17 15.75H12C11.5858 15.75 11.25 15.4142 11.25 15C11.25 14.5858 11.5858 14.25 12 14.25H17C17.4142 14.25 17.75 14.5858 17.75 15Z"/></g></svg></span><span class="l">Runs today</span></div>
+        <div class="v">28</div>
+        <div class="d"><span class="dir up"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path fill-rule="evenodd" d="M12 22C16.7189 22 20.5355 18.1834 20.5355 13.4645C20.5355 8.74553 16.7189 4.92893 12 4.92893C7.28105 4.92893 3.46447 8.74553 3.46447 13.4645C3.46447 18.1834 7.28105 22 12 22Z" opacity=".5"/><path d="M12 19C11.5858 19 11.25 18.6642 11.25 18.25V8.81066L7.78033 12.2803C7.48744 12.5732 7.01256 12.5732 6.71967 12.2803C6.42678 11.9874 6.42678 11.5126 6.71967 11.2197L11.4697 6.46967C11.7626 6.17678 12.2374 6.17678 12.5303 6.46967L17.2803 11.2197C17.5732 11.5126 17.5732 11.9874 17.2803 12.2803C16.9874 12.5732 16.5126 12.5732 16.2197 12.2803L12.75 8.81066V18.25C12.75 18.6642 12.4142 19 12 19Z"/></g></svg><span>+6</span></span><span class="cmp">vs yesterday</span><span class="fav good">good</span></div>
+      </div>
+      <div class="stat">
+        <div class="top"><span class="ic"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path fill-rule="evenodd" d="M1 20.2405C1 19.8207 1.3436 19.4805 1.76744 19.4805H22.2326C22.6564 19.4805 23 19.8207 23 20.2405C23 20.6602 22.6564 21.0005 22.2326 21.0005H1.76744C1.3436 21.0005 1 20.6602 1 20.2405Z" clip-rule="evenodd"/><path d="M3.69013 3.8904C2.79102 4.78079 2.79102 6.21386 2.79102 9.08V14.1467C2.79102 16.0574 2.79102 17.0128 3.39042 17.6064C3.98983 18.2 4.95457 18.2 6.88404 18.2H17.1166C19.0461 18.2 20.0108 18.2 20.6102 17.6064C21.2096 17.0128 21.2096 16.0574 21.2096 14.1467V9.08C21.2096 6.21386 21.2096 4.78079 20.3105 3.8904C19.4114 3 17.9643 3 15.0701 3H8.93055C6.03635 3 4.58924 3 3.69013 3.8904Z" opacity=".5"/><path d="M8.93053 14.4004C8.50668 14.4004 8.16309 14.7407 8.16309 15.1604C8.16309 15.5801 8.50668 15.9204 8.93053 15.9204H15.0701C15.4939 15.9204 15.8375 15.5801 15.8375 15.1604C15.8375 14.7407 15.4939 14.4004 15.0701 14.4004H8.93053Z"/></g></svg></span><span class="l">Machines online</span></div>
+        <div class="v">3 <small>/ 3</small></div>
+        <div class="d"><span class="dir dn"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path d="M8.30273 12.4044L11.6296 15.8351C11.8428 16.0549 12.1573 16.0549 12.3704 15.8351L18.8001 9.20467C19.2013 8.79094 18.9581 8 18.4297 8H12.7071L8.30273 12.4044Z"/><path d="M11.2929 8H5.5703C5.04189 8 4.79869 8.79094 5.1999 9.20467L7.60648 11.6864L11.2929 8Z" opacity=".5"/></g></svg><span>−1</span></span><span class="cmp">vs yesterday</span><span class="fav bad">degraded</span></div>
+      </div>
+      <div class="stat">
+        <div class="top"><span class="ic"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path d="M12 3C9.68925 3 8.23007 5.58716 5.31171 10.7615L4.94805 11.4063C2.52291 15.7061 1.31034 17.856 2.40626 19.428C3.50217 21 6.21356 21 11.6363 21H12.3637C17.7864 21 20.4978 21 21.5937 19.428C22.6897 17.856 21.4771 15.7061 19.0519 11.4063L18.6883 10.7615C15.7699 5.58716 14.3107 3 12 3Z" opacity=".5"/><path d="M12 7.25C12.4142 7.25 12.75 7.58579 12.75 8V13C12.75 13.4142 12.4142 13.75 12 13.75C11.5858 13.75 11.25 13.4142 11.25 13V8C11.25 7.58579 11.5858 7.25 12 7.25Z"/><path d="M12 17C12.5523 17 13 16.5523 13 16C13 15.4477 12.5523 15 12 15C11.4477 15 11 15.4477 11 16C11 16.5523 11.4477 17 12 17Z"/></g></svg></span><span class="l">Needs you</span></div>
+        <div class="v">3</div>
+        <div class="d"><span class="dir dn"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path d="M8.30273 12.4044L11.6296 15.8351C11.8428 16.0549 12.1573 16.0549 12.3704 15.8351L18.8001 9.20467C19.2013 8.79094 18.9581 8 18.4297 8H12.7071L8.30273 12.4044Z"/><path d="M11.2929 8H5.5703C5.04189 8 4.79869 8.79094 5.1999 9.20467L7.60648 11.6864L11.2929 8Z" opacity=".5"/></g></svg><span>−2</span></span><span class="cmp">vs an hour ago</span><span class="fav good">clearing</span></div>
+      </div>
+      <div class="stat">
+        <div class="top"><span class="ic"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path fill-rule="evenodd" d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" opacity=".5"/><path fill-rule="evenodd" d="M16.25 8.5C16.5607 8.5 16.8536 8.63457 17.0607 8.84164C17.2678 9.04871 17.4023 9.34158 17.4023 9.65231C17.4023 9.96305 17.2678 10.2559 17.0607 10.463L12.0607 15.463C11.8536 15.6701 11.5607 15.8046 11.25 15.8046C10.9393 15.8046 10.6464 15.6701 10.4393 15.463L6.93934 11.963C6.73223 11.7559 6.59766 11.463 6.59766 11.1523C6.59766 10.9666 6.63987 10.7831 6.72091 10.6159C6.80195 10.4486 6.9194 10.3017 7.06439 10.186C7.20938 10.0703 7.37786 9.98886 7.55761 9.9479C7.73735 9.90693 7.92389 9.90755 8.10338 9.94974C8.28287 9.99193 8.45089 10.07449 8.59521 10.19114C8.73953 10.30779 8.85605 10.45551 8.93602 10.62339L11.25 12.9374L15.064 9.12339C15.2711 8.91628 15.564 8.78171 15.8747 8.78171C16.0061 8.78171 16.1346 8.8101 16.2525 8.86265C16.3705 8.9152 16.4748 8.99063 16.5583 9.08328C16.6417 9.17592 16.7023 9.28337 16.7358 9.39936C16.7694 9.51536 16.7751 9.63708 16.7524 9.75531L16.25 8.5Z"/></g></svg></span><span class="l">Success rate</span></div>
+        <div class="v">98.2<small>%</small></div>
+        <div class="d"><span class="dir up"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path fill-rule="evenodd" d="M12 22C16.7189 22 20.5355 18.1834 20.5355 13.4645C20.5355 8.74553 16.7189 4.92893 12 4.92893C7.28105 4.92893 3.46447 8.74553 3.46447 13.4645C3.46447 18.1834 7.28105 22 12 22Z" opacity=".5"/><path d="M12 19C11.5858 19 11.25 18.6642 11.25 18.25V8.81066L7.78033 12.2803C7.48744 12.5732 7.01256 12.5732 6.71967 12.2803C6.42678 11.9874 6.42678 11.5126 6.71967 11.2197L11.4697 6.46967C11.7626 6.17678 12.2374 6.17678 12.5303 6.46967L17.2803 11.2197C17.5732 11.5126 17.5732 11.9874 17.2803 12.2803C16.9874 12.5732 16.5126 12.5732 16.2197 12.2803L12.75 8.81066V18.25C12.75 18.6642 12.4142 19 12 19Z"/></g></svg><span>+0.4pt</span></span><span class="cmp">vs yesterday</span><span class="fav good">good</span></div>
+      </div>
+    </section>
+
+    <!-- ================= USAGE + CONTEXT BULLET METERS (DW-6.3) =========== -->
+    <section class="meters" aria-label="Usage and context meters">
+      <div class="meter">
+        <div class="cap"><span class="nm">Daily budget</span><span class="val"><span class="now">$18.40</span><span class="max"> / $50</span></span>
+          <span class="st warn"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path d="M12 3C9.68925 3 8.23007 5.58716 5.31171 10.7615L4.94805 11.4063C2.52291 15.7061 1.31034 17.856 2.40626 19.428C3.50217 21 6.21356 21 11.6363 21H12.3637C17.7864 21 20.4978 21 21.5937 19.428C22.6897 17.856 21.4771 15.7061 19.0519 11.4063L18.6883 10.7615C15.7699 5.58716 14.3107 3 12 3Z" opacity=".5"/><path d="M12 7.25C12.4142 7.25 12.75 7.58579 12.75 8V13C12.75 13.4142 12.4142 13.75 12 13.75C11.5858 13.75 11.25 13.4142 11.25 13V8C11.25 7.58579 11.5858 7.25 12 7.25Z"/><path d="M12 17C12.5523 17 13 16.5523 13 16C13 15.4477 12.5523 15 12 15C11.4477 15 11 15.4477 11 16C11 16.5523 11.4477 17 12 17Z"/></g></svg>near limit</span></div>
+        <div class="bullet" aria-hidden="true">
+          <span class="range" style="left:68%;right:4%"></span>
+          <span class="target" style="left:80%"></span>
+          <span class="bar" style="left:0;width:37%;background:var(--data-warn)"></span>
+        </div>
+        <div class="leg"><span><span class="sw" style="background:var(--data-warn)"></span><b>37%</b> used</span>
+          <span><span class="sw" style="background:var(--status-attn-bg)"></span><b>68…96%</b> alert band</span>
+          <span><span class="sw" style="background:var(--ink-strong)"></span><b>100%</b> hard cap</span></div>
+      </div>
+      <div class="meter">
+        <div class="cap"><span class="nm">Context window</span><span class="val"><span class="now">104k</span><span class="max"> / 200k</span></span>
+          <span class="st good"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path fill-rule="evenodd" d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" opacity=".5"/><path fill-rule="evenodd" d="M16.25 8.5C16.5607 8.5 16.8536 8.63457 17.0607 8.84164C17.2678 9.04871 17.4023 9.34158 17.4023 9.65231C17.4023 9.96305 17.2678 10.2559 17.0607 10.463L12.0607 15.463C11.8536 15.6701 11.5607 15.8046 11.25 15.8046C10.9393 15.8046 10.6464 15.6701 10.4393 15.463L6.93934 11.963C6.73223 11.7559 6.59766 11.463 6.59766 11.1523C6.59766 10.9666 6.63987 10.7831 6.72091 10.6159C6.80195 10.4486 6.9194 10.3017 7.06439 10.186C7.20938 10.0703 7.37786 9.98886 7.55761 9.9479C7.73735 9.90693 7.92389 9.90755 8.10338 9.94974C8.28287 9.99193 8.45089 10.07449 8.59521 10.19114C8.73953 10.30779 8.85605 10.45551 8.93602 10.62339L11.25 12.9374L15.064 9.12339C15.2711 8.91628 15.564 8.78171 15.8747 8.78171C16.0061 8.78171 16.1346 8.8101 16.2525 8.86265C16.3705 8.9152 16.4748 8.99063 16.5583 9.08328C16.6417 9.17592 16.7023 9.28337 16.7358 9.39936C16.7694 9.51536 16.7751 9.63708 16.7524 9.75531L16.25 8.5Z"/></g></svg>healthy</span></div>
+        <div class="bullet" aria-hidden="true">
+          <span class="range" style="left:78%;right:4%"></span>
+          <span class="target" style="left:88%"></span>
+          <span class="bar" style="left:0;width:52%;background:var(--data-ok)"></span>
+        </div>
+        <div class="leg"><span><span class="sw" style="background:var(--data-ok)"></span><b>52%</b> used</span>
+          <span><span class="sw" style="background:var(--status-done-bg)"></span><b>78…96%</b> refill band</span>
+          <span><span class="sw" style="background:var(--ink-strong)"></span><b>100%</b> hard cap</span></div>
+      </div>
+    </section>
+
+    <!-- ================= BAR CHART (DW-6.1, 6.8, 6.9) =====================
+         Cost by day, stacked by model. Value axis starts at ZERO. Series use the
+         Okabe-Ito categorical palette (colour-blind safe) and each carries a
+         redundant non-hue channel (legend shape marker: squircle / rhombus /
+         disc) so it survives deuteranopia / protanopia. -->
+    <section class="panel" aria-labelledby="c1">
+      <div class="phead"><h2 id="c1">Cost by day</h2><span class="sub">last 7 days</span>
+        <div class="pH"><span class="dnote">stacked by model</span></div></div>
+      <div class="body">
+        <div class="chart-legend">
+          <span class="k"><span class="sw disc" style="background:var(--chart-5)"></span>Claude Code</span>
+          <span class="k"><span class="sw rhombus" style="background:var(--chart-2)"></span>OpenCode</span>
+          <span class="k"><span class="sw tri" style="border-bottom-color:var(--chart-1)"></span>pi</span>
+        </div>
+        <svg class="chart-box" viewBox="0 0 560 224" width="100%" height="224" role="img"
+             aria-describedby="cost-data-table"
+             aria-label="Bar chart showing daily cost by model, last 7 days. Spend peaks mid-week at $28 on Thursday, then falls steeply toward the weekend; Claude Code is the largest share every day.">
+          <line x1="0" y1="205" x2="560" y2="205" stroke="var(--border-divider)" stroke-width="1"/>
+          <text x="2" y="204" fill="var(--ink-muted)" font-size="10">0</text>
+          <text x="2" y="14" fill="var(--ink-muted)" font-size="10">$28</text>
+          <rect x="0.00" y="170.00" width="64.57" height="35.00" fill="var(--chart-5)"/>
+          <rect x="0.00" y="142.00" width="64.57" height="28.00" fill="var(--chart-2)"/>
+          <rect x="0.00" y="121.00" width="64.57" height="21.00" fill="var(--chart-1)"/>
+          <rect x="82.57" y="149.00" width="64.57" height="56.00" fill="var(--chart-5)"/>
+          <rect x="82.57" y="107.00" width="64.57" height="42.00" fill="var(--chart-2)"/>
+          <rect x="82.57" y="79.00" width="64.57" height="28.00" fill="var(--chart-1)"/>
+          <rect x="165.14" y="135.00" width="64.57" height="70.00" fill="var(--chart-5)"/>
+          <rect x="165.14" y="79.00" width="64.57" height="56.00" fill="var(--chart-2)"/>
+          <rect x="165.14" y="37.00" width="64.57" height="42.00" fill="var(--chart-1)"/>
+          <rect x="247.71" y="121.00" width="64.57" height="84.00" fill="var(--chart-5)"/>
+          <rect x="247.71" y="51.00" width="64.57" height="70.00" fill="var(--chart-2)"/>
+          <rect x="247.71" y="9.00" width="64.57" height="42.00" fill="var(--chart-1)"/>
+          <rect x="330.29" y="142.00" width="64.57" height="63.00" fill="var(--chart-5)"/>
+          <rect x="330.29" y="93.00" width="64.57" height="49.00" fill="var(--chart-2)"/>
+          <rect x="330.29" y="58.00" width="64.57" height="35.00" fill="var(--chart-1)"/>
+          <rect x="412.86" y="177.00" width="64.57" height="28.00" fill="var(--chart-5)"/>
+          <rect x="412.86" y="156.00" width="64.57" height="21.00" fill="var(--chart-2)"/>
+          <rect x="412.86" y="142.00" width="64.57" height="14.00" fill="var(--chart-1)"/>
+          <rect x="495.43" y="191.00" width="64.57" height="14.00" fill="var(--chart-5)"/>
+          <rect x="495.43" y="177.00" width="64.57" height="14.00" fill="var(--chart-2)"/>
+          <rect x="495.43" y="163.00" width="64.57" height="14.00" fill="var(--chart-1)"/>
+          <g fill="var(--ink-muted)" font-size="10" text-anchor="middle">
+            <text x="32" y="221">Mon</text><text x="115" y="221">Tue</text><text x="197" y="221">Wed</text>
+            <text x="280" y="221">Thu</text><text x="363" y="221">Fri</text><text x="445" y="221">Sat</text><text x="528" y="221">Sun</text>
+          </g>
+        </svg>
+        <p class="axis-note">Value axis starts at $0. Cost is stack of Claude Code, OpenCode and pi spend.</p>
+      </div>
+    </section>
+
+    <!-- ================= DISTRIBUTION PANEL ============================== -->
+    <section class="panel" aria-labelledby="d1">
+      <div class="phead"><h2 id="d1">Cost by machine</h2><span class="sub">today</span></div>
+      <div class="body">
+        <div class="dist" role="img"
+             aria-label="Horizontal bar chart showing cost by machine, today. nixbox leads at $8.70, then mba-m3 and hetzner-01."
+             aria-describedby="dist-data">
+          <div class="row"><span class="nm">nixbox</span><span class="track"><i style="width:74%"></i></span><span class="v">$8.70</span></div>
+          <div class="row alt"><span class="nm">mba-m3</span><span class="track"><i style="width:61%"></i></span><span class="v">$6.40</span></div>
+          <div class="row"><span class="nm">hetzner-01</span><span class="track"><i style="width:29%"></i></span><span class="v">$3.30</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========= HIDDEN DATA TABLE for the distribution chart (DW-6.8 long description) ========= -->
+    <div class="sr" id="dist-data">
+      <p>Horizontal bar chart showing cost by machine, today. Values in US dollars.</p>
+      <table>
+        <caption>Cost by machine today (US dollars)</caption>
+        <thead><tr><th>Machine</th><th>Share</th><th>Cost</th></tr></thead>
+        <tbody>
+          <tr><td>nixbox</td><td>74%</td><td>$8.70</td></tr>
+          <tr><td>mba-m3</td><td>61%</td><td>$6.40</td></tr>
+          <tr><td>hetzner-01</td><td>29%</td><td>$3.30</td></tr>
+        </tbody>
+      </table>
+      <p>Insight: nixbox carries the largest share of today's machine cost, followed by mba-m3, then hetzner-01.</p>
+    </div>
+
+    <!-- ================= TABLE SYSTEM (DW-6.7, 6.4, 6.5) ================== -->
+    <section class="panel" aria-labelledby="t1">
+      <div class="phead"><h2 id="t1">Sessions</h2><span class="sub">live and recent, ordered by spend</span>
+        <div class="pH"><button class="btn" type="button" style="height:var(--d-btn-h);padding:0 12px;font-size:var(--text-sm)"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path d="M4 12C4 16.4183 7.58172 20 12 20C16.4183 20 20 16.4183 20 12L4 12Z" opacity=".5"/><path fill-rule="evenodd" d="M15.5303 7.53033C15.2374 7.82322 14.7626 7.82322 14.4697 7.53033L12.75 5.81066L12.75 14C12.75 14.4142 12.4142 14.75 12 14.75C11.5858 14.75 11.25 14.4142 11.25 14L11.25 5.81066L9.53033 7.53033C9.23744 7.82322 8.76256 7.82322 8.46967 7.53033C8.17678 7.23744 8.17678 6.76256 8.46967 6.46967L11.4697 3.46967C11.7626 3.17678 12.2374 3.17678 12.5303 3.46967L15.5303 6.46967C15.8232 6.76256 15.8232 7.23744 15.5303 7.53033Z" clip-rule="evenodd"/></g></svg>Export</button></div></div>
+      <div class="toolbar">
+        <span class="search"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill="currentColor" d="M20.313 11.157a9.157 9.157 0 1 1-18.313 0a9.157 9.157 0 0 1 18.313 0" opacity=".5"/><path fill="currentColor" d="m17.1 18.122l3.666 3.666a.723.723 0 0 0 1.023-1.022L18.122 17.1a9 9 0 0 1-1.022 1.022"/></svg><span>Search sessions…</span></span>
+        <div class="ph"><span class="pill live"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path fill-rule="evenodd" d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" opacity=".5"/><path fill-rule="evenodd" d="M16.25 8.5C16.5607 8.5 16.8536 8.63457 17.0607 8.84164C17.2678 9.04871 17.4023 9.34158 17.4023 9.65231C17.4023 9.96305 17.2678 10.2559 17.0607 10.463L12.0607 15.463C11.8536 15.6701 11.5607 15.8046 11.25 15.8046C10.9393 15.8046 10.6464 15.6701 10.4393 15.463L6.93934 11.963C6.73223 11.7559 6.59766 11.463 6.59766 11.1523C6.59766 10.9666 6.63987 10.7831 6.72091 10.6159C6.80195 10.4486 6.9194 10.3017 7.06439 10.186C7.20938 10.0703 7.37786 9.98886 7.55761 9.9479C7.73735 9.90693 7.92389 9.90755 8.10338 9.94974C8.28287 9.99193 8.45089 10.07449 8.59521 10.19114C8.73953 10.30779 8.85605 10.45551 8.93602 10.62339L11.25 12.9374L15.064 9.12339C15.2711 8.91628 15.564 8.78171 15.8747 8.78171C16.0061 8.78171 16.1346 8.8101 16.2525 8.86265C16.3705 8.9152 16.4748 8.99063 16.5583 9.08328C16.6417 9.17592 16.7023 9.28337 16.7358 9.39936C16.7694 9.51536 16.7751 9.63708 16.7524 9.75531L16.25 8.5Z"/></g></svg>Live</span></div>
+      </div>
+      <div class="tbl-wrap">
+        <table class="t" aria-label="Sessions ordered by spend">
+          <thead>
+            <tr><th>Session</th><th>Project</th><th>Status</th><th class="num">Turns</th><th class="num">Spend</th><th class="num">Context</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="nm"><span class="mark"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l7 4v8l-7 4-7-4V8z"/></svg></span><a href="#s">wire delegate rows</a><span class="sub">· 3 delegates</span></span></td>
+              <td class="mono">~/cockpit</td>
+              <td><span class="pill live"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path fill-rule="evenodd" d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" opacity=".5"/><path fill-rule="evenodd" d="M16.25 8.5C16.5607 8.5 16.8536 8.63457 17.0607 8.84164C17.2678 9.04871 17.4023 9.34158 17.4023 9.65231C17.4023 9.96305 17.2678 10.2559 17.0607 10.463L12.0607 15.463C11.8536 15.6701 11.5607 15.8046 11.25 15.8046C10.9393 15.8046 10.6464 15.6701 10.4393 15.463L6.93934 11.963C6.73223 11.7559 6.59766 11.463 6.59766 11.1523C6.59766 10.9666 6.63987 10.7831 6.72091 10.6159C6.80195 10.4486 6.9194 10.3017 7.06439 10.186C7.20938 10.0703 7.37786 9.98886 7.55761 9.9479C7.73735 9.90693 7.92389 9.90755 8.10338 9.94974C8.28287 9.99193 8.45089 10.07449 8.59521 10.19114C8.73953 10.30779 8.85605 10.45551 8.93602 10.62339L11.25 12.9374L15.064 9.12339C15.2711 8.91628 15.564 8.78171 15.8747 8.78171C16.0061 8.78171 16.1346 8.8101 16.2525 8.86265C16.3705 8.9152 16.4748 8.99063 16.5583 9.08328C16.6417 9.17592 16.7023 9.28337 16.7358 9.39936C16.7694 9.51536 16.7751 9.63708 16.7524 9.75531L16.25 8.5Z"/></g></svg>working</span></td>
+              <td class="num">28</td>
+              <td class="num">$4.12</td>
+              <td class="num"><span class="thr warn"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path d="M12 3C9.68925 3 8.23007 5.58716 5.31171 10.7615L4.94805 11.4063C2.52291 15.7061 1.31034 17.856 2.40626 19.428C3.50217 21 6.21356 21 11.6363 21H12.3637C17.7864 21 20.4978 21 21.5937 19.428C22.6897 17.856 21.4771 15.7061 19.0519 11.4063L18.6883 10.7615C15.7699 5.58716 14.3107 3 12 3Z" opacity=".5"/><path d="M12 7.25C12.4142 7.25 12.75 7.58579 12.75 8V13C12.75 13.4142 12.4142 13.75 12 13.75C11.5858 13.75 11.25 13.4142 11.25 13V8C11.25 7.58579 11.5858 7.25 12 7.25Z"/><path d="M12 17C12.5523 17 13 16.5523 13 16C13 15.4477 12.5523 15 12 15C11.4477 15 11 15.4477 11 16C11 16.5523 11.4477 17 12 17Z"/></g></svg>84%<span class="lvl">moving</span></span></td>
+            </tr>
+            <tr>
+              <td><span class="nm"><span class="mark" style="background-color:var(--mark-2)"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M9 8l-4 4 4 4M15 8l4 4-4 4"/></svg></span><a href="#s">table system spike</a><span class="sub">· 1 delegate</span></span></td>
+              <td class="mono">~/cockpit</td>
+              <td><span class="pill attn"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path fill-rule="evenodd" d="M12 22C16.7189 22 20.5355 18.1834 20.5355 13.4645C20.5355 8.74553 16.7189 4.92893 12 4.92893C7.28105 4.92893 3.46447 8.74553 3.46447 13.4645C3.46447 18.1834 7.28105 22 12 22Z" opacity=".5"/><path d="M12 19C11.5858 19 11.25 18.6642 11.25 18.25V8.81066L7.78033 12.2803C7.48744 12.5732 7.01256 12.5732 6.71967 12.2803C6.42678 11.9874 6.42678 11.5126 6.71967 11.2197L11.4697 6.46967C11.7626 6.17678 12.2374 6.17678 12.5303 6.46967L17.2803 11.2197C17.5732 11.5126 17.5732 11.9874 17.2803 12.2803C16.9874 12.5732 16.5126 12.5732 16.2197 12.2803L12.75 8.81066V18.25C12.75 18.6642 12.4142 19 12 19Z"/></g></svg>needs you</span></td>
+              <td class="num">41</td>
+              <td class="num">$3.60</td>
+              <td class="num"><span class="thr bad"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path fill-rule="evenodd" d="M22 12C22 17.5228 17.5228 22 12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2C17.5228 2 22 6.47715 22 12Z" opacity=".5"/><path d="M8.46967 8.46967C8.76256 8.17678 9.23744 8.17678 9.53033 8.46967L12 10.9393L14.4697 8.46967C14.7626 8.17678 15.2374 8.17678 15.5303 8.46967C15.8232 8.76256 15.8232 9.23744 15.5303 9.53033L13.0607 12L15.5303 14.4697C15.8232 14.7626 15.8232 15.2374 15.5303 15.5303C15.2374 15.8232 14.7626 15.8232 14.4697 15.5303L12 13.0607L9.53033 15.5303C9.23744 15.8232 8.76256 15.8232 8.46967 15.5303C8.17678 15.2374 8.17678 14.7626 8.46967 14.4697L10.9393 12L8.46967 9.53033C8.17678 9.23744 8.17678 8.76256 8.46967 8.46967Z"/></g></svg>94%<span class="lvl">critical</span></span></td>
+            </tr>
+            <tr>
+              <td><span class="nm"><span class="mark" style="background-color:var(--mark-5)"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l7 4v8l-7 4-7-4V8z"/></svg></span><a href="#s">flaky ws reconnect</a></span></td>
+              <td class="mono">~/agent</td>
+              <td><span class="pill done"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path fill-rule="evenodd" d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" opacity=".5"/><path fill-rule="evenodd" d="M16.25 8.5C16.5607 8.5 16.8536 8.63457 17.0607 8.84164C17.2678 9.04871 17.4023 9.34158 17.4023 9.65231C17.4023 9.96305 17.2678 10.2559 17.0607 10.463L12.0607 15.463C11.8536 15.6701 11.5607 15.8046 11.25 15.8046C10.9393 15.8046 10.6464 15.6701 10.4393 15.463L6.93934 11.963C6.73223 11.7559 6.59766 11.463 6.59766 11.1523C6.59766 10.9666 6.63987 10.7831 6.72091 10.6159C6.80195 10.4486 6.9194 10.3017 7.06439 10.186C7.20938 10.0703 7.37786 9.98886 7.55761 9.9479C7.73735 9.90693 7.92389 9.90755 8.10338 9.94974C8.28287 9.99193 8.45089 10.07449 8.59521 10.19114C8.73953 10.30779 8.85605 10.45551 8.93602 10.62339L11.25 12.9374L15.064 9.12339C15.2711 8.91628 15.564 8.78171 15.8747 8.78171C16.0061 8.78171 16.1346 8.8101 16.2525 8.86265C16.3705 8.9152 16.4748 8.99063 16.5583 9.08328C16.6417 9.17592 16.7023 9.28337 16.7358 9.39936C16.7694 9.51536 16.7751 9.63708 16.7524 9.75531L16.25 8.5Z"/></g></svg>done</span></td>
+              <td class="num">17</td>
+              <td class="num">$2.10</td>
+              <td class="num"><span class="thr ok"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path fill-rule="evenodd" d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" opacity=".5"/><path fill-rule="evenodd" d="M16.25 8.5C16.5607 8.5 16.8536 8.63457 17.0607 8.84164C17.2678 9.04871 17.4023 9.34158 17.4023 9.65231C17.4023 9.96305 17.2678 10.2559 17.0607 10.463L12.0607 15.463C11.8536 15.6701 11.5607 15.8046 11.25 15.8046C10.9393 15.8046 10.6464 15.6701 10.4393 15.463L6.93934 11.963C6.73223 11.7559 6.59766 11.463 6.59766 11.1523C6.59766 10.9666 6.63987 10.7831 6.72091 10.6159C6.80195 10.4486 6.9194 10.3017 7.06439 10.186C7.20938 10.0703 7.37786 9.98886 7.55761 9.9479C7.73735 9.90693 7.92389 9.90755 8.10338 9.94974C8.28287 9.99193 8.45089 10.07449 8.59521 10.19114C8.73953 10.30779 8.85605 10.45551 8.93602 10.62339L11.25 12.9374L15.064 9.12339C15.2711 8.91628 15.564 8.78171 15.8747 8.78171C16.0061 8.78171 16.1346 8.8101 16.2525 8.86265C16.3705 8.9152 16.4748 8.99063 16.5583 9.08328C16.6417 9.17592 16.7023 9.28337 16.7358 9.39936C16.7694 9.51536 16.7751 9.63708 16.7524 9.75531L16.25 8.5Z"/></g></svg>61%<span class="lvl">ok</span></span></td>
+            </tr>
+            <tr>
+              <td><span class="nm"><span class="mark" style="background-color:var(--mark-6)"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7.5h14M9 7.5v9M15 7.5v6.5a2.5 2.5 0 0 0 4 0"/></svg></span><a href="#s">landing copy pass</a></span></td>
+              <td class="mono">~/ui</td>
+              <td><span class="pill attn"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path fill-rule="evenodd" d="M12 22C16.7189 22 20.5355 18.1834 20.5355 13.4645C20.5355 8.74553 16.7189 4.92893 12 4.92893C7.28105 4.92893 3.46447 8.74553 3.46447 13.4645C3.46447 18.1834 7.28105 22 12 22Z" opacity=".5"/><path d="M12 19C11.5858 19 11.25 18.6642 11.25 18.25V8.81066L7.78033 12.2803C7.48744 12.5732 7.01256 12.5732 6.71967 12.2803C6.42678 11.9874 6.42678 11.5126 6.71967 11.2197L11.4697 6.46967C11.7626 6.17678 12.2374 6.17678 12.5303 6.46967L17.2803 11.2197C17.5732 11.5126 17.5732 11.9874 17.2803 12.2803C16.9874 12.5732 16.5126 12.5732 16.2197 12.2803L12.75 8.81066V18.25C12.75 18.6642 12.4142 19 12 19Z"/></g></svg>needs you</span></td>
+              <td class="num">12</td>
+              <td class="num">$1.85</td>
+              <td class="num"><span class="thr warn"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path d="M12 3C9.68925 3 8.23007 5.58716 5.31171 10.7615L4.94805 11.4063C2.52291 15.7061 1.31034 17.856 2.40626 19.428C3.50217 21 6.21356 21 11.6363 21H12.3637C17.7864 21 20.4978 21 21.5937 19.428C22.6897 17.856 21.4771 15.7061 19.0519 11.4063L18.6883 10.7615C15.7699 5.58716 14.3107 3 12 3Z" opacity=".5"/><path d="M12 7.25C12.4142 7.25 12.75 7.58579 12.75 8V13C12.75 13.4142 12.4142 13.75 12 13.75C11.5858 13.75 11.25 13.4142 11.25 13V8C11.25 7.58579 11.5858 7.25 12 7.25Z"/><path d="M12 17C12.5523 17 13 16.5523 13 16C13 15.4477 12.5523 15 12 15C11.4477 15 11 15.4477 11 16C11 16.5523 11.4477 17 12 17Z"/></g></svg>78%<span class="lvl">moving</span></span></td>
+            </tr>
+            <tr>
+              <td><span class="nm"><span class="mark" style="background-color:var(--mark-4)"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l7 4v8l-7 4-7-4V8z"/></svg></span><a href="#s">retoken pass</a></span></td>
+              <td class="mono">~/cockpit</td>
+              <td><span class="pill fail"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path fill-rule="evenodd" d="M22 12C22 17.5228 17.5228 22 12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2C17.5228 2 22 6.47715 22 12Z" opacity=".5"/><path d="M8.46967 8.46967C8.76256 8.17678 9.23744 8.17678 9.53033 8.46967L12 10.9393L14.4697 8.46967C14.7626 8.17678 15.2374 8.17678 15.5303 8.46967C15.8232 8.76256 15.8232 9.23744 15.5303 9.53033L13.0607 12L15.5303 14.4697C15.8232 14.7626 15.8232 15.2374 15.5303 15.5303C15.2374 15.8232 14.7626 15.8232 14.4697 15.5303L12 13.0607L9.53033 15.5303C9.23744 15.8232 8.76256 15.8232 8.46967 15.5303C8.17678 15.2374 8.17678 14.7626 8.46967 14.4697L10.9393 12L8.46967 9.53033C8.17678 9.23744 8.17678 8.76256 8.46967 8.46967Z"/></g></svg>failed</span></td>
+              <td class="num">9</td>
+              <td class="num">$0.92</td>
+              <td class="num"><span class="thr ok"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path fill-rule="evenodd" d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" opacity=".5"/><path fill-rule="evenodd" d="M16.25 8.5C16.5607 8.5 16.8536 8.63457 17.0607 8.84164C17.2678 9.04871 17.4023 9.34158 17.4023 9.65231C17.4023 9.96305 17.2678 10.2559 17.0607 10.463L12.0607 15.463C11.8536 15.6701 11.5607 15.8046 11.25 15.8046C10.9393 15.8046 10.6464 15.6701 10.4393 15.463L6.93934 11.963C6.73223 11.7559 6.59766 11.463 6.59766 11.1523C6.59766 10.9666 6.63987 10.7831 6.72091 10.6159C6.80195 10.4486 6.9194 10.3017 7.06439 10.186C7.20938 10.0703 7.37786 9.98886 7.55761 9.9479C7.73735 9.90693 7.92389 9.90755 8.10338 9.94974C8.28287 9.99193 8.45089 10.07449 8.59521 10.19114C8.73953 10.30779 8.85605 10.45551 8.93602 10.62339L11.25 12.9374L15.064 9.12339C15.2711 8.91628 15.564 8.78171 15.8747 8.78171C16.0061 8.78171 16.1346 8.8101 16.2525 8.86265C16.3705 8.9152 16.4748 8.99063 16.5583 9.08328C16.6417 9.17592 16.7023 9.28337 16.7358 9.39936C16.7694 9.51536 16.7751 9.63708 16.7524 9.75531L16.25 8.5Z"/></g></svg>40%<span class="lvl">ok</span></span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="foot"><span>5 of 34 sessions</span>
+        <div class="pg">
+          <button class="pgbtn" type="button" aria-label="Previous page"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path d="M11.5956 8.30273L8.16485 11.6296C7.94505 11.8428 7.94505 12.1573 8.16485 12.3704L14.7953 18.8001C15.2091 19.2013 16 18.9581 16 18.4297V12.7071L11.5956 8.30273Z"/><path d="M15.9999 11.2929L15.9999 5.5703C15.9999 5.04189 15.2089 4.79869 14.7952 5.1999L12.3135 7.60648L15.9999 11.2929Z" opacity=".5"/></g></svg></button>
+          <button class="pgbtn on" type="button" aria-label="Page 1">1</button>
+          <button class="pgbtn" type="button" aria-label="Page 2">2</button>
+          <button class="pgbtn" type="button" aria-label="Next page"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path d="M12.4044 8.30273L15.8351 11.6296C16.0549 11.8428 16.0549 12.1573 15.8351 12.3704L9.20467 18.8001C8.79094 19.2013 8 18.9581 8 18.4297V12.7071L12.4044 8.30273Z"/><path d="M8 11.2929L8 5.5703C8 5.04189 8.79094 4.79869 9.20467 5.1999L11.6864 7.60648L8 11.2929Z" opacity=".5"/></g></svg></button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ====== HIDDEN DATA TABLE for the bar chart (DW-6.8 long description) ====== -->
+    <div class="sr" id="cost-data-table">
+      <p>Bar chart showing daily cost by model, last 7 days. Values in US dollars.</p>
+      <table>
+        <caption>Daily cost by model (US dollars)</caption>
+        <thead><tr><th>Day</th><th>Claude Code</th><th>OpenCode</th><th>pi</th><th>Total</th></tr></thead>
+        <tbody>
+          <tr><td>Mon</td><td>5</td><td>4</td><td>3</td><td>12</td></tr>
+          <tr><td>Tue</td><td>8</td><td>6</td><td>4</td><td>18</td></tr>
+          <tr><td>Wed</td><td>10</td><td>8</td><td>6</td><td>24</td></tr>
+          <tr><td>Thu</td><td>12</td><td>10</td><td>6</td><td>28</td></tr>
+          <tr><td>Fri</td><td>9</td><td>7</td><td>5</td><td>21</td></tr>
+          <tr><td>Sat</td><td>4</td><td>3</td><td>2</td><td>9</td></tr>
+          <tr><td>Sun</td><td>2</td><td>2</td><td>2</td><td>6</td></tr>
+        </tbody>
+      </table>
+      <p>Insight: spend rises through the week to a Thursday peak of $28, then falls steeply into the weekend. Claude Code is the largest cost share on every day.</p>
+    </div>
+
+  </div>
+</main>
+
+<!-- density toggle (screenshot affordance, not the product) -->
+<div class="fluxbar" aria-hidden="true">
+  <button type="button" tabindex="-1" data-dense-btn="comfortable" class="on">Comfortable</button>
+  <button type="button" tabindex="-1" data-dense-btn="compact">Compact</button>
+</div>
+
+<script>
+(function () {
+  var btn = document.querySelector('[data-dense-btn="comfortable"]');
+  var cbtn = document.querySelector('[data-dense-btn="compact"]');
+  function set(d) {
+    document.documentElement.classList.toggle('d-compact', d === 'compact');
+    btn.classList.toggle('on', d === 'comfortable');
+    cbtn.classList.toggle('on', d === 'compact');
+  }
+  btn.addEventListener('click', function () { set('comfortable'); });
+  cbtn.addEventListener('click', function () { set('compact'); });
+})();
+/* navigation drawer toggle — real control (DW drawer doctrine): the ≤900px
+   aside is off-canvas, the <button> opens it via .nav-open on <body>; the
+   scrim and Escape close it and return focus to the opener. `aria-expanded`
+   tracks the drawer state. */
+(function () {
+  var burger = document.querySelector('.burger');
+  var scrim = document.querySelector('.nav-scrim');
+  if (!burger) return;
+  function set(open) {
+    document.body.classList.toggle('nav-open', open);
+    burger.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+  burger.addEventListener('click', function () {
+    set(!document.body.classList.contains('nav-open'));
+  });
+  if (scrim) scrim.addEventListener('click', function () { set(false); burger.focus(); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && document.body.classList.contains('nav-open')) {
+      set(false); burger.focus();
+    }
+  });
+})();
+</script>
+
+<!-- =========================================================================
+   DESIGN-DELIVERABLE NOTES (not rendered) — part of the Phase 6 spec.
+
+   ---- RECORDED DEVIATION FROM THE REFERENCE (DW-6.2) ------------------------
+   The FlowAI comps ship stat cards that are BARE NUMBERS — 28, 98.2%, 08, 842K —
+   with no comparison, no direction, and no favorability. The data-viz doctrine
+   (Cairo's "missing baseline" lie) holds that a KPI without a baseline is not
+   interpretable. This phase DELIBERATELY deviates from the reference: every stat
+   card renders a comparison value, a direction of change, and whether that change
+   is favourable. The deviation is recorded here rather than silently resolved.
+
+   ---- CHART PALETTE IS NOT THE BRAND PALETTE (DW-6.9) ----------------------
+   The categorical chart palette is Okabe-Ito's colour-blind set (--chart-1..8),
+   chosen by DATA TYPE because categorical series need 8 distinguishable hues.
+   The brand/status palette is NOT interchangeable with it: status red/amber/green
+   appear only on status indicators (DW-6.6). Every chart series also carries a
+   redundant non-hue channel — legend shape markers (disc / rhombus / triangle)
+   and, in the table, an icon + breakpoint word — so it survives deuteranopia and
+   protanopia even if the hue channel collapses.
+
+   ---- CHART FORM SELECTED BY DATA RELATIONSHIP -----------------------------
+   · Cost by day      -> bar (magnitude across a categorical time axis; value axis
+                         at zero, DW-6.1). Hue = model category (Okabe-Ito).
+   · Cost by machine  -> horizontal distribution bars (one accent + neutrals;
+                         position/x encodes magnitude, DW-6.6).
+   · Budget / context -> bullet meter (bar + target line + range), never a gauge.
+
+   ---- THRESHOLD BREAKPOINTS (DW-6.5) ---------------------------------------
+   Context % is status, not magnitude, and switches only at these NAMED levels:
+     ok       < 70%   (check glyph, "ok")
+     warn  70–90%     (triangle glyph, "moving")
+     bad      > 90%   (cross glyph, "critical")
+   The hue is one of exactly three discrete --data-* steps; it never interpolates
+   with the value, and every value carries its glyph + word so a colour-blind
+   operator reads the status.
+   ========================================================================== -->
+</body></html>

@@ -20,6 +20,7 @@ cd "$(dirname "$0")"
 # {{solar:NAME}} placeholders, the same as the other four.
 cp src/v5-components.html v5-components.html
 cp src/v5-agent.html v5-agent.html
+cp src/v5-data.html v5-data.html
 for f in v2-fleet.html v3-assistant.html v4-transcript.html; do cp "src/$f" "$f"; done
 python3 retoken.py
 python3 statuschips.py
@@ -37,4 +38,9 @@ node render.mjs v5-components.html v5-components-mobile.png --viewport 390x10400
 node render.mjs v5-agent.html v5-agent.png --viewport 1440x4000
 node render.mjs v5-agent.html v5-agent-dark.png --dark --viewport 1440x4000
 node render.mjs v5-agent.html v5-agent-mobile.png --viewport 390x5200
-echo "built 5 mocks from mocks/src/"
+# render the v5 data surfaces (table system / stat cards / charts / meters) at
+# comfortable density in light and dark, and the narrow view for the coarse sweep
+node render.mjs v5-data.html v5-data.png --viewport 1440x1800
+node render.mjs v5-data.html v5-data-dark.png --dark --viewport 1440x1800
+node render.mjs v5-data.html v5-data-mobile.png --viewport 390x3600
+echo "built 6 mocks from mocks/src/"

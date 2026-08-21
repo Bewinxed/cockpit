@@ -455,6 +455,25 @@ hand-typed, which satisfies "no hand-typed hex" literally instead of by exceptio
   --data-warn: oklch(from var(--warning-9) 0.46 0.125 h);
   --data-bad:  oklch(from var(--error-9)   0.46 0.135 h);
 
+  /* ---- CHART PALETTE — Okabe-Ito categorical (colour-blind safe) ---------
+     Phase 6 (DW-6.9): the chart palette is chosen by DATA TYPE, NOT the brand
+     palette — the two are explicitly not the same set. This is Okabe-Ito's
+     8-colour categorical set, the canonical colour-blind-safe default, taken
+     verbatim from the published hex and re-expressed in OKLCH (light scheme).
+     It is deliberately distinct from the four STATUS hues (DW-6.6): the status
+     red/amber/green appear ONLY on status indicators; these are the categorical
+     hues a chart may use. Every series using them carries a redundant non-hue
+     channel (pattern / direct label) so it survives deuteranopia/protanopia.
+     Okabe, I. & Ito, K., "Colour Universal Design", 2008. */
+  --chart-1: oklch(0.753 0.158 76.8);   /* #E69F00 orange   */
+  --chart-2: oklch(0.735 0.117 236.2);  /* #56B4E9 sky blue */
+  --chart-3: oklch(0.620 0.130 165.5);  /* #009E73 green    */
+  --chart-4: oklch(0.902 0.172 105.0);  /* #F0E442 yellow   */
+  --chart-5: oklch(0.532 0.131 244.0);  /* #0072B2 blue     */
+  --chart-6: oklch(0.621 0.170 47.5);   /* #D55E00 vermillion */
+  --chart-7: oklch(0.679 0.118 346.3);  /* #CC79A7 purple   */
+  --chart-8: oklch(0.000 0.000 0.0);    /* #000000 black    */
+
   /* elevation — hue-shifted cool graphite, never rgba(0,0,0,·) */
   /* Elevation was too faint to register: at 0.055 alpha over a 1px blur the
      cards melted into the canvas and the whole board read as one flat grey. The
@@ -579,6 +598,20 @@ hand-typed, which satisfies "no hand-typed hex" literally instead of by exceptio
   --data-ok:   oklch(from var(--success-9) 0.78 0.135 h);
   --data-warn: oklch(from var(--warning-9) 0.80 0.130 h);
   --data-bad:  oklch(from var(--error-9)   0.81 0.130 h);
+
+  /* CHART PALETTE, dark — the same Okabe-Ito categorical set, re-solved so it
+     reads on the dark ground. Only the foreground-weak colours change: the
+     categorical "black" cannot paint on a dark field, so it becomes a light
+     neutral; the mid blue is lifted a step. Hue identity is preserved so the
+     CVD-safe separation holds in both schemes. */
+  --chart-1: oklch(0.780 0.160 76.8);   /* orange   */
+  --chart-2: oklch(0.770 0.120 236.2);  /* sky blue */
+  --chart-3: oklch(0.660 0.135 165.5);  /* green    */
+  --chart-4: oklch(0.920 0.150 105.0);  /* yellow   */
+  --chart-5: oklch(0.620 0.135 244.0);  /* blue     */
+  --chart-6: oklch(0.680 0.175 47.5);   /* vermillion */
+  --chart-7: oklch(0.720 0.125 346.3);  /* purple   */
+  --chart-8: oklch(0.930 0.000 0.0);    /* black -> light graphite on dark */
 
   /* identity marks lift on a dark ground — L*0.70, one step above the deep
      status chips (L*~0.30). Four of the eight Flexoki hues (red/yellow/green/
