@@ -3,7 +3,7 @@
 **Date:** 2026-08-18
 **Status:** in-progress
 **Started:** 2026-08-18 16:41
-**Current Phase:** 8
+**Current Phase:** 9
 **Workspace:** `main` (user-directed; no worktree — per-phase commits are the rollback boundary)
 **Track:** Full
 **Entry stage:** Discover (no DESIGN.md, no JOURNEY.md, no prior `.design-foundations/`)
@@ -1247,6 +1247,30 @@ subagent/delegate mean five distinct things everywhere, plus a machine gate (wor
 banned strings, blame framing, placeholder-only labels, non-Verb+Object buttons, and delegate/
 subagent conflation out. Accepted follow-ups: echo the typed query verbatim in the project-picker
 no-results; drop the `!` from the assistant greeting if the summon register is later tightened.
+
+### Phase 8: Workspace surface — tabs, split, gestures, mobile shell (Gate: Full)
+- [x] BUILD: `mocks/src/v5-workspace.html` — a tab strip whose reorder remaps CSS `order` (DOM order
+      untouched, so a pane's scroll offset survives), a split view that reads as ONE workspace (shared
+      chrome once; active pane marked by a graphite rail + a real "Active" word + aria-selected, never
+      colour alone), and the standalone mobile shell. New gate `mocks/v5workspacecheck.mjs` (62 checks)
+      enforces DW-8.1..8.9 + the 9-row mobile-defect checklist. Doctrine loaded via §5: `usability`,
+      `surface`, `interaction`, `motion`, `responsive` (references/visual/).
+- [x] REVIEW: **PASS** (dual-blind on Ox Alpha by the real protocol; Assessment B = `scripts/detect.mjs`
+      blind, ai-tells distinctiveness clean, DW-8.1..8.10 verbatim). Measured: anchors byte-identical
+      across split/tabbed/reordered on desktop AND coarse 390px; active cue is a genuine non-colour
+      element (graphite `--neutral-12` rail, not a hue — Never #2); `.tr-pane` touch-action=manipulation
+      (DW-8.5); the code descendant genuinely scrolls sideways (1270>562, DW-8.8); reachable set = 4 open
+      tabs of 6 sessions (DW-8.9). **DW-8.6 (real iOS) and DW-8.10 (drag smoothness) honestly scoped
+      OUT-of-automated-set** (routed to the companion .code-foundations plan), not faked. No prior gate
+      weakened. Two Minor accepted notes: no in-mock marker naming 8.6/8.10; comment-block em-dashes.
+- [x] Committed
+Commit: `45446c1`
+Summary: The workspace behaves as a *surface* — tabs reorder by CSS order (reader's place kept), a
+split is one workspace not two pages, and every gesture has a non-gesture equivalent with ownership
+decided by "what actually moved." The mobile-defect checklist is now a machine gate (9 discrete rows).
+The phase honours its own boundary: the two properties no static mock can prove — real-iOS behaviour
+and runtime drag smoothness — are scoped out to the companion code plan rather than asserted, and the
+gate string says "DW-8.1..8.9" to make that scoping legible.
 
 ### Audit of user-attributed claims (2026-08-19)
 
