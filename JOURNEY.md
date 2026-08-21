@@ -693,3 +693,45 @@ Two scales, one token language. The plan reserves compact for the transcript and
 ## Marketing spine
 
 N/A. Cockpit has no acquisition funnel — it is installed and used by its own operator, not marketed to a cold visitor. The persuasion spine, awareness-stage matching, and StoryBrand framing in the doctrine's `journey-stack.md` §Marketing persuasion spine do not apply to a self-hosted, single-operator control plane, and are omitted rather than filled with invented content.
+
+---
+
+## Assistant
+
+*Phase 9a (Discover) decided whether the fleet assistant panel has a job this product needs, applying a kill test to every proposed and shipped capability. Phase 9b designs the panel **only** around the surviving job below; DW-9b keeps the measured visual shell (380×899, inset 24/40, scrim `rgba(0,0,0,.06)`, suggestion pitch 44, radius 16, header 47 — `mocks/v3-assistant.html`) as law regardless of what the rows say.*
+
+**Job story:** When an agent session is stalled or a run's spend surprises me and I suspect the cause spans more than one session, machine, or project — and no single agent in Cockpit can see across the fleet, because every one is bound to one repo, one machine, one task — I want to ask one surface a question no individual session's transcript can answer, so I can find the fleet-level cause and act on it without opening every session to assemble it by hand.
+
+**Scope test (the assistant's only defensible territory):** every agent in Cockpit is bound to ONE session and cannot see outside it. The assistant's legitimate job is the class of question no single session can answer — fleet-spanning reasoning and lookups. Any question a session's own transcript answers is, by definition, answerable more directly and more truthfully by opening that session, and the assistant must not answer it.
+
+**Kill test (DW-9a.2) — every proposed capability classified:**
+
+| Capability | Source | Kill test | Verdict |
+|---|---|---|---|
+| "What needs me right now?" | mock suggestion (`v3-assistant.html`, `v5-agent.html`) | **Answerable in transcript/surface** — the fleet board's needs-you count and attention queue already answer exactly this, at a glance, as Flow 1 and the `session` page spec require; asking another AI to restate the board adds a surface and subtracts trust. | **CUT** |
+| "Why did spend jump today?" | mock suggestion | **Not answerable by opening one session.** The `usage` and `session/[id]` surfaces show the amount per session and the total against a threshold, but the *cause* — which correlated events across which machines and sessions produced the spike — is a fleet-spanning synthesis no single transcript holds. | **KEEP** (as a cross-session question) |
+| "Start a session" | mock suggestion | **Neither cross-session nor a question** — it is an action that already has one correct home: the project surface's spawn control (Flow 4, `project/[id]` spec). A second entry point for an action with an existing surface duplicates it. | **CUT** |
+| "Which sessions are stuck, and why, as a pattern" | plan examples (§Phase 9a constraints) | The bare "which are stuck" is the board's job; the "why, and are several stuck for the same reason" is a **pattern across transcripts** no session and no board row holds. | **KEEP** (the "why" half; the "which" half belongs to the board) |
+| "What did the delegate on another machine conclude?" | plan examples | A delegate's conclusion lives in **another** session's transcript; the current session cannot see it. Pure cross-session. | **KEEP** |
+| "Which sessions touched a given file?" | plan examples | A cross-fleet index over many sessions. No session can answer it. | **KEEP** |
+| Restate any turn, request, or decision already shown in an open transcript | derived from the kill test's own rule | The transcript already shows it. | **CUT** |
+
+**Cut list (DW-9a.2, explicit):** *"What needs me right now?"* (restates the board), *"Start a session"* (duplicates the project spawn control), and the entire class of any question whose answer is a transcript the operator can open. These are retired from the assistant's mandate, not merely deprioritised: a panel that restates the board or a transcript is worse than no panel.
+
+**Kill test rule, recorded as policy:** a question is CUT if it can be answered by reading an **open transcript, or an existing fleet surface the operator is already looking at** (the board, `usage`, the current `session/[id]`). The delegate-conclusion and file-touch cases survive precisely because their answer lives in a session the operator *cannot know to open* without the cross-session lookup — the assistant's job is to find that session and point at it, never to paraphrase a transcript already in view. Cross-session is the assistant's only territory. This is the same rule V-27 in the plan's verification table enforces.
+
+**Outcome (DW-9a.3): KEEP — the panel survives, with a hard boundary.** It is not a general assistant and it is not a chat about the fleet; it is a **cross-session question surface**. Its scope boundary for Phase 9b:
+
+- **In:** questions whose answer spans ≥2 sessions, machines, or projects — fleet-level causation ("why did spend jump", "are several stuck for the same reason"), cross-machine delegate conclusions, and cross-session indexes ("which sessions touched this file"). Synthesising across the fleet is the one thing no session and no existing surface does.
+- **Out (boundary):** anything a session's own transcript, the fleet board, or the `usage` surface already answers. The assistant never restates a turn, an approval, a status, or a spend figure that an existing surface renders. When the answer to a question *is* a session (e.g. "which session is stuck" → a specific one), the correct response is to point at that session, not to paraphrase it.
+- **It may propose actions** (as Phase 9b's action contract covers — spawn, clear a block, write a rule) **only** where the action is a legitimate outcome of a cross-session answer and inherits Phase 5's approval contract in full; it never competes as a second home for an action an existing surface already owns.
+
+The mock suggestions that KEEP survive because they are cross-session *questions* ("why did spend jump today", "which sessions are stuck and why") or pure cross-session lookups; the mock suggestions that CUT ("what needs me right now", "start a session") fail the scope test and are retired. Phase 9b runs, and designs within the boundary above.
+
+---
+
+## Decision log
+
+| Date | Decision | Rationale |
+|---|---|---|
+| 2026-08-21 | **Phase 9a: the fleet assistant panel is KEPT**, but only as a cross-session question surface. | The kill test (DW-9a.2) cut *"What needs me right now?"* and *"Start a session"* — the first restates the fleet board, the second duplicates the project spawn control — and cut the whole class of answerable-in-transcript questions. The surviving job — fleet-spanning questions no single session can answer ("why did spend jump", "what did that delegate conclude", "which sessions touched this file") — is the one thing no existing surface does, so the panel earns its place. Phase 9b runs within the recorded boundary; the mock's suggestion set is trimmed, not discarded. |
