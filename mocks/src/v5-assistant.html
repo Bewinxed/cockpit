@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Outpost — Fleet assistant (v5, Phase 9b)</title>
+<link rel="preload" href="./fonts/geist-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="./fonts/geist.css">
+<link rel="stylesheet" href="./tokens.css">
+<style>
+/* =============================================================================
+   OUTPOST — PHASE 9b  FLEET ASSISTANT, on the PRESERVED measured shell.
+   The shell is LAW (DW-9b.1): panel 380x899, inset 24 right / 40 top,
+   scrim rgba(0,0,0,.06)=--scrim-soft, suggestion pitch 44 (40h + 4 gap),
+   radius 16, header 47. A change of job changed what the rows SAY (Phase 9a's
+   kill test), never the surface. Every colour resolves through a token.
+
+   DESIGN-DELIVERABLE — ACTION CONTRACT (DW-9b.2). Every action the assistant
+   can take, mapped to Phase 5's reversibility contract. ZERO map to silent;
+   every consequential action shows the full approval card (symmetric, no
+   preselect, machine/path/network/future disclosure), inherited whole.
+     · Point at a session (the answer IS a session)  -> undo (navigation only;
+       no state change; the assistant points, never paraphrases the transcript)
+     · Spawn a session on a project/machine           -> checkpoint (the running
+       session is stoppable and keeps its transcript; a resume entry exists) [card]
+     · Clear a blocked permission (one-shot approve)  -> checkpoint (the one
+       command is consumed; the agent re-asks for any later command) [card]
+     · Write a rule (standing permission from a fleet pattern) -> checkpoint
+       (a rule is created; reviewable and deletable under Rules) [card]
+   NONE maps to silent. It never becomes a second home for an action an existing
+   surface already owns; each action here is a legitimate outcome of a
+   cross-session answer.
+
+   DESIGN-DELIVERABLE — ai-native CANON GAP (DW-9b.4). ai-native has no settled
+   canon; every recommendation here is [principle-derived] (Dibia; Wilson 2022;
+   Smashing 2024), never "the rule is". The four areas the doctrine does not
+   cover are the designer's own inference, marked as such:
+     · STREAMING  [designer inference] -> usability feedback tiers
+     · LATENCY / WAITING  [designer inference] -> determinate progress, no bare spinner >5s
+     · REFUSAL  [designer inference] -> plain "outside my fleet-wide scope; open the session"
+     · REASONING DISPLAY  [designer inference] -> collapsed by default, on demand
+
+   DESIGN-DELIVERABLE — DISTINGUISHABILITY (DW-9b.3). Two AI surfaces share this
+   screen: the session TRANSCRIPT ("Claude Code", inline, in the page flow) and
+   the ASSISTANT ("Outpost Assistant", a floating panel over a scrim). The
+   non-positional cue is the assistant's own NAME + orb mark + a persistent
+   "Assistant" role tag in its header — legible wherever the reader lands, never
+   position-alone.
+   ========================================================================== */
+:root{
+  --a-input-fs:16px;               /* >=16px so iOS never zooms */
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--surface-app);color:var(--ink-body);
+  font-family:var(--font-body);font-size:var(--text-md);line-height:var(--leading-body);
+  -webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent}
+svg{display:block}
+
+/* ---- app shell (context behind the panel) ------------------------------- */
+.app{display:grid;grid-template-columns:228px 1fr;height:100dvh;overflow:hidden}
+.side{background:var(--surface-sidebar,var(--surface-raised));border-right:1px solid var(--border-hairline);
+  display:flex;flex-direction:column;gap:2px;padding:14px 12px}
+.side .brand{display:flex;align-items:center;gap:10px;padding:4px 8px 12px;font-weight:var(--weight-strong);
+  font-size:var(--text-lg);color:var(--ink-strong)}
+.side .brand i{width:26px;height:26px;border-radius:var(--radius-mark);background:var(--brand-solid);
+  background-image:var(--gradient-action);box-shadow:var(--shadow-action);color:var(--on-brand);display:grid;place-items:center}
+.side .brand i svg{width:15px;height:15px}
+.side .lbl{font-size:var(--text-xs,11px);text-transform:uppercase;letter-spacing:.06em;color:var(--ink-faint,var(--ink-muted));padding:12px 8px 4px}
+.side a{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:var(--radius-control);
+  color:var(--ink-body);text-decoration:none;font-size:var(--text-md);font-weight:var(--weight-medium)}
+.side a svg{width:18px;height:18px;color:var(--ink-muted)}
+.side a.on{background:var(--surface-hover);color:var(--ink-strong)}
+@media (hover:hover) and (pointer:fine){.side a:hover{background:var(--surface-hover)}}
+
+.main{display:flex;flex-direction:column;min-width:0;overflow:hidden;position:relative}
+.shead{height:56px;flex:0 0 auto;display:flex;align-items:center;gap:10px;padding:0 22px;
+  border-bottom:1px solid var(--border-hairline)}
+.shead .mk{width:20px;height:20px;border-radius:var(--radius-mark);background:var(--status-fail-bg,var(--error-3));
+  color:var(--status-fail-ink,var(--error-11));display:grid;place-items:center;flex:0 0 auto}
+.shead .mk svg{width:12px;height:12px}
+.shead h1{font-size:var(--text-md);font-weight:var(--weight-strong);color:var(--ink-strong);white-space:nowrap}
+.shead .path{font-family:var(--font-mono);font-size:var(--text-sm);color:var(--ink-muted)}
+.shead .pill{margin-left:6px;display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 9px;
+  border-radius:var(--radius-pill);font-size:var(--text-sm);font-weight:var(--weight-strong);
+  background:var(--status-live-bg);color:var(--status-live-ink)}
+.shead .pill .d{width:6px;height:6px;border-radius:var(--radius-pill);background:currentColor}
+
+/* ---- a minimal session transcript (the OTHER AI surface, for DW-9b.3) ---- */
+.tr{flex:1 1 auto;overflow:auto;padding:20px 22px 96px;display:flex;flex-direction:column;gap:16px;max-width:820px}
+.turn{display:flex;flex-direction:column;gap:6px}
+.who{display:inline-flex;align-items:center;gap:7px;font-size:var(--text-sm);font-weight:var(--weight-strong);color:var(--ink-strong)}
+.who .rm{width:18px;height:18px;border-radius:var(--radius-mark);display:grid;place-items:center;flex:0 0 auto}
+.who.user .rm{background:var(--surface-sunken);color:var(--ink-muted)}
+.who.agent .rm{background:var(--brand-solid);color:var(--on-brand)}
+.who .rm svg{width:11px;height:11px}
+.turn p{font-size:var(--text-md);line-height:var(--leading-body);color:var(--ink-body)}
+.turn code{font-family:var(--font-mono);font-size:var(--text-base);background:var(--surface-sunken);
+  padding:1px 5px;border-radius:var(--radius-well);color:var(--ink-strong)}
+
+/* ---- the session composer (fixed anchor; distinct from the assistant's) -- */
+.composer{position:absolute;left:50%;transform:translateX(-50%);bottom:16px;width:min(720px,calc(100% - 44px))}
+.cin{border:1px solid var(--border-control);background:var(--surface-raised);border-radius:var(--radius-panel);
+  box-shadow:var(--shadow-lifted);display:flex;align-items:center;gap:10px;padding:5px 5px 5px 15px}
+.cin .ph{flex:1 1 auto;min-width:0;font-size:var(--a-input-fs);color:var(--ink-muted)}
+.cin .stop{width:44px;height:44px;flex:0 0 auto;border:0;border-radius:var(--radius-pill);
+  background:var(--brand-solid);background-image:var(--gradient-action);box-shadow:var(--shadow-action);
+  color:var(--on-brand);display:grid;place-items:center;cursor:pointer}
+.cin .stop svg{width:15px;height:15px}
+
+/* =====================================================================
+   THE ASSISTANT — PRESERVED SHELL (DW-9b.1). Numbers are the measured law.
+   ===================================================================== */
+.asst-scrim{position:fixed;inset:0;background:var(--scrim-soft);-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px);z-index:50}
+.asst{position:fixed;top:40px;right:24px;width:380px;height:899px;z-index:60;
+  background:var(--surface-overlay);border-radius:16px;box-shadow:var(--shadow-overlay);
+  display:flex;flex-direction:column;overflow:hidden}
+.asst header{height:47px;flex:0 0 auto;display:flex;align-items:center;gap:9px;padding:0 12px;
+  border-bottom:1px solid var(--border-hairline)}
+.a-logo{width:25px;height:25px;flex:0 0 auto;border-radius:var(--radius-well);background:var(--brand-solid);
+  background-image:var(--gradient-action);box-shadow:var(--shadow-action);color:var(--on-brand);display:grid;place-items:center}
+.a-logo svg{width:14px;height:14px}
+.a-t{font-size:var(--text-md);color:var(--ink-strong)}
+.a-t b{font-weight:var(--weight-strong)}
+.a-role{margin-left:8px;display:inline-flex;align-items:center;height:19px;padding:0 8px;border-radius:var(--radius-pill);
+  font-size:var(--text-xs,11px);font-weight:var(--weight-strong);letter-spacing:.03em;text-transform:uppercase;
+  background:var(--surface-sunken);color:var(--ink-muted)}
+.a-x{margin-left:auto;width:28px;height:28px;flex:0 0 auto;border:0;background:var(--surface-sunken);
+  border-radius:var(--radius-well);color:var(--ink-muted);display:grid;place-items:center;cursor:pointer}
+.a-x svg{width:14px;height:14px}
+@media (hover:hover) and (pointer:fine){.a-x:hover{background:var(--surface-hover);color:var(--ink-body)}}
+
+.a-empty{flex:1 1 auto;position:relative;display:grid;place-items:center;min-height:0;overflow:hidden}
+.a-grid{position:absolute;inset:0;background-image:
+    linear-gradient(var(--border-hairline) 1px,transparent 1px),
+    linear-gradient(90deg,var(--border-hairline) 1px,transparent 1px);
+  background-size:22px 22px;opacity:.5;-webkit-mask-image:radial-gradient(closest-side,#000,transparent);mask-image:radial-gradient(closest-side,#000,transparent)}
+.a-orb{width:66px;height:66px;border-radius:var(--radius-pill);background:var(--surface-field);
+  border:1px solid var(--border-hairline);box-shadow:var(--shadow-lifted);display:grid;place-items:center;position:relative}
+.a-orb svg{width:27px;height:27px;color:var(--ink-body)}
+
+.a-body{padding:0 16px 4px;flex:0 0 auto}
+.a-body h3{font-size:var(--text-lg);font-weight:var(--weight-strong);letter-spacing:var(--track-display);color:var(--ink-strong)}
+.a-body p{font-size:var(--text-base);line-height:var(--leading-body);color:var(--ink-muted);margin:5px 0 14px}
+.a-body p b{color:var(--ink-body);font-weight:var(--weight-medium)}
+.a-sug{display:flex;flex-direction:column;gap:4px}
+.a-sug button{height:40px;flex:0 0 auto;border:1px solid var(--border-hairline);background:var(--surface-raised);
+  border-radius:var(--radius-card);display:flex;align-items:center;gap:10px;padding:0 12px;text-align:left;
+  font-family:var(--font-body);font-size:var(--text-base);color:var(--ink-body);cursor:pointer;width:100%}
+.a-sug .s-i{width:22px;height:22px;flex:0 0 auto;border-radius:var(--radius-mark);background:var(--surface-sunken);
+  color:var(--ink-muted);display:grid;place-items:center}
+.a-sug .s-i svg{width:14px;height:14px}
+@media (hover:hover) and (pointer:fine){.a-sug button:hover{background:var(--surface-hover)}}
+.a-sug button:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+
+/* "what I can do" — the action contract, made visible (DW-9b.2) */
+.a-can{margin:14px 16px 0;padding-top:12px;border-top:1px solid var(--border-hairline)}
+.a-can .h{font-size:var(--text-sm);font-weight:var(--weight-strong);color:var(--ink-body);margin-bottom:6px}
+.a-can ul{list-style:none;display:flex;flex-direction:column;gap:4px}
+.a-can li{display:flex;align-items:baseline;gap:8px;font-size:var(--text-sm);color:var(--ink-muted);line-height:var(--leading-body)}
+.a-can li b{color:var(--ink-body);font-weight:var(--weight-medium);flex:0 0 auto}
+.a-can .rv{margin-left:auto;flex:0 0 auto;font-size:var(--text-xs,11px);font-weight:var(--weight-strong);
+  color:var(--ink-muted);background:var(--surface-sunken);border-radius:var(--radius-pill);padding:2px 7px}
+
+.a-composer{margin:14px 16px 16px;flex:0 0 auto;border:1px solid var(--border-hairline);border-radius:var(--radius-panel);
+  padding:12px;background:var(--surface-raised)}
+.a-in{font-size:var(--a-input-fs);color:var(--ink-muted);min-height:44px;display:flex;align-items:center}
+.a-actions{display:flex;align-items:center;gap:8px;margin-top:2px}
+.a-plus{width:32px;height:32px;border:1px solid var(--border-control);background:var(--surface-raised);
+  border-radius:var(--radius-control);color:var(--ink-muted);display:grid;place-items:center;cursor:pointer}
+.a-plus svg{width:15px;height:15px}
+.a-send{margin-left:auto;width:44px;height:44px;border:0;border-radius:var(--radius-pill);
+  background:var(--brand-solid);background-image:var(--gradient-action);box-shadow:var(--shadow-action);
+  color:var(--on-brand);display:grid;place-items:center;cursor:pointer}
+.a-send svg{width:15px;height:15px}
+.a-plus:focus-visible,.a-send:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+
+@media (prefers-reduced-motion:reduce){*{transition-duration:1ms!important;animation-duration:1ms!important}}
+/* the panel goes full-bleed under a coarse pointer / narrow width */
+@media (max-width:900px){
+  .asst{top:0;right:0;left:0;width:auto;height:100svh;border-radius:0}
+}
+</style></head>
+<body>
+
+<div class="app" aria-hidden="true">
+  <aside class="side">
+    <div class="brand"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M4 4h8v16H4z" fill="currentColor"/></svg></i>Outpost</div>
+    <div class="lbl">Fleet</div>
+    <a><svg viewBox="0 0 24 24" fill="currentColor">{{solar:widget-5}}</svg>Fleet</a>
+    <a><svg viewBox="0 0 24 24" fill="currentColor">{{solar:tuning-2}}</svg>Tools</a>
+    <a><svg viewBox="0 0 24 24" fill="currentColor">{{solar:checklist-minimalistic}}</svg>Rules</a>
+    <a><svg viewBox="0 0 24 24" fill="currentColor">{{solar:chart-2}}</svg>Usage</a>
+  </aside>
+
+  <main class="main">
+    <header class="shead">
+      <span class="mk"><svg viewBox="0 0 24 24" fill="currentColor">{{solar:programming}}</svg></span>
+      <h1>wire delegate row outcomes</h1>
+      <span class="path">nixbox : ~/cockpit</span>
+      <span class="pill"><span class="d"></span>running</span>
+    </header>
+    <div class="tr">
+      <section class="turn">
+        <span class="who user"><span class="rm"><svg viewBox="0 0 24 24" fill="currentColor">{{solar:user}}</svg></span>You</span>
+        <p>The delegate rows and the fleet board disagree on how they order equal-age items. Make them consistent.</p>
+      </section>
+      <section class="turn">
+        <span class="who agent"><span class="rm"><svg viewBox="0 0 24 24" fill="currentColor">{{solar:programming}}</svg></span>Claude Code</span>
+        <p>Three call sites use the age comparator: <code>FleetBoard.svelte</code>, <code>SessionPane.svelte</code>, <code>fleet-memory.ts</code>.</p>
+      </section>
+    </div>
+    <div class="composer">
+      <div class="cin"><span class="ph">Message the agent…</span><button class="stop" type="button" aria-label="Stop the agent"><svg viewBox="0 0 24 24" fill="currentColor">{{solar:pause}}</svg></button></div>
+    </div>
+  </main>
+</div>
+
+<div class="asst-scrim"></div>
+<section class="asst" role="complementary" aria-label="Outpost Assistant" aria-live="polite">
+  <header>
+    <span class="a-logo"><svg viewBox="0 0 24 24" fill="currentColor">{{solar:magic-stick-3}}</svg></span>
+    <span class="a-t"><b>Outpost</b> Assistant</span>
+    <span class="a-role">Assistant</span>
+    <button class="a-x" type="button" aria-label="Close assistant"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  </header>
+
+  <div class="a-empty">
+    <div class="a-grid"></div>
+    <div class="a-orb"><svg viewBox="0 0 24 24" fill="currentColor">{{solar:magic-stick-3}}</svg></div>
+  </div>
+
+  <div class="a-body">
+    <h3>Ask across the fleet</h3>
+    <p>I answer only what <b>no single session can see</b> — spend spikes across machines, why several runs stalled for one reason, what a delegate concluded elsewhere. For anything inside one session, I point you to it rather than retell it.</p>
+    <div class="a-sug">
+      <button type="button"><span class="s-i"><svg viewBox="0 0 24 24" fill="currentColor">{{solar:chart-2}}</svg></span>Why did spend jump today?</button>
+      <button type="button"><span class="s-i"><svg viewBox="0 0 24 24" fill="currentColor">{{solar:danger-triangle}}</svg></span>Which sessions are stuck, and why?</button>
+      <button type="button"><span class="s-i"><svg viewBox="0 0 24 24" fill="currentColor">{{solar:branching-paths-down}}</svg></span>What did the delegate on mba-m3 conclude?</button>
+      <button type="button"><span class="s-i"><svg viewBox="0 0 24 24" fill="currentColor">{{solar:document-text}}</svg></span>Which sessions touched fleet-memory.ts?</button>
+    </div>
+
+    <div class="a-can">
+      <div class="h">What I can do — every action asks first, none is silent</div>
+      <ul>
+        <li><b>Open a session</b> the answer points to<span class="rv">undo</span></li>
+        <li><b>Spawn a session</b> from a cross-session finding<span class="rv">checkpoint</span></li>
+        <li><b>Clear a blocked permission</b> once<span class="rv">checkpoint</span></li>
+        <li><b>Write a rule</b> from a fleet pattern<span class="rv">checkpoint</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="a-composer">
+    <div class="a-in">Ask across your fleet…</div>
+    <div class="a-actions">
+      <button class="a-plus" type="button" aria-label="Attach"><svg viewBox="0 0 24 24" fill="currentColor">{{solar:add-circle}}</svg></button>
+      <button class="a-send" type="button" aria-label="Send"><svg viewBox="0 0 24 24" fill="currentColor">{{solar:alt-arrow-up}}</svg></button>
+    </div>
+  </div>
+</section>
+</body></html>

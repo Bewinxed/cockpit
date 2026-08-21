@@ -22,6 +22,7 @@ cp src/v5-components.html v5-components.html
 cp src/v5-agent.html v5-agent.html
 cp src/v5-data.html v5-data.html
 cp src/v5-workspace.html v5-workspace.html
+cp src/v5-assistant.html v5-assistant.html
 for f in v2-fleet.html v3-assistant.html v4-transcript.html; do cp "src/$f" "$f"; done
 python3 retoken.py
 python3 statuschips.py
@@ -51,4 +52,7 @@ node render.mjs v5-workspace.html v5-workspace.png --viewport 1440x1200
 node render.mjs v5-workspace.html v5-workspace-dark.png --dark --viewport 1440x1200
 node render.mjs v5-workspace.html v5-workspace-split.png --viewport 1440x820
 node render.mjs v5-workspace.html v5-workspace-mobile.png --viewport 390x1200
+node render.mjs v5-assistant.html v5-assistant.png --viewport 1440x960
+node render.mjs v5-assistant.html v5-assistant-dark.png --dark --viewport 1440x960
+node render.mjs v5-assistant.html v5-assistant-mobile.png --viewport 390x960
 echo "built 7 mocks from mocks/src/"
