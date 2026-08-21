@@ -1,9 +1,10 @@
 # Design Plan — Cockpit visual overhaul from FlowAI comps
 
 **Date:** 2026-08-18
-**Status:** in-progress
+**Status:** complete
 **Started:** 2026-08-18 16:41
-**Current Phase:** 9
+**Completed:** 2026-08-21
+**Current Phase:** 9 (all complete)
 **Workspace:** `main` (user-directed; no worktree — per-phase commits are the rollback boundary)
 **Track:** Full
 **Entry stage:** Discover (no DESIGN.md, no JOURNEY.md, no prior `.design-foundations/`)
@@ -1264,7 +1265,7 @@ no-results; drop the `!` from the assistant greeting if the summon register is l
       OUT-of-automated-set** (routed to the companion .code-foundations plan), not faked. No prior gate
       weakened. Two Minor accepted notes: no in-mock marker naming 8.6/8.10; comment-block em-dashes.
 - [x] Committed
-Commit: `45446c1`
+Commit: `45446c1` (+ visual-review fixes `687ddf9`, `cc9d714`)
 Summary: The workspace behaves as a *surface* — tabs reorder by CSS order (reader's place kept), a
 split is one workspace not two pages, and every gesture has a non-gesture equivalent with ownership
 decided by "what actually moved." The mobile-defect checklist is now a machine gate (9 discrete rows).
@@ -1293,6 +1294,47 @@ existing fleet surface; the assistant's only territory is the question that span
 the phase that proves the process can say "cut it" — the delegate could have kept everything to avoid
 work, and the independent review's job was to catch that; it didn't happen because the kill test was
 applied honestly.
+
+### Phase 8 — visual-review closeout (2026-08-21)
+The mechanical gate was green but blind to aesthetics. A vision-capable reviewer (and the orchestrator's
+own eyeball) found four real render defects — a state-toggle overlapping the composer, a too-subtle
+active-pane cue, a tab pager sorting to the wrong side, a stray desktop header sliver — all fixed
+(`687ddf9`), then a fix-induced mobile-header overlap fixed too (`cc9d714`). Every fix re-measured AND
+pixel-confirmed by the vision-capable orchestrator at desktop + mobile. The lesson logged: `verify.sh`
+green certifies structure and measurement, never that a surface *reads* right — the eyeball is a
+separate, required gate, and it is the orchestrator's job when the review model is image-blind.
+
+### Phase 9b: Fleet assistant — design, on the preserved shell (Gate: Full)
+- [x] BUILD: `mocks/src/v5-assistant.html` — the fleet assistant on the PRESERVED measured shell
+      (380×899, inset 24/40, scrim rgba(0,0,0,.06)=`--scrim-soft`, suggestion pitch 44, radius 16,
+      header 47; A/B'd against `mocks/ref-assistant.png` — shell geometry matches, palette is our
+      graphite not FlowAI's blue). The job changed, not the surface: the two loud suggestions are cut,
+      the four survivors are cross-session questions. A visible action contract (Open→undo,
+      Spawn/Clear-block/Write-rule→checkpoint, zero silent, Phase-5 card inherited), a non-positional
+      "Assistant" cue distinguishing it from the transcript's "Claude Code", and the ai-native
+      canon-gap labels. New gate `mocks/v5assistantcheck.mjs` (28 checks). Built directly by the
+      orchestrator after the Ox Alpha delegate stalled with no output (and Ox balance later ran out).
+- [x] REVIEW: **PASS** — by the in-process Claude `design-review-agent` (the command's default reviewer;
+      switched to it after Ox Alpha balance was exhausted). Dual-blind clean (Assessment B =
+      `scripts/detect.mjs`, 5 register-justified nested-cards, distinctiveness "Quiet Ledger" PASS);
+      all four DW-9b items verified on pixels + source; both CUT suggestions confirmed ABSENT; gates
+      green (verify.sh ALL PASS, v5assistantcheck 28/0, Phase-5 82/0). No blockers.
+- [x] Committed
+Commit: `1e1ff0e`
+Summary: The assistant earned a place by shedding its two loudest buttons and gaining a boundary: it
+answers only what spans the fleet, points at sessions instead of retelling them, and every action it
+takes asks first. The shell the comps measured is preserved to the pixel; only the job changed.
+
+### Build complete (2026-08-21)
+All nine phases built, reviewed, and committed on `main`. Whole-design evidence: `verify.sh` →
+**ALL DESIGN CHECKS PASS (P3+P4+P5+P6+P7+P8+P9b)** — contrast (palette.mjs, light + dark), token
+coverage (zero hand-typed colour across every mock; DESIGN.md regenerates byte-for-byte), every mock
+renders and reproduces byte-for-byte, and the per-phase gates (v5check 127, v5agentcheck 82,
+v5datacheck 77, wordcheck 35, v5workspacecheck 62, v5assistantcheck 28) hold. No unresolved Critical
+across the nine reviews. Artifacts present: DESIGN.md (locked) · JOURNEY.md (7 page specs + Assistant +
+Decision log) · WORDS.md (voice/tone/terminology) · 7 v5 mocks + their gates. Commit chain: `b4636a4`
+(P3) → `04826ac` (P4) → `964f065` (P5+P4-fix) → `2b5a0e0` (P6) → `b86e351` (P7) → `45446c1`/`687ddf9`/
+`cc9d714` (P8) → `29be5d1`/`e190e83` (P9a) → `1e1ff0e` (P9b).
 
 ### Audit of user-attributed claims (2026-08-19)
 
