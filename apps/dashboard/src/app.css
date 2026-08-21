@@ -1,7 +1,7 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn-svelte/tailwind.css";
-@import "@fontsource-variable/public-sans";
+@import "@fontsource-variable/geist";
 @plugin "@tailwindcss/typography";
 
 @custom-variant dark (&:where(.dark, .dark *));
@@ -58,103 +58,87 @@
   --radius-window: 20px;
   --window-inset: 20px;
 
-  /* ---- Light: a white app window floating in a plain grey field.
-     The neutrals are neutral: chroma rounds to nothing, so nothing in the
-     chrome can read as a hue. Colour is reserved for the three places that
-     mean something — a project's identity mark, a state pill, a severity
-     number. */
-  --background: oklch(0.9521 0.001 264); /* the field the window floats in */
-  --foreground: oklch(0.2178 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.2178 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.2178 0 0);
+  /* DESIGN.md locked ramps (palette.mjs · seed hue 263 · analogous). Cool
+     neutrals: chroma rounds to nothing in chrome; colour is reserved for the
+     accent (blue), status (error/success/warning), and identity marks. */
+  --neutral-1:#fcfdfd;--neutral-2:#f8f9fa;--neutral-3:#eff0f3;--neutral-4:#e6e8ec;
+  --neutral-5:#dbdee3;--neutral-6:#cfd2d9;--neutral-7:#bfc4cc;--neutral-8:#a6abb4;
+  --neutral-9:#636974;--neutral-10:#535862;--neutral-11:#60636a;--neutral-12:#2c2e31;
+  --accent-1:#fcfdff;--accent-2:#f6f9ff;--accent-3:#e9f1ff;--accent-4:#dce8ff;
+  --accent-5:#cddfff;--accent-6:#bcd3ff;--accent-7:#a8c4f8;--accent-8:#8babe8;
+  --accent-9:#4466ac;--accent-10:#365596;--accent-11:#4e638c;--accent-12:#232e43;--accent-on-solid:#f8faff;
+  --error-3:#ffebe9;--error-9:#c56c65;--error-11:#86534f;
+  --success-3:#e6f6e6;--success-9:#84cc86;--success-11:#486e49;
+  --warning-3:#f6f0e4;--warning-9:#ceb47e;--warning-11:#6f6144;
+  --info-3:#e7f2fa;--info-9:#7aabce;--info-11:#4c677a;
 
-  /* The working surface inside the window, and the fill a table header takes. */
-  --surface-content: oklch(0.9761 0 0);
-  --surface-header: oklch(0.9851 0 0);
+  /* ---- shadcn 27-var bridge -> the ramps. Graphite is the action, never a
+     hue (DESIGN.md Never #2); the blue accent is reserved for focus. */
+  --background: var(--neutral-2);        /* the grey field the window floats in */
+  --foreground: var(--neutral-12);
+  --card: var(--neutral-1);              /* the white window/card */
+  --card-foreground: var(--neutral-12);
+  --popover: var(--neutral-1);
+  --popover-foreground: var(--neutral-12);
 
-  /* The one filled action per view is near-black, not a hue: a brand colour on
-     a button competes with the state pills, which are the only saturated thing
-     on the board that carries meaning. */
-  --action: oklch(0.2178 0 0);
-  --action-foreground: oklch(0.99 0 0);
+  --surface-content: var(--neutral-1);
+  --surface-header: var(--neutral-2);
 
-  /* Accent olive — links, focus, selection. Never chrome. */
-  --primary: oklch(0.52 0.1 120);
-  --primary-foreground: oklch(0.995 0.002 84);
+  /* the one filled action per view is graphite, not a hue */
+  --action: var(--neutral-12);
+  --action-foreground: var(--neutral-1);
+  --primary: var(--neutral-12);
+  --primary-foreground: var(--neutral-1);
 
-  --secondary: oklch(0.9612 0 0);
-  --secondary-foreground: oklch(0.2178 0 0);
+  --secondary: var(--neutral-3);
+  --secondary-foreground: var(--neutral-12);
 
-  --muted: oklch(0.9761 0 0);
-  /* Three ink steps, not two: foreground carries identity, muted-foreground
-     carries metadata, faint carries the asides (section dividers, overflow
-     counts, finished work). Each is a real value rather than an alpha on the
-     one above it — alpha put the third step at 2.78:1, which is not a step,
-     it is unreadable. Every value clears 4.5:1 on the row's hover background
-     (--sidebar-accent), which is the tightest surface any of them lands on. */
-  --muted-foreground: oklch(0.495 0 0);
-  --faint: oklch(0.535 0 0);
+  --muted: var(--neutral-2);
+  --muted-foreground: var(--neutral-11);
+  --faint: var(--neutral-10);
 
-  --accent: oklch(0.9686 0 0);
-  --accent-foreground: oklch(0.2178 0 0);
+  --accent: var(--neutral-3);            /* the SUBTLE hover surface, never brand */
+  --accent-foreground: var(--neutral-12);
 
-  --destructive: oklch(0.53 0.2 27);
-  --destructive-foreground: oklch(0.995 0.002 84);
+  --destructive: var(--error-9);
+  --destructive-foreground: var(--neutral-1);
 
-  --border: oklch(0.931 0 0);
-  --input: oklch(0.906 0 0);
-  --ring: oklch(0.52 0.1 120);
+  --border: var(--neutral-6);
+  --input: var(--neutral-7);
+  --ring: var(--accent-9);               /* focus = the blue accent */
 
-  /* Session/status semantics: idle=success hue at rest, working=warning hue,
-     needs-you=error hue. Tuned as calm tints, not alarms. Success sits
-     cooler (160) than the olive primary (120) so state never reads as brand. */
-  --success: oklch(0.63 0.135 160);
-  --success-foreground: oklch(0.995 0.002 84);
-  --warning: oklch(0.74 0.145 78);
-  --warning-foreground: oklch(0.28 0.012 55);
-  --info: var(--primary);
-  --info-foreground: var(--primary-foreground);
-  --error: oklch(0.577 0.215 27);
-  --error-foreground: oklch(0.995 0.002 84);
+  /* Session/status semantics -> Flexoki functional hues. */
+  --success: var(--success-9);--success-foreground: var(--neutral-1);
+  --warning: var(--warning-9);--warning-foreground: var(--neutral-12);
+  --info: var(--accent-9);--info-foreground: var(--accent-on-solid);
+  --error: var(--error-9);--error-foreground: var(--neutral-1);
 
-  /* Sidebar sits on the canvas, not on a card. */
-  --sidebar: oklch(0.965 0.004 82);
-  --sidebar-foreground: oklch(0.235 0.01 55);
-  --sidebar-primary: var(--primary);
-  --sidebar-primary-foreground: var(--primary-foreground);
-  --sidebar-accent: oklch(0.928 0.006 78);
-  --sidebar-accent-foreground: oklch(0.28 0.012 55);
-  --sidebar-border: oklch(0.905 0.006 78);
-  --sidebar-ring: var(--ring);
+  --sidebar: var(--neutral-2);
+  --sidebar-foreground: var(--neutral-12);
+  --sidebar-primary: var(--neutral-12);
+  --sidebar-primary-foreground: var(--neutral-1);
+  --sidebar-accent: var(--neutral-3);
+  --sidebar-accent-foreground: var(--neutral-12);
+  --sidebar-border: var(--neutral-6);
+  --sidebar-ring: var(--accent-9);
 
-  /* Elevation ladder — always offset + soft blur, warm-inked, never a halo. */
-  --shadow-sm: 0 1px 2px oklch(0.25 0.02 55 / 0.05);
-  --shadow-md: 0 2px 8px oklch(0.25 0.02 55 / 0.07), 0 1px 2px oklch(0.25 0.02 55 / 0.05);
-  --shadow-lg: 0 8px 28px oklch(0.25 0.02 55 / 0.10), 0 2px 8px oklch(0.25 0.02 55 / 0.06);
-  --shadow-xl: 0 24px 64px oklch(0.25 0.02 55 / 0.16), 0 6px 16px oklch(0.25 0.02 55 / 0.08);
+  /* Elevation — cool-inked (hue 264), always offset + soft blur, never a halo. */
+  --shadow-sm: 0 1px 2px oklch(0.28 0.02 264 / 0.05);
+  --shadow-md: 0 2px 8px oklch(0.28 0.02 264 / 0.07), 0 1px 2px oklch(0.28 0.02 264 / 0.05);
+  --shadow-lg: 0 8px 28px oklch(0.28 0.02 264 / 0.10), 0 2px 8px oklch(0.28 0.02 264 / 0.06);
+  --shadow-xl: 0 24px 64px oklch(0.28 0.02 264 / 0.16), 0 6px 16px oklch(0.28 0.02 264 / 0.08);
 
-  /* Chrome materials (toolbar/sidebar/sheets). Content scrolls beneath. */
-  --material-chrome: oklch(0.977 0.003 84 / 0.78);
-  --material-panel: oklch(1 0 0 / 0.72);
+  /* Chrome materials. */
+  --material-chrome: color-mix(in oklab, var(--neutral-2) 78%, transparent);
+  --material-panel: color-mix(in oklab, var(--neutral-1) 72%, transparent);
   --material-blur: 20px;
   --material-saturate: 1.6;
 
-  --chart-1: oklch(0.52 0.1 120);
-  --chart-2: oklch(0.63 0.135 160);
-  --chart-3: oklch(0.74 0.145 78);
-  --chart-4: oklch(0.577 0.215 27);
-  --chart-5: oklch(0.525 0.014 62);
+  /* Chart palette — accent + identity hues + neutral, distinct from status. */
+  --chart-1: var(--accent-9);--chart-2: var(--blue-9, #7aabce);--chart-3: var(--violet-9, #705ab0);
+  --chart-4: var(--warning-9);--chart-5: var(--neutral-9);
 
-  /* Tool ink — one hue per tool family (see tool-cards/descriptors.ts), so the
-     glyph column of a transcript reads as the shape of the turn before a word
-     of it does. Identity, exactly like a project's: it renders as a filled
-     glyph and nothing else — never a dot, a tint, or a ring — and every hue
-     keeps its distance from the four spoken ones (error 27, working 78, action
-     120, idle 160) so no tool can wear a state's colour. Lightness and chroma
-     are the identity ink's, already proven on card and canvas in both
-     appearances; only the hue moves. */
+  /* Tool ink — one identity hue per tool family (unchanged; distinct from status). */
   --tool-run: oklch(0.5 0.12 52);
   --tool-mcp: oklch(0.5 0.12 176);
   --tool-search: oklch(0.5 0.12 195);
@@ -169,72 +153,77 @@
 }
 
 .dark {
-  /* ---- Dark: the same room at night. Warm charcoal, surfaces step lighter. */
-  --background: oklch(0.205 0.008 60);
-  --foreground: oklch(0.945 0.004 84);
-  --card: oklch(0.25 0.009 58);
-  --card-foreground: oklch(0.945 0.004 84);
-  --popover: oklch(0.275 0.01 58);
-  --popover-foreground: oklch(0.945 0.004 84);
+  /* Dark: the same room at night — DESIGN.md dark ramp. */
+  --neutral-1:#121313;--neutral-2:#19191a;--neutral-3:#212224;--neutral-4:#292a2d;
+  --neutral-5:#303236;--neutral-6:#393c41;--neutral-7:#464950;--neutral-8:#5c6169;
+  --neutral-9:#636974;--neutral-10:#757b85;--neutral-11:#b4b7be;--neutral-12:#e6e8ec;
+  --accent-1:#111316;--accent-2:#171a1f;--accent-3:#1b222f;--accent-4:#202a3d;
+  --accent-5:#24324d;--accent-6:#293b5e;--accent-7:#324874;--accent-8:#435f97;
+  --accent-9:#4466ac;--accent-10:#5679bd;--accent-11:#a0b8e6;--accent-12:#dce8ff;--accent-on-solid:#f8faff;
+  --error-3:#2d1d1c;--error-9:#c56c65;--error-11:#e0a7a1;
+  --success-3:#1a261a;--success-9:#84cc86;--success-11:#9bc49b;
+  --warning-3:#262219;--warning-9:#ceb47e;--warning-11:#c5b696;
+  --info-3:#1b2329;--info-9:#7aabce;--info-11:#9fbcd1;
 
-  --primary: oklch(0.7 0.1 122);
-  --primary-foreground: oklch(0.16 0.008 60);
+  --background: var(--neutral-1);
+  --foreground: var(--neutral-12);
+  --card: var(--neutral-2);
+  --card-foreground: var(--neutral-12);
+  --popover: var(--neutral-3);
+  --popover-foreground: var(--neutral-12);
 
-  --secondary: oklch(0.30 0.01 58);
-  --secondary-foreground: oklch(0.945 0.004 84);
+  --surface-content: var(--neutral-2);
+  --surface-header: var(--neutral-3);
 
-  --muted: oklch(0.285 0.009 58);
-  /* Dark had the headroom light did not, so muted-foreground stays put and
-     faint drops below it. */
-  --muted-foreground: oklch(0.72 0.012 70);
-  --faint: oklch(0.66 0.012 70);
+  --action: var(--neutral-12);
+  --action-foreground: var(--neutral-1);
+  --primary: var(--neutral-12);
+  --primary-foreground: var(--neutral-1);
 
-  --accent: oklch(0.30 0.011 60);
-  --accent-foreground: oklch(0.945 0.004 84);
+  --secondary: var(--neutral-3);
+  --secondary-foreground: var(--neutral-12);
 
-  --destructive: oklch(0.66 0.185 25);
-  --destructive-foreground: oklch(0.985 0.003 84);
+  --muted: var(--neutral-2);
+  --muted-foreground: var(--neutral-11);
+  --faint: var(--neutral-10);
 
-  /* Depth is the surface step and the shadow; at night a 9% hairline read as an
-     outline around every card, so the border recedes to a seam and controls
-     take their edge from `--input` instead. */
-  --border: oklch(1 0 0 / 5%);
-  --input: oklch(1 0 0 / 13%);
-  --ring: oklch(0.7 0.1 122);
+  --accent: var(--neutral-4);
+  --accent-foreground: var(--neutral-12);
 
-  --success: oklch(0.70 0.125 160);
-  --success-foreground: oklch(0.16 0.008 60);
-  --warning: oklch(0.79 0.135 80);
-  --warning-foreground: oklch(0.16 0.008 60);
-  --info: var(--primary);
-  --info-foreground: var(--primary-foreground);
-  --error: oklch(0.66 0.185 25);
-  --error-foreground: oklch(0.985 0.003 84);
+  --destructive: var(--error-9);
+  --destructive-foreground: var(--neutral-1);
 
-  --sidebar: oklch(0.225 0.008 60);
-  --sidebar-foreground: oklch(0.945 0.004 84);
-  --sidebar-primary: var(--primary);
-  --sidebar-primary-foreground: var(--primary-foreground);
-  --sidebar-accent: oklch(0.285 0.009 58);
-  --sidebar-accent-foreground: oklch(0.945 0.004 84);
-  --sidebar-border: oklch(1 0 0 / 8%);
-  --sidebar-ring: var(--ring);
+  /* At night the hairline recedes to a seam; controls take their edge from input. */
+  --border: color-mix(in oklab, var(--neutral-12) 8%, transparent);
+  --input: color-mix(in oklab, var(--neutral-12) 14%, transparent);
+  --ring: var(--accent-9);
+
+  --success: var(--success-9);--success-foreground: var(--neutral-1);
+  --warning: var(--warning-9);--warning-foreground: var(--neutral-1);
+  --info: var(--accent-9);--info-foreground: var(--accent-on-solid);
+  --error: var(--error-9);--error-foreground: var(--neutral-1);
+
+  --sidebar: var(--neutral-1);
+  --sidebar-foreground: var(--neutral-12);
+  --sidebar-primary: var(--neutral-12);
+  --sidebar-primary-foreground: var(--neutral-1);
+  --sidebar-accent: var(--neutral-3);
+  --sidebar-accent-foreground: var(--neutral-12);
+  --sidebar-border: color-mix(in oklab, var(--neutral-12) 8%, transparent);
+  --sidebar-ring: var(--accent-9);
 
   --shadow-sm: 0 1px 2px oklch(0 0 0 / 0.30);
   --shadow-md: 0 2px 8px oklch(0 0 0 / 0.38), 0 1px 2px oklch(0 0 0 / 0.28);
   --shadow-lg: 0 8px 28px oklch(0 0 0 / 0.46), 0 2px 8px oklch(0 0 0 / 0.32);
   --shadow-xl: 0 24px 64px oklch(0 0 0 / 0.55), 0 6px 16px oklch(0 0 0 / 0.35);
 
-  --material-chrome: oklch(0.205 0.008 60 / 0.72);
-  --material-panel: oklch(0.25 0.009 58 / 0.68);
+  --material-chrome: color-mix(in oklab, var(--neutral-1) 72%, transparent);
+  --material-panel: color-mix(in oklab, var(--neutral-2) 68%, transparent);
 
-  --chart-1: oklch(0.7 0.1 122);
-  --chart-2: oklch(0.70 0.125 160);
-  --chart-3: oklch(0.79 0.135 80);
-  --chart-4: oklch(0.66 0.185 25);
-  --chart-5: oklch(0.72 0.012 70);
+  --chart-1: var(--accent-9);--chart-2: var(--info-9);--chart-3: #b9aee6;
+  --chart-4: var(--warning-9);--chart-5: var(--neutral-9);
 
-  /* The same hues, lifted for a charcoal canvas. */
+  /* Tool ink — one identity hue per tool family (unchanged; distinct from status). */
   --tool-run: oklch(0.74 0.11 52);
   --tool-mcp: oklch(0.74 0.11 176);
   --tool-search: oklch(0.74 0.11 195);
@@ -296,9 +285,9 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 
-  /* SF where the platform has it, Public Sans (SF-adjacent) where it doesn't,
-     so the three targets read as one product. */
-  --font-sans: -apple-system, BlinkMacSystemFont, 'Public Sans Variable', 'Segoe UI', system-ui, sans-serif;
+  /* Geist across the product (DESIGN.md locked face); platform stack falls
+     back where Geist is unavailable. TX-02 stays the mono for code/paths/IDs. */
+  --font-sans: 'Geist Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
   --font-mono: 'TX-02', ui-monospace, 'SF Mono', monospace;
 
   --shadow-sm: var(--shadow-sm);
@@ -383,10 +372,10 @@
 
   /* Browser surfaces carry the design too. */
   ::selection {
-    background: oklch(0.52 0.1 120 / 0.25);
+    background: var(--accent-9) / 0.22; background: color-mix(in oklab, var(--accent-9) 22%, transparent);
   }
   .dark ::selection {
-    background: oklch(0.7 0.1 122 / 0.35);
+    background: color-mix(in oklab, var(--accent-9) 32%, transparent);
   }
 
   input, textarea {
