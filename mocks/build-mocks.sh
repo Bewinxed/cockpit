@@ -13,7 +13,13 @@ cd "$(dirname "$0")"
 # — which are count-matched to the product mocks — are NOT run on it. It is
 # copied here so the solarize pass below (which loops over v5-components.html)
 # can inline its {{solar:NAME}} placeholders, the same as the other three.
+# v5-components and v5-agent are authored already tokenised (their <style> blocks
+# reference alias tokens only), so the retoken/statuschips/a11y rewrite passes —
+# which are count-matched to the product mocks — are NOT run on them. They are
+# copied here so the solarize pass below (which loops over each) can inline the
+# {{solar:NAME}} placeholders, the same as the other four.
 cp src/v5-components.html v5-components.html
+cp src/v5-agent.html v5-agent.html
 for f in v2-fleet.html v3-assistant.html v4-transcript.html; do cp "src/$f" "$f"; done
 python3 retoken.py
 python3 statuschips.py
@@ -25,4 +31,10 @@ node resolve-tokens.mjs
 node render.mjs v5-components.html v5-components.png --viewport 1440x5600
 node render.mjs v5-components.html v5-components-dark.png --dark --viewport 1440x5600
 node render.mjs v5-components.html v5-components-mobile.png --viewport 390x10400
-echo "built 4 mocks from mocks/src/"
+# render the v5 agent surface at compact density (the surface, failure modes and
+# the 8-state gallery are taller than one screen) in light, dark, and the
+# mobile/compact view for the coarse-pointer target sweep
+node render.mjs v5-agent.html v5-agent.png --viewport 1440x4000
+node render.mjs v5-agent.html v5-agent-dark.png --dark --viewport 1440x4000
+node render.mjs v5-agent.html v5-agent-mobile.png --viewport 390x5200
+echo "built 5 mocks from mocks/src/"

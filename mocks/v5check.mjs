@@ -162,6 +162,56 @@ console.log('== density = dimension-only: one tier, colours identical, sizes sma
 }
 
 // =====================================================================
+console.log('== modal density reaches the modal: field/btn heights DIFFER per density (C1) ==');
+{
+  const grab = async (compact) => {
+    const p = await open({ compact });
+    await p.evaluate(SAMPLER);
+    const r = await p.evaluate(() => ({
+      field: getComputedStyle(document.querySelector('.mod-bd .sel')).height,
+      btn: getComputedStyle(document.querySelector('.mod-ft .btn')).height,
+    }));
+    await p.close();
+    return r;
+  };
+  const comfy = await grab(false), compact = await grab(true);
+  ok(parseFloat(comfy.field) > parseFloat(compact.field),
+    `modal field height differs per density (${comfy.field} comfy vs ${compact.field} compact)`);
+  ok(parseFloat(comfy.btn) > parseFloat(compact.btn),
+    `modal footer btn height differs per density (${comfy.btn} comfy vs ${compact.btn} compact)`);
+}
+
+// =====================================================================
+console.log('== pagination exposes all 8 interaction states (DW-4.4) ==');
+{
+  const p = await open({});
+  await p.evaluate(SAMPLER);
+  const caps = await p.evaluate(() =>
+    Array.from(document.querySelectorAll('section.group h2'))
+      .map((h) => h.textContent)
+      .length && 0); // silence
+  // scope to the pagination section: find the <h2> "Pagination" then its .cell caps
+  const pg = await p.evaluate(() => {
+    let out = { caps: [] };
+    for (const s of document.querySelectorAll('section.group')) {
+      const h = s.querySelector('h2');
+      if (h && h.textContent.trim() === 'Pagination') {
+        out.caps = Array.from(s.querySelectorAll('.cell .cap')).map((c) => c.textContent.trim());
+        out.pages = s.querySelectorAll('.page').length;
+      }
+    }
+    return out;
+  });
+  ok(pg.caps.length >= 8, `pagination documents >=8 state cells (${pg.caps.length}: ${pg.caps.join(', ')})`);
+  const stateMods = ['active · press', 'hover', 'focus', 'disabled', 'loading', 'error', 'success', 'default'];
+  for (const s of stateMods) {
+    ok(pg.caps.some((c) => c.toLowerCase().includes(s.toLowerCase())),
+      `pagination exposes the "${s}" state cell`);
+  }
+  await p.close();
+}
+
+// =====================================================================
 console.log('== focus ring: 2px solid, 2px offset, non-transparent colour ==');
 for (const scheme of ['light', 'dark']) {
   const p = await open({ scheme });
@@ -186,12 +236,14 @@ for (const scheme of ['light', 'dark']) {
       ic: (() => { const r = document.querySelector('.btn.ic').getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; })(),
       page: (() => { const r = document.querySelector('.page').getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; })(),
       nav: (() => { const r = document.querySelector('.nav-i').getBoundingClientRect(); return Math.round(r.height); })(),
+      eye: (() => { const r = document.querySelector('.inp .eye').getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; })(),
     }));
     ok(m.sw <= m.iw, `${scheme} @${width}: no horizontal overflow (scrollWidth ${m.sw} vs ${m.iw})`);
     ok(parseFloat(m.fs) >= 16, `${scheme} @${width}: input font ${m.fs}px`);
     ok(m.ic[0] >= 44 && m.ic[1] >= 44, `${scheme} @${width}: icon button ${m.ic[0]}x${m.ic[1]}`);
     ok(m.page[0] >= 44 && m.page[1] >= 44, `${scheme} @${width}: page button ${m.page[0]}x${m.page[1]}`);
     ok(m.nav >= 44, `${scheme} @${width}: nav item ${m.nav}px`);
+    ok(m.eye[0] >= 44 && m.eye[1] >= 44, `${scheme} @${width}: .inp .eye coarse target ${m.eye[0]}x${m.eye[1]} (DW-4.10)`);
     await p.close();
   }
 }

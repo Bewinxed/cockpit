@@ -449,23 +449,35 @@
   --radius-well:   7px;
   --radius-control: 8px;
   --radius-card:   10px;
+  --radius-modal:  12px;   /* modal control groups (fields / footer buttons) */
   --radius-panel:  14px;
+  --radius-shell:  20px;   /* floating shell surfaces (composer, modal frame) */
   --radius-pill:   999px;
 
   /* motion — the one unpinned DNA axis. Structure never moves; only the live
-     channel does. */
+     channel does.
+     A SINGLE vocabulary: the component tier's 100 / 300 / 500ms durations are
+     canonical here (--c-100 / --c-300 / --c-500), and the earlier --motion-*
+     aliases resolve through them, so the two names can never drift apart.
+     Easings are limited to the three canonical curves (--e-in / --e-out /
+     --e-toggle); instance use is var(--e-in) for entry and var(--e-out) for
+     exit, with --e-toggle reserved for continuous toggles. */
+  --c-100:100ms; --c-300:300ms; --c-500:500ms;
+  --e-in:    cubic-bezier(0.16, 1, 0.3, 1);
+  --e-out:   cubic-bezier(0.7, 0, 0.84, 0);
+  --e-toggle: cubic-bezier(0.65, 0, 0.35, 1);
   --motion-instant: 0ms;
-  --motion-fast:   120ms;
-  --motion-base:   200ms;
-  --motion-slow:   320ms;
-  --ease-entry:  cubic-bezier(0.16, 1, 0.3, 1);
-  --ease-exit:   cubic-bezier(0.7, 0, 0.84, 0);
-  --ease-toggle: cubic-bezier(0.65, 0, 0.35, 1);
-  --breath: 2000ms;
+  --motion-fast:   var(--c-100);
+  --motion-base:   var(--c-300);
+  --motion-slow:   var(--c-500);
+  --breath: calc(var(--c-500) * 4);   /* 2000ms — the running mark's breath */
+  --ease-entry:  var(--e-in);
+  --ease-exit:   var(--e-out);
+  --ease-toggle: var(--e-toggle);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  :root { --motion-fast: 0ms; --motion-base: 0ms; --motion-slow: 0ms; --breath: 0ms; }
+  :root { --motion-instant: 0ms; --motion-fast: 0ms; --motion-base: 0ms; --motion-slow: 0ms; --breath: 0ms; }
   *, *::before, *::after {
     animation-duration: 1ms !important;
     animation-iteration-count: 1 !important;

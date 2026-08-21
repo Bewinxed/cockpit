@@ -471,14 +471,20 @@ does move is what is genuinely alive: the running mark breathes on \`--breath\`,
 \`needs you\` chip settles once on arrival, and the assistant panel enters. Every
 other state change is instantaneous.
 
-- **Timing:** \`--motion-instant\` 0ms · \`--motion-fast\` 120ms · \`--motion-base\`
-  200ms · \`--motion-slow\` 320ms · \`--breath\` 2000ms
-- **Easing:** \`--ease-entry\` \`cubic-bezier(0.16, 1, 0.3, 1)\` · \`--ease-exit\`
-  \`cubic-bezier(0.7, 0, 0.84, 0)\` · \`--ease-toggle\` \`cubic-bezier(0.65, 0, 0.35, 1)\`
+- **Timing:** a single vocabulary — \`--c-100\` 100ms · \`--c-300\` 300ms ·
+  \`--c-500\` 500ms. The earlier \`--motion-instant\` 0ms · \`--motion-fast\` / \`--motion-base\` /
+  \`--motion-slow\` are now aliases of the same tier (\`--motion-fast\`→\`--c-100\`,
+  \`--motion-base\`→\`--c-300\`, \`--motion-slow\`→\`--c-500\`), so the mock component
+  tiers and the global tokens resolve to one set of durations. \`--breath\` is
+  \`calc(var(--c-500) * 4)\` (2000ms). No component tier carries a literal ms.
+- **Easing:** \`--e-in\` \`cubic-bezier(0.16, 1, 0.3, 1)\` (entry) · \`--e-out\`
+  \`cubic-bezier(0.7, 0, 0.84, 0)\` (exit) · \`--e-toggle\` \`cubic-bezier(0.65, 0, 0.35, 1)\`
+  — the three canonical curves, aliased as \`--ease-entry\` / \`--ease-exit\` / \`--ease-toggle\`.
 - **Allowed:** \`transform\` and \`opacity\` only. The running mark's breath; one
   settle on a status arrival; panel and drawer entry/exit.
 - **Never:** row reflow, table sort animation, number count-ups, hover lifts on
-  table rows, staggered page-load fades, bounce or elastic easing.
+  table rows, staggered page-load fades, bounce or elastic easing — and never a
+  transition on \`border-radius\`, \`grid-template-*\`, \`width\`/\`height\`/\`padding\`/\`margin\`/\`top\`/\`left\`/\`box-shadow\`.
 - **\`prefers-reduced-motion\`:** all four duration tokens collapse to 0 and a global
   rule caps every animation and transition at 1ms. The breath becomes a static
   ring — the *information* survives, only the movement stops.
