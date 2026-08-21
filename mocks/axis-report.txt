@@ -8,18 +8,10 @@
   PASS  coarse @390 · dark
   PASS  coarse @768 · light
   PASS  coarse @768 · dark
-  FAIL  coarse @1024 · light — 2 finding(s)
-          v2 target DIV.ghost exp 28x44
-          v3 target DIV.ghost exp 28x44
-  FAIL  coarse @1024 · dark — 2 finding(s)
-          v2 target DIV.ghost exp 28x44
-          v3 target DIV.ghost exp 28x44
-  FAIL  coarse @1440 · light — 2 finding(s)
-          v2 target DIV.ghost exp 28x44
-          v3 target DIV.ghost exp 28x44
-  FAIL  coarse @1440 · dark — 2 finding(s)
-          v2 target DIV.ghost exp 28x44
-          v3 target DIV.ghost exp 28x44
+  PASS  coarse @1024 · light
+  PASS  coarse @1024 · dark
+  PASS  coarse @1440 · light
+  PASS  coarse @1440 · dark
   PASS  contrast more @320 · light
   PASS  contrast more @320 · dark
   PASS  contrast more @390 · light
@@ -50,4 +42,4 @@
   PASS  contrast more @1440 · dark
   PASS  RTL (report only) · light
   PASS  RTL (report only) · dark
-  8 axis failures (0 reported-only findings on unenforced axes)
+  every enforced axis holds (0 reported-only findings on RTL, which is not enforced — see header)

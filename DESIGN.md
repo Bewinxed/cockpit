@@ -16,8 +16,8 @@ hairlines do the structural work that cards would otherwise do badly. The
 surfaces stay quiet on purpose — the field, the chrome and the content region
 carry no hue at all — so that the one thing that matters, *this session is asking
 you for something*, is the only coloured thing in view. Measured on the rendered
-board: **2.328% of the surface carries any hue, and the largest single hued
-region is 0.1202% of it** (generated from `mocks/satcensus-report.txt`). Calm is not a mood here, it is a budget.
+board: **2.570% of the surface carries any hue, and the largest single hued
+region is 0.1184% of it** (generated from `mocks/satcensus-report.txt`). Calm is not a mood here, it is a budget.
 
 The collision that makes it specific: FlowAI's recessed wells give the density
 somewhere to breathe — a stat is a near-white card with a sunken interior, so
@@ -109,7 +109,7 @@ size jump.
   **1.25** (`--leading-ui`), display figures **1** (`--leading-numeric`).
   **Verified by rendering, not by the token's presence** — computed
   `line-height / font-size` across all three mocks at five widths in both schemes
-  returns: `1.400x6284  1.250x916  1.000x280` (generated from `mocks/clipcheck-report.txt`).
+  returns: `1.400x6180  1.250x800  1.000x280` (generated from `mocks/clipcheck-report.txt`).
   This sentence previously claimed the incoming 1.45 had been corrected while
   1.45 was still what rendered — a token-rewrite pass reordered the leading out
   of the body shorthand. The claim now has a gate behind it
@@ -119,7 +119,7 @@ size jump.
   transcript's body was a 12.5px literal that appears nowhere in the nine steps;
   it is now `--text-base` (13px) with its small size on `--text-sm`, so the dense
   surface and the management surfaces share one scale. Computed sizes across all
-  three mocks: `{"13px":2252,"14.5px":388,"11.5px":990,"23.5px":44,"20.75px":48,"18.5px":8,"16.5px":10,"10.25px":10}` — every one a named step, generated from the
+  three mocks: `{"14.5px":376,"11.5px":1050,"13px":2094,"23.5px":44,"20.75px":48,"18.5px":8,"16.5px":10,"10.25px":10}` — every one a named step, generated from the
   same report.
 - **Display figures take `--leading-numeric: 1`.** Digits carry no descender, and
   a body line box on a KPI does not fit the measured 90px stat card: at 1.45 the
@@ -130,7 +130,7 @@ size jump.
   and 10px at 390 and 320**.
 - **Weights:** **400 body · 450 medium · 500 strong. 600 and above never appear.**
   Gated, not merely asserted: computed weights across all three mocks in both
-  schemes are `{"400":2338,"450":360,"500":1052}` (generated from `mocks/typecheck-report.txt`). This claim was **false when
+  schemes are `{"400":2258,"450":360,"500":1022}` (generated from `mocks/typecheck-report.txt`). This claim was **false when
   it was first written** — v3 shipped `font-weight:650` on the assistant title and
   `550` on its headings, plainly visible in the PNG, because nothing gated the
   sentence. `mocks/typecheck.mjs` now fails the build on any weight outside the
@@ -389,13 +389,37 @@ hand-typed, which satisfies "no hand-typed hex" literally instead of by exceptio
   --brand-edge:  oklch(from var(--neutral-12) calc(l - 0.045) c h);
   --on-brand:    var(--neutral-1);
 
+  /* ---- Flexoki v2 accent swatches (user directive) ----------------------
+     The functional hues — and only the functional/identity hues — are migrated
+     to Flexoki v2's accents (oklch canonical). The NEUTRAL graphite ramp is
+     untouched; the accent ramp / focus ring / brand are left as the generator
+     solved them. error->red, success->green, warning->yellow, info->blue.
+     Only the three steps the status aliases and data colours consume are
+     overridden (-3 pale tint, -9 solid, -11 ink). Inks take the 850 step so the
+     dark text clears 4.5:1 on the pale-100 chip, not only on white. */
+  --error-3:    oklch(88.2% .064 36.4);   /* red-100    */
+  --error-9:    oklch(50.4% .165 27.8);   /* red-600    */
+  --error-11:   oklch(31.3% .087 26.3);   /* red-850    */
+  --warning-3:  oklch(91.4% .087 93.2);   /* yellow-100 */
+  --warning-9:  oklch(63.3% .129 85.8);   /* yellow-600 */
+  --warning-11: oklch(37.0% .074 88.4);   /* yellow-850 */
+  /* done takes the 200-step green base (more chroma) rather than the 100: the
+     pale yellow attn-tint and a pale green done-tint sit only 35deg apart and
+     collide at pill size on the 100 step; a more saturated green clears >=12. */
+  --success-3:  oklch(81.0% .098 115.5);  /* green-200  */
+  --success-9:  oklch(55.9% .134 122.9);  /* green-600  */
+  --success-11: oklch(33.8% .076 121.9);  /* green-850  */
+  --info-3:     oklch(88.4% .029 228.1);  /* blue-100   */
+  --info-9:     oklch(48.2% .131 254.8);  /* blue-600   */
+  --info-11:    oklch(30.6% .069 253.5);  /* blue-850   */
+
   /* status — four functional hues, one meaning each, plus a hueless idle.
      The step-3 tints straight off the ramp are too pale to tell apart at pill
      size: measured CIEDE2000 between error-3 and warning-3 is 9.2, and between
      warning-3 and success-3 is 9.7. Pulling each tint 14% toward its own solid
      lifts the worst pair to 12.5 while keeping every text-on-tint pair at or
      above 4.7:1 — deepened rather than the threshold lowered. */
-  --tint-depth: 86%;
+  --tint-depth: 76%;
   --status-live-bg:  color-mix(in oklab, var(--info-3)    var(--tint-depth), var(--info-9));
   --status-attn-bg:  color-mix(in oklab, var(--warning-3) var(--tint-depth), var(--warning-9));
   --status-done-bg:  color-mix(in oklab, var(--success-3) var(--tint-depth), var(--success-9));
@@ -414,24 +438,72 @@ hand-typed, which satisfies "no hand-typed hex" literally instead of by exceptio
          everything behind it.
      Together those put seven pairs between 3.92:1 and 4.45:1 on the glass while
      every token-level pair read 4.7-5.5. Deepened here; the target was not moved. */
-  --ink-depth: 52%;
+  --ink-depth: 76%;
   --status-live-ink: color-mix(in oklab, var(--info-11)    var(--ink-depth), var(--neutral-12));
   --status-attn-ink: color-mix(in oklab, var(--warning-11) var(--ink-depth), var(--neutral-12));
   --status-done-ink: color-mix(in oklab, var(--success-11) var(--ink-depth), var(--neutral-12));
   --status-fail-ink: color-mix(in oklab, var(--error-11)   var(--ink-depth), var(--neutral-12));
   --status-idle-ink: var(--neutral-11);
 
+  /* ---- data colour ------------------------------------------------------
+     The reference colours its Success column by value — green, amber, red — and
+     that is information, not decoration, on a console whose job is showing what
+     needs attention. Threshold numerals were riding the muted 11-step through
+     the ink-depth correction and came out near-grey (measured rgb(94,84,64) for
+     an amber value). These take the SOLID hue darkened, so chroma survives. */
+  --data-ok:   oklch(from var(--success-9) 0.46 0.125 h);
+  --data-warn: oklch(from var(--warning-9) 0.46 0.125 h);
+  --data-bad:  oklch(from var(--error-9)   0.46 0.135 h);
+
   /* elevation — hue-shifted cool graphite, never rgba(0,0,0,·) */
-  --shadow-tint:   oklch(from var(--neutral-12) l c h / 0.055);
-  --shadow-tint-2: oklch(from var(--neutral-12) l c h / 0.10);
-  --shadow-tint-3: oklch(from var(--neutral-12) l c h / 0.16);
-  --shadow-hairline: 0 1px 2px var(--shadow-tint);
-  --shadow-tile:     0 1px 2.5px var(--shadow-tint-2), 0 0 0 .5px var(--shadow-tint);
+  /* Elevation was too faint to register: at 0.055 alpha over a 1px blur the
+     cards melted into the canvas and the whole board read as one flat grey. The
+     tint stays cool graphite (neutral-12, never pure black — DW-3.10); only the
+     alpha and the spread grow, to reference-level lift — a soft drop, not a
+     heavy AI-tell shadow. */
+  --shadow-tint:   oklch(from var(--neutral-12) l c h / 0.09);
+  --shadow-tint-2: oklch(from var(--neutral-12) l c h / 0.14);
+  --shadow-tint-3: oklch(from var(--neutral-12) l c h / 0.20);
+  --shadow-hairline: 0 3px 7px -2px var(--shadow-tint-2);
+  --shadow-tile:     0 2px 6px var(--shadow-tint-2), 0 0 0 .5px var(--shadow-tint);
   --shadow-lifted:   0 6px 18px var(--shadow-tint-2), 0 1px 3px var(--shadow-tint);
   --shadow-overlay:  0 18px 48px var(--shadow-tint-3), 0 2px 6px var(--shadow-tint);
   --shadow-drawer:   0 12px 40px var(--shadow-tint-3);
   --shadow-inset-sel: inset 0 1px 1px var(--shadow-tint);
   --shadow-action:   inset 0 -1px 0 var(--brand-edge), 0 1px 2px var(--shadow-tint-2);
+
+  /* ---- identity palette for item marks ---------------------------------
+     The user's constraint names small marks as a place colour LIVES: "colour
+     lives on chips, badges, and small marks". The marks had gone graphite
+     because DW-3.12 asked for a non-status accent distinct from the four
+     functional hues and no single hue satisfied that plus the contrast floor —
+     but the constraint is NON-COLLISION, not absence, and one hue was the wrong
+     shape of answer. Six identity hues, rotated off the accent in OKLCH so they
+     are token-derived rather than typed, all at one lightness and chroma so a
+     white glyph clears contrast on every one of them.
+
+     They do not collide with status because they differ in FORM as well as hue:
+     status is a pale tint carrying dark ink, an item mark is a saturated solid
+     carrying a white glyph. Separation is measured in colorcheck.py. */
+  /* Light marks were L*0.50 / C0.155 and read as dark, muddy squares against the
+     near-white sidebar — legible glyph, but heavy identity. Lifted to L*0.56 and
+     saturated to C0.165 so each mark reads as a vivid identity colour; the white
+     glyph still clears 4.5:1 on every one (measured), and dark is untouched. */
+  /* Eight identity hues drawn from Flexoki's eight accents (richer than the six
+     rotations that came before). The lightness is held near L*0.51 rather than
+     taken raw from Flexoki's 400–600 steps: the light hues (yellow/green/cyan)
+     are too bright at their own lightness for a white glyph to clear 4.5:1, so
+     each Flexoki HUE is placed on a common dark-enough lightness. The white
+     glyph clears 4.5:1 on every one (measured in colorcheck / the crops). */
+  --mark-1: oklch(0.51 0.168 27.9);    /* red     */
+  --mark-2: oklch(0.53 0.150 47.4);    /* orange  */
+  --mark-3: oklch(0.50 0.115 86.8);    /* yellow  */
+  --mark-4: oklch(0.51 0.132 121.2);   /* green   */
+  --mark-5: oklch(0.51 0.093 186.7);   /* cyan    */
+  --mark-6: oklch(0.51 0.140 251.4);   /* blue    */
+  --mark-7: oklch(0.51 0.150 292.5);   /* purple  */
+  --mark-8: oklch(0.51 0.165 349.8);   /* magenta */
+  --mark-glyph: oklch(from var(--neutral-1) 0.99 0 h);
 
   /* the signature move, as tokens: the action is never flat, and the item mark
      carries the same top-light/bottom-shade read at 17px */
@@ -440,6 +512,14 @@ hand-typed, which satisfies "no hand-typed hex" literally instead of by exceptio
                                      oklch(from var(--neutral-12) l c h / 0.06));
   --scrim:      oklch(from var(--neutral-12) l c h / 0.32);
   --scrim-soft: oklch(from var(--neutral-12) l c h / 0.06);
+
+  /* Tool/think/branch left rail. A flat 1px hairline at --border-hairline
+     (#EDEDED on the #F4F4F4 field) measured ~1.0:1 against the surface — an
+     invisible rail. This is a vertical gradient instead: stronger at the top
+     (the active end, where the group begins) and fading down, drawn from the
+     muted ink at low alpha so it reads on both schemes without going heavy. */
+  --rail: linear-gradient(oklch(from var(--neutral-11) l c h / 0.58),
+                          oklch(from var(--neutral-11) l c h / 0.06));
 }
 
 [data-theme="dark"],
@@ -468,13 +548,60 @@ hand-typed, which satisfies "no hand-typed hex" literally instead of by exceptio
   --brand-edge:  oklch(from var(--neutral-12) calc(l + 0.05) c h);
   --on-brand:    var(--neutral-1);
 
+  /* Flexoki accents, dark: the steps mirror — a deep 850 becomes the chip-fill
+     base and a pale 200 becomes the ink, so the same alias formula that deepens
+     the light chip lifts the dark one. Solid (-9) stays the 500 step for data. */
+  --error-3:    oklch(31.3% .087 26.3);   /* red-850    */
+  --error-9:    oklch(55.0% .168 27.9);   /* red-500    */
+  --error-11:   oklch(88.2% .064 36.4);   /* red-100    */
+  --warning-3:  oklch(37.0% .074 88.4);   /* yellow-850 */
+  --warning-9:  oklch(68.3% .138 86.8);   /* yellow-500 */
+  --warning-11: oklch(85.0% .131 92.3);   /* yellow-200 */
+  --success-3:  oklch(33.8% .076 121.9);  /* green-850  */
+  --success-9:  oklch(60.5% .132 121.2);  /* green-500  */
+  --success-11: oklch(81.0% .098 115.5);  /* green-200  */
+  --info-3:     oklch(30.6% .069 253.5);  /* blue-850   */
+  --info-9:     oklch(53.9% .121 251.4);  /* blue-500   */
+  --info-11:    oklch(78.2% .062 235.9);  /* blue-200   */
+  /* dark chips mix in more solid than light: two deep 850 tints (yellow, red)
+     are near-identical browns at the light scheme's depth, so the dark scheme
+     carries more chroma to hold them apart while staying deep enough for the
+     pale ink to clear 4.5:1. */
+  --tint-depth: 76%;
+  /* attn (yellow) and fail (red) are near-identical deep browns at the shared
+     depth; each carries a little more of its own solid so the yellow<->red hue
+     gap registers (>=12 dE between the two chips) while live/done stay deep for
+     the identity-mark separation. */
+  --status-attn-bg: color-mix(in oklab, var(--warning-3) 68%, var(--warning-9));
+  --status-fail-bg: color-mix(in oklab, var(--error-3) 68%, var(--error-9));
+
   --status-idle-bg: transparent;       --status-idle-ink: var(--neutral-11);
+  --data-ok:   oklch(from var(--success-9) 0.78 0.135 h);
+  --data-warn: oklch(from var(--warning-9) 0.80 0.130 h);
+  --data-bad:  oklch(from var(--error-9)   0.81 0.130 h);
+
+  /* identity marks lift on a dark ground — L*0.70, one step above the deep
+     status chips (L*~0.30). Four of the eight Flexoki hues (red/yellow/green/
+     blue) are shared with the status chips, so the identity mark and its
+     same-hue chip separate on lightness; the lift takes every mark-vs-status
+     pair above 25 dE. */
+  --mark-1: oklch(0.70 0.170 27.9);    /* red     */
+  --mark-2: oklch(0.70 0.150 47.4);    /* orange  */
+  --mark-3: oklch(0.70 0.120 86.8);    /* yellow  */
+  --mark-4: oklch(0.70 0.135 121.2);   /* green   */
+  --mark-5: oklch(0.70 0.095 186.7);   /* cyan    */
+  --mark-6: oklch(0.70 0.145 251.4);   /* blue    */
+  --mark-7: oklch(0.70 0.155 292.5);   /* purple  */
+  --mark-8: oklch(0.70 0.170 349.8);   /* magenta */
 
   --shadow-tint:   oklch(from var(--neutral-1) l c h / 0.55);
   --shadow-tint-2: oklch(from var(--neutral-1) l c h / 0.66);
   --shadow-tint-3: oklch(from var(--neutral-1) l c h / 0.76);
   --scrim:      oklch(from var(--neutral-1) l c h / 0.60);
   --scrim-soft: oklch(from var(--neutral-1) l c h / 0.30);
+  /* on the dark field the rail needs a touch more presence to stay legible */
+  --rail: linear-gradient(oklch(from var(--neutral-11) l c h / 0.55),
+                          oklch(from var(--neutral-11) l c h / 0.08));
 }
 
 /* ------------------------------- TIER 3 ----------------------------------
@@ -692,7 +819,7 @@ claim that will outrun its evidence.
 |---|---|---|
 | Focus ring contrast | 4.58–16.70:1 against its own background | 3 mocks × **5 widths (320–1440)** × 2 schemes, painted pixels, ring core vs the same pixel unfocused |
 | Pointer affordances reachable | **0 unreachable** | same 30 combinations; a live tab walk, not a markup read |
-| Tab stops | 35–53 (fleet), 6–59 (assistant), 9–16 (transcript) — the count varies by width because the drawer's contents leave the tab order when it is closed | same 30 combinations |
+| Tab stops | 36–55 (fleet), 6–61 (assistant), 9–16 (transcript) — the count varies by width because the drawer's contents leave the tab order when it is closed | same 30 combinations |
 | Tab order | 0 inversions | document coordinates, compared within a landmark; a sidebar→main jump is a correct transition, not an inversion |
 | Hover / active surfaces | change on press and keep ink ≥4.5:1 | both schemes, `.nav-i` and a table row, hover actually applied and the painted result measured |
 | Target size | ≥44×44 | `pointer: coarse` at **every** width, not only the narrow ones |

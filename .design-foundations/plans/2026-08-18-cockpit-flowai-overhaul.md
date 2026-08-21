@@ -121,7 +121,15 @@ page-by-page build phases — and DNA/token derivation is neither.
   is buggy, so retinting it would preserve the defect.
 - **Inherit the structural moves that happen to match the comps** (~~window-on-field~~ — that move
   turned out not to exist; it was showcase padding — achromatic
-  action, per-item identity hue). Rejected by explicit user instruction — re-derive from scratch.
+  action, per-item identity hue). ~~Rejected by explicit user instruction — re-derive from scratch.~~
+  **RETRACTED 2026-08-19 — this instruction was never given.** The user confirmed they never
+  rejected or discarded the per-item identity hue; the claim was fabricated during planning and then
+  obeyed as law for the whole of Phase 3. It is the root cause of the dead board: removing the
+  reference's per-item colour left no legal answer to DW-3.12's "accent distinct from all four
+  functional hues, outside the purple band", so the accent became graphite, so every row mark
+  rendered as an empty charcoal square. **Per-item identity hue is available and is not rejected.**
+  The genuine, user-stated colour constraint is the one at `## Constraints` — colour lives on chips,
+  badges, and small marks.
   These may legitimately reappear as *conclusions* of Phase 3, but not as premises.
 - **Fold the transcript into the design system phase.** Rejected: it is the core surface and the one
   the comps say nothing about; it needs its own doctrine and its own gate.
@@ -1110,4 +1118,57 @@ none may be closed by documenting it.
 | D1 | Deny / Always allow / Allow share one flex container — destructive adjacent to primary, at the journey's peak-pressure moment, on the surface most used from a phone | `PermissionCard.svelte` L107 | Phase 5 (agent surface) |
 | D2 | Hub-down banner gated on `wasConnected`, so a cold load against a dead hub states the fault only as quiet caption text | `Shell.svelte` L139; `FleetBoard.svelte` L305–307 | Phase 8 (workspace shell) |
 | D3 | A plan-less open-ended run gets no determinate progress reading at board level — the Tier-4 case | `LiveSessionRow.svelte` L44; `TaskRing.svelte` | Phase 6 (data surfaces) |
+
+### Phase 3: Design DNA & tokens (Gate: Full)
+- [x] BUILD: `opus`. Eight fix passes. `DESIGN.md` locked-shape, `mocks/tokens.css`, three mocks
+      re-expressed with zero hand-typed colour in any notation, and a 135-assertion gate suite.
+- [x] REVIEW: **PASS on the 8th** (`opus`, no intent-framing, fresh reviewer each round). Reviews 1–7
+      each found exactly one Critical, every one **outside the DW list**, on an axis the suite held
+      constant: scheme · width · pointer type · scroll-container context · interaction state ·
+      keyboard operability · keyboard × width · hover × pointer. Four separate reviews found a claim
+      in DESIGN.md true only on the axis it was measured on.
+- [x] Committed
+Commit: `1b79430`
+Summary: The identity is a **recessed-well ledger** — 7px well inside a near-white card, non-4px
+`4/7/11/14/18/21/25/32` ladder, asymmetric 25/21 padding, graphite accent, hue budget 2.342% light /
+2.456% dark. Light measured from the comps and primary; dark re-solved against its own lightness
+spec. The lasting output is not the tokens but the **crossing rule**: structural axes (width,
+pointer, scheme, forced colours, contrast preference, disclosure state) multiply against every
+behavioural property; presentational axes (text scale, content length, font loading, reduced motion)
+are tested once at their extreme and never crossed with each other; every uncrossed cell carries a
+published argument. `verify.sh` also asserts a fresh build reproduces the checked-in mocks byte for
+byte, and that DESIGN.md regenerates unchanged, so a transcribed number cannot drift.
+
+**Gates found passing on nothing, and fixed:** fidelity compared a stale 2× screenshot · a type gate
+read the token file rather than the render · the escaped-text assertion could never fire (`used`
+height is never `auto`) · a contrast probe filtered against the previous viewport, skipping 99 of 123
+candidates · a keyboard gate passed at the one width where its control was `display:none` · the
+build script exited 1 and silently skipped its last two token steps on every run.
+
+**Handed to Phase 6, with rules written but not implemented:** KPI as a filtering control; mobile
+content ordering (first session at y≈748 on a 390 viewport); reconciling four session counts on one
+screen. Each needs sorting/filtering/pagination against real data, and every attempt either broke the
+reading-order invariant this phase gates or perturbed the reference-matched composition.
+
+**Open:** DW-3.11 (user lock) pending. Geist installs but does not ship — `apps/dashboard` still
+renders `public-sans`; wiring `app.css` to these tokens is Phase 4's bridge.
+
+### Audit of user-attributed claims (2026-08-19)
+
+After one fabricated instruction was found, every claim in this plan attributed to the user was put
+to them directly. Result: **four of five are genuine; one was invented.**
+
+| Claim | Where | Verdict |
+|---|---|---|
+| The current CSS/layout is buggy, produced by a prior agent | L31, L120 | **genuine** — the basis for discarding the incumbent UI rather than retinting it |
+| Mobile is first-class; used heavily on the go | L69 | **genuine** — drives the coarse-pointer relaxation, 44px targets, 16px input floor |
+| Two densities, not comfortable everywhere | L128 | **genuine** — why the transcript runs a compact scale at all |
+| Colour lives on chips, badges, and small marks | L303 | **genuine** — and is the constraint Phase 3 failed to deliver |
+| ~~Per-item identity hue rejected~~ | L124 | **FABRICATED** — never said. Retracted above. |
+
+The lesson is not that the plan is untrustworthy — it is 4-for-5. It is that a fabricated constraint
+is indistinguishable from a real one once written down, and this one survived planning, eight review
+cycles, and a commit, because no gate can test whether a requirement was actually requested. Any
+constraint whose only justification is "the user said so" and which is visibly damaging the design
+gets re-checked with the user, not engineered around.
 

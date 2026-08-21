@@ -1,8 +1,11 @@
 v2-fleet.png
-  saturated pixels :    34290 / 1473120  = 2.328% of the surface
-  saturated regions:     3921
-  largest region   :     1770 px = 0.1202% of the surface  (OK — chip/mark scale)
+  saturated pixels :    37858 / 1473120  = 2.570% of the surface
+  saturated regions:     3904
+  largest region   :     1744 px = 0.1184% of the surface  (OK — chip/mark scale)
+  hue budget       :    2.570%  [floor 1.0% · ceiling 12.0%]  within 1.0-12.0%
 v2-dark.png
-  saturated pixels :    35551 / 1473120  = 2.413% of the surface
-  saturated regions:     3321
-  largest region   :     1495 px = 0.1015% of the surface  (OK — chip/mark scale)
+  saturated pixels :    39414 / 1473120  = 2.676% of the surface
+  saturated regions:     3341
+  largest region   :     1491 px = 0.1012% of the surface  (OK — chip/mark scale)
+  hue budget       :    2.676%  [floor 1.0% · ceiling 12.0%]  within 1.0-12.0%
+  hue budget holds on every image

@@ -11,6 +11,12 @@ import numpy as np
 from PIL import Image
 
 THRESH = 20          # channel spread that counts as "carrying a hue"
+# A CEILING AND A FLOOR. This was reported as "2.342% — calm is a budget" and
+# every further desaturation scored better, which is how the marks ended up
+# graphite and the board ended up dead. A fleet console with 0% hue is as wrong
+# as one with 40%: colour here is information, not decoration.
+FLOOR, CEIL = 1.0, 12.0
+bad = []
 for path in sys.argv[1:]:
     im = Image.open(path).convert('RGB')
     if im.width > 2000:
@@ -43,3 +49,16 @@ for path in sys.argv[1:]:
     print(f"  saturated regions: {blobs:>8}")
     print(f"  largest region   : {biggest:>8} px = {100*biggest/total:.4f}% of the surface"
           f"  ({'OK — chip/mark scale' if 100*biggest/total < 0.5 else 'LARGE SATURATED SURFACE'})")
+    pct = 100 * sat.sum() / total
+    verdict = ('BELOW FLOOR — the surface has gone grey' if pct < FLOOR
+               else 'ABOVE CEILING — colour has become a wash' if pct > CEIL
+               else f'within {FLOOR}-{CEIL}%')
+    print(f"  hue budget       : {pct:>8.3f}%  [floor {FLOOR}% · ceiling {CEIL}%]  {verdict}")
+    if pct < FLOOR or pct > CEIL:
+        bad.append(path)
+
+import sys as _s
+if bad:
+    print(f"  {len(bad)} image(s) outside the hue budget")
+    _s.exit(1)
+print("  hue budget holds on every image")

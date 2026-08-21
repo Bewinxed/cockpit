@@ -30,6 +30,23 @@ echo "  checked-in $dbefore   regenerated $dafter"
 [ "$dbefore" = "$dafter" ]
 ok $? "DESIGN.md regenerates byte for byte from the current reports"
 
+say "shared classes render equivalently across all three mocks"
+node mocks/paritycheck.mjs
+ok $? "no shared class diverges between files"
+
+say "checked-in PNGs match the HTML (a stale image misleads a reviewer)"
+# The byte-identity gate covered the HTML only. A reviewer looking at a
+# stale PNG is looking at the past — which is how the fidelity gate passed
+# on a screenshot in round one.
+pbefore=$(md5sum mocks/v2-fleet.png mocks/v3-assistant.png mocks/v4-transcript.png mocks/v2-dark.png | md5sum | cut -d" " -f1)
+for a in "v2-fleet.html v2-fleet.png" "v3-assistant.html v3-assistant.png" "v4-transcript.html v4-transcript.png"; do
+  set -- $a; node mocks/render.mjs "mocks/$1" "mocks/$2" > /dev/null 2>&1; done
+node mocks/render.mjs mocks/v2-fleet.html mocks/v2-dark.png --dark > /dev/null 2>&1
+pafter=$(md5sum mocks/v2-fleet.png mocks/v3-assistant.png mocks/v4-transcript.png mocks/v2-dark.png | md5sum | cut -d" " -f1)
+echo "  checked-in $pbefore   fresh render $pafter"
+[ "$pbefore" = "$pafter" ]
+ok $? "the checked-in PNGs are a fresh render of the checked-in HTML"
+
 say "DW-3.1  palette.mjs --scheme both exits 0, no FAIL lines"
 node ~/.claude/plugins/cache/rtd/design-for-ai/4.2.0/scripts/palette.mjs \
   --seed 263 --chroma muted --harmony analogous --scheme both > /tmp/v-pal.css 2>/tmp/v-pal.err

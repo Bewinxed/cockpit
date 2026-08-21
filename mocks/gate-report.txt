@@ -19,7 +19,7 @@ content_pad_l               25          26        +1   ok
 content_pad_r               21          21        +0   ok
 page_bg                #F5F5F5     #F3F4F6       -1L   ok
 row_bg                 #FCFCFC     #FCFDFD       +1L   ok
-row_name_ink           #393939     #353535       -4L   ok
+row_name_ink           #393939     #393939       +0L   ok
 row_pitch                   44          44        +0   ok
 sidebar_bg             #FDFDFD     #FCFDFD       -0L   ok
 sidebar_w                  228         227        -1   ok

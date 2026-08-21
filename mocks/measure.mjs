@@ -123,6 +123,58 @@ check('idle ships no fill (measured 6.7 dE from the live chip when it had one)',
   [...states.values()].filter((c) => c.cls === 's-idle')
     .every((c) => c.fill === 'rgba(0, 0, 0, 0)'), states.get('s-idle')?.fill);
 
+// ---- the design is alive: colour on the marks, icons that are icons ---------
+// None of this was caught by 135 assertions across eight review cycles, because
+// the suite measured conformance and never asked whether the result was any
+// good. A column of empty grey boxes passed every check.
+console.log('\n=== marks carry colour, and their glyph is legible on it ===');
+const marks = await page.evaluate(() => {
+  const cv = document.createElement('canvas'); cv.width = cv.height = 1;
+  const ctx = cv.getContext('2d');
+  const px = (v) => { ctx.clearRect(0, 0, 1, 1); ctx.fillStyle = v; ctx.fillRect(0, 0, 1, 1);
+    const d = ctx.getImageData(0, 0, 1, 1).data; return [d[0], d[1], d[2]]; };
+  const out = [];
+  for (const m of document.querySelectorAll('.mark, .s-i')) {
+    const cs = getComputedStyle(m);
+    const sv = m.querySelector('svg');
+    out.push({ fill: px(cs.backgroundColor),
+      glyph: sv ? px(getComputedStyle(sv).stroke === 'none'
+        ? getComputedStyle(sv).fill : getComputedStyle(sv).stroke) : null });
+  }
+  return out;
+});
+const sat = ([r, g, b]) => Math.max(r, g, b) - Math.min(r, g, b);
+const cr = (a, b) => { const l = (c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
+  const L = ([r, g, bb]) => 0.2126 * l(r) + 0.7152 * l(g) + 0.0722 * l(bb);
+  const [x, y] = [L(a), L(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+const hues = new Set(marks.map((m) => m.fill.join(',')));
+const flat = marks.filter((m) => sat(m.fill) < 30);
+const worstGlyph = marks.filter((m) => m.glyph).reduce((w, m) => Math.min(w, cr(m.glyph, m.fill)), 99);
+console.log(`     ${marks.length} marks · ${hues.size} distinct fills · worst glyph contrast ${worstGlyph.toFixed(2)}:1`);
+check('every item mark carries a saturated identity hue (not graphite)',
+  flat.length === 0, `${flat.length} flat/greyscale marks`);
+check('at least 4 distinct mark hues — identity, not one accent',
+  hues.size >= 4, `${hues.size} hues`);
+check('mark glyph clears 3:1 on its own fill (WCAG 1.4.11 non-text)',
+  worstGlyph >= 3, `worst ${worstGlyph.toFixed(2)}:1`);
+
+console.log('\n=== no Unicode character standing in for an icon ===');
+const uni = await page.evaluate(() => {
+  const BAD = /[\u25A0-\u25FF\u2190-\u21FF\u2300-\u23FF\u2000-\u206F\u25CC\u25E7\u25A4\u2039\u203A\u2304]/g;
+  const ALLOW = new Set(['\u2026', '\u00b7', '\u2014', '\u2013', '\u2019']);
+  const hits = [];
+  const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  for (let n = w.nextNode(); n; n = w.nextNode()) {
+    for (const m of (n.textContent.match(BAD) || [])) {
+      if (ALLOW.has(m)) continue;
+      hits.push(`${m} in <${n.parentElement.tagName.toLowerCase()}.${n.parentElement.className}>`);
+    }
+  }
+  return hits;
+});
+check('no Unicode glyph used as an icon', uni.length === 0,
+  uni.length ? uni.slice(0, 4).join(' | ') : 'none');
+
 // ---- DW-3.4: the dark ramp actually activates -------------------------------
 console.log('\n=== DW-3.4 — dark ramp under the project\'s .dark class variant ===');
 const themed = await page.evaluate(() => {

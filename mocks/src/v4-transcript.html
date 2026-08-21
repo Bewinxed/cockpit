@@ -62,7 +62,7 @@ body{font:400 var(--c-fs)/1.5 'Geist Variable',ui-sans-serif,system-ui,sans-seri
   grid-template-columns:228px minmax(0,1fr);height:100vh;width:100%;-webkit-font-smoothing:antialiased}
 .mono{font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11.5px}
 
-aside{background:var(--sidebar);border-right:1px solid var(--line);display:flex;flex-direction:column;overflow:hidden}
+aside{background:var(--well);border-right:1px solid var(--line);display:flex;flex-direction:column;overflow:hidden}
 .brand{height:57px;display:flex;align-items:center;gap:9px;padding:0 14px;flex-shrink:0}
 .logo{width:26px;height:26px;border-radius:7px;background:linear-gradient(#3C3C3C,#262626);color:#fff;
   display:grid;place-items:center;font-size:12px;font-weight:600}
@@ -108,7 +108,8 @@ main{display:flex;flex-direction:column;overflow:hidden;min-width:0;position:rel
   padding:1px 4px;border-radius:4px}
 
 /* tool group: indent + rail, never a nested card */
-.tools{margin:6px 0 0 7px;padding-left:12px;border-left:1px solid var(--line)}
+.tools{margin:6px 0 0 7px;padding-left:12px;
+  background:var(--rail) left top/2px 100% no-repeat}
 .trow{height:var(--c-row);display:flex;align-items:center;gap:8px;font-size:var(--c-fs-sm);color:var(--ink-2)}
 .trow .tk{font-weight:600;color:var(--ink);font-size:var(--c-fs-sm)}
 .trow .arg{font-family:ui-monospace,monospace;color:var(--muted);overflow:hidden;
@@ -117,17 +118,25 @@ main{display:flex;flex-direction:column;overflow:hidden;min-width:0;position:rel
 .trow .d{color:var(--ok-ink);font-variant-numeric:tabular-nums;flex:0 0 auto}
 .tdot{width:5px;height:5px;border-radius:999px;flex:0 0 auto}
 
-.think{margin:6px 0 0 7px;padding-left:12px;border-left:1px solid var(--line);
+.think{margin:6px 0 0 7px;padding-left:12px;
+  background:var(--rail) left top/2px 100% no-repeat;
   font-style:italic;color:var(--muted);font-size:var(--c-fs-sm);line-height:1.5;max-width:70ch}
 .think .caret{display:inline-block;width:2px;height:11px;background:var(--muted);
   vertical-align:-1px;margin-left:2px;animation:blink 1.1s steps(1) infinite}
 @keyframes blink{50%{opacity:0}}
 
 /* subagent branch: a fold, not a box */
-.branch{margin:6px 0 0 7px;padding-left:12px;border-left:1px solid var(--line)}
+.branch{margin:6px 0 0 7px;padding-left:12px;
+  background:var(--rail) left top/2px 100% no-repeat}
 .bhead{height:var(--c-row);display:flex;align-items:center;gap:8px;font-size:var(--c-fs-sm)}
-.bhead .tag{font-size:10px;font-weight:600;letter-spacing:.03em;text-transform:uppercase;
-  color:var(--muted);border:1px solid var(--line);border-radius:4px;padding:1px 5px}
+/* Delegate badge: a subagent branch header must read distinct from the tool
+   rows above it. A Solar branch glyph, an accent chip fill, and 11.5px ink that
+   clears 4.5:1 on the chip in both schemes (accent-text on accent-bg-subtle is a
+   palette-guaranteed pair) — not 10px muted text on a faint hairline. */
+.bhead .tag{display:inline-flex;align-items:center;gap:4px;font-size:var(--text-sm);
+  font-weight:500;letter-spacing:.02em;text-transform:uppercase;color:var(--accent-text);
+  background:var(--accent-bg-subtle);border:0;border-radius:5px;padding:2px 7px}
+.bhead .tag svg{width:12px;height:12px;flex:0 0 auto}
 
 /* ---- human-in-the-loop cards ---- */
 .hitl{border:1px solid #E7E7E7;border-radius:var(--r-panel);background:#fff;
@@ -216,26 +225,114 @@ main{display:flex;flex-direction:column;overflow:hidden;min-width:0;position:rel
   .shead,.tr,.dock{padding-left:16px;padding-right:16px}
   .shead .meta{display:none}
   .hitl,.tools,.think,.branch{margin-left:0}
+  /* On a phone the composer docks in normal flow at the foot of the column
+     instead of floating over the scroll — so it reads and tabs LAST, after the
+     transcript, and nothing scrolls underneath a hovering capsule. */
+  .composer{position:static;transform:none;left:auto;width:auto;
+    margin:6px 16px calc(6px + env(safe-area-inset-bottom));z-index:auto}
+  .fade{display:none}
+  .tr{padding-bottom:16px}
 }
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+/* ===== shared sidebar shell — same component as the fleet board (v2) ===== */
+/* ---------------- sidebar ---------------- */
+aside{background:var(--sidebar);border-right:1px solid var(--line);display:flex;flex-direction:column}
+.brand{height:57px;display:flex;align-items:center;gap:9px;padding:0 14px;flex-shrink:0}
+.logo{width:26px;height:26px;border-radius:7px;background:var(--action);color:var(--on-action);
+      display:grid;place-items:center;font-size:13px;font-weight:700}
+.brand b{font-size:15px;font-weight:600;letter-spacing:-.004em}
+.brand .collapse{margin-left:auto;color:var(--muted);font-size:15px}
+
+.sec{font-size:10.5px;color:var(--sec-ink);font-weight:600;text-transform:uppercase;letter-spacing:.07em;
+     padding:0 20px;margin:16px 0 7px;display:flex;align-items:center;gap:7px}
+.sec .plus{margin-left:auto;width:20px;height:20px;border:1px solid var(--line);border-radius:6px;
+           background:var(--elev);display:grid;place-items:center;color:var(--muted);font-size:12px}
+nav{padding:0 10px;display:flex;flex-direction:column;gap:1px}
+.nav-i{height:36px;border-radius:var(--r-ctl);display:flex;align-items:center;gap:10px;
+       padding:0 10px;font-size:14px;color:var(--nav-ink);font-weight:450}
+.nav-i .ic{width:17px;text-align:center;font-size:13px;color:var(--icon-ink)}
+/* sidebar icon parity: v2/v3 carry this rule, v4 did not, so v4's nav glyphs
+   rendered at 17px against 16px on the other two boards. One optical size. */
+.ic svg{width:16px;height:16px}
+.nav-i.on{background:var(--elev);color:var(--ink);font-weight:600;
+          box-shadow:var(--chip-shadow)}
+.nav-i.on .ic{color:var(--ink)}
+.pill-n{margin-left:auto;font-size:11px;font-weight:600;line-height:1;padding:4px 7px;border-radius:999px;
+        background:var(--lav-bg);color:var(--lav-fg)}
+.pill-n.mint{background:var(--mint-bg);color:var(--mint-fg)}
+
+.runs{padding:0 10px;display:flex;flex-direction:column;gap:1px}
+.run-i{height:32px;border-radius:7px;display:flex;align-items:center;gap:9px;padding:0 10px;
+       font-size:13px;color:var(--run-ink);font-weight:450}
+.run-i .mark{width:17px;height:17px;border-radius:6px;flex-shrink:0;display:grid;place-items:center}
+.run-i .mark svg{width:10px;height:10px;display:block}
+.run-i .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1 1 auto}
+.run-i .star{margin-left:auto;color:var(--muted);font-size:12px}
+
+.quota{margin:auto 10px 12px;background:var(--elev);border:1px solid var(--line);border-radius:var(--r-panel);padding:13px}
+.run-i .star{flex:0 0 auto}
+.quota .n{font-size:14.5px;font-weight:600;display:flex;align-items:center;gap:6px}
+.quota .n svg{width:15px;height:15px;flex:0 0 15px;color:var(--warn-fg)}
+.quota .s{font-size:11.5px;color:var(--muted);margin:2px 0 10px}
+.quota button{width:100%;height:31px;border:0;border-radius:var(--r-ctl);background:var(--sel);
+              color:var(--btn-ink);font:600 12.5px 'Geist Variable';cursor:pointer}
+.me{border-top:1px solid var(--line);height:60px;display:flex;align-items:center;gap:9px;padding:0 14px}
+.av{width:31px;height:31px;border-radius:999px;background:var(--av-bg);flex-shrink:0;
+    display:grid;place-items:center;font-size:11.5px;font-weight:600;color:var(--av-ink);letter-spacing:.01em}
+.me .nm{font-size:13px;font-weight:600;line-height:1.25}
+.me .em{font-size:11.5px;color:var(--muted)}
+.me .chev{margin-left:auto;color:var(--muted);font-size:11px}
+
+/* Defect 8: tool rows align in columns — icon + fixed-width label, then arg */
+.trow{align-items:center}
+.tic{width:15px;height:15px;flex:0 0 auto;display:grid;place-items:center;color:var(--muted)}
+.tic svg{width:15px;height:15px;display:block}
+.trow .tk{flex:0 0 42px}
+.bhead .tk{flex:0 0 auto}
+/* Defect 7 + 9: quick-reply keycaps and graceful wrapping to realistic answers */
+.qopts{align-items:flex-start}
+.qopts button{display:inline-flex;align-items:center;gap:8px;height:auto;
+  padding:7px 11px;text-align:left;max-width:100%}
+.qopts button .kc{flex:0 0 auto}
+.kc{display:inline-grid;place-items:center;min-width:17px;height:17px;padding:0 4px;border-radius:5px;
+  background:#E4E4E4;font:600 10.5px ui-monospace,monospace;color:var(--ink-2);
+  line-height:1}
 </style></head><body>
 
 <aside>
-  <div class="brand"><div class="logo">◧</div><b>Outpost</b></div>
+    <div class="brand"><div class="logo">◧</div><b>Outpost</b><span class="collapse"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M9.5 4.5v15"/></svg></span></div>
+
   <div class="sec">Fleet</div>
   <nav>
-    <div class="nav-i"><span>Fleet</span></div>
-    <div class="nav-i"><span>Tools</span></div>
-    <div class="nav-i"><span>Rules</span></div>
-    <div class="nav-i"><span>Usage</span></div>
+    <div class="nav-i on"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.6"/><rect x="14" y="3" width="7" height="7" rx="1.6"/><rect x="3" y="14" width="7" height="7" rx="1.6"/><rect x="14" y="14" width="7" height="7" rx="1.6"/></svg></span>Fleet<span class="pill-n">6</span></div>
+    <div class="nav-i"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 0 1-5.4 5.4L4 17v3h3l5.3-5.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.1-2.1z"/></svg></span>Tools</div>
+    <div class="nav-i"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16M4 12h11M4 19h7"/></svg></span>Rules<span class="pill-n mint">14</span></div>
+    <div class="nav-i"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></span>Usage</div>
+    <div class="nav-i"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span>Projects</div>
   </nav>
-  <div class="sec">Running now</div>
+
+  <div class="sec">Machines</div>
+  <nav>
+    <div class="nav-i"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4.5" width="19" height="12" rx="2"/><path d="M8 20h8M12 16.5V20"/></svg></span>nixbox</div>
+    <div class="nav-i"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4.5" width="19" height="12" rx="2"/><path d="M8 20h8M12 16.5V20"/></svg></span>mba-m3</div>
+    <div class="nav-i"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4.5" width="19" height="12" rx="2"/><path d="M8 20h8M12 16.5V20"/></svg></span>hetzner-01</div>
+  </nav>
+
+  <div class="sec">Running now <span class="plus"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></span></div>
   <div class="runs">
-    <div class="run-i on"><span class="mark" style="background:#F0705E"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.55" stroke-linecap="round"><circle cx="12" cy="12" r="3.1"/><ellipse cx="12" cy="12" rx="10" ry="4.6" transform="rotate(45 12 12)"/><ellipse cx="12" cy="12" rx="10" ry="4.6" transform="rotate(-45 12 12)"/></svg></span><span class="nm">wire delegate row o…</span></div>
-    <div class="run-i"><span class="mark" style="background:#F2C14E"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.55" stroke-linecap="round"><circle cx="12" cy="12" r="3.1"/><ellipse cx="12" cy="12" rx="10" ry="4.6" transform="rotate(45 12 12)"/><ellipse cx="12" cy="12" rx="10" ry="4.6" transform="rotate(-45 12 12)"/></svg></span><span class="nm">table system spike</span></div>
-    <div class="run-i"><span class="mark" style="background:#4FC3D9"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.55" stroke-linecap="round"><circle cx="12" cy="12" r="3.1"/><ellipse cx="12" cy="12" rx="10" ry="4.6" transform="rotate(45 12 12)"/><ellipse cx="12" cy="12" rx="10" ry="4.6" transform="rotate(-45 12 12)"/></svg></span><span class="nm">flaky ws reconnect</span></div>
-    <div class="run-i"><span class="mark" style="background:#7B8FE8"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.55" stroke-linecap="round"><circle cx="12" cy="12" r="3.1"/><ellipse cx="12" cy="12" rx="10" ry="4.6" transform="rotate(45 12 12)"/><ellipse cx="12" cy="12" rx="10" ry="4.6" transform="rotate(-45 12 12)"/></svg></span><span class="nm">landing copy pass</span></div>
+    <div class="run-i"><span class="mark" style="background:#F0705E"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.55" stroke-linecap="round"><circle cx="12" cy="12" r="3.1"/><ellipse cx="12" cy="12" rx="10" ry="4.6" transform="rotate(45 12 12)"/><ellipse cx="12" cy="12" rx="10" ry="4.6" transform="rotate(-45 12 12)"/></svg></span><span class="nm">wire delegate row outc…</span><span class="star"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3.6 2.6 5.4 5.9.8-4.3 4.1 1 5.9-5.2-2.8-5.2 2.8 1-5.9L3.5 9.8l5.9-.8z"/></svg></span></div>
+    <div class="run-i"><span class="mark" style="background:#F2C14E"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.55" stroke-linecap="round"><circle cx="12" cy="12" r="3.1"/><ellipse cx="12" cy="12" rx="10" ry="4.6" transform="rotate(45 12 12)"/><ellipse cx="12" cy="12" rx="10" ry="4.6" transform="rotate(-45 12 12)"/></svg></span><span class="nm">table system spike</span><span class="star"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3.6 2.6 5.4 5.9.8-4.3 4.1 1 5.9-5.2-2.8-5.2 2.8 1-5.9L3.5 9.8l5.9-.8z"/></svg></span></div>
+    <div class="run-i"><span class="mark" style="background:#4FC3D9"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.55" stroke-linecap="round"><circle cx="12" cy="12" r="3.1"/><ellipse cx="12" cy="12" rx="10" ry="4.6" transform="rotate(45 12 12)"/><ellipse cx="12" cy="12" rx="10" ry="4.6" transform="rotate(-45 12 12)"/></svg></span><span class="nm">flaky ws reconnect</span><span class="star"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3.6 2.6 5.4 5.9.8-4.3 4.1 1 5.9-5.2-2.8-5.2 2.8 1-5.9L3.5 9.8l5.9-.8z"/></svg></span></div>
+    <div class="run-i"><span class="mark" style="background:#7B8FE8"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.55" stroke-linecap="round"><circle cx="12" cy="12" r="3.1"/><ellipse cx="12" cy="12" rx="10" ry="4.6" transform="rotate(45 12 12)"/><ellipse cx="12" cy="12" rx="10" ry="4.6" transform="rotate(-45 12 12)"/></svg></span><span class="nm">landing copy pass</span><span class="star"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3.6 2.6 5.4 5.9.8-4.3 4.1 1 5.9-5.2-2.8-5.2 2.8 1-5.9L3.5 9.8l5.9-.8z"/></svg></span></div>
   </div>
+
+  <div class="quota">
+    <div class="n"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4.5 13.5H11L10 22l8.5-11.5H12z"/></svg>18.40 / 50.00</div>
+    <div class="s">Spend today across the fleet</div>
+    <button>View usage</button>
+  </div>
+  <div class="me"><div class="av">bw</div><div><div class="nm">bewinxed</div><div class="em">obelisk-of-light</div></div><span class="chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9.5 6 6 6-6"/></svg></span></div>
 </aside>
 
 <main>
@@ -258,13 +355,13 @@ main{display:flex;flex-direction:column;overflow:hidden;min-width:0;position:rel
       <div class="who"><span class="dot a">◧</span>Claude Code</div>
       <div class="msg">Three real call sites use the age comparator: <code>FleetBoard.svelte</code>, <code>SessionPane.svelte</code>, <code>fleet-memory.ts</code>. A fourth hit is a test fixture asserting the old shape deliberately.</div>
       <div class="tools">
-        <div class="trow"><span class="tdot" style="background:#5AA9E6"></span><span class="tk">Grep</span><span class="arg">outcomeLabel\( — 4 files</span><span class="t">0.4s</span></div>
-        <div class="trow"><span class="tdot" style="background:#5AA9E6"></span><span class="tk">Read</span><span class="arg">lib/state/delegates.svelte.ts</span><span class="t">0.2s</span></div>
-        <div class="trow"><span class="tdot" style="background:#B98BE0"></span><span class="tk">Edit</span><span class="arg">DelegateRow.svelte</span><span class="d">+14 −6</span></div>
-        <div class="trow"><span class="tdot" style="background:#B98BE0"></span><span class="tk">Edit</span><span class="arg">lib/format/age.ts</span><span class="d">+9 −2</span></div>
+        <div class="trow"><span class="tic">{{solar:magnifer}}</span><span class="tk">Grep</span><span class="arg">outcomeLabel\( — 4 files</span><span class="t">0.4s</span></div>
+        <div class="trow"><span class="tic">{{solar:document-text}}</span><span class="tk">Read</span><span class="arg">lib/state/delegates.svelte.ts</span><span class="t">0.2s</span></div>
+        <div class="trow"><span class="tic">{{solar:pen}}</span><span class="tk">Edit</span><span class="arg">DelegateRow.svelte</span><span class="d">+14 −6</span></div>
+        <div class="trow"><span class="tic">{{solar:pen}}</span><span class="tk">Edit</span><span class="arg">lib/format/age.ts</span><span class="d">+9 −2</span></div>
       </div>
       <div class="branch">
-        <div class="bhead"><span class="tag">delegate</span><span class="tk">fixture-check</span><span class="arg">pi · 2 steps</span><span class="t">9s</span></div>
+        <div class="bhead"><span class="tag">{{solar:branching-paths-down}}delegate</span><span class="tk">fixture-check</span><span class="arg">pi · 2 steps</span><span class="t">9s</span></div>
         <div class="msg" style="font-size:var(--c-fs-sm);color:var(--ink-2)">Fixture asserts the old shape on purpose. Left alone, flagged.</div>
       </div>
     </div>
@@ -273,7 +370,10 @@ main{display:flex;flex-direction:column;overflow:hidden;min-width:0;position:rel
       <h2 id="q1"><span class="chip-s s-att">needs you</span>Question from the agent</h2>
       <p class="lede">Two delegate rows can finish in the same second. What should break the tie in the age column?</p>
       <div class="qopts">
-        <button>Start time</button><button>Session id</button><button>Machine, then time</button>
+        <button><kbd class="kc">1</kbd><span>Earliest start time wins the tie</span></button>
+        <button><kbd class="kc">2</kbd><span>Order by session id</span></button>
+        <button><kbd class="kc">3</kbd><span>Group by machine, then by start time within each machine</span></button>
+        <button><kbd class="kc">4</kbd><span>Keep them equal and preserve the order they arrived in</span></button>
       </div>
       <div class="qfree"><span>Or answer in your own words</span><span class="fake-in">Type an answer…</span></div>
     </section>

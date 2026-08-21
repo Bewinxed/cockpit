@@ -42,11 +42,11 @@ RENAME = {
     'action': 'brand-solid', 'action-2': 'brand-hi', 'on-action': 'on-brand',
     'mark-glyph': 'on-brand', 'orb-ink': 'accent-solid',
     # status
-    'ok-bg': 'status-done-bg', 'ok-fg': 'status-done-ink', 'ok-ink': 'status-done-ink',
-    'err-bg': 'status-fail-bg', 'err-fg': 'status-fail-ink', 'bad-ink': 'status-fail-ink',
+    'ok-bg': 'status-done-bg', 'ok-fg': 'status-done-ink', 'ok-ink': 'data-ok',
+    'err-bg': 'status-fail-bg', 'err-fg': 'status-fail-ink', 'bad-ink': 'data-bad',
     'att-bg': 'status-attn-bg', 'att-fg': 'status-attn-ink',
     'warn-bg': 'status-attn-bg', 'warn-fg': 'status-attn-ink',
-    'warn-ink': 'status-attn-ink',
+    'warn-ink': 'data-warn',
     'lav-bg': 'status-attn-bg', 'lav-fg': 'status-attn-ink',
     'mint-bg': 'surface-sunken', 'mint-fg': 'ink-muted',
     'dot': 'status-attn-ink',
@@ -194,6 +194,39 @@ button{cursor:pointer}
   color:var(--status-attn-ink);font-weight:var(--weight-strong);gap:6px}
 .widen button svg{width:11px;height:11px;flex:0 0 auto}
 
+/* ---- pagination and row actions were unstyled text ----------------------
+   `< 1 2 3 ... 6 >` as bare characters and three plain text links in a design
+   that is otherwise finished. The reference has real controls with a filled
+   active page. */
+.pg{display:flex;align-items:center;gap:4px}
+.pg button{min-width:28px;height:28px;padding:0 7px;border:1px solid transparent;
+  border-radius:var(--radius-control);color:var(--ink-body);font-size:var(--text-sm);
+  display:inline-flex;align-items:center;justify-content:center}
+.pg button.b{border-color:var(--border-control);background:var(--surface-raised)}
+.pg button.on{background:var(--brand-solid);background-image:var(--gradient-action);
+  box-shadow:var(--shadow-action);color:var(--on-brand);font-weight:var(--weight-strong)}
+.pg button svg{width:12px;height:12px}
+/* the coarse-pointer minimum lives here, after the pagination rule: placed in
+   the earlier @media block it lost on source order and every page button
+   rendered 28x44 on touch */
+@media (pointer:coarse){ .pg button{min-width:44px} }
+/* Row-action icon buttons. A real affordance at rest — a subtle control edge on
+   a raised fill — that gains a hover fill on fine pointers and a 44px target on
+   coarse ones (the @media(pointer:coarse) sweep below covers `button`). Consistent
+   28x28 sizing; the idle "—" is a muted dash, never a button. */
+.act{gap:8px}
+.act button{width:28px;height:28px;padding:0;border:1px solid var(--border-control);
+  border-radius:var(--radius-control);background:var(--surface-raised);color:var(--ink-body);
+  display:inline-flex;align-items:center;justify-content:center}
+.act button svg{width:15px;height:15px}
+.act button[disabled]{border-color:transparent;background:none;color:var(--ink-muted);cursor:default}
+.act .mut{color:var(--ink-muted);display:inline-flex;align-items:center;justify-content:center;
+  width:28px;height:28px}
+.sec svg{width:11px;height:11px;opacity:.75;flex:0 0 auto}
+.crumb svg,.brand .logo svg{flex:0 0 auto}
+.sel:after{display:none}
+.sel svg.chev{width:12px;height:12px;margin-left:auto}
+
 /* press feedback is legitimate on touch and stays outside the hover query */
 .cta:active,.stop:active,.choice button.grant:active{
   filter:brightness(0.94);box-shadow:var(--shadow-inset-sel)}
@@ -211,12 +244,20 @@ CHOICE_CSS = """/* A DESTRUCTIVE GATE HAS NO PRIMARY.
    recessed at the same fill, and differ in KIND: the grant carries a graphite
    edge and graphite ink, the refusal a hairline and muted ink, each with its own
    glyph. */
-.choice button{background:var(--surface-sunken);background-image:none;
-  box-shadow:var(--shadow-inset-sel);gap:6px}
+/* NEITHER OPTION IS PUSHED IS NOT THE SAME AS NEITHER IS VISIBLE.
+   Flattening both to the same recessed grey answered the salience complaint by
+   making the most important decision in the product look like a disabled form.
+   Filled-primary against clearly-outlined-secondary is the conventional answer
+   and is not a nudge when both carry real presence: equal size, equal type
+   weight, equal *visual* weight, distinguished by treatment and glyph. The
+   original defect was 12.62:1 against 1.12:1 — a slab beside a whisper — and
+   that is what had to go, not the contrast itself. */
+.choice button{gap:6px;font-weight:var(--weight-strong)}
 .choice button svg{width:11px;height:11px;flex:0 0 auto}
-.choice button.grant,.choice button.refuse{border-color:var(--border-control);border-width:1px}
-.choice button.grant{color:var(--ink-strong)}
-.choice button.refuse{color:var(--ink-body)}
+.choice button.grant{background:var(--brand-solid);background-image:var(--gradient-action);
+  box-shadow:var(--shadow-action);color:var(--on-brand);border-color:transparent}
+.choice button.refuse{background:var(--surface-raised);background-image:none;
+  border:1.5px solid var(--ink-row);color:var(--ink-strong);box-shadow:var(--shadow-hairline)}
 
 """
 
@@ -224,13 +265,62 @@ MARK_FILL_CSS = """
 /* Item marks. Identity used to ride an inline hue; it now rides the label and
    the glyph, and the mark carries the DNA's top-light/bottom-shade read.
    Appended last so it wins on source order regardless of each file's spelling. */
-.mark,.s-i{background-color:var(--brand-solid);background-image:var(--mark-overlay)}
+.mark,.s-i{background-image:var(--mark-overlay)}
+.mark,.s-i{background-color:var(--mark-1)}
+.mark.m2,.s-i.m2{background-color:var(--mark-2)}
+.mark.m3,.s-i.m3{background-color:var(--mark-3)}
+.mark.m4,.s-i.m4{background-color:var(--mark-4)}
+.mark.m5,.s-i.m5{background-color:var(--mark-5)}
+.mark.m6,.s-i.m6{background-color:var(--mark-6)}
+.mark.m7,.s-i.m7{background-color:var(--mark-7)}
+.mark.m8,.s-i.m8{background-color:var(--mark-8)}
+/* the glyph was a pale stroke on near-black and read as an empty square */
+.mark svg,.s-i svg{stroke:var(--mark-glyph);opacity:1;stroke-width:2}
 /* The tool dot distinguished read tools from mutating ones by HUE ALONE
    (blue vs violet, and violet sits inside the banned band). Kind is carried by
    fill-vs-ring instead, so it survives greyscale and colour blindness. */
 .tdot{background:var(--brand-solid)}
 .tdot.read{background:transparent;box-shadow:inset 0 0 0 1.5px var(--ink-muted)}
 """
+
+# ---- session identity, keyed to the author's per-session inline hex ----------
+# Identity must NOT depend on DOM position. The same session's mark appears in the
+# sidebar "Running now" list, the board name cell and the v4 session header, and
+# every occurrence must resolve to the SAME hue (its Flexoki mark class) and the
+# SAME harness glyph. The author's stable key is the inline hex, which is present
+# in every location. a11y used to assign hue (i % 8) and glyph (i % 3) by DOM
+# occurrence order, so — because the sidebar marks precede the board marks — one
+# session drew a different colour and a different harness glyph in each place.
+# Keyed here, at the point where the hex still exists and before it is consumed.
+HEX_MARK = {   # identity hex -> Flexoki mark class (hue), hue-matched, all distinct
+    '#F0705E': 1, '#E8873B': 2, '#F2C14E': 3, '#63C68B': 4,
+    '#4FC3D9': 5, '#5AA9E6': 6, '#7B8FE8': 7, '#B98BE0': 8,
+}
+HEX_HARNESS = {  # identity hex -> harness (glyph), read from the board Harness column
+    '#F0705E': 'claude', '#F2C14E': 'opencode', '#4FC3D9': 'claude',
+    '#7B8FE8': 'pi',     '#63C68B': 'claude',   '#E8873B': 'opencode',
+    '#B98BE0': 'claude', '#5AA9E6': 'pi',
+}
+HARNESS_GLYPH = {
+    'claude':   '<path d="M12 4l7 4v8l-7 4-7-4V8z"/>',
+    'opencode': '<path d="M9 8l-4 4 4 4M15 8l4 4-4 4"/>',
+    'pi':       '<path d="M5 7.5h14M9 7.5v9M15 7.5v6.5a2.5 2.5 0 0 0 4 0"/>',
+}
+MARK_SVG_OPEN = ('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+                 'stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">')
+
+
+def _mark_ident(m):
+    cls, hexv, svg = m.group(1), m.group(2).upper(), m.group(3)
+    n = HEX_MARK.get(hexv, 1)
+    klass = cls if n == 1 else f'{cls} m{n}'
+    if cls == 'mark':
+        # a session mark (board / sidebar / v4 header) carries the harness glyph,
+        # keyed to the same identity hex — matches its stated harness everywhere
+        svg = MARK_SVG_OPEN + HARNESS_GLYPH[HEX_HARNESS.get(hexv, 'claude')] + '</svg>'
+    # .s-i quick-action marks keep their own action glyph; only the hue is keyed
+    return f'<span class="{klass}">{svg}</span>'
+
 
 WEIGHT = {'700': 'var(--weight-strong)', '600': 'var(--weight-strong)',
           '500': 'var(--weight-strong)', '450': 'var(--weight-medium)',
@@ -348,10 +438,17 @@ def transform(path: Path):
     # 1.07:1 and v3's .s-i put white ink on white at 1.09:1. The fill is
     # re-supplied here for EVERY class that lost one, appended last so it wins
     # on source order rather than depending on each file's rule spelling.
-    stripped = len(re.findall(r'\s*style="background:#[0-9A-Fa-f]{6}"', s))
-    R._record('strip inline hue fills', stripped,
-              {'v2-fleet.html': 12, 'v3-assistant.html': 15, 'v4-transcript.html': 9})
-    s = re.sub(r'\s*style="background:#[0-9A-Fa-f]{6}"', '', s)
+    # The inline hex is the author's session-identity key, not a colour to throw
+    # away: it maps to a fixed Flexoki mark class (hue) and, for session marks, a
+    # fixed harness glyph — so the same session reads identically in every
+    # location. See HEX_MARK / HEX_HARNESS above.
+    marks = len(re.findall(
+        r'<span class="(?:mark|s-i)" style="background:#[0-9A-Fa-f]{6}">', s))
+    R._record('identity marks keyed to session hex', marks,
+              {'v2-fleet.html': 12, 'v3-assistant.html': 15, 'v4-transcript.html': 5})
+    s = re.sub(
+        r'<span class="(mark|s-i)" style="background:(#[0-9A-Fa-f]{6})">(<svg.*?</svg>)</span>',
+        _mark_ident, s, flags=re.S)
     s = R.lit(s, 'inject mark fill', '</style>', MARK_FILL_CSS + '</style>', 1)
 
     # 6. type: sizes onto the ladder, weights down one notch, leading tokenised
@@ -580,6 +677,7 @@ def transform(path: Path):
               # sweep found .quota button at 235x31, .icobtn 32 wide, .cta 36
               # high, .sel 32 high and .stop 34x34, all of which only got 44px
               # inside a WIDTH query and so never applied to a tablet
+
               "  button,textarea,input,select,.ghost,.icobtn,.sel,.search,.cta,"
               ".stop,.quota button,.back,.fake-in{min-height:44px}\n"
               "  button,.icobtn,.stop,.back{min-width:44px}\n"
@@ -591,7 +689,7 @@ def transform(path: Path):
     s = R.lit(s, 'mark radius consistent',
               ".run-i .mark{width:17px;height:17px;border-radius:6px;",
               ".run-i .mark{width:17px;height:17px;border-radius:var(--radius-mark);",
-              {'v2-fleet.html': 1, 'v3-assistant.html': 1, 'v4-transcript.html': 0})
+              {'v2-fleet.html': 1, 'v3-assistant.html': 1, 'v4-transcript.html': 1})
 
     # 18. MAJOR — the Action column shipped unlabeled Unicode stand-ins with no
     # accessible name. They are words now, like the two beside them.

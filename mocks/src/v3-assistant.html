@@ -97,16 +97,16 @@ aside{background:var(--sidebar);border-right:1px solid var(--line);display:flex;
 .brand b{font-size:15px;font-weight:600;letter-spacing:-.004em}
 .brand .collapse{margin-left:auto;color:var(--muted);font-size:15px}
 
-.sec{font-size:11.5px;color:var(--sec-ink);font-weight:500;padding:0 20px;margin:14px 0 6px;
-     display:flex;align-items:center;gap:7px}
+.sec{font-size:10.5px;color:var(--sec-ink);font-weight:600;text-transform:uppercase;letter-spacing:.07em;
+     padding:0 20px;margin:16px 0 7px;display:flex;align-items:center;gap:7px}
 .sec .plus{margin-left:auto;width:20px;height:20px;border:1px solid var(--line);border-radius:6px;
            background:var(--elev);display:grid;place-items:center;color:var(--muted);font-size:12px}
 nav{padding:0 10px;display:flex;flex-direction:column;gap:1px}
 .nav-i{height:36px;border-radius:var(--r-ctl);display:flex;align-items:center;gap:10px;
        padding:0 10px;font-size:14px;color:var(--nav-ink);font-weight:450}
 .nav-i .ic{width:17px;text-align:center;font-size:13px;color:var(--icon-ink)}
-.nav-i.on{background:var(--sel);color:var(--ink);font-weight:600;
-          box-shadow:var(--sel-shadow)}
+.nav-i.on{background:var(--elev);color:var(--ink);font-weight:600;
+          box-shadow:var(--chip-shadow)}
 .nav-i.on .ic{color:var(--ink)}
 .pill-n{margin-left:auto;font-size:11px;font-weight:600;line-height:1;padding:4px 7px;border-radius:999px;
         background:var(--lav-bg);color:var(--lav-fg)}
@@ -438,7 +438,7 @@ tbody tr:last-child td{border-bottom:0}
 <input type="checkbox" id="navt" hidden><aside>
   <div class="brand"><div class="logo">◧</div><b>Outpost</b><span class="collapse"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M9.5 4.5v15"/></svg></span></div>
 
-  <div class="sec">◌ Fleet</div>
+  <div class="sec">Fleet</div>
   <nav>
     <div class="nav-i on"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.6"/><rect x="14" y="3" width="7" height="7" rx="1.6"/><rect x="3" y="14" width="7" height="7" rx="1.6"/><rect x="14" y="14" width="7" height="7" rx="1.6"/></svg></span>Fleet<span class="pill-n">6</span></div>
     <div class="nav-i"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 0 1-5.4 5.4L4 17v3h3l5.3-5.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.1-2.1z"/></svg></span>Tools</div>
@@ -447,14 +447,14 @@ tbody tr:last-child td{border-bottom:0}
     <div class="nav-i"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span>Projects</div>
   </nav>
 
-  <div class="sec">◌ Machines</div>
+  <div class="sec">Machines</div>
   <nav>
     <div class="nav-i"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4.5" width="19" height="12" rx="2"/><path d="M8 20h8M12 16.5V20"/></svg></span>nixbox</div>
     <div class="nav-i"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4.5" width="19" height="12" rx="2"/><path d="M8 20h8M12 16.5V20"/></svg></span>mba-m3</div>
     <div class="nav-i"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4.5" width="19" height="12" rx="2"/><path d="M8 20h8M12 16.5V20"/></svg></span>hetzner-01</div>
   </nav>
 
-  <div class="sec">◌ Running now <span class="plus"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></span></div>
+  <div class="sec">Running now <span class="plus"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></span></div>
   <div class="runs">
     <div class="run-i"><span class="mark" style="background:#F0705E"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.55" stroke-linecap="round"><circle cx="12" cy="12" r="3.1"/><ellipse cx="12" cy="12" rx="10" ry="4.6" transform="rotate(45 12 12)"/><ellipse cx="12" cy="12" rx="10" ry="4.6" transform="rotate(-45 12 12)"/></svg></span><span class="nm">wire delegate row outc…</span><span class="star"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3.6 2.6 5.4 5.9.8-4.3 4.1 1 5.9-5.2-2.8-5.2 2.8 1-5.9L3.5 9.8l5.9-.8z"/></svg></span></div>
     <div class="run-i"><span class="mark" style="background:#F2C14E"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.55" stroke-linecap="round"><circle cx="12" cy="12" r="3.1"/><ellipse cx="12" cy="12" rx="10" ry="4.6" transform="rotate(45 12 12)"/><ellipse cx="12" cy="12" rx="10" ry="4.6" transform="rotate(-45 12 12)"/></svg></span><span class="nm">table system spike</span><span class="star"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3.6 2.6 5.4 5.9.8-4.3 4.1 1 5.9-5.2-2.8-5.2 2.8 1-5.9L3.5 9.8l5.9-.8z"/></svg></span></div>
@@ -484,7 +484,6 @@ tbody tr:last-child td{border-bottom:0}
     <div class="head">
       <div><h1>Fleet</h1><p>Every agent across your machines, and what needs you.</p></div>
       <div class="right">
-        <div class="ghost"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/><path d="M7.5 13.5h.01M12 13.5h.01M16.5 13.5h.01M7.5 17h.01M12 17h.01" stroke-width="1.9"/></svg>18 Aug, 2026</div>
         <button class="cta"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>Start session</button>
       </div>
     </div>

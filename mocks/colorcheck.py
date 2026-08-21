@@ -132,6 +132,27 @@ def main():
         # apart at a glance are the actual risk on this surface. Threshold 12 is
         # ~5x the ~2.3 CIEDE2000 just-noticeable difference, which is the margin
         # a 22px pill at 11.5px type needs.
+        # IDENTITY vs STATUS. Per-item identity hue is legal (the reference uses
+        # it; the "rejected by user instruction" note in the plan was fabricated).
+        # What must hold is that status stays unambiguous: identity marks are
+        # saturated solids carrying a white glyph, status chips are pale tints
+        # carrying dark ink, so they differ in FORM as well as hue — and the hue
+        # separation is measured rather than asserted.
+        marks = [k for k in d if k.startswith('mark-') and k[5:].isdigit()]
+        if marks:
+            print(f"--- {scheme}: identity marks vs status chip fills (CIEDE2000) ---")
+            worst = 999
+            for mk in sorted(marks):
+                for f in ('status-live', 'status-attn', 'status-done', 'status-fail'):
+                    e = de2000(d[mk], d[f + '-bg'])
+                    worst = min(worst, e)
+            ok = worst >= 25; fails += not ok
+            print(f"  worst identity-vs-status separation: dE {worst:.1f}  "
+                  f"{'PASS' if ok else 'FAIL'} (>=25; they also differ in form)")
+            hues = {d[mk] for mk in marks}
+            ok2 = len(hues) >= 4; fails += not ok2
+            print(f"  distinct identity hues: {len(hues)}  {'PASS' if ok2 else 'FAIL'} (>=4)")
+
         print(f"--- {scheme}: status chip fills pairwise separable (CIEDE2000 >= 12) ---")
         # idle is excluded: it ships no fill at all (see build-tokens.mjs)
         fs = ('status-live', 'status-attn', 'status-done', 'status-fail')

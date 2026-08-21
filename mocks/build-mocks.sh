@@ -12,6 +12,7 @@ for f in v2-fleet.html v3-assistant.html v4-transcript.html; do cp "src/$f" "$f"
 python3 retoken.py
 python3 statuschips.py
 python3 a11y.py
+python3 solarize.py
 node build-tokens.mjs
 node resolve-tokens.mjs
 echo "built 3 mocks from mocks/src/"

@@ -1,52 +1,24 @@
-<!doctype html>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Cockpit — mocks</title>
+<!doctype html><html><head><meta charset="utf-8"><title>Outpost mocks — Phase 3</title>
 <style>
-  :root{color-scheme:light dark}
-  body{font:15px/1.55 system-ui,sans-serif;margin:0;padding:26px 22px 90px;max-width:1500px;margin-inline:auto}
-  h1{font-size:21px;margin:0 0 3px} .sub{color:#666;margin:0 0 22px}
-  h2{font-size:17px;margin:34px 0 3px} .meta{color:#666;margin:0 0 10px;font-size:13px}
-  img{width:100%;height:auto;display:block;border:1px solid #ddd;border-radius:8px}
-  .two{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
-  figure{margin:0} figcaption{font-size:12px;color:#777;padding:6px 2px}
-  .old{opacity:.4} code{font:13px ui-monospace,monospace;background:#f0f0f0;padding:1px 5px;border-radius:4px}
-  .gate{font:12px ui-monospace,monospace;background:#f6f6f6;padding:10px 12px;border-radius:8px;color:#444}
-  @media (prefers-color-scheme:dark){body{background:#141414;color:#e8e8e8}
-    .sub,.meta,figcaption{color:#999} img{border-color:#333} code,.gate{background:#262626;color:#bbb}}
-  @media (max-width:760px){.two{grid-template-columns:1fr}}
-</style>
-
-<h1>Cockpit — FlowAI overhaul</h1>
-<p class="sub">All values measured from the comps cropped to their real 1440&times;1023. Every colour now resolves through <code>tokens.css</code> &mdash; <b>zero raw hex in all three mocks</b>. Type: Geist Variable, self-hosted.</p>
-
-<p class="gate">fidelity.py &rarr; PASS (26 quantities, 2&times; render) &nbsp;·&nbsp; colorcheck.py &rarr; PASS (69 assertions, both schemes) &nbsp;·&nbsp; measure.mjs &rarr; PASS (16 DOM assertions) &nbsp;·&nbsp; detect.mjs &rarr; 18 nested-cards, 18 verified false positives, 0 real<br>reproduce: <code>bash mocks/verify.sh</code></p>
-
-<h2>Session transcript — compact density</h2>
-<p class="meta">
-  The core surface. Tool rows 24px vs the management surfaces' 44px &mdash; <b>1.83&times; denser</b> from the
-  same tokens, marks, pills and radii. Approve/Deny 132&times;32 identical, nothing autofocused,
-  scope-widening 45px below the pair and after it in tab order.
-  <a href="v4-transcript.html">live HTML</a>
-</p>
-<img src="v4-transcript.png" alt="Session transcript">
-
-<h2>Assistant panel</h2>
-<p class="meta">Panel 380&times;899, inset 24/40, scrim <code>rgba(0,0,0,.06)</code>, suggestion pitch 44 &mdash; all matching the comp. <a href="v3-assistant.html">live HTML</a></p>
-<div class="two">
-  <figure><img src="v3-assistant.png" alt="Cockpit assistant"><figcaption>Cockpit</figcaption></figure>
-  <figure><img src="ref-assistant.png" alt="reference"><figcaption>Reference</figcaption></figure>
-</div>
-
-<h2>Fleet board — comfortable density</h2>
-<p class="meta">Sidebar 228 · card padding 11 · stat card 280&times;90 with 7px recessed well · band 32 · row pitch 44 · ruler strip 17px @ 6px tick pitch. <a href="v2-fleet.html">live HTML</a> · <a href="v2-mobile.png">mobile</a></p>
-<div class="two">
-  <figure><img src="v2-fleet.png" alt="Cockpit fleet"><figcaption>Cockpit</figcaption></figure>
-  <figure><img src="ref-table.png" alt="reference"><figcaption>Reference</figcaption></figure>
-</div>
-
-<h2 class="old">v1 — greyscale wireframe (superseded)</h2>
-<p class="meta old">Built before the crop; inherited a phantom floating window and 1.68&times; inflated measurements.</p>
-<div class="two old">
-  <figure><img src="session-fleet-board.png" alt="v1"><figcaption>v1 fleet</figcaption></figure>
-  <figure><img src="session-transcript.png" alt="v1"><figcaption>v1 transcript</figcaption></figure>
-</div>
+body{font-family:system-ui,sans-serif;max-width:760px;margin:40px auto;padding:0 20px;color:#1a1a1a}
+h1{font-size:20px} h2{font-size:14px;color:#666;margin-top:28px;text-transform:uppercase;letter-spacing:.05em}
+a{display:block;padding:10px 14px;margin:6px 0;border:1px solid #ddd;border-radius:8px;text-decoration:none;color:#1a1a1a}
+a:hover{background:#f5f5f5} .live{border-color:#2a6}
+small{color:#888}
+</style></head><body>
+<h1>Outpost — Phase 3 mocks</h1>
+<p><small>Rendered PNGs (what the design actually looks like) and the live HTML.</small></p>
+<h2>Rendered images</h2>
+<a href="/v2-fleet.png">v2 Fleet board — light</a>
+<a href="/v2-dark.png">v2 Fleet board — dark</a>
+<a href="/v2-mobile.png">v2 Fleet board — mobile (390px)</a>
+<a href="/v3-assistant.png">v3 Assistant</a>
+<a href="/v3-dark.png">v3 Assistant — dark</a>
+<a href="/v4-transcript.png">v4 Transcript (permission / approve-deny)</a>
+<h2>Reference (FlowAI — derivation source only)</h2>
+<a href="/ref/crop-table-1x.png">ref: FlowAI table crop</a>
+<h2>Live HTML (interactive)</h2>
+<a class="live" href="/v2-fleet.html">v2 Fleet board — live</a>
+<a class="live" href="/v3-assistant.html">v3 Assistant — live</a>
+<a class="live" href="/v4-transcript.html">v4 Transcript — live</a>
+</body></html>
