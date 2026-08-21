@@ -1272,6 +1272,28 @@ The phase honours its own boundary: the two properties no static mock can prove 
 and runtime drag smoothness — are scoped out to the companion code plan rather than asserted, and the
 gate string says "DW-8.1..8.9" to make that scoping legible.
 
+### Phase 9a: Fleet assistant — does it have a job? (Gate: Standard, Stage: Discover)
+- [x] BUILD: appended a `## Assistant` section + `## Decision log` row to JOURNEY.md — a kill test
+      applied to every proposed + shipped assistant capability. **Verdict: KEEP**, re-scoped to a
+      cross-session question surface. The test CUT the two most prominent shipped suggestions ("What
+      needs me right now?" = restates the fleet board; "Start a session" = duplicates the project
+      spawn control) and the whole class of answerable-in-transcript questions; it KEEPS only
+      fleet-spanning questions no single session can answer (why spend jumped, why several are stuck
+      as a pattern, what a delegate on another machine concluded, which sessions touched a file).
+- [x] REVIEW: **PASS** (journey doctrine; Assessment B N/A — spec-only phase). The reviewer
+      INDEPENDENTLY re-applied the kill test to every KEEP/CUT against the incumbent page specs and
+      confirmed no KEEP is a rubber-stamp and the surviving job is non-empty. Applied the reviewer's
+      F1 fix (tightened the kill-test rule sentence so it no longer contradicts the delegate-conclusion
+      KEEP). Verdict stands: **Phase 9b runs.**
+- [x] Committed
+Commit: `29be5d1`
+Summary: The assistant earned its place by losing its two loudest buttons. The lasting output is the
+kill-test rule now recorded in JOURNEY.md: a capability is cut if it restates an open transcript or an
+existing fleet surface; the assistant's only territory is the question that spans sessions. This is
+the phase that proves the process can say "cut it" — the delegate could have kept everything to avoid
+work, and the independent review's job was to catch that; it didn't happen because the kill test was
+applied honestly.
+
 ### Audit of user-attributed claims (2026-08-19)
 
 After one fabricated instruction was found, every claim in this plan attributed to the user was put
