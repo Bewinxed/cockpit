@@ -564,6 +564,9 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
       if (parked.instanceId === instanceId && parked.requestId)
         telegram?.onSettled(parked.requestId);
     pending.forget(instanceId);
+    // A session that died before it ever said anything is never going to name
+    // itself; nothing should still be waiting to hear its first words.
+    awaitingFirstTurn.delete(instanceId);
   };
 
   /**
