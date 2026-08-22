@@ -720,23 +720,6 @@
   }
 }
 
-/* Scroll edge: chrome meets content with a fade, not a hard divider. */
-@utility scroll-edge-b {
-  position: relative;
-}
-.scroll-edge-b::after {
-  content: '';
-  position: absolute;
-  inset-inline: 0;
-  top: 100%;
-  height: 12px;
-  pointer-events: none;
-  background: linear-gradient(to bottom, oklch(0.25 0.02 55 / 0.05), transparent);
-}
-.dark .scroll-edge-b::after {
-  background: linear-gradient(to bottom, oklch(0 0 0 / 0.25), transparent);
-}
-
 /* ---- Instant press feedback: the hand feels the button before release. */
 @utility pressable {
   transition: transform 100ms var(--ease-out-expo), box-shadow 100ms var(--ease-out-expo);
@@ -771,29 +754,6 @@
   scale: 0.25;
   filter: blur(4px);
   pointer-events: none;
-}
-
-/* A search jump lands the reader somewhere they were not looking. */
-.transcript-flash > * {
-  animation: transcript-flash 1.2s var(--ease-out-expo);
-}
-
-@keyframes transcript-flash {
-  0%, 40% {
-    box-shadow: 0 0 0 2px var(--color-primary);
-    border-radius: 12px;
-  }
-  100% {
-    box-shadow: 0 0 0 2px transparent;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .transcript-flash > * {
-    animation: none;
-    box-shadow: 0 0 0 2px var(--color-primary);
-    border-radius: 12px;
-  }
 }
 
 /* ========================================
