@@ -443,7 +443,7 @@
   /* ---- shadcn primitives, dressed in Quiet Ledger tokens ------------------
      The classes below live on child-component elements, so they are addressed
      globally. Every value resolves through a DESIGN.md token; nothing here is a
-     shadcn default (`rounded-2xl`, `ring-1`, `bg-card`, the 8/12/16 spacing
+     shadcn default (`ring-1`, `bg-card`, the 8/12/16 spacing
      ladder), because an unmodified shadcn surface is a High-severity tell. */
   :global {
     /* Card → the raised panel (was outpost Panel). */

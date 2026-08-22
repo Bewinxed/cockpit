@@ -60,7 +60,7 @@
   });
 
   /* Dress shadcn Card as the Quiet Ledger raised panel (--surface-raised,
-     --radius-panel, --shadow-lifted) — never the stock rounded-2xl/bg-card/ring
+     --radius-panel, --shadow-lifted) — never the stock bg-card/ring
      shadcn ships. tailwind-merge drops the defaults these override. */
   const panelClass =
     'gap-0 overflow-visible rounded-[var(--radius-panel)] bg-[var(--surface-raised)] p-[var(--space-5)] shadow-[var(--shadow-lifted)] ring-0';

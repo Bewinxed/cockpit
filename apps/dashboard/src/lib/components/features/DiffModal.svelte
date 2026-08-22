@@ -162,7 +162,7 @@
         {#if isOpen}
           <div
             {...props}
-            class="fixed top-1/2 left-1/2 z-50 w-[95vw] h-[90vh] max-w-7xl -translate-x-1/2 -translate-y-1/2 bg-background rounded-xl shadow-2xl border border-border flex flex-col overflow-hidden"
+            class="fixed top-1/2 left-1/2 z-50 w-[95vw] h-[90vh] max-w-7xl -translate-x-1/2 -translate-y-1/2 bg-background rounded-[var(--radius-shell)] shadow-2xl border border-border flex flex-col overflow-hidden"
             in:scale={{ duration: 200, start: 0.96, easing: quintOut }}
             out:scale={{ duration: 150, start: 0.96, easing: quintOut }}
           >
@@ -187,7 +187,7 @@
               <div class="flex items-center gap-2">
                 <!-- Diff style toggle -->
                 <div
-                  class="flex items-center bg-muted rounded-lg p-0.5 border border-border"
+                  class="flex items-center bg-muted rounded-[var(--radius-control)] p-0.5 border border-border"
                   role="group"
                   aria-label="Diff layout"
                 >

@@ -113,7 +113,7 @@
             aria-label={command.description
               ? `${command.name} — ${command.description}`
               : command.name}
-            class="w-full px-2.5 py-2 flex items-center gap-3 rounded-md hover:bg-accent transition-colors text-left
+            class="w-full px-2.5 py-2 flex items-center gap-3 rounded-[var(--radius-control)] hover:bg-accent transition-colors text-left
                    {index === selectedIndex ? 'bg-accent text-accent-foreground' : ''}"
             onclick={() => onSelect(command)}
           >

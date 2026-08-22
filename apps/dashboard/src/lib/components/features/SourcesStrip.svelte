@@ -55,7 +55,7 @@
 
 <Collapsible.Root bind:open class="mt-2">
   <Collapsible.Trigger
-    class="group -ml-1 flex min-h-9 items-center gap-2 rounded-lg px-1 transition-colors hover:bg-accent/40"
+    class="group -ml-1 flex min-h-9 items-center gap-2 rounded-[var(--radius-control)] px-1 transition-colors hover:bg-accent/40"
   >
     <span class="flex -space-x-1.5" aria-hidden="true">
       {#each sources.slice(0, STACKED) as source (source.url)}
@@ -80,7 +80,7 @@
           href={source.url}
           target="_blank"
           rel="noopener noreferrer"
-          class="flex min-h-9 items-center gap-2.5 rounded-lg px-1 transition-colors hover:bg-accent/40"
+          class="flex min-h-9 items-center gap-2.5 rounded-[var(--radius-control)] px-1 transition-colors hover:bg-accent/40"
           in:fly={{
             y: prefersReducedMotion.current ? 0 : 4,
             duration: prefersReducedMotion.current ? 120 : 180,

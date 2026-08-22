@@ -85,6 +85,14 @@ export const instances = sqliteTable('instances', {
    * back to the transcript's own title, then to where it runs.
    */
   title: text('title'),
+  /**
+   * What the session called itself by what it was first asked to do: the first
+   * user message, cleaned by core's `deriveTitleFromFirstMessage`. Written once,
+   * the first time the hub sees that message, so a listing already carries the
+   * name a reader would otherwise only see after the transcript loaded. Never
+   * written over `title`, and never rewritten — a given title always wins.
+   */
+  derivedTitle: text('derived_title'),
   /** `scratch`: a side quest (NEW.md §1), shown apart from mainline work. */
   kind: text('kind').$type<'mainline' | 'scratch'>().notNull().default('mainline'),
   /**

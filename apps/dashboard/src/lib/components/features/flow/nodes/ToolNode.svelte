@@ -91,7 +91,7 @@
 
 <Handle type="target" position={Position.Top} class="!bg-warning" />
 
-<div class="tool-node rounded-xl shadow-sm bg-card p-3 w-[320px]">
+<div class="tool-node rounded-[var(--radius-card)] shadow-sm bg-card p-3 w-[320px]">
   {#if zoomLevel === 'overview'}
     <div class="flex items-center justify-center gap-2">
       <div class="rounded-full bg-muted p-2">

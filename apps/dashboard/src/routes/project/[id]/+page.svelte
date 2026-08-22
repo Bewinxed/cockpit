@@ -289,7 +289,7 @@
               </Button>
             {/snippet}
           </AlertDialog.Trigger>
-          <AlertDialog.Content class="rounded-2xl shadow-xl">
+          <AlertDialog.Content class="rounded-[var(--radius-shell)] shadow-xl">
             <AlertDialog.Header>
               <AlertDialog.Title>Forget {project.name}?</AlertDialog.Title>
               <AlertDialog.Description>
@@ -362,7 +362,7 @@
                     type="button"
                     role="option"
                     aria-selected={open?.path === doc.path}
-                    class="truncate rounded-lg px-3 py-1.5 text-left font-mono text-micro transition-colors
+                    class="truncate rounded-[var(--radius-control)] px-3 py-1.5 text-left font-mono text-micro transition-colors
                       hover:bg-accent
                       {open?.path === doc.path
                         ? 'bg-accent text-accent-foreground font-medium'
@@ -394,7 +394,7 @@
                       type="button"
                       role="option"
                       aria-selected={open?.path === doc.path}
-                      class="shrink-0 truncate rounded-lg px-3 py-1.5 font-mono text-micro transition-colors
+                      class="shrink-0 truncate rounded-[var(--radius-control)] px-3 py-1.5 font-mono text-micro transition-colors
                         hover:bg-accent
                         {open?.path === doc.path
                           ? 'bg-accent text-accent-foreground font-medium'

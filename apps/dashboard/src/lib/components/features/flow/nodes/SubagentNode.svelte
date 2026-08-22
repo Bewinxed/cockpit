@@ -227,7 +227,7 @@
 <Handle type="target" position={Position.Top} style="background: {branchColor}" />
 
 <div
-  class="subagent-node rounded-xl shadow-sm bg-card p-3 w-[320px] transition-colors {zoomable
+  class="subagent-node rounded-[var(--radius-card)] shadow-sm bg-card p-3 w-[320px] transition-colors {zoomable
     ? 'cursor-pointer hover:bg-accent hover:text-accent-foreground/50 focus-visible:ring-2 focus-visible:ring-ring'
     : ''}"
   {...zoomAction}

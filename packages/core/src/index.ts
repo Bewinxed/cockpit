@@ -349,6 +349,12 @@ export interface InstanceRow {
    * delegate's brief headline. Null on a session that was started without one.
    */
   title?: string | null;
+  /**
+   * The name the session's first user message gave it, derived once by the hub.
+   * A listing already answers {@link title} with this when nothing named the
+   * row, so a reader never watches the label change as the transcript arrives.
+   */
+  derivedTitle?: string | null;
   /** `scratch` for a side quest; absent from a hub that predates the column. */
   kind?: string;
   /**

@@ -207,7 +207,7 @@
 
     <!-- Header panel with cost display -->
     <Panel position="top-right" class="!bg-transparent">
-      <div class="flex items-center gap-2 rounded-md bg-background/80 backdrop-blur-sm px-3 py-1.5 border border-border text-sm">
+      <div class="flex items-center gap-2 rounded-[var(--radius-control)] bg-background/80 backdrop-blur-sm px-3 py-1.5 border border-border text-sm">
         <span class="text-muted-foreground">Cost:</span>
         <span class="font-mono text-foreground">${totalCost}</span>
       </div>
@@ -216,7 +216,7 @@
     <!-- Empty state when no messages -->
     {#if nodes.length === 0}
       <Panel position="top-left" class="!bg-transparent">
-        <div class="flex items-center gap-2 rounded-md bg-background/80 backdrop-blur-sm px-4 py-3 border border-border">
+        <div class="flex items-center gap-2 rounded-[var(--radius-control)] bg-background/80 backdrop-blur-sm px-4 py-3 border border-border">
           <span class="text-muted-foreground">Flow view ready. Messages will appear as nodes.</span>
         </div>
       </Panel>

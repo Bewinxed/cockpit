@@ -95,7 +95,7 @@
 </script>
 
 <div
-  class="absolute top-2 right-4 z-10 flex items-center gap-1.5 rounded-lg border border-border bg-card px-2 py-1.5 shadow-lg"
+  class="absolute top-2 right-4 z-10 flex items-center gap-1.5 rounded-[var(--radius-card)] border border-border bg-card px-2 py-1.5 shadow-lg"
   in:fly={{ y: -8, duration: 200, easing: quintOut }}
   out:fly={{ y: -8, duration: 150, easing: quintOut }}
 >

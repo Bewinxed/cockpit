@@ -50,7 +50,7 @@
 
 <Handle type="target" position={Position.Top} class="!bg-primary" />
 
-<div class="assistant-message-node rounded-xl shadow-sm {isStreaming ? 'animate-pulse' : ''} bg-card p-3 w-[320px]">
+<div class="assistant-message-node rounded-[var(--radius-card)] shadow-sm {isStreaming ? 'animate-pulse' : ''} bg-card p-3 w-[320px]">
   {#if zoomLevel === 'overview'}
     <div class="flex items-center justify-center gap-2">
       <div class="rounded-full bg-primary/20 text-primary p-2">

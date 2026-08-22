@@ -160,6 +160,13 @@ export interface DbShape {
     model?: string;
     effort?: string;
   }) => void;
+  /**
+   * The name the session's first user message gives it, for a row nobody named.
+   * Write-once and never over a given title: a spawn's headline, or a custom
+   * title arriving later, always wins. Returns whether it took, so the caller
+   * only re-publishes when something actually moved.
+   */
+  readonly noteDerivedTitle: (id: string, derivedTitle: string) => boolean;
   readonly stopInstance: (id: string) => void;
   /** The agent reported the session dead: what killed it, kept for late readers. */
   readonly failInstance: (id: string, error: string) => void;
@@ -599,6 +606,18 @@ const make = (path: string): DbShape => {
         })
         .run();
     },
+    noteDerivedTitle: (id, derivedTitle) => {
+      if (!derivedTitle) return false;
+      // `updatedAt` deliberately untouched: naming a row is not the session
+      // moving, and the listings age rows out on that column.
+      const written = db
+        .update(instances)
+        .set({ derivedTitle })
+        .where(and(eq(instances.id, id), isNull(instances.title), isNull(instances.derivedTitle)))
+        .returning({ id: instances.id })
+        .all();
+      return written.length > 0;
+    },
     stopInstance: (id) => {
       db.update(instances)
         .set({ status: 'stopped', updatedAt: new Date() })
@@ -991,7 +1010,12 @@ const make = (path: string): DbShape => {
             )
           )
         )
-        .all(),
+        .all()
+        // A row nobody named answers with the name its first message gave it,
+        // so every listing — the rail, the tab strip, the first server render —
+        // already carries it and no label changes once a transcript loads. The
+        // column itself stays as it was: a given title is still what wins here.
+        .map((row) => (row.title ? row : { ...row, title: row.derivedTitle })),
     listProjects: () => db.select().from(projects).all(),
     createProject: ({ id, machineId, name, cwd }) =>
       db.insert(projects).values({ id, machineId, name, cwd }).returning().get(),

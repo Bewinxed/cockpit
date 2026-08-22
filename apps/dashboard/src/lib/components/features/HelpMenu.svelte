@@ -69,7 +69,7 @@
   value={activeTab}
   onValueChange={(value) => (activeTab = value as Tab)}
   loop
-  class="font-mono text-sm bg-background border border-border rounded-lg overflow-hidden"
+  class="font-mono text-sm bg-background border border-border rounded-[var(--radius-card)] overflow-hidden"
 >
   <!-- Header with tabs -->
   <div class="flex items-center gap-4 px-4 py-2 bg-accent text-accent-foreground border-b border-border">

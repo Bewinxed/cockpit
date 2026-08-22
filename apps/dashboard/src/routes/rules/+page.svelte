@@ -75,7 +75,7 @@
   }
 
   /* Quiet Ledger dressing for shadcn primitives — tailwind-merge drops the stock
-     rounded-4xl / bg-primary / bg-card defaults these override, so nothing reads
+     radius / bg-primary / bg-card defaults these override, so nothing reads
      as unmodified shadcn. */
   const panelClass =
     'gap-0 overflow-visible rounded-[var(--radius-panel)] bg-[var(--surface-raised)] p-[var(--space-5)] shadow-[var(--shadow-lifted)] ring-0';

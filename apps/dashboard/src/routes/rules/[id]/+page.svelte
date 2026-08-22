@@ -149,7 +149,7 @@
     </a>
 
     {#if data.error}
-      <div class="rounded-xl bg-card p-4 shadow-md" role="alert">
+      <div class="rounded-[var(--radius-card)] bg-card p-4 shadow-md" role="alert">
         <p class="text-caption text-warning">{data.error}</p>
       </div>
     {/if}
@@ -175,7 +175,7 @@
 
       <!-- The rule, read back. It is the only place the whole thing is one thought. -->
       <p
-        class="max-w-prose rounded-lg bg-primary/8 p-4 text-body text-foreground transition-all duration-240 ease-expo"
+        class="max-w-prose rounded-[var(--radius-card)] bg-primary/8 p-4 text-body text-foreground transition-all duration-240 ease-expo"
         aria-live="polite"
       >
         {ruleSentence(draft)}
@@ -189,7 +189,7 @@
       </label>
     </header>
 
-    <section class="flex flex-col gap-4 rounded-xl bg-card p-5 shadow-md">
+    <section class="flex flex-col gap-4 rounded-[var(--radius-panel)] bg-card p-5 shadow-md">
       <div class="flex flex-col gap-1">
         <h2 class="text-body font-medium">What to watch for</h2>
         <p class="max-w-prose text-micro text-muted-foreground">
@@ -281,7 +281,7 @@
       <RuleTester {draft} bind:sample />
     </section>
 
-    <section class="flex flex-col gap-4 rounded-xl bg-card p-5 shadow-md">
+    <section class="flex flex-col gap-4 rounded-[var(--radius-panel)] bg-card p-5 shadow-md">
       <div class="flex flex-col gap-1">
         <h2 class="text-body font-medium">What cockpit sends back</h2>
         <p class="max-w-prose text-micro text-muted-foreground">
@@ -338,7 +338,7 @@
       {/if}
     </section>
 
-    <section class="flex flex-col gap-4 rounded-xl bg-card p-5 shadow-md">
+    <section class="flex flex-col gap-4 rounded-[var(--radius-panel)] bg-card p-5 shadow-md">
       <div class="flex flex-col gap-1">
         <h2 class="text-body font-medium">Where it applies</h2>
         <p class="max-w-prose text-micro text-muted-foreground">
@@ -411,7 +411,7 @@
       </div>
     </section>
 
-    <section class="flex flex-col gap-4 rounded-xl bg-card p-5 shadow-md">
+    <section class="flex flex-col gap-4 rounded-[var(--radius-panel)] bg-card p-5 shadow-md">
       <div class="flex flex-col gap-1">
         <h2 class="text-body font-medium">Making it stick</h2>
         <p class="max-w-prose text-micro text-muted-foreground">

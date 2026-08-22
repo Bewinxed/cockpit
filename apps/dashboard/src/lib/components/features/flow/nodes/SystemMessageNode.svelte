@@ -56,7 +56,7 @@
 
 <Handle type="target" position={Position.Top} class="!bg-muted-foreground" />
 
-<div class="system-message-node rounded-lg border border-border bg-muted/50 p-2 w-[320px]">
+<div class="system-message-node rounded-[var(--radius-card)] border border-border bg-muted/50 p-2 w-[320px]">
   {#if zoomLevel === 'overview'}
     <div class="flex items-center justify-center">
       <IconComponent class="h-4 w-4 {iconColor}" />

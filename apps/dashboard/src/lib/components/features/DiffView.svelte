@@ -120,7 +120,7 @@
   }
 </script>
 
-<div class="rounded-lg overflow-hidden border border-border bg-muted">
+<div class="rounded-[var(--radius-card)] overflow-hidden border border-border bg-muted">
   <div class="flex items-center justify-between px-3 py-2 bg-card border-b border-border font-mono text-xs text-muted-foreground">
     <span class="break-all flex-1 min-w-0">{filePath}</span>
     <Button
