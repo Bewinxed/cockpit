@@ -142,6 +142,8 @@
   import MachineMenu from './MachineMenu.svelte';
   import NewProjectPopover from './NewProjectPopover.svelte';
   import OsMark from './OsMark.svelte';
+  import { ItemMark } from '$lib/outpost';
+  import { markHue } from './mark';
   import SpawnPanel from './SpawnPanel.svelte';
   import StoredSessionMenu from './StoredSessionMenu.svelte';
   import { folderPrefs, identityVar } from './folder-prefs.svelte';
@@ -980,10 +982,27 @@
             onclick={() => setFolder(folder.id, !open)}
           >
             <span class="{LEAD} relative">
-              <IconFolderDuo
-                class="size-4 transition-opacity duration-150 md:group-hover/folder:opacity-0 md:group-focus-within/folder:opacity-0 {tinted ? 'text-error' : 'identity-ink'}"
-                style={tinted ? undefined : identityVar(folder.cwd)}
-              />
+              {#if tinted}
+                <IconFolderDuo
+                  class="size-4 text-error transition-opacity duration-150 md:group-hover/folder:opacity-0 md:group-focus-within/folder:opacity-0"
+                />
+              {:else}
+                <span
+                  class="transition-opacity duration-150 md:group-hover/folder:opacity-0 md:group-focus-within/folder:opacity-0"
+                  style="--c-mark:18px;--c-mark-glyph:11px"
+                >
+                  <ItemMark hue={markHue(folder.cwd)}>
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path
+                        d="M3 7a2 2 0 0 1 2-2h3.6l1.6 2H19a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"
+                        stroke="currentColor"
+                        stroke-width="1.6"
+                        stroke-linejoin="round"
+                      />
+                    </svg>
+                  </ItemMark>
+                </span>
+              {/if}
               <IconChevronRight
                 class="absolute inset-0 m-auto size-4 text-muted-foreground/70 opacity-0 transition-all duration-240 ease-expo md:group-hover/folder:opacity-100 md:group-focus-within/folder:opacity-100 {open ? 'rotate-90' : ''}"
               />
