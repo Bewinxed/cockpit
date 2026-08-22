@@ -111,6 +111,7 @@
     gap: 10px;
   }
   .cin {
+    position: relative;
     border: 1px solid var(--border-control);
     background: oklch(from var(--surface-raised) l c h / 0.82);
     -webkit-backdrop-filter: blur(16px) saturate(1.6);
@@ -154,7 +155,11 @@
   textarea::placeholder {
     color: var(--ink-muted);
   }
+  /* Collapsed, the affordance row is taken OUT OF FLOW (absolute) so it claims
+     zero width — otherwise it squeezes the resting textarea to a sliver at
+     mobile widths. On focus it returns to flow and unfolds below the input. */
   .aff-row {
+    position: absolute;
     display: grid;
     grid-template-rows: 0fr;
     opacity: 0;
@@ -165,6 +170,7 @@
       transform var(--c-300) var(--e-in);
   }
   .composer:focus-within .aff-row {
+    position: static;
     grid-template-rows: 1fr;
     opacity: 1;
     transform: none;
