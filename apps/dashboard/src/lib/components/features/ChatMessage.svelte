@@ -39,6 +39,9 @@
 	import type { MessageHints } from '$lib/cockpit/message-hints';
 	import ToolRow from './tool-cards/ToolRow.svelte';
 	import ReportBody from './tool-cards/ReportBody.svelte';
+	import ReportedTurn from './message-renderers/ReportedTurn.svelte';
+	import CommandOutput from './message-renderers/CommandOutput.svelte';
+	import SystemNote from './message-renderers/SystemNote.svelte';
 	import { isFileDiffTool, resultText, type ToolStatus } from './tool-cards/descriptors';
 
 	interface Props {
@@ -696,78 +699,39 @@
 				     this is reported speech, and a reader who mistakes it for
 				     their own instruction loses track of who asked for what. -->
 				{#if !suppressedAsDelegateTraffic}
-				<!-- A rule wears the warning hue rather than the peer primary: it is not
-				     another session talking, it is a standing instruction the reader
-				     themselves set, and the two should never be confused at a glance. -->
-				<div
-					class="w-full overflow-hidden rounded-xl border {message.metadata?.ruleName
-						? 'border-warning/30 bg-warning/5'
-						: 'border-primary/30 bg-primary/5'}"
-				>
-					<div
-						class="flex items-center gap-2 border-b px-3 py-2 {message.metadata?.ruleName
-							? 'border-warning/20'
-							: 'border-primary/20'}"
-					>
-						<!-- The kind glyph; the sender's model mark is the gutter avatar. -->
-						{#if message.metadata?.ruleName}
-							<IconRules class="size-4 shrink-0 text-warning" />
-						{:else}
-							<IconSubagentsDuo class="size-4 shrink-0 text-primary" />
-						{/if}
-						<span
-							class="min-w-0 flex-1 truncate text-xs font-medium {message.metadata?.ruleName
-								? 'text-warning'
-								: 'text-primary'}"
-						>
-							{#if message.metadata?.ruleName}
-								<a href="/rules" class="underline-offset-2 hover:underline">
-									Your rule · {message.metadata.ruleName}
-								</a>
-							{:else if message.metadata?.reportKind}
-								{#if sessionHref}
-									<a href={sessionHref} class="underline-offset-2 hover:underline">
-										← Report from {message.metadata?.peerName ?? 'a delegate'}{message
-											.metadata.reportKind === 'failed'
-											? ' — turn failed'
-											: ''}
-									</a>
+					{#if message.metadata?.ruleName}
+						<!-- The reader's own standing rule, injected — not another session
+						     talking. A quiet warning-toned note on the rail, never a card. -->
+						<div class="op-note" style="background:var(--rail) left top/2px 100% no-repeat;padding-left:12px;margin-left:7px">
+							<div class="flex items-center gap-1.5 text-xs font-medium text-warning">
+								<IconRules class="size-4 shrink-0" />
+								<a href="/rules" class="underline-offset-2 hover:underline">Your rule · {message.metadata.ruleName}</a>
+							</div>
+							<div class="mt-1 text-[13px]" style="color:var(--ink-body)"><Markdown source={message.content} /></div>
+						</div>
+					{:else if briefParent}
+						<!-- A delegation brief — who delegated, on the rail. -->
+						<div class="op-note" style="background:var(--rail) left top/2px 100% no-repeat;padding-left:12px;margin-left:7px">
+							<div class="flex items-center gap-1.5 text-xs font-medium" style="color:var(--ink-muted)">
+								<IconSubagentsDuo class="size-4 shrink-0" />
+								<span>Delegation brief from <span class="font-mono">{briefParent.label}</span></span>
+								<a href="/session/{briefParent.id}" class="ml-auto shrink-0 underline-offset-2 hover:underline" style="color:var(--ink-muted)">Open it</a>
+							</div>
+							<div class="mt-1 text-[13px]" style="color:var(--ink-body)"><Markdown source={message.content} /></div>
+						</div>
+					{:else}
+						<!-- Reported speech from another session: attributed by the peer's own
+						     identity mark, on the rail, body quoted one ink-notch down. -->
+						<ReportedTurn {message}>
+							{#snippet body()}
+								{#if message.metadata?.reportKind}
+									<ReportBody text={message.content} />
 								{:else}
-									← Report from {message.metadata?.peerName ?? 'a delegate'}{message.metadata
-										.reportKind === 'failed'
-										? ' — turn failed'
-										: ''}
+									<Markdown source={message.content} />
 								{/if}
-							{:else if briefParent}
-								← Delegation brief from <span class="font-mono">{briefParent.label}</span>
-							{:else}
-								← Handed over by {message.metadata?.peerName ?? 'another session'}
-							{/if}
-						</span>
-						{#if briefParent}
-							<a
-								href="/session/{briefParent.id}"
-								class="shrink-0 text-xs text-muted-foreground underline-offset-2 hover:text-primary hover:underline"
-							>
-								Open it
-							</a>
-						{:else if message.metadata?.peerSession}
-							<a
-								href="/session/{message.metadata.peerSession}"
-								class="shrink-0 text-xs text-muted-foreground underline-offset-2 hover:text-primary hover:underline"
-							>
-								Open it
-							</a>
-						{/if}
-					</div>
-					<div class="px-3 py-2.5 text-sm">
-						{#if message.metadata?.reportKind}
-							<ReportBody text={message.content} />
-						{:else}
-							<Markdown source={message.content} />
-						{/if}
-					</div>
-				</div>
+							{/snippet}
+						</ReportedTurn>
+					{/if}
 				{/if}
 			{:else if message.type === 'user.delegate_ask'}
 				<!-- A delegate's routed permission ask. When the delegate's card is
@@ -776,68 +740,28 @@
 				     escalated out of a dead parent) a muted fallback row stands in —
 				     not a user bubble, and not markdown. -->
 				{#if !suppressedAsDelegateTraffic}
-					<div
-						class="w-full max-w-[min(65ch,100%)] rounded-xl border border-border/50 bg-muted/30 px-3 py-2"
-					>
-						<div class="flex items-center gap-2">
-							<IconHelp class="size-4 shrink-0 text-muted-foreground" />
-							<span class="text-xs font-medium text-muted-foreground">
-								Ask from {message.metadata?.askLabel ?? 'a delegate'}
-							</span>
-							<span
-								class="min-w-0 flex-1 font-mono text-xs text-muted-foreground line-clamp-2 break-all"
-							>
-								{askShort(message.content)}
-							</span>
-						</div>
+					<div class="op-note flex items-center gap-2" style="background:var(--rail) left top/2px 100% no-repeat;padding-left:12px;margin-left:7px">
+						<IconHelp class="size-4 shrink-0" style="color:var(--ink-muted)" />
+						<span class="text-xs font-medium" style="color:var(--ink-muted)">
+							Ask from {message.metadata?.askLabel ?? 'a delegate'}
+						</span>
+						<span class="min-w-0 flex-1 font-mono text-xs line-clamp-2 break-all" style="color:var(--ink-muted)">
+							{askShort(message.content)}
+						</span>
 					</div>
 				{/if}
 			{:else if message.type === 'ui.system_note'}
 				{#if !suppressedAsTaskEcho}
-				<!-- Harness-injected note that arrived as a user turn - collapsible card -->
-				<div class="w-full border border-border/60 bg-muted/20 rounded-xl overflow-hidden">
-					<Collapsible.Root open={isExpanded} onOpenChange={toggleExpanded}>
-						<Collapsible.Trigger class="w-full text-left">
-							<div
-								class="w-full px-3 py-2.5 text-left hover:bg-muted/50 transition-colors flex items-center gap-2"
-							>
-								<IconChevronRight
-									class="w-4 h-4 text-muted-foreground shrink-0 transition-transform duration-200 ease-out {isExpanded
-										? 'rotate-90'
-										: ''}"
-								/>
-								<span class="text-xs font-medium text-muted-foreground">
-									{message.metadata?.noteKind}
-								</span>
-								<span class="truncate text-xs text-faint">
-									{message.metadata?.noteTitle}
-								</span>
-							</div>
-						</Collapsible.Trigger>
-
-						<Collapsible.Content>
-							<div class="border-t border-border p-3 text-muted-foreground">
-								<Markdown source={message.content} />
-							</div>
-						</Collapsible.Content>
-					</Collapsible.Root>
-				</div>
+					<!-- Ambient harness note — the quietest thing in the transcript, folded. -->
+					<SystemNote {message}>
+						{#snippet body()}<Markdown source={message.content} />{/snippet}
+					</SystemNote>
 				{/if}
 			{:else if message.type === 'ui.command_output'}
-				<!-- Command output (like /help) - rendered with markdown and terminal styling -->
-				<div
-					class="relative px-4 py-3 text-sm leading-relaxed rounded-2xl rounded-bl-sm bg-muted border border-border shadow-sm"
-				>
-					{#if message.metadata?.command}
-						<div
-							class="flex items-center gap-1.5 text-xs text-muted-foreground mb-2 pb-2 border-b border-border"
-						>
-							<IconTerminal class="w-3 h-3" />
-							<code class="font-mono">{message.metadata.command}</code>
-						</div>
-					{/if}
-					<Markdown source={message.content} />
-				</div>
+				<!-- Command output (/help) — a recessed well, the system-computed surface. -->
+				<CommandOutput {message}>
+					{#snippet body()}<Markdown source={message.content} />{/snippet}
+				</CommandOutput>
 			{:else if message.type === 'ui.help_menu'}
 				<!-- Help menu with tabs (Claude CLI-style) -->
 				<div class="w-full max-w-2xl">
