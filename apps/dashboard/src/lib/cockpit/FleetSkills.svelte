@@ -1,8 +1,10 @@
 <script lang="ts">
   import { toast } from 'svelte-sonner';
   import type { FleetConfig, FleetSkillMeta, MarketplacePluginInfo } from '@cockpit/core';
-  import { IconPlus, IconRefresh, IconSearch, IconTrash } from '$lib/icons';
+  import { IconPlus, IconRefresh, IconSearch, IconTrash, IconWarningTriangle } from '$lib/icons';
+  import * as Alert from '$lib/components/ui/alert';
   import { Button } from '$lib/components/ui/button';
+  import * as Card from '$lib/components/ui/card';
   import { Skeleton } from '$lib/components/ui/skeleton';
   import { Toggle } from '$lib/components/ui/toggle';
   import * as Tooltip from '$lib/components/ui/tooltip';
@@ -32,6 +34,11 @@
 
   const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
   const installed = (id: string): boolean => config.plugins.some((row) => row.id === id);
+
+  // Quiet Ledger surfaces (DESIGN.md · mocks/v5-components.html .panel / .callout).
+  const panelList = 'gap-0 overflow-hidden rounded-[var(--radius-panel)] border-0 bg-[var(--surface-raised)] p-0 shadow-[var(--shadow-lifted)] ring-1 ring-[var(--border-hairline)]';
+  const panelPad = 'gap-[var(--space-3)] rounded-[var(--radius-panel)] border-0 bg-[var(--surface-raised)] p-[var(--space-6)] shadow-[var(--shadow-lifted)] ring-1 ring-[var(--border-hairline)]';
+  const warnAlert = 'items-center rounded-[var(--radius-control)] border-[var(--warning-9)] bg-[var(--warning-3)] p-[var(--space-3)] [&>svg]:text-[var(--warning-11)]';
 
   function landed(row: FleetSkillMeta) {
     const at = skills.findIndex((other) => other.name === row.name);
@@ -131,25 +138,27 @@
 </div>
 
 {#if error}
-  <div class="rounded-xl bg-card p-4 shadow-md" role="alert">
-    <p class="text-caption text-warning">{error}</p>
-  </div>
+  <Alert.Root class={warnAlert}>
+    <IconWarningTriangle />
+    <Alert.Description class="text-caption text-[var(--warning-11)]">{error}</Alert.Description>
+  </Alert.Root>
 {:else}
   <section class="flex flex-col gap-3">
     <h2 class="text-micro font-medium tracking-wider text-muted-foreground uppercase">Skills</h2>
     {#if skills.length === 0}
-      <div class="rounded-xl bg-card p-6 shadow-md">
+      <Card.Root class={panelPad}>
         <p class="text-caption">No skills fetched yet. Paste what you would otherwise have run and the hub downloads the files itself.</p>
-        <Button size="sm" class="mt-3" onclick={() => (fetching = true)}>
+        <Button size="sm" class="self-start" onclick={() => (fetching = true)}>
           <IconPlus class="shrink-0" />
           Add skill
         </Button>
-      </div>
+      </Card.Root>
     {:else}
-      <ul class="flex flex-col rounded-xl bg-card shadow-md">
+      <Card.Root class={panelList}>
+       <ul class="flex flex-col">
         {#each skills as row (row.name)}
-          <li class="group flex flex-col gap-2 border-t border-border p-4 first:border-t-0">
-            <div class="flex items-start gap-3">
+          <li class="group flex flex-col gap-[var(--space-2)] border-t border-[var(--border-hairline)] p-[var(--space-4)] first:border-t-0">
+            <div class="flex items-start gap-[var(--space-3)]">
               <div class="flex min-w-0 flex-1 flex-col gap-0.5">
                 <span class="flex flex-wrap items-baseline gap-x-2">
                   <span class="truncate text-caption font-medium text-foreground">{row.name}</span>
@@ -193,12 +202,15 @@
             </div>
 
             {#if row.error}
-              <div class="flex items-start gap-2 rounded-lg bg-warning/10 px-3 py-2">
-                <p class="min-w-0 flex-1 font-mono text-micro text-warning" role="alert">{row.error}</p>
-                <Button variant="outline" size="xs" class="shrink-0" disabled={working[row.name] === true} onclick={() => refresh(row)}>
-                  {working[row.name] ? 'Retrying…' : 'Retry'}
-                </Button>
-              </div>
+              <Alert.Root class={warnAlert}>
+                <IconWarningTriangle />
+                <Alert.Description class="font-mono text-micro text-[var(--warning-11)]">{row.error}</Alert.Description>
+                <Alert.Action>
+                  <Button variant="outline" size="xs" class="shrink-0" disabled={working[row.name] === true} onclick={() => refresh(row)}>
+                    {working[row.name] ? 'Retrying…' : 'Retry'}
+                  </Button>
+                </Alert.Action>
+              </Alert.Root>
             {/if}
 
             {#if machines.length === 0 && settling}
@@ -210,7 +222,8 @@
             {/if}
           </li>
         {/each}
-      </ul>
+       </ul>
+      </Card.Root>
     {/if}
     <p class="max-w-prose text-micro text-muted-foreground">
       Outpost installs a skill's files. A skill that also ships hooks or subagents runs in its
@@ -221,16 +234,17 @@
   <section class="flex flex-col gap-3">
     <h2 class="text-micro font-medium tracking-wider text-muted-foreground uppercase">Marketplaces</h2>
     {#if config.marketplaces.length === 0}
-      <div class="rounded-xl bg-card p-6 shadow-md">
+      <Card.Root class={panelPad}>
         <p class="text-caption">No marketplaces linked yet. Link one and its plugins become browsable here.</p>
-        <Button variant="outline" size="sm" class="mt-3" onclick={() => (linking = true)}>Link marketplace</Button>
-      </div>
+        <Button variant="outline" size="sm" class="self-start" onclick={() => (linking = true)}>Link marketplace</Button>
+      </Card.Root>
     {:else}
-      <ul class="flex flex-col rounded-xl bg-card shadow-md">
+      <Card.Root class={panelList}>
+       <ul class="flex flex-col">
         {#each config.marketplaces as row (row.name)}
           {@const host = catalogHost(machines, row.name)}
-          <li class="group flex flex-col gap-2 border-t border-border p-4 first:border-t-0">
-            <div class="flex items-start gap-3">
+          <li class="group flex flex-col gap-[var(--space-2)] border-t border-[var(--border-hairline)] p-[var(--space-4)] first:border-t-0">
+            <div class="flex items-start gap-[var(--space-3)]">
               <div class="flex min-w-0 flex-1 flex-col gap-0.5">
                 <span class="truncate text-caption font-medium text-foreground">{row.name}</span>
                 <span class="truncate font-mono text-micro text-muted-foreground" title={row.source}>{row.source}</span>
@@ -276,10 +290,10 @@
               {:else if (listings[row.name] ?? []).length === 0}
                 <p class="pt-1 text-caption text-muted-foreground">This marketplace lists no plugins.</p>
               {:else}
-                <ul class="flex flex-col rounded-lg border border-border">
+                <ul class="flex flex-col rounded-[var(--radius-well)] border border-[var(--border-hairline)] bg-[var(--surface-field)]">
                   {#each listings[row.name] as plugin (plugin.name)}
                     {@const id = `${plugin.name}@${row.name}`}
-                    <li class="flex items-start gap-3 border-t border-border px-3 py-2 first:border-t-0">
+                    <li class="flex items-start gap-[var(--space-3)] border-t border-[var(--border-hairline)] px-[var(--space-3)] py-[var(--space-2)] first:border-t-0">
                       <div class="flex min-w-0 flex-1 flex-col gap-0.5">
                         <span class="flex flex-wrap items-baseline gap-x-2">
                           <span class="text-caption font-medium text-foreground">{plugin.name}</span>
@@ -302,21 +316,23 @@
             {/if}
           </li>
         {/each}
-      </ul>
+       </ul>
+      </Card.Root>
     {/if}
   </section>
 
   <section class="flex flex-col gap-3">
     <h2 class="text-micro font-medium tracking-wider text-muted-foreground uppercase">Plugins</h2>
     {#if config.plugins.length === 0}
-      <div class="rounded-xl bg-card p-6 shadow-md">
+      <Card.Root class={panelPad}>
         <p class="text-caption">Nothing installed yet. Browse a marketplace above and add a plugin.</p>
-      </div>
+      </Card.Root>
     {:else}
-      <ul class="flex flex-col rounded-xl bg-card shadow-md">
+      <Card.Root class={panelList}>
+       <ul class="flex flex-col">
         {#each config.plugins as row (row.id)}
-          <li class="group flex flex-col gap-2 border-t border-border p-4 first:border-t-0">
-            <div class="flex items-start gap-3">
+          <li class="group flex flex-col gap-[var(--space-2)] border-t border-[var(--border-hairline)] p-[var(--space-4)] first:border-t-0">
+            <div class="flex items-start gap-[var(--space-3)]">
               <span class="min-w-0 flex-1 truncate font-mono text-caption">{row.id}</span>
               <Tooltip.Root>
                 <Tooltip.Trigger>
@@ -352,7 +368,8 @@
             {/if}
           </li>
         {/each}
-      </ul>
+       </ul>
+      </Card.Root>
     {/if}
   </section>
 

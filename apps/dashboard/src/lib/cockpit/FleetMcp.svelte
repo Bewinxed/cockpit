@@ -1,8 +1,11 @@
 <script lang="ts">
   import { toast } from 'svelte-sonner';
   import type { FleetMcpServer } from '@cockpit/core';
-  import { IconPen, IconPlus, IconRefresh, IconTrash } from '$lib/icons';
+  import { IconPen, IconPlus, IconRefresh, IconTrash, IconWarningTriangle } from '$lib/icons';
+  import * as Alert from '$lib/components/ui/alert';
+  import { Badge } from '$lib/components/ui/badge';
   import { Button } from '$lib/components/ui/button';
+  import * as Card from '$lib/components/ui/card';
   import { Skeleton } from '$lib/components/ui/skeleton';
   import { Toggle } from '$lib/components/ui/toggle';
   import * as Tooltip from '$lib/components/ui/tooltip';
@@ -30,6 +33,11 @@
   let busy = $state<Record<string, boolean>>({});
 
   const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
+
+  // Quiet Ledger surfaces (DESIGN.md · mocks/v5-components.html .panel / .callout).
+  const panelList = 'gap-0 overflow-hidden rounded-[var(--radius-panel)] border-0 bg-[var(--surface-raised)] p-0 shadow-[var(--shadow-lifted)] ring-1 ring-[var(--border-hairline)]';
+  const panelPad = 'gap-[var(--space-3)] rounded-[var(--radius-panel)] border-0 bg-[var(--surface-raised)] p-[var(--space-6)] shadow-[var(--shadow-lifted)] ring-1 ring-[var(--border-hairline)]';
+  const warnAlert = 'items-center rounded-[var(--radius-control)] border-[var(--warning-9)] bg-[var(--warning-3)] p-[var(--space-3)] [&>svg]:text-[var(--warning-11)]';
 
   function open(row: FleetMcpServer | null) {
     editing = row;
@@ -107,11 +115,12 @@
 </p>
 
 {#if error}
-  <div class="rounded-xl bg-card p-4 shadow-md" role="alert">
-    <p class="text-caption text-warning">{error}</p>
-  </div>
+  <Alert.Root class={warnAlert}>
+    <IconWarningTriangle />
+    <Alert.Description class="text-caption text-[var(--warning-11)]">{error}</Alert.Description>
+  </Alert.Root>
 {:else if servers.length === 0}
-  <section class="flex flex-col gap-3 rounded-xl bg-card p-6 shadow-md">
+  <Card.Root class={panelPad}>
     <h2 class="text-body font-medium">No MCP servers yet</h2>
     <p class="max-w-prose text-caption">
       Add a server and every machine gets it — the quick way is a package name.
@@ -120,19 +129,18 @@
       <IconPlus class="shrink-0" />
       Add server
     </Button>
-  </section>
+  </Card.Root>
 {:else}
-  <ul class="flex flex-col rounded-xl bg-card shadow-md">
+  <Card.Root class={panelList}>
+   <ul class="flex flex-col">
     {#each servers as row (row.name)}
-      <li class="group flex flex-col gap-2 border-t border-border p-4 first:border-t-0">
-        <div class="flex items-start gap-3">
+      <li class="group flex flex-col gap-[var(--space-2)] border-t border-[var(--border-hairline)] p-[var(--space-4)] first:border-t-0">
+        <div class="flex items-start gap-[var(--space-3)]">
           <div class="flex min-w-0 flex-1 flex-col gap-0.5">
             <span class="flex items-center gap-2">
               <span class="truncate text-caption font-medium text-foreground">{row.name}</span>
               {#if isRemoteMcp(row.config)}
-                <span class="shrink-0 rounded-full bg-muted px-2 text-micro text-muted-foreground uppercase">
-                  {row.config.type}
-                </span>
+                <Badge variant="outline" class="shrink-0 uppercase">{row.config.type}</Badge>
               {/if}
             </span>
             <span class="truncate font-mono text-micro text-muted-foreground" title={describeMcp(row.config)}>
@@ -193,7 +201,8 @@
         {/if}
       </li>
     {/each}
-  </ul>
+   </ul>
+  </Card.Root>
 {/if}
 
 {#if !error}

@@ -11,10 +11,12 @@
    */
   import { toast } from 'svelte-sonner';
   import { parseAgentFrontMatter, type FleetAgent } from '@cockpit/core';
-  import { IconPlus, IconSpinner, IconTrash } from '$lib/icons';
+  import { IconPlus, IconSpinner, IconTrash, IconWarningTriangle } from '$lib/icons';
+  import * as Alert from '$lib/components/ui/alert';
   import * as AlertDialog from '$lib/components/ui/alert-dialog';
   import { Badge } from '$lib/components/ui/badge';
   import { Button } from '$lib/components/ui/button';
+  import * as Card from '$lib/components/ui/card';
   import { Skeleton } from '$lib/components/ui/skeleton';
   import * as Tooltip from '$lib/components/ui/tooltip';
   import AgentEditor from './AgentEditor.svelte';
@@ -39,6 +41,13 @@
   let reading = $state<Record<string, boolean>>({});
 
   const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
+
+  // Quiet Ledger surfaces (DESIGN.md · mocks/v5-components.html .panel / .callout):
+  // a raised panel is --surface-raised at --radius-panel under --shadow-lifted;
+  // a warning banner is the callout — --warning-9 edge, --warning-3 tint, --warning-11 ink.
+  const panelList = 'gap-0 overflow-hidden rounded-[var(--radius-panel)] border-0 bg-[var(--surface-raised)] p-0 shadow-[var(--shadow-lifted)] ring-1 ring-[var(--border-hairline)]';
+  const panelPad = 'gap-[var(--space-3)] rounded-[var(--radius-panel)] border-0 bg-[var(--surface-raised)] p-[var(--space-6)] shadow-[var(--shadow-lifted)] ring-1 ring-[var(--border-hairline)]';
+  const warnAlert = 'items-center rounded-[var(--radius-control)] border-[var(--warning-9)] bg-[var(--warning-3)] p-[var(--space-3)] [&>svg]:text-[var(--warning-11)]';
 
   /**
    * Every online machine is asked once, when it appears. Nothing is stored: a
@@ -132,27 +141,29 @@
 </div>
 
 {#if error}
-  <div class="rounded-xl bg-card p-4 shadow-md" role="alert">
-    <p class="text-caption text-warning">{error}</p>
-  </div>
+  <Alert.Root class={warnAlert}>
+    <IconWarningTriangle />
+    <Alert.Description class="text-caption text-[var(--warning-11)]">{error}</Alert.Description>
+  </Alert.Root>
 {:else}
   <section class="flex flex-col gap-3">
     <h2 class="text-micro font-medium tracking-wider text-muted-foreground uppercase">Fleet subagents</h2>
     {#if agents.length === 0}
-      <div class="rounded-xl bg-card p-6 shadow-md">
+      <Card.Root class={panelPad}>
         <p class="text-caption">
           None yet. Write one, or adopt one a machine already has from the list below.
         </p>
-        <Button size="sm" class="mt-3" onclick={() => edit(null)}>
+        <Button size="sm" class="self-start" onclick={() => edit(null)}>
           <IconPlus class="shrink-0" />
           Add subagent
         </Button>
-      </div>
+      </Card.Root>
     {:else}
-      <ul class="flex flex-col rounded-xl bg-card shadow-md">
+      <Card.Root class={panelList}>
+       <ul class="flex flex-col">
         {#each agents as row (row.name)}
           {@const front = parseAgentFrontMatter(row.content)}
-          <li class="group flex items-start gap-3 border-t border-border p-4 first:border-t-0">
+          <li class="group flex items-start gap-[var(--space-3)] border-t border-[var(--border-hairline)] p-[var(--space-4)] first:border-t-0">
             <button
               type="button"
               class="flex min-w-0 flex-1 flex-col items-start gap-0.5 text-left"
@@ -185,7 +196,8 @@
             </span>
           </li>
         {/each}
-      </ul>
+       </ul>
+      </Card.Root>
     {/if}
     {#each Object.entries(unpushable) as [machineId, why] (machineId)}
       {@const machine = machines.find((row) => row.machineId === machineId)}
@@ -203,7 +215,7 @@
     </p>
 
     {#if online.length === 0 && settling}
-      <Skeleton class="h-16 w-full rounded-xl" />
+      <Skeleton class="h-16 w-full rounded-[var(--radius-panel)]" />
     {:else if online.length === 0}
       <p class="text-caption text-muted-foreground">No machine is online to ask.</p>
     {:else if discovered.length === 0}
@@ -216,11 +228,12 @@
         <p class="text-caption text-muted-foreground">No machine has any subagent files yet.</p>
       {/if}
     {:else}
-      <ul class="flex flex-col rounded-xl bg-card shadow-md">
+      <Card.Root class={panelList}>
+       <ul class="flex flex-col">
         {#each discovered as { machine, row } (`${machine.machineId}:${row.path}`)}
           {@const stored = agents.find((other) => other.name === row.name)}
           {@const key = `${machine.machineId}:${row.name}`}
-          <li class="flex flex-wrap items-start gap-x-3 gap-y-1 border-t border-border p-4 first:border-t-0">
+          <li class="flex flex-wrap items-start gap-x-[var(--space-3)] gap-y-1 border-t border-[var(--border-hairline)] p-[var(--space-4)] first:border-t-0">
             <span class="flex min-w-0 flex-1 flex-col gap-0.5">
               <span class="flex flex-wrap items-center gap-x-2 gap-y-1">
                 <span class="truncate font-mono text-caption text-foreground">{row.name}</span>
@@ -247,7 +260,8 @@
             {/if}
           </li>
         {/each}
-      </ul>
+       </ul>
+      </Card.Root>
     {/if}
   </section>
 {/if}

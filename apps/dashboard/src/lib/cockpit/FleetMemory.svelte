@@ -3,7 +3,10 @@
   import { toast } from 'svelte-sonner';
   import { memoryDocProblem } from '@cockpit/core';
   import { IconCheck, IconChevronDown, IconChevronRight, IconPlus, IconSpinner, IconTrash, IconWarningTriangle } from '$lib/icons';
+  import * as Alert from '$lib/components/ui/alert';
   import { Button } from '$lib/components/ui/button';
+  import * as Card from '$lib/components/ui/card';
+  import { Input } from '$lib/components/ui/input';
   import { Skeleton } from '$lib/components/ui/skeleton';
   import * as Tooltip from '$lib/components/ui/tooltip';
   import DiffView from '$lib/components/features/DiffView.svelte';
@@ -37,6 +40,11 @@
   let restoring = $state<number | null>(null);
 
   const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
+
+  // Quiet Ledger surfaces (DESIGN.md · mocks/v5-components.html .panel / .callout).
+  const panelList = 'gap-0 overflow-hidden rounded-[var(--radius-panel)] border-0 bg-[var(--surface-raised)] p-0 shadow-[var(--shadow-lifted)] ring-1 ring-[var(--border-hairline)]';
+  const warnAlert = 'items-center rounded-[var(--radius-control)] border-[var(--warning-9)] bg-[var(--warning-3)] p-[var(--space-3)] [&>svg]:text-[var(--warning-11)]';
+
   const bytes = $derived(memory ? new TextEncoder().encode(memory.content).length : 0);
   const applied = $derived(machines.filter((row) => row.fleet?.memory?.state === 'applied'));
   const drifted = $derived(machines.filter((row) => row.fleet?.memory?.state === 'failed'));
@@ -216,8 +224,8 @@
   {@const item = machine.fleet?.memory}
   {@const online = machine.status === 'online'}
   {@const isOpen = comparing === machine.machineId}
-  <li class="flex flex-col gap-2 border-t border-border p-4 first:border-t-0">
-    <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+  <li class="flex flex-col gap-[var(--space-2)] border-t border-[var(--border-hairline)] p-[var(--space-4)] first:border-t-0">
+    <div class="flex flex-wrap items-center gap-x-[var(--space-3)] gap-y-2">
       <span class="flex min-w-0 items-center gap-1.5">
         <IconWarningTriangle class="size-3.5 shrink-0 text-warning" />
         <span class="truncate text-caption font-medium {online ? 'text-foreground' : 'text-muted-foreground'}">{machineLabel(machine.hostname)}</span>
@@ -274,10 +282,10 @@
     {/snippet}
     {#snippet footer()}
       {#if drifted.length > 0}
-        <div class="flex flex-col gap-2 border-t border-border p-4">
+        <div class="flex flex-col gap-[var(--space-2)] border-t border-[var(--border-hairline)] p-[var(--space-4)]">
           {#each drifted as machine (machine.machineId)}
             {@const online = machine.status === 'online'}
-            <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <div class="flex flex-wrap items-center gap-x-[var(--space-3)] gap-y-2">
               <span class="flex min-w-0 items-center gap-1.5">
                 <IconWarningTriangle class="size-3.5 shrink-0 text-warning" />
                 <span class="truncate text-caption font-medium {online ? 'text-foreground' : 'text-muted-foreground'}">{machineLabel(machine.hostname)}</span>
@@ -297,27 +305,27 @@
   <MemoryCard path="~/.claude/memories/" content="" bind:editing={drafting} save={createDoc}>
     {#snippet meta()}
       <!-- The header already says where the file goes; this is only its last
-           part, typed where the rest of it is written. `.input` is unlayered, so
-           its own padding and size beat any utility written here — only what it
-           leaves alone is worth setting. -->
-      <input
-        bind:this={pathField}
+           part, typed where the rest of it is written. ui/input carries the
+           Quiet Ledger control dressing (--radius-control, --border-control,
+           --surface-raised, --ink-strong) so no unlayered .input is needed. -->
+      <Input
+        bind:ref={pathField}
         bind:value={draftPath}
         placeholder="models/deepseek-v4.md"
         autocomplete="off"
         spellcheck="false"
         aria-label="Path under ~/.claude/memories/"
         aria-invalid={pathProblem === undefined ? undefined : 'true'}
-        class="input min-w-0 max-w-80 flex-1 font-mono"
+        class="min-w-0 max-w-80 flex-1 font-mono"
       />
     {/snippet}
     {#snippet footer()}
       {#if pathProblem}
-        <div class="flex flex-col gap-2 border-t border-border p-4">
-          <div class="flex items-start gap-2 rounded-lg bg-warning/10 px-3 py-2">
-            <IconWarningTriangle class="mt-0.5 size-4 shrink-0 text-warning" />
-            <p class="text-caption text-warning" role="alert">{pathProblem}</p>
-          </div>
+        <div class="flex flex-col gap-[var(--space-2)] border-t border-[var(--border-hairline)] p-[var(--space-4)]">
+          <Alert.Root class={warnAlert}>
+            <IconWarningTriangle />
+            <Alert.Description class="text-caption text-[var(--warning-11)]">{pathProblem}</Alert.Description>
+          </Alert.Root>
           {#if taken}
             <Button variant="outline" size="xs" class="self-start" onclick={() => showDoc(trimmed)}>Show that document</Button>
           {/if}
@@ -332,7 +340,10 @@
 </p>
 
 {#if error}
-  <div class="rounded-xl bg-card p-4 shadow-md" role="alert"><p class="text-caption text-warning">{error}</p></div>
+  <Alert.Root class={warnAlert}>
+    <IconWarningTriangle />
+    <Alert.Description class="text-caption text-[var(--warning-11)]">{error}</Alert.Description>
+  </Alert.Root>
 {:else}
   <MemoryCard path="~/.claude/CLAUDE.md" content={memory?.content ?? null} bind:editing {save} emptyText="The fleet keeps no memory yet. Click to write one — or adopt a machine's copy below.">
     {#snippet meta()}
@@ -362,11 +373,11 @@
     {/snippet}
     {#snippet footer()}
       {#if conflict}
-        <div class="flex flex-col gap-3 border-t border-border p-4">
-          <div class="flex items-start gap-2 rounded-lg bg-warning/10 px-3 py-2">
-            <IconWarningTriangle class="mt-0.5 size-4 shrink-0 text-warning" />
-            <p class="text-caption text-warning">Changed elsewhere while you edited. Nothing was overwritten.</p>
-          </div>
+        <div class="flex flex-col gap-[var(--space-3)] border-t border-[var(--border-hairline)] p-[var(--space-4)]">
+          <Alert.Root class={warnAlert}>
+            <IconWarningTriangle />
+            <Alert.Description class="text-caption text-[var(--warning-11)]">Changed elsewhere while you edited. Nothing was overwritten.</Alert.Description>
+          </Alert.Root>
           {#key conflict.hash}<DiffView filePath="CLAUDE.md" oldContent={conflict.content} newContent={mine} />{/key}
           <div class="flex flex-wrap gap-2">
             <Button variant="outline" size="xs" disabled={saving} onclick={takeLatest}>Take latest</Button>
@@ -396,16 +407,17 @@
 
   {#if historyOpen}
     {#if loadingHistory && versions === null}
-      <Skeleton class="h-16 w-full rounded-xl" />
+      <Skeleton class="h-16 w-full rounded-[var(--radius-panel)]" />
     {:else if historyError}
       <p class="text-caption text-warning" role="alert">{historyError}</p>
     {:else if (versions ?? []).length === 0}
       <p class="text-caption text-muted-foreground">Nothing replaced yet. Every version a save, an adopt or an overwrite replaces is kept here.</p>
     {:else}
-      <ul class="flex flex-col rounded-xl bg-card shadow-md">
+      <Card.Root class={panelList}>
+       <ul class="flex flex-col">
         {#each versions ?? [] as row (row.id)}
-          <li class="flex flex-col gap-2 border-t border-border p-4 first:border-t-0">
-            <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <li class="flex flex-col gap-[var(--space-2)] border-t border-[var(--border-hairline)] p-[var(--space-4)] first:border-t-0">
+            <div class="flex flex-wrap items-center gap-x-[var(--space-3)] gap-y-2">
               <span class="text-caption">{formatDistanceToNow(new Date(row.createdAt))}</span>
               <span class="text-micro text-muted-foreground">from {sourceLabel(row.source)}</span>
               <span class="font-mono text-micro text-muted-foreground" title={row.hash}>{row.hash.slice(0, 8)}</span>
@@ -422,24 +434,27 @@
             {/if}
           </li>
         {/each}
-      </ul>
+       </ul>
+      </Card.Root>
     {/if}
   {/if}
 
   {#if machines.length === 0 && settling}
-    <Skeleton class="h-10 w-full rounded-xl" />
+    <Skeleton class="h-10 w-full rounded-[var(--radius-panel)]" />
   {:else if machines.length === 0}
     <p class="text-caption text-muted-foreground">No machines yet — this lands on the first one that registers.</p>
   {:else if !memory}
-    <ul class="flex flex-col rounded-xl bg-card shadow-md">
+    <Card.Root class={panelList}>
+     <ul class="flex flex-col">
       {#each machines as machine (machine.machineId)}
         {@const online = machine.status === 'online'}
-        <li class="flex flex-wrap items-center gap-3 border-t border-border p-4 first:border-t-0">
+        <li class="flex flex-wrap items-center gap-[var(--space-3)] border-t border-[var(--border-hairline)] p-[var(--space-4)] first:border-t-0">
           <span class="min-w-0 flex-1 truncate text-caption font-medium {online ? 'text-foreground' : 'text-muted-foreground'}">{machineLabel(machine.hostname)}</span>
           <Button variant="outline" size="xs" class="shrink-0" disabled={!online || busy[machine.machineId] === true} onclick={() => adopt(machine)}>Adopt this machine's copy</Button>
         </li>
       {/each}
-    </ul>
+     </ul>
+    </Card.Root>
   {:else}
     {#if applied.length > 0}
       <p class="flex flex-wrap items-center gap-x-2 text-caption text-muted-foreground" title={names(applied)}>
@@ -449,9 +464,11 @@
       </p>
     {/if}
     {#if drifted.length > 0}
-      <ul class="flex flex-col rounded-xl bg-card shadow-md">
+      <Card.Root class={panelList}>
+       <ul class="flex flex-col">
         {#each drifted as machine (machine.machineId)}{@render driftedRow(machine)}{/each}
-      </ul>
+       </ul>
+      </Card.Root>
       <p class="max-w-prose text-micro text-muted-foreground">
         A machine only ever gives back the copy Outpost wrote it. One edited on the machine itself is left where it is, and says so here until you take it or replace it.
       </p>
