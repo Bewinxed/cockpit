@@ -5,8 +5,10 @@
   import type { RuleRow } from '@cockpit/core';
   import { ruleSentence } from '@cockpit/core';
   import { IconAlert, IconPlus, IconTrash } from '$lib/icons';
-  import { Button, Callout, Panel, StatCard } from '$lib/outpost';
-  import { Button as UiButton } from '$lib/components/ui/button';
+  import { Button } from '$lib/components/ui/button';
+  import * as Card from '$lib/components/ui/card';
+  import * as Alert from '$lib/components/ui/alert';
+  import { Badge } from '$lib/components/ui/badge';
   import { Toggle } from '$lib/components/ui/toggle';
   import * as Tooltip from '$lib/components/ui/tooltip';
   import {
@@ -72,6 +74,24 @@
     }
   }
 
+  /* Quiet Ledger dressing for shadcn primitives — tailwind-merge drops the stock
+     rounded-4xl / bg-primary / bg-card defaults these override, so nothing reads
+     as unmodified shadcn. */
+  const panelClass =
+    'gap-0 overflow-visible rounded-[var(--radius-panel)] bg-[var(--surface-raised)] p-[var(--space-5)] shadow-[var(--shadow-lifted)] ring-0';
+  const tileClass =
+    'h-full gap-0 overflow-visible rounded-[var(--radius-panel)] bg-[var(--surface-raised)] p-[var(--c-card-pad)] shadow-[var(--shadow-lifted)] ring-0';
+  // The never-flat primary action: graphite brand fill + top-light gradient + inset edge.
+  const btnPrimary =
+    'h-[var(--c-btn-h)] gap-[var(--c-btn-gap)] rounded-[var(--radius-control)] border-transparent bg-[var(--brand-solid)] bg-[image:var(--gradient-action)] px-[var(--c-btn-pad)] text-[length:var(--c-btn-fs)] font-medium text-[color:var(--on-brand)] shadow-[var(--shadow-action)] hover:brightness-110';
+  // The quiet secondary action: raised surface + control border.
+  const btnQuiet =
+    'h-[var(--c-btn-h)] gap-[var(--c-btn-gap)] rounded-[var(--radius-control)] border border-[var(--border-control)] bg-[var(--surface-raised)] px-[var(--c-btn-pad)] text-[length:var(--c-btn-fs)] font-medium text-[color:var(--ink-strong)] shadow-none hover:bg-[var(--surface-hover)]';
+  const alertWarn =
+    'rounded-[var(--radius-control)] border-[var(--warning-9)] bg-[var(--warning-3)] text-[color:var(--warning-11)]';
+  const alertDanger =
+    'rounded-[var(--radius-control)] border-[var(--error-9)] bg-[var(--error-3)] text-[color:var(--error-11)]';
+
   async function useTemplate(template: (typeof RULE_TEMPLATES)[number]) {
     seeding = template.title;
     try {
@@ -92,6 +112,17 @@
 
 <svelte:head><title>Rules &middot; Outpost</title></svelte:head>
 
+<!-- Stat tile: a raised shadcn Card whose body is a sunken hairline well — the
+     Quiet Ledger recessed-field signature, a number set *in* the surface. -->
+{#snippet stat(label: string, value: string | number, unit?: string)}
+  <Card.Root class={tileClass}>
+    <div class="well">
+      <span class="k">{label}</span>
+      <span class="v">{value}</span>
+      {#if unit}<span class="u">{unit}</span>{/if}
+    </div>
+  </Card.Root>
+{/snippet}
 <div class="page">
   <div class="col">
     <header class="head">
@@ -103,31 +134,41 @@
           session acknowledges what it was told.
         </p>
       </div>
-      <Button variant="primary" onclick={() => goto('/rules/new')}>
+      <Button class={btnPrimary} onclick={() => goto('/rules/new')}>
         <IconPlus class="shrink-0" />
         New rule
       </Button>
     </header>
 
     <section class="stats" aria-label="Rule library at a glance">
-      <StatCard label="Rules" value={rules.length} />
-      <StatCard label="Enabled" value={enabledTotal} unit="of {rules.length}" />
-      <StatCard label="Waiting on an answer" value={pendingTotal} unit="sessions" />
-      <StatCard label="Times fired" value={firesTotal} unit="all time" />
+      {@render stat('Rules', rules.length)}
+      {@render stat('Enabled', enabledTotal, `of ${rules.length}`)}
+      {@render stat('Waiting on an answer', pendingTotal, 'sessions')}
+      {@render stat('Times fired', firesTotal, 'all time')}
     </section>
 
     {#if pendingTotal > 0}
-      <Callout>
-        {pendingTotal}
-        {pendingTotal === 1 ? 'session has' : 'sessions have'} been told something and not answered for
-        it yet.
-      </Callout>
+      <Alert.Root class={alertWarn}>
+        <Alert.Description
+          class="text-[length:var(--text-sm)] leading-[var(--leading-body)] text-[color:var(--warning-11)]"
+        >
+          {pendingTotal}
+          {pendingTotal === 1 ? 'session has' : 'sessions have'} been told something and not answered
+          for it yet.
+        </Alert.Description>
+      </Alert.Root>
     {/if}
 
     {#if data.error}
-      <Callout danger>{data.error}</Callout>
+      <Alert.Root class={alertDanger}>
+        <Alert.Description
+          class="text-[length:var(--text-sm)] leading-[var(--leading-body)] text-[color:var(--error-11)]"
+        >
+          {data.error}
+        </Alert.Description>
+      </Alert.Root>
     {:else if rules.length === 0}
-      <Panel style="--c-card-pad: var(--space-5)">
+      <Card.Root class={panelClass}>
         <header class="phead">
           <h2>Nothing is watching yet</h2>
           <span class="psub">
@@ -145,7 +186,11 @@
                   <span class="line mono">{template.draft.pattern}</span>
                 </div>
                 <div class="rowactions">
-                  <Button disabled={seeding !== null} onclick={() => useTemplate(template)}>
+                  <Button
+                    class={btnQuiet}
+                    disabled={seeding !== null}
+                    onclick={() => useTemplate(template)}
+                  >
                     {seeding === template.title ? 'Adding…' : 'Add'}
                   </Button>
                 </div>
@@ -153,12 +198,14 @@
             {/each}
           </ul>
           <div>
-            <Button onclick={() => goto('/rules/new')}>Or write one from scratch</Button>
+            <Button class={btnQuiet} onclick={() => goto('/rules/new')}>
+              Or write one from scratch
+            </Button>
           </div>
         </div>
-      </Panel>
+      </Card.Root>
     {:else}
-      <Panel style="--c-card-pad: var(--space-5)">
+      <Card.Root class={panelClass}>
         <header class="phead">
           <h2>Rule library</h2>
           <span class="psub">Every rule the hub is enforcing, and what it has caught</span>
@@ -174,10 +221,12 @@
                     <!-- The whole row is the link; the actions sit above it. -->
                     <a href="/rules/{row.id}">{row.name}</a>
                     {#if row.stats.pending > 0}
-                      <span class="waiting">
+                      <Badge
+                        class="gap-[var(--space-1)] rounded-[var(--radius-pill)] border-transparent bg-[var(--status-attn-bg)] px-[var(--space-2)] text-[length:var(--text-sm)] font-medium text-[color:var(--status-attn-ink)]"
+                      >
                         <IconAlert class="size-3 shrink-0" />
                         {row.stats.pending} waiting
-                      </span>
+                      </Badge>
                     {/if}
                   </span>
                   <span class="line">{ruleSentence(row)}</span>
@@ -201,7 +250,7 @@
                     <Tooltip.Root>
                       <Tooltip.Trigger>
                         {#snippet child({ props })}
-                          <UiButton
+                          <Button
                             {...props}
                             variant="ghost"
                             size="icon"
@@ -211,7 +260,7 @@
                             onclick={() => remove(row)}
                           >
                             <IconTrash class="size-4" />
-                          </UiButton>
+                          </Button>
                         {/snippet}
                       </Tooltip.Trigger>
                       <Tooltip.Content>Delete {row.name}</Tooltip.Content>
@@ -222,7 +271,7 @@
             {/each}
           </ul>
         </div>
-      </Panel>
+      </Card.Root>
     {/if}
   </div>
 </div>
@@ -270,10 +319,34 @@
     grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
     gap: var(--space-4);
   }
-  /* Tiles share a row, so they share a height — a tile with a unit line must not
-     stand taller than one without. */
-  .stats :global(.tile > .panel) {
-    height: 100%;
+  /* The sunken well inside each raised stat Card — the recessed-field signature.
+     flex:1 keeps a tile with a unit line the same height as one without. */
+  .well {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--c-card-gap);
+    justify-content: center;
+    background: var(--surface-field);
+    border: 1px solid var(--border-hairline);
+    border-radius: var(--radius-well);
+    padding: var(--c-card-pad);
+  }
+  .well .k {
+    color: var(--ink-label);
+    font-size: var(--text-sm);
+    font-weight: var(--weight-medium);
+  }
+  .well .v {
+    font-size: var(--text-3xl);
+    font-weight: var(--weight-strong);
+    line-height: var(--leading-numeric);
+    color: var(--ink-strong);
+    font-variant-numeric: tabular-nums;
+  }
+  .well .u {
+    color: var(--ink-muted);
+    font-size: var(--text-sm);
   }
   .phead {
     display: flex;
@@ -348,17 +421,6 @@
   .name a:hover,
   .name a:focus-visible {
     text-decoration: underline;
-  }
-  .waiting {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-1);
-    border-radius: var(--radius-pill);
-    padding: 1px 8px;
-    background: var(--status-attn-bg);
-    color: var(--status-attn-ink);
-    font-size: var(--text-sm);
-    font-weight: var(--weight-strong);
   }
   .line {
     max-width: 68ch;

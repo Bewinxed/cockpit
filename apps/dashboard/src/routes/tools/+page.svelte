@@ -10,7 +10,7 @@
   import { onMount, untrack } from 'svelte';
   import type { FleetAgent, FleetConfig, FleetSkillMeta } from '@cockpit/core';
   import * as Tooltip from '$lib/components/ui/tooltip';
-  import { Panel, StatCard } from '$lib/outpost';
+  import * as Card from '$lib/components/ui/card';
   import { cockpit } from '$lib/cockpit/client.svelte';
   import type { FleetMemoryDocRow, FleetMemoryRow } from '$lib/cockpit/fleet';
   import FleetAgents from '$lib/cockpit/FleetAgents.svelte';
@@ -58,6 +58,14 @@
     const timer = setTimeout(() => (settling = false), 600);
     return () => clearTimeout(timer);
   });
+
+  /* Dress shadcn Card as the Quiet Ledger raised panel (--surface-raised,
+     --radius-panel, --shadow-lifted) — never the stock rounded-2xl/bg-card/ring
+     shadcn ships. tailwind-merge drops the defaults these override. */
+  const panelClass =
+    'gap-0 overflow-visible rounded-[var(--radius-panel)] bg-[var(--surface-raised)] p-[var(--space-5)] shadow-[var(--shadow-lifted)] ring-0';
+  const tileClass =
+    'h-full gap-0 overflow-visible rounded-[var(--radius-panel)] bg-[var(--surface-raised)] p-[var(--c-card-pad)] shadow-[var(--shadow-lifted)] ring-0';
 </script>
 
 <svelte:head>
@@ -68,6 +76,17 @@
      throw on the server, which is what used to leave /tools a 500 on a cold load. -->
 <Tooltip.Provider>
 <div class="page">
+  <!-- The stat tile IS the signature move: a shadcn Card (raised) whose body is a
+       sunken hairline well — a number sits *in* something, never on it. -->
+  {#snippet stat(label: string, value: string | number, unit?: string)}
+    <Card.Root class={tileClass}>
+      <div class="well">
+        <span class="k">{label}</span>
+        <span class="v">{value}</span>
+        {#if unit}<span class="u">{unit}</span>{/if}
+      </div>
+    </Card.Root>
+  {/snippet}
   <div class="col">
     <header class="head">
       <h1>Tools</h1>
@@ -78,14 +97,14 @@
     </header>
 
     <section class="stats" aria-label="Fleet inventory">
-      <StatCard label="Tools tracked" value={data.catalog.length} />
-      <StatCard label="MCP servers" value={config.mcp.length} />
-      <StatCard label="Skills" value={skills.length} />
-      <StatCard label="Subagents" value={agents.length} />
-      <StatCard label="Machines online" value={online} unit="of {machines.length}" />
+      {@render stat('Tools tracked', data.catalog.length)}
+      {@render stat('MCP servers', config.mcp.length)}
+      {@render stat('Skills', skills.length)}
+      {@render stat('Subagents', agents.length)}
+      {@render stat('Machines online', online, `of ${machines.length}`)}
     </section>
 
-    <Panel style="--c-card-pad: var(--space-5)">
+    <Card.Root class={panelClass}>
       <header class="phead">
         <h2>Tool matrix</h2>
         <span class="psub">Workflow CLIs, machine by machine</span>
@@ -99,9 +118,9 @@
           error={data.toolsError}
         />
       </div>
-    </Panel>
+    </Card.Root>
 
-    <Panel style="--c-card-pad: var(--space-5)">
+    <Card.Root class={panelClass}>
       <header class="phead">
         <h2>MCP servers</h2>
         <span class="psub">Written to every machine, online now or when it returns</span>
@@ -109,9 +128,9 @@
       <div class="pbody">
         <FleetMcp servers={config.mcp} {machines} {settling} error={data.fleetError} />
       </div>
-    </Panel>
+    </Card.Root>
 
-    <Panel style="--c-card-pad: var(--space-5)">
+    <Card.Root class={panelClass}>
       <header class="phead">
         <h2>Skills &amp; plugins</h2>
         <span class="psub">Fetched once for the fleet, or cloned from a marketplace</span>
@@ -119,9 +138,9 @@
       <div class="pbody">
         <FleetSkills {config} {skills} {machines} {settling} error={data.fleetError} />
       </div>
-    </Panel>
+    </Card.Root>
 
-    <Panel style="--c-card-pad: var(--space-5)">
+    <Card.Root class={panelClass}>
       <header class="phead">
         <h2>Subagents</h2>
         <span class="psub">Markdown files that land in ~/.claude/agents everywhere</span>
@@ -129,9 +148,9 @@
       <div class="pbody">
         <FleetAgents {agents} {machines} {settling} error={data.fleetError} />
       </div>
-    </Panel>
+    </Card.Root>
 
-    <Panel style="--c-card-pad: var(--space-5)">
+    <Card.Root class={panelClass}>
       <header class="phead">
         <h2>Memory</h2>
         <span class="psub">The user CLAUDE.md the whole fleet reads</span>
@@ -145,7 +164,7 @@
           error={data.fleetError}
         />
       </div>
-    </Panel>
+    </Card.Root>
   </div>
 </div>
 </Tooltip.Provider>
@@ -186,10 +205,34 @@
     grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
     gap: var(--space-4);
   }
-  /* Tiles share a row, so they share a height — a tile with a unit line must not
-     stand taller than one without. */
-  .stats :global(.tile > .panel) {
-    height: 100%;
+  /* The sunken well inside each raised stat Card — the recessed-field signature.
+     flex:1 keeps a tile with a unit line the same height as one without. */
+  .well {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--c-card-gap);
+    justify-content: center;
+    background: var(--surface-field);
+    border: 1px solid var(--border-hairline);
+    border-radius: var(--radius-well);
+    padding: var(--c-card-pad);
+  }
+  .well .k {
+    color: var(--ink-label);
+    font-size: var(--text-sm);
+    font-weight: var(--weight-medium);
+  }
+  .well .v {
+    font-size: var(--text-3xl);
+    font-weight: var(--weight-strong);
+    line-height: var(--leading-numeric);
+    color: var(--ink-strong);
+    font-variant-numeric: tabular-nums;
+  }
+  .well .u {
+    color: var(--ink-muted);
+    font-size: var(--text-sm);
   }
   .phead {
     display: flex;
