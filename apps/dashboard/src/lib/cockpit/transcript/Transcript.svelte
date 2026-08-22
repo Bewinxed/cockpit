@@ -12,6 +12,7 @@
   import { IconSpinner } from '$lib/icons';
   import MessageRow from './MessageRow.svelte';
   import ToolGroup from './ToolGroup.svelte';
+  import QuestionCard from './QuestionCard.svelte';
   import Subagent from './Subagent.svelte';
   import Thinking from './Thinking.svelte';
   import MessageBody from './MessageBody.svelte';
@@ -58,6 +59,8 @@
         <MessageRow message={row.message} {agentName} />
       {:else if row.kind === 'tools'}
         <ToolGroup messages={row.messages} />
+      {:else if row.kind === 'question'}
+        <QuestionCard message={row.message} />
       {:else if row.kind === 'subagent'}
         <Subagent branch={row.branch} spawn={row.spawn} />
       {:else if row.kind === 'thinking'}

@@ -9,16 +9,22 @@ import type { Message } from '../types';
 import type { SessionState } from '../client.svelte';
 import type { ToolGlance } from '../frames';
 import type { SubagentState } from '$lib/utils/flow-types';
+import { ASK_USER_QUESTION } from '@cockpit/core';
 
 export type Row =
   | { kind: 'single'; key: string; message: Message }
   | { kind: 'tools'; key: string; messages: Message[] }
+  | { kind: 'question'; key: string; message: Message }
   | { kind: 'subagent'; key: string; branch: SubagentState; spawn: Message }
   | { kind: 'stream'; key: string; text: string }
   | { kind: 'thinking'; key: string; text: string; live: boolean }
   | { kind: 'livetool'; key: string; glance: ToolGlance };
 
 const isToolMsg = (m: Message): boolean => m.type === 'tool.use' || m.type === 'tool.handoff';
+
+/** A question the agent asked, rendered as its own card rather than a tool row. */
+const isQuestionMsg = (m: Message): boolean =>
+  isToolMsg(m) && m.metadata?.toolName === ASK_USER_QUESTION;
 
 /** The branch a tool.use spawned, when it opened one — a real subagent fold. */
 const branchOf = (m: Message, subagents: Record<string, SubagentState>): SubagentState | null => {
@@ -43,10 +49,21 @@ export function buildRows(session: SessionState): Row[] {
       continue;
     }
 
+    if (isQuestionMsg(m)) {
+      rows.push({ kind: 'question', key: `q:${keyOf(m, i)}`, message: m });
+      i++;
+      continue;
+    }
+
     if (isToolMsg(m)) {
       const run: Message[] = [];
       const start = i;
-      while (i < messages.length && isToolMsg(messages[i]) && !branchOf(messages[i], subagents)) {
+      while (
+        i < messages.length &&
+        isToolMsg(messages[i]) &&
+        !isQuestionMsg(messages[i]) &&
+        !branchOf(messages[i], subagents)
+      ) {
         run.push(messages[i]);
         i++;
       }
