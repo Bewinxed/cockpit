@@ -154,7 +154,7 @@
 <a class="skip" href="#main-content">Skip to content</a>
 
 <div class="shell" style="--sidebar-width: {railWidth}px">
-  <aside class="rail hidden md:flex">
+  <aside class="rail hidden min-[900px]:flex">
     <Sidebar />
     <div
       class="grip"
@@ -171,7 +171,7 @@
   </aside>
 
   <Sheet.Root bind:open={railOpen}>
-    <Sheet.Content side="left" class="w-[284px] p-0 md:hidden">
+    <Sheet.Content side="left" class="w-[284px] p-0 min-[900px]:hidden">
       <Sheet.Header class="sr-only">
         <Sheet.Title>Navigation</Sheet.Title>
       </Sheet.Header>
@@ -183,21 +183,21 @@
     <header class="top">
       <button
         type="button"
-        class="burger md:hidden"
+        class="burger min-[900px]:hidden"
         aria-label="Open navigation"
         onclick={() => (railOpen = true)}
       >
         <IconSidebar />
       </button>
-      <a class="wordmark md:hidden" href="/session">Outpost</a>
-      <span class="crumb hidden md:inline">{crumb}</span>
+      <a class="wordmark min-[900px]:hidden" href="/session">Outpost</a>
+      <span class="crumb hidden min-[900px]:inline">{crumb}</span>
 
       <div class="right">
         <Button class="jump" onclick={() => (jumpOpen = true)} title="Jump to session (⌘K)">
           <IconSearch />
           <span class="hidden sm:inline">Jump</span>
         </Button>
-        <span class="md:hidden"><UsageMeter /></span>
+        <span class="min-[900px]:hidden"><UsageMeter /></span>
         {#if cockpit.blockedCount > 0}
           <a class="icobtn" href="/session" title="{cockpit.blockedCount} waiting on you">
             <IconShield />
@@ -323,6 +323,13 @@
     border-radius: var(--radius-control);
     color: var(--ink-row);
     cursor: pointer;
+  }
+  /* At the mock's 900px breakpoint the rail returns and the burger retires.
+     Scoped so it beats the display:grid above, which a utility class cannot. */
+  @media (min-width: 900px) {
+    .burger {
+      display: none;
+    }
   }
   .burger :global(svg) {
     width: 19px;
