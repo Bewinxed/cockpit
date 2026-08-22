@@ -34,8 +34,16 @@ const branchOf = (m: Message, subagents: Record<string, SubagentState>): Subagen
 
 const keyOf = (m: Message, index: number): string => m.id ?? m.sdkUuid ?? `${m.type}:${index}`;
 
-export function buildRows(session: SessionState): Row[] {
-  const { messages, subagents } = session;
+/**
+ * The row grammar itself: a list of messages folded into rows, with no live tail
+ * and no session. The main transcript and a subagent's own mini-transcript both
+ * go through this, so a delegate's tool calls and reasoning read exactly like
+ * the parent's rather than like a printed log.
+ */
+export function foldMessages(
+  messages: Message[],
+  subagents: Record<string, SubagentState>
+): Row[] {
   const rows: Row[] = [];
 
   let i = 0;
@@ -74,6 +82,25 @@ export function buildRows(session: SessionState): Row[] {
     rows.push({ kind: 'single', key: keyOf(m, i), message: m });
     i++;
   }
+
+  return rows;
+}
+
+/**
+ * A subagent's own transcript, for the peek inside its branch card. Nested
+ * branches are not resolved — the SDK caps delegation at one level, so a
+ * `tool.use` in here is a call the delegate made, never a fold of its own.
+ */
+export function branchRows(branch: SubagentState): Row[] {
+  const rows = foldMessages(branch.messages, {});
+  if (branch.streaming) {
+    rows.push({ kind: 'stream', key: 'branch:stream', text: branch.streaming });
+  }
+  return rows;
+}
+
+export function buildRows(session: SessionState): Row[] {
+  const rows = foldMessages(session.messages, session.subagents);
 
   // The live tail: only ever the main loop's, and only while nothing settled it.
   if (session.openBlock === 'thinking' && session.thinkingStream) {

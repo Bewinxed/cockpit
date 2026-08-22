@@ -362,6 +362,22 @@ function subagentSpawn(
   };
 }
 
+/**
+ * An async subagent launch's `tool_result`: the SDK's own bookkeeping for a Task
+ * it started in the background — an agentId, an output file, and a paragraph
+ * telling the model not to quote either. It answers the Task call without being
+ * the subagent's report, so folding it the ordinary way made the metadata the
+ * branch's `result`, which the card then printed word for word. Recognised the
+ * way {@link systemNote} recognises local-command scaffolding: by the opening
+ * the SDK writes, or by the id/file pair a re-worded launch still carries.
+ */
+function subagentLaunch(result: string): boolean {
+  const head = result.trimStart().slice(0, 200);
+  if (head.startsWith('Async agent launched')) return true;
+  if (head.startsWith('(This tool result is internal metadata')) return true;
+  return result.includes('agentId:') && result.includes('output_file:');
+}
+
 function systemLine(
   base: Omit<Message, 'type' | 'content'>,
   type: MessageType,
@@ -556,9 +572,17 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
       if (typeof content === 'string') break;
       for (const block of content) {
         if (block.type !== 'tool_result') continue;
+        const text = resultText(block.content);
+        // A launch is not a report. It says the delegate started, so that is all
+        // it does here: the branch moves to running and the metadata stops —
+        // it never reaches a `result`, a message, or the card.
+        if (subagentLaunch(text)) {
+          mapping.branch = { toolUseId: block.tool_use_id, status: 'running' };
+          continue;
+        }
         mapping.toolResults.push({
           toolId: block.tool_use_id,
-          result: resultText(block.content),
+          result: text,
           isError: block.is_error === true,
           structuredContent: block.structuredContent,
           questionResult: block.questionResult,
@@ -860,14 +884,87 @@ export function suppressesTaskLine(
   return Boolean(toolUseId && branches[toolUseId]);
 }
 
-/** The one line a collapsed branch card shows for what its subagent is doing. */
-export function branchActivity(branch: SubagentState): string {
+/**
+ * A subagent branch as something to WATCH rather than a string to print: what it
+ * is doing right now, what it finally reported, and how many steps that took.
+ * Each field keeps its own source — collapsing them into one display line is
+ * what let the launch metadata be shown as a delegate's "result", and it loses
+ * the live line either way.
+ */
+export interface SubagentView {
+  /** Whether the branch is still working. */
+  running: boolean;
+  /** Present tense, what it is doing NOW. Empty once the branch has settled. */
+  currentStep: string;
+  /** Its final report: the Task result, or the last thing it said. */
+  report: string;
+  /** Tool calls it has made — what the status pill counts. */
+  steps: number;
+}
+
+/**
+ * Present-tense verbs for the tools a delegate's live line names. Anything not
+ * listed says its own name, which reads as a step already (`WebSearch cockpit`).
+ */
+const STEP_VERB: Record<string, string> = {
+  Read: 'Reading',
+  Write: 'Writing',
+  Edit: 'Editing',
+  NotebookEdit: 'Editing',
+  Bash: 'Running',
+  Grep: 'Searching',
+  Glob: 'Globbing',
+  WebFetch: 'Fetching',
+  WebSearch: 'Searching the web',
+  Task: 'Delegating',
+  TodoWrite: 'Updating its plan',
+};
+
+/** An MCP tool's own name, out of the `mcp__<server>__<tool>` it is called by. */
+const stepVerb = (name: string): string => {
+  const tool = name.split('__').pop() ?? name;
+  return STEP_VERB[tool] ?? tool;
+};
+
+const stepLine = (message: Message): string => {
+  const verb = stepVerb(message.metadata?.toolName ?? message.content);
+  const glance = getToolGlance(
+    (message.metadata?.toolInput ?? undefined) as Record<string, unknown> | undefined
+  );
+  return glance ? `${verb} ${glance}` : verb;
+};
+
+/**
+ * What the delegate is doing at this instant. The call still in flight is the
+ * truest answer — it is literally what it is inside — and the progress summary,
+ * the text it is writing, and the last call it made are what is left when there
+ * is none.
+ */
+function currentStep(branch: SubagentState, tools: Message[]): string {
+  const inFlight = [...tools].reverse().find((m) => m.metadata?.toolStatus === 'pending');
+  if (inFlight) return stepLine(inFlight);
   if (branch.summary) return branch.summary;
-  if (branch.status === 'complete' && branch.result) return branch.result;
-  const last = branch.messages[branch.messages.length - 1];
-  if (last?.type === 'tool.use') return last.metadata?.toolName ?? 'working';
-  if (last?.type === 'assistant') return last.content;
-  return branch.lastToolName ?? branch.description ?? '';
+  const writing = branch.streaming.trim().split('\n').filter(Boolean).pop();
+  if (writing) return writing;
+  const last = tools[tools.length - 1];
+  if (last) return stepLine(last);
+  if (branch.lastToolName) return stepVerb(branch.lastToolName);
+  return branch.description ?? 'Working';
+}
+
+/** {@link SubagentView} for a branch, recomputed as its frames arrive. */
+export function subagentView(branch: SubagentState): SubagentView {
+  const running = branch.status === 'starting' || branch.status === 'running';
+  const tools = branch.messages.filter((m) => m.type === 'tool.use');
+  const said = [...branch.messages]
+    .reverse()
+    .find((m) => m.type === 'assistant' && m.content.trim());
+  return {
+    running,
+    steps: tools.length,
+    currentStep: running ? currentStep(branch, tools) : '',
+    report: branch.result?.trim() || said?.content.trim() || '',
+  };
 }
 
 /** A gap longer than this is a clock that moved, not a model that thought. */

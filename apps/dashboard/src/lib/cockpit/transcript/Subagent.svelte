@@ -1,62 +1,118 @@
 <script lang="ts">
   /**
-   * A subagent (a delegate is a separate session, folded here as a branch) on
-   * the rail — a fold, not a box. The head names it and its harness/steps; the
-   * body carries its present-tense line or its final report. Ported from the
-   * mock's `.branch`.
+   * A subagent — a delegate's own run, folded onto the parent's spine as a
+   * branch you can watch rather than a paragraph you read. The head is its
+   * identity and a status pill; the live line says what it is doing at this
+   * instant; the fold opens its own transcript, rendered through the same row
+   * grammar as the main one (`branchRows`).
    */
   import type { Message } from '../types';
   import type { SubagentState } from '$lib/utils/flow-types';
-  import { IconSubagent } from '$lib/icons';
+  import { subagentView } from '../frames';
+  import { branchRows } from './rows';
+  import { markHue, sessionSprite } from '../mark';
+  import { modelLabel } from '../models.svelte';
+  import { IconChevronRight } from '$lib/icons';
   import { formatDuration } from '$lib/utils/time';
   import * as Collapsible from '$lib/components/ui/collapsible';
   import MessageBody from './MessageBody.svelte';
+  import MessageRow from './MessageRow.svelte';
+  import ToolGroup from './ToolGroup.svelte';
+  import Thinking from './Thinking.svelte';
 
   let { branch, spawn }: { branch: SubagentState; spawn: Message } = $props();
 
-  const steps = $derived(branch.messages.filter((m) => m.type === 'tool.use').length);
-  const running = $derived(branch.status === 'running' || branch.status === 'starting');
-  const elapsed = $derived(
-    formatDuration(
-      (branch.completedAt?.getTime() ?? Date.now()) - branch.startedAt.getTime()
-    )
-  );
-
+  const view = $derived(subagentView(branch));
+  const rows = $derived(branchRows(branch));
+  const seed = $derived(branch.toolUseId || branch.subagentType);
+  const Sprite = $derived(sessionSprite(seed));
   const title = $derived(
     branch.description || spawn.metadata?.subagentDescription || branch.subagentType
   );
-  const body = $derived(branch.error || branch.result || branch.summary || branch.streaming);
+  const model = $derived(branch.model ?? spawn.metadata?.subagentModel);
+  const failed = $derived(branch.status === 'error');
+  const phase = $derived(failed ? 'failed' : view.running ? 'running' : 'done');
+
+  // Elapsed is a clock, not a frame: a running branch has to re-read it on its
+  // own, or the pill freezes at whatever second its last message arrived.
+  let now = $state(Date.now());
+  $effect(() => {
+    if (!view.running) return;
+    const tick = setInterval(() => (now = Date.now()), 1000);
+    return () => clearInterval(tick);
+  });
+  const elapsed = $derived(
+    formatDuration((branch.completedAt?.getTime() ?? now) - branch.startedAt.getTime())
+  );
+
+  /** A settled branch's headline: its first line, at a scannable length. */
+  const headline = (text: string): string => {
+    const line = text.split('\n').map((each) => each.trim()).find(Boolean) ?? '';
+    return line.length > 120 ? `${line.slice(0, 119)}…` : line;
+  };
 </script>
 
 <div class="branch">
   <Collapsible.Root>
     <Collapsible.Trigger class="bhead">
-      <span class="tag"><IconSubagent />subagent</span>
-      <span class="tk">{title}</span>
-      <span class="arg">{branch.model ?? branch.subagentType}{#if steps} · {steps} step{steps === 1 ? '' : 's'}{/if}</span>
-      <span class="t" class:live={running}>{running ? 'running' : elapsed}</span>
+      <span class="chev" aria-hidden="true"><IconChevronRight /></span>
+      <span class="mark m{markHue(seed)}" aria-hidden="true"><Sprite /></span>
+      <span class="tk">{branch.subagentType}</span>
+      {#if title !== branch.subagentType}<span class="arg">{title}</span>{/if}
+      {#if model}<span class="model">{modelLabel(model)}</span>{/if}
+      <span class="pill {phase}">
+        {phase}{#if view.steps} · {view.steps} step{view.steps === 1 ? '' : 's'}{/if} · {elapsed}
+      </span>
     </Collapsible.Trigger>
-    {#if body}
-      <p class="bmsg" class:err={!!branch.error}>{body}</p>
+
+    <!-- Always visible: the observability at a glance, no expand needed. -->
+    {#if view.running}
+      <p class="now"><span class="beat" aria-hidden="true"></span>{view.currentStep}</p>
+    {:else if failed && branch.error}
+      <p class="now err">{headline(branch.error)}</p>
+    {:else if view.report}
+      <p class="now">{headline(view.report)}</p>
     {/if}
+
     <Collapsible.Content>
       <div class="inner">
-        {#each branch.messages as m (m.id ?? m.sdkUuid)}
-          {#if m.type === 'assistant' && m.content.trim()}
-            <MessageBody source={m.content} />
+        {#each rows as row (row.key)}
+          {#if row.kind === 'tools'}
+            <ToolGroup messages={row.messages} />
+          {:else if row.kind === 'question'}
+            <ToolGroup messages={[row.message]} />
+          {:else if row.kind === 'thinking'}
+            <Thinking text={row.text} live={row.live} />
+          {:else if row.kind === 'stream'}
+            <div class="say"><MessageBody source={row.text} streaming /></div>
+          {:else if row.kind === 'single'}
+            <MessageRow message={row.message} agentName={branch.subagentType} />
           {/if}
         {/each}
+
+        {#if failed && branch.error}
+          <p class="fail">{branch.error}</p>
+        {:else if view.report}
+          <section class="report">
+            <h4>Report</h4>
+            <MessageBody source={view.report} />
+          </section>
+        {/if}
       </div>
     </Collapsible.Content>
   </Collapsible.Root>
 </div>
 
 <style>
+  /* The spine: a structural 2px rail, the same indent every rail block uses. */
   .branch {
     margin: var(--space-4) 0 0 var(--space-2);
     padding-left: var(--space-3);
     background: var(--rail) left top / 2px 100% no-repeat;
   }
+
+  /* The trigger is a component's element, so the scoped selector cannot reach
+     it — everything under `.branch` here is addressed globally on purpose. */
   :global(.branch .bhead) {
     min-height: 26px;
     width: 100%;
@@ -70,26 +126,58 @@
     color: inherit;
     cursor: pointer;
     text-align: left;
+    transform-origin: left center;
+    transition: transform var(--c-100) var(--e-in);
   }
-  .tag {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    font-size: var(--text-sm);
-    font-weight: var(--weight-medium);
-    letter-spacing: 0.02em;
-    text-transform: uppercase;
-    color: var(--accent-text);
-    background: var(--accent-bg-subtle);
+  :global(.branch .bhead:active) {
+    transform: scale(0.96);
+  }
+
+  /* The disclosure affordance: one glyph in currentColor, rotated by its own
+     state rather than swapped for a second asset. */
+  .chev {
+    width: 13px;
+    height: 13px;
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    color: var(--ink-muted);
+    transition: transform var(--c-100) var(--e-in);
+  }
+  :global(.branch .bhead[data-state='open']) .chev {
+    transform: rotate(90deg);
+  }
+  .chev :global(svg) {
+    width: 13px;
+    height: 13px;
+    display: block;
+  }
+
+  /* The per-session identity sprite, on its --mark-N hue square. */
+  .mark {
+    width: 17px;
+    height: 17px;
     border-radius: var(--radius-mark);
-    padding: 2px var(--space-2);
     flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    background-image: var(--mark-overlay);
+    background-color: var(--mark-1);
   }
-  .tag :global(svg) {
-    width: 12px;
-    height: 12px;
-    flex: 0 0 auto;
+  .mark :global(svg) {
+    width: 11px;
+    height: 11px;
+    display: block;
+    color: var(--mark-glyph);
   }
+  .mark.m2 { background-color: var(--mark-2); }
+  .mark.m3 { background-color: var(--mark-3); }
+  .mark.m4 { background-color: var(--mark-4); }
+  .mark.m5 { background-color: var(--mark-5); }
+  .mark.m6 { background-color: var(--mark-6); }
+  .mark.m7 { background-color: var(--mark-7); }
+  .mark.m8 { background-color: var(--mark-8); }
+
   .tk {
     font-family: var(--font-mono);
     color: var(--ink-strong);
@@ -109,36 +197,126 @@
     min-width: 0;
     flex: 1 1 auto;
   }
-  .t {
-    margin-left: auto;
+  .model {
     color: var(--ink-muted);
-    font-variant-numeric: tabular-nums;
+    font-size: var(--text-xs);
     flex: 0 0 auto;
-    font-size: var(--text-sm);
+    white-space: nowrap;
   }
-  .t.live {
+  .pill {
+    margin-left: auto;
+    flex: 0 0 auto;
+    font-size: var(--text-xs);
+    font-variant-numeric: tabular-nums;
+    border-radius: var(--radius-mark);
+    padding: 2px var(--space-2);
+    background: var(--status-idle-bg);
+    color: var(--status-idle-ink);
+  }
+  .pill.running {
+    background: var(--status-live-bg);
     color: var(--status-live-ink);
   }
-  .bmsg {
-    margin: 2px 0 0 22px;
-    font-size: var(--text-sm);
-    color: var(--ink-body);
-    max-width: 68ch;
+  .pill.done {
+    background: var(--status-done-bg);
+    color: var(--status-done-ink);
   }
-  .bmsg.err {
+  .pill.failed {
+    background: var(--status-fail-bg);
     color: var(--status-fail-ink);
   }
-  .inner {
-    margin: 4px 0 0 22px;
+
+  /* The live line, indented under the head's glyph column. */
+  .now {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-2);
+    margin: var(--space-1) 0 0 var(--space-5);
+    font-size: var(--text-sm);
+    color: var(--ink-body);
+    line-height: var(--leading-body);
+    max-width: 68ch;
   }
+  .now.err {
+    color: var(--status-fail-ink);
+  }
+  /* The beat is the second cue, never the only one: the pill already says
+     "running" in words beside it. */
+  .beat {
+    width: 5px;
+    height: 5px;
+    flex: 0 0 auto;
+    border-radius: 50%;
+    background: var(--status-live-ink);
+    animation: beat var(--breath) var(--e-toggle) infinite;
+  }
+  @keyframes beat {
+    50% {
+      opacity: 0.3;
+    }
+  }
+
+  /* The delegate's own transcript, in a well of its own. Concentric: the well's
+     --radius-control (8px) less its --space-1 (4px) padding is the --radius-mark
+     the report inside it carries, so no two nested corners share a radius. */
+  .inner {
+    margin: var(--space-2) 0 0 var(--space-5);
+    padding: var(--space-1);
+    border-radius: var(--radius-control);
+    background: var(--surface-sunken);
+  }
+  .say {
+    margin-top: var(--space-4);
+  }
+  .report {
+    margin-top: var(--space-4);
+    padding: var(--space-3);
+    border-radius: var(--radius-mark);
+    background: var(--surface-raised);
+    box-shadow: var(--shadow-tile);
+  }
+  .report h4 {
+    font-size: var(--text-xs);
+    font-weight: var(--weight-medium);
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+    margin-bottom: var(--space-2);
+  }
+  .fail {
+    margin-top: var(--space-4);
+    padding: var(--space-3);
+    border-radius: var(--radius-mark);
+    font-size: var(--text-sm);
+    color: var(--status-fail-ink);
+    background: var(--surface-raised);
+    box-shadow: var(--shadow-tile);
+    white-space: pre-wrap;
+  }
+
   @media (max-width: 900px) {
     .branch {
       margin-left: 0;
     }
   }
+  /* The head is the only control on the card, so on a touch screen it is a real
+     target. Scoped `.bhead` never matched the trigger — this is the same rule
+     the old card carried, written so it applies. */
   @media (pointer: coarse) {
-    .bhead {
+    :global(.branch .bhead) {
       min-height: 44px;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    :global(.branch .bhead),
+    .chev {
+      transition: none;
+    }
+    :global(.branch .bhead:active) {
+      transform: none;
+    }
+    .beat {
+      animation: none;
     }
   }
 </style>
