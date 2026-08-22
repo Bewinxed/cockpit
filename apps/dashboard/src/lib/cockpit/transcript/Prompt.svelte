@@ -15,6 +15,7 @@
   import { questionsOf, questionAnswer } from '../question';
   import { permissionSummary, suggestedRule } from '../permission-summary';
   import { IconArrowUp, IconCheck, IconClose, IconShield } from '$lib/icons';
+  import { Button } from '$lib/components/ui/button';
 
   let {
     request,
@@ -74,6 +75,40 @@
       questionAnswer(input, answers)
     );
   }
+
+  /* shadcn <Button>, dressed in DESIGN.md tokens so nothing reads as stock
+     shadcn (no 4/8/12 padding ladder, no pill radius, no --primary fill).
+     Control height sits on the scale — --space-8 (32) fine, 44 coarse. */
+  const btnBase =
+    'h-[var(--space-8)] pointer-coarse:h-11 gap-[var(--space-2)] ' +
+    'rounded-[var(--radius-control)] px-[var(--space-3)] ' +
+    'text-[length:var(--text-base)] font-medium ' +
+    "[&_svg:not([class*='size-'])]:size-3";
+
+  /* The permission gate is symmetric by DESIGN.md law: Approve and Deny are
+     recessed PEERS at one fill and one border — no gradient, no primary. They
+     differ only in glyph and ink (grant → --ink-strong, refuse → --ink-body). */
+  const peer =
+    `${btnBase} flex-1 min-w-0 border border-[var(--border-control)] ` +
+    'bg-[var(--surface-raised)] hover:bg-[var(--surface-hover)]';
+  const grant = `${peer} text-[color:var(--ink-strong)]`;
+  const refuse = `${peer} text-[color:var(--ink-body)]`;
+
+  /* Answer IS a primary, non-destructive action, so it takes the never-flat
+     brand treatment (gradient + inset action shadow). */
+  const primary =
+    `${btnBase} px-[var(--space-4)] border-0 text-[color:var(--on-brand)] ` +
+    'bg-[var(--brand-solid)] [background-image:var(--gradient-action)] ' +
+    '[box-shadow:var(--shadow-action)]';
+  const dismiss =
+    `${btnBase} border border-[var(--border-control)] bg-[var(--surface-raised)] ` +
+    'text-[color:var(--ink-body)] hover:bg-[var(--surface-hover)]';
+
+  /* A standing grant must read as consequential — warning tint, warning ink,
+     a real edge (DESIGN.md §"A standing grant must read as consequential"). */
+  const widen =
+    `${btnBase} border border-[var(--status-attn-ink)] bg-[var(--status-attn-bg)] ` +
+    'text-[color:var(--status-attn-ink)]';
 </script>
 
 <section class="hitl" aria-label={questions ? 'Question from the agent' : 'Permission request'}>
@@ -94,29 +129,29 @@
       </div>
     {/each}
     <div class="qact">
-      <button type="button" class="answer" disabled={!allAnswered} onclick={submitQuestion}>
+      <Button class={primary} disabled={!allAnswered} onclick={submitQuestion}>
         <IconCheck />Answer
-      </button>
-      <button type="button" class="dismiss" onclick={() => answer('deny')}>Dismiss</button>
+      </Button>
+      <Button class={dismiss} onclick={() => answer('deny')}>Dismiss</Button>
     </div>
   {:else}
     <h2><span class="pill attn"><IconArrowUp />needs you</span>Permission — {request.toolName}</h2>
     <p class="lede">{summary}</p>
     {#if command}<div class="cmd">{command}</div>{/if}
     <div class="choice">
-      <button type="button" class="grant" onclick={() => answer('allow')}>
+      <Button class={grant} onclick={() => answer('allow')}>
         <IconCheck />Approve
-      </button>
-      <button type="button" class="refuse" onclick={() => answer('deny')}>
+      </Button>
+      <Button class={refuse} onclick={() => answer('deny')}>
         <IconClose />Deny
-      </button>
+      </Button>
     </div>
     {#if rule}
       <div class="widen">
         <p>This would allow <span class="mono">{rule.full}</span> for {rule.scope} — a wider grant than the request above.</p>
-        <button type="button" onclick={() => answer('always')}>
+        <Button class={widen} onclick={() => answer('always')}>
           <IconShield />Always allow {rule.short}
-        </button>
+        </Button>
       </div>
     {/if}
   {/if}
@@ -127,7 +162,7 @@
     border: 1px solid var(--border-control);
     border-radius: var(--radius-panel);
     background: var(--surface-raised);
-    padding: 13px;
+    padding: var(--space-3);
     box-shadow: var(--shadow-hairline, var(--shadow-tile));
   }
   h2 {
@@ -135,15 +170,15 @@
     font-weight: var(--weight-strong);
     display: flex;
     align-items: center;
-    gap: 8px;
-    margin-bottom: 7px;
+    gap: var(--space-2);
+    margin-bottom: var(--space-2);
   }
   .pill {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
+    gap: var(--space-1);
     height: 20px;
-    padding: 0 9px;
+    padding: 0 var(--space-2);
     border-radius: var(--radius-pill);
     font-size: var(--text-sm);
     font-weight: var(--weight-strong);
@@ -159,7 +194,7 @@
     font-size: var(--text-base);
     line-height: var(--leading-body);
     color: var(--ink-body);
-    margin-bottom: 9px;
+    margin-bottom: var(--space-2);
     max-width: 72ch;
   }
   .cmd {
@@ -167,90 +202,42 @@
     font-size: var(--text-sm);
     color: var(--ink-strong);
     border-left: 2px solid var(--border-divider);
-    padding: 3px 0 3px 10px;
-    margin-bottom: 8px;
+    padding: 3px 0 3px var(--space-3);
+    margin-bottom: var(--space-2);
     white-space: pre-wrap;
   }
   .choice {
     display: flex;
-    gap: 9px;
-    margin-top: 9px;
-  }
-  .choice button {
-    flex: 1 1 0;
-    min-width: 0;
-    height: 34px;
-    padding: 0 12px;
-    border-radius: var(--radius-control);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    font-family: var(--font-body);
-    font-size: var(--text-base);
-    font-weight: var(--weight-strong);
-    cursor: pointer;
-    background: var(--surface-raised);
-    border: 1px solid var(--border-control);
-  }
-  .choice button.grant {
-    color: var(--ink-strong);
-  }
-  .choice button.refuse {
-    color: var(--ink-body);
-  }
-  .choice button :global(svg) {
-    width: 12px;
-    height: 12px;
-    flex: 0 0 auto;
-  }
-  .choice button:hover {
-    background-color: var(--surface-hover);
+    gap: var(--space-2);
+    margin-top: var(--space-2);
   }
   .widen {
-    margin-top: 40px;
-    padding-top: 18px;
+    /* a clear break from the gate above, on the scale (--space-8 / --space-5) */
+    margin-top: var(--space-8);
+    padding-top: var(--space-5);
     border-top: 1px solid var(--border-hairline);
   }
   .widen > p {
     font-size: var(--text-sm);
     color: var(--ink-muted);
-    margin-bottom: 8px;
+    margin-bottom: var(--space-2);
     max-width: 66ch;
   }
-  .widen button {
-    height: 34px;
-    padding: 0 13px;
-    border: 1px solid var(--status-attn-ink);
-    border-radius: var(--radius-control);
-    background: var(--status-attn-bg);
-    color: var(--status-attn-ink);
-    font-family: var(--font-body);
-    font-size: var(--text-base);
-    font-weight: var(--weight-strong);
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    cursor: pointer;
-  }
-  .widen button :global(svg) {
-    width: 11px;
-    height: 11px;
-    flex: 0 0 auto;
-  }
+  /* The permission scope actually being granted is consequential text — it
+     reads at --text-sm, never the 10.25px micro-label step. */
   .mono {
     font-family: var(--font-mono);
-    font-size: var(--text-xs);
+    font-size: var(--text-sm);
   }
   .qopts {
     display: flex;
-    gap: 8px;
+    gap: var(--space-2);
     flex-wrap: wrap;
-    margin: 2px 0 9px;
+    margin: 2px 0 var(--space-2);
   }
   .qopts button {
     min-height: 30px;
-    padding: 7px 11px;
+    padding: var(--space-2) var(--space-3);
     border: 1px solid var(--border-control);
     border-radius: var(--radius-control);
     background: var(--surface-raised);
@@ -260,7 +247,7 @@
     font-weight: var(--weight-medium);
     display: inline-flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-2);
     cursor: pointer;
     text-align: left;
     max-width: 100%;
@@ -288,40 +275,10 @@
   }
   .qact {
     display: flex;
-    gap: 9px;
-  }
-  .qact button {
-    height: 34px;
-    padding: 0 14px;
-    border-radius: var(--radius-control);
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-family: var(--font-body);
-    font-size: var(--text-base);
-    font-weight: var(--weight-strong);
-    cursor: pointer;
-    border: 1px solid var(--border-control);
-    background: var(--surface-raised);
-    color: var(--ink-strong);
-  }
-  .qact button :global(svg) {
-    width: 12px;
-    height: 12px;
-  }
-  .qact .dismiss {
-    color: var(--ink-body);
-    font-weight: var(--weight-medium);
-  }
-  .qact button:disabled {
-    opacity: 0.45;
-    cursor: default;
+    gap: var(--space-2);
   }
   @media (pointer: coarse) {
-    .choice button,
-    .widen button,
-    .qopts button,
-    .qact button {
+    .qopts button {
       min-height: 44px;
     }
   }

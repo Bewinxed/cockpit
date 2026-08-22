@@ -10,6 +10,18 @@
   import { isTyping } from '$lib/utils/typing';
   import type { PendingPermission } from './client.svelte';
   import { questionAnswer, questionDismissal } from './question';
+  import { Button } from '$lib/components/ui/button';
+
+  /* shadcn <Button> dressed on the DESIGN.md scale — never the stock ladder.
+     Send answer is a primary, non-destructive action → the never-flat brand
+     treatment; dismiss is a quiet recessed control. */
+  const sendBtn =
+    'h-[var(--space-8)] pointer-coarse:h-11 gap-[var(--space-2)] ' +
+    'rounded-[var(--radius-control)] px-[var(--space-3)] border-0 ' +
+    'text-[length:var(--text-base)] font-medium ' +
+    'text-[color:var(--on-brand)] bg-[var(--brand-solid)] ' +
+    '[background-image:var(--gradient-action)] [box-shadow:var(--shadow-action)] ' +
+    "[&_svg:not([class*='size-'])]:size-3";
 
   interface Props {
     request: PendingPermission;
@@ -113,8 +125,8 @@
 
 <svelte:window onkeydown={handleKeydown} />
 
-<div class="bg-card rounded-xl shadow-sm p-4" role="alert">
-  <div class="flex items-start gap-2">
+<div class="bg-card rounded-[var(--radius-panel)] shadow-sm p-[var(--space-3)]" role="alert">
+  <div class="flex items-start gap-[var(--space-2)]">
     <div class="text-primary mt-0.5 shrink-0">
       {#if questions.some((question) => question.multiSelect)}
         <IconChecklist class="size-[18px]" />
@@ -123,12 +135,12 @@
       {/if}
     </div>
 
-    <div class="flex min-w-0 flex-1 flex-col gap-3">
-      <div class="flex items-start justify-between gap-3">
+    <div class="flex min-w-0 flex-1 flex-col gap-[var(--space-3)]">
+      <div class="flex items-start justify-between gap-[var(--space-3)]">
         <div class="text-foreground text-sm font-semibold">
           {questions.length > 1 ? `${questions.length} questions for you` : 'A question for you'}
         </div>
-        <div class="-mt-0.5 flex shrink-0 items-center gap-1.5">
+        <div class="-mt-0.5 flex shrink-0 items-center gap-[var(--space-2)]">
           {#if shortcuts}
             <kbd class={kbd}>Esc</kbd>
           {/if}
@@ -154,10 +166,10 @@
            layout agree with the keyboard. -->
       {#each [questions[current]] as question (question.question)}
         {@const index = current}
-        <div class="flex max-h-[50vh] flex-col gap-2 overflow-y-auto pr-1">
-          <div class="flex flex-wrap items-baseline gap-2">
+        <div class="flex max-h-[50vh] flex-col gap-[var(--space-2)] overflow-y-auto pr-1">
+          <div class="flex flex-wrap items-baseline gap-[var(--space-2)]">
             <span
-              class="bg-primary/10 text-primary rounded-full px-2 py-0.5 text-xs font-semibold tracking-wider uppercase"
+              class="bg-primary/10 text-primary rounded-full px-[var(--space-2)] py-px text-xs font-semibold tracking-wider uppercase"
             >
               {question.header}
             </span>
@@ -168,7 +180,7 @@
           <p class="text-foreground text-sm leading-snug font-medium">{question.question}</p>
 
           <div
-            class="flex flex-col gap-1.5"
+            class="flex flex-col gap-[var(--space-2)]"
             role={question.multiSelect ? 'group' : 'radiogroup'}
             aria-label={question.question}
           >
@@ -179,7 +191,7 @@
                 role={question.multiSelect ? 'checkbox' : 'radio'}
                 aria-checked={picked}
                 disabled={sent}
-                class="flex w-full items-start gap-2.5 rounded-xl border px-2.5 py-2 text-left
+                class="flex w-full items-start gap-[var(--space-2)] rounded-[var(--radius-control)] border px-[var(--space-3)] py-[var(--space-2)] text-left
                        transition-[background-color,border-color] duration-150 ease-out
                        disabled:cursor-not-allowed disabled:opacity-60
                        {picked
@@ -199,7 +211,7 @@
                   {/if}
                 </span>
                 <span class="min-w-0 flex-1">
-                  <span class="flex items-center gap-2">
+                  <span class="flex items-center gap-[var(--space-2)]">
                     <span class="text-sm font-medium">{option.label}</span>
                     {#if shortcuts && index === current && position < 9}
                       <kbd class={kbd}>{position + 1}</kbd>
@@ -223,7 +235,7 @@
               aria-label="Answer in your own words"
               placeholder="Or answer in your own words…"
               class="border-border bg-card text-foreground placeholder:text-muted-foreground
-                     focus:border-primary/50 focus:ring-primary/20 w-full rounded-xl border px-2.5 py-2
+                     focus:border-primary/50 focus:ring-primary/20 w-full rounded-[var(--radius-control)] border px-[var(--space-3)] py-[var(--space-2)]
                      text-sm focus:ring-2 focus:outline-none disabled:opacity-60"
               value={custom[index] ?? ''}
               oninput={(event) => type(index, event.currentTarget.value)}
@@ -238,13 +250,13 @@
         </div>
       {/each}
 
-      <div class="flex flex-wrap items-center justify-between gap-3">
-        <div class="flex items-center gap-2">
+      <div class="flex flex-wrap items-center justify-between gap-[var(--space-3)]">
+        <div class="flex items-center gap-[var(--space-2)]">
           {#if questions.length > 1}
             <!-- Dots rather than "2 of 3" alone: they show which questions are
                  already answered, so the reader can see what is left without
                  stepping through it. -->
-            <div class="flex items-center gap-1" role="tablist" aria-label="Questions">
+            <div class="flex items-center gap-[var(--space-1)]" role="tablist" aria-label="Questions">
               {#each questions as question, index (question.question)}
                 <button
                   type="button"
@@ -279,12 +291,9 @@
         <!-- One primary button that means what is actually next: paging past an
              unanswered question and then finding a dead "Send answer" is how a
              reader gets stuck on a card they cannot finish. -->
-        <button
-          type="button"
+        <Button
           disabled={sent || (complete ? false : answerOf(current) === null)}
-          class="bg-primary text-primary-foreground hover:bg-primary/90 flex items-center gap-1.5
-                 rounded-xl px-3 py-1.5 text-sm font-medium transition-[background-color,opacity]
-                 duration-150 ease-out disabled:cursor-not-allowed disabled:opacity-40"
+          class={sendBtn}
           onclick={() => (complete ? submit() : advance())}
         >
           {#if complete}
@@ -293,7 +302,7 @@
           {:else}
             <span>Next</span>
           {/if}
-        </button>
+        </Button>
       </div>
     </div>
   </div>

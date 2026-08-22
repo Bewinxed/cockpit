@@ -200,11 +200,11 @@
     left: 50%;
     transform: translateX(-50%);
     z-index: 20;
-    bottom: calc(16px + env(safe-area-inset-bottom));
+    bottom: calc(var(--space-4) + env(safe-area-inset-bottom));
     width: min(720px, calc(100% - 50px));
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: var(--space-3);
     pointer-events: none;
   }
   .composer > :global(*) {
@@ -213,7 +213,7 @@
   .prompts {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: var(--space-3);
   }
   .cin {
     position: relative;
@@ -222,10 +222,13 @@
     -webkit-backdrop-filter: blur(16px) saturate(1.6);
     backdrop-filter: blur(16px) saturate(1.6);
     border-radius: var(--radius-shell);
-    padding: 5px 5px 5px 15px;
+    /* A tight, even inset around a control cluster whose own height (44px)
+       sets the row: the send/attach buttons and the textarea share one
+       baseline instead of the textarea riding high in a taller box. */
+    padding: var(--space-1) var(--space-1) var(--space-1) var(--space-3);
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--space-2);
     box-shadow: var(--shadow-lifted);
   }
   /* Focused: the pill unfolds into a panel — textarea grows, affordances
@@ -234,7 +237,7 @@
     border-radius: var(--radius-panel);
     flex-direction: column;
     align-items: stretch;
-    padding: 12px 12px 9px;
+    padding: var(--space-3) var(--space-3) var(--space-2);
   }
   textarea {
     flex: 1 1 auto;
@@ -246,15 +249,19 @@
     font-size: var(--a-input-fs, 16px);
     line-height: var(--leading-ui);
     color: var(--ink-strong);
-    height: 34px;
-    padding: 7px 0 0;
+    /* Collapsed: match the 44px control height and centre the single line
+       with symmetric padding, so the text sits on the buttons' midline
+       rather than kissing their tops. */
+    min-height: 44px;
+    height: auto;
+    padding: var(--space-3) 0;
     min-width: 0;
   }
   .composer:focus-within textarea {
     height: auto;
     min-height: 66px;
     max-height: 200px;
-    padding-top: 0;
+    padding: 0;
     field-sizing: content;
   }
   textarea::placeholder {
@@ -285,12 +292,12 @@
     overflow: hidden;
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: var(--space-3);
     font-size: var(--text-sm);
     color: var(--ink-muted);
-    padding-top: 8px;
+    padding-top: var(--space-2);
     flex-wrap: wrap;
-    row-gap: 6px;
+    row-gap: var(--space-2);
   }
   .aff-row .hint {
     margin-left: auto;
@@ -302,7 +309,7 @@
   .ctrls {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--space-2);
     flex: 0 0 auto;
   }
   .composer:focus-within .ctrls {
@@ -360,14 +367,14 @@
   .atts {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
+    gap: var(--space-2);
   }
   .att {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--space-2);
     max-width: 100%;
-    padding: 3px 4px 3px 8px;
+    padding: var(--space-1) var(--space-1) var(--space-1) var(--space-2);
     border: 1px solid var(--border-hairline);
     border-radius: var(--radius-control);
     background: var(--surface-raised);
@@ -411,11 +418,11 @@
      owns the safe-area inset. */
   @media (max-width: 900px) {
     .composer {
-      left: 12px;
-      right: 12px;
+      left: var(--space-3);
+      right: var(--space-3);
       width: auto;
       transform: none;
-      bottom: 10px;
+      bottom: var(--space-2);
     }
     /* The Enter/Shift+Enter hint is desktop-only guidance; on a phone it just
        wraps the affordance row to a second line. */

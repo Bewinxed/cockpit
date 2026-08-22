@@ -85,32 +85,36 @@
   .tr {
     flex: 1 1 auto;
     overflow-y: auto;
-    padding: 0 21px 96px 25px;
+    /* asymmetric content padding is the DESIGN.md ledger signature:
+       left --space-7 (25), right --space-6 (21). */
+    padding: 0 var(--space-6) calc(var(--space-8) * 3) var(--space-7);
     min-height: 0;
     position: relative;
   }
   .empty {
     font-size: var(--text-sm);
     color: var(--ink-muted);
-    padding: 20px 0;
+    padding: var(--space-5) 0;
   }
   @media (max-width: 900px) {
     .tr {
-      padding-left: 16px;
-      padding-right: 16px;
+      padding-left: var(--space-5);
+      padding-right: var(--space-5);
     }
   }
   .turn {
-    margin-top: 14px;
+    margin-top: var(--space-4);
   }
   .livetool {
-    margin: 6px 0 0 7px;
-    padding-left: 12px;
+    /* one rhythm value (--space-4) tops every row type; the rail indent is
+       --space-2 margin + --space-3 padding, shared across every rail block. */
+    margin: var(--space-4) 0 0 var(--space-2);
+    padding-left: var(--space-3);
     background: var(--rail) left top / 2px 100% no-repeat;
     min-height: 26px;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-2);
     font-size: var(--text-sm);
     color: var(--ink-body);
   }

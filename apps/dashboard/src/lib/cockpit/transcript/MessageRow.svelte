@@ -6,6 +6,14 @@
   import Thinking from './Thinking.svelte';
   import Peer from './Peer.svelte';
   import SystemLine from './SystemLine.svelte';
+  import { Badge } from '$lib/components/ui/badge';
+
+  /** A token-dressed micro count badge — shadcn Badge, off the stock 4/8/12
+   *  ladder and onto the DESIGN.md scale so it never reads as stock shadcn. */
+  const chipClass =
+    'h-auto rounded-[var(--radius-mark)] border-transparent bg-[var(--surface-sunken)] ' +
+    'px-[var(--space-2)] py-px text-[length:var(--text-xs)] font-[var(--weight-body)] ' +
+    'text-[color:var(--ink-muted)]';
 
   let { message, agentName }: { message: Message; agentName: string } = $props();
 
@@ -24,10 +32,10 @@
     {#if message.metadata?.attachments?.length || message.metadata?.images?.length}
       <div class="chips">
         {#each message.metadata.attachments ?? [] as att}
-          <span class="chip">{att.name} · {att.chars} chars</span>
+          <Badge variant="secondary" class={chipClass}>{att.name} · {att.chars} chars</Badge>
         {/each}
         {#each message.metadata.images ?? [] as _img}
-          <span class="chip">image</span>
+          <Badge variant="secondary" class={chipClass}>image</Badge>
         {/each}
       </div>
     {/if}
@@ -49,19 +57,12 @@
 
 <style>
   .turn {
-    margin-top: 14px;
+    margin-top: var(--space-4);
   }
   .chips {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
-    margin-top: 6px;
-  }
-  .chip {
-    font-size: var(--text-xs);
-    color: var(--ink-muted);
-    background: var(--surface-sunken);
-    border-radius: var(--radius-mark);
-    padding: 2px 7px;
+    gap: var(--space-2);
+    margin-top: var(--space-2);
   }
 </style>

@@ -75,8 +75,8 @@
     border: 1px solid var(--border-control);
     border-radius: var(--radius-panel);
     background: var(--surface-raised);
-    margin: 10px 0 0 7px;
-    padding: 13px;
+    margin: var(--space-4) 0 0 var(--space-2);
+    padding: var(--space-3);
     box-shadow: var(--shadow-hairline, var(--shadow-tile));
   }
   h2 {
@@ -85,15 +85,15 @@
     color: var(--ink-strong);
     display: flex;
     align-items: center;
-    gap: 8px;
-    margin-bottom: 7px;
+    gap: var(--space-2);
+    margin-bottom: var(--space-2);
   }
   .pill {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
+    gap: var(--space-1);
     height: 20px;
-    padding: 0 9px;
+    padding: 0 var(--space-2);
     border-radius: var(--radius-pill);
     font-size: var(--text-sm);
     font-weight: var(--weight-strong);
@@ -120,18 +120,18 @@
     font-size: var(--text-base);
     line-height: var(--leading-body);
     color: var(--ink-body);
-    margin-bottom: 9px;
+    margin-bottom: var(--space-2);
     max-width: 72ch;
   }
   .qopts {
     display: flex;
-    gap: 8px;
+    gap: var(--space-2);
     flex-wrap: wrap;
-    margin: 2px 0 9px;
+    margin: 2px 0 var(--space-2);
   }
   .opt {
     min-height: 30px;
-    padding: 7px 11px;
+    padding: var(--space-2) var(--space-3);
     border: 1px solid var(--border-control);
     border-radius: var(--radius-control);
     background: var(--surface-raised);
@@ -141,7 +141,7 @@
     font-weight: var(--weight-medium);
     display: inline-flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-2);
     text-align: left;
     max-width: 100%;
   }
@@ -170,7 +170,7 @@
     color: var(--ink-body);
     max-width: 72ch;
     display: flex;
-    gap: 8px;
+    gap: var(--space-2);
     align-items: baseline;
   }
   .answer-free .lbl {

@@ -54,8 +54,8 @@
   .well {
     background: var(--surface-sunken);
     border-radius: var(--radius-well);
-    padding: 10px 12px;
-    margin: 6px 0 0 7px;
+    padding: var(--space-3);
+    margin: var(--space-4) 0 0 var(--space-2);
     overflow-x: auto;
     font-family: var(--font-mono);
     font-size: var(--text-sm);
@@ -68,8 +68,8 @@
     background: var(--status-fail-bg);
     color: var(--status-fail-ink);
     border-radius: var(--radius-control);
-    padding: 10px 12px;
-    margin: 8px 0;
+    padding: var(--space-3);
+    margin: var(--space-4) 0 0;
   }
   .failcard b {
     display: block;
@@ -82,8 +82,8 @@
     white-space: pre-wrap;
   }
   .note {
-    margin: 6px 0 0 7px;
-    padding-left: 12px;
+    margin: var(--space-4) 0 0 var(--space-2);
+    padding-left: var(--space-3);
     background: var(--rail) left top / 2px 100% no-repeat;
     font-size: var(--text-sm);
     color: var(--ink-muted);
@@ -93,7 +93,7 @@
     align-items: center;
     gap: 4px;
     color: var(--accent-text);
-    margin-right: 6px;
+    margin-right: var(--space-2);
   }
   .note :global(svg) {
     width: 12px;
@@ -103,7 +103,7 @@
   :global(.note .ftrig) {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--space-2);
     background: none;
     border: 0;
     padding: 0;

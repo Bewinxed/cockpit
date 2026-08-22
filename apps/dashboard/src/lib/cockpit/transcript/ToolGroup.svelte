@@ -7,8 +7,15 @@
    */
   import type { Message } from '../types';
   import { describeTool, type ToolDescriptor, type ToolStatus } from '$lib/components/features/tool-cards/descriptors';
+  import { Badge } from '$lib/components/ui/badge';
 
   let { messages }: { messages: Message[] } = $props();
+
+  /** shadcn Badge, dressed on the DESIGN.md scale rather than the stock ladder. */
+  const chipClass =
+    'h-auto rounded-[var(--radius-mark)] border-transparent bg-[var(--surface-sunken)] ' +
+    'px-[var(--space-2)] py-px text-[length:var(--text-xs)] font-[var(--weight-body)] ' +
+    'text-[color:var(--ink-muted)]';
 
   const asString = (value: unknown): string | undefined =>
     typeof value === 'string' ? value : undefined;
@@ -34,7 +41,7 @@
       <span class="arg" title={[d.object, d.detail].filter(Boolean).join(' ') || undefined}>
         {#if d.object}{d.object}{/if}{#if d.detail}<span class="tail"> {d.detail}</span>{/if}
       </span>
-      {#if d.chip}<span class="chip">{d.chip}</span>{/if}
+      {#if d.chip}<Badge variant="secondary" class={chipClass}>{d.chip}</Badge>{/if}
       {#if d.fact}<span class="d" class:bad={d.factTone === 'error'}>{d.fact}</span>{/if}
     </div>
   {/each}
@@ -42,15 +49,15 @@
 
 <style>
   .tools {
-    margin: 6px 0 0 7px;
-    padding-left: 12px;
+    margin: var(--space-4) 0 0 var(--space-2);
+    padding-left: var(--space-3);
     background: var(--rail) left top / 2px 100% no-repeat;
   }
   .trow {
     min-height: 26px;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-2);
     font-size: var(--text-sm);
     color: var(--ink-body);
   }
@@ -86,12 +93,7 @@
     color: var(--ink-muted);
     opacity: 0.7;
   }
-  .chip {
-    font-size: var(--text-xs);
-    color: var(--ink-muted);
-    background: var(--surface-sunken);
-    border-radius: var(--radius-mark);
-    padding: 1px 6px;
+  .trow :global([data-slot='badge']) {
     flex: 0 0 auto;
   }
   .d {

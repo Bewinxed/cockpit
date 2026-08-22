@@ -36,8 +36,8 @@
 
 <style>
   .peer {
-    margin: 6px 0 0 7px;
-    padding-left: 12px;
+    margin: var(--space-4) 0 0 var(--space-2);
+    padding-left: var(--space-3);
     background: var(--rail) left top / 2px 100% no-repeat;
   }
   .tag {
@@ -51,7 +51,7 @@
     color: var(--accent-text);
     background: var(--accent-bg-subtle);
     border-radius: var(--radius-mark);
-    padding: 2px 7px;
+    padding: 2px var(--space-2);
   }
   .peer.err .tag {
     color: var(--status-fail-ink);

@@ -53,8 +53,8 @@
 
 <style>
   .branch {
-    margin: 6px 0 0 7px;
-    padding-left: 12px;
+    margin: var(--space-4) 0 0 var(--space-2);
+    padding-left: var(--space-3);
     background: var(--rail) left top / 2px 100% no-repeat;
   }
   :global(.branch .bhead) {
@@ -62,7 +62,7 @@
     width: 100%;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-2);
     font-size: var(--text-sm);
     background: none;
     border: 0;
@@ -82,7 +82,7 @@
     color: var(--accent-text);
     background: var(--accent-bg-subtle);
     border-radius: var(--radius-mark);
-    padding: 2px 7px;
+    padding: 2px var(--space-2);
     flex: 0 0 auto;
   }
   .tag :global(svg) {
