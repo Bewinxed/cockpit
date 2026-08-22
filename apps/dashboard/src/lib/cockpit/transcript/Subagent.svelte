@@ -126,11 +126,50 @@
     color: inherit;
     cursor: pointer;
     text-align: left;
-    transform-origin: left center;
-    transition: transform var(--c-100) var(--e-in);
+    /* A disclosure header toggles content — it is not a press-action, so it does
+       NOT scale on click (that read as the whole card shrinking). It reacts with
+       ink only; the chevron rotation and the panel opening are the feedback. */
+    transition: color var(--c-100) var(--e-in);
   }
-  :global(.branch .bhead:active) {
-    transform: scale(0.96);
+  @media (hover: hover) and (pointer: fine) {
+    :global(.branch .bhead:hover) .tk {
+      color: var(--ink-strong);
+    }
+  }
+
+  /* Animate the disclosure open/close. bits-ui exposes the measured content
+     height on the content element; shadcn's bare Collapsible.Content never got
+     the CSS to use it, so it opened instantly. */
+  :global(.branch [data-slot='collapsible-content']) {
+    overflow: hidden;
+  }
+  :global(.branch [data-slot='collapsible-content'][data-state='open']) {
+    animation: branch-down var(--c-300) var(--e-out);
+  }
+  :global(.branch [data-slot='collapsible-content'][data-state='closed']) {
+    animation: branch-up var(--c-300) var(--e-out);
+  }
+  @keyframes branch-down {
+    from {
+      height: 0;
+    }
+    to {
+      height: var(--bits-collapsible-content-height);
+    }
+  }
+  @keyframes branch-up {
+    from {
+      height: var(--bits-collapsible-content-height);
+    }
+    to {
+      height: 0;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    :global(.branch [data-slot='collapsible-content'][data-state='open']),
+    :global(.branch [data-slot='collapsible-content'][data-state='closed']) {
+      animation: none;
+    }
   }
 
   /* The disclosure affordance: one glyph in currentColor, rotated by its own

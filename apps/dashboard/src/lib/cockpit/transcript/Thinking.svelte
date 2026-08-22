@@ -7,7 +7,7 @@
   let { text, live = false }: { text: string; live?: boolean } = $props();
 </script>
 
-<div class="think">{text}{#if live}<span class="caret"></span>{/if}</div>
+<div class="think">{#if text}{text}{:else}Thinking…{/if}{#if live}<span class="caret"></span>{/if}</div>
 
 <style>
   .think {

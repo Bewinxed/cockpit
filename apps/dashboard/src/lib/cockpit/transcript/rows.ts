@@ -103,7 +103,12 @@ export function buildRows(session: SessionState): Row[] {
   const rows = foldMessages(session.messages, session.subagents);
 
   // The live tail: only ever the main loop's, and only while nothing settled it.
-  if (session.openBlock === 'thinking' && session.thinkingStream) {
+  // A thinking block is shown the moment it opens, even with no delta text yet —
+  // Claude's extended thinking is often REDACTED and streams no deltas at all
+  // (see frames.ts), so gating on thinkingStream meant "reasoning, silently,
+  // with no indicator". The row itself is the indicator; the text fills in if
+  // and when it arrives.
+  if (session.openBlock === 'thinking') {
     rows.push({
       kind: 'thinking',
       key: 'stream:thinking',
