@@ -184,6 +184,8 @@
     font-size: var(--text-sm);
     color: var(--ink-muted);
     padding-top: 8px;
+    /* Reserve the send button's corner so the hint never runs under it. */
+    padding-right: 52px;
     flex-wrap: wrap;
     row-gap: 6px;
   }
