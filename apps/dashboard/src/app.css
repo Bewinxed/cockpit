@@ -552,8 +552,8 @@
 
   body {
     @apply bg-background text-foreground;
-    font-size: 0.9375rem; /* 15px UI base — pro-app density, 12px floor holds */
-    line-height: 1.5;
+    font-size: var(--text-md); /* 14.5px — DESIGN.md body copy / nav step */
+    line-height: var(--leading-body);
   }
 
   code, pre, .font-mono {
@@ -587,36 +587,36 @@
 
 /* ---- Typography discipline: tracking is size-specific, never global. */
 @utility text-display {
-  font-size: 1.75rem;
-  line-height: 1.15;
-  letter-spacing: -0.022em;
-  font-weight: 650;
+  font-size: var(--text-3xl); /* 23.5px — largest real step (mock census) */
+  line-height: var(--leading-tight);
+  letter-spacing: var(--track-display);
+  font-weight: var(--weight-strong); /* 500 — 650 is a banned weight */
 }
 
 @utility text-title {
-  font-size: 1.25rem;
-  line-height: 1.25;
-  letter-spacing: -0.014em;
-  font-weight: 600;
+  font-size: var(--text-2xl); /* 20.75px */
+  line-height: var(--leading-tight);
+  letter-spacing: var(--track-display);
+  font-weight: var(--weight-strong); /* 500 — 600 is a banned weight */
 }
 
 @utility text-body {
-  font-size: 0.9375rem;
-  line-height: 1.5;
-  letter-spacing: 0;
+  font-size: var(--text-md); /* 14.5px — body copy */
+  line-height: var(--leading-body);
+  letter-spacing: var(--track-body);
 }
 
 @utility text-caption {
-  font-size: 0.8125rem;
-  line-height: 1.4;
-  letter-spacing: 0.002em;
+  font-size: var(--text-base); /* 13px — the anchor step */
+  line-height: var(--leading-body);
+  letter-spacing: var(--track-caps);
   color: var(--muted-foreground);
 }
 
 @utility text-micro {
-  font-size: 0.75rem; /* 12px floor — nothing renders below this */
-  line-height: 1.35;
-  letter-spacing: 0.008em;
+  font-size: var(--text-sm); /* 11.5px — section labels / chips step */
+  line-height: var(--leading-ui);
+  letter-spacing: var(--track-caps);
 }
 
 @utility ease-expo {
