@@ -20,19 +20,6 @@
 	} = $props();
 
 	const sidebar = useSidebar();
-
-	/** The sidebar's target inline-size: full width when expanded, zero
-	 *  (offcanvas) or icon-width (icon) when collapsed. Drives the
-	 *  single CSS transition — no gap div, no absolute positioning. */
-	const inlineSize = $derived(
-		sidebar.state === "expanded"
-			? "var(--sidebar-width)"
-			: collapsible === "icon"
-				? variant === "floating" || variant === "inset"
-					? "calc(var(--sidebar-width-icon) + var(--spacing) * 4 + 2px)"
-					: "var(--sidebar-width-icon)"
-				: "0px"
-	);
 </script>
 
 {#if collapsible === "none"}
@@ -70,40 +57,49 @@
 		</Sheet.Content>
 	</Sheet.Root>
 {:else}
-	<!-- Desktop: a single flow element that transitions its own inline-size.
-	     No gap spacer, no absolute/fixed positioning — the sidebar participates
-	     in the parent flex layout directly. Collapsed content is clipped by
-	     overflow-hidden; the inner div keeps full sidebar width so the content
-	     is always laid out and never remeasured on open. -->
 	<div
 		bind:this={ref}
-		class={cn(
-			"group peer hidden overflow-hidden text-sidebar-foreground",
-			"md:flex md:flex-col",
-			"transition-[inline-size] duration-200 ease-linear motion-reduce:transition-none",
-			side === "left" && "-order-1",
-		)}
-		style:inline-size={inlineSize}
+		class="group peer hidden text-sidebar-foreground md:block"
 		data-state={sidebar.state}
 		data-collapsible={sidebar.state === "collapsed" ? collapsible : ""}
 		data-variant={variant}
 		data-side={side}
 		data-slot="sidebar"
 	>
+		<!-- This is what handles the sidebar gap on desktop -->
 		<div
-			data-sidebar="sidebar"
-			data-slot="sidebar-inner"
+			data-slot="sidebar-gap"
 			class={cn(
-				"flex h-full min-h-0 flex-col bg-sidebar",
-				"min-w-(--sidebar-width)",
+				"transition-[width] duration-200 ease-linear relative w-(--sidebar-width) bg-transparent",
+				"group-data-[collapsible=offcanvas]:w-0",
+				"group-data-[side=right]:rotate-180",
 				variant === "floating" || variant === "inset"
-					? "m-2 rounded-lg shadow-sm ring-1 ring-sidebar-border"
-					: side === "left" ? "border-e" : "border-s",
-				className,
+					? "group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(4)))]"
+					: "group-data-[collapsible=icon]:w-(--sidebar-width-icon)"
+			)}
+		></div>
+		<div
+			data-slot="sidebar-container"
+			class={cn(
+				"fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) transition-[left,right,width] duration-200 ease-linear md:flex",
+				side === "left"
+					? "start-0 group-data-[collapsible=offcanvas]:start-[calc(var(--sidebar-width)*-1)]"
+					: "end-0 group-data-[collapsible=offcanvas]:end-[calc(var(--sidebar-width)*-1)]",
+				// Adjust the padding for floating and inset variants.
+				variant === "floating" || variant === "inset"
+					? "p-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(4))+2px)]"
+					: "group-data-[collapsible=icon]:w-(--sidebar-width-icon) group-data-[side=left]:border-e group-data-[side=right]:border-s",
+				className
 			)}
 			{...restProps}
 		>
-			{@render children?.()}
+			<div
+				data-sidebar="sidebar"
+				data-slot="sidebar-inner"
+				class="bg-sidebar group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:shadow-sm group-data-[variant=floating]:ring-1 group-data-[variant=floating]:ring-sidebar-border flex size-full flex-col"
+			>
+				{@render children?.()}
+			</div>
 		</div>
 	</div>
 {/if}
