@@ -87,6 +87,11 @@
   );
 
   const title = $derived.by(() => {
+    // The hub's session title (the harness's own summary) is exactly what the tab
+    // strip shows, so the header names the same session the reader clicked —
+    // otherwise a first-message-derived header reads as an unrelated conversation.
+    const named = cockpit.instances.find((i) => i.id === viewId)?.title?.trim();
+    if (named) return named;
     const first = session?.messages.find((m) => m.type === 'user' && m.content.trim());
     if (first) {
       const raw = first.content;
