@@ -129,7 +129,6 @@
   --shadow-xl: 0 24px 64px oklch(0.28 0.02 264 / 0.16), 0 6px 16px oklch(0.28 0.02 264 / 0.08);
 
   /* Chrome materials. */
-  --material-chrome: color-mix(in oklab, var(--neutral-2) 78%, transparent);
   --material-panel: color-mix(in oklab, var(--neutral-1) 72%, transparent);
   --material-blur: 20px;
   --material-saturate: 1.6;
@@ -217,7 +216,6 @@
   --shadow-lg: 0 8px 28px oklch(0 0 0 / 0.46), 0 2px 8px oklch(0 0 0 / 0.32);
   --shadow-xl: 0 24px 64px oklch(0 0 0 / 0.55), 0 6px 16px oklch(0 0 0 / 0.35);
 
-  --material-chrome: color-mix(in oklab, var(--neutral-1) 72%, transparent);
   --material-panel: color-mix(in oklab, var(--neutral-2) 68%, transparent);
 
   --chart-1: var(--accent-9);--chart-2: var(--info-9);--chart-3: #b9aee6;
@@ -699,12 +697,6 @@
 }
 
 /* ---- Chrome materials. Structural translucency, never decoration. */
-@utility material-chrome {
-  background: var(--material-chrome);
-  backdrop-filter: blur(var(--material-blur)) saturate(var(--material-saturate));
-  -webkit-backdrop-filter: blur(var(--material-blur)) saturate(var(--material-saturate));
-}
-
 @utility material-panel {
   background: var(--material-panel);
   backdrop-filter: blur(calc(var(--material-blur) * 1.4)) saturate(var(--material-saturate));
@@ -712,7 +704,6 @@
 }
 
 @media (prefers-reduced-transparency: reduce) {
-  .material-chrome,
   .material-panel {
     background: var(--background);
     backdrop-filter: none;
