@@ -508,17 +508,76 @@
     left: 0;
     right: 0;
     bottom: calc(100% + var(--space-2));
-    max-height: 280px;
+    max-height: 320px;
     overflow: hidden;
     border: 1px solid var(--border-hairline);
     border-radius: var(--radius-panel);
     background: var(--surface-raised);
     box-shadow: var(--shadow-lifted);
   }
+
+  /* The Command primitive is shadcn's; its parts are addressed by slot so the
+     menu wears Quiet Ledger tokens rather than the stock ladder. The list is the
+     one thing that scrolls; the shell stays put. */
+  :global(.menu [data-slot='command']) {
+    background: transparent;
+  }
+  :global(.menu [data-slot='command-list']) {
+    max-height: 320px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: var(--space-1);
+  }
+
+  /* Each family is a titled section, ruled off from the one above so "Skills"
+     and "Commands" read as two kinds of thing rather than one long list. */
+  :global(.menu [data-slot='command-group']) {
+    padding: var(--space-1) 0;
+  }
+  :global(.menu [data-slot='command-group'] + [data-slot='command-group']) {
+    border-top: 1px solid var(--border-hairline);
+  }
+  :global(.menu [data-slot='command-group'] [cmdk-group-heading]) {
+    padding: var(--space-1) var(--space-2) var(--space-2);
+    font-size: var(--text-xs);
+    font-weight: var(--weight-medium);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+  }
+
+  /* One row: the name, its prose, and where it came from — on a single line,
+     the selected one carrying fill and stronger ink so the highlight survives
+     greyscale (it is never colour alone). */
+  :global(.menu [data-slot='command-item']) {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-2);
+    min-height: 30px;
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius-control);
+    cursor: pointer;
+    color: var(--ink-body);
+    transition:
+      background-color var(--c-100) var(--e-in),
+      color var(--c-100) var(--e-in);
+  }
+  :global(.menu [data-slot='command-item'][data-selected='true']) {
+    background: var(--surface-hover);
+    color: var(--ink-strong);
+  }
+  @media (pointer: coarse) {
+    :global(.menu [data-slot='command-item']) {
+      min-height: 44px;
+    }
+  }
+
   .e-label {
+    font-family: var(--font-mono);
     font-weight: var(--weight-medium);
     color: var(--ink-strong);
     white-space: nowrap;
+    flex: 0 0 auto;
   }
   .e-detail {
     min-width: 0;
@@ -527,6 +586,19 @@
     white-space: nowrap;
     font-size: var(--text-sm);
     color: var(--ink-muted);
+    flex: 1 1 auto;
+  }
+  /* The origin tag: which plugin or MCP server lent the command, held to the
+     right in a quiet well so it reads as provenance, not as the name. */
+  .e-source {
+    flex: 0 0 auto;
+    margin-left: auto;
+    padding: 1px var(--space-2);
+    border-radius: var(--radius-mark);
+    background: var(--surface-sunken);
+    font-size: var(--text-xs);
+    color: var(--ink-muted);
+    white-space: nowrap;
   }
 
   /* Attach + send, together and bottom-aligned, so they hold their box as the
