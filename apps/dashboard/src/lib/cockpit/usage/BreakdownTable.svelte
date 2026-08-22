@@ -10,6 +10,7 @@
   import { goto } from '$app/navigation';
   import * as Tabs from '$lib/components/ui/tabs';
   import * as Dialog from '$lib/components/ui/dialog';
+  import * as Table from '$lib/components/ui/table';
   import { compactNumber, totalTokensOf, usd, type UsageSummary, type UsageSummaryRow } from '../usage';
 
   type TabId = 'model' | 'project' | 'session';
@@ -158,69 +159,64 @@
   {:else if loading}
     <div class="h-40 w-full rounded-xl bg-muted/40"></div>
   {:else}
-    <div class="overflow-x-auto rounded-xl bg-card shadow-md">
-      <table class="w-full text-caption">
-        <thead>
-          <tr class="border-b border-border text-left text-micro text-muted-foreground">
-            <th class="px-3 py-2 font-medium">Name</th>
-            {#each COLUMNS as column (column.key)}
-              <th class="px-3 py-2 text-right font-medium">
-                <button
-                  class="ml-auto inline-flex items-center gap-0.5 tabular-nums transition-colors hover:text-foreground"
-                  onclick={() => sort(column.key)}
-                >
-                  {column.label}
-                  {#if sortBy === column.key}
-                    <span aria-hidden="true">{sortAsc ? '↑' : '↓'}</span>
-                  {/if}
-                </button>
-              </th>
-            {/each}
-          </tr>
-        </thead>
-        <tbody>
-          {#each rows as row (String(row.key))}
-            <tr
-              class="border-b border-border/50 tabular-nums last:border-0 {tab === 'session'
-                ? 'cursor-pointer transition-colors hover:bg-muted'
-                : ''}"
-              onclick={() => (tab === 'session' ? openSession(row) : undefined)}
-              role={tab === 'session' ? 'button' : undefined}
-              tabindex={tab === 'session' ? 0 : undefined}
-              onkeydown={(event) => {
-                if (tab === 'session' && (event.key === 'Enter' || event.key === ' ')) {
-                  event.preventDefault();
-                  openSession(row);
-                }
-              }}
-            >
-              <td
-                class="max-w-56 truncate px-3 py-2 font-medium {tab === 'model' || tab === 'session'
-                  ? 'font-mono'
-                  : ''}"
-                title={nameOf(row)}
+    <Table.Root class="q-break">
+      <Table.Header>
+        <Table.Row>
+          <Table.Head>Name</Table.Head>
+          {#each COLUMNS as column (column.key)}
+            <Table.Head class="num">
+              <button
+                class="sortbtn"
+                aria-pressed={sortBy === column.key}
+                onclick={() => sort(column.key)}
               >
-                {nameOf(row)}
-              </td>
-              <td class="px-3 py-2 text-right">{compactNumber(row.input)}</td>
-              <td class="px-3 py-2 text-right">{compactNumber(row.output)}</td>
-              <td class="px-3 py-2 text-right">{compactNumber(row.cacheCreation)}</td>
-              <td class="px-3 py-2 text-right">{compactNumber(row.cacheRead)}</td>
-              <td class="px-3 py-2 text-right font-medium">{compactNumber(row.total)}</td>
-              <td class="px-3 py-2 text-right">{row.messages.toLocaleString()}</td>
-              <td class="px-3 py-2 text-right font-medium">{usd(row.costUsd)}</td>
-            </tr>
+                {column.label}
+                {#if sortBy === column.key}
+                  <span aria-hidden="true">{sortAsc ? '↑' : '↓'}</span>
+                {/if}
+              </button>
+            </Table.Head>
           {/each}
-          {#if rows.length === 0}
-            <tr>
-              <td colspan="8" class="px-3 py-6 text-center text-muted-foreground">
-                Nothing recorded for this harness yet.
-              </td>
-            </tr>
-          {/if}
-        </tbody>
-      </table>
-    </div>
+        </Table.Row>
+      </Table.Header>
+      <Table.Body>
+        {#each rows as row (String(row.key))}
+          <Table.Row
+            class={tab === 'session' ? 'clickable' : ''}
+            onclick={() => (tab === 'session' ? openSession(row) : undefined)}
+            role={tab === 'session' ? 'button' : undefined}
+            tabindex={tab === 'session' ? 0 : undefined}
+            onkeydown={(event) => {
+              if (tab === 'session' && (event.key === 'Enter' || event.key === ' ')) {
+                event.preventDefault();
+                openSession(row);
+              }
+            }}
+          >
+            <Table.Cell
+              class="name {tab === 'model' || tab === 'session' ? 'mono' : ''}"
+              title={nameOf(row)}
+            >
+              {nameOf(row)}
+            </Table.Cell>
+            <Table.Cell class="num">{compactNumber(row.input)}</Table.Cell>
+            <Table.Cell class="num">{compactNumber(row.output)}</Table.Cell>
+            <Table.Cell class="num">{compactNumber(row.cacheCreation)}</Table.Cell>
+            <Table.Cell class="num">{compactNumber(row.cacheRead)}</Table.Cell>
+            <Table.Cell class="num strong">{compactNumber(row.total)}</Table.Cell>
+            <Table.Cell class="num">{row.messages.toLocaleString()}</Table.Cell>
+            <Table.Cell class="num strong">{usd(row.costUsd)}</Table.Cell>
+          </Table.Row>
+        {/each}
+        {#if rows.length === 0}
+          <Table.Row>
+            <Table.Cell colspan={8} class="empty">
+              Nothing recorded for this harness yet.
+            </Table.Cell>
+          </Table.Row>
+        {/if}
+      </Table.Body>
+    </Table.Root>
   {/if}
 </div>
 
@@ -242,3 +238,95 @@
     {/if}
   </Dialog.Content>
 </Dialog.Root>
+
+<style>
+  /* The breakdown table: shadcn Table primitives dressed in Quiet Ledger tokens
+     — hairline dividers, uppercase micro-label header, tabular numerics, on the
+     --space ladder (never shadcn's 8/12/16). Addressed globally because the
+     classes ride on child-component elements. */
+  :global {
+    .q-break {
+      width: 100%;
+      min-width: max-content;
+      border-collapse: collapse;
+      font-variant-numeric: normal;
+    }
+    .q-break tr {
+      border: 0;
+    }
+    .q-break thead th {
+      height: auto;
+      padding: var(--space-2) var(--space-3);
+      border-bottom: 1px solid var(--border-divider);
+      text-align: left;
+      white-space: nowrap;
+    }
+    .q-break thead th.num {
+      text-align: right;
+    }
+    .q-break .sortbtn {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-1);
+      margin-left: auto;
+      font-size: var(--text-xs);
+      text-transform: uppercase;
+      letter-spacing: var(--track-caps);
+      font-weight: var(--weight-strong);
+      color: var(--ink-label);
+      font-variant-numeric: tabular-nums;
+      transition: color var(--c-100) var(--e-toggle);
+      cursor: pointer;
+    }
+    .q-break thead th:not(.num) .sortbtn {
+      margin-left: 0;
+    }
+    .q-break .sortbtn:hover {
+      color: var(--ink-strong);
+    }
+    .q-break td {
+      font-size: var(--text-base);
+      color: var(--ink-row);
+      padding: var(--space-2) var(--space-3);
+      border-bottom: 1px solid var(--border-hairline);
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+    .q-break tbody tr:last-child td {
+      border-bottom: 0;
+    }
+    .q-break tbody tr:hover {
+      background: transparent;
+    }
+    .q-break tbody tr.clickable {
+      cursor: pointer;
+    }
+    .q-break tbody tr.clickable:hover {
+      background: var(--surface-hover);
+    }
+    .q-break td.num {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+    .q-break td.strong {
+      color: var(--ink-strong);
+      font-weight: var(--weight-medium);
+    }
+    .q-break td.name {
+      max-width: 14rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-weight: var(--weight-medium);
+      color: var(--ink-strong);
+    }
+    .q-break td.name.mono {
+      font-family: var(--font-mono);
+    }
+    .q-break td.empty {
+      text-align: center;
+      padding: var(--space-6) var(--space-3);
+      color: var(--ink-muted);
+      white-space: normal;
+    }
+  }
+</style>

@@ -7,10 +7,17 @@
    * number — Claude is a subscription whose real constraint is a percentage, and
    * opencode is real money. Making that the layout means the page cannot lie by
    * addition.
+   *
+   * Presentation ported (2026-08-22) from the outpost house components to
+   * shadcn-svelte primitives (Card / Table / Badge) dressed in the Quiet Ledger
+   * tokens — the raised-panel + sunken-well signature, the hairline table, the
+   * uppercase micro-label header — so the primitives never read as stock shadcn.
    */
   import type { PageData } from './$types';
   import type { LimitWindow } from '@cockpit/core';
-  import { Panel, StatCard, StatusPill } from '$lib/outpost';
+  import * as Card from '$lib/components/ui/card';
+  import * as Table from '$lib/components/ui/table';
+  import { Badge } from '$lib/components/ui/badge';
   import { compactNumber, usd, type UsageSummaryRow } from '$lib/cockpit/usage';
   import DailyChart from '$lib/cockpit/usage/DailyChart.svelte';
   import BreakdownTable from '$lib/cockpit/usage/BreakdownTable.svelte';
@@ -131,6 +138,18 @@
   and can name what spent it.
 -->
 
+<!-- The recessed-well stat tile: a raised shadcn Card with a sunken hairline
+     field inside it — the DESIGN.md signature move, not a flat shadcn card. -->
+{#snippet stat(label: string, value: string, unit?: string)}
+  <Card.Root class="q-stat">
+    <div class="q-well">
+      <span class="k">{label}</span>
+      <span class="v">{value}</span>
+      {#if unit}<span class="u">{unit}</span>{/if}
+    </div>
+  </Card.Root>
+{/snippet}
+
 <div class="page">
   <div class="col">
     <header class="head">
@@ -147,34 +166,34 @@
 
     <section class="stats" aria-label="Usage at a glance">
       {#if binding}
-        <StatCard label="{windowLabel(binding)} used" value="{Math.round(binding.percent)}%" />
-        <StatCard label="Resets in" value={resetsIn(binding.resetsAt, now) || '—'} />
+        {@render stat(`${windowLabel(binding)} used`, `${Math.round(binding.percent)}%`)}
+        {@render stat('Resets in', resetsIn(binding.resetsAt, now) || '—')}
       {/if}
-      <StatCard
-        label="opencode spend"
-        value={openCodeTotals ? usd(openCodeTotals.costUsd) : '—'}
-        unit="real money"
-      />
-      <StatCard
-        label="Claude at API prices"
-        value={claudeTotals ? `~${usd(claudeTotals.costUsd)}` : '—'}
-        unit="covered by the plan"
-      />
+      {@render stat(
+        'opencode spend',
+        openCodeTotals ? usd(openCodeTotals.costUsd) : '—',
+        'real money'
+      )}
+      {@render stat(
+        'Claude at API prices',
+        claudeTotals ? `~${usd(claudeTotals.costUsd)}` : '—',
+        'covered by the plan'
+      )}
       {#if planLabel}
-        <StatCard label="Plan" value={planLabel} />
+        {@render stat('Plan', planLabel)}
       {/if}
     </section>
 
-    <Panel style="--c-card-pad: var(--space-5)">
-      <header class="phead">
-        <h2>Claude limits</h2>
-        <span class="psub">Account-scoped — every signed-in machine reads the same numbers</span>
+    <Card.Root class="q-card">
+      <Card.Header class="q-head">
+        <Card.Title class="q-title">Claude limits</Card.Title>
+        <span class="q-sub">Account-scoped — every signed-in machine reads the same numbers</span>
         {#if planLabel}
-          <div class="pactions"><StatusPill status="idle">{planLabel}</StatusPill></div>
+          <Badge class="q-tag">{planLabel}</Badge>
         {/if}
-      </header>
+      </Card.Header>
 
-      <div class="pbody">
+      <Card.Content class="q-body">
         {#if readingError}
           <p class="note">
             {readingError === 'not signed in'
@@ -186,21 +205,21 @@
         {:else if orderedWindows.length === 0}
           <p class="note">No limit reading yet.</p>
         {:else}
-          <table class="t">
-            <thead>
-              <tr>
-                <th>Window</th>
-                <th>Filled</th>
-                <th class="num">Used</th>
-                <th class="num">Resets in</th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table.Root class="q-table">
+            <Table.Header>
+              <Table.Row>
+                <Table.Head>Window</Table.Head>
+                <Table.Head>Filled</Table.Head>
+                <Table.Head class="num">Used</Table.Head>
+                <Table.Head class="num">Resets in</Table.Head>
+              </Table.Row>
+            </Table.Header>
+            <Table.Body>
               {#each orderedWindows as w (w.kind + (w.scopeLabel ?? ''))}
                 {@const tone = band(w.percent)}
-                <tr>
-                  <td>{windowLabel(w)}</td>
-                  <td class="wide">
+                <Table.Row>
+                  <Table.Cell>{windowLabel(w)}</Table.Cell>
+                  <Table.Cell class="wide">
                     <span
                       class="track"
                       role="progressbar"
@@ -211,34 +230,34 @@
                     >
                       <span class="fill {tone}" style="width: {Math.max(w.percent, 1)}%"></span>
                     </span>
-                  </td>
-                  <td class="num {tone}">{Math.round(w.percent)}%</td>
-                  <td class="num muted">{resetsIn(w.resetsAt, now)}</td>
-                </tr>
+                  </Table.Cell>
+                  <Table.Cell class="num {tone}">{Math.round(w.percent)}%</Table.Cell>
+                  <Table.Cell class="num muted">{resetsIn(w.resetsAt, now)}</Table.Cell>
+                </Table.Row>
               {/each}
-            </tbody>
-          </table>
+            </Table.Body>
+          </Table.Root>
         {/if}
 
         {#if claudeRows.length > 0}
-          <table class="t">
-            <thead>
-              <tr>
-                <th>Model</th>
-                <th class="num">Output</th>
-                <th class="num">At API prices</th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table.Root class="q-table">
+            <Table.Header>
+              <Table.Row>
+                <Table.Head>Model</Table.Head>
+                <Table.Head class="num">Output</Table.Head>
+                <Table.Head class="num">At API prices</Table.Head>
+              </Table.Row>
+            </Table.Header>
+            <Table.Body>
               {#each claudeRows as row (row.key)}
-                <tr>
-                  <td class="mono">{row.key}</td>
-                  <td class="num">{compactNumber(row.output)}</td>
-                  <td class="num">~{usd(row.costUsd)}</td>
-                </tr>
+                <Table.Row>
+                  <Table.Cell class="mono">{row.key}</Table.Cell>
+                  <Table.Cell class="num">{compactNumber(row.output)}</Table.Cell>
+                  <Table.Cell class="num">~{usd(row.costUsd)}</Table.Cell>
+                </Table.Row>
               {/each}
-            </tbody>
-          </table>
+            </Table.Body>
+          </Table.Root>
         {/if}
 
         {#if claudeTotals}
@@ -247,16 +266,16 @@
             plan already covers it.
           </p>
         {/if}
-      </div>
-    </Panel>
+      </Card.Content>
+    </Card.Root>
 
-    <Panel style="--c-card-pad: var(--space-5)">
-      <header class="phead">
-        <h2>opencode spend</h2>
-        <span class="psub">Recorded per message by opencode itself — real money, not an estimate</span>
-      </header>
+    <Card.Root class="q-card">
+      <Card.Header class="q-head">
+        <Card.Title class="q-title">opencode spend</Card.Title>
+        <span class="q-sub">Recorded per message by opencode itself — real money, not an estimate</span>
+      </Card.Header>
 
-      <div class="pbody">
+      <Card.Content class="q-body">
         {#if openCodeTotals}
           <div class="lede">
             <span class="big">{usd(openCodeTotals.costUsd)}</span>
@@ -268,66 +287,66 @@
         {/if}
 
         {#if openCodeRows.length > 0}
-          <table class="t">
-            <thead>
-              <tr>
-                <th>Model</th>
-                <th class="num">Output</th>
-                <th class="num">Cost</th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table.Root class="q-table">
+            <Table.Header>
+              <Table.Row>
+                <Table.Head>Model</Table.Head>
+                <Table.Head class="num">Output</Table.Head>
+                <Table.Head class="num">Cost</Table.Head>
+              </Table.Row>
+            </Table.Header>
+            <Table.Body>
               {#each openCodeRows as row (row.key)}
-                <tr>
-                  <td class="mono">{row.key}</td>
-                  <td class="num">{compactNumber(row.output)}</td>
-                  <td class="num">{usd(row.costUsd)}</td>
-                </tr>
+                <Table.Row>
+                  <Table.Cell class="mono">{row.key}</Table.Cell>
+                  <Table.Cell class="num">{compactNumber(row.output)}</Table.Cell>
+                  <Table.Cell class="num">{usd(row.costUsd)}</Table.Cell>
+                </Table.Row>
               {/each}
-            </tbody>
-          </table>
+            </Table.Body>
+          </Table.Root>
         {:else}
           <p class="note">Nothing recorded yet.</p>
         {/if}
-      </div>
-    </Panel>
+      </Card.Content>
+    </Card.Root>
 
-    <!-- DailyChart brings its own heading and range switcher, so this panel is
+    <!-- DailyChart brings its own heading and range switcher, so this card is
          all body — a second header here would only repeat it. -->
-    <Panel style="--c-card-pad: var(--space-5)">
-      <div class="pbody"><DailyChart /></div>
-    </Panel>
+    <Card.Root class="q-card">
+      <Card.Content class="q-body"><DailyChart /></Card.Content>
+    </Card.Root>
 
     {#if dayGroups.length > 0}
-      <Panel style="--c-card-pad: var(--space-5)">
-        <header class="phead">
-          <h2>5-hour windows</h2>
-          <span class="psub">The windows as they actually fell, last 3 days</span>
-        </header>
-        <div class="pbody">
-          <table class="t">
-            <thead>
-              <tr>
-                <th>Window</th>
-                <th>Harness</th>
-                <th class="num">Cost</th>
-                <th>Pace</th>
-                <th>Models</th>
-              </tr>
-            </thead>
+      <Card.Root class="q-card">
+        <Card.Header class="q-head">
+          <Card.Title class="q-title">5-hour windows</Card.Title>
+          <span class="q-sub">The windows as they actually fell, last 3 days</span>
+        </Card.Header>
+        <Card.Content class="q-body">
+          <Table.Root class="q-table">
+            <Table.Header>
+              <Table.Row>
+                <Table.Head>Window</Table.Head>
+                <Table.Head>Harness</Table.Head>
+                <Table.Head class="num">Cost</Table.Head>
+                <Table.Head>Pace</Table.Head>
+                <Table.Head>Models</Table.Head>
+              </Table.Row>
+            </Table.Header>
             {#each dayGroups as group (group.day)}
-              <tbody>
-                <tr class="dayrow">
-                  <th colspan="5" scope="colgroup">{group.day}</th>
-                </tr>
+              <Table.Body>
+                <Table.Row class="dayrow">
+                  <Table.Head colspan={5} scope="colgroup">{group.day}</Table.Head>
+                </Table.Row>
                 {#each group.blocks as block (block.harness + block.id)}
-                  <tr>
-                    <td class="num-left">{clock(block.startTime)} – {clock(block.endTime)}</td>
-                    <td class="muted">{block.harness}</td>
-                    <td class="num">
+                  <Table.Row>
+                    <Table.Cell class="num-left">{clock(block.startTime)} – {clock(block.endTime)}</Table.Cell>
+                    <Table.Cell class="muted">{block.harness}</Table.Cell>
+                    <Table.Cell class="num">
                       {block.harness === 'Claude' ? '~' : ''}{usd(block.costUsd)}
-                    </td>
-                    <td class="pace">
+                    </Table.Cell>
+                    <Table.Cell class="pace">
                       {#if block.isActive && block.burnRate}
                         {usd(block.burnRate.costPerHour)}/h
                         {#if projectable(block) && block.projection}
@@ -336,21 +355,21 @@
                             : ''}{usd(block.projection.totalCost)}
                         {/if}
                       {/if}
-                    </td>
-                    <td class="mono muted">{block.models.join(' · ')}</td>
-                  </tr>
+                    </Table.Cell>
+                    <Table.Cell class="mono muted">{block.models.join(' · ')}</Table.Cell>
+                  </Table.Row>
                 {/each}
-              </tbody>
+              </Table.Body>
             {/each}
-          </table>
-        </div>
-      </Panel>
+          </Table.Root>
+        </Card.Content>
+      </Card.Root>
     {/if}
 
     <!-- BreakdownTable owns its own heading, harness switch and tabs. -->
-    <Panel style="--c-card-pad: var(--space-5)">
-      <div class="pbody"><BreakdownTable /></div>
-    </Panel>
+    <Card.Root class="q-card">
+      <Card.Content class="q-body"><BreakdownTable /></Card.Content>
+    </Card.Root>
 
     {#if missing.length > 0}
       <p class="note">
@@ -397,41 +416,6 @@
     grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
     gap: var(--space-4);
   }
-  /* Tiles share a row, so they share a height — a tile with a unit line must not
-     stand taller than one without. */
-  .stats :global(.tile > .panel) {
-    height: 100%;
-  }
-  .phead {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: var(--space-1) var(--space-3);
-    margin-bottom: var(--space-4);
-  }
-  .phead h2 {
-    font-size: var(--text-md);
-    font-weight: var(--weight-strong);
-    color: var(--ink-strong);
-  }
-  .psub {
-    font-size: var(--text-sm);
-    color: var(--ink-muted);
-  }
-  .pactions {
-    margin-left: auto;
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-  }
-  .pbody {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-4);
-    /* Wide numeric tables (nowrap columns) exceed a phone viewport; scroll them
-       inside the panel instead of forcing the whole page to scroll sideways. */
-    overflow-x: auto;
-  }
   .note {
     font-size: var(--text-sm);
     color: var(--ink-muted);
@@ -456,101 +440,208 @@
     font-variant-numeric: tabular-nums;
   }
 
-  /* Tables: hairline dividers, small-caps label header, tabular numerics. */
-  .t {
-    width: 100%;
-    /* Fills the panel when it fits; expands to its content width (making .pbody
-       scroll) when the nowrap columns can't fit a narrow viewport. */
-    min-width: max-content;
-    border-collapse: collapse;
-  }
-  .t th {
-    font-size: var(--text-xs);
-    text-transform: uppercase;
-    letter-spacing: var(--track-caps);
-    color: var(--ink-label);
-    font-weight: var(--weight-strong);
-    text-align: left;
-    padding: var(--space-2) var(--space-3);
-    border-bottom: 1px solid var(--border-divider);
-    white-space: nowrap;
-  }
-  .t th.num {
-    text-align: right;
-  }
-  .t td {
-    font-size: var(--text-base);
-    color: var(--ink-row);
-    padding: var(--space-2) var(--space-3);
-    border-bottom: 1px solid var(--border-hairline);
-    vertical-align: middle;
-  }
-  .t tbody:last-child tr:last-child td {
-    border-bottom: 0;
-  }
-  .t td.num,
-  .t td.num-left {
-    font-variant-numeric: tabular-nums;
-  }
-  .t td.num {
-    text-align: right;
-    white-space: nowrap;
-    color: var(--ink-strong);
-  }
-  .t td.muted {
-    color: var(--ink-muted);
-  }
-  .t td.mono {
-    font-family: var(--font-mono);
-    font-size: var(--text-sm);
-    word-break: break-word;
-  }
-  .t td.wide {
-    width: 40%;
-    min-width: 90px;
-  }
-  .t td.pace {
-    font-size: var(--text-sm);
-    font-variant-numeric: tabular-nums;
-    color: var(--status-attn-ink);
-  }
-  .t tr.dayrow th {
-    color: var(--ink-muted);
-    text-transform: none;
-    letter-spacing: 0;
-    font-size: var(--text-sm);
-    border-bottom: 1px solid var(--border-hairline);
-  }
-  .t td.ok {
-    color: var(--data-ok);
-  }
-  .t td.warn {
-    color: var(--data-warn);
-  }
-  .t td.bad {
-    color: var(--data-bad);
-  }
+  /* ---- shadcn primitives, dressed in Quiet Ledger tokens ------------------
+     The classes below live on child-component elements, so they are addressed
+     globally. Every value resolves through a DESIGN.md token; nothing here is a
+     shadcn default (`rounded-2xl`, `ring-1`, `bg-card`, the 8/12/16 spacing
+     ladder), because an unmodified shadcn surface is a High-severity tell. */
+  :global {
+    /* Card → the raised panel (was outpost Panel). */
+    .q-card {
+      background: var(--surface-raised);
+      border-radius: var(--radius-panel);
+      box-shadow: var(--shadow-lifted);
+      padding: var(--space-5);
+      gap: var(--space-4);
+      overflow: visible;
+      /* neutralise the stock ring/border shadcn ships on the card */
+      --tw-ring-shadow: 0 0 transparent;
+    }
+    .q-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: var(--space-1) var(--space-3);
+      padding: 0;
+    }
+    .q-title {
+      font-size: var(--text-md);
+      font-weight: var(--weight-strong);
+      line-height: var(--leading-tight);
+      color: var(--ink-strong);
+    }
+    .q-sub {
+      font-size: var(--text-sm);
+      color: var(--ink-muted);
+    }
+    /* Badge → the plan tag. A quiet neutral chip (idle carries no status hue),
+       not the stock solid-primary badge fill. */
+    .q-tag {
+      margin-left: auto;
+      height: auto;
+      border-radius: var(--radius-pill);
+      background: var(--surface-field);
+      border: 1px solid var(--border-hairline);
+      color: var(--ink-muted);
+      padding: 2px var(--space-3);
+      font-size: var(--text-sm);
+      font-weight: var(--weight-medium);
+    }
+    .q-body {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-4);
+      padding: 0;
+    }
 
-  .track {
-    display: block;
-    position: relative;
-    height: 8px;
-    border-radius: var(--radius-pill);
-    background: var(--surface-sunken);
-  }
-  .fill {
-    position: absolute;
-    inset: 0 auto 0 0;
-    border-radius: var(--radius-pill);
-    transition: width var(--c-500) ease-out;
-  }
-  .fill.ok {
-    background: var(--data-ok);
-  }
-  .fill.warn {
-    background: var(--data-warn);
-  }
-  .fill.bad {
-    background: var(--data-bad);
+    /* Stat tile → raised card wrapping a sunken hairline well. */
+    .q-stat {
+      height: 100%;
+      background: var(--surface-raised);
+      border-radius: var(--radius-panel);
+      box-shadow: var(--shadow-lifted);
+      padding: var(--space-4);
+      overflow: visible;
+      --tw-ring-shadow: 0 0 transparent;
+    }
+    .q-stat .q-well {
+      flex: 1 1 auto;
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-1);
+      justify-content: center;
+      background: var(--surface-field);
+      border: 1px solid var(--border-hairline);
+      border-radius: var(--radius-well);
+      padding: var(--space-4);
+    }
+    .q-stat .k {
+      color: var(--ink-label);
+      font-size: var(--text-sm);
+      font-weight: var(--weight-medium);
+    }
+    .q-stat .v {
+      font-size: var(--text-3xl);
+      font-weight: var(--weight-strong);
+      line-height: var(--leading-numeric);
+      color: var(--ink-strong);
+      font-variant-numeric: tabular-nums;
+    }
+    .q-stat .u {
+      color: var(--ink-muted);
+      font-size: var(--text-sm);
+    }
+
+    /* Table → hairline dividers, uppercase micro-label header, tabular numerics.
+       Table.Root ships its own overflow-x-auto container, so the whole card
+       never scrolls sideways — the table does, inside the panel. */
+    .q-table {
+      width: 100%;
+      min-width: max-content;
+      border-collapse: collapse;
+      font-variant-numeric: normal;
+    }
+    /* the primitives put dividers on the <tr>; ours live on the cells, so the
+       row borders are zeroed to keep a single hairline (and its exact token). */
+    .q-table tr {
+      border: 0;
+    }
+    .q-table thead th {
+      height: auto;
+      font-size: var(--text-xs);
+      text-transform: uppercase;
+      letter-spacing: var(--track-caps);
+      color: var(--ink-label);
+      font-weight: var(--weight-strong);
+      text-align: left;
+      padding: var(--space-2) var(--space-3);
+      border-bottom: 1px solid var(--border-divider);
+      white-space: nowrap;
+    }
+    .q-table thead th.num {
+      text-align: right;
+    }
+    .q-table td {
+      font-size: var(--text-base);
+      color: var(--ink-row);
+      padding: var(--space-2) var(--space-3);
+      border-bottom: 1px solid var(--border-hairline);
+      vertical-align: middle;
+      white-space: normal;
+    }
+    /* the primitive row ships a hover tint; these tables are read-only ledgers */
+    .q-table tbody tr:hover {
+      background: transparent;
+    }
+    .q-table tbody:last-child tr:last-child td {
+      border-bottom: 0;
+    }
+    .q-table td.num,
+    .q-table td.num-left {
+      font-variant-numeric: tabular-nums;
+    }
+    .q-table td.num {
+      text-align: right;
+      white-space: nowrap;
+      color: var(--ink-strong);
+    }
+    .q-table td.muted {
+      color: var(--ink-muted);
+    }
+    .q-table td.mono {
+      font-family: var(--font-mono);
+      font-size: var(--text-sm);
+      word-break: break-word;
+    }
+    .q-table td.wide {
+      width: 40%;
+      min-width: 90px;
+    }
+    .q-table td.pace {
+      font-size: var(--text-sm);
+      font-variant-numeric: tabular-nums;
+      color: var(--status-attn-ink);
+    }
+    .q-table tr.dayrow th {
+      color: var(--ink-muted);
+      text-transform: none;
+      letter-spacing: 0;
+      font-size: var(--text-sm);
+      font-weight: var(--weight-medium);
+      border-bottom: 1px solid var(--border-hairline);
+    }
+    .q-table td.ok {
+      color: var(--data-ok);
+    }
+    .q-table td.warn {
+      color: var(--data-warn);
+    }
+    .q-table td.bad {
+      color: var(--data-bad);
+    }
+
+    /* the inline progress bar (was .track / .fill). */
+    .q-table .track {
+      display: block;
+      position: relative;
+      height: 8px;
+      border-radius: var(--radius-pill);
+      background: var(--surface-sunken);
+    }
+    .q-table .fill {
+      position: absolute;
+      inset: 0 auto 0 0;
+      border-radius: var(--radius-pill);
+      transition: width var(--c-500) ease-out;
+    }
+    .q-table .fill.ok {
+      background: var(--data-ok);
+    }
+    .q-table .fill.warn {
+      background: var(--data-warn);
+    }
+    .q-table .fill.bad {
+      background: var(--data-bad);
+    }
   }
 </style>
