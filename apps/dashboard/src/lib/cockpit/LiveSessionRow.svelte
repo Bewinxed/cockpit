@@ -21,6 +21,7 @@
   import { fly } from 'svelte/transition';
   import { quintOut } from 'svelte/easing';
   import { Badge } from '$lib/components/ui/badge';
+  import { StatusPill } from '$lib/outpost';
   import { formatDuration } from '$lib/utils/time';
   import { ACTIVITY_LABEL, SLEEPING_HINT, SLEEPING_LABEL } from './activity';
   import ActivityDot from './ActivityDot.svelte';
@@ -49,6 +50,12 @@
   const quest = $derived(instance.kind === 'scratch');
   const label = $derived(
     failed ? 'Failed' : sleeping ? SLEEPING_LABEL : ACTIVITY_LABEL[activity]
+  );
+
+  /** The Quiet Ledger status the row's state pill wears: fail red, needs-you
+   *  amber, working blue-live, everything at rest bare-idle. */
+  const pillStatus = $derived(
+    failed ? 'fail' : activity === 'blocked' ? 'attn' : activity === 'working' ? 'live' : 'idle'
   );
 
   // What the session is about, not where it runs: the SDK's own title for the
@@ -171,23 +178,19 @@
           {#if onStepFor}{onStepFor}{/if}
         </span>
       {/if}
-      <!-- The state word keeps its colour until the row goes dark under the
-           pointer, where only the surface's own foreground stays legible. -->
+      <!-- The state, as the Quiet Ledger status pill: a tint carries working /
+           needs-you / failed, and idle carries no fill (bare muted label). -->
       <span
-        class="inline-grid shrink-0 justify-items-end text-micro tabular-nums group-hover:text-accent-foreground {progress ||
-        unmeasured
-          ? 'ml-2'
-          : 'ml-auto'} {failed || activity === 'blocked'
-          ? 'font-medium text-error'
-          : 'text-muted-foreground'}"
-        data-tabular
+        class="inline-grid shrink-0 justify-items-end {progress || unmeasured ? 'ml-2' : 'ml-auto'}"
       >
         {#key label}
           <span
             class="col-start-1 row-start-1"
             in:fly={{ y: 5, duration: painted ? 180 : 0, easing: quintOut }}
             out:fly={{ y: -5, duration: painted ? 140 : 0, easing: quintOut }}
-          >{label}</span>
+          >
+            <StatusPill status={pillStatus}>{label}</StatusPill>
+          </span>
         {/key}
       </span>
     </span>
