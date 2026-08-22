@@ -5,11 +5,17 @@
    * block and the tool in flight all scroll with the conversation. Announces
    * blocked-on-you through the log's live region.
    */
-  import { tick } from 'svelte';
+  import { tick, type Component } from 'svelte';
   import { Virtualizer } from 'virtua/svelte';
   import type { SessionState } from '../client.svelte';
   import { buildRows } from './rows';
-  import { IconSpinner } from '$lib/icons';
+  import {
+    IconBoltDuo,
+    IconGhostDuo,
+    IconSubagentsDuo,
+    IconToolWrite,
+  } from '$lib/icons';
+  import { describeTool } from '$lib/components/features/tool-cards/descriptors';
   import MessageRow from './MessageRow.svelte';
   import ToolGroup from './ToolGroup.svelte';
   import QuestionCard from './QuestionCard.svelte';
@@ -57,6 +63,97 @@
       });
     }
   });
+
+  // ── Enter motion ────────────────────────────────────────────────────────
+  // A new tail turn fades in and rises 8px over ~150ms on MOUNT only — the one
+  // live channel DESIGN.md §motion permits to move, never the structure.
+  //
+  // Coexisting with virtua is the whole trick: virtua mounts and unmounts rows
+  // as they cross the viewport, so a naive `in:` transition would replay on
+  // every scroll. The guard below fires the animation only when the row is a
+  // GENUINELY new arrival — landed, at the tail, and its key never seen before.
+  // The motion is opacity + `transform`, neither of which changes the measured
+  // box, so virtua's ResizeObserver and scroll math are untouched.
+  const seen = new Set<string>();
+  const reduceMotionQuery =
+    typeof window !== 'undefined'
+      ? window.matchMedia('(prefers-reduced-motion: reduce)')
+      : null;
+
+  /**
+   * Per-row enter action. A row animates only the first time its key is seen,
+   * and only once the transcript has landed and the reader is at the tail — so
+   * the initial history batch, a row virtua re-mounts on scroll, and older
+   * chunks prepended above all stay still. `prefers-reduced-motion` → no motion.
+   */
+  function enterMotion(node: HTMLElement, key: string) {
+    const fresh = landed && atBottom && !seen.has(key);
+    seen.add(key);
+    if (!fresh || reduceMotionQuery?.matches) return;
+    const easing =
+      getComputedStyle(node).getPropertyValue('--e-in').trim() ||
+      'cubic-bezier(0.16, 1, 0.3, 1)';
+    node.style.opacity = '0';
+    const anim = node.animate(
+      [
+        { opacity: 0, transform: 'translateY(8px)' },
+        { opacity: 1, transform: 'translateY(0)' },
+      ],
+      { duration: 150, easing, fill: 'both' }
+    );
+    anim.onfinish = () => {
+      node.style.opacity = '';
+      anim.cancel();
+    };
+  }
+
+  // Seed every key already present before the transcript lands on its latest
+  // message, so nothing that streamed in as history animates when scrolled to.
+  $effect(() => {
+    if (landed) return;
+    for (const r of rows) seen.add(r.key);
+  });
+
+  // ── Working liveness ────────────────────────────────────────────────────
+  // `session.busy` flips true on send — before the first frame — and false on
+  // the turn's result, so it is the one signal that also covers the silent gap
+  // between a send and the first token (session.streaming is still '' there).
+  // Rather than a generic spinner, the cue names WHAT the agent is doing right
+  // now, each state its own quiet duotone glyph + present-tense label. The glyph
+  // breathes (restrained motion, the live channel); the label is the static cue.
+  const delegating = $derived(
+    Object.values(session.subagents).find(
+      (b) => b.status === 'running' || b.status === 'starting'
+    )
+  );
+  const runTool = $derived(
+    session.currentTool
+      ? describeTool(session.currentTool.name, undefined, undefined, 'pending')
+      : undefined
+  );
+  type Activity = { icon: Component; tint: string; label: string };
+  const activity = $derived.by((): Activity | null => {
+    if (!session.busy) return null;
+    // Most specific first: a named subagent, then a named tool, then the raw
+    // main-loop phases, then the bare "heard you" gap right after a send.
+    if (delegating)
+      return {
+        icon: IconSubagentsDuo,
+        tint: 'text-tool-agent',
+        label: `Delegating to ${delegating.description || delegating.subagentType || 'subagent'}…`,
+      };
+    if (session.currentTool && runTool)
+      return {
+        icon: runTool.icon,
+        tint: runTool.color,
+        label: `Running ${session.currentTool.name}…`,
+      };
+    if (session.openBlock === 'thinking')
+      return { icon: IconBoltDuo, tint: 'text-tool-skill', label: 'Thinking…' };
+    if (session.streaming)
+      return { icon: IconToolWrite, tint: 'text-tool-write', label: 'Writing…' };
+    return { icon: IconGhostDuo, tint: '', label: `${agentName} is working…` };
+  });
 </script>
 
 <div class="tr" role="log" aria-live="polite" aria-label="Session transcript" bind:this={scroller} {onscroll}>
@@ -68,30 +165,47 @@
 
   <Virtualizer bind:this={list} data={rows} getKey={(r) => r.key} scrollRef={scroller}>
     {#snippet children(row)}
-      {#if row.kind === 'single'}
-        <MessageRow message={row.message} {agentName} />
-      {:else if row.kind === 'tools'}
-        <ToolGroup messages={row.messages} />
-      {:else if row.kind === 'question'}
-        <QuestionCard message={row.message} />
-      {:else if row.kind === 'subagent'}
-        <Subagent branch={row.branch} spawn={row.spawn} />
-      {:else if row.kind === 'thinking'}
-        <Thinking text={row.text} live={row.live} />
-      {:else if row.kind === 'stream'}
-        <section class="turn">
-          <Who name={agentName} />
-          <MessageBody source={row.text} streaming />
-        </section>
-      {:else if row.kind === 'livetool'}
-        <div class="livetool">
-          <span class="ic"><IconSpinner /></span>
-          <span class="tk">{row.glance.name}</span>
-          <span class="arg">{row.glance.glance}</span>
-        </div>
-      {/if}
+      <div class="renter" use:enterMotion={row.key}>
+        {#if row.kind === 'single'}
+          <MessageRow message={row.message} {agentName} />
+        {:else if row.kind === 'tools'}
+          <ToolGroup messages={row.messages} />
+        {:else if row.kind === 'question'}
+          <QuestionCard message={row.message} />
+        {:else if row.kind === 'subagent'}
+          <Subagent branch={row.branch} spawn={row.spawn} />
+        {:else if row.kind === 'thinking'}
+          <Thinking text={row.text} live={row.live} />
+        {:else if row.kind === 'stream'}
+          <section class="turn">
+            <Who name={agentName} />
+            <MessageBody source={row.text} streaming />
+          </section>
+        {:else if row.kind === 'livetool'}
+          {@const d = describeTool(row.glance.name, undefined, undefined, 'pending')}
+          {@const LiveIcon = d.icon}
+          <div class="livetool">
+            <span class="ic breathe {d.color}"><LiveIcon /></span>
+            <span class="tk">{row.glance.name}</span>
+            <span class="arg">{row.glance.glance}</span>
+          </div>
+        {/if}
+      </div>
     {/snippet}
   </Virtualizer>
+
+  <!-- Persistent liveness: from the moment of send (busy flips before any frame
+       arrives) until the turn's result, a restrained cue pins to the tail so the
+       reader always knows the agent heard them — and names WHICH activity is in
+       flight. The glyph breathes (the live channel); the label is the static cue
+       that carries the meaning. Removes when the turn ends. -->
+  {#if activity}
+    {@const ActIcon = activity.icon}
+    <div class="working">
+      <span class="ic breathe {activity.tint}" aria-hidden="true"><ActIcon /></span>
+      <span class="lbl">{activity.label}</span>
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -137,12 +251,12 @@
     flex: 0 0 auto;
     display: grid;
     place-items: center;
-    color: var(--ink-muted);
+    /* No `color` here: the tool family's `text-tool-*` tint governs the glyph;
+       the generic case inherits --ink-body from .livetool. */
   }
   .livetool .ic :global(svg) {
     width: 15px;
     height: 15px;
-    animation: spin 1s linear infinite;
   }
   .livetool .tk {
     font-weight: var(--weight-strong);
@@ -157,13 +271,81 @@
     white-space: nowrap;
     min-width: 0;
   }
-  @keyframes spin {
+
+  /* Per-row enter wrapper: carries the mount-only fade+rise driven imperatively
+     in `enterMotion`. No box of its own — the child's margin collapses through,
+     so virtua measures the row's height exactly as before. */
+  .renter {
+    display: block;
+  }
+
+  /* The pinned working cue — the one part of the ledger allowed to float. It
+     rides the tail through scroll so the reader always sees it while a turn is
+     live. Elevation via --shadow-tile (its 0.5px ring is the structural edge);
+     a pill radius sized off the rhythm scale keeps it concentric with its pad. */
+  .working {
+    position: sticky;
+    bottom: var(--space-4);
+    z-index: 2;
+    width: fit-content;
+    margin: var(--space-4) 0 0 var(--space-2);
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-pill);
+    background: var(--surface);
+    box-shadow: var(--shadow-tile);
+    font-size: var(--text-sm);
+    color: var(--ink-muted);
+    /* one-shot entrance, opacity only — never fights the sticky containing box */
+    animation: cue-in var(--c-300) var(--e-in);
+  }
+  .working .ic {
+    width: 15px;
+    height: 15px;
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+  }
+  .working .ic :global(svg) {
+    width: 15px;
+    height: 15px;
+  }
+  .working .lbl {
+    color: var(--ink-body);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Restrained ambient breath on the live glyph, transitioning opacity only —
+     paired always with a static label (better-ui motion restraint). This is the
+     sole continuous motion; every other cue here is a one-shot on mount. */
+  .breathe :global(svg) {
+    animation: breathe var(--breath) var(--e-toggle) infinite;
+  }
+  @keyframes breathe {
+    0%,
+    100% {
+      opacity: 0.55;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+  @keyframes cue-in {
+    from {
+      opacity: 0;
+    }
     to {
-      transform: rotate(360deg);
+      opacity: 1;
     }
   }
   @media (prefers-reduced-motion: reduce) {
-    .livetool .ic :global(svg) {
+    .breathe :global(svg) {
+      animation: none;
+      opacity: 1;
+    }
+    .working {
       animation: none;
     }
   }
