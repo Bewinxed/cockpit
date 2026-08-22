@@ -2,8 +2,11 @@
   /**
    * The fleet board — every session across every machine as one ledger table,
    * with the four counts that say whether the fleet needs you above it.
-   * Ported from mocks/v2-fleet.html (`<main>`): stat row, filter bar, the
-   * eight-column table, pagination.
+   * Built from the design source (mocks/v2-fleet.html · mocks/v5-*.html) on
+   * shadcn-svelte primitives, token-dressed in the Quiet Ledger system: the
+   * stat row is a shadcn Card recessed-well, the filter bar is ui/input +
+   * ui/select, the status column is ui/badge, the eight-column ledger is
+   * ui/table, and paging is ui/pagination.
    *
    * Live and stored sessions are the same kind of row here. A stored session
    * whose transcript is already running somewhere is dropped — the live row is
@@ -12,17 +15,15 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import type { SDKSessionInfo } from '@cockpit/core';
-  import {
-    Button,
-    FilterSelect,
-    ItemMark,
-    Pagination,
-    StatCard,
-    StatusPill,
-    TextField,
-  } from '$lib/outpost';
+  import { cn } from '$lib/utils';
+  import { Button } from '$lib/components/ui/button';
+  import { Badge } from '$lib/components/ui/badge';
+  import { Input } from '$lib/components/ui/input';
+  import * as Card from '$lib/components/ui/card';
+  import * as Select from '$lib/components/ui/select';
+  import * as Table from '$lib/components/ui/table';
+  import * as Pagination from '$lib/components/ui/pagination';
   import SpawnPanel from '$lib/cockpit/SpawnPanel.svelte';
-  import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
   import {
     cockpit,
     isFailed,
@@ -165,7 +166,7 @@
   /* ---- filters ------------------------------------------------------- */
 
   let search = $state('');
-  /** '' is "All machines"; otherwise a machineId. Cycled by the select. */
+  /** '' is "All machines"; otherwise a machineId. */
   let machineFilter = $state('');
   const STATES: { value: PillStatus | ''; label: string }[] = [
     { value: '', label: 'All states' },
@@ -173,12 +174,12 @@
     { value: 'attn', label: 'Needs you' },
     { value: 'idle', label: 'Idle' },
   ];
-  let stateFilter = $state(0);
+  let stateFilter = $state<PillStatus | ''>('');
   const SORTS: { value: 'recent' | 'name'; label: string }[] = [
     { value: 'recent', label: 'Last active' },
     { value: 'name', label: 'Name (A–Z)' },
   ];
-  let sortBy = $state(0);
+  let sortBy = $state<'recent' | 'name'>('recent');
   let pageNo = $state(1);
 
   const machineName = $derived(
@@ -186,20 +187,21 @@
       ? (rows.find((row) => row.machineId === machineFilter)?.machine ?? machineFilter)
       : 'All machines'
   );
+  const stateName = $derived(STATES.find((s) => s.value === stateFilter)?.label ?? 'All states');
+  const sortName = $derived(SORTS.find((s) => s.value === sortBy)?.label ?? 'Last active');
 
   const filtered = $derived(
     rows.filter((row) => {
       const needle = search.trim().toLowerCase();
       if (needle && !row.title.toLowerCase().includes(needle)) return false;
       if (machineFilter && row.machineId !== machineFilter) return false;
-      const want = STATES[stateFilter].value;
-      if (want && row.status !== want) return false;
+      if (stateFilter && row.status !== stateFilter) return false;
       return true;
     })
   );
 
   const sorted = $derived(
-    SORTS[sortBy].value === 'name'
+    sortBy === 'name'
       ? [...filtered].sort((a, b) => a.title.localeCompare(b.title))
       : [...filtered].sort((a, b) => (b.at ?? 0) - (a.at ?? 0))
   );
@@ -277,6 +279,23 @@
 
   const contextClass = (pct: number | null) =>
     pct === null ? '' : pct >= 90 ? 'bad' : pct >= 70 ? 'warn' : '';
+
+  // The stat tile IS the recessed-well signature: a shadcn Card (raised) whose
+  // body is a sunken hairline well — a number sits *in* something, never on it.
+  // tailwind-merge drops the stock rounded-2xl / bg-card / ring defaults.
+  const tileClass =
+    'h-full gap-0 overflow-visible rounded-[var(--radius-panel)] bg-[var(--surface-raised)] p-[var(--c-card-pad)] shadow-[var(--shadow-lifted)] ring-0';
+
+  // The status column, dressed on ui/badge: a light tint carries the meaning,
+  // deepened ink carries the legibility. Idle carries no fill — absence is idle.
+  const pillBase =
+    'h-[var(--c-pill-h)] gap-[var(--c-pill-gap)] rounded-[var(--radius-pill)] border-transparent px-[10px] [font-size:var(--c-pill-fs)] [font-weight:var(--weight-strong)] whitespace-nowrap';
+  const pillTint: Record<PillStatus, string> = {
+    live: 'bg-[var(--status-live-bg)] text-[var(--status-live-ink)]',
+    attn: 'bg-[var(--status-attn-bg)] text-[var(--status-attn-ink)]',
+    fail: 'bg-[var(--status-fail-bg)] text-[var(--status-fail-ink)]',
+    idle: 'bg-transparent px-0 text-[var(--ink-muted)] [font-weight:var(--weight-medium)]',
+  };
 </script>
 
 <div class="board">
@@ -286,21 +305,27 @@
         <h1>Fleet</h1>
         <p>Every agent across your machines, and what needs you.</p>
       </div>
-      <Button variant="primary" onclick={startSession}>
+      <Button onclick={startSession}>
         <IconPlus />
         Start session
       </Button>
     </div>
 
+    {#snippet stat(label: string, value: string | number, unit?: string)}
+      <Card.Root class={tileClass}>
+        <div class="well">
+          <span class="k">{label}</span>
+          <span class="v">{value}</span>
+          {#if unit}<span class="u">{unit}</span>{/if}
+        </div>
+      </Card.Root>
+    {/snippet}
+
     <div class="stats">
-      <StatCard label="Sessions" value={cockpit.runningInstances.length} />
-      <StatCard label="Needs you" value={cockpit.blocked.length} />
-      <StatCard
-        label="Machines"
-        value={cockpit.onlineMachines.length}
-        unit="of {cockpit.machines.length}"
-      />
-      <StatCard label="Spend today" value="${spend.toFixed(2)}" />
+      {@render stat('Sessions', cockpit.runningInstances.length)}
+      {@render stat('Needs you', cockpit.blocked.length)}
+      {@render stat('Machines', cockpit.onlineMachines.length, `of ${cockpit.machines.length}`)}
+      {@render stat('Spend today', `$${spend.toFixed(2)}`)}
     </div>
 
     <div class="panel">
@@ -308,7 +333,7 @@
         <div class="empty">
           <b>Can't reach the hub</b>
           <p>Nothing on the fleet can be read until the connection is back.</p>
-          <Button onclick={() => reconnectNow()}>Retry</Button>
+          <Button variant="outline" onclick={() => reconnectNow()}>Retry</Button>
         </div>
       {:else if cockpit.machines.length === 0}
         <div class="empty">
@@ -318,94 +343,99 @@
       {:else if rows.length === 0}
         <div class="empty">
           <b>{cockpit.onlineMachines.length} machines online, no sessions running.</b>
-          <Button variant="primary" onclick={startSession}>
+          <Button onclick={startSession}>
             <IconPlus />
             Start session
           </Button>
         </div>
       {:else}
         <div class="bar">
-          <TextField
-            class="search"
-            bind:value={search}
-            placeholder="Search sessions…"
-            aria-label="Search sessions"
-            oninput={() => (pageNo = 1)}
+          <div class="search">
+            <span class="lead"><IconSearch /></span>
+            <Input
+              class="search-input"
+              bind:value={search}
+              placeholder="Search sessions…"
+              aria-label="Search sessions"
+              oninput={() => (pageNo = 1)}
+            />
+          </div>
+
+          <Select.Root
+            type="single"
+            value={machineFilter || 'all'}
+            onValueChange={(v) => ((machineFilter = v === 'all' ? '' : v), (pageNo = 1))}
           >
-            {#snippet lead()}<IconSearch />{/snippet}
-          </TextField>
-          <DropdownMenu.Root>
-            <DropdownMenu.Trigger>
-              {#snippet child({ props })}<FilterSelect label={machineName} {...props} />{/snippet}
-            </DropdownMenu.Trigger>
-            <DropdownMenu.Content align="start">
-              <DropdownMenu.Item onSelect={() => ((machineFilter = ''), (pageNo = 1))}>
-                All machines
-              </DropdownMenu.Item>
+            <Select.Trigger class="min-w-[168px]">{machineName}</Select.Trigger>
+            <Select.Content>
+              <Select.Item value="all" label="All machines">All machines</Select.Item>
               {#each cockpit.machines as m (m.machineId)}
-                <DropdownMenu.Item
-                  onSelect={() => ((machineFilter = m.machineId), (pageNo = 1))}
-                >
+                <Select.Item value={m.machineId} label={machineLabel(m.hostname)}>
                   {machineLabel(m.hostname)}
-                </DropdownMenu.Item>
+                </Select.Item>
               {/each}
-            </DropdownMenu.Content>
-          </DropdownMenu.Root>
+            </Select.Content>
+          </Select.Root>
 
-          <DropdownMenu.Root>
-            <DropdownMenu.Trigger>
-              {#snippet child({ props })}
-                <FilterSelect label={STATES[stateFilter].label} {...props} />
-              {/snippet}
-            </DropdownMenu.Trigger>
-            <DropdownMenu.Content align="start">
-              {#each STATES as s, i (s.label)}
-                <DropdownMenu.Item onSelect={() => ((stateFilter = i), (pageNo = 1))}>
-                  {s.label}
-                </DropdownMenu.Item>
+          <Select.Root
+            type="single"
+            value={stateFilter || 'all'}
+            onValueChange={(v) => (
+              (stateFilter = (v === 'all' ? '' : v) as PillStatus | ''), (pageNo = 1)
+            )}
+          >
+            <Select.Trigger class="min-w-[140px]">{stateName}</Select.Trigger>
+            <Select.Content>
+              {#each STATES as s (s.label)}
+                <Select.Item value={s.value || 'all'} label={s.label}>{s.label}</Select.Item>
               {/each}
-            </DropdownMenu.Content>
-          </DropdownMenu.Root>
+            </Select.Content>
+          </Select.Root>
 
-          <DropdownMenu.Root>
-            <DropdownMenu.Trigger>
-              {#snippet child({ props })}
-                <FilterSelect label={SORTS[sortBy].label} {...props} />
-              {/snippet}
-            </DropdownMenu.Trigger>
-            <DropdownMenu.Content align="start">
-              {#each SORTS as s, i (s.value)}
-                <DropdownMenu.Item onSelect={() => (sortBy = i)}>{s.label}</DropdownMenu.Item>
+          <Select.Root
+            type="single"
+            value={sortBy}
+            onValueChange={(v) => (sortBy = v as 'recent' | 'name')}
+          >
+            <Select.Trigger class="min-w-[150px]">{sortName}</Select.Trigger>
+            <Select.Content>
+              {#each SORTS as s (s.value)}
+                <Select.Item value={s.value} label={s.label}>{s.label}</Select.Item>
               {/each}
-            </DropdownMenu.Content>
-          </DropdownMenu.Root>
-          <Button class="exp" onclick={exportCsv}>
+            </Select.Content>
+          </Select.Root>
+
+          <Button variant="outline" class="ml-auto max-[900px]:ml-0" onclick={exportCsv}>
             <IconDownload />
             Export CSV
           </Button>
         </div>
 
-        <div class="tscroll">
-          <table>
-            <thead>
-              <tr>
-                <th class="s-name">Session</th>
-                <th>Machine</th>
-                <th>Harness</th>
-                <th class="num">Turns</th>
-                <th class="num">Context</th>
-                <th>Last activity</th>
-                <th>State</th>
-                <th class="s-act">Action</th>
-              </tr>
-            </thead>
-            <tbody>
+        <div class="tbl">
+          <Table.Root class="min-w-[860px]">
+            <Table.Header>
+              <Table.Row>
+                <Table.Head class="s-name">Session</Table.Head>
+                <Table.Head>Machine</Table.Head>
+                <Table.Head>Harness</Table.Head>
+                <Table.Head class="num">Turns</Table.Head>
+                <Table.Head class="num">Context</Table.Head>
+                <Table.Head>Last activity</Table.Head>
+                <Table.Head>State</Table.Head>
+                <Table.Head class="s-act">Action</Table.Head>
+              </Table.Row>
+            </Table.Header>
+            <Table.Body>
               {#each paged as row (row.key)}
-                <tr>
-                  <td>
+                <Table.Row>
+                  <Table.Cell>
                     <div class="nm">
-                      <ItemMark hue={row.hue}>
-                        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <span
+                        class="mark"
+                        style="background-color: var(--mark-{row.hue});"
+                        aria-hidden="true"
+                      >
+                        <svg viewBox="0 0 24 24" fill="none">
                           <path
                             d={row.glyph}
                             stroke="currentColor"
@@ -413,32 +443,38 @@
                             stroke-linejoin="round"
                           />
                         </svg>
-                      </ItemMark>
+                      </span>
                       <a href={row.href}>{row.title}</a>
                     </div>
-                  </td>
-                  <td class="mut">{row.machine}</td>
-                  <td class="mut">{row.harnessLabel}</td>
-                  <td class="num">{row.turns ?? '—'}</td>
-                  <td class="num {contextClass(row.contextPct)}">
+                  </Table.Cell>
+                  <Table.Cell class="mut">{row.machine}</Table.Cell>
+                  <Table.Cell class="mut">{row.harnessLabel}</Table.Cell>
+                  <Table.Cell class="num">{row.turns ?? '—'}</Table.Cell>
+                  <Table.Cell class={cn('num', contextClass(row.contextPct))}>
                     {row.contextPct === null ? '—' : `${Math.round(row.contextPct)}%`}
-                  </td>
-                  <td>
+                  </Table.Cell>
+                  <Table.Cell>
                     <span class="when">
                       <IconHistory />
                       {row.at ? formatDistanceToNow(new Date(row.at)) : '—'}
                     </span>
-                  </td>
-                  <td>
-                    <StatusPill status={row.status}>{row.stateLabel}</StatusPill>
-                  </td>
-                  <td>
+                  </Table.Cell>
+                  <Table.Cell>
+                    <Badge class={cn(pillBase, pillTint[row.status])}>{row.stateLabel}</Badge>
+                  </Table.Cell>
+                  <Table.Cell>
                     <div class="act">
-                      <Button size="icon-sm" href={row.href} aria-label="Open {row.title}">
+                      <Button
+                        variant="outline"
+                        size="icon-sm"
+                        href={row.href}
+                        aria-label="Open {row.title}"
+                      >
                         <IconExternal />
                       </Button>
                       {#if row.instance}
                         <Button
+                          variant="outline"
                           size="icon-sm"
                           aria-label="Peek {row.title}"
                           onclick={() => setPeeked(row.instance!.id)}
@@ -448,6 +484,7 @@
                       {/if}
                       {#if row.stored || (row.instance && isResumable(row.instance))}
                         <Button
+                          variant="outline"
                           size="icon-sm"
                           aria-label="Resume {row.title}"
                           onclick={() => resume(row)}
@@ -456,16 +493,42 @@
                         </Button>
                       {/if}
                     </div>
-                  </td>
-                </tr>
+                  </Table.Cell>
+                </Table.Row>
               {/each}
-            </tbody>
-          </table>
+            </Table.Body>
+          </Table.Root>
         </div>
 
         <div class="foot">
           Showing {paged.length} of {filtered.length}
-          <Pagination bind:page={pageNo} total={pageCount} />
+          <div class="pager">
+            <Pagination.Root count={filtered.length} perPage={PAGE_SIZE} bind:page={pageNo} class="w-fit">
+              {#snippet children({ pages, currentPage })}
+                <Pagination.Content>
+                  <Pagination.Item>
+                    <Pagination.PrevButton />
+                  </Pagination.Item>
+                  {#each pages as p (p.key)}
+                    {#if p.type === 'ellipsis'}
+                      <Pagination.Item>
+                        <Pagination.Ellipsis />
+                      </Pagination.Item>
+                    {:else}
+                      <Pagination.Item>
+                        <Pagination.Link page={p} isActive={currentPage === p.value}>
+                          {p.value}
+                        </Pagination.Link>
+                      </Pagination.Item>
+                    {/if}
+                  {/each}
+                  <Pagination.Item>
+                    <Pagination.NextButton />
+                  </Pagination.Item>
+                </Pagination.Content>
+              {/snippet}
+            </Pagination.Root>
+          </div>
         </div>
       {/if}
     </div>
@@ -504,7 +567,7 @@
   .head p {
     font-size: var(--text-md);
     color: var(--ink-muted);
-    margin-top: 3px;
+    margin-top: var(--space-1);
   }
 
   .stats {
@@ -512,8 +575,35 @@
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: var(--space-4);
   }
-  .stats :global(> *) {
-    display: block;
+
+  /* the recessed well inside each raised stat card */
+  .well {
+    background: var(--surface-field);
+    border: 1px solid var(--border-hairline);
+    border-radius: var(--radius-well);
+    padding: var(--c-card-pad);
+    display: flex;
+    flex-direction: column;
+    gap: var(--c-card-gap);
+    justify-content: center;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+  .k {
+    color: var(--ink-label);
+    font-size: var(--text-sm);
+    font-weight: var(--weight-medium);
+  }
+  .v {
+    font-size: var(--text-3xl);
+    font-weight: var(--weight-strong);
+    line-height: var(--leading-numeric);
+    color: var(--ink-strong);
+    font-variant-numeric: tabular-nums;
+  }
+  .u {
+    color: var(--ink-muted);
+    font-size: var(--text-sm);
   }
 
   .panel {
@@ -530,25 +620,33 @@
     gap: var(--space-2);
     padding-bottom: var(--space-3);
   }
-  .bar :global(.search) {
+  .search {
+    position: relative;
     width: 237px;
   }
-  .bar :global(.exp) {
-    margin-left: auto;
+  .search .lead {
+    position: absolute;
+    left: var(--space-3);
+    top: 50%;
+    transform: translateY(-50%);
+    display: grid;
+    place-items: center;
+    color: var(--ink-muted);
+    pointer-events: none;
+  }
+  .search .lead :global(svg) {
+    width: 16px;
+    height: 16px;
+  }
+  .search :global(.search-input) {
+    padding-left: calc(var(--space-3) + 16px + var(--space-2));
   }
 
-  .tscroll {
-    overflow-x: auto;
-  }
-  table {
-    width: 100%;
-    min-width: 860px;
-    border-collapse: collapse;
-  }
-  thead th {
+  /* ui/table, dressed as the ledger grid */
+  .tbl :global([data-slot='table-head']) {
+    height: var(--space-8);
+    padding: 0 var(--space-3);
     background: var(--surface-sunken);
-    height: 32px;
-    padding: 0 12px;
     text-align: left;
     white-space: nowrap;
     font-size: var(--text-sm);
@@ -556,46 +654,70 @@
     letter-spacing: var(--track-caps);
     text-transform: uppercase;
     color: var(--ink-label);
+    vertical-align: middle;
   }
-  thead th:first-child {
-    border-radius: 6px 0 0 6px;
+  .tbl :global([data-slot='table-head']:first-child) {
+    border-radius: var(--radius-tile) 0 0 var(--radius-tile);
   }
-  thead th:last-child {
-    border-radius: 0 6px 6px 0;
+  .tbl :global([data-slot='table-head']:last-child) {
+    border-radius: 0 var(--radius-tile) var(--radius-tile) 0;
   }
-  th.s-name {
+  .tbl :global([data-slot='table-head'].s-name) {
     width: 290px;
   }
-  th.s-act {
+  .tbl :global([data-slot='table-head'].s-act) {
     width: 140px;
   }
-  tbody td {
+  .tbl :global([data-slot='table-header'] tr),
+  .tbl :global([data-slot='table-row']) {
+    border-bottom: 0;
+  }
+  .tbl :global(tbody [data-slot='table-cell']) {
     height: 44px;
-    padding: 0 12px;
+    padding: 0 var(--space-3);
     border-bottom: 1px solid var(--border-divider);
     font-size: var(--text-base);
     color: var(--ink-row);
     vertical-align: middle;
   }
-  tbody tr:last-child td {
+  .tbl :global(tbody tr:last-child [data-slot='table-cell']) {
     border-bottom: 0;
   }
-  .num {
+  .tbl :global(.num) {
     font-variant-numeric: tabular-nums;
   }
-  .mut {
+  .tbl :global(.mut) {
     color: var(--ink-muted);
   }
-  .warn {
+  .tbl :global(.warn) {
     color: var(--data-warn);
   }
-  .bad {
+  .tbl :global(.bad) {
     color: var(--data-bad);
   }
+
+  .mark {
+    width: var(--c-mark);
+    height: var(--c-mark);
+    border-radius: var(--radius-mark);
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    background-image: var(--mark-overlay);
+  }
+  .mark svg {
+    width: var(--c-mark-glyph);
+    height: var(--c-mark-glyph);
+    display: block;
+    stroke: var(--mark-glyph);
+    color: var(--mark-glyph);
+    stroke-width: 1.6;
+  }
+
   .nm {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--space-3);
     min-width: 0;
   }
   .nm a {
@@ -612,7 +734,7 @@
   .when {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--space-2);
     color: var(--ink-muted);
     white-space: nowrap;
   }
@@ -624,7 +746,7 @@
   .act {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--space-2);
   }
 
   .foot {
@@ -632,12 +754,12 @@
     align-items: center;
     gap: var(--space-4);
     height: 55px;
-    padding: 0 12px;
+    padding: 0 var(--space-3);
     border-top: 1px solid var(--border-hairline);
     font-size: var(--text-base);
     color: var(--ink-muted);
   }
-  .foot :global(.pager) {
+  .pager {
     margin-left: auto;
   }
 
@@ -668,14 +790,14 @@
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: var(--space-3);
     }
+    .v {
+      font-size: var(--text-2xl);
+    }
     .bar {
       flex-wrap: wrap;
     }
-    .bar :global(.search) {
+    .search {
       width: 100%;
-    }
-    .bar :global(.exp) {
-      margin-left: 0;
     }
   }
 </style>
