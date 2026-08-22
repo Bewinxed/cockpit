@@ -7,11 +7,14 @@
   import { untrack } from 'svelte';
   import { goto } from '$app/navigation';
   import { Markdown } from '$lib/components/ui/markdown';
+  import { Alert, AlertDescription } from '$lib/components/ui/alert';
   import * as AlertDialog from '$lib/components/ui/alert-dialog';
   import * as Popover from '$lib/components/ui/popover';
   import * as Select from '$lib/components/ui/select';
   import { Button } from '$lib/components/ui/button';
+  import { Card } from '$lib/components/ui/card';
   import { Input } from '$lib/components/ui/input';
+  import { Textarea } from '$lib/components/ui/textarea';
   import MemoryCard from '$lib/components/features/MemoryCard.svelte';
   import { cockpit, deleteProject, machineFs, spawnSession } from '$lib/cockpit/client.svelte';
   import type { ProjectRow } from '$lib/cockpit/client.svelte';
@@ -307,15 +310,15 @@
       <!-- Main column: docs -->
       <div class="flex min-w-0 flex-1 flex-col gap-4 lg:overflow-y-auto">
         {#if docs.length === 0 && !docsError}
-          <div class="rounded-xl bg-card p-6 shadow-md">
+          <Card class="rounded-[var(--radius-panel)] p-[var(--space-6)] shadow-md">
             <p class="text-body text-muted-foreground">
               No markdown yet. Add a README.md at the top of the checkout and it shows up here.
             </p>
-          </div>
+          </Card>
         {:else if docsError}
-          <div class="rounded-xl bg-card p-6 shadow-md" role="alert">
-            <p class="text-body text-warning">{docsError}</p>
-          </div>
+          <Alert class="border-warning/40 bg-warning/10 text-warning">
+            <AlertDescription class="text-body text-warning">{docsError}</AlertDescription>
+          </Alert>
         {:else}
           <!-- Doc nav: Select on mobile -->
           <div class="block md:hidden">
@@ -405,8 +408,8 @@
               </nav>
 
               {#if open}
-                <section class="rounded-xl bg-card shadow-md">
-                  <header class="flex items-center gap-3 px-4 py-2.5">
+                <Card class="gap-0 rounded-[var(--radius-panel)] py-0 shadow-md">
+                  <header class="flex items-center gap-[var(--space-3)] px-[var(--space-4)] py-[var(--space-2)]">
                     <span class="min-w-0 truncate font-mono text-micro text-muted-foreground">{open.name}</span>
                     {#if docError}
                       <span class="truncate text-micro text-error" role="alert">{docError}</span>
@@ -431,7 +434,7 @@
                     <div class="relative border-t border-border">
                       <div
                         bind:this={docBody}
-                        class="overflow-y-auto px-5 py-4 md:px-6"
+                        class="overflow-y-auto px-[var(--space-6)] py-[var(--space-4)] md:px-[var(--space-7)]"
                         style="max-height: {expanded ? '70vh' : COLLAPSED_DOC}"
                       >
                         <div class="prose prose-sm dark:prose-invert max-w-[72ch]">
@@ -447,7 +450,7 @@
                     {#if clipped || expanded}
                       <button
                         type="button"
-                        class="flex min-h-9 w-full items-center justify-center rounded-b-xl text-caption
+                        class="flex min-h-9 w-full items-center justify-center rounded-b-[var(--radius-panel)] text-caption
                           transition-colors hover:bg-accent hover:text-accent-foreground"
                         onclick={() => (expanded = !expanded)}
                       >
@@ -455,14 +458,14 @@
                       </button>
                     {/if}
                   {:else}
-                    <textarea
+                    <Textarea
                       bind:value={draft}
                       spellcheck="false"
-                      class="h-[60vh] w-full resize-none border-t border-border bg-transparent px-5 py-4 font-mono text-sm text-foreground
-                        focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset md:px-6"
-                    ></textarea>
+                      aria-label={open.name}
+                      class="h-[60vh] min-h-0 rounded-none border-x-0 border-b-0 border-t border-border bg-transparent px-[var(--space-6)] py-[var(--space-4)] font-mono text-[length:var(--text-base)] text-foreground focus-visible:ring-inset md:px-[var(--space-7)]"
+                    />
                   {/if}
-                </section>
+                </Card>
               {/if}
             </div>
           </div>
@@ -472,11 +475,11 @@
       <!-- Right rail (320-380px on lg; stacked on mobile) -->
       <aside class="mt-6 flex w-full shrink-0 flex-col gap-4 lg:mt-0 lg:w-[340px] lg:overflow-y-auto xl:w-[360px]">
         <!-- Sessions -->
-        <section class="rounded-xl bg-card shadow-md">
-          <header class="px-4 py-3">
+        <Card class="gap-0 rounded-[var(--radius-panel)] py-0 shadow-md">
+          <header class="px-[var(--space-4)] py-[var(--space-3)]">
             <h2 class="text-title">Sessions</h2>
           </header>
-          <div class="flex flex-col gap-1.5 px-3 pb-3">
+          <div class="flex flex-col gap-1.5 px-[var(--space-3)] pb-[var(--space-3)]">
             {#each live as instance (instance.id)}
               <LiveSessionRow {instance} groupCwd={project.cwd} />
             {/each}
@@ -498,7 +501,7 @@
               </Button>
             {/if}
           </div>
-        </section>
+        </Card>
 
         <!-- CLAUDE.md. The file itself reads in the docs viewer beside this,
              which is where a 360px rail cannot compete — so the rail only says

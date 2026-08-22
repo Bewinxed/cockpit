@@ -2,8 +2,10 @@
   import { toast } from 'svelte-sonner';
   import type { ConfigInspection, DiscoveredMcp, DiscoveredSkill, FleetMcpServer, FleetSkillMeta } from '@cockpit/core';
   import { IconChevronDown, IconChevronRight, IconSpinner } from '$lib/icons';
+  import { Alert, AlertDescription } from '$lib/components/ui/alert';
   import { Badge } from '$lib/components/ui/badge';
   import { Button } from '$lib/components/ui/button';
+  import { Card } from '$lib/components/ui/card';
   import type { Machine } from './client.svelte';
   import { adoptSkill, inspectMachine, saveMcpServer } from './fleet';
   import { machineLabel } from './machine';
@@ -52,7 +54,7 @@
   }
 </script>
 
-<section class="flex flex-col gap-3">
+<section class="flex flex-col gap-[var(--space-3)]">
   <h2 class="text-micro font-medium tracking-wider text-muted-foreground uppercase">On this machine</h2>
   <p class="max-w-prose text-micro text-muted-foreground">
     What each machine really has, whoever put it there — read live, never stored. Anything the fleet does not manage can be adopted into it.
@@ -61,12 +63,13 @@
   {#if online.length === 0}
     <p class="text-caption text-muted-foreground">No machine is online to ask.</p>
   {:else}
-    <ul class="flex flex-col rounded-xl bg-card shadow-md">
-      {#each online as machine (machine.machineId)}
-        {@const inspection = found[machine.machineId]}
-        {@const rows = kind === 'mcp' ? (inspection?.mcp ?? []) : (inspection?.skills ?? [])}
-        <li class="flex flex-col gap-2 border-t border-border p-4 first:border-t-0">
-          <div class="flex flex-wrap items-center gap-3">
+    <Card class="gap-0 rounded-[var(--radius-panel)] py-0 shadow-md [--card-spacing:var(--space-4)]">
+      <ul class="flex flex-col">
+        {#each online as machine (machine.machineId)}
+          {@const inspection = found[machine.machineId]}
+          {@const rows = kind === 'mcp' ? (inspection?.mcp ?? []) : (inspection?.skills ?? [])}
+          <li class="flex flex-col gap-[var(--space-2)] border-t border-border p-[var(--space-4)] first:border-t-0">
+          <div class="flex flex-wrap items-center gap-[var(--space-3)]">
             <span class="min-w-0 flex-1 truncate text-caption font-medium text-foreground">{machineLabel(machine.hostname)}</span>
             <Button variant="outline" size="xs" class="shrink-0" aria-expanded={open[machine.machineId] === true} onclick={() => expand(machine)}>
               {#if open[machine.machineId]}<IconChevronDown class="shrink-0" />{:else}<IconChevronRight class="shrink-0" />{/if}
@@ -77,14 +80,18 @@
             {#if reading[machine.machineId]}
               <p class="flex items-center gap-2 text-caption text-muted-foreground" role="status"><IconSpinner class="size-4 shrink-0 animate-spin" />Asking this machine…</p>
             {:else if unread[machine.machineId]}
-              <p class="text-caption text-warning" role="alert">{unread[machine.machineId]}</p>
+              <Alert
+                class="border-warning/40 bg-warning/10 px-[var(--space-3)] py-[var(--space-2)] text-warning"
+              >
+                <AlertDescription class="text-warning">{unread[machine.machineId]}</AlertDescription>
+              </Alert>
             {:else if rows.length === 0}
               <p class="text-caption text-muted-foreground">{kind === 'mcp' ? 'This machine has no MCP servers at all.' : 'This machine has no skills at all.'}</p>
             {:else}
               <ul class="flex flex-col rounded-lg border border-border">
                 {#each rows as row (`${row.scope}:${row.name}`)}
                   {@const key = keyOf(machine.machineId, row.scope, row.name)}
-                  <li class="flex flex-wrap items-start gap-x-3 gap-y-1 border-t border-border px-3 py-2 first:border-t-0">
+                  <li class="flex flex-wrap items-start gap-x-[var(--space-3)] gap-y-[var(--space-1)] border-t border-border px-[var(--space-3)] py-[var(--space-2)] first:border-t-0">
                     <span class="flex min-w-0 flex-1 flex-col gap-0.5">
                       <span class="flex flex-wrap items-center gap-x-2 gap-y-1">
                         <span class="truncate font-mono text-caption">{row.name}</span>
@@ -107,8 +114,9 @@
             {/if}
           {/if}
         </li>
-      {/each}
-    </ul>
+        {/each}
+      </ul>
+    </Card>
   {/if}
 
   {#if asleep.length > 0}

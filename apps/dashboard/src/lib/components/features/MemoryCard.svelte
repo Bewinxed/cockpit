@@ -12,6 +12,7 @@
   import type { Snippet } from 'svelte';
   import { toast } from 'svelte-sonner';
   import { Button } from '$lib/components/ui/button';
+  import { Card } from '$lib/components/ui/card';
   import { Markdown } from '$lib/components/ui/markdown';
   import { Textarea } from '$lib/components/ui/textarea';
 
@@ -108,8 +109,10 @@
   }
 </script>
 
-<section class="w-full min-w-0 overflow-hidden rounded-xl bg-card shadow-md">
-  <header class="flex items-center gap-3 border-b border-border/50 px-4 py-2">
+<Card
+  class="w-full min-w-0 gap-0 rounded-[var(--radius-panel)] py-0 shadow-md [--card-spacing:var(--space-4)]"
+>
+  <header class="flex items-center gap-3 border-b border-border/50 px-[var(--space-4)] py-[var(--space-2)]">
     <span class="min-w-0 truncate font-mono text-micro text-muted-foreground" title={path}>{path}</span>
     {#if meta}
       {@render meta()}
@@ -138,17 +141,17 @@
       bind:value={draft}
       spellcheck="false"
       aria-label={path}
-      class="min-h-72 rounded-none border-0 font-mono text-sm focus-visible:ring-inset"
+      class="min-h-72 rounded-none border-0 bg-transparent font-mono text-[length:var(--text-base)] focus-visible:ring-inset"
     />
   {:else if content !== null && summary}
-    <p class="px-4 py-2.5 text-caption">{summary}</p>
+    <p class="px-[var(--space-4)] py-[var(--space-2)] text-caption">{summary}</p>
   {:else if content !== null}
     <!-- The click is the convenience; the Edit button above is the affordance,
          which is why this needs no key handler of its own. -->
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
-      class="max-h-[60vh] min-h-40 overflow-y-auto px-4 py-3 {save ? 'cursor-text' : ''}"
+      class="max-h-[60vh] min-h-40 overflow-y-auto px-[var(--space-4)] py-[var(--space-3)] {save ? 'cursor-text' : ''}"
       title={save ? 'Click to edit' : undefined}
       onclick={bodyClick}
     >
@@ -159,16 +162,16 @@
          two lines would push the card past its column instead of wrapping. -->
     <Button
       variant="ghost"
-      class="h-auto w-full justify-start rounded-none px-4 py-6 text-left text-[13px] font-normal whitespace-normal text-muted-foreground"
+      class="text-caption h-auto w-full justify-start rounded-none px-[var(--space-4)] py-[var(--space-6)] text-left font-normal whitespace-normal"
       onclick={edit}
     >
       {emptyText}
     </Button>
   {:else}
-    <p class="px-4 py-6 text-[13px] text-muted-foreground">{emptyText}</p>
+    <p class="text-caption px-[var(--space-4)] py-[var(--space-6)]">{emptyText}</p>
   {/if}
 
   {#if footer}
     {@render footer()}
   {/if}
-</section>
+</Card>

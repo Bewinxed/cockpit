@@ -27,7 +27,9 @@
   import { questionsOf } from './question';
   import { isTyping } from '$lib/utils/typing';
   import ActivityDot from './ActivityDot.svelte';
+  import { Badge } from '$lib/components/ui/badge';
   import { Button } from '$lib/components/ui/button';
+  import { Card } from '$lib/components/ui/card';
   import { fly, slide } from 'svelte/transition';
   import { quintOut } from 'svelte/easing';
 
@@ -67,19 +69,19 @@
 </script>
 
 {#if total > 0}
-  <section
-    class="flex flex-col overflow-hidden rounded-xl bg-card shadow-md"
+  <Card
+    class="flex flex-col gap-0 rounded-[var(--radius-panel)] py-0 shadow-md [--card-spacing:var(--space-4)]"
     aria-labelledby="attention-queue-heading"
   >
-    <header class="flex items-center gap-2 px-4 pt-4 pb-2">
+    <header class="flex items-center gap-[var(--space-1)] px-[var(--space-4)] pt-[var(--space-4)] pb-[var(--space-2)]">
       <h2 id="attention-queue-heading" class="text-body font-medium text-foreground">Needs you</h2>
-      <span
-        class="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-error/15 px-1.5
-               text-micro font-medium text-error tabular-nums"
+      <Badge
+        variant="secondary"
+        class="min-w-5 bg-error/15 px-1.5 text-error tabular-nums"
         aria-label="{total} {total === 1 ? 'session needs' : 'sessions need'} you"
       >
         {total}
-      </span>
+      </Badge>
     </header>
 
     <ul class="flex flex-col">
@@ -93,7 +95,7 @@
         <li
           tabindex="0"
           aria-label="{item.hostname}: {summary}"
-          class="flex flex-wrap items-start gap-x-3 gap-y-2 border-t border-border/60 px-4 py-3
+          class="flex flex-wrap items-start gap-x-[var(--space-3)] gap-y-[var(--space-2)] border-t border-border/60 px-[var(--space-4)] py-[var(--space-3)]
                  first:border-t-0 transition-colors duration-150 ease-out hover:bg-accent/40
                  focus-visible:bg-accent/50"
           onkeydown={(event) => onKeydown(event, item, isQuestion)}
@@ -124,7 +126,7 @@
           {#if !isQuestion}
             <!-- A phone gives the actions their own row rather than squeezing
                  the reason that made them necessary down to three words. -->
-            <div class="flex w-full shrink-0 items-center justify-end gap-1.5 sm:w-auto sm:pt-0.5">
+            <div class="flex w-full shrink-0 items-center justify-end gap-[var(--space-1)] sm:w-auto sm:pt-0.5">
               <Button size="sm" onclick={() => answer(item, 'allow')}>Allow</Button>
               <Button size="sm" variant="ghost" onclick={() => answer(item, 'deny')}>Deny</Button>
               <Button size="sm" variant="ghost" href="/session/{item.instanceId}">Open</Button>
@@ -133,5 +135,5 @@
         </li>
       {/each}
     </ul>
-  </section>
+  </Card>
 {/if}
