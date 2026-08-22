@@ -1,0 +1,190 @@
+<script lang="ts">
+  /**
+   * The floating composer — a lifted shell holding the text input, a context-%
+   * readout, and any inline permission / question prompts stacked above it. Home,
+   * this input, and Stop are the surface's fixed anchors; the button is a single
+   * box that sends when idle and interrupts while a turn is in flight. Ported
+   * from the mock's `.composer` / `.cin`.
+   */
+  import type { Snippet } from 'svelte';
+  import { IconSend, IconStop } from '$lib/icons';
+
+  let {
+    value = $bindable(''),
+    busy = false,
+    contextPct = null,
+    onsubmit,
+    onstop,
+    prompts,
+  }: {
+    value?: string;
+    busy?: boolean;
+    contextPct?: number | null;
+    onsubmit: (text: string) => void;
+    onstop: () => void;
+    prompts?: Snippet;
+  } = $props();
+
+  const canSend = $derived(value.trim().length > 0);
+
+  function submit(): void {
+    const text = value.trim();
+    if (!text) return;
+    value = '';
+    onsubmit(text);
+  }
+
+  function onkeydown(event: KeyboardEvent): void {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      submit();
+    }
+  }
+
+  function onaction(): void {
+    if (busy) onstop();
+    else submit();
+  }
+</script>
+
+<div class="fade"></div>
+<div class="composer">
+  {#if prompts}
+    <div class="prompts">{@render prompts()}</div>
+  {/if}
+  <form class="cin" onsubmit={(e) => e.preventDefault()} aria-label="Message the agent">
+    <textarea
+      bind:value
+      {onkeydown}
+      placeholder="Message the agent…"
+      aria-label="Message the agent"
+    ></textarea>
+    <div class="foot">
+      {#if contextPct !== null}
+        <span class="ctx" title="Context window used">{Math.round(contextPct)}% context</span>
+      {/if}
+      <span class="hint">Enter sends · Shift+Enter for a new line</span>
+      <button
+        class="stop"
+        type="button"
+        onclick={onaction}
+        disabled={!busy && !canSend}
+        aria-label={busy ? 'Stop the agent' : 'Send message'}
+      >
+        {#if busy}<IconStop />{:else}<IconSend />{/if}
+      </button>
+    </div>
+  </form>
+</div>
+
+<style>
+  .fade {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 96px;
+    pointer-events: none;
+    z-index: 19;
+    background: linear-gradient(
+      to top,
+      var(--surface-field) 22%,
+      oklch(from var(--surface-field) l c h / 0)
+    );
+  }
+  .composer {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 20;
+    bottom: calc(16px + env(safe-area-inset-bottom));
+    width: min(720px, calc(100% - 50px));
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    pointer-events: none;
+  }
+  .composer > :global(*) {
+    pointer-events: auto;
+  }
+  .prompts {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .cin {
+    border: 1px solid var(--border-control);
+    background: oklch(from var(--surface-raised) l c h / 0.82);
+    -webkit-backdrop-filter: blur(16px) saturate(1.6);
+    backdrop-filter: blur(16px) saturate(1.6);
+    border-radius: var(--radius-shell);
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    box-shadow: var(--shadow-lifted);
+  }
+  textarea {
+    border: 0;
+    outline: 0;
+    background: transparent;
+    resize: none;
+    font-family: var(--font-body);
+    font-size: 16px;
+    line-height: var(--leading-ui);
+    color: var(--ink-strong);
+    min-height: 34px;
+    max-height: 200px;
+    field-sizing: content;
+    min-width: 0;
+  }
+  textarea::placeholder {
+    color: var(--ink-muted);
+  }
+  .foot {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: var(--text-sm);
+    color: var(--ink-muted);
+  }
+  .ctx {
+    font-variant-numeric: tabular-nums;
+  }
+  .hint {
+    margin-left: auto;
+  }
+  .stop {
+    width: 34px;
+    height: 34px;
+    min-width: 34px;
+    border: 0;
+    border-radius: var(--radius-pill);
+    flex: 0 0 auto;
+    background: var(--brand-solid);
+    background-image: var(--gradient-action);
+    box-shadow: var(--shadow-action);
+    color: var(--on-brand);
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+  }
+  .stop :global(svg) {
+    width: 15px;
+    height: 15px;
+  }
+  .stop:disabled {
+    opacity: 0.45;
+    cursor: default;
+    box-shadow: none;
+    background-image: none;
+  }
+  @media (pointer: coarse) {
+    .stop {
+      width: 44px;
+      height: 44px;
+      min-width: 44px;
+      min-height: 44px;
+    }
+  }
+</style>

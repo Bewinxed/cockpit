@@ -1,89 +1,75 @@
 <script lang="ts">
   /**
-   * What a call printed, in the one well every expanded row uses: untinted, so
-   * a failed call's output stays as readable as a successful one's.
-   *
-   * Told what it is looking at, the same well is a code surface — coloured by
-   * its grammar, named by the file it came from, and copyable. Told nothing, it
-   * is the plain log it has always been: a copy button buys a log nothing, and
-   * a header over it would only be one more line to read past.
+   * The one code surface the console opens into — a tool result's output and a
+   * markdown fence share it. Colour rides on the token as a light/dark pair and
+   * CSS picks, so a theme switch repaints without tokenizing a line again; a
+   * grammar the highlighter does not carry falls back to a plain mono well.
    */
-  import { CopyButton } from '$lib/components/ui/copy-button';
-  import AgentCode from './AgentCode.svelte';
-  import { agentCodeLanguage } from './agent-code';
+  import {
+    agentCodeLanguage,
+    cachedTokens,
+    paintableTokens,
+    tokenize,
+    type AgentCodeTokenLines,
+    type AgentCodeTokens,
+  } from './agent-code';
 
-  interface Props {
-    text: string;
-    /** What the block is, when the row's sentence has not already said it. */
-    caption?: string;
-    /** Rendered mono, for a url or a path standing over its own output. */
-    captionIsMono?: boolean;
-    /** The grammar to paint `text` with; a word we have no grammar for stays plain. */
-    language?: string;
-    /** The file the text came from, named over it. */
-    filename?: string;
-    /** A gutter of line numbers, for a listing whose lines get cited. */
-    lineNumbers?: boolean;
-    /** On by default once there is code to copy; off for a plain log. */
-    copyable?: boolean;
-  }
+  let { text, language = undefined }: { text: string; language?: string | null } = $props();
 
-  let {
-    text,
-    caption,
-    captionIsMono = false,
-    language,
-    filename,
-    lineNumbers = false,
-    copyable,
-  }: Props = $props();
+  const lang = $derived(agentCodeLanguage(language));
 
-  const grammar = $derived(agentCodeLanguage(language));
-  const canCopy = $derived(copyable ?? Boolean(language || filename));
-  /** The file wins over the caption: it says the same thing, more precisely. */
-  const heading = $derived(filename ?? caption);
-  const header = $derived(Boolean(filename || language || canCopy));
+  let painted = $state<AgentCodeTokens | null>(null);
+
+  // The tokens that may paint right now: the ones in hand while a fresh batch is
+  // pending, so a streaming block stays coloured between frames.
+  const lines = $derived.by<AgentCodeTokenLines | null>(() => {
+    if (!lang) return null;
+    return paintableTokens(painted, text, lang) ?? cachedTokens(text, lang)?.lines ?? null;
+  });
+
+  $effect(() => {
+    if (!lang) return;
+    let live = true;
+    void tokenize(text, lang).then((result) => {
+      if (live) painted = result;
+    });
+    return () => {
+      live = false;
+    };
+  });
 </script>
 
-<div class="overflow-hidden rounded-lg bg-muted/50">
-  {#if header}
-    <div class="flex h-9 items-center gap-2 border-b border-border/50 px-3">
-      {#if heading}
-        <span
-          class="min-w-0 flex-1 truncate {filename || captionIsMono
-            ? 'font-mono text-micro text-muted-foreground'
-            : 'text-caption'}"
-          title={heading}
-        >
-          {heading}
-        </span>
-      {/if}
-      <div class="ml-auto flex shrink-0 items-center gap-2">
-        {#if language}
-          <span class="text-micro lowercase text-muted-foreground">{language}</span>
-        {/if}
-        {#if canCopy}
-          <CopyButton {text} size="icon-sm" class="-mr-1.5 text-muted-foreground" />
-        {/if}
-      </div>
-    </div>
+<div class="well">
+  {#if lines}
+    <pre><code
+        >{#each lines as line}<span class="ln"
+            >{#each line as token}<span
+                style="--l:{token.light ?? 'inherit'};--d:{token.dark ?? 'inherit'}"
+                >{token.content}</span
+              >{/each}{'\n'}</span
+          >{/each}</code
+      ></pre>
+  {:else}
+    <pre><code>{text}</code></pre>
   {/if}
-
-  <div class="max-h-[320px] overflow-auto p-3">
-    {#if caption && !header}
-      <div
-        class="mb-1.5 truncate {captionIsMono
-          ? 'font-mono text-micro text-muted-foreground'
-          : 'text-caption'}"
-        title={caption}
-      >
-        {caption}
-      </div>
-    {/if}
-    {#if grammar}
-      <AgentCode code={text} language={grammar} {lineNumbers} />
-    {:else}
-      <pre class="font-mono text-micro whitespace-pre-wrap break-all text-foreground">{text}</pre>
-    {/if}
-  </div>
 </div>
+
+<style>
+  .well {
+    background: var(--surface-sunken);
+    border-radius: var(--radius-well);
+    padding: 10px 12px;
+    overflow-x: auto;
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    line-height: var(--leading-body);
+    color: var(--ink-strong);
+  }
+  pre {
+    margin: 0;
+    white-space: pre;
+  }
+  .ln span {
+    color: light-dark(var(--l), var(--d));
+  }
+</style>
