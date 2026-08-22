@@ -12,3 +12,6 @@ export { default as StatCard } from './StatCard.svelte';
 export { default as TextField } from './TextField.svelte';
 export { default as FilterSelect } from './FilterSelect.svelte';
 export { default as Pagination } from './Pagination.svelte';
+export { default as Callout } from './Callout.svelte';
+export { default as Sheet } from './Sheet.svelte';
+export { default as Modal } from './Modal.svelte';

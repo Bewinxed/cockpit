@@ -10,9 +10,14 @@
     TextField,
     FilterSelect,
     Pagination,
+    Callout,
+    Sheet,
+    Modal,
+    Button as OpButton,
   } from '$lib/outpost';
 
   let page = $state(5);
+  let modalOpen = $state(false);
 </script>
 
 <div class="stage">
@@ -114,6 +119,43 @@
     <h2>Pagination</h2>
     <Pagination bind:page total={20} />
     <p class="muted" style="margin-top:8px">page {page}</p>
+  </section>
+
+  <section>
+    <h2>Callout</h2>
+    <div class="row" style="flex-direction:column;align-items:stretch;gap:12px;max-width:520px">
+      <Callout>
+        {#snippet icon()}<svg viewBox="0 0 24 24" fill="none"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>{/snippet}
+        This machine is offline — the session will queue until it reconnects.
+      </Callout>
+      <Callout danger>
+        {#snippet icon()}<svg viewBox="0 0 24 24" fill="none"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>{/snippet}
+        Deleting a session removes its transcript and permissions from the fleet.
+      </Callout>
+    </div>
+  </section>
+
+  <section>
+    <h2>Sheet</h2>
+    <Sheet title="Session actions">
+      <p>Hand off, rename, or archive this session.</p>
+    </Sheet>
+  </section>
+
+  <section>
+    <h2>Modal <span class="muted">— the priority component</span></h2>
+    <OpButton variant="primary" onclick={() => (modalOpen = true)}>Connect a machine</OpButton>
+    <Modal bind:open={modalOpen} title="Connect a machine" subtitle="Add a new host to the fleet over tailnet.">
+      <TextField label="Machine name" placeholder="e.g. nixbox" />
+      <Callout>
+        {#snippet icon()}<svg viewBox="0 0 24 24" fill="none"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>{/snippet}
+        The host must be reachable on your tailnet and running the agent daemon.
+      </Callout>
+      {#snippet footer()}
+        <OpButton onclick={() => (modalOpen = false)}>Cancel</OpButton>
+        <OpButton variant="primary" onclick={() => (modalOpen = false)}>Connect</OpButton>
+      {/snippet}
+    </Modal>
   </section>
 </div>
 
