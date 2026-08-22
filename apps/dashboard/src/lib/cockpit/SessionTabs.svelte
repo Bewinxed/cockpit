@@ -16,6 +16,7 @@
 
   interface Tab {
     id: string;
+    href: string;
     label: string;
     hue: ReturnType<typeof markHue>;
     glyph: string;
@@ -26,8 +27,16 @@
   const tabs = $derived.by((): Tab[] =>
     workingSet.order.map((id) => {
       const row = cockpit.instances.find((instance) => instance.id === id);
+      // A stored session addresses itself with its machine/cwd/harness; drop
+      // that and /session/{id} opens a different session with the same id. Live
+      // sessions have no context and are addressed by id alone.
+      const ctx = workingSet.contextOf(id);
+      const href = ctx
+        ? `/session/${id}?${new URLSearchParams({ machine: ctx.machine, cwd: ctx.cwd, harness: ctx.harness })}`
+        : `/session/${id}`;
       return {
         id,
+        href,
         label: row?.title?.trim() || row?.cwd.split('/').filter(Boolean).pop() || id.slice(0, 8),
         hue: markHue(row?.cwd || row?.machineId || id),
         glyph: harnessGlyphPath(row?.harness),
@@ -49,7 +58,7 @@
   {#each tabs as tab (tab.id)}
     {@const active = path === `/session/${tab.id}`}
     <div class="tab" class:on={active}>
-      <a class="tl" href="/session/{tab.id}" role="tab" aria-selected={active}>
+      <a class="tl" href={tab.href} role="tab" aria-selected={active}>
         <span class="tm m{tab.hue}" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
             <path d={tab.glyph} />

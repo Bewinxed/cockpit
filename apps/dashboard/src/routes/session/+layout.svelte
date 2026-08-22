@@ -62,7 +62,7 @@
     untrack(() => {
       // Being on screen is what puts a conversation in the working set — and
       // the set's own limit is what bounds how many panes are kept alive.
-      workingSet.visit(id);
+      workingSet.visit(id, { machine: machineId, cwd, harness });
       if (!panes.some((pane) => pane.id === id)) panes.push({ id, browsing: machineId, cwd, harness });
     });
   });

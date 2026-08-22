@@ -19,6 +19,23 @@ interface Visit {
   id: string;
   /** Only eviction reads this: the tab that goes is the coldest one. */
   at: number;
+  /**
+   * The browsing context a STORED session addresses itself with. Without it the
+   * tab link falls to `/session/{id}` with no machine, which resolves to a
+   * different (live, or another machine's) session that happens to share the id
+   * — so clicking the tab opened an unrelated conversation. Live sessions leave
+   * these undefined; their id alone addresses them.
+   */
+  machine?: string | null;
+  cwd?: string;
+  harness?: string;
+}
+
+/** The query a stored session's tab needs to rebuild the URL that opened it. */
+export interface VisitContext {
+  machine: string;
+  cwd: string;
+  harness: string;
 }
 
 const load = (): Visit[] => {
@@ -52,19 +69,28 @@ export const workingSet = {
     return visits.map((visit) => visit.id);
   },
 
-  /** Notes that a conversation is on screen. */
-  visit(id: string): void {
+  /** The browsing context a stored session's tab needs to rebuild its URL, or
+      null for a live session addressed by id alone. */
+  contextOf(id: string): VisitContext | null {
+    const visit = visits.find((v) => v.id === id);
+    if (!visit || !visit.machine) return null;
+    return { machine: visit.machine, cwd: visit.cwd ?? '', harness: visit.harness ?? 'claude' };
+  },
+
+  /** Notes that a conversation is on screen, keeping the browsing context a
+      stored session needs to be reopened from its tab. */
+  visit(id: string, ctx?: { machine?: string | null; cwd?: string; harness?: string }): void {
     if (!id) return;
     const at = Date.now();
     const existing = visits.findIndex((visit) => visit.id === id);
     // Coming back to a tab only re-dates it. Moving it is the re-rank this
     // ordering exists to be rid of.
     if (existing !== -1) {
-      visits[existing] = { id, at };
+      visits[existing] = { ...visits[existing], id, at, ...(ctx ?? {}) };
       save();
       return;
     }
-    visits.push({ id, at });
+    visits.push({ id, at, ...(ctx ?? {}) });
     // The coldest tab makes room; everything else keeps the place it had.
     if (visits.length > LIMIT) {
       let coldest = 0;
