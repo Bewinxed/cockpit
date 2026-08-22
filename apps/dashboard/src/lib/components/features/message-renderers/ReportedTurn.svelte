@@ -15,6 +15,7 @@
   const peerName = $derived(message.metadata?.peerName);
   const reportKind = $derived(message.metadata?.reportKind);
   const failed = $derived(reportKind === 'failed');
+  const peerSession = $derived(message.metadata?.peerSession);
 </script>
 
 <div class="reported">
@@ -34,6 +35,9 @@
         Handed over by {peerName ?? 'another session'}
       {/if}
     </span>
+    {#if peerSession}
+      <a class="open" href="/session/{peerSession}">Open it</a>
+    {/if}
   </div>
   <div class="quoted">
     {@render body?.()}
@@ -59,6 +63,18 @@
   .who {
     font-size: var(--text-sm);
     color: var(--ink-muted);
+  }
+  .open {
+    margin-left: auto;
+    flex: 0 0 auto;
+    font-size: var(--text-xs);
+    color: var(--ink-muted);
+    text-decoration: none;
+    text-underline-offset: 2px;
+  }
+  .open:hover {
+    color: var(--ink-body);
+    text-decoration: underline;
   }
   .quoted {
     color: var(--ink-body);
