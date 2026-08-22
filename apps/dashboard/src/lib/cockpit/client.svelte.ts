@@ -2695,6 +2695,23 @@ export const cockpit = {
    * every session while its transcript frames only flow to a watcher.
    */
   pulseAt: (instanceId: string): number | undefined => state.pulses[instanceId]?.at,
+  /**
+   * The ledger stats the fleet table shows per session — turns, context %, cost.
+   * Only populated for a session this browser has state for (subscribed / a turn
+   * has closed); `null` otherwise, which the table renders as an em dash.
+   */
+  statsOf: (
+    instanceId: string
+  ): { turns: number | null; contextPct: number | null; cost: number | null } => {
+    const t = state.sessions[instanceId];
+    if (!t) return { turns: null, contextPct: null, cost: null };
+    const turns = t.messages.filter((m) => m.type === 'assistant').length;
+    return {
+      turns: turns > 0 ? turns : null,
+      contextPct: t.context?.percentage ?? null,
+      cost: t.totalCost ?? null,
+    };
+  },
   /** What a session offers behind `/`, grouped the way the palette lists it. */
   commandsOf: (instanceId: string): AvailableCommand[] => {
     const target = state.sessions[instanceId];

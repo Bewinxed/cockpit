@@ -1,617 +1,640 @@
 <script lang="ts">
   /**
-   * The fleet board — what every machine and project is running, and what needs
-   * a human. Kept alive by `session/+layout.svelte` alongside the conversation
-   * panes rather than mounted by a route of its own: Fleet is the first tab in
-   * the strip, so leaving it is switching tabs, and coming back should find the
-   * board where it was left rather than rebuilt and re-animated.
+   * The fleet board — every session across every machine as one ledger table,
+   * with the four counts that say whether the fleet needs you above it.
+   * Ported from mocks/v2-fleet.html (`<main>`): stat row, filter bar, the
+   * eight-column table, pagination.
+   *
+   * Live and stored sessions are the same kind of row here. A stored session
+   * whose transcript is already running somewhere is dropped — the live row is
+   * the same conversation, and it is the one that can still be spoken to.
    */
-  import {
-    IconChevronRight,
-    IconPlus,
-  } from '$lib/icons';
-  import { onMount, untrack, type Snippet } from 'svelte';
-  import { fly, slide } from 'svelte/transition';
-  import { flip } from 'svelte/animate';
-  import { quintOut } from 'svelte/easing';
-  import { MediaQuery } from 'svelte/reactivity';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import type { SDKSessionInfo } from '@cockpit/core';
   import {
-    cockpit,
-    hubSocketUrl,
-    reconnectNow,
-    type InstanceRow,
-    type ProjectRow,
-  } from '$lib/cockpit/client.svelte';
-  import FolderMenu from '$lib/cockpit/FolderMenu.svelte';
-  import LiveSessionRow from '$lib/cockpit/LiveSessionRow.svelte';
-  import MachineMenu from '$lib/cockpit/MachineMenu.svelte';
-  import OsMark from '$lib/cockpit/OsMark.svelte';
-  import StoredSessionRow from '$lib/cockpit/StoredSessionRow.svelte';
-  import AttentionQueue from '$lib/cockpit/AttentionQueue.svelte';
-  import FleetFilter, { type FleetFilterValue } from '$lib/cockpit/FleetFilter.svelte';
-  import PeekPane, { type PeekTarget } from '$lib/cockpit/PeekPane.svelte';
+    Button,
+    FilterSelect,
+    ItemMark,
+    Pagination,
+    StatCard,
+    StatusPill,
+    TextField,
+  } from '$lib/outpost';
   import SpawnPanel from '$lib/cockpit/SpawnPanel.svelte';
-  import { identityVar } from '$lib/cockpit/folder-prefs.svelte';
-  import { transcriptHref } from '$lib/cockpit/links';
-  import { refreshTasks } from '$lib/cockpit/tasks.svelte';
-  import { machineLabel, machineOs } from '$lib/cockpit/machine';
-  import { isTyping } from '$lib/utils/typing';
-  import { Button } from '$lib/components/ui/button';
-  import { ItemMark } from '$lib/outpost';
-  import { markHue } from '$lib/cockpit/mark';
-  import * as Collapsible from '$lib/components/ui/collapsible';
+  import {
+    cockpit,
+    isFailed,
+    isResumable,
+    reconnectNow,
+    resumeSession,
+    setPeeked,
+    type InstanceRow,
+  } from './client.svelte';
+  import { markHue, harnessGlyphPath, type MarkHue } from './mark';
+  import { machineLabel } from './machine';
+  import { sessionTitle, transcriptHref } from './links';
+  import { formatDistanceToNow } from '$lib/utils/time';
+  import {
+    IconDownload,
+    IconExternal,
+    IconHistory,
+    IconMaximize,
+    IconPlay,
+    IconPlus,
+    IconSearch,
+  } from '$lib/icons';
 
-  interface Props {
-    /** Whether the board is the tab on screen. The keyboard belongs to that
-     *  one; hidden, it only keeps its place. */
-    active: boolean;
+  let { active }: { active: boolean } = $props();
+
+  const PAGE_SIZE = 12;
+
+  type PillStatus = 'live' | 'attn' | 'fail' | 'idle';
+
+  interface Row {
+    key: string;
+    title: string;
+    machineId: string;
+    machine: string;
+    harness: string;
+    harnessLabel: string;
+    hue: MarkHue;
+    glyph: string;
+    status: PillStatus;
+    stateLabel: string;
+    turns: number | null;
+    contextPct: number | null;
+    cost: number | null;
+    at: number | undefined;
+    href: string;
+    instance: InstanceRow | null;
+    stored: SDKSessionInfo | null;
+    cwd: string;
   }
 
-  let { active }: Props = $props();
-
-  /** Groups the fleet board shows: a project, or a machine with ungrouped sessions. */
-  type BoardGroup =
-    | { kind: 'project'; project: ProjectRow; live: InstanceRow[]; stored: SDKSessionInfo[] }
-    | { kind: 'machine'; machineId: string; hostname: string; os: string; live: InstanceRow[]; stored: SDKSessionInfo[] };
-
-  const groups = $derived.by((): BoardGroup[] => {
-    const result: BoardGroup[] = [];
-    const claimed = new Set<string>();
-
-    for (const project of cockpit.projects) {
-      const live = cockpit.liveIn(project);
-      const stored = cockpit.storedIn(project);
-      if (live.length === 0 && stored.length === 0) continue;
-      for (const row of live) claimed.add(row.id);
-      result.push({ kind: 'project', project, live, stored });
+  function harnessLabelOf(harness: string): string {
+    switch (harness) {
+      case 'claude':
+        return 'Claude Code';
+      case 'opencode':
+        return 'OpenCode';
+      case 'pi':
+        return 'pi';
+      default:
+        return harness;
     }
-
-    for (const machine of cockpit.machines) {
-      const allLive = cockpit.listedOn(machine.machineId);
-      const live = allLive.filter((row) => !claimed.has(row.id));
-      const stored = cockpit.catalogOf(machine.machineId);
-      if (live.length === 0 && stored.length === 0) continue;
-      result.push({
-        kind: 'machine',
-        machineId: machine.machineId,
-        hostname: machine.hostname,
-        os: machine.os,
-        live,
-        stored,
-      });
-    }
-
-    return result;
-  });
-
-  let filter = $state<FleetFilterValue>('all');
-
-  /**
-   * The sessions the attention queue would list: parked on a permission or a
-   * question, i.e. something with an answer the user can give. A failed session
-   * has nothing to answer, so it is never here — its row already paints red.
-   */
-  const needsYou = $derived(new Set(cockpit.blocked.map((item) => item.instanceId)));
-
-  /**
-   * Which chip a row answers to. A sleeping session is at rest, so it is idle.
-   * A filter must agree with the reader's eyes, so any row whose dot paints
-   * red files under "Needs you" — including a delegate whose ask is routed to
-   * its parent and therefore absent from the queue above. The chip's count can
-   * exceed the queue's on purpose: the queue lists what is yours to answer,
-   * the chip gathers what looks blocked.
-   */
-  function statusOf(row: InstanceRow): Exclude<FleetFilterValue, 'all'> {
-    if (needsYou.has(row.id)) return 'needs-you';
-    const activity = cockpit.activityOf(row.id);
-    if (activity === 'blocked') return 'needs-you';
-    return activity === 'working' ? 'working' : 'idle';
   }
 
-  const counts = $derived.by((): Record<FleetFilterValue, number> => {
-    const tally: Record<FleetFilterValue, number> = {
-      all: 0,
-      working: 0,
-      'needs-you': 0,
-      idle: 0,
-    };
-    for (const group of groups) {
-      for (const row of group.live) {
-        tally.all += 1;
-        tally[statusOf(row)] += 1;
-      }
+  function liveState(instance: InstanceRow): { status: PillStatus; label: string } {
+    if (isFailed(instance)) return { status: 'fail', label: 'Failed' };
+    switch (cockpit.activityOf(instance.id)) {
+      case 'blocked':
+        return { status: 'attn', label: 'Needs you' };
+      case 'working':
+        return { status: 'live', label: 'Working' };
+      default:
+        return { status: 'idle', label: 'Idle' };
     }
-    return tally;
+  }
+
+  const rows = $derived.by<Row[]>(() => {
+    const live = cockpit.runningInstances.map((instance): Row => {
+      const stats = cockpit.statsOf(instance.id);
+      const state = liveState(instance);
+      const machine = cockpit.machines.find((m) => m.machineId === instance.machineId);
+      const harness = instance.harness ?? 'claude';
+      return {
+        key: instance.id,
+        title: instance.title ?? 'untitled session',
+        machineId: instance.machineId,
+        machine: machine ? machineLabel(machine.hostname) : instance.machineId,
+        harness,
+        harnessLabel: harnessLabelOf(harness),
+        hue: markHue(instance.cwd || instance.machineId),
+        glyph: harnessGlyphPath(harness),
+        status: state.status,
+        stateLabel: state.label,
+        turns: stats.turns,
+        contextPct: stats.contextPct,
+        cost: stats.cost,
+        at: cockpit.pulseAt(instance.id),
+        href: `/session/${instance.id}`,
+        instance,
+        stored: null,
+        cwd: instance.cwd,
+      };
+    });
+
+    const running = new Set(live.map((row) => row.instance?.sessionId).filter(Boolean));
+    const stored = cockpit.machines.flatMap((machine) =>
+      cockpit
+        .catalogOf(machine.machineId)
+        .filter((info) => !running.has(info.sessionId))
+        .map(
+          (info): Row => ({
+            key: `${machine.machineId}:${info.sessionId}`,
+            title: sessionTitle(info),
+            machineId: machine.machineId,
+            machine: machineLabel(machine.hostname),
+            harness: info.harness,
+            harnessLabel: harnessLabelOf(info.harness),
+            hue: markHue(info.cwd || machine.machineId),
+            glyph: harnessGlyphPath(info.harness),
+            status: 'idle',
+            stateLabel: 'Idle',
+            turns: null,
+            contextPct: null,
+            cost: null,
+            at: info.lastModified,
+            href: transcriptHref(machine.machineId, info),
+            instance: null,
+            stored: info,
+            cwd: info.cwd ?? '',
+          })
+        )
+    );
+
+    return [...live, ...stored].sort((a, b) => (b.at ?? 0) - (a.at ?? 0));
   });
 
-  /**
-   * The board under the chosen chip. Stored transcripts are history rather than
-   * state, so a filter about what a session is doing right now leaves them out
-   * entirely — and a group with nothing left folds away rather than standing as
-   * a header over nothing.
-   */
-  const shown = $derived.by((): BoardGroup[] => {
-    if (filter === 'all') return groups;
-    const kept: BoardGroup[] = [];
-    for (const group of groups) {
-      const live = group.live.filter((row) => statusOf(row) === filter);
-      if (live.length === 0) continue;
-      kept.push({ ...group, live, stored: [] });
-    }
-    return kept;
-  });
-
-  /**
-   * One chip row over a fleet that is all one state filters nothing, so it is
-   * not there — and once the reader has chosen, it stays, or there is no way
-   * back to the whole board.
-   */
-  const showFilter = $derived(
-    [counts.working, counts['needs-you'], counts.idle].filter((count) => count > 0).length >= 2 ||
-      filter !== 'all'
+  const spend = $derived(
+    cockpit.runningInstances.reduce((sum, row) => sum + (cockpit.statsOf(row.id).cost ?? 0), 0)
   );
 
-  /**
-   * The board reflows in JS — Svelte's transitions and `flip` both are — so the
-   * reduced-motion setting has to be asked in JS. Clamped to one beat rather
-   * than zeroed: the setting asks for stillness, not for instant swaps.
-   */
-  const calm = new MediaQuery('prefers-reduced-motion: reduce');
-  const enterMs = $derived(calm.current ? 120 : 240);
-  const exitMs = $derived(calm.current ? 120 : 160);
+  /* ---- filters ------------------------------------------------------- */
 
-  const stale = $derived(cockpit.staleInstances);
-  let showStale = $state(false);
+  let search = $state('');
+  /** '' is "All machines"; otherwise a machineId. Cycled by the select. */
+  let machineFilter = $state('');
+  const STATES: { value: PillStatus | ''; label: string }[] = [
+    { value: '', label: 'All states' },
+    { value: 'live', label: 'Working' },
+    { value: 'attn', label: 'Needs you' },
+    { value: 'idle', label: 'Idle' },
+  ];
+  let stateFilter = $state(0);
+  let pageNo = $state(1);
 
-  let entering = $state(true);
-  onMount(() => {
-    const timer = setTimeout(() => (entering = false), 800);
-    return () => clearTimeout(timer);
-  });
+  const machineName = $derived(
+    machineFilter
+      ? (rows.find((row) => row.machineId === machineFilter)?.machine ?? machineFilter)
+      : 'All machines'
+  );
 
-  /**
-   * One sweep of the fleet's task ledgers, so the rows can draw their rings —
-   * the board asks, not the rows, or a card of thirty sessions is thirty round
-   * trips in the same frame. Each session is asked once and the `Task*` frames
-   * keep it current from there; the registry arrives after the board mounts and
-   * grows as sessions start, so this re-arms on the list rather than on mount.
-   */
-  const swept = new Set<string>();
+  function cycleMachine() {
+    const ids = cockpit.machines.map((machine) => machine.machineId);
+    const next = ids.indexOf(machineFilter) + 1;
+    machineFilter =
+      next > 0 && next < ids.length ? ids[next] : machineFilter ? '' : (ids[0] ?? '');
+    pageNo = 1;
+  }
+
+  function cycleState() {
+    stateFilter = (stateFilter + 1) % STATES.length;
+    pageNo = 1;
+  }
+
+  const filtered = $derived(
+    rows.filter((row) => {
+      const needle = search.trim().toLowerCase();
+      if (needle && !row.title.toLowerCase().includes(needle)) return false;
+      if (machineFilter && row.machineId !== machineFilter) return false;
+      const want = STATES[stateFilter].value;
+      if (want && row.status !== want) return false;
+      return true;
+    })
+  );
+
+  const pageCount = $derived(Math.max(1, Math.ceil(filtered.length / PAGE_SIZE)));
+  const paged = $derived(filtered.slice((pageNo - 1) * PAGE_SIZE, pageNo * PAGE_SIZE));
+
+  // A filter that shrinks the list out from under the current page leaves it
+  // showing nothing at all; the first page always has rows.
   $effect(() => {
-    const live = cockpit.runningInstances;
-    untrack(() => {
-      let delay = 0;
-      for (const instance of live) {
-        if (swept.has(instance.id)) continue;
-        swept.add(instance.id);
-        setTimeout(() => refreshTasks(instance.id), delay);
-        delay += 100;
-      }
-    });
+    if (pageNo > pageCount) pageNo = 1;
   });
+
+  /* ---- actions ------------------------------------------------------- */
 
   let spawnOpen = $state(false);
-  let spawnPrefill = $state<{ machineId?: string; cwd?: string; projectId?: string } | undefined>(undefined);
+  let spawnPrefill = $state<{ machineId?: string; cwd?: string } | undefined>(undefined);
 
-  function openSpawn(prefill?: typeof spawnPrefill) {
-    spawnPrefill = prefill;
+  // "Spawn here" from anywhere else in the app arrives as a query on the board's
+  // own URL. It is consumed once and cleared, so a reload is not a second spawn.
+  $effect(() => {
+    if (!active) return;
+    const machineId = page.url.searchParams.get('machine');
+    if (!machineId) return;
+    spawnPrefill = { machineId, cwd: page.url.searchParams.get('cwd') ?? undefined };
+    spawnOpen = true;
+    void goto('/session', { replaceState: true });
+  });
+
+  function startSession() {
+    spawnPrefill = undefined;
     spawnOpen = true;
   }
 
-  /**
-   * "New session on this machine", wherever it is asked from — the rail's machine
-   * menu, the jump palette — is a link to `/session?machine=<id>`, and the board
-   * is where that lands, so the board is what has to answer it. The params are
-   * consumed once and then swapped out of the URL: left there, a refresh or a
-   * return to this tab re-opens a panel the reader already dismissed. The board
-   * is kept alive across tab switches, so this reacts to the URL rather than to
-   * mounting, and the latch is what keeps one arrival from being read twice.
-   */
-  let consumed = $state.raw<string | null>(null);
-  $effect(() => {
-    if (!active || page.params.id) return;
-    const url = page.url.href;
-    const machineId = page.url.searchParams.get('machine');
-    const cwd = page.url.searchParams.get('cwd');
-    untrack(() => {
-      if (!machineId || consumed === url) return;
-      consumed = url;
-      openSpawn({ machineId, cwd: cwd ?? undefined });
-      void goto('/session', { replaceState: true, keepFocus: true, noScroll: true });
+  function resume(row: Row) {
+    const sessionId = row.instance?.sessionId ?? row.stored?.sessionId;
+    if (!sessionId) return;
+    const id = resumeSession({
+      machineId: row.machineId,
+      cwd: row.cwd,
+      sessionId,
+      harness: row.harness as never,
     });
-  });
-
-  const machineCount = $derived(cockpit.machines.length);
-  const onlineCount = $derived(cockpit.onlineMachines.length);
-
-  /**
-   * Past this width the board has room to keep a session open beside it, so a
-   * click stops being a navigation: one click peeks, Enter or a double-click
-   * dives. Below it there is nowhere to peek into, so a row is only a link.
-   */
-  const roomForPeek = new MediaQuery('min-width: 1920px');
-
-  let peeked = $state<PeekTarget | null>(null);
-  $effect(() => {
-    if (!roomForPeek.current) peeked = null;
-  });
-
-  const liveTarget = (instance: InstanceRow): PeekTarget => ({
-    viewId: instance.id,
-    href: `/session/${instance.id}`,
-  });
-
-  const storedTarget = (machineId: string, info: SDKSessionInfo): PeekTarget => ({
-    viewId: info.sessionId,
-    href: transcriptHref(machineId, info),
-    browsing: { machineId, cwd: info.cwd ?? '' },
-  });
-
-  /** A modified click is the reader asking their browser for a tab, not a peek. */
-  function peek(event: MouseEvent, target: PeekTarget): void {
-    if (!roomForPeek.current || event.metaKey || event.ctrlKey || event.shiftKey) return;
-    event.preventDefault();
-    peeked = target;
+    void goto(`/session/${id}`);
   }
 
-  function dive(target: PeekTarget): void {
-    if (!roomForPeek.current) return;
-    peeked = target;
-    void goto(target.href);
+  function exportCsv() {
+    const head = ['Session', 'Machine', 'Harness', 'Turns', 'Context', 'Last activity', 'State'];
+    const cell = (value: string) => `"${value.replaceAll('"', '""')}"`;
+    const body = filtered.map((row) =>
+      [
+        row.title,
+        row.machine,
+        row.harnessLabel,
+        row.turns === null ? '' : String(row.turns),
+        row.contextPct === null ? '' : `${Math.round(row.contextPct)}%`,
+        row.at ? new Date(row.at).toISOString() : '',
+        row.stateLabel,
+      ]
+        .map(cell)
+        .join(',')
+    );
+    const blob = new Blob([[head.map(cell).join(','), ...body].join('\n')], {
+      type: 'text/csv;charset=utf-8',
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'fleet-sessions.csv';
+    link.click();
+    URL.revokeObjectURL(url);
   }
 
-  function onKeydown(event: KeyboardEvent): void {
-    // The board is one of several tabs kept mounted at once; only the one on
-    // screen answers for the keyboard.
-    if (!active || !peeked || isTyping()) return;
-    if (event.key === 'Escape') {
-      peeked = null;
-      return;
-    }
-    // A row that has the focus is a link and opens itself; this is for a peek
-    // made with the pointer, where nothing on the board holds the key.
-    if (event.key === 'Enter' && !(document.activeElement instanceof HTMLAnchorElement)) {
-      event.preventDefault();
-      void goto(peeked.href);
-    }
-  }
+  /* ---- cells --------------------------------------------------------- */
+
+  const contextClass = (pct: number | null) =>
+    pct === null ? '' : pct >= 90 ? 'bad' : pct >= 70 ? 'warn' : '';
 </script>
 
-<svelte:window onkeydown={onKeydown} />
+<div class="board">
+  <div class="inner">
+    <div class="head">
+      <div>
+        <h1>Fleet</h1>
+        <p>Every agent across your machines, and what needs you.</p>
+      </div>
+      <Button variant="primary" onclick={startSession}>
+        <IconPlus />
+        Start session
+      </Button>
+    </div>
 
-<!-- A board row stays the link it always was; where there is a pane to peek
-     into, the wrapper takes the click off it and marks the one being shown.
-     Selection is a pill so it is not mistaken for the hover band under it. -->
-{#snippet peekable(target: PeekTarget, row: Snippet)}
-  <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div
-    class="transition-colors duration-150 ease-out {peeked?.viewId === target.viewId
-      ? 'overflow-hidden rounded-full bg-accent font-medium text-accent-foreground'
-      : 'rounded-lg'}"
-    onclick={(event) => peek(event, target)}
-    ondblclick={() => dive(target)}
-  >
-    {@render row()}
-  </div>
-{/snippet}
+    <div class="stats">
+      <StatCard label="Sessions" value={cockpit.runningInstances.length} />
+      <StatCard label="Needs you" value={cockpit.blocked.length} />
+      <StatCard
+        label="Machines"
+        value={cockpit.onlineMachines.length}
+        unit="of {cockpit.machines.length}"
+      />
+      <StatCard label="Spend today" value="${spend.toFixed(2)}" />
+    </div>
 
-<div class="flex min-h-0 flex-1">
-  <div class="min-w-0 flex-1 overflow-y-auto p-4 sm:p-6">
-    <div class="mx-auto flex max-w-5xl flex-col gap-5 2xl:max-w-none">
-      <!-- Page header -->
-      <header class="flex items-center gap-3">
-        <h1 class="text-title">Fleet</h1>
-        {#if cockpit.hub === 'connecting'}
-          <span class="text-caption">connecting to the hub…</span>
-        {/if}
-        <!-- Machines, and only machines: the board's cards are projects too, so a
-             bare "2/2" over three of them read as a count of what is on screen.
-             A hub the board cannot reach knows no machines, so the count is not
-             a fact about the fleet and is not stated as one. -->
-        {#if cockpit.hub !== 'unreachable'}
-          <span class="text-micro text-muted-foreground">
-            {onlineCount} of {machineCount} machine{machineCount === 1 ? '' : 's'} online
-          </span>
-        {/if}
-        <!-- The thumb bar owns this verb on a phone; two of it on one 390pt
-             screen is the same duplication the rail's pill was. -->
-        <div class="ml-auto hidden sm:block">
-          <Button size="sm" class="pressable" onclick={() => openSpawn()}>
+    <div class="panel">
+      {#if cockpit.hub === 'unreachable'}
+        <div class="empty">
+          <b>Can't reach the hub</b>
+          <p>Nothing on the fleet can be read until the connection is back.</p>
+          <Button onclick={() => reconnectNow()}>Retry</Button>
+        </div>
+      {:else if cockpit.machines.length === 0}
+        <div class="empty">
+          <b>No machines yet</b>
+          <p>Run <code>cockpit</code> on a machine and it joins this board by itself.</p>
+        </div>
+      {:else if rows.length === 0}
+        <div class="empty">
+          <b>{cockpit.onlineMachines.length} machines online, no sessions running.</b>
+          <Button variant="primary" onclick={startSession}>
             <IconPlus />
-            New session
+            Start session
           </Button>
         </div>
-      </header>
+      {:else}
+        <div class="bar">
+          <TextField
+            class="search"
+            bind:value={search}
+            placeholder="Search sessions…"
+            aria-label="Search sessions"
+            oninput={() => (pageNo = 1)}
+          >
+            {#snippet lead()}<IconSearch />{/snippet}
+          </TextField>
+          <FilterSelect label={machineName} onclick={cycleMachine} />
+          <FilterSelect label={STATES[stateFilter].label} onclick={cycleState} />
+          <FilterSelect label="Last active" />
+          <Button class="exp" onclick={exportCsv}>
+            <IconDownload />
+            Export CSV
+          </Button>
+        </div>
 
-      <!-- Attention queue -->
-      <AttentionQueue />
-
-      <!-- What the board is showing. A view state, not an action: the chips
-           wear the kit's quiet toggle fill rather than the olive, which means
-           "this acts on the fleet". -->
-      {#if showFilter}
-        <FleetFilter {counts} value={filter} onchange={(next) => (filter = next)} />
-      {/if}
-
-      <!-- Session board: groups -->
-      {#if shown.length > 0}
-        <!-- `auto-fit`, not `auto-fill`: an ultrawide fills with empty tracks under
-             `auto-fill` and pins three cards to 480px against a bare half-screen.
-             Collapsed instead, the cards take the width they are given. -->
-        <div
-          class="grid grid-cols-1 gap-4 md:grid-cols-[repeat(auto-fit,minmax(480px,1fr))]
-                 2xl:grid-cols-[repeat(auto-fit,minmax(620px,1fr))]"
-        >
-          {#each shown as group, index (group.kind === 'project' ? `p-${group.project.id}` : `m-${group.machineId}`)}
-            {@const live = group.live}
-            {@const stored = group.stored}
-            {@const groupCwd = group.kind === 'project' ? group.project.cwd : undefined}
-            {@const storedPreview = stored.slice(0, 5)}
-            {@const hasMore = stored.length > 5}
-            <section
-              class="flex flex-col"
-              style="border-radius:var(--radius-panel);background:var(--surface-raised);box-shadow:var(--shadow-lifted)"
-              animate:flip={{ duration: enterMs, easing: quintOut }}
-              in:fly={{
-                y: 6,
-                duration: entering ? enterMs : 0,
-                delay: entering ? index * 60 : 0,
-                easing: quintOut,
-              }}
-            >
-              <!-- Group header. A project card reads like a machine card — icon
-                   slot, name, one meta line — so the board has one header to
-                   learn rather than two. -->
-              {#if group.kind === 'project'}
-                {@const count = live.length + stored.length}
-                <!-- Header shares the rows' max-w-3xl measure: one right edge
-                     per card at ultrawide, not two (finish-review finding). -->
-                <FolderMenu
-                  name={group.project.name}
-                  cwd={group.project.cwd}
-                  project={group.project}
-                  onnew={() => openSpawn({ machineId: group.project.machineId, cwd: group.project.cwd, projectId: group.project.id })}
-                >
-                  <div class="flex max-w-3xl items-center gap-3 px-4 py-3">
-                    <!-- The project's own hue and mark, the same ones its folder
-                         wears in the rail: the card is recognisable before it is
-                         read. -->
-                    <span
-                      class="flex shrink-0 items-center justify-center"
-                      style="--c-mark:20px;--c-mark-glyph:12px"
-                    >
-                      <ItemMark hue={markHue(group.project.cwd)}>
+        <div class="tscroll">
+          <table>
+            <thead>
+              <tr>
+                <th class="s-name">Session</th>
+                <th>Machine</th>
+                <th>Harness</th>
+                <th class="num">Turns</th>
+                <th class="num">Context</th>
+                <th>Last activity</th>
+                <th>State</th>
+                <th class="s-act">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {#each paged as row (row.key)}
+                <tr>
+                  <td>
+                    <div class="nm">
+                      <ItemMark hue={row.hue}>
                         <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
                           <path
-                            d="M3 7a2 2 0 0 1 2-2h3.6l1.6 2H19a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"
+                            d={row.glyph}
                             stroke="currentColor"
-                            stroke-width="1.6"
+                            stroke-linecap="round"
                             stroke-linejoin="round"
                           />
                         </svg>
                       </ItemMark>
-                    </span>
-                    <div class="min-w-0 flex-1">
-                      <span class="text-sm font-semibold">{group.project.name}</span>
-                      <span class="block truncate font-mono text-micro text-muted-foreground">{group.project.cwd}</span>
+                      <a href={row.href}>{row.title}</a>
                     </div>
-                    <span
-                      class="identity-tint shrink-0 rounded-full px-2 py-0.5 text-micro text-muted-foreground tabular-nums"
-                      style={identityVar(group.project.cwd)}
-                      data-tabular
-                    >
-                      {count} session{count === 1 ? '' : 's'}
+                  </td>
+                  <td class="mut">{row.machine}</td>
+                  <td class="mut">{row.harnessLabel}</td>
+                  <td class="num">{row.turns ?? '—'}</td>
+                  <td class="num {contextClass(row.contextPct)}">
+                    {row.contextPct === null ? '—' : `${Math.round(row.contextPct)}%`}
+                  </td>
+                  <td>
+                    <span class="when">
+                      <IconHistory />
+                      {row.at ? formatDistanceToNow(new Date(row.at)) : '—'}
                     </span>
-                    <button
-                      type="button"
-                      class="flex size-8 items-center justify-center rounded-lg text-muted-foreground
-                        transition-colors hover:bg-accent hover:text-foreground"
-                      title="New session in {group.project.name}"
-                      onclick={() => openSpawn({ machineId: group.project.machineId, cwd: group.project.cwd, projectId: group.project.id })}
-                    >
-                      <IconPlus class="size-4" />
-                    </button>
-                  </div>
-                </FolderMenu>
-              {:else}
-                {@const osInfo = machineOs(group.os)}
-                {@const machine = cockpit.machines.find((m) => m.machineId === group.machineId)}
-                {@const count = live.length + stored.length}
-                {#if machine}
-                  <!-- The whole header answers the right button, not just the
-                       name in it: a menu you have to hit a 20px glyph for is
-                       one nobody finds. -->
-                  <MachineMenu {machine}>
-                    <div class="flex max-w-3xl items-center gap-3 px-4 py-3">
-                      <OsMark os={group.os} class="size-5 shrink-0 text-muted-foreground" />
-                      <div class="min-w-0 flex-1">
-                        <span class="text-sm font-semibold">{machineLabel(group.hostname)}</span>
-                        <span class="block text-micro text-muted-foreground">{osInfo.label}{osInfo.arch ? ` ${osInfo.arch}` : ''}</span>
-                      </div>
-                      <span class="shrink-0 text-micro text-muted-foreground tabular-nums" data-tabular>
-                        {count} session{count === 1 ? '' : 's'}
-                      </span>
-                      <button
-                        type="button"
-                        class="flex size-8 items-center justify-center rounded-lg text-muted-foreground
-                          transition-colors hover:bg-accent hover:text-foreground"
-                        title="New session on {machineLabel(group.hostname)}"
-                        onclick={() => openSpawn({ machineId: group.machineId })}
-                      >
-                        <IconPlus class="size-4" />
-                      </button>
+                  </td>
+                  <td>
+                    <StatusPill status={row.status}>{row.stateLabel}</StatusPill>
+                  </td>
+                  <td>
+                    <div class="act">
+                      <Button size="icon-sm" href={row.href} aria-label="Open {row.title}">
+                        <IconExternal />
+                      </Button>
+                      {#if row.instance}
+                        <Button
+                          size="icon-sm"
+                          aria-label="Peek {row.title}"
+                          onclick={() => setPeeked(row.instance!.id)}
+                        >
+                          <IconMaximize />
+                        </Button>
+                      {/if}
+                      {#if row.stored || (row.instance && isResumable(row.instance))}
+                        <Button
+                          size="icon-sm"
+                          aria-label="Resume {row.title}"
+                          onclick={() => resume(row)}
+                        >
+                          <IconPlay />
+                        </Button>
+                      {/if}
                     </div>
-                  </MachineMenu>
-                {/if}
-              {/if}
-
-              <!-- Live sessions -->
-              <div class="flex flex-col">
-                {#each live as instance (instance.id)}
-                  {#snippet liveRow()}
-                    <LiveSessionRow {instance} {groupCwd} />
-                  {/snippet}
-                  <!-- A row leaves by collapsing so the rows under it follow it
-                       up; the rows already on the page when the board paints
-                       arrive with their card and announce nothing. -->
-                  <div
-                    in:fly={{ y: -8, duration: entering ? 0 : enterMs, easing: quintOut }}
-                    out:slide={{ duration: exitMs, easing: quintOut }}
-                  >
-                    {@render peekable(liveTarget(instance), liveRow)}
-                  </div>
-                {:else}
-                  {#if stored.length === 0}
-                    <p class="px-4 pb-3 text-caption">
-                      No sessions yet.
-                      <button
-                        type="button"
-                        class="text-primary hover:underline"
-                        onclick={() => {
-                          if (group.kind === 'project') openSpawn({ machineId: group.project.machineId, cwd: group.project.cwd, projectId: group.project.id });
-                          else openSpawn({ machineId: group.machineId });
-                        }}
-                      >Start one.</button>
-                    </p>
-                  {/if}
-                {/each}
-              </div>
-
-              <!-- Stored sessions -->
-              {#if storedPreview.length > 0}
-                <div class="flex flex-col border-t border-border/50">
-                  {#each storedPreview as info (info.sessionId)}
-                    {@const machineId = group.kind === 'project' ? group.project.machineId : group.machineId}
-                    {#snippet storedRow()}
-                      <StoredSessionRow {machineId} {info} {groupCwd} />
-                    {/snippet}
-                    {@render peekable(storedTarget(machineId, info), storedRow)}
-                  {/each}
-                  {#if hasMore}
-                    <Collapsible.Root class="flex flex-col">
-                      <Collapsible.Trigger
-                        class="flex h-8 items-center gap-1.5 px-3 text-micro text-muted-foreground transition-colors hover:text-foreground"
-                      >
-                        Show all ({stored.length})
-                      </Collapsible.Trigger>
-                      <Collapsible.Content>
-                        {#each stored.slice(5) as info (info.sessionId)}
-                          {@const machineId = group.kind === 'project' ? group.project.machineId : group.machineId}
-                          {#snippet restRow()}
-                            <StoredSessionRow {machineId} {info} {groupCwd} />
-                          {/snippet}
-                          {@render peekable(storedTarget(machineId, info), restRow)}
-                        {/each}
-                      </Collapsible.Content>
-                    </Collapsible.Root>
-                  {/if}
-                </div>
-              {/if}
-            </section>
-          {/each}
+                  </td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
         </div>
-      {:else if filter !== 'all'}
-        <!-- Nothing is in the state the reader asked for. The chip row above
-             already says which state that is and that it stands at zero, so a
-             card here would be a placeholder for an absence it has covered. -->
-      {:else if cockpit.hub === 'unreachable'}
-        <!-- The hub is down, or is not where this page thinks it is. Either way
-             the board knows nothing about the fleet, so it says that instead of
-             "No machines yet" — which claims the fleet is idle, the one thing
-             this dashboard cannot currently know. -->
-        <!-- Not a live region: the chrome's banner is the one that announces
-             this, and saying it twice assertively is noise, not emphasis. -->
-        <section class="rounded-xl bg-card p-6 shadow-md">
-          <h2 class="text-sm font-semibold text-error">Can't reach the hub</h2>
-          <p class="mt-2 text-caption">
-            This dashboard has never connected, so nothing below is a reading of your fleet — your
-            agents may well be running. The hub is a process on a machine you control; check that it
-            is up, then retry.
-          </p>
-          <p class="mt-3 text-micro text-muted-foreground">
-            Tried <span class="font-mono text-foreground">{hubSocketUrl()}</span>
-          </p>
-          <Button size="sm" class="pressable mt-3" onclick={reconnectNow}>Retry now</Button>
-        </section>
-      {:else if cockpit.hub === 'connecting' && cockpit.machines.length === 0}
-        <!-- The ordinary first second of a cold load. Nothing is known yet, and
-             an absence that has not been established is not reported as one. -->
-        <section class="rounded-xl bg-card p-6 shadow-md">
-          <p class="text-caption">Connecting to the hub…</p>
-        </section>
-      {:else if cockpit.machines.length === 0}
-        <!-- No machines onboarding -->
-        <section class="rounded-xl bg-card p-6 shadow-md">
-          <h2 class="text-sm font-semibold">No machines yet</h2>
-          <p class="mt-2 text-caption">
-            Outpost runs Claude Code on your own hardware and watches it from here. Start the agent
-            daemon on a machine, pointed at this hub, and it shows up in the rail.
-          </p>
-          <pre
-            class="mt-3 overflow-x-auto rounded-lg bg-secondary px-3.5 py-2.5 font-mono text-micro text-foreground">COCKPIT_HUB_URL=ws://&lt;this-host&gt;:3456/ws bun run agent</pre>
-        </section>
-      {:else}
-        <!-- Machines exist but no sessions -->
-        <section class="rounded-xl bg-card p-6 shadow-md">
-          <p class="text-caption">
-            {cockpit.onlineMachines.length} machine{cockpit.onlineMachines.length === 1 ? '' : 's'} online, no sessions running.
-          </p>
-          <Button size="sm" class="pressable mt-3" onclick={() => openSpawn()}>
-            <IconPlus />
-            Start a session
-          </Button>
-        </section>
-      {/if}
 
-      <!-- Stale sessions -->
-      {#if stale.length > 0}
-        <section>
-          <Collapsible.Root
-            open={showStale}
-            onOpenChange={() => (showStale = !showStale)}
-            class="flex flex-col gap-2"
-          >
-            <Collapsible.Trigger
-              class="flex min-h-6 items-center gap-2 text-left text-micro font-medium text-muted-foreground
-                transition-colors hover:text-foreground"
-            >
-              <IconChevronRight class="size-3 transition-transform {showStale ? 'rotate-90' : ''}" />
-              Stale
-              <span class="font-mono tabular-nums" data-tabular>{stale.length}</span>
-            </Collapsible.Trigger>
-            <Collapsible.Content>
-              <div class="flex flex-col gap-1">
-                <p class="text-micro text-muted-foreground">
-                  The daemon running these went away. They may still be alive on their machine — the
-                  hub cannot tell, so it stops counting them as live.
-                </p>
-                {#each stale as instance (instance.id)}
-                  <span
-                    class="flex items-baseline gap-3 rounded-lg px-3 py-2 text-micro text-muted-foreground"
-                  >
-                    <span class="truncate font-mono">{instance.cwd || '—'}</span>
-                    <span class="ml-auto shrink-0 font-mono">{instance.machineId}</span>
-                  </span>
-                {/each}
-              </div>
-            </Collapsible.Content>
-          </Collapsible.Root>
-        </section>
+        <div class="foot">
+          Showing {paged.length} of {filtered.length}
+          <Pagination bind:page={pageNo} total={pageCount} />
+        </div>
       {/if}
     </div>
   </div>
-
-  <!-- The board's own right padding is the gap, so the pane sits one column
-       over rather than in a second gutter. -->
-  {#if roomForPeek.current}
-    <aside class="flex w-[520px] shrink-0 flex-col py-4 pr-4 sm:py-6 sm:pr-6" aria-label="Session detail">
-      <PeekPane target={peeked} onclose={() => (peeked = null)} />
-    </aside>
-  {/if}
 </div>
 
 <SpawnPanel open={spawnOpen} prefill={spawnPrefill} onclose={() => (spawnOpen = false)} />
+
+<style>
+  .board {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: auto;
+    background: var(--surface-field);
+  }
+  .inner {
+    padding: 0 var(--space-6) var(--space-7) var(--space-7);
+  }
+  .head {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-4);
+    padding: var(--space-6) 0 var(--space-5);
+  }
+  .head > div:first-child {
+    margin-right: auto;
+    min-width: 0;
+  }
+  h1 {
+    font-size: var(--text-xl);
+    font-weight: var(--weight-strong);
+    letter-spacing: var(--track-display);
+    line-height: var(--leading-ui);
+    color: var(--ink-strong);
+  }
+  .head p {
+    font-size: var(--text-md);
+    color: var(--ink-muted);
+    margin-top: 3px;
+  }
+
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--space-4);
+  }
+  .stats :global(> *) {
+    display: block;
+  }
+
+  .panel {
+    background: var(--surface-raised);
+    border-radius: var(--radius-panel);
+    margin-top: var(--space-6);
+    padding: var(--space-3);
+    box-shadow: var(--shadow-lifted);
+  }
+
+  .bar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding-bottom: var(--space-3);
+  }
+  .bar :global(.search) {
+    width: 237px;
+  }
+  .bar :global(.exp) {
+    margin-left: auto;
+  }
+
+  .tscroll {
+    overflow-x: auto;
+  }
+  table {
+    width: 100%;
+    min-width: 860px;
+    border-collapse: collapse;
+  }
+  thead th {
+    background: var(--surface-sunken);
+    height: 32px;
+    padding: 0 12px;
+    text-align: left;
+    white-space: nowrap;
+    font-size: var(--text-sm);
+    font-weight: var(--weight-medium);
+    letter-spacing: var(--track-caps);
+    text-transform: uppercase;
+    color: var(--ink-label);
+  }
+  thead th:first-child {
+    border-radius: 6px 0 0 6px;
+  }
+  thead th:last-child {
+    border-radius: 0 6px 6px 0;
+  }
+  th.s-name {
+    width: 290px;
+  }
+  th.s-act {
+    width: 140px;
+  }
+  tbody td {
+    height: 44px;
+    padding: 0 12px;
+    border-bottom: 1px solid var(--border-divider);
+    font-size: var(--text-base);
+    color: var(--ink-row);
+    vertical-align: middle;
+  }
+  tbody tr:last-child td {
+    border-bottom: 0;
+  }
+  .num {
+    font-variant-numeric: tabular-nums;
+  }
+  .mut {
+    color: var(--ink-muted);
+  }
+  .warn {
+    color: var(--data-warn);
+  }
+  .bad {
+    color: var(--data-bad);
+  }
+  .nm {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+  }
+  .nm a {
+    font-weight: var(--weight-strong);
+    color: var(--ink-row);
+    text-decoration: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .nm a:hover {
+    text-decoration: underline;
+  }
+  .when {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--ink-muted);
+    white-space: nowrap;
+  }
+  .when :global(svg) {
+    width: 13px;
+    height: 13px;
+    flex: 0 0 auto;
+  }
+  .act {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .foot {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    height: 55px;
+    padding: 0 12px;
+    border-top: 1px solid var(--border-hairline);
+    font-size: var(--text-base);
+    color: var(--ink-muted);
+  }
+  .foot :global(.pager) {
+    margin-left: auto;
+  }
+
+  .empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-3);
+    padding: var(--space-8) var(--space-5);
+    text-align: center;
+  }
+  .empty b {
+    font-size: var(--text-md);
+    font-weight: var(--weight-strong);
+    color: var(--ink-strong);
+  }
+  .empty p {
+    font-size: var(--text-base);
+    color: var(--ink-muted);
+  }
+
+  @media (max-width: 900px) {
+    .inner {
+      padding: 0 var(--space-4) var(--space-8);
+    }
+    .stats {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: var(--space-3);
+    }
+    .bar {
+      flex-wrap: wrap;
+    }
+    .bar :global(.search) {
+      width: 100%;
+    }
+    .bar :global(.exp) {
+      margin-left: 0;
+    }
+  }
+</style>

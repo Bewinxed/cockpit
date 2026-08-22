@@ -1,330 +1,433 @@
 <script lang="ts">
-  /** The whole chrome: wordmark, hub status, session tabs, and the route. */
-  import { IconSidebar, IconSearch, IconShield, IconHelp } from '$lib/icons';
-  import type { Snippet } from 'svelte';
-  import { fly, scale, slide } from 'svelte/transition';
-  import { quintOut } from 'svelte/easing';
+  /**
+   * The app chrome: the management rail on the left, a slim bar across the top,
+   * and everything else underneath. Ported from mocks/v2-fleet.html (`aside` +
+   * `main .top`) and mocks/v5-workspace.html (the tab strip).
+   *
+   * On a phone the rail is a sheet the bar's burger opens; on a desktop it is a
+   * resizable column whose width is this browser's, not the fleet's.
+   */
+  import { onMount } from 'svelte';
+  import { browser } from '$app/environment';
   import { afterNavigate } from '$app/navigation';
   import { page } from '$app/state';
-  import { browser } from '$app/environment';
-  import { Button } from '$lib/components/ui/button';
-  import { Kbd } from '$lib/components/ui/kbd';
   import * as Sheet from '$lib/components/ui/sheet';
-  import * as SidebarPrimitive from '$lib/components/ui/sidebar';
   import ThemeSwitcher from '$lib/components/ui/ThemeSwitcher.svelte';
+  import { Button } from '$lib/outpost';
+  import { IconCommand, IconSearch, IconShield, IconSidebar } from '$lib/icons';
+  import { isTyping } from '$lib/utils/typing';
   import { cockpit, hubSocketUrl, reconnectNow } from './client.svelte';
   import JumpPalette from './JumpPalette.svelte';
-  import SessionTabs from './SessionTabs.svelte';
   import ShortcutSheet from './ShortcutSheet.svelte';
   import Sidebar from './Sidebar.svelte';
-  import UsageMeter from './UsageMeter.svelte';
+  import SessionTabs from './SessionTabs.svelte';
   import ThumbBar from './ThumbBar.svelte';
+  import UsageMeter from './UsageMeter.svelte';
 
-  let { children }: { children: Snippet } = $props();
-
-  let palette = $state(false);
-  let shortcuts = $state(false);
-  let rail = $state(false);
-
-  afterNavigate(() => (rail = false));
+  let { children }: { children: import('svelte').Snippet } = $props();
 
   const RAIL_KEY = 'cockpit-rail-width';
-  const RAIL_DEFAULT = 288;
   const RAIL_MIN = 216;
   const RAIL_MAX = 520;
+  const RAIL_DEFAULT = 288;
 
-  const clampRail = (px: number) => Math.min(RAIL_MAX, Math.max(RAIL_MIN, Math.round(px)));
+  let railWidth = $state(RAIL_DEFAULT);
+  let jumpOpen = $state(false);
+  let shortcutsOpen = $state(false);
+  let railOpen = $state(false);
 
-  function readRailWidth(): number {
-    if (!browser) return RAIL_DEFAULT;
+  const clamp = (px: number) => Math.min(RAIL_MAX, Math.max(RAIL_MIN, Math.round(px)));
+
+  onMount(() => {
     const stored = Number(localStorage.getItem(RAIL_KEY));
-    return Number.isFinite(stored) && stored > 0 ? clampRail(stored) : RAIL_DEFAULT;
+    if (Number.isFinite(stored) && stored > 0) railWidth = clamp(stored);
+  });
+
+  function setRail(px: number) {
+    railWidth = clamp(px);
+    try {
+      localStorage.setItem(RAIL_KEY, String(railWidth));
+    } catch {
+      // A browser that will not store just starts at the default next time.
+    }
   }
 
-  let railWidth = $state(readRailWidth());
-
-  function commitRailWidth(px: number): void {
-    railWidth = clampRail(px);
-    localStorage.setItem(RAIL_KEY, String(railWidth));
-  }
-
-  function startResize(event: PointerEvent): void {
+  function startDrag(event: PointerEvent) {
     const handle = event.currentTarget as HTMLElement;
-    const startX = event.clientX;
-    const startWidth = railWidth;
-    event.preventDefault();
     handle.setPointerCapture(event.pointerId);
-
-    const move = (e: PointerEvent) => (railWidth = clampRail(startWidth + e.clientX - startX));
-    const end = () => {
+    const move = (e: PointerEvent) => setRail(e.clientX);
+    const stop = () => {
       handle.removeEventListener('pointermove', move);
-      handle.removeEventListener('pointerup', end);
-      handle.removeEventListener('pointercancel', end);
-      commitRailWidth(railWidth);
+      handle.removeEventListener('pointerup', stop);
+      handle.removeEventListener('pointercancel', stop);
     };
-
     handle.addEventListener('pointermove', move);
-    handle.addEventListener('pointerup', end);
-    handle.addEventListener('pointercancel', end);
+    handle.addEventListener('pointerup', stop);
+    handle.addEventListener('pointercancel', stop);
   }
 
-  function resizeKeydown(event: KeyboardEvent): void {
-    const step = event.shiftKey ? 48 : 16;
-    if (event.key === 'ArrowLeft') commitRailWidth(railWidth - step);
-    else if (event.key === 'ArrowRight') commitRailWidth(railWidth + step);
-    else if (event.key === 'Home') commitRailWidth(RAIL_MIN);
-    else if (event.key === 'End') commitRailWidth(RAIL_MAX);
-    else return;
+  function resizeKey(event: KeyboardEvent) {
+    const step = event.shiftKey ? 32 : 8;
+    switch (event.key) {
+      case 'ArrowLeft':
+        setRail(railWidth - step);
+        break;
+      case 'ArrowRight':
+        setRail(railWidth + step);
+        break;
+      case 'Home':
+        setRail(RAIL_MIN);
+        break;
+      case 'End':
+        setRail(RAIL_MAX);
+        break;
+      default:
+        return;
+    }
     event.preventDefault();
   }
 
-  const TYPING = new Set(['INPUT', 'TEXTAREA', 'SELECT']);
+  // The sheet is a place you go through, not one you stay in.
+  afterNavigate(() => {
+    railOpen = false;
+  });
 
-  function handleKeydown(event: KeyboardEvent) {
-    if (event.key !== 'k' || !(event.metaKey || event.ctrlKey)) return;
-    const target = event.target;
-    if (target instanceof HTMLElement && (TYPING.has(target.tagName) || target.isContentEditable)) {
-      return;
-    }
+  function shortcut(event: KeyboardEvent) {
+    if (event.key.toLowerCase() !== 'k' || !(event.metaKey || event.ctrlKey)) return;
+    if (isTyping()) return;
     event.preventDefault();
-    palette = true;
+    jumpOpen = !jumpOpen;
   }
 
-  /* A hub that cannot be reached is a fault whether the socket closed cleanly or
-     errored, so the dot reads the coarser {@link HubState} rather than the
-     socket's four words — a grey dot for "your fleet is unreachable" was the
-     quiet half of the same misreading the banner below fixes. */
-  const dot = $derived(
-    {
-      connected: 'bg-success',
-      connecting: 'bg-warning animate-pulse',
-      unreachable: 'bg-error',
-    }[cockpit.hub]
-  );
+  const onSession = $derived(page.url.pathname.startsWith('/session'));
 
-  const dotLabel = $derived(
-    {
-      connected: 'Connected to the hub',
-      connecting: 'Connecting to the hub',
-      unreachable: 'Cannot reach the hub',
-    }[cockpit.hub]
-  );
-
-  const blocked = $derived(cockpit.blockedCount);
-  const disconnected = $derived(cockpit.status !== 'connected');
-
-  /** Where the work happens: the board and the conversations. It is the phone's
-   *  two screens, and the only place the tab strip belongs. */
-  const sessionRoute = $derived(page.url.pathname.startsWith('/session'));
-
-  /* ---- Reconnect banner countdown ---- */
-  let countdown = $state(0);
-  let bannerVisible = $state(false);
-  let recoveryFlash = $state(false);
-  /** Whether this tab ever reached the hub — a drop, or a hub that was already
-   *  down when the page loaded. Only the first is a recovery worth flashing. */
-  let wasConnected = $state(false);
-
-  $effect(() => {
-    if (cockpit.status === 'connected') {
-      if (bannerVisible && wasConnected) {
-        recoveryFlash = true;
-        setTimeout(() => {
-          recoveryFlash = false;
-          bannerVisible = false;
-        }, 1500);
-      } else {
-        bannerVisible = false;
-      }
-      wasConnected = true;
-      return;
-    }
-    // A cold load against a hub that is off never satisfied `wasConnected`, so
-    // the banner used to stay away in exactly the case it was written for: the
-    // hub is a process on a machine that may simply not be running. The gate is
-    // the attempt, not the success — `connecting` is still nobody's fault.
-    if (cockpit.hub === 'unreachable') {
-      bannerVisible = true;
-      recoveryFlash = false;
+  /** Which section the bar names, for the readers who arrived by URL. */
+  const crumb = $derived.by(() => {
+    const [section] = page.url.pathname.split('/').filter(Boolean);
+    switch (section) {
+      case undefined:
+      case 'session':
+        return 'Fleet';
+      case 'project':
+        return 'Project';
+      default:
+        return section[0].toUpperCase() + section.slice(1);
     }
   });
 
+  const HUB_DOT: Record<string, string> = {
+    connected: 'bg-success',
+    connecting: 'bg-warning animate-pulse',
+    unreachable: 'bg-error',
+  };
+  const HUB_TITLE: Record<string, string> = {
+    connected: 'Hub connected',
+    connecting: 'Connecting to the hub…',
+    unreachable: 'Cannot reach the hub',
+  };
+
+  /**
+   * Whether this tab has ever had the hub. A socket that dropped is retrying
+   * and will say so; one that never landed is a wrong address, and the two want
+   * different words.
+   */
+  let everConnected = $state(false);
   $effect(() => {
-    const retryAt = cockpit.retryAt;
-    if (!retryAt || cockpit.status === 'connected') {
-      countdown = 0;
-      return;
-    }
-    const tick = () => {
-      const remaining = Math.max(0, Math.ceil((retryAt - Date.now()) / 1000));
-      countdown = remaining;
-    };
-    tick();
-    const id = setInterval(tick, 250);
-    return () => clearInterval(id);
+    if (cockpit.status === 'connected') everConnected = true;
   });
+
+  // The countdown is a clock, not a frame: 250ms is fast enough that the number
+  // never looks stuck and slow enough to cost nothing.
+  let now = $state(Date.now());
+  $effect(() => {
+    if (cockpit.status === 'connected') return;
+    const timer = setInterval(() => (now = Date.now()), 250);
+    return () => clearInterval(timer);
+  });
+  const retryIn = $derived(
+    cockpit.retryAt ? Math.max(0, Math.ceil((cockpit.retryAt - now) / 1000)) : 0
+  );
 </script>
 
-<svelte:window onkeydown={handleKeydown} />
+<svelte:window onkeydown={shortcut} />
 
-<JumpPalette bind:open={palette} />
-<ShortcutSheet bind:open={shortcuts} />
+<a class="skip" href="#main-content">Skip to content</a>
 
-<div class="flex h-dvh flex-col overflow-hidden bg-background text-foreground">
-  <a
-    href="#main"
-    class="sr-only rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50"
-  >
-    Skip to content
-  </a>
-
-  <header
-    class="material-chrome scroll-edge-b relative z-30 flex h-12 shrink-0 items-center gap-3 px-4"
-    style="view-transition-name: app-header"
-  >
-    <Button
-      variant="ghost"
-      size="icon-xs"
-      class="md:hidden"
-      aria-label="Machines and sessions"
-      aria-expanded={rail}
-      onclick={() => (rail = !rail)}
-    >
-      <IconSidebar />
-    </Button>
-
-    <a href="/session" class="text-title shrink-0 text-[17px]">Outpost</a>
-
-    <div class="ml-auto flex items-center gap-1.5">
-      <Button
-        variant="ghost"
-        size="xs"
-        title="Jump to a project, machine, or session"
-        onclick={() => (palette = true)}
-      >
-        <IconSearch />
-        <span class="hidden sm:inline">Jump</span>
-        <Kbd class="hidden sm:inline-flex">⌘K</Kbd>
-      </Button>
-
-      <!-- Account state, so it lives with the other account state rather than in
-           any one session's composer: the same percentages in every tab, on
-           every route, at every width. -->
-      <UsageMeter />
-
-      <a
-        href="/session"
-        class="flex min-h-6 items-center gap-1.5 rounded-lg px-1.5 py-0.5 text-xs transition-colors {blocked >
-        0
-          ? 'bg-error/10 text-error hover:bg-error/20'
-          : 'text-faint hover:text-muted-foreground'}"
-        title="{blocked} session{blocked === 1 ? '' : 's'} awaiting approval"
-      >
-        <IconShield class="size-3" />
-        {#if blocked > 0}
-          <span
-            in:scale={{ duration: 260, start: 0.5, easing: quintOut }}
-            out:scale={{ duration: 180, start: 0.75, easing: quintOut }}
-          >
-            {#key blocked}
-              <span class="inline-block" in:fly={{ y: 4, duration: 150, easing: quintOut }}>
-                {blocked}
-              </span>
-            {/key}
-          </span>
-        {/if}
-      </a>
-
-      <span class="flex size-6 items-center justify-center" title={dotLabel}>
-        <span class="size-2 rounded-full {dot}"></span>
-      </span>
-
-      <Button
-        variant="ghost"
-        size="icon-xs"
-        title="Keyboard shortcuts"
-        aria-label="Keyboard shortcuts"
-        onclick={() => (shortcuts = true)}
-      >
-        <IconHelp class="size-4" />
-      </Button>
-
-      <ThemeSwitcher />
-    </div>
-  </header>
-
-  <!-- Reconnect banner. A hub that dropped is amber — it was there a moment ago
-       and the backoff will most likely get it back. A hub this tab has never
-       reached is red and says where it looked, because that is the difference
-       between "start the hub" and "you are on the wrong host". -->
-  {#if bannerVisible}
+<div class="shell" style="--sidebar-width: {railWidth}px">
+  <aside class="rail hidden md:flex">
+    <Sidebar />
     <div
-      role={wasConnected || recoveryFlash ? 'status' : 'alert'}
-      class="relative z-20 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 px-4 py-1.5 text-[13px]
-             {recoveryFlash
-        ? 'bg-success/10 text-success'
-        : wasConnected
-          ? 'bg-warning/10 text-warning'
-          : 'bg-error/10 text-error'}"
-      transition:slide={{ duration: 160, easing: quintOut }}
-    >
-      {#if recoveryFlash}
-        Connected
-      {:else if wasConnected}
-        <span>Hub connection lost{countdown > 0 ? ` — retrying in ${countdown}s` : ' — retrying…'}</span>
-        <Button variant="ghost" size="xs" class="h-6" onclick={reconnectNow}>
-          Reconnect now
-        </Button>
-      {:else}
-        <span class="font-medium">Can't reach the hub</span>
-        <span class="font-mono text-micro opacity-80">{hubSocketUrl()}</span>
-        <span class="opacity-80">{countdown > 0 ? `retrying in ${countdown}s` : 'retrying…'}</span>
-        <Button variant="ghost" size="xs" class="h-6" onclick={reconnectNow}>Retry now</Button>
-      {/if}
-    </div>
-  {/if}
-
-  <SidebarPrimitive.Provider
-    class="min-h-0 flex-1"
-    style="--sidebar-width: {railWidth}px;"
-    open={true}
-  >
-    <div class="hidden md:flex" style="view-transition-name: app-rail">
-      <Sidebar />
-    </div>
-    <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-    <div
-      role="separator"
+      class="grip"
+      role="slider"
       aria-orientation="vertical"
-      aria-label="Rail width"
+      aria-label="Resize sidebar"
       aria-valuenow={railWidth}
       aria-valuemin={RAIL_MIN}
       aria-valuemax={RAIL_MAX}
       tabindex="0"
-      class="hidden w-1 shrink-0 cursor-col-resize touch-none transition-colors hover:bg-border focus-visible:bg-ring focus-visible:outline-none md:block"
-      onpointerdown={startResize}
-      onkeydown={resizeKeydown}
+      onpointerdown={startDrag}
+      onkeydown={resizeKey}
     ></div>
-    <main id="main" class="flex min-w-0 flex-1 flex-col overflow-hidden">
-      <!-- Colocated with what it opens (user, 2026-08-08): the strip is the top
-           row of the working column, not part of the chrome above it. -->
-      {#if sessionRoute}
-        <SessionTabs />
-      {/if}
+  </aside>
+
+  <Sheet.Root bind:open={railOpen}>
+    <Sheet.Content side="left" class="w-[284px] p-0 md:hidden">
+      <Sheet.Header class="sr-only">
+        <Sheet.Title>Navigation</Sheet.Title>
+      </Sheet.Header>
+      <Sidebar />
+    </Sheet.Content>
+  </Sheet.Root>
+
+  <div class="main">
+    <header class="top">
+      <button
+        type="button"
+        class="burger md:hidden"
+        aria-label="Open navigation"
+        onclick={() => (railOpen = true)}
+      >
+        <IconSidebar />
+      </button>
+      <a class="wordmark md:hidden" href="/session">Outpost</a>
+      <span class="crumb hidden md:inline">{crumb}</span>
+
+      <div class="right">
+        <Button class="jump" onclick={() => (jumpOpen = true)} title="Jump to session (⌘K)">
+          <IconSearch />
+          <span class="hidden sm:inline">Jump</span>
+        </Button>
+        <span class="md:hidden"><UsageMeter /></span>
+        {#if cockpit.blockedCount > 0}
+          <a class="icobtn" href="/session" title="{cockpit.blockedCount} waiting on you">
+            <IconShield />
+            <span class="badge">{cockpit.blockedCount}</span>
+          </a>
+        {/if}
+        <span class="hub {HUB_DOT[cockpit.hub]}" title={HUB_TITLE[cockpit.hub]}></span>
+        <button
+          type="button"
+          class="icobtn"
+          aria-label="Keyboard shortcuts"
+          onclick={() => (shortcutsOpen = true)}
+        >
+          <IconCommand />
+        </button>
+        <ThemeSwitcher />
+      </div>
+    </header>
+
+    <!-- Server-side there is no socket to have lost, so the banner would render
+         into every first paint and flash away on hydration. -->
+    {#if browser && cockpit.status !== 'connected'}
+      <div class="banner {everConnected ? 'warn' : 'bad'}" role="status">
+        {#if everConnected}
+          <span>Hub connection lost — retrying in {retryIn}s</span>
+          <Button onclick={reconnectNow}>Reconnect</Button>
+        {:else}
+          <span>Can't reach the hub at <code>{hubSocketUrl()}</code></span>
+          <Button onclick={reconnectNow}>Retry</Button>
+        {/if}
+      </div>
+    {/if}
+
+    {#if onSession}
+      <SessionTabs />
+    {/if}
+
+    <main id="main-content" class="content">
       {@render children()}
     </main>
 
-    <Sheet.Root bind:open={rail}>
-      <Sheet.Content side="left" class="material-panel w-[85vw] max-w-sm p-0" showCloseButton={false}>
-        <Sheet.Title class="sr-only">Navigation</Sheet.Title>
-        <Sheet.Description class="sr-only">Machines and sessions</Sheet.Description>
-        <Sidebar />
-      </Sheet.Content>
-    </Sheet.Root>
-  </SidebarPrimitive.Provider>
-
-  {#if sessionRoute}
-    <ThumbBar onjump={() => (palette = true)} />
-  {/if}
+    {#if onSession}
+      <ThumbBar onjump={() => (jumpOpen = true)} />
+    {/if}
+  </div>
 </div>
+
+<JumpPalette bind:open={jumpOpen} />
+<ShortcutSheet bind:open={shortcutsOpen} />
+
+<style>
+  .skip {
+    position: absolute;
+    left: -9999px;
+    z-index: 100;
+    padding: var(--space-2) var(--space-4);
+    background: var(--surface-raised);
+    border-radius: var(--radius-control);
+    box-shadow: var(--shadow-lifted);
+  }
+  .skip:focus {
+    left: var(--space-4);
+    top: var(--space-4);
+  }
+
+  .shell {
+    display: flex;
+    height: 100dvh;
+    width: 100%;
+    background: var(--surface-field);
+    overflow: hidden;
+  }
+
+  .rail {
+    position: relative;
+    width: var(--sidebar-width);
+    flex: 0 0 var(--sidebar-width);
+    min-width: 0;
+    border-right: 1px solid var(--border-hairline);
+  }
+  .grip {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    right: -3px;
+    width: 6px;
+    cursor: col-resize;
+    touch-action: none;
+    z-index: 5;
+  }
+  .grip:hover,
+  .grip:focus-visible {
+    background: var(--border-control);
+    outline: none;
+  }
+
+  .main {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .top {
+    height: 57px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 0 var(--space-6) 0 var(--space-7);
+    background: var(--surface-raised);
+    border-bottom: 1px solid var(--border-hairline);
+  }
+  .burger {
+    width: 44px;
+    height: 44px;
+    margin-left: -10px;
+    display: grid;
+    place-items: center;
+    border: 0;
+    background: none;
+    border-radius: var(--radius-control);
+    color: var(--ink-row);
+    cursor: pointer;
+  }
+  .burger :global(svg) {
+    width: 19px;
+    height: 19px;
+  }
+  .wordmark {
+    font-size: var(--text-md);
+    font-weight: var(--weight-strong);
+    letter-spacing: var(--track-display);
+    color: var(--ink-strong);
+    text-decoration: none;
+  }
+  .crumb {
+    font-size: var(--text-md);
+    color: var(--ink-body);
+    font-weight: var(--weight-medium);
+  }
+
+  .right {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+  }
+  .right :global(.jump) {
+    gap: 7px;
+  }
+  .right :global(.jump svg) {
+    width: 15px;
+    height: 15px;
+    color: var(--ink-muted);
+  }
+
+  .icobtn {
+    position: relative;
+    width: 32px;
+    height: 32px;
+    display: grid;
+    place-items: center;
+    border: 1px solid var(--border-hairline);
+    background: var(--surface-raised);
+    border-radius: var(--radius-control);
+    color: var(--ink-body);
+    cursor: pointer;
+  }
+  .icobtn :global(svg) {
+    width: 17px;
+    height: 17px;
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .icobtn:hover,
+    .burger:hover {
+      background: var(--surface-hover);
+    }
+  }
+  .badge {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: var(--radius-pill);
+    background: var(--status-attn-bg);
+    color: var(--status-attn-ink);
+    font-size: var(--text-xs);
+    font-weight: var(--weight-strong);
+    display: grid;
+    place-items: center;
+  }
+
+  .hub {
+    width: 8px;
+    height: 8px;
+    border-radius: var(--radius-pill);
+    flex: 0 0 auto;
+  }
+
+  .banner {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-6) var(--space-2) var(--space-7);
+    font-size: var(--text-base);
+    border-bottom: 1px solid var(--border-hairline);
+  }
+  .banner.warn {
+    background: var(--status-attn-bg);
+    color: var(--status-attn-ink);
+  }
+  .banner.bad {
+    background: var(--status-fail-bg);
+    color: var(--status-fail-ink);
+  }
+  .banner code {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+  }
+
+  .content {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: auto;
+  }
+</style>
