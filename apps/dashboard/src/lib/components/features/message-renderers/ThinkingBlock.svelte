@@ -136,8 +136,9 @@
 
 		<Collapsible.Content class="thinking-content duration-[220ms] ease-[var(--ease-out-expo)]">
 			<div
-				class="reveal mt-2 pl-[18px] font-mono text-sm whitespace-pre-wrap text-muted-foreground
+				class="reveal mt-2 ml-[7px] pl-3 font-mono text-sm whitespace-pre-wrap text-muted-foreground
 					{isRedacted ? 'italic' : ''} {expanded ? 'reveal-open' : ''}"
+				style="background:var(--rail) left top/2px 100% no-repeat"
 			>
 				{#if isRedacted}
 					<span class="text-faint"

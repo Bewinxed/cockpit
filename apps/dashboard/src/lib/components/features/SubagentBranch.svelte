@@ -238,7 +238,10 @@
     </Collapsible.Trigger>
 
     <Collapsible.Content>
-      <div class="space-y-3 border-t border-border/50 px-4 py-3 pl-[calc(1rem+22px)]">
+      <div
+        class="space-y-3 border-t border-border/50 px-4 py-3 pl-[calc(1rem+22px)]"
+        style="background:var(--rail) calc(1rem + 11px) 0.75rem/2px calc(100% - 1.5rem) no-repeat"
+      >
         <!-- Live transcript messages -->
         {#each groups as group (group.kind === 'tools' ? `tools-${group.at}` : group.message.id)}
           {#if group.kind === 'tools'}
