@@ -355,23 +355,11 @@
   --e-toggle: cubic-bezier(0.65, 0, 0.35, 1);
   --breath: calc(var(--c-500) * 4);
 
-  /* component dimension ramp — COMFORTABLE (default). Density switch = these
-     values only; colour + structure never change. .d-compact overrides them. */
-  --c-btn-h: 44px; --c-btn-h-s: 36px; --c-btn-pad: 16px; --c-btn-gap: 8px; --c-btn-fs: 14.5px;
-  --c-input-h: 44px; --c-input-fs: 16px; --c-input-pad: 12px; --c-input-gap: 10px;
+  /* component dimension ramp. */
+  --c-btn-h: 44px; --c-btn-pad: 16px; --c-btn-gap: 8px; --c-btn-fs: 14.5px;
   --c-mark: 26px; --c-mark-glyph: 14px;
   --c-pill-h: 24px; --c-pill-gap: 6px; --c-pill-fs: 11.5px;
-  --c-nav-h: 40px; --c-row-gap: 6px; --c-card-pad: 14px; --c-card-gap: 10px; --c-page: 36px;
-  --c-sheet-w: 300px; --c-mod-w: 460px; --c-mod-gap: 10px; --c-modal-input-h: 52px; --c-modal-btn-h: 48px; --c-sw: 18px;
-}
-
-.d-compact {
-  --c-btn-h: 32px; --c-btn-h-s: 28px; --c-btn-pad: 10px; --c-btn-gap: 6px; --c-btn-fs: 13px;
-  --c-input-h: 34px; --c-input-fs: 16px; --c-input-pad: 10px; --c-input-gap: 8px;
-  --c-mark: 20px; --c-mark-glyph: 11px;
-  --c-pill-h: 18px; --c-pill-gap: 4px; --c-pill-fs: 10.25px;
-  --c-nav-h: 30px; --c-row-gap: 4px; --c-card-pad: 12px; --c-card-gap: 8px; --c-page: 28px;
-  --c-modal-input-h: 42px; --c-modal-btn-h: 38px; --c-sw: 15px;
+  --c-nav-h: 40px; --c-card-pad: 14px; --c-card-gap: 10px;
 }
 
 .dark {
