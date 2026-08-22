@@ -428,6 +428,9 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-4);
+    /* Wide numeric tables (nowrap columns) exceed a phone viewport; scroll them
+       inside the panel instead of forcing the whole page to scroll sideways. */
+    overflow-x: auto;
   }
   .note {
     font-size: var(--text-sm);
@@ -456,6 +459,9 @@
   /* Tables: hairline dividers, small-caps label header, tabular numerics. */
   .t {
     width: 100%;
+    /* Fills the panel when it fits; expands to its content width (making .pbody
+       scroll) when the nowrap columns can't fit a narrow viewport. */
+    min-width: max-content;
     border-collapse: collapse;
   }
   .t th {
