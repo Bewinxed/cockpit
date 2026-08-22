@@ -8,7 +8,6 @@
    */
   import {
     IconChevronRight,
-    IconFolderDuo,
     IconPlus,
   } from '$lib/icons';
   import { onMount, untrack, type Snippet } from 'svelte';
@@ -41,6 +40,8 @@
   import { machineLabel, machineOs } from '$lib/cockpit/machine';
   import { isTyping } from '$lib/utils/typing';
   import { Button } from '$lib/components/ui/button';
+  import { ItemMark } from '$lib/outpost';
+  import { markHue } from '$lib/cockpit/mark';
   import * as Collapsible from '$lib/components/ui/collapsible';
 
   interface Props {
@@ -352,7 +353,8 @@
             {@const storedPreview = stored.slice(0, 5)}
             {@const hasMore = stored.length > 5}
             <section
-              class="flex flex-col rounded-xl bg-card shadow-md"
+              class="flex flex-col"
+              style="border-radius:var(--radius-panel);background:var(--surface-raised);box-shadow:var(--shadow-lifted)"
               animate:flip={{ duration: enterMs, easing: quintOut }}
               in:fly={{
                 y: 6,
@@ -378,10 +380,21 @@
                     <!-- The project's own hue and mark, the same ones its folder
                          wears in the rail: the card is recognisable before it is
                          read. -->
-                    <IconFolderDuo
-                      class="identity-ink size-5 shrink-0"
-                      style={identityVar(group.project.cwd)}
-                    />
+                    <span
+                      class="flex shrink-0 items-center justify-center"
+                      style="--c-mark:20px;--c-mark-glyph:12px"
+                    >
+                      <ItemMark hue={markHue(group.project.cwd)}>
+                        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                          <path
+                            d="M3 7a2 2 0 0 1 2-2h3.6l1.6 2H19a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"
+                            stroke="currentColor"
+                            stroke-width="1.6"
+                            stroke-linejoin="round"
+                          />
+                        </svg>
+                      </ItemMark>
+                    </span>
                     <div class="min-w-0 flex-1">
                       <span class="text-sm font-semibold">{group.project.name}</span>
                       <span class="block truncate font-mono text-micro text-muted-foreground">{group.project.cwd}</span>
