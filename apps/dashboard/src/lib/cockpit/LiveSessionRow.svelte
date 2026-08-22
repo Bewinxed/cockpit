@@ -21,10 +21,10 @@
   import { fly } from 'svelte/transition';
   import { quintOut } from 'svelte/easing';
   import { Badge } from '$lib/components/ui/badge';
-  import { StatusPill } from '$lib/outpost';
+  import { ItemMark, StatusPill } from '$lib/outpost';
+  import { markHue, harnessGlyphPath } from './mark';
   import { formatDuration } from '$lib/utils/time';
   import { ACTIVITY_LABEL, SLEEPING_HINT, SLEEPING_LABEL } from './activity';
-  import ActivityDot from './ActivityDot.svelte';
   import { cockpit, isFailed, isResumable, type InstanceRow } from './client.svelte';
   import { identityVar } from './folder-prefs.svelte';
   import { sessionTitle } from './links';
@@ -119,14 +119,21 @@
       <!-- The card's lead column: the header's 20px mark sits in the same one,
            so a card has a single title column rather than a header set in from
            the rows it heads. -->
-      <span class="flex w-5 shrink-0 items-center justify-center">
-        {#if failed}
-          <span class="size-2 rounded-full bg-error"></span>
-        {:else if sleeping}
-          <span class="size-2 rounded-full bg-muted-foreground/40"></span>
-        {:else}
-          <ActivityDot {activity} />
-        {/if}
+      <span
+        class="flex shrink-0 items-center justify-center {sleeping ? 'opacity-60' : ''}"
+        style="--c-mark:20px;--c-mark-glyph:11px"
+      >
+        <ItemMark hue={markHue(instance.cwd || instance.machineId)}>
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path
+              d={harnessGlyphPath(instance.harness)}
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </ItemMark>
       </span>
       <!-- `max-w-lg`: a title that runs on — a pasted URL, usually — stops at a
            readable measure instead of crushing the path beside it. -->

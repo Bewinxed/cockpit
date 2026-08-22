@@ -4,6 +4,8 @@
   import { formatDistanceToNow } from '$lib/utils/time';
   import { sessionTitle, transcriptHref } from './links';
   import StoredSessionMenu from './StoredSessionMenu.svelte';
+  import { ItemMark } from '$lib/outpost';
+  import { markHue, harnessGlyphPath } from './mark';
 
   interface Props {
     machineId: string;
@@ -27,7 +29,23 @@
     <span class="flex w-full max-w-3xl items-center gap-3">
       <!-- Where a live row carries its state dot and the card's header carries
            its mark, so a card has one title column top to bottom. -->
-      <span class="w-5 shrink-0" aria-hidden="true"></span>
+      <span
+        class="flex shrink-0 items-center justify-center opacity-60"
+        style="--c-mark:20px;--c-mark-glyph:11px"
+        aria-hidden="true"
+      >
+        <ItemMark hue={markHue(info.cwd || machineId)}>
+          <svg viewBox="0 0 24 24" fill="none">
+            <path
+              d={harnessGlyphPath(null)}
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </ItemMark>
+      </span>
       <!-- Stops at a readable measure, as the live rows do, so a runaway title
            does not crush the path beside it. -->
       <span class="min-w-0 max-w-lg truncate text-[13px]">{sessionTitle(info)}</span>
