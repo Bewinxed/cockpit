@@ -30,6 +30,7 @@ import {
   agentProblem,
   ASK_USER_QUESTION,
   CONTROL_GET_SESSION_MESSAGES,
+  deriveTitleFromFirstMessage,
   FLEET_STATUS,
   FLEET_SYNC,
   identifyBlocks,
@@ -774,6 +775,43 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
   };
 
   /**
+   * Sessions this hub started fresh and has not yet heard a word from. A title
+   * derived from a live turn is only the session's *first* message while this
+   * holds the id — a resumed session's next turn is somewhere in the middle of
+   * a conversation, and naming the row after it would be a wrong name that then
+   * outranks the transcript's own. Those get named from the transcript instead,
+   * where the first message is unambiguous.
+   */
+  const awaitingFirstTurn = new Set<string>();
+
+  /**
+   * Names an unnamed row after what its session was first asked to do, using
+   * core's cleaning so the string is identical to the one the dashboard derives
+   * from the transcript. Write-once and never over a given title, so this can
+   * be called from every path that might see the first message first.
+   */
+  const nameFromFirstTurn = (machineId: string, instanceId: string, raw: string): void => {
+    const derived = deriveTitleFromFirstMessage(raw);
+    if (derived && db.noteDerivedTitle(instanceId, derived)) publishInstances(machineId);
+  };
+
+  /**
+   * A live turn for a session the hub started: if it is the first thing said,
+   * it is the session's name. Consumed either way — the second turn is not a
+   * first message, and a turn with no text of its own never was.
+   */
+  const nameFromLiveTurn = (machineId: string, instanceId: string, message: unknown): void => {
+    if (!awaitingFirstTurn.has(instanceId)) return;
+    // Everything that is not a reader speaking — an init frame, a tool result
+    // coming back on the same channel — leaves the session still unnamed and
+    // still waiting: the first *words* are the name, whenever they arrive.
+    const text = userTurnText(message);
+    if (!text) return;
+    awaitingFirstTurn.delete(instanceId);
+    nameFromFirstTurn(machineId, instanceId, text);
+  };
+
+  /**
    * One line of the hub's record of a delegate's traffic, to every dashboard,
    * the moment it is written — the same reason the instance rows are pushed:
    * a reader watching either session should see the ask, the answer and the
@@ -1198,6 +1236,21 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
         // an empty transcript rather than a fault — the same shape a brand new
         // session has.
         const transcript = Array.isArray(answer.result) ? answer.result : [];
+
+        // The transcript is in hand anyway, and its oldest user turn is the
+        // unambiguous answer to what the session is called — including for
+        // conversations this hub never started, which no live turn can name.
+        // Write-once, so this costs one statement the first time a transcript
+        // is read and nothing on every read after it.
+        if (row && !row.title && !row.derivedTitle) {
+          for (const entry of transcript) {
+            const text = userTurnText(entry);
+            if (!text) continue;
+            nameFromFirstTurn(machineId, row.id, text);
+            break;
+          }
+        }
+
         return new Response(ndjsonNewestFirst(transcript), {
           headers: { 'Content-Type': 'application/x-ndjson', 'Cache-Control': 'no-store' },
         });
@@ -1934,6 +1987,8 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
         effort: peek(body, 'effort'),
         ...peekParent(body),
       });
+      // A conversation that starts here: its first turn is its name.
+      if (!peekResume(body)) awaitingFirstTurn.add(instanceId);
       publishInstances(machineId);
       return { ok: true };
     })
@@ -1957,6 +2012,10 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
       if (!agent) return status(404, `machine ${machineId} is not connected`);
 
       agent.send({ verb: 'send', machineId, instanceId, payload: body } satisfies Envelope);
+      // The first thing a session is asked is what it is called, until
+      // something names it properly.
+      if (!hasAttachments(body))
+        nameFromLiveTurn(machineId, instanceId, (body as { message?: unknown } | null)?.message);
       const from = peekPeer(body);
       if (from && !isQuerySend(body)) {
         handoffs.set(instanceId, { from, at: Date.now() });
@@ -2210,6 +2269,14 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
             }
             const from = peekPeer(message.payload);
             if (!forward(message, ws) || !message.instanceId) break;
+            // The first thing a session is asked is what it is called, until
+            // something names it properly.
+            if (!hasAttachments(message.payload))
+              nameFromLiveTurn(
+                message.machineId,
+                message.instanceId,
+                (message.payload as { message?: unknown } | null)?.message
+              );
             if (from && !isQuerySend(message.payload)) {
               // A queued hand-off: the target now carries unread work.
               handoffs.set(message.instanceId, { from, at: Date.now() });
@@ -2248,6 +2315,8 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
                 effort: peek(message.payload, 'effort'),
                 ...peekParent(message.payload),
               });
+              // A conversation that starts here: its first turn is its name.
+              if (!peekResume(message.payload)) awaitingFirstTurn.add(message.instanceId);
               publishInstances(message.machineId);
             }
             break;
@@ -2299,6 +2368,15 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
                 );
                 publishInstances(message.machineId);
               }
+            }
+            // A session named by what it was first asked, whether the ask came
+            // through this hub or the harness echoed one it was spawned with.
+            if (kind === 'frame' && message.instanceId) {
+              nameFromLiveTurn(
+                message.machineId,
+                message.instanceId,
+                (message.payload as FramePayload & { kind: 'frame' }).message
+              );
             }
             // Standing instructions read the same frames the dashboards do.
             // Deliberately before the delegate hand-back below: a rule that
@@ -2508,12 +2586,22 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
                 effort: peek(message.payload, 'effort'),
                 ...peekParent(message.payload),
               });
+              // A conversation that starts here: its first turn is its name.
+              if (!peekResume(message.payload)) awaitingFirstTurn.add(message.instanceId);
               publishInstances(message.machineId);
             }
             break;
           case 'send': {
             const from = peekPeer(message.payload);
             if (!forward(message, ws) || !message.instanceId) break;
+            // The first thing a session is asked is what it is called, until
+            // something names it properly.
+            if (!hasAttachments(message.payload))
+              nameFromLiveTurn(
+                message.machineId,
+                message.instanceId,
+                (message.payload as { message?: unknown } | null)?.message
+              );
             if (from && !isQuerySend(message.payload)) {
               // A queued hand-off: the target now carries unread work.
               handoffs.set(message.instanceId, { from, at: Date.now() });
