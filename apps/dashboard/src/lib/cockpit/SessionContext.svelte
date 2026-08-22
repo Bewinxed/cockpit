@@ -1,529 +1,475 @@
 <script lang="ts">
   /**
-   * What this session is running in, beside the chat rather than over it: the
-   * CLAUDE.md files it reads (NEW.md §11), the MCP servers it can reach, and
-   * the facts about the session itself. Three answers to "what is in front of
-   * this model", which is one question and so one rail.
+   * The transcript's header bar — the fixed identity of the run and the settings
+   * that can still change under it. Left: the session's mark, its name, the
+   * `machine : path` it works in, and a status pill. Right: the harness, the
+   * turns taken, how full the window is and what it has cost. Between them the
+   * controls that steer the next turn — the chat/flow view, how it answers
+   * permissions, which model, and how hard it thinks.
    *
-   * The rail is always mounted — the kit slides it and animates the gap the
-   * chat shrinks into — so the files are read on the rising edge of open rather
-   * than on mount, and the machine's skills on the rising edge of their own
-   * tab. The servers and the facts are the page's own live state.
+   * Presentational: every fact and every callback is handed down by SessionPane,
+   * which owns the session state and the sends. Rebuilt from mocks/v5-agent.html.
    */
-  import { toast } from 'svelte-sonner';
-  import type {
-    AvailableCommand,
-    DiscoveredSkill,
-    McpServerStatus,
-    PermissionMode,
-  } from '@cockpit/core';
-  import { IconClose } from '$lib/icons';
-  import { Badge } from '$lib/components/ui/badge';
-  import { Button } from '$lib/components/ui/button';
-  import { CopyButton } from '$lib/components/ui/copy-button';
-  import * as Sidebar from '$lib/components/ui/sidebar';
-  import { useSidebar } from '$lib/components/ui/sidebar';
-  import { Skeleton } from '$lib/components/ui/skeleton';
-  import * as Tabs from '$lib/components/ui/tabs';
-  import MemoryCard from '$lib/components/features/MemoryCard.svelte';
-  import type { SubagentState } from '$lib/utils/flow-types';
-  import { formatDistanceToNow } from '$lib/utils/time';
-  import { machineFs } from './client.svelte';
-  import { adoptSkill, inspectMachine, peekMemory } from './fleet';
-  import { machineLabel } from './machine';
-  import McpServerDetail from './McpServerDetail.svelte';
+  import type { EffortLevel, McpServerStatus, PermissionMode } from '@cockpit/core';
+  import type { EffortStop } from './effort-levels';
+  import type { Activity } from './activity';
+  import { ACTIVITY_LABEL, SLEEPING_LABEL } from './activity';
+  import { markHue, harnessGlyphPath } from './mark';
+  import { PERMISSION_MODES, permissionModeLabel } from './permission-modes';
   import { modelLabel } from './models.svelte';
-  import { permissionModeLabel } from './permission-modes';
+  import { StatusPill, ItemMark } from '$lib/outpost';
+  import { IconChat, IconFlow, IconFork, IconStop, IconCheck, IconTrash } from '$lib/icons';
+  import { Button, type ButtonVariant } from '$lib/components/ui/button';
+  import * as ButtonGroup from '$lib/components/ui/button-group';
+  import * as Popover from '$lib/components/ui/popover';
+  import * as Select from '$lib/components/ui/select';
+  import * as ToggleGroup from '$lib/components/ui/toggle-group';
+  import * as Tooltip from '$lib/components/ui/tooltip';
+  import type { Component } from 'svelte';
+  import ModelCombobox from './ModelCombobox.svelte';
+  import EffortSlider from './EffortSlider.svelte';
+  import McpChips from './McpChips.svelte';
+  import TaskPanel from './TaskPanel.svelte';
 
   interface Props {
-    instanceId: string;
-    machineId: string;
-    cwd: string;
-    /** The session's live MCP status; null until the session has reported it. */
-    servers: McpServerStatus[] | null;
-    /** Its `/` menu, off the init frame — which is where its skills are named. */
-    commands: AvailableCommand[];
-    model: string | null;
-    permissionMode: PermissionMode | null;
-    sessionId: string | null;
-    /** The machine's own name, when the fleet has one for it. */
+    viewId: string;
+    /** A stored transcript, not a live session — no settings, no verbs. */
+    browsing: string | null;
+    /** What the session is about, and where it runs. */
+    heading: string;
+    cwdLabel: string;
     hostname: string | null;
-    totalCostUsd: number;
-    lastActivityAt: Date | null;
-    branches: SubagentState[];
+    /** The harness id — the mark's glyph and the display name both come from it. */
+    harness: string;
+    activity: Activity;
+    /** Its process is gone but its conversation is kept — the fourth word. */
+    sleeping: boolean;
+    stats: { turns: number | null; contextPct: number | null; cost: number | null };
+    /** Browsing only: how much of the stored transcript there is. */
+    messageCount: number;
+    loading: boolean;
+    scratch: boolean;
+
+    view: 'chat' | 'flow';
+    onChooseView: (value: string) => void;
+
+    permissionMode: PermissionMode | null;
+    canRelaunch: boolean;
+    onChooseMode: (value: string) => void;
+
+    currentModel: string;
+    onChooseModel: (value: string) => void;
+
+    showEffort: boolean;
+    effortStops: EffortStop[];
+    effort: EffortLevel | null;
+    onChooseEffort: (level: EffortLevel) => void;
+
+    mcpServers: McpServerStatus[] | null;
+    machineId: string;
+
+    forkable: boolean;
+    wholeTranscript: boolean;
+    connected: boolean;
+    onFork: () => void;
+    onStop: () => void;
+    onKeep: () => void;
+    onDiscard: () => void;
+
+    /** The session's plan, when it has one — a small ring that opens the panel. */
+    progress: { done: number; total: number } | null;
   }
 
   let {
-    instanceId,
-    machineId,
-    cwd,
-    servers,
-    commands,
-    model,
-    permissionMode,
-    sessionId,
+    viewId,
+    browsing,
+    heading,
+    cwdLabel,
     hostname,
-    totalCostUsd,
-    lastActivityAt,
-    branches,
+    harness,
+    activity,
+    sleeping,
+    stats,
+    messageCount,
+    loading,
+    scratch,
+    view,
+    onChooseView,
+    permissionMode,
+    canRelaunch,
+    onChooseMode,
+    currentModel,
+    onChooseModel,
+    showEffort,
+    effortStops,
+    effort,
+    onChooseEffort,
+    mcpServers,
+    machineId,
+    forkable,
+    wholeTranscript,
+    connected,
+    onFork,
+    onStop,
+    onKeep,
+    onDiscard,
+    progress,
   }: Props = $props();
 
-  const sidebar = useSidebar();
-  /** The skills this very session listed, as its `/` menu classifies them. */
-  const skills = $derived(commands.filter((command) => command.type === 'skill'));
-  /** Bound to the kit's tabs, which own the value; a union would not bind to it. */
-  let tab = $state('memory');
-
-  /**
-   * The kit keeps every panel mounted and only toggles `hidden`, so a Svelte
-   * `in:` transition would never fire. Going `display:none` → shown restarts a
-   * CSS animation, which is the entrance: 160ms of opacity, no travel.
-   */
-  const PANEL =
-    'flex flex-col gap-4 duration-[160ms] ease-[var(--ease-out-expo)] ' +
-    'data-[state=active]:animate-in data-[state=active]:fade-in';
-
-  /** The rail's own dot for a branch, in `ActivityDot`'s vocabulary: amber is
-      work in progress, green is never a branch mid-flight. */
-  const BRANCH_DOT: Record<string, string> = {
-    error: 'bg-error',
-    running: 'bg-warning',
-    starting: 'bg-warning/60',
-    complete: 'bg-muted-foreground/40',
-  };
-
-  let loading = $state(true);
-
-  let user = $state<string | null>(null);
-  let project = $state<string | null>(null);
-  let local = $state<string | null>(null);
-  /** Per scope: a real failure. A file that is not there is content null, not this. */
-  let failed = $state<Record<'user' | 'project' | 'local', string | null>>({
-    user: null,
-    project: null,
-    local: null,
+  /** The pill's hue and word, from the one activity the session reports. */
+  const pill = $derived.by((): { status: 'live' | 'attn' | 'idle'; label: string } => {
+    if (sleeping) return { status: 'idle', label: SLEEPING_LABEL };
+    if (activity === 'blocked') return { status: 'attn', label: ACTIVITY_LABEL.blocked };
+    if (activity === 'working') return { status: 'live', label: ACTIVITY_LABEL.working };
+    return { status: 'idle', label: ACTIVITY_LABEL.idle };
   });
 
-  const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
+  const hue = $derived(markHue(cwdLabel));
+  const glyph = $derived(harnessGlyphPath(harness));
+  const contextPct = $derived(stats.contextPct);
 
-  /** The `fs` verb's own sentence for a file that is not there. */
-  const isMissing = (error: unknown) => message(error).includes('does not exist');
-
-  /**
-   * A machine that is away fails all three reads at once, and that is one fact
-   * about the machine rather than three about the files. Said once in the
-   * banner; the cards then only note that they are unreadable.
-   */
-  const anyFailed = $derived(Boolean(failed.user || failed.project || failed.local));
-  const allFailed = $derived(Boolean(failed.user && failed.project && failed.local));
-
-  /** A card whose read did not come back, in place of its content. */
-  const UNREADABLE = 'Unreadable while the machine is away.';
-
-  /**
-   * The tooltip on a single scope that did not answer. The exception underneath
-   * is the tunnel's own ("Failed to execute 'json' on 'Response'…") and names
-   * neither the file nor a way out of it, so it stays in the tooltip for
-   * whoever is debugging the wire rather than reading their memory.
-   */
-  const unanswered = (file: string): string =>
-    `This machine did not answer for ${file} — reconnect it and retry.`;
-
-  async function readFile(path: string): Promise<{ content: string | null; error: string | null }> {
-    try {
-      return { content: await machineFs<string>(machineId, 'read', path), error: null };
-    } catch (error) {
-      return { content: null, error: isMissing(error) ? null : message(error) };
+  /** The harness's own name, spelled the way the fleet board spells it. */
+  const harnessLabel = $derived.by(() => {
+    switch (harness) {
+      case 'claude':
+        return 'Claude Code';
+      case 'opencode':
+        return 'OpenCode';
+      default:
+        return harness;
     }
-  }
-
-  async function load() {
-    loading = true;
-    const [userRead, projectRead, localRead] = await Promise.all([
-      peekMemory(machineId)
-        .then((copy) => ({ content: copy?.content ?? null, error: null }))
-        .catch((error: unknown) => ({ content: null, error: message(error) })),
-      readFile(`${cwd}/CLAUDE.md`),
-      readFile(`${cwd}/CLAUDE.local.md`),
-    ]);
-    user = userRead.content;
-    project = projectRead.content;
-    local = localRead.content;
-    failed = { user: userRead.error, project: projectRead.error, local: localRead.error };
-    loading = false;
-  }
-
-  // Every opening is a fresh read: these files change under a running session,
-  // which is the reason to be looking at them. On the rising edge only — the
-  // rail stays mounted while it is closed, and a closed rail reads nothing.
-  let wasOpen = false;
-  $effect(() => {
-    const open = sidebar.open || sidebar.openMobile;
-    if (open && !wasOpen) void load();
-    wasOpen = open;
   });
-
-  /**
-   * The machine's own word about the skills the session listed, by name —
-   * which scope each really came from and whether the fleet manages it. The
-   * `/` menu knows neither, and a project-scoped skill is exactly the one the
-   * reader could not act on from here.
-   */
-  let discovered = $state<Record<string, DiscoveredSkill>>({});
-  let adopting = $state<Record<string, boolean>>({});
-
-  // Asked when the Skills tab is first shown, not when the rail opens: most
-  // openings never reach this tab, and the answer holds for one opening.
-  let asked = false;
-  $effect(() => {
-    const open = sidebar.open || sidebar.openMobile;
-    if (!open) {
-      asked = false;
-      discovered = {};
-      return;
-    }
-    if (tab !== 'skills' || asked) return;
-    asked = true;
-    void discover();
-  });
-
-  async function discover() {
-    try {
-      const inspection = await inspectMachine(machineId, cwd);
-      discovered = Object.fromEntries(inspection.skills.map((skill) => [skill.name, skill]));
-    } catch {
-      // Absence over an error: the list is what it was before anyone asked.
-    }
-  }
-
-  /**
-   * What the tab lists. A session that has spoken names its own skills and the
-   * discovery enriches them; a resumed one has no init frame and would show
-   * nothing forever — so the machine's answer for this folder stands alone,
-   * which is exactly what a session here would see (NEW.md §11).
-   */
-  const skillRows = $derived(
-    skills.length > 0
-      ? skills.map((skill) => ({
-          name: skill.name,
-          description: skill.description,
-          source: skill.source,
-          found: discovered[skill.name] as DiscoveredSkill | undefined,
-        }))
-      : Object.values(discovered)
-          .sort((a, b) => a.name.localeCompare(b.name))
-          .map((found) => ({
-            name: found.name,
-            description: found.description,
-            source: undefined as string | undefined,
-            found: found as DiscoveredSkill | undefined,
-          }))
-  );
-
-  async function adopt(skill: DiscoveredSkill) {
-    adopting[skill.name] = true;
-    try {
-      await adoptSkill(skill.name, machineId, cwd);
-      discovered[skill.name] = { ...skill, managed: true };
-      toast.success(`${skill.name} is the fleet's now — its files went to the hub.`);
-    } catch (error) {
-      toast.error(message(error));
-    } finally {
-      delete adopting[skill.name];
-    }
-  }
-
-  const close = () => (sidebar.isMobile ? sidebar.setOpenMobile(false) : sidebar.setOpen(false));
-
-  async function saveProject(text: string): Promise<boolean> {
-    await machineFs(machineId, 'write', `${cwd}/CLAUDE.md`, text);
-    project = text;
-    failed.project = null;
-    return true;
-  }
-
-  async function saveLocal(text: string): Promise<boolean> {
-    await machineFs(machineId, 'write', `${cwd}/CLAUDE.local.md`, text);
-    local = text;
-    failed.local = null;
-    return true;
-  }
 </script>
 
-{#snippet fact(label: string, value: string, mono: boolean)}
-  <div class="flex flex-col gap-0.5">
-    <dt class="text-caption">{label}</dt>
-    <dd class="text-body break-all {mono ? 'font-mono' : ''}">{value}</dd>
-  </div>
+{#snippet verb(opts: {
+  label: string;
+  tip: string;
+  icon: Component;
+  onclick: () => void;
+  disabled?: boolean;
+  variant?: ButtonVariant;
+})}
+  {@const Icon = opts.icon}
+  <Tooltip.Root>
+    <Tooltip.Trigger>
+      {#snippet child({ props })}
+        <Button
+          {...props}
+          variant={opts.variant === 'destructive' ? 'outline' : (opts.variant ?? 'outline')}
+          size="sm"
+          class="text-xs {opts.variant === 'destructive'
+            ? 'text-destructive hover:bg-destructive/10 hover:text-destructive'
+            : ''}"
+          disabled={opts.disabled}
+          aria-label={opts.label}
+          onclick={opts.onclick}
+        >
+          <Icon />
+          <span class="hidden 2xl:inline">{opts.label}</span>
+        </Button>
+      {/snippet}
+    </Tooltip.Trigger>
+    <Tooltip.Content>{opts.tip}</Tooltip.Content>
+  </Tooltip.Root>
 {/snippet}
 
-{#snippet scope(name: string, file: string, problem: string | null)}
-  <span class="flex min-w-0 items-center gap-2 text-micro text-muted-foreground">
-    <span>{name}</span>
-    <!-- Not red: a machine that cannot be reached is a fact, not a thing the
-         reader has to answer. When all three failed the banner has said it
-         once already, so the cards keep quiet. -->
-    {#if problem && !allFailed}
-      <span class="min-w-0 shrink-0" title="{unanswered(file)} ({problem})">no answer</span>
-    {/if}
-  </span>
-{/snippet}
+<Tooltip.Provider delayDuration={200}>
+<header class="shead">
+  <a class="back" href="/session" aria-label="Back to fleet board">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6" /></svg>
+  </a>
 
-<!-- Offcanvas: the sidebar transitions its own inline-size inside the
-     Provider's flex layout. No absolute positioning — it flows beside the
-     chat and the parent's overflow-hidden clips it when collapsed. -->
-<Sidebar.Root side="right" collapsible="offcanvas">
-  <Tabs.Root bind:value={tab} class="flex min-h-0 flex-1 flex-col gap-0">
-    <!-- The kit's header stacks; this one is a row. -->
-    <Sidebar.Header class="material-chrome flex-row items-center gap-2 border-b border-border px-4 py-2">
-      <Tabs.List class="bg-muted rounded-xl p-1">
-        <Tabs.Trigger value="memory">Memory</Tabs.Trigger>
-        <Tabs.Trigger value="mcp">MCP</Tabs.Trigger>
-        <Tabs.Trigger value="skills">Skills</Tabs.Trigger>
-        <Tabs.Trigger value="info">Info</Tabs.Trigger>
-      </Tabs.List>
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        class="ml-auto shrink-0 text-muted-foreground"
-        aria-label="Close context panel"
-        onclick={close}
-      >
-        <IconClose />
-      </Button>
-    </Sidebar.Header>
+  <ItemMark {hue}>
+    <svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={glyph} /></svg>
+  </ItemMark>
 
-    <Sidebar.Content class="gap-4 overflow-x-hidden p-4">
-      <Tabs.Content value="memory" class={PANEL}>
-        <div class="flex items-start gap-2">
-          <p class="min-w-0 flex-1 text-caption">
-            What Claude Code reads at <span class="font-mono break-words">{cwd}</span> on this machine
-            — user, project, then local.
-          </p>
-          <!-- The read only happens on the rising edge of open, so a failure
-               with the rail already open has no other way back. -->
-          {#if anyFailed && !allFailed}
-            <Button variant="ghost" size="xs" class="shrink-0" disabled={loading} onclick={load}>
-              Retry
-            </Button>
-          {/if}
-        </div>
+  <h1 class="title" title={[heading, cwdLabel].join('\n')}>{heading}</h1>
+  <span class="path">{hostname ? `${hostname} : ` : ''}{cwdLabel}</span>
 
-        {#if loading}
-          {#each [0, 1, 2] as slot (slot)}
-            <Skeleton class="h-32 w-full shrink-0 rounded-xl" />
-          {/each}
-        {:else}
-          {#if allFailed}
-            <div
-              role="status"
-              title={failed.user}
-              class="flex shrink-0 items-center gap-2 rounded-xl bg-warning/10 px-4 py-3 text-caption"
-            >
-              <span class="min-w-0 flex-1">
-                This machine is not answering — memory can't be read.
-              </span>
-              <Button variant="ghost" size="xs" class="shrink-0" onclick={load}>Retry</Button>
-            </div>
-          {/if}
+  <StatusPill status={pill.status}>
+    {#snippet icon()}
+      {#if pill.status === 'live'}
+        <svg viewBox="0 0 12 12" fill="currentColor" aria-hidden="true"><circle cx="6" cy="6" r="3.1" /></svg>
+      {:else if pill.status === 'attn'}
+        <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9.4V2.6M3 5.6 6 2.6l3 3" /></svg>
+      {/if}
+    {/snippet}
+    {pill.label}
+  </StatusPill>
 
-          <MemoryCard
-            path="~/.claude/CLAUDE.md"
-            content={user}
-            emptyText={failed.user ? UNREADABLE : 'No user CLAUDE.md on this machine.'}
+  {#if scratch}
+    <span class="quest">side quest</span>
+  {/if}
+
+  <div class="controls">
+    <ToggleGroup.Root
+      type="single"
+      variant="outline"
+      size="sm"
+      value={view}
+      onValueChange={onChooseView}
+      class="shrink-0"
+      aria-label="Session view"
+    >
+      <ToggleGroup.Item value="chat" aria-controls="session-view-panel" aria-label="Chat">
+        <IconChat />
+        <span class="hidden sm:inline">Chat</span>
+      </ToggleGroup.Item>
+      <ToggleGroup.Item value="flow" aria-controls="session-view-panel" aria-label="Flow">
+        <IconFlow />
+        <span class="hidden sm:inline">Flow</span>
+      </ToggleGroup.Item>
+    </ToggleGroup.Root>
+
+    {#if !browsing}
+      <ButtonGroup.Root class="shrink-0">
+        <Select.Root type="single" value={permissionMode ?? ''} onValueChange={onChooseMode}>
+          <Select.Trigger
+            size="sm"
+            aria-label={permissionMode ? 'Permission mode' : 'Permission mode, not reported yet'}
+            title={permissionMode
+              ? 'How this session answers tool permissions'
+              : "Read from this session's next turn — it has not said how it answers tool permissions"}
+            class="text-xs {permissionMode === 'bypassPermissions'
+              ? 'font-medium text-warning'
+              : 'text-muted-foreground'}"
           >
-            {#snippet meta()}
-              {@render scope('user', 'its user memory', failed.user)}
-            {/snippet}
-            {#snippet actions()}
-              <Button variant="ghost" size="xs" href="/tools?tab=memory">Manage</Button>
-            {/snippet}
-          </MemoryCard>
-
-          <MemoryCard
-            path="CLAUDE.md"
-            content={project}
-            save={failed.project ? undefined : saveProject}
-            emptyText={failed.project
-              ? UNREADABLE
-              : 'No CLAUDE.md in this project — click to write one.'}
-          >
-            {#snippet meta()}
-              {@render scope('project', 'CLAUDE.md', failed.project)}
-            {/snippet}
-          </MemoryCard>
-
-          <MemoryCard
-            path="CLAUDE.local.md"
-            content={local}
-            save={failed.local ? undefined : saveLocal}
-            emptyText={failed.local
-              ? UNREADABLE
-              : 'No CLAUDE.local.md — click to write one. Git never sees this file.'}
-          >
-            {#snippet meta()}
-              {@render scope('local', 'CLAUDE.local.md', failed.local)}
-            {/snippet}
-          </MemoryCard>
-        {/if}
-      </Tabs.Content>
-
-      <Tabs.Content value="mcp" class={PANEL}>
-        {#if servers === null}
-          {#each [0, 1] as slot (slot)}
-            <Skeleton class="h-28 w-full shrink-0 rounded-xl" />
-          {/each}
-        {:else if servers.length === 0}
-          <p class="text-caption">No MCP servers in this session.</p>
-        {:else}
-          {#each servers as server (server.name)}
-            <div class="shrink-0 rounded-xl bg-card p-3 shadow-md">
-              <McpServerDetail {server} {instanceId} {machineId} />
-            </div>
-          {/each}
-        {/if}
-      </Tabs.Content>
-
-      <Tabs.Content value="skills" class={PANEL}>
-        {#if skillRows.length === 0}
-          <p class="text-caption">
-            No skills here yet — the session has listed none, and the machine names none for this
-            folder.
-          </p>
-        {:else}
-          <p class="text-caption">
-            {#if skills.length > 0}
-              {skills.length} skill{skills.length === 1 ? '' : 's'} this session can reach, as its
-              <span class="font-mono">/</span> menu lists them.
-            {:else}
-              {skillRows.length} skill{skillRows.length === 1 ? '' : 's'} a session in this folder
-              can reach, as the machine lists them.
-            {/if}
-          </p>
-          <ul class="flex flex-col rounded-xl bg-card shadow-md">
-            {#each skillRows as skill (skill.name)}
-              {@const found = skill.found}
-              <li
-                class="flex min-h-9 flex-wrap items-start gap-x-3 gap-y-1 border-t border-border/50 px-3 py-2 first:border-t-0"
+            {permissionMode ? permissionModeLabel(permissionMode) : '—'}
+          </Select.Trigger>
+          <Select.Content>
+            {#each PERMISSION_MODES as option (option.value)}
+              {@const locked =
+                option.value === 'bypassPermissions' &&
+                option.value !== permissionMode &&
+                !canRelaunch}
+              <Select.Item
+                value={option.value}
+                label={option.label}
+                disabled={locked}
+                title={locked
+                  ? 'This session has not started yet — try again in a moment'
+                  : option.description}
+                class={locked ? 'opacity-40' : ''}
               >
-                <span class="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <span class="flex flex-wrap items-center gap-x-2 gap-y-1">
-                    <span class="truncate font-mono text-[13px]">{skill.name}</span>
-                    <!-- The scope is the better fact when the machine has
-                         answered; `source` is only the name's own prefix. -->
-                    {#if found}
-                      <Badge variant="outline" class="text-micro">{found.scope}</Badge>
-                    {:else if skill.source}
-                      <Badge variant="outline">{skill.source}</Badge>
-                    {/if}
+                <span class="flex flex-col">
+                  <span class={option.value === 'bypassPermissions' ? 'text-warning' : ''}>
+                    {option.label}
                   </span>
-                  {#if skill.description}
-                    <span class="line-clamp-2 text-micro text-muted-foreground">
-                      {skill.description}
-                    </span>
-                  {/if}
+                  <span class="text-xs text-muted-foreground">{option.description}</span>
                 </span>
-                <!-- A plugin's skills ride the plugin, so they are neither the
-                     fleet's nor adoptable. -->
-                {#if found?.managed}
-                  <span
-                    class="shrink-0 rounded-full bg-muted px-2 py-0.5 text-micro text-muted-foreground"
-                  >
-                    fleet
-                  </span>
-                {:else if found && found.scope !== 'plugin'}
-                  <Button
-                    variant="outline"
-                    size="xs"
-                    class="shrink-0"
-                    disabled={adopting[skill.name] === true}
-                    onclick={() => adopt(found)}
-                  >
-                    {adopting[skill.name] ? 'Adopting…' : 'Adopt'}
-                  </Button>
-                {/if}
-              </li>
+              </Select.Item>
             {/each}
-          </ul>
-          <p class="text-caption">
-            Every machine's own skills are on
-            <a class="underline underline-offset-4" href="/tools?tab=skills">the tools page</a>,
-            where an unmanaged one can be adopted into the fleet.
-          </p>
+          </Select.Content>
+        </Select.Root>
+
+        <ModelCombobox
+          value={currentModel}
+          onchoose={onChooseModel}
+          class="text-xs text-muted-foreground"
+        />
+
+        {#if showEffort}
+          <Popover.Root>
+            <Popover.Trigger
+              class="flex min-h-8 shrink-0 items-center rounded-md border border-border px-2.5
+                font-mono text-xs text-muted-foreground transition-colors duration-150 ease-out
+                hover:bg-accent hover:text-foreground"
+              title={effort
+                ? 'How hard this session thinks, and how much it spends doing it'
+                : 'No effort level has been asked for — this session is running at its model’s own'}
+              aria-label="Reasoning effort"
+            >
+              {effort ?? '—'}
+            </Popover.Trigger>
+            <Popover.Content class="material-panel w-[320px] p-3" align="end">
+              <EffortSlider
+                stops={effortStops}
+                value={effort}
+                modelName={modelLabel(currentModel)}
+                onchange={onChooseEffort}
+              />
+            </Popover.Content>
+          </Popover.Root>
         {/if}
-      </Tabs.Content>
+      </ButtonGroup.Root>
 
+      {#if mcpServers && mcpServers.length > 0}
+        <McpChips servers={mcpServers} instanceId={viewId} {machineId} />
+      {/if}
 
-      <Tabs.Content value="info" class={PANEL}>
-        <dl class="flex shrink-0 flex-col gap-3">
-          {#if model}
-            {@render fact('Model', modelLabel(model), false)}
-          {/if}
-          {#if hostname}
-            {@render fact('Machine', machineLabel(hostname), false)}
-          {/if}
-          {@render fact('Directory', cwd, true)}
-          {#if permissionMode}
-            {@render fact('Permission mode', permissionModeLabel(permissionMode), false)}
-          {/if}
-          {#if totalCostUsd > 0}
-            {@render fact('Cost', `$${totalCostUsd.toFixed(4)}`, false)}
-          {/if}
-          {#if lastActivityAt}
-            {@render fact('Last activity', formatDistanceToNow(lastActivityAt), false)}
-          {/if}
-          {#if sessionId}
-            <div class="flex flex-col gap-0.5">
-              <dt class="text-caption">Session id</dt>
-              <dd class="flex items-center gap-2">
-                <span class="min-w-0 flex-1 truncate font-mono text-body">{sessionId}</span>
-                <CopyButton
-                  text={sessionId}
-                  variant="ghost"
-                  size="icon-sm"
-                  class="shrink-0 text-muted-foreground"
-                />
-              </dd>
-            </div>
-          {/if}
-        </dl>
+      {#if progress}
+        <Popover.Root>
+          <Popover.Trigger
+            class="flex min-h-8 shrink-0 items-center gap-1.5 rounded-full px-2 text-micro
+              tabular-nums text-muted-foreground transition-colors duration-150 ease-out hover:bg-accent"
+            aria-label="Tasks: {progress.done} of {progress.total} done"
+          >
+            {progress.done}/{progress.total} tasks
+          </Popover.Trigger>
+          <Popover.Content
+            class="material-panel max-h-[480px] w-[380px] overflow-y-auto p-0"
+            align="end"
+          >
+            <TaskPanel {viewId} />
+          </Popover.Content>
+        </Popover.Root>
+      {/if}
 
-        {#if branches.length > 0}
-          <div class="flex shrink-0 flex-col gap-2">
-            <h3 class="text-caption">Subagents</h3>
-            <ul class="flex flex-col gap-1">
-              {#each branches as branch (branch.toolUseId)}
-                <li>
-                  <!-- The hash is the transcript's own jump: the page watches it
-                       and scrolls virtua at the branch. -->
-                  <Button
-                    variant="ghost"
-                    href="#subagent-{branch.toolUseId}"
-                    class="h-auto w-full justify-start gap-2 px-2 py-1.5 font-normal"
-                    title={branch.description ?? branch.subagentType}
-                  >
-                    <span
-                      class="size-1.5 shrink-0 rounded-full {BRANCH_DOT[branch.status] ??
-                        'bg-muted-foreground/40'} {branch.status === 'running'
-                        ? 'animate-pulse motion-reduce:animate-none'
-                        : ''}"
-                    ></span>
-                    <span class="min-w-0 flex-1 truncate text-left text-[13px]">
-                      {branch.description ?? branch.subagentType}
-                    </span>
-                    {#if branch.model}
-                      <span class="shrink-0 text-micro text-muted-foreground">
-                        {modelLabel(branch.model)}
-                      </span>
-                    {/if}
-                    <span class="shrink-0 text-micro text-muted-foreground">{branch.status}</span>
-                  </Button>
-                </li>
-              {/each}
-            </ul>
-          </div>
+      <ButtonGroup.Root class="shrink-0">
+        {@render verb({
+          label: 'Fork',
+          tip: 'Branch a side quest off this session',
+          icon: IconFork,
+          onclick: onFork,
+          disabled: !forkable || !wholeTranscript,
+        })}
+        {#if scratch}
+          {@render verb({
+            label: 'Keep',
+            tip: 'Promote this side quest to mainline work',
+            icon: IconCheck,
+            onclick: onKeep,
+          })}
+          {@render verb({
+            label: 'Discard',
+            tip: "Delete this quest's worktree and its transcript, for good",
+            icon: IconTrash,
+            onclick: onDiscard,
+            variant: 'destructive',
+          })}
+        {:else}
+          {@render verb({
+            label: 'Stop',
+            tip: 'End this session',
+            icon: IconStop,
+            onclick: onStop,
+          })}
         {/if}
-      </Tabs.Content>
-    </Sidebar.Content>
-  </Tabs.Root>
-</Sidebar.Root>
+      </ButtonGroup.Root>
+    {/if}
+  </div>
+
+  <div class="meta" role="status" aria-live="polite">
+    {#if browsing}
+      <span>Transcript</span>
+      <span><b>{loading ? '—' : messageCount}</b> messages</span>
+    {:else}
+      <span>{harnessLabel}</span>
+      {#if stats.turns !== null}
+        <span><b>{stats.turns}</b> turns</span>
+      {/if}
+      {#if contextPct !== null}
+        <span><b>{Math.round(contextPct)}%</b> context</span>
+      {/if}
+      {#if stats.cost !== null && stats.cost > 0}
+        <span><b>${stats.cost.toFixed(2)}</b></span>
+      {/if}
+    {/if}
+  </div>
+</header>
+</Tooltip.Provider>
+
+<style>
+  .shead {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    height: 57px;
+    flex-shrink: 0;
+    padding: 0 var(--space-5) 0 var(--space-6);
+    border-bottom: 1px solid var(--border-hairline);
+    background: var(--surface-raised);
+    min-width: 0;
+  }
+
+  .back {
+    width: 32px;
+    height: 32px;
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    border: 1px solid var(--border-hairline);
+    border-radius: var(--radius-control);
+    background: var(--surface-raised);
+    color: var(--ink-body);
+  }
+  .back:hover {
+    background: var(--surface-field);
+    color: var(--ink-strong);
+  }
+  .back svg {
+    width: 17px;
+    height: 17px;
+  }
+
+  .title {
+    font-size: var(--text-md);
+    font-weight: var(--weight-strong);
+    letter-spacing: var(--track-display);
+    color: var(--ink-strong);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 0 1 auto;
+    min-width: 4ch;
+  }
+
+  .path {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    color: var(--ink-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .quest {
+    flex: 0 0 auto;
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    letter-spacing: var(--track-caps);
+    color: var(--ink-muted);
+    border: 1px dashed var(--border-divider);
+    border-radius: var(--radius-mark);
+    padding: 2px 6px;
+  }
+
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex: 0 0 auto;
+    margin-left: auto;
+  }
+
+  .meta {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    flex: 0 0 auto;
+    font-size: var(--text-sm);
+    color: var(--ink-muted);
+  }
+  .meta b {
+    font-weight: var(--weight-strong);
+    color: var(--ink-body);
+    font-variant-numeric: tabular-nums;
+  }
+
+  @media (max-width: 1100px) {
+    .meta {
+      display: none;
+    }
+  }
+  @media (max-width: 640px) {
+    .shead {
+      padding: 0 var(--space-4);
+      gap: var(--space-2);
+    }
+    .path {
+      display: none;
+    }
+  }
+</style>

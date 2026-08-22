@@ -1372,43 +1372,6 @@
 
 <svelte:window onkeydown={handleKeydown} />
 
-<!-- One shape for every session verb: an icon that survives a narrow header, a
-     name that drops out with it, and a tooltip that is the only place the name
-     is guaranteed to be. -->
-{#snippet verb(opts: {
-  label: string;
-  tip: string;
-  icon: Component;
-  onclick: () => void;
-  disabled?: boolean;
-  variant?: ButtonVariant;
-})}
-  {@const Icon = opts.icon}
-  <Tooltip.Root>
-    <Tooltip.Trigger>
-      {#snippet child({ props })}
-        <Button
-          {...props}
-          variant={opts.variant === 'destructive' ? 'outline' : (opts.variant ?? 'outline')}
-          size="sm"
-          class="text-xs {opts.variant === 'destructive'
-            ? 'text-destructive hover:bg-destructive/10 hover:text-destructive'
-            : ''}"
-          disabled={opts.disabled}
-          aria-label={opts.label}
-          onclick={opts.onclick}
-        >
-          <Icon />
-          <!-- The name is in the tooltip and the aria-label, so the label is the
-               first thing to go when the bar runs out of room. -->
-          <span class="hidden 2xl:inline">{opts.label}</span>
-        </Button>
-      {/snippet}
-    </Tooltip.Trigger>
-    <Tooltip.Content>{opts.tip}</Tooltip.Content>
-  </Tooltip.Root>
-{/snippet}
-
 <AlertDialog.Root bind:open={confirmingDiscard}>
   <AlertDialog.Content>
     <AlertDialog.Header>
@@ -1431,578 +1394,317 @@
   <MachineLogin {machine} bind:open={loggingIn} />
 {/if}
 
-<!-- The sidebar is a flow element inside this flex wrapper — no absolute
-     positioning, so no overflow-hidden needed for clipping. The sidebar's
-     own overflow-hidden handles its collapsed state. -->
-<Sidebar.Provider
-  bind:open={contextRail.open}
-  style="--sidebar-width: 26rem"
-  class="h-full min-h-0 flex-1"
+<div
+  class="flex h-full min-w-0 flex-1 flex-col overflow-hidden"
+  use:swipeBetween={{
+    onNext: () => step(1),
+    onPrevious: () => step(-1),
+    // Not while a question or a permission is waiting: swiping away from
+    // something that is blocked on an answer loses the reader's place in the
+    // one situation where the page is asking them for something.
+    enabled: () => answerable.length === 0,
+  }}
 >
-  <div
-    class="flex h-full min-w-0 flex-1 flex-col overflow-hidden"
-    use:swipeBetween={{
-      onNext: () => step(1),
-      onPrevious: () => step(-1),
-      // Not while a question or a permission is waiting: swiping away from
-      // something that is blocked on an answer loses the reader's place in the
-      // one situation where the page is asking them for something.
-      enabled: () => answerable.length === 0,
-    }}
-  >
-    {#if machineOffline && machine}
-      <div
-        role="status"
-        class="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-warning/30 bg-warning/10 px-4 py-2 text-sm"
-        transition:fly={{ y: -6, duration: 180, easing: quintOut }}
-      >
-        <span class="font-medium text-warning">{machine.hostname} is offline</span>
-        <span class="text-warning/80">
-          Messages cannot be delivered until it reconnects.
-        </span>
-      </div>
-    {/if}
-    {#if cannotAnswer && machine}
-      <div
-        role="status"
-        class="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-warning/30 bg-warning/10 px-4 py-2 text-sm"
-        transition:fly={{ y: -6, duration: 180, easing: quintOut }}
-      >
-        <span class="font-medium text-warning">{machine.hostname} is not logged in</span>
-        <span class="text-warning/80">
-          Claude Code there cannot reach its credentials, so this session cannot answer.
-        </span>
-        <Button size="sm" class="ml-auto" onclick={() => (loggingIn = true)}>Log in</Button>
-      </div>
-    {/if}
-
-    <!-- The controls are the fixed cost; the path is what gives way. Without
-         min-w-0 the flex items refuse to shrink below their content and the
-         right-hand group is pushed off the window instead. -->
-    <!-- A phone's header is all controls and no room; the session says its name
-         on the line above them instead of going unnamed. -->
-    <div class="flex min-w-0 items-baseline gap-2 px-4 pt-2 sm:hidden">
-      <h1 class="min-w-0 truncate text-sm font-medium" title={heading}>{heading}</h1>
-      {#if leaf !== heading}
-        <span class="shrink-0 font-mono text-micro text-muted-foreground">{leaf}</span>
-      {/if}
-      <!-- The count only: a phone header has no room for what it is on, and
-           the sheet this opens says that on its own row. -->
-      {#if progress}
-        <button
-          type="button"
-          class="-mr-1 ml-auto flex min-h-8 shrink-0 items-center gap-1.5 self-center rounded-full
-            px-2 transition-colors duration-150 ease-out hover:bg-accent"
-          aria-label="Tasks: {progress.done} of {progress.total} done"
-          onclick={() => (planSheet = true)}
-        >
-          <span class="identity-ink flex items-center" style={identityVar(cwdLabel)}>
-            <TaskRing done={progress.done} total={progress.total} size="sm" />
-          </span>
-          <span class="text-micro tabular-nums" data-tabular>
-            {progress.done}/{progress.total}
-          </span>
-        </button>
-      {/if}
+  {#if machineOffline && machine}
+    <div
+      role="status"
+      class="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-warning/30 bg-warning/10 px-4 py-2 text-sm"
+      transition:fly={{ y: -6, duration: 180, easing: quintOut }}
+    >
+      <span class="font-medium text-warning">{machine.hostname} is offline</span>
+      <span class="text-warning/80">Messages cannot be delivered until it reconnects.</span>
     </div>
-
-    <!-- A fixed height, whatever the session puts in it: a stored transcript
-         carries none of the pickers a live one does, and a header that measured
-         its contents made the transcript below it start at a different line in
-         every tab. Everything in here truncates rather than growing. -->
-    <header class="flex h-12 min-w-0 shrink-0 items-center gap-3 border-b border-border px-4">
-      <a href="/session" class="hidden shrink-0 text-sm text-muted-foreground hover:text-foreground sm:inline"
-        >Sessions</a
-      >
-      <!-- The verbs, the pickers and the state are this bar's fixed cost, and
-           under `2xl` what is left cannot hold a title and a path without
-           cutting the path's head off — so there the path drops to the title's
-           tooltip and the name gets the whole run. Where both fit, the path
-           takes the width it needs, up to 60% of the run, and the title gives
-           up the rest: a half-path is a wrong answer to "which checkout", a
-           half-sentence is still the sentence. -->
-      <div class="hidden min-w-0 flex-1 items-baseline gap-3 sm:flex">
-        <h1
-          class="min-w-0 flex-1 truncate text-sm font-medium"
-          title={[heading, cwdLabel].join('\n')}
-        >{heading}</h1>
-        <!-- Below `2xl` the whole path does not fit, but its last segment does,
-             and that is the segment that tells two checkouts apart. -->
-        {#if leaf !== heading}
-          <span
-            class="hidden min-w-0 truncate font-mono text-micro text-muted-foreground sm:block 2xl:hidden"
-            title={cwdLabel}
-          >{leaf}</span>
-        {/if}
-        <span
-          class="hidden max-w-[60%] shrink-0 truncate font-mono text-micro text-muted-foreground [direction:rtl] 2xl:block"
-          title={cwdLabel}
-        ><bdi>{cwdLabel}</bdi></span>
-        <!-- The plan, beside the name it belongs to rather than out in the
-             toolbar: it is a fact about this conversation, not a verb. The
-             ring wears the directory's hue and nothing else does — identity
-             is decoration here, and olive still means "this acts". -->
-        {#if progress}
-          <Popover.Root>
-            <Popover.Trigger
-              class="flex min-h-8 shrink-0 items-center gap-1.5 self-center rounded-full px-2
-                transition-colors duration-150 ease-out hover:bg-accent"
-              aria-label="Tasks: {progress.done} of {progress.total} done"
-            >
-              <span class="identity-ink flex items-center" style={identityVar(cwdLabel)}>
-                <TaskRing done={progress.done} total={progress.total} />
-              </span>
-              <span class="inline-grid text-micro tabular-nums" data-tabular>
-                {#key `${progress.done}/${progress.total}`}
-                  <span
-                    class="col-start-1 row-start-1"
-                    in:fly={{ y: 5, duration: painted ? 180 : 0, easing: quintOut }}
-                    out:fly={{ y: -5, duration: painted ? 140 : 0, easing: quintOut }}
-                  >{progress.done}/{progress.total}</span>
-                {/key}
-              </span>
-              {#if doingNow}
-                <span class="max-w-[24ch] truncate text-micro text-muted-foreground">
-                  · {doingNow}
-                </span>
-              {/if}
-            </Popover.Trigger>
-            <Popover.Content
-              class="material-panel max-h-[480px] w-[380px] overflow-y-auto p-0"
-              align="start"
-            >
-              <TaskPanel {viewId} />
-            </Popover.Content>
-          </Popover.Root>
-        {/if}
-      </div>
-      {#if session?.scratch}
-        <span
-          class="shrink-0 rounded-sm border border-dashed border-muted-foreground/40 px-1.5 py-0.5 text-xs tracking-wide text-muted-foreground uppercase"
-        >
-          side quest
-        </span>
-      {/if}
-      <span
-        class="ml-auto flex min-h-6 shrink-0 items-center gap-1.5 text-xs text-muted-foreground"
-        role="status"
-        aria-live="polite"
-      >
-        {#if !browsing}
-          <!-- The state carries a colour of its own, so the dot says it before the
-               word is read: pinging red when the session is waiting on you. -->
-          <ActivityDot {activity} size={1.5} />
-        {/if}
-        {#if browsing}
-          Transcript · {session?.loading
-            ? 'loading'
-            : `${session?.messages.length ?? 0} messages`}
-        {:else}
-          <!-- The word swaps in place; the dot beside the session is the static cue.
-               One inline run, so the separator's leading space survives. -->
-          <span>
-            <span class="inline-grid">
-              {#key activity}
-                <span
-                  class="col-start-1 row-start-1"
-                  in:fly={{ y: 5, duration: painted ? 180 : 0, easing: quintOut }}
-                  out:fly={{ y: -5, duration: painted ? 140 : 0, easing: quintOut }}
-                >{ACTIVITY_LABEL[activity]}</span>
-              {/key}
-            </span>{runningTool}
-          </span>
-        {/if}
+  {/if}
+  {#if cannotAnswer && machine}
+    <div
+      role="status"
+      class="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-warning/30 bg-warning/10 px-4 py-2 text-sm"
+      transition:fly={{ y: -6, duration: 180, easing: quintOut }}
+    >
+      <span class="font-medium text-warning">{machine.hostname} is not logged in</span>
+      <span class="text-warning/80">
+        Claude Code there cannot reach its credentials, so this session cannot answer.
       </span>
+      <Button size="sm" class="ml-auto" onclick={() => (loggingIn = true)}>Log in</Button>
+    </div>
+  {/if}
 
-      {#if !browsing && session && session.mcp && session.mcp.length > 0}
-        <McpChips servers={session.mcp} instanceId={viewId} machineId={session.machineId} />
-      {/if}
+  <!-- The transcript's header: identity, state, and the settings that steer the
+       next turn. Its own component so the transcript body below stays one thing. -->
+  <SessionContext
+    {viewId}
+    {browsing}
+    {heading}
+    {cwdLabel}
+    hostname={machine?.hostname ?? null}
+    harness={session?.harness ?? 'claude'}
+    {activity}
+    {sleeping}
+    stats={cockpit.statsOf(viewId)}
+    messageCount={session?.messages.length ?? 0}
+    loading={session?.loading ?? false}
+    scratch={session?.scratch ?? false}
+    {view}
+    onChooseView={chooseView}
+    {permissionMode}
+    {canRelaunch}
+    onChooseMode={chooseMode}
+    {currentModel}
+    onChooseModel={chooseModel}
+    {showEffort}
+    effortStops={effortStopsForModel}
+    {effort}
+    onChooseEffort={chooseEffort}
+    mcpServers={session?.mcp ?? null}
+    machineId={session?.machineId ?? ''}
+    {forkable}
+    {wholeTranscript}
+    connected={cockpit.status === 'connected'}
+    onFork={handleFork}
+    onStop={() => session && stopSession(viewId, session.machineId)}
+    onKeep={handleKeep}
+    onDiscard={() => (confirmingDiscard = true)}
+    {progress}
+  />
 
-      <!-- What this session is running in: its CLAUDE.md files, its MCP servers
-           and its own facts, in the rail on the right. -->
-      {#if !browsing && session?.machineId && session.cwd}
-        <SessionContextButton />
-      {/if}
-
-      <ToggleGroup.Root
-        type="single"
-        variant="outline"
-        size="sm"
-        value={view}
-        onValueChange={chooseView}
-        class="shrink-0"
-        aria-label="Session view"
+  <!-- Two panes of one screen: they slide past each other rather than cutting,
+       so the toggle reads as moving sideways instead of reloading. -->
+  <div class="relative min-h-0 min-w-0 flex-1" id="session-view-panel">
+    {#if view === 'flow'}
+      <div
+        class="absolute inset-0"
+        in:fly={{ x: 10, duration: painted ? 200 : 0, easing: quintOut }}
+        out:fly={{ x: 10, duration: painted ? 150 : 0, easing: quintOut }}
       >
-        <ToggleGroup.Item value="chat" aria-controls="session-view-panel" aria-label="Chat">
-          <IconChat />
-          <span class="hidden sm:inline">Chat</span>
-        </ToggleGroup.Item>
-        <ToggleGroup.Item value="flow" aria-controls="session-view-panel" aria-label="Flow">
-          <IconFlow />
-          <span class="hidden sm:inline">Flow</span>
-        </ToggleGroup.Item>
-      </ToggleGroup.Root>
-
-      {#if !browsing}
-        <!-- How the session is configured: the settings that can still change
-             mid-flight, read as one control. The effort slider needs room a
-             header does not have, so it keeps its place in the group as a
-             trigger and opens beneath it. -->
-        <ButtonGroup.Root class="shrink-0">
-          <Select.Root type="single" value={permissionMode ?? ''} onValueChange={chooseMode}>
-            <Select.Trigger
-              size="sm"
-              aria-label={permissionMode ? 'Permission mode' : 'Permission mode, not reported yet'}
-              title={permissionMode
-                ? 'How this session answers tool permissions'
-                : "Read from this session's next turn — it has not said how it answers tool permissions"}
-              class="text-xs {permissionMode === 'bypassPermissions'
-                ? 'font-medium text-warning'
-                : 'text-muted-foreground'}"
-            >
-              {permissionMode ? permissionModeLabel(permissionMode) : '—'}
-            </Select.Trigger>
-            <Select.Content>
-              {#each PERMISSION_MODES as option (option.value)}
-                {@const locked =
-                  option.value === 'bypassPermissions' &&
-                  option.value !== permissionMode &&
-                  !canRelaunch}
-                <Select.Item
-                  value={option.value}
-                  label={option.label}
-                  disabled={locked}
-                  title={locked
-                    ? 'This session has not started yet — try again in a moment'
-                    : option.description} class={locked ? 'opacity-40' : ''}
-                >
-                  <span class="flex flex-col">
-                    <span class={option.value === 'bypassPermissions' ? 'text-warning' : ''}>
-                      {option.label}
-                    </span>
-                    <span class="text-xs text-muted-foreground">{option.description}</span>
-                  </span>
-                </Select.Item>
-              {/each}
-            </Select.Content>
-          </Select.Root>
-
-          <ModelCombobox
-            value={currentModel}
-            onchoose={chooseModel}
-            class="text-xs text-muted-foreground"
-          />
-
-          {#if showEffort}
-            <Popover.Root>
-              <Popover.Trigger
-                class="flex min-h-8 shrink-0 items-center rounded-md border border-border px-2.5
-                  font-mono text-xs text-muted-foreground transition-colors duration-150 ease-out
-                  hover:bg-accent hover:text-foreground"
-                title={effort
-                  ? 'How hard this session thinks, and how much it spends doing it'
-                  : 'No effort level has been asked for — this session is running at its model’s own'}
-                aria-label="Reasoning effort"
-              >
-                {effort ?? '—'}
-              </Popover.Trigger>
-              <Popover.Content class="material-panel w-[320px] p-3" align="end">
-                <EffortSlider
-                  stops={effortStopsForModel}
-                  value={effort}
-                  modelName={modelLabel(currentModel)}
-                  onchange={chooseEffort}
-                />
-              </Popover.Content>
-            </Popover.Root>
-          {/if}
-        </ButtonGroup.Root>
-
-        <!-- What you can do to the session itself. -->
-        <ButtonGroup.Root class="shrink-0">
-          {@render verb({
-            label: 'Fork',
-            tip: 'Branch a side quest off this session',
-            icon: IconFork,
-            onclick: handleFork,
-            disabled: !forkable || !wholeTranscript,
-          })}
-          {#if session?.scratch}
-            {@render verb({
-              label: 'Keep',
-              tip: 'Promote this side quest to mainline work',
-              icon: IconCheck,
-              onclick: handleKeep,
-            })}
-            {@render verb({
-              label: 'Discard',
-              tip: "Delete this quest's worktree and its transcript, for good",
-              icon: IconTrash,
-              onclick: () => (confirmingDiscard = true),
-              variant: 'destructive',
-            })}
-          {:else}
-            {@render verb({
-              label: 'Stop',
-              tip: 'End this session',
-              icon: IconStop,
-              onclick: () => session && stopSession(viewId, session.machineId),
-            })}
-          {/if}
-        </ButtonGroup.Root>
-      {/if}
-    </header>
-
-    <!-- Two panes of one screen: they slide past each other rather than cutting,
-         so the toggle reads as moving sideways instead of reloading. -->
-    <!-- Named so the view toggle can point at what it swaps; the toggle is a group
-         of two, not a tablist, so the panel does not claim the matching role. -->
-    <!-- `min-w-0` so the column really gives way as the rail's gap grows; the
-         chat reflows with it rather than being covered by it. -->
-    <div class="relative min-h-0 min-w-0 flex-1" id="session-view-panel">
-      {#if view === 'flow'}
+        <FlowView
+          instanceId={viewId}
+          messages={session?.messages ?? []}
+          subagents={branches}
+          streamingToolId={session?.currentTool?.toolId}
+          {totalCostUsd}
+          onJump={(nodeId) => {
+            view = 'chat';
+            const messages = session?.messages ?? [];
+            const target = messages.find(
+              (m) => m.sdkUuid === nodeId || m.id === nodeId || m.metadata?.toolId === nodeId
+            );
+            if (!target) return;
+            const index = groups.findIndex((g) => {
+              if (g.kind === 'single')
+                return g.message.id === target.id || g.message.sdkUuid === target.sdkUuid;
+              if (g.kind === 'tools')
+                return g.messages.some((m) => m.id === target.id || m.sdkUuid === target.sdkUuid);
+              return false;
+            });
+            if (index >= 0) void tick().then(() => jumpToMatch(index));
+          }}
+        />
+      </div>
+    {:else}
+      <div
+        class="absolute inset-0"
+        in:fly={{ x: -10, duration: painted ? 200 : 0, easing: quintOut }}
+        out:fly={{ x: -10, duration: painted ? 150 : 0, easing: quintOut }}
+      >
         <div
-          class="absolute inset-0"
-          in:fly={{ x: 10, duration: painted ? 200 : 0, easing: quintOut }}
-          out:fly={{ x: 10, duration: painted ? 150 : 0, easing: quintOut }}
+          bind:this={scroller}
+          onscroll={trackScroll}
+          tabindex="-1"
+          class="h-full space-y-4 overflow-x-hidden overflow-y-auto overscroll-contain px-4 pt-4 pb-44 [overflow-anchor:none] [scrollbar-gutter:stable] focus:outline-none"
         >
-          <FlowView
-            instanceId={viewId}
-            messages={session?.messages ?? []}
-            subagents={branches}
-            streamingToolId={session?.currentTool?.toolId}
-            {totalCostUsd}
-            onJump={(nodeId) => {
-              view = 'chat';
-              const messages = session?.messages ?? [];
-              const target = messages.find(
-                (m) => m.sdkUuid === nodeId || m.id === nodeId || m.metadata?.toolId === nodeId
-              );
-              if (!target) return;
-              const index = groups.findIndex((g) => {
-                if (g.kind === 'single') return g.message.id === target.id || g.message.sdkUuid === target.sdkUuid;
-                if (g.kind === 'tools') return g.messages.some((m) => m.id === target.id || m.sdkUuid === target.sdkUuid);
-                return false;
-              });
-              if (index >= 0) void tick().then(() => jumpToMatch(index));
-            }}
-          />
-        </div>
-      {:else}
-        <div
-          class="absolute inset-0"
-          in:fly={{ x: -10, duration: painted ? 200 : 0, easing: quintOut }}
-          out:fly={{ x: -10, duration: painted ? 150 : 0, easing: quintOut }}
-        >
+          <!-- The transcript is a log, and a turn arriving is an addition to it:
+               the reader who is not looking at the screen is told by their screen
+               reader instead of by nothing. -->
           <div
-            bind:this={scroller}
-            onscroll={trackScroll}
-            tabindex="-1"
-            class="h-full space-y-4 overflow-y-auto overflow-x-hidden overscroll-contain px-4 pt-4 pb-44 [overflow-anchor:none] [scrollbar-gutter:stable] focus:outline-none"
+            class="mx-auto max-w-4xl"
+            data-transcript-content
+            role="log"
+            aria-live="polite"
+            aria-relevant="additions text"
+            aria-busy={activity === 'working'}
           >
-            <!-- The transcript is a log, and a turn arriving is an addition to
-                 it: the reader who is not looking at the screen is told by their
-                 screen reader instead of by nothing. -->
-            <!-- Named, because the selection bar has to know a passage of the
-                 transcript from the chrome around it. -->
-            <div
-              class="mx-auto max-w-4xl"
-              data-transcript-content
-              role="log"
-              aria-live="polite"
-              aria-relevant="additions text"
-              aria-busy={activity === 'working'}
-            >
-              {#if session?.hydrating}
-                <div class="sticky top-0 z-10">
-                  <div class="h-0.5 w-full overflow-hidden bg-muted">
-                    <div class="h-full w-1/3 animate-pulse rounded-full bg-primary/40" style="animation: hydrate-slide 1.2s ease-in-out infinite;"></div>
-                  </div>
+            {#if session?.hydrating}
+              <div class="sticky top-0 z-10">
+                <div class="h-0.5 w-full overflow-hidden bg-muted">
                   <div
-                    class="mx-auto mt-2 w-fit rounded-full bg-card px-3 py-1 text-micro text-muted-foreground shadow-sm"
-                    transition:fly={{ y: -6, duration: 180, easing: quintOut }}
-                  >
-                    Loading earlier turns
-                  </div>
+                    class="h-full w-1/3 animate-pulse rounded-full bg-primary/40"
+                    style="animation: hydrate-slide 1.2s ease-in-out infinite;"
+                  ></div>
                 </div>
-              {/if}
-              <!-- Mounted once the scroller exists: virtua reads scrollRef once, on
-                   mount, and silently falls back to its parent element if it is unset. -->
-              {#if scroller}
-                <Virtualizer
-                  bind:this={vlistRaw}
-                  data={groups}
-                  getKey={groupKey}
-                  scrollRef={scroller}
-                  itemSize={120}
-                  bufferSize={400}
-                  shift={session?.hydrating ?? false}
-                >
-                  {#snippet children(group)}
-                    {@const key = groupKey(group)}
-                    {@const isNew = painted && !seenGroups.has(key)}
-                    <div
-                      class="pb-4 {key === flashKey ? 'transcript-flash' : ''}"
-                      in:fade={{ duration: isNew && !stillness.current ? 150 : 0 }}
-                    >
-                      {#if group.kind === 'tools'}
-                        <!-- No wrench avatar: every row in the group already
-                             wears its tool family's duotone glyph. -->
-                        <div class="flex justify-start">
-                          <div class="w-full max-w-[85%] min-w-0">
-                            <ToolGroup tools={group.messages} />
-                          </div>
-                        </div>
-                      {:else if group.kind === 'subagent'}
-                        <div class="flex justify-start gap-3">
-                          <div
-                            class="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl border border-border bg-secondary"
-                          >
-                            <IconSubagent class="size-[18px] text-muted-foreground" />
-                          </div>
-                          <!-- The rail links straight to a branch; `scroll-margin`
-                               keeps the jump clear of the sticky header. -->
-                          <div
-                            id="subagent-{group.branch.toolUseId}"
-                            class="w-full max-w-[85%] min-w-0 scroll-mt-20"
-                          >
-                            <SubagentBranch branch={group.branch} spawn={group.spawn} />
-                          </div>
-                        </div>
-                      {:else}
-                        {@const rewind = rewindable.has(group.message.sdkUuid ?? '')}
-                        <ChatMessage
-                          message={group.message}
-                          instanceId={viewId}
-                          hints={group.message.id ? messageHints.get(group.message.id) : undefined}
-                          canEdit={rewind && canRewind}
-                          canFork={rewind && canBranch}
-                          onEditMessage={handleEditMessage}
-                          onForkFrom={handleForkFrom}
-                        />
-                      {/if}
-                    </div>
-                  {/snippet}
-                </Virtualizer>
-              {/if}
-
-              {#if reading}
-                <div class="flex flex-col items-center gap-2 py-8">
-                  <IconSpinner class="size-5 animate-spin text-muted-foreground" />
-                  <p class="text-caption">Reading transcript…</p>
-                </div>
-              {:else if sleeping}
-                <!-- Not a failure, so nothing here is coloured like one: the work
-                     is intact and one message would bring it back on its own. -->
                 <div
-                  class="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card px-4 py-3"
+                  class="mx-auto mt-2 w-fit rounded-full bg-card px-3 py-1 text-micro text-muted-foreground shadow-sm"
+                  transition:fly={{ y: -6, duration: 180, easing: quintOut }}
                 >
-                  <p class="min-w-0 flex-1 text-sm text-muted-foreground">
-                    This session is sleeping — its process ended, but the conversation was kept.
-                    Send a message, or pick it back up now.
-                  </p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    class="shrink-0 text-xs"
-                    disabled={cockpit.status !== 'connected' || (session?.relaunching ?? false)}
-                    onclick={handleRevive}
+                  Loading earlier turns
+                </div>
+              </div>
+            {/if}
+            <!-- Mounted once the scroller exists: virtua reads scrollRef once, on
+                 mount, and silently falls back to its parent element if it is unset. -->
+            {#if scroller}
+              <Virtualizer
+                bind:this={vlistRaw}
+                data={groups}
+                getKey={groupKey}
+                scrollRef={scroller}
+                itemSize={120}
+                bufferSize={400}
+                shift={session?.hydrating ?? false}
+              >
+                {#snippet children(group)}
+                  {@const key = groupKey(group)}
+                  {@const isNew = painted && !seenGroups.has(key)}
+                  <div
+                    class="pb-4 {key === flashKey ? 'transcript-flash' : ''}"
+                    in:fade={{ duration: isNew && !stillness.current ? 150 : 0 }}
                   >
-                    <IconPlay />
-                    Resume
-                  </Button>
-                </div>
-              {:else if groups.length === 0 && !session?.streaming}
-                <p class="text-sm text-muted-foreground">
-                  {browsing
-                    ? 'This session recorded no messages.'
-                    : 'Nothing said yet — send a message below to start.'}
+                    {#if group.kind === 'tools'}
+                      <!-- The tool group leads with its own rail; no wrapper card. -->
+                      <div class="min-w-0">
+                        <ToolGroup tools={group.messages} />
+                      </div>
+                    {:else if group.kind === 'subagent'}
+                      <!-- The rail links straight to a branch; `scroll-margin`
+                           keeps the jump clear of the header. -->
+                      <div id="subagent-{group.branch.toolUseId}" class="min-w-0 scroll-mt-20">
+                        <SubagentBranch branch={group.branch} spawn={group.spawn} />
+                      </div>
+                    {:else}
+                      {@const rewind = rewindable.has(group.message.sdkUuid ?? '')}
+                      <ChatMessage
+                        message={group.message}
+                        instanceId={viewId}
+                        hints={group.message.id ? messageHints.get(group.message.id) : undefined}
+                        canEdit={rewind && canRewind}
+                        canFork={rewind && canBranch}
+                        onEditMessage={handleEditMessage}
+                        onForkFrom={handleForkFrom}
+                      />
+                    {/if}
+                  </div>
+                {/snippet}
+              </Virtualizer>
+            {/if}
+
+            {#if reading}
+              <div class="flex flex-col items-center gap-2 py-8">
+                <IconSpinner class="size-5 animate-spin text-muted-foreground" />
+                <p class="text-caption">Reading transcript…</p>
+              </div>
+            {:else if sleeping}
+              <!-- Not a failure, so nothing here is coloured like one: the work is
+                   intact and one message would bring it back on its own. -->
+              <div
+                class="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card px-4 py-3"
+              >
+                <p class="min-w-0 flex-1 text-sm text-muted-foreground">
+                  This session is sleeping — its process ended, but the conversation was kept. Send a
+                  message, or pick it back up now.
                 </p>
-              {/if}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  class="shrink-0 text-xs"
+                  disabled={cockpit.status !== 'connected' || (session?.relaunching ?? false)}
+                  onclick={handleRevive}
+                >
+                  <IconPlay />
+                  Resume
+                </Button>
+              </div>
+            {:else if groups.length === 0 && !session?.streaming}
+              <p class="text-sm text-muted-foreground">
+                {browsing
+                  ? 'This session recorded no messages.'
+                  : 'Nothing said yet — send a message below to start.'}
+              </p>
+            {/if}
 
-              <!-- Streaming buffer. Always in the DOM; the grid row collapses
-                   smoothly when the buffer empties. `bufferText` holds the last
-                   non-empty text past the moment streaming stops, so the row has
-                   real content to animate its height FROM — without it, the
-                   grid-template-rows transition from 1fr to 0fr snaps. -->
-              <div
-                class="grid transition-[grid-template-rows] duration-150 ease-out motion-reduce:transition-none
-                  {bufferOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}"
-              >
-                <div class="min-h-0 overflow-hidden">
-                  <div class="max-w-[min(65ch,100%)] min-w-0 text-body leading-relaxed text-foreground break-words">
-                    <Markdown source={bufferText} streaming={bufferOpen} />{#if bufferOpen}<span class="inline-block w-[3px] h-4 rounded-sm bg-primary/60 align-text-bottom animate-pulse"></span>{/if}
-                  </div>
+            <!-- Streaming buffer. Always in the DOM; the grid row collapses
+                 smoothly when the buffer empties. `bufferText` holds the last
+                 non-empty text past the moment streaming stops, so the row has
+                 real content to animate its height FROM. -->
+            <div
+              class="grid transition-[grid-template-rows] duration-150 ease-out motion-reduce:transition-none
+                {bufferOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}"
+            >
+              <div class="min-h-0 overflow-hidden">
+                <div
+                  class="max-w-[min(74ch,100%)] min-w-0 text-body leading-relaxed break-words text-foreground"
+                >
+                  <Markdown source={bufferText} streaming={bufferOpen} />{#if bufferOpen}<span
+                      class="inline-block h-4 w-[3px] animate-pulse rounded-sm bg-primary/60 align-text-bottom"
+                    ></span>{/if}
                 </div>
               </div>
+            </div>
 
-              <!-- The tail: thinking and presence in separate always-rendered
-                   grid wrappers. The components stay mounted so the grid row has
-                   real content to animate FROM on collapse — a conditional {#if}
-                   removes the DOM in the same frame the class changes to 0fr,
-                   making 1fr resolve to 0 and snapping the height. -->
-              <div
-                class="grid transition-[grid-template-rows] ease-out motion-reduce:transition-none
-                  {thinkingShown ? 'grid-rows-[1fr] duration-200' : 'grid-rows-[0fr] duration-500'}"
-              >
-                <div class="min-h-0 overflow-hidden">
-                  <div class="flex justify-start py-2">
-                    <LiveThinking
-                      stream={session?.thinkingStream || heldThinking}
-                      closing={(session?.thinkingClosing ?? false) || (thinkingShown && !thinkingLive)}
-                    />
-                  </div>
+            <!-- The tail: thinking and presence in separate always-rendered grid
+                 wrappers, so the row has real content to animate FROM on collapse. -->
+            <div
+              class="grid transition-[grid-template-rows] ease-out motion-reduce:transition-none
+                {thinkingShown ? 'grid-rows-[1fr] duration-200' : 'grid-rows-[0fr] duration-500'}"
+            >
+              <div class="min-h-0 overflow-hidden">
+                <div class="flex justify-start py-2">
+                  <LiveThinking
+                    stream={session?.thinkingStream || heldThinking}
+                    closing={(session?.thinkingClosing ?? false) || (thinkingShown && !thinkingLive)}
+                  />
                 </div>
               </div>
-              <div
-                class="grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none
-                  {!thinkingShown && presenceSince !== null ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}"
-              >
-                <div class="min-h-0 overflow-hidden">
-                  <div class="flex justify-start py-2">
-                    <AgentPresence label={presenceLabel} startedAt={presenceSince ?? Date.now()} />
-                  </div>
+            </div>
+            <div
+              class="grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none
+                {!thinkingShown && presenceSince !== null ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}"
+            >
+              <div class="min-h-0 overflow-hidden">
+                <div class="flex justify-start py-2">
+                  <AgentPresence label={presenceLabel} startedAt={presenceSince ?? Date.now()} />
                 </div>
               </div>
             </div>
           </div>
-
-          {#if searchOpen}
-            <TranscriptSearch bind:this={search} {groups} onJump={jumpToMatch} onClose={closeSearch} />
-          {/if}
-
-          <!-- A stored transcript has no composer to quote into, so it has no
-               bar: the one action it could still offer is the browser's own. -->
-          {#if !browsing}
-            <SelectionActions {scroller} onQuote={quoteSelection} />
-          {/if}
-
-          {#if unseen}
-            <div class="absolute inset-x-0 bottom-4 flex justify-center">
-              <Button
-                variant="outline"
-                size="sm"
-                class="rounded-full bg-card px-4 text-xs shadow-lg pressable"
-                onclick={jumpToLatest}
-              >
-                <IconArrowDown />
-                Jump to latest
-              </Button>
-            </div>
-          {/if}
         </div>
-      {/if}
 
-      <!-- Content dissolves as it slides under the floating dock.
-           A solid gradient instead of backdrop-blur: same visual fade, but no
-           per-frame GPU recomposite during scrolling (measured: the blur element
-           was 1148×128px and always rendered). -->
-      <div class="pointer-events-none absolute inset-x-0 bottom-0 h-32">
-        <div class="absolute inset-0 bg-linear-to-t from-background via-background/85 to-transparent"></div>
+        {#if searchOpen}
+          <TranscriptSearch bind:this={search} {groups} onJump={jumpToMatch} onClose={closeSearch} />
+        {/if}
+
+        <!-- A stored transcript has no composer to quote into, so it has no bar:
+             the one action it could still offer is the browser's own. -->
+        {#if !browsing}
+          <SelectionActions {scroller} onQuote={quoteSelection} />
+        {/if}
+
+        {#if unseen}
+          <div class="absolute inset-x-0 bottom-4 flex justify-center">
+            <Button
+              variant="outline"
+              size="sm"
+              class="pressable rounded-full bg-card px-4 text-xs shadow-lg"
+              onclick={jumpToLatest}
+            >
+              <IconArrowDown />
+              Jump to latest
+            </Button>
+          </div>
+        {/if}
       </div>
+    {/if}
 
-      <div class="pointer-events-none absolute inset-x-0 bottom-0 px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-        <div bind:this={dock} class="pointer-events-auto mx-auto flex max-w-4xl flex-col gap-2">
+    <!-- Content dissolves as it slides under the floating composer. A solid
+         gradient instead of backdrop-blur: same fade, no per-frame recomposite. -->
+    <div class="pointer-events-none absolute inset-x-0 bottom-0 h-32">
+      <div
+        class="absolute inset-0 bg-linear-to-t from-background via-background/85 to-transparent"
+      ></div>
+    </div>
+
+    <div
+      class="pointer-events-none absolute inset-x-0 bottom-0 px-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
+    >
+      <div bind:this={dock} class="pointer-events-auto mx-auto flex max-w-4xl flex-col gap-2">
         {#if sendError}
           <div
             class="flex items-center gap-2 rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive"
@@ -2012,15 +1714,18 @@
             <span class="min-w-0 flex-1">Send failed: {sendError}</span>
             <button
               type="button"
-              class="shrink-0 rounded-md bg-destructive/10 px-2 py-1 font-medium text-destructive hover:bg-destructive/20 transition-colors"
+              class="shrink-0 rounded-md bg-destructive/10 px-2 py-1 font-medium text-destructive transition-colors hover:bg-destructive/20"
               onclick={retrySend}
             >
               Retry
             </button>
             <button
               type="button"
-              class="shrink-0 text-destructive/60 hover:text-destructive transition-colors"
-              onclick={() => { sendError = null; restoredDraft = null; }}
+              class="shrink-0 text-destructive/60 transition-colors hover:text-destructive"
+              onclick={() => {
+                sendError = null;
+                restoredDraft = null;
+              }}
               aria-label="Dismiss"
             >
               &times;
@@ -2035,7 +1740,9 @@
           {/key}
         {/if}
         {#if browsing}
-          <div class="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3 shadow-lg">
+          <div
+            class="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3 shadow-lg"
+          >
             <span class="text-sm text-muted-foreground">
               Read-only transcript of a stored session.
             </span>
@@ -2075,7 +1782,9 @@
             onSend={handleSend}
             onInterrupt={handleInterrupt}
             streaming={session?.busy ?? false}
-            disabled={cockpit.status !== 'connected' || (session?.relaunching ?? false) || machineOffline}
+            disabled={cockpit.status !== 'connected' ||
+              (session?.relaunching ?? false) ||
+              machineOffline}
             attachmentOpen={answerable.length > 0}
             {commands}
             onCommandsNeeded={askCommands}
@@ -2084,9 +1793,7 @@
           >
             {#snippet meter()}
               <!-- Effort sits with the context meter because they are the same
-                   kind of fact: what the next turn will cost. The settings
-                   popover keeps the full slider for deciding; this is the
-                   glance and the quick change, where the sending happens. -->
+                   kind of fact: what the next turn will cost. -->
               {#if showEffort}
                 <EffortThrottle
                   stops={effortStopsForModel}
@@ -2115,38 +1822,7 @@
             {/snippet}
           </ChatInput>
         {/if}
-        </div>
       </div>
     </div>
   </div>
-
-  <!-- Always mounted: the kit slides the rail in and animates the gap the
-       chat shrinks into, which a panel mounted on demand cannot do. -->
-  {#if !browsing && session?.machineId && session.cwd}
-    <SessionContext
-      instanceId={viewId}
-      machineId={session.machineId}
-      cwd={session.cwd}
-      servers={session.mcp ?? null}
-      {commands}
-      model={session.model}
-      permissionMode={session.permissionMode}
-      sessionId={session.sessionId}
-      hostname={machine?.hostname ?? null}
-      {totalCostUsd}
-      lastActivityAt={session.lastActivityAt}
-      branches={[...branches.values()]}
-    />
-  {/if}
-
-  <!-- The phone's answer to the popover. The panel writes its own heading, so
-       the sheet's is only there for the screen reader. -->
-  <Drawer.Root bind:open={planSheet}>
-    <Drawer.Content class="px-2 pb-[max(env(safe-area-inset-bottom),1rem)]">
-      <Drawer.Title class="sr-only">Tasks</Drawer.Title>
-      <div class="max-h-[60vh] overflow-y-auto">
-        <TaskPanel {viewId} />
-      </div>
-    </Drawer.Content>
-  </Drawer.Root>
-</Sidebar.Provider>
+</div>
