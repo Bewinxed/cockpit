@@ -10,10 +10,7 @@
    */
   import type { PageData } from './$types';
   import type { LimitWindow } from '@cockpit/core';
-  import { Badge } from '$lib/components/ui/badge';
-  import IconClaude from '~icons/solar/stars-minimalistic-bold-duotone';
-  import IconOpenCode from '~icons/solar/code-square-bold-duotone';
-  import IconWindow from '~icons/solar/hourglass-line-duotone';
+  import { Panel, StatCard, StatusPill } from '$lib/outpost';
   import { compactNumber, usd, type UsageSummaryRow } from '$lib/cockpit/usage';
   import DailyChart from '$lib/cockpit/usage/DailyChart.svelte';
   import BreakdownTable from '$lib/cockpit/usage/BreakdownTable.svelte';
@@ -43,19 +40,10 @@
     ...windows.filter((w) => w.group === 'weekly').sort((a, b) => b.percent - a.percent),
     ...windows.filter((w) => w.group !== 'session' && w.group !== 'weekly'),
   ]);
+  const binding = $derived(orderedWindows.find((w) => w.isActive) ?? orderedWindows[0] ?? null);
 
-  const band = (pct: number): 'calm' | 'warn' | 'critical' =>
-    pct >= 90 ? 'critical' : pct >= 70 ? 'warn' : 'calm';
-  const FILL: Record<string, string> = {
-    calm: 'bg-muted-foreground/50',
-    warn: 'bg-warning',
-    critical: 'bg-destructive',
-  };
-  const TEXT: Record<string, string> = {
-    calm: 'text-foreground',
-    warn: 'text-warning',
-    critical: 'text-destructive',
-  };
+  const band = (pct: number): 'ok' | 'warn' | 'bad' =>
+    pct >= 90 ? 'bad' : pct >= 70 ? 'warn' : 'ok';
 
   const windowLabel = (w: LimitWindow): string =>
     w.group === 'session' ? '5-hour' : w.scopeLabel ? `Weekly · ${w.scopeLabel}` : 'Weekly';
@@ -132,223 +120,431 @@
     b.lastTs - b.firstTs >= PROJECTABLE_MS;
 </script>
 
+<svelte:head>
+  <title>Usage &middot; Outpost</title>
+</svelte:head>
+
 <!--
   THESIS: how much room is left, and where it went — refusing the dashboard
   default that sums every provider into one meaningless total.
-  OWN-WORLD: Daylight Studio, unchanged. Warm neutrals, one olive that only ever
-  means "this acts", state hues reserved for how close a limit is, rounded-xl
-  cards on soft warm shadow, hairlines between rows, TX-02 for data only.
   STORY: the operator glances, sees which window binds first and when it resets,
   and can name what spent it.
-  FIRST VIEWPORT: route header, then two cards side by side that never merge —
-  Claude led by its limit meters and reset countdowns, opencode led by real
-  dollars. No primary action; this surface is read, not operated.
-  FORM: split by harness, third on the ranked list, seed f9c9e4e0.
-  FINISH: unreviewed and undocumented is unfinished; this build ends with the
-  finish review, the verdict, DESIGN.md, and every shipping raster carrying its
-  provenance.
 -->
 
-<div class="flex min-h-0 flex-1">
-  <div class="min-w-0 flex-1 overflow-y-auto p-4 sm:p-6">
-    <div class="mx-auto flex max-w-5xl flex-col gap-5 2xl:max-w-none">
-      <header class="flex items-center gap-3">
-        <h1 class="text-title">Usage</h1>
-        {#if reading}
-          {@const binding = orderedWindows.find((w) => w.isActive) ?? orderedWindows[0]}
-          {#if binding}
-            <span class="text-micro text-muted-foreground">
-              {windowLabel(binding).toLowerCase()} binds first · resets in {resetsIn(
-                binding.resetsAt,
-                now
-              )}
-            </span>
-          {/if}
-        {/if}
+<div class="page">
+  <div class="col">
+    <header class="head">
+      <h1>Usage</h1>
+      <p class="sub">
+        How much room is left, and where it went. Claude is a subscription whose constraint is a
+        percentage; opencode is real money. The two are never added together.
+      </p>
+    </header>
+
+    {#if data.error}
+      <p class="note" role="alert">{data.error}</p>
+    {/if}
+
+    <section class="stats" aria-label="Usage at a glance">
+      {#if binding}
+        <StatCard label="{windowLabel(binding)} used" value="{Math.round(binding.percent)}%" />
+        <StatCard label="Resets in" value={resetsIn(binding.resetsAt, now) || '—'} />
+      {/if}
+      <StatCard
+        label="opencode spend"
+        value={openCodeTotals ? usd(openCodeTotals.costUsd) : '—'}
+        unit="real money"
+      />
+      <StatCard
+        label="Claude at API prices"
+        value={claudeTotals ? `~${usd(claudeTotals.costUsd)}` : '—'}
+        unit="covered by the plan"
+      />
+      {#if planLabel}
+        <StatCard label="Plan" value={planLabel} />
+      {/if}
+    </section>
+
+    <Panel style="--c-card-pad: var(--space-5)">
+      <header class="phead">
+        <h2>Claude limits</h2>
+        <span class="psub">Account-scoped — every signed-in machine reads the same numbers</span>
         {#if planLabel}
-          <Badge variant="secondary" class="ml-auto font-normal">{planLabel}</Badge>
+          <div class="pactions"><StatusPill status="idle">{planLabel}</StatusPill></div>
         {/if}
       </header>
 
-      {#if data.error}
-        <p class="text-caption">{data.error}</p>
-      {/if}
-
-      <!-- Two truths, side by side, never added together. -->
-      <div
-        class="grid grid-cols-1 gap-4 md:grid-cols-[repeat(auto-fit,minmax(480px,1fr))]
-               2xl:grid-cols-[repeat(auto-fit,minmax(620px,1fr))]"
-      >
-        <!-- Claude: the constraint is a percentage, so percentages lead. -->
-        <section class="rounded-xl bg-card shadow-md">
-          <header class="flex items-center gap-2 px-4 py-3">
-            <IconClaude class="size-5 text-muted-foreground" />
-            <span class="text-sm font-semibold">Claude</span>
-            <span class="ml-auto text-micro text-muted-foreground">limits</span>
-          </header>
-
-          {#if readingError}
-            <p class="px-4 pb-4 text-caption">
-              {readingError === 'not signed in'
-                ? 'This machine is not signed in to Claude, so there is no limit to read.'
-                : readingError === 'token expired'
-                  ? 'The Claude login on this machine has expired. Claude Code owns that file — signing in there restores this reading.'
-                  : readingError}
-            </p>
-          {:else if orderedWindows.length === 0}
-            <p class="px-4 pb-4 text-caption">No limit reading yet.</p>
-          {:else}
-            <ul class="border-t border-border/50">
+      <div class="pbody">
+        {#if readingError}
+          <p class="note">
+            {readingError === 'not signed in'
+              ? 'This machine is not signed in to Claude, so there is no limit to read.'
+              : readingError === 'token expired'
+                ? 'The Claude login on this machine has expired. Claude Code owns that file — signing in there restores this reading.'
+                : readingError}
+          </p>
+        {:else if orderedWindows.length === 0}
+          <p class="note">No limit reading yet.</p>
+        {:else}
+          <table class="t">
+            <thead>
+              <tr>
+                <th>Window</th>
+                <th>Filled</th>
+                <th class="num">Used</th>
+                <th class="num">Resets in</th>
+              </tr>
+            </thead>
+            <tbody>
               {#each orderedWindows as w (w.kind + (w.scopeLabel ?? ''))}
                 {@const tone = band(w.percent)}
-                <li class="flex min-h-9 items-center gap-3 px-4 py-2">
-                  <span class="w-28 shrink-0 truncate text-micro">{windowLabel(w)}</span>
-                  <span
-                    class="relative h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-muted"
-                    role="progressbar"
-                    aria-valuenow={w.percent}
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                    aria-label="{windowLabel(w)} limit"
-                  >
+                <tr>
+                  <td>{windowLabel(w)}</td>
+                  <td class="wide">
                     <span
-                      class="absolute inset-y-0 left-0 rounded-full {FILL[tone]}
-                             transition-[width,background-color] duration-500 ease-out"
-                      style="width: {Math.max(w.percent, 1)}%"
-                    ></span>
-                  </span>
-                  <span class="w-10 shrink-0 text-right text-micro tabular-nums {TEXT[tone]}">
-                    {Math.round(w.percent)}%
-                  </span>
-                  <span class="w-16 shrink-0 text-right text-micro tabular-nums text-muted-foreground">
-                    {resetsIn(w.resetsAt, now)}
-                  </span>
-                </li>
+                      class="track"
+                      role="progressbar"
+                      aria-valuenow={w.percent}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-label="{windowLabel(w)} limit"
+                    >
+                      <span class="fill {tone}" style="width: {Math.max(w.percent, 1)}%"></span>
+                    </span>
+                  </td>
+                  <td class="num {tone}">{Math.round(w.percent)}%</td>
+                  <td class="num muted">{resetsIn(w.resetsAt, now)}</td>
+                </tr>
               {/each}
-            </ul>
-          {/if}
+            </tbody>
+          </table>
+        {/if}
 
-          {#if claudeRows.length > 0}
-            <ul class="border-t border-border/50">
+        {#if claudeRows.length > 0}
+          <table class="t">
+            <thead>
+              <tr>
+                <th>Model</th>
+                <th class="num">Output</th>
+                <th class="num">At API prices</th>
+              </tr>
+            </thead>
+            <tbody>
               {#each claudeRows as row (row.key)}
-                <li class="flex min-h-9 items-center gap-3 px-4 py-1.5">
-                  <span class="min-w-0 flex-1 truncate font-mono text-micro">{row.key}</span>
-                  <span class="shrink-0 text-micro tabular-nums text-muted-foreground">
-                    {compactNumber(row.output)} out
-                  </span>
-                  <span class="w-20 shrink-0 text-right text-micro tabular-nums text-muted-foreground">
-                    ~{usd(row.costUsd)}
-                  </span>
-                </li>
+                <tr>
+                  <td class="mono">{row.key}</td>
+                  <td class="num">{compactNumber(row.output)}</td>
+                  <td class="num">~{usd(row.costUsd)}</td>
+                </tr>
               {/each}
-            </ul>
-          {/if}
+            </tbody>
+          </table>
+        {/if}
 
-          {#if claudeTotals}
-            <p class="border-t border-border/50 px-4 py-2.5 text-micro text-muted-foreground">
-              <span class="tabular-nums">~{usd(claudeTotals.costUsd)}</span> would cost on the API —
-              your plan already covers it.
-            </p>
-          {/if}
-        </section>
-
-        <!-- opencode: real money, so the money leads. -->
-        <section class="rounded-xl bg-card shadow-md">
-          <header class="flex items-center gap-2 px-4 py-3">
-            <IconOpenCode class="size-5 text-muted-foreground" />
-            <span class="text-sm font-semibold">opencode</span>
-            <span class="ml-auto text-micro text-muted-foreground">spend</span>
-          </header>
-
-          {#if openCodeTotals}
-            <div class="px-4 pb-3">
-              <p class="text-display tabular-nums">{usd(openCodeTotals.costUsd)}</p>
-              <p class="text-micro tabular-nums text-muted-foreground">
-                {compactNumber(openCodeTotals.input)} in · {compactNumber(openCodeTotals.output)} out
-                · {compactNumber(openCodeTotals.cacheRead)} cache read
-              </p>
-            </div>
-          {/if}
-
-          {#if openCodeRows.length > 0}
-            <ul class="border-t border-border/50">
-              {#each openCodeRows as row (row.key)}
-                <li class="flex min-h-9 items-center gap-3 px-4 py-1.5">
-                  <span class="min-w-0 flex-1 truncate font-mono text-micro">{row.key}</span>
-                  <span class="shrink-0 text-micro tabular-nums text-muted-foreground">
-                    {compactNumber(row.output)} out
-                  </span>
-                  <span class="w-20 shrink-0 text-right text-micro tabular-nums">
-                    {usd(row.costUsd)}
-                  </span>
-                </li>
-              {/each}
-            </ul>
-          {/if}
-
-          <p class="border-t border-border/50 px-4 py-2.5 text-micro text-muted-foreground">
-            Recorded per message by opencode itself — real money, not an estimate.
+        {#if claudeTotals}
+          <p class="note">
+            <span class="tabular">~{usd(claudeTotals.costUsd)}</span> would cost on the API — your
+            plan already covers it.
           </p>
-        </section>
+        {/if}
       </div>
+    </Panel>
 
-      <!-- The windows themselves, as they actually fell. -->
-      <DailyChart />
+    <Panel style="--c-card-pad: var(--space-5)">
+      <header class="phead">
+        <h2>opencode spend</h2>
+        <span class="psub">Recorded per message by opencode itself — real money, not an estimate</span>
+      </header>
 
-      {#if dayGroups.length > 0}
-        <section class="rounded-xl bg-card shadow-md">
-          <header class="flex items-center gap-2 px-4 py-3">
-            <IconWindow class="size-5 text-muted-foreground" />
-            <span class="text-sm font-semibold">5-hour windows</span>
-            <span class="ml-auto text-micro text-muted-foreground">last 3 days</span>
-          </header>
+      <div class="pbody">
+        {#if openCodeTotals}
+          <div class="lede">
+            <span class="big">{usd(openCodeTotals.costUsd)}</span>
+            <span class="note">
+              {compactNumber(openCodeTotals.input)} in · {compactNumber(openCodeTotals.output)} out ·
+              {compactNumber(openCodeTotals.cacheRead)} cache read
+            </span>
+          </div>
+        {/if}
 
-          {#each dayGroups as group (group.day)}
-            <div class="border-t border-border/50">
-              <p class="px-4 pt-2.5 pb-1 text-micro text-muted-foreground">{group.day}</p>
-              <ul>
+        {#if openCodeRows.length > 0}
+          <table class="t">
+            <thead>
+              <tr>
+                <th>Model</th>
+                <th class="num">Output</th>
+                <th class="num">Cost</th>
+              </tr>
+            </thead>
+            <tbody>
+              {#each openCodeRows as row (row.key)}
+                <tr>
+                  <td class="mono">{row.key}</td>
+                  <td class="num">{compactNumber(row.output)}</td>
+                  <td class="num">{usd(row.costUsd)}</td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        {:else}
+          <p class="note">Nothing recorded yet.</p>
+        {/if}
+      </div>
+    </Panel>
+
+    <!-- DailyChart brings its own heading and range switcher, so this panel is
+         all body — a second header here would only repeat it. -->
+    <Panel style="--c-card-pad: var(--space-5)">
+      <div class="pbody"><DailyChart /></div>
+    </Panel>
+
+    {#if dayGroups.length > 0}
+      <Panel style="--c-card-pad: var(--space-5)">
+        <header class="phead">
+          <h2>5-hour windows</h2>
+          <span class="psub">The windows as they actually fell, last 3 days</span>
+        </header>
+        <div class="pbody">
+          <table class="t">
+            <thead>
+              <tr>
+                <th>Window</th>
+                <th>Harness</th>
+                <th class="num">Cost</th>
+                <th>Pace</th>
+                <th>Models</th>
+              </tr>
+            </thead>
+            {#each dayGroups as group (group.day)}
+              <tbody>
+                <tr class="dayrow">
+                  <th colspan="5" scope="colgroup">{group.day}</th>
+                </tr>
                 {#each group.blocks as block (block.harness + block.id)}
-                  <li class="flex min-h-9 flex-wrap items-center gap-x-3 gap-y-0.5 px-4 py-1.5">
-                    <span class="w-32 shrink-0 text-micro tabular-nums">
-                      {clock(block.startTime)} – {clock(block.endTime)}
-                    </span>
-                    <span class="w-16 shrink-0 text-micro text-muted-foreground">
-                      {block.harness}
-                    </span>
-                    <span class="w-20 shrink-0 text-micro tabular-nums">
+                  <tr>
+                    <td class="num-left">{clock(block.startTime)} – {clock(block.endTime)}</td>
+                    <td class="muted">{block.harness}</td>
+                    <td class="num">
                       {block.harness === 'Claude' ? '~' : ''}{usd(block.costUsd)}
-                    </span>
-                    {#if block.isActive && block.burnRate}
-                      <span class="shrink-0 text-micro tabular-nums text-warning">
+                    </td>
+                    <td class="pace">
+                      {#if block.isActive && block.burnRate}
                         {usd(block.burnRate.costPerHour)}/h
                         {#if projectable(block) && block.projection}
                           · on pace for {block.harness === 'Claude'
                             ? '~'
                             : ''}{usd(block.projection.totalCost)}
                         {/if}
-                      </span>
-                    {/if}
-                    <span
-                      class="min-w-0 flex-1 truncate text-right font-mono text-micro text-muted-foreground"
-                    >
-                      {block.models.join(' · ')}
-                    </span>
-                  </li>
+                      {/if}
+                    </td>
+                    <td class="mono muted">{block.models.join(' · ')}</td>
+                  </tr>
                 {/each}
-              </ul>
-            </div>
-          {/each}
-        </section>
-      {/if}
+              </tbody>
+            {/each}
+          </table>
+        </div>
+      </Panel>
+    {/if}
 
-      <BreakdownTable />
+    <!-- BreakdownTable owns its own heading, harness switch and tabs. -->
+    <Panel style="--c-card-pad: var(--space-5)">
+      <div class="pbody"><BreakdownTable /></div>
+    </Panel>
 
-      {#if missing.length > 0}
-        <p class="text-micro text-muted-foreground">
-          No published price for <span class="font-mono">{missing.join(', ')}</span> — those read as
-          $0 rather than a guess.
-        </p>
-      {/if}
-    </div>
+    {#if missing.length > 0}
+      <p class="note">
+        No published price for <span class="mono">{missing.join(', ')}</span> — those read as $0
+        rather than a guess.
+      </p>
+    {/if}
   </div>
 </div>
+
+<style>
+  .page {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    padding: var(--space-6);
+    min-width: 0;
+  }
+  .col {
+    margin: 0 auto;
+    max-width: 1100px;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+  }
+  .head {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+  .head h1 {
+    font-size: var(--text-2xl);
+    font-weight: var(--weight-strong);
+    line-height: var(--leading-tight);
+    letter-spacing: var(--track-display);
+    color: var(--ink-strong);
+  }
+  .head .sub {
+    max-width: 68ch;
+    font-size: var(--text-base);
+    color: var(--ink-muted);
+  }
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: var(--space-4);
+  }
+  /* Tiles share a row, so they share a height — a tile with a unit line must not
+     stand taller than one without. */
+  .stats :global(.tile > .panel) {
+    height: 100%;
+  }
+  .phead {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-1) var(--space-3);
+    margin-bottom: var(--space-4);
+  }
+  .phead h2 {
+    font-size: var(--text-md);
+    font-weight: var(--weight-strong);
+    color: var(--ink-strong);
+  }
+  .psub {
+    font-size: var(--text-sm);
+    color: var(--ink-muted);
+  }
+  .pactions {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  .pbody {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+  .note {
+    font-size: var(--text-sm);
+    color: var(--ink-muted);
+  }
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+  .mono {
+    font-family: var(--font-mono);
+    word-break: break-word;
+  }
+  .lede {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+  .lede .big {
+    font-size: var(--text-3xl);
+    font-weight: var(--weight-strong);
+    line-height: var(--leading-numeric);
+    color: var(--ink-strong);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Tables: hairline dividers, small-caps label header, tabular numerics. */
+  .t {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .t th {
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    letter-spacing: var(--track-caps);
+    color: var(--ink-label);
+    font-weight: var(--weight-strong);
+    text-align: left;
+    padding: var(--space-2) var(--space-3);
+    border-bottom: 1px solid var(--border-divider);
+    white-space: nowrap;
+  }
+  .t th.num {
+    text-align: right;
+  }
+  .t td {
+    font-size: var(--text-base);
+    color: var(--ink-row);
+    padding: var(--space-2) var(--space-3);
+    border-bottom: 1px solid var(--border-hairline);
+    vertical-align: middle;
+  }
+  .t tbody:last-child tr:last-child td {
+    border-bottom: 0;
+  }
+  .t td.num,
+  .t td.num-left {
+    font-variant-numeric: tabular-nums;
+  }
+  .t td.num {
+    text-align: right;
+    white-space: nowrap;
+    color: var(--ink-strong);
+  }
+  .t td.muted {
+    color: var(--ink-muted);
+  }
+  .t td.mono {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    word-break: break-word;
+  }
+  .t td.wide {
+    width: 40%;
+    min-width: 90px;
+  }
+  .t td.pace {
+    font-size: var(--text-sm);
+    font-variant-numeric: tabular-nums;
+    color: var(--status-attn-ink);
+  }
+  .t tr.dayrow th {
+    color: var(--ink-muted);
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: var(--text-sm);
+    border-bottom: 1px solid var(--border-hairline);
+  }
+  .t td.ok {
+    color: var(--data-ok);
+  }
+  .t td.warn {
+    color: var(--data-warn);
+  }
+  .t td.bad {
+    color: var(--data-bad);
+  }
+
+  .track {
+    display: block;
+    position: relative;
+    height: 8px;
+    border-radius: var(--radius-pill);
+    background: var(--surface-sunken);
+  }
+  .fill {
+    position: absolute;
+    inset: 0 auto 0 0;
+    border-radius: var(--radius-pill);
+    transition: width var(--c-500) ease-out;
+  }
+  .fill.ok {
+    background: var(--data-ok);
+  }
+  .fill.warn {
+    background: var(--data-warn);
+  }
+  .fill.bad {
+    background: var(--data-bad);
+  }
+</style>

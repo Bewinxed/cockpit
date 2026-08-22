@@ -1,18 +1,16 @@
 <script lang="ts">
   /**
    * What the fleet's machines carry: the workflow CLIs (NEW.md §10), the MCP
-   * servers, the skill plugins and the subagents (NEW.md §11). Five tabs over
-   * one hub read, because they are five answers to the same question — what can
-   * a session started on that machine reach?
-   *
-   * The tab is a search param so a tab can be linked to, and the load never
-   * reads the URL, so switching one costs no request.
+   * servers, the skill plugins, the subagents and the shared memory (NEW.md
+   * §11). Five panels over one hub read, stacked down the page, because they
+   * are five answers to the same question — what can a session started on that
+   * machine reach? Tabs hid four of those answers behind a click; the stat row
+   * up top is the index that replaces them.
    */
   import { onMount, untrack } from 'svelte';
-  import { page } from '$app/state';
-  import { goto } from '$app/navigation';
   import type { FleetAgent, FleetConfig, FleetSkillMeta } from '@cockpit/core';
-  import * as Tabs from '$lib/components/ui/tabs';
+  import * as Tooltip from '$lib/components/ui/tooltip';
+  import { Panel, StatCard } from '$lib/outpost';
   import { cockpit } from '$lib/cockpit/client.svelte';
   import type { FleetMemoryDocRow, FleetMemoryRow } from '$lib/cockpit/fleet';
   import FleetAgents from '$lib/cockpit/FleetAgents.svelte';
@@ -25,20 +23,8 @@
 
   let { data }: { data: PageData } = $props();
 
-  const TAB_LIST = [
-    { id: 'tools', label: 'Tools' },
-    { id: 'mcp', label: 'MCP servers' },
-    { id: 'skills', label: 'Skills & plugins' },
-    { id: 'agents', label: 'Agents' },
-    { id: 'memory', label: 'Memory' },
-  ] as const;
-
-  const tab = $derived(
-    TAB_LIST.find((one) => one.id === page.url.searchParams.get('tab'))?.id ?? 'tools'
-  );
-  const title = $derived(TAB_LIST.find((one) => one.id === tab)?.label ?? 'Tools');
-
   const machines = $derived(orderMachines(cockpit.machines));
+  const online = $derived(machines.filter((one) => one.status === 'online').length);
 
   /**
    * The hub's desired state, re-seeded when `data` changes (e.g. on navigation)
@@ -72,30 +58,39 @@
     const timer = setTimeout(() => (settling = false), 600);
     return () => clearTimeout(timer);
   });
-
-  function switchTab(next: string) {
-    void goto(`/tools?tab=${next}`, { noScroll: true, replaceState: true });
-  }
 </script>
 
 <svelte:head>
-  <title>{title} &middot; Outpost</title>
+  <title>Tools &middot; Outpost</title>
 </svelte:head>
 
-<div class="flex-1 overflow-y-auto p-6">
-  <div class="mx-auto flex max-w-5xl flex-col gap-6">
-    <header>
-      <h1 class="text-display">{title}</h1>
+<!-- The fleet panels all reach for a tooltip; without an ancestor provider they
+     throw on the server, which is what used to leave /tools a 500 on a cold load. -->
+<Tooltip.Provider>
+<div class="page">
+  <div class="col">
+    <header class="head">
+      <h1>Tools</h1>
+      <p class="sub">
+        Everything a session can reach the moment it starts on one of these machines — the CLIs,
+        the servers, the skills, the subagents and the memory they all share.
+      </p>
     </header>
 
-    <Tabs.Root value={tab} onValueChange={switchTab}>
-      <Tabs.List variant="line" class="w-full">
-        {#each TAB_LIST as one (one.id)}
-          <Tabs.Trigger value={one.id}>{one.label}</Tabs.Trigger>
-        {/each}
-      </Tabs.List>
+    <section class="stats" aria-label="Fleet inventory">
+      <StatCard label="Tools tracked" value={data.catalog.length} />
+      <StatCard label="MCP servers" value={config.mcp.length} />
+      <StatCard label="Skills" value={skills.length} />
+      <StatCard label="Subagents" value={agents.length} />
+      <StatCard label="Machines online" value={online} unit="of {machines.length}" />
+    </section>
 
-      <Tabs.Content value="tools" class="flex flex-col gap-4 pt-4">
+    <Panel style="--c-card-pad: var(--space-5)">
+      <header class="phead">
+        <h2>Tool matrix</h2>
+        <span class="psub">Workflow CLIs, machine by machine</span>
+      </header>
+      <div class="pbody">
         <ToolMatrix
           {machines}
           {settling}
@@ -103,23 +98,118 @@
           policies={data.policies}
           error={data.toolsError}
         />
-      </Tabs.Content>
+      </div>
+    </Panel>
 
-      <Tabs.Content value="mcp" class="flex flex-col gap-4 pt-4">
+    <Panel style="--c-card-pad: var(--space-5)">
+      <header class="phead">
+        <h2>MCP servers</h2>
+        <span class="psub">Written to every machine, online now or when it returns</span>
+      </header>
+      <div class="pbody">
         <FleetMcp servers={config.mcp} {machines} {settling} error={data.fleetError} />
-      </Tabs.Content>
+      </div>
+    </Panel>
 
-      <Tabs.Content value="skills" class="flex flex-col gap-4 pt-4">
+    <Panel style="--c-card-pad: var(--space-5)">
+      <header class="phead">
+        <h2>Skills &amp; plugins</h2>
+        <span class="psub">Fetched once for the fleet, or cloned from a marketplace</span>
+      </header>
+      <div class="pbody">
         <FleetSkills {config} {skills} {machines} {settling} error={data.fleetError} />
-      </Tabs.Content>
+      </div>
+    </Panel>
 
-      <Tabs.Content value="agents" class="flex flex-col gap-4 pt-4">
+    <Panel style="--c-card-pad: var(--space-5)">
+      <header class="phead">
+        <h2>Subagents</h2>
+        <span class="psub">Markdown files that land in ~/.claude/agents everywhere</span>
+      </header>
+      <div class="pbody">
         <FleetAgents {agents} {machines} {settling} error={data.fleetError} />
-      </Tabs.Content>
+      </div>
+    </Panel>
 
-      <Tabs.Content value="memory" class="flex flex-col gap-4 pt-4">
-        <FleetMemory bind:memory bind:docs={memoryDocs} {machines} {settling} error={data.fleetError} />
-      </Tabs.Content>
-    </Tabs.Root>
+    <Panel style="--c-card-pad: var(--space-5)">
+      <header class="phead">
+        <h2>Memory</h2>
+        <span class="psub">The user CLAUDE.md the whole fleet reads</span>
+      </header>
+      <div class="pbody">
+        <FleetMemory
+          bind:memory
+          bind:docs={memoryDocs}
+          {machines}
+          {settling}
+          error={data.fleetError}
+        />
+      </div>
+    </Panel>
   </div>
 </div>
+</Tooltip.Provider>
+
+<style>
+  .page {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    padding: var(--space-6);
+    min-width: 0;
+  }
+  .col {
+    margin: 0 auto;
+    max-width: 1100px;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+  }
+  .head {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+  .head h1 {
+    font-size: var(--text-2xl);
+    font-weight: var(--weight-strong);
+    line-height: var(--leading-tight);
+    letter-spacing: var(--track-display);
+    color: var(--ink-strong);
+  }
+  .head .sub {
+    max-width: 68ch;
+    font-size: var(--text-base);
+    color: var(--ink-muted);
+  }
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: var(--space-4);
+  }
+  /* Tiles share a row, so they share a height — a tile with a unit line must not
+     stand taller than one without. */
+  .stats :global(.tile > .panel) {
+    height: 100%;
+  }
+  .phead {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-1) var(--space-3);
+    margin-bottom: var(--space-4);
+  }
+  .phead h2 {
+    font-size: var(--text-md);
+    font-weight: var(--weight-strong);
+    color: var(--ink-strong);
+  }
+  .psub {
+    font-size: var(--text-sm);
+    color: var(--ink-muted);
+  }
+  .pbody {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+</style>
