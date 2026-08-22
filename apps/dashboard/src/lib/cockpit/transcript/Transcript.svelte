@@ -5,16 +5,10 @@
    * block and the tool in flight all scroll with the conversation. Announces
    * blocked-on-you through the log's live region.
    */
-  import { tick, type Component } from 'svelte';
+  import { tick } from 'svelte';
   import { Virtualizer } from 'virtua/svelte';
   import type { SessionState } from '../client.svelte';
   import { buildRows } from './rows';
-  import {
-    IconBoltDuo,
-    IconGhostDuo,
-    IconSubagentsDuo,
-    IconToolWrite,
-  } from '$lib/icons';
   import { describeTool } from '$lib/components/features/tool-cards/descriptors';
   import MessageRow from './MessageRow.svelte';
   import ToolGroup from './ToolGroup.svelte';
@@ -114,46 +108,12 @@
     for (const r of rows) seen.add(r.key);
   });
 
-  // ── Working liveness ────────────────────────────────────────────────────
-  // `session.busy` flips true on send — before the first frame — and false on
-  // the turn's result, so it is the one signal that also covers the silent gap
-  // between a send and the first token (session.streaming is still '' there).
-  // Rather than a generic spinner, the cue names WHAT the agent is doing right
-  // now, each state its own quiet duotone glyph + present-tense label. The glyph
-  // breathes (restrained motion, the live channel); the label is the static cue.
-  const delegating = $derived(
-    Object.values(session.subagents).find(
-      (b) => b.status === 'running' || b.status === 'starting'
-    )
-  );
-  const runTool = $derived(
-    session.currentTool
-      ? describeTool(session.currentTool.name, undefined, undefined, 'pending')
-      : undefined
-  );
-  type Activity = { icon: Component; tint: string; label: string };
-  const activity = $derived.by((): Activity | null => {
-    if (!session.busy) return null;
-    // Most specific first: a named subagent, then a named tool, then the raw
-    // main-loop phases, then the bare "heard you" gap right after a send.
-    if (delegating)
-      return {
-        icon: IconSubagentsDuo,
-        tint: 'text-tool-agent',
-        label: `Delegating to ${delegating.description || delegating.subagentType || 'subagent'}…`,
-      };
-    if (session.currentTool && runTool)
-      return {
-        icon: runTool.icon,
-        tint: runTool.color,
-        label: `Running ${session.currentTool.name}…`,
-      };
-    if (session.openBlock === 'thinking')
-      return { icon: IconBoltDuo, tint: 'text-tool-skill', label: 'Thinking…' };
-    if (session.streaming)
-      return { icon: IconToolWrite, tint: 'text-tool-write', label: 'Writing…' };
-    return { icon: IconGhostDuo, tint: '', label: `${agentName} is working…` };
-  });
+  // No separate "working"/status row: the live state is the streaming content
+  // itself — the in-flight tool row (livetool), the thinking block, the streaming
+  // turn, and the subagent branch each show their own progress inline. A second
+  // row narrating "Thinking…/Running…" under the row already showing it is the
+  // duplication no chat app ships. The send→stop button flip carries the bare
+  // "heard you" gap before the first frame.
 </script>
 
 <div class="tr" role="log" aria-live="polite" aria-label="Session transcript" bind:this={scroller} {onscroll}>
@@ -194,18 +154,6 @@
     {/snippet}
   </Virtualizer>
 
-  <!-- Persistent liveness: from the moment of send (busy flips before any frame
-       arrives) until the turn's result, a restrained cue pins to the tail so the
-       reader always knows the agent heard them — and names WHICH activity is in
-       flight. The glyph breathes (the live channel); the label is the static cue
-       that carries the meaning. Removes when the turn ends. -->
-  {#if activity}
-    {@const ActIcon = activity.icon}
-    <div class="working">
-      <span class="ic breathe {activity.tint}" aria-hidden="true"><ActIcon /></span>
-      <span class="lbl">{activity.label}</span>
-    </div>
-  {/if}
 </div>
 
 <style>
@@ -279,74 +227,4 @@
     display: block;
   }
 
-  /* The pinned working cue — the one part of the ledger allowed to float. It
-     rides the tail through scroll so the reader always sees it while a turn is
-     live. Elevation via --shadow-tile (its 0.5px ring is the structural edge);
-     a pill radius sized off the rhythm scale keeps it concentric with its pad. */
-  .working {
-    position: sticky;
-    bottom: var(--space-4);
-    z-index: 2;
-    width: fit-content;
-    margin: var(--space-4) 0 0 var(--space-2);
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    padding: var(--space-2) var(--space-3);
-    border-radius: var(--radius-pill);
-    background: var(--surface);
-    box-shadow: var(--shadow-tile);
-    font-size: var(--text-sm);
-    color: var(--ink-muted);
-    /* one-shot entrance, opacity only — never fights the sticky containing box */
-    animation: cue-in var(--c-300) var(--e-in);
-  }
-  .working .ic {
-    width: 15px;
-    height: 15px;
-    flex: 0 0 auto;
-    display: grid;
-    place-items: center;
-  }
-  .working .ic :global(svg) {
-    width: 15px;
-    height: 15px;
-  }
-  .working .lbl {
-    color: var(--ink-body);
-    font-variant-numeric: tabular-nums;
-  }
-
-  /* Restrained ambient breath on the live glyph, transitioning opacity only —
-     paired always with a static label (better-ui motion restraint). This is the
-     sole continuous motion; every other cue here is a one-shot on mount. */
-  .breathe :global(svg) {
-    animation: breathe var(--breath) var(--e-toggle) infinite;
-  }
-  @keyframes breathe {
-    0%,
-    100% {
-      opacity: 0.55;
-    }
-    50% {
-      opacity: 1;
-    }
-  }
-  @keyframes cue-in {
-    from {
-      opacity: 0;
-    }
-    to {
-      opacity: 1;
-    }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .breathe :global(svg) {
-      animation: none;
-      opacity: 1;
-    }
-    .working {
-      animation: none;
-    }
-  }
 </style>
