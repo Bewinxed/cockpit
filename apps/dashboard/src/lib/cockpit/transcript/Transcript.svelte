@@ -27,10 +27,18 @@
   const rows = $derived(buildRows(session));
 
   let scroller = $state<HTMLElement | undefined>();
+  /** virtua's imperative handle — `scrollToIndex` reaches the true last row even
+      as rows are still being measured, which a one-shot scrollTop cannot. */
+  let list = $state<{ scrollToIndex: (i: number, opts?: { align?: 'start' | 'center' | 'end' | 'nearest' }) => void } | undefined>();
   let atBottom = $state(true);
+  // The transcript opens on the latest message, not the top. virtua fires an
+  // onscroll on mount (scrollTop 0, tall content) which would flip `atBottom`
+  // false before the tail-follow effect runs, leaving the reader at the top —
+  // so the first landing is unconditional, and only then does `atBottom` govern.
+  let landed = $state(false);
 
   function onscroll(): void {
-    if (!scroller) return;
+    if (!scroller || !landed) return;
     atBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 120;
   }
 
@@ -39,10 +47,15 @@
   $effect(() => {
     void rows.length;
     void session.streaming;
-    if (!active || !atBottom || !scroller) return;
-    void tick().then(() => {
-      if (scroller) scroller.scrollTop = scroller.scrollHeight;
-    });
+    if (!active || rows.length === 0) return;
+    if (!landed || atBottom) {
+      void tick().then(() => {
+        if (list) list.scrollToIndex(rows.length - 1, { align: 'end' });
+        else if (scroller) scroller.scrollTop = scroller.scrollHeight;
+        atBottom = true;
+        landed = true;
+      });
+    }
   });
 </script>
 
@@ -53,7 +66,7 @@
     <p class="empty">No messages yet.</p>
   {/if}
 
-  <Virtualizer data={rows} getKey={(r) => r.key} scrollRef={scroller}>
+  <Virtualizer bind:this={list} data={rows} getKey={(r) => r.key} scrollRef={scroller}>
     {#snippet children(row)}
       {#if row.kind === 'single'}
         <MessageRow message={row.message} {agentName} />
