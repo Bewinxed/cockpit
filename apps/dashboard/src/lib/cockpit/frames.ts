@@ -1128,7 +1128,7 @@ export interface Transcript {
 const ruleLabel = (name?: string): string =>
   name?.replace(/^rule:/, '').trim() || 'a rule';
 
-function turnStart(
+export function turnStart(
   entry: SessionMessage
 ): { text: string; images?: MessageMetadata['images'] } | null {
   if (entry.type !== 'user' || entry.parent_tool_use_id) return null;

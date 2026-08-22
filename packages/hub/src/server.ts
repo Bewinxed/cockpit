@@ -10,6 +10,7 @@ import type {
   FleetSyncReport,
   FramePayload,
   FsPayload,
+  HarnessKind,
   HarnessReport,
   InstanceRow,
   MachineMemorySet,
@@ -28,6 +29,7 @@ import {
   AGENT_BUSY,
   agentProblem,
   ASK_USER_QUESTION,
+  CONTROL_GET_SESSION_MESSAGES,
   FLEET_STATUS,
   FLEET_SYNC,
   identifyBlocks,
@@ -66,6 +68,36 @@ const UPDATE_TIMEOUT_MS = 10 * 60_000;
 
 /** Reading one file off a machine: it answers about as fast as a disk does. */
 const READ_TIMEOUT_MS = 10_000;
+
+/** Entries per flush of a streamed transcript — small enough to paint, big enough not to thrash. */
+const TRANSCRIPT_FLUSH = 25;
+
+/**
+ * A transcript on its way to a browser, newest entry first, one JSON object per
+ * line. Newest first because that is what the reader is looking at: the tail
+ * lands in the first flush and the rest fills in behind it, so a long session
+ * paints in milliseconds instead of after its last line has crossed the wire.
+ * The whole array is already in hand — `getSessionMessages` answers in one
+ * `control_result` — so this streams the *delivery*, which is what the reader
+ * waits through.
+ */
+const ndjsonNewestFirst = (rows: unknown[]): ReadableStream<Uint8Array> => {
+  const encoder = new TextEncoder();
+  let cursor = rows.length - 1;
+  return new ReadableStream({
+    pull(controller) {
+      if (cursor < 0) {
+        controller.close();
+        return;
+      }
+      let chunk = '';
+      for (let n = 0; n < TRANSCRIPT_FLUSH && cursor >= 0; n++, cursor--) {
+        chunk += `${JSON.stringify(rows[cursor])}\n`;
+      }
+      controller.enqueue(encoder.encode(chunk));
+    },
+  });
+};
 
 export interface HubServices {
   readonly registry: RegistryShape;
@@ -613,13 +645,14 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
     machineId: string,
     method: string,
     args: unknown[],
-    timeoutMs: number
+    timeoutMs: number,
+    harness?: HarnessKind
   ): Promise<ControlResult | 'offline' | 'timeout'> => {
     const agent = registry.agent(machineId);
     if (!agent) return Promise.resolve('offline');
 
     const requestId = crypto.randomUUID();
-    const payload: ControlPayload = { requestId, method, args };
+    const payload: ControlPayload = { requestId, method, args, ...(harness && { harness }) };
     agent.send({ verb: 'control', machineId, payload } satisfies Envelope<ControlPayload>);
     return new Promise((resolve) => {
       const timer = setTimeout(() => {
@@ -1084,6 +1117,53 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
       }
     )
     .get('/api/instances', () => db.listInstances())
+    // A session's stored transcript over HTTP, which is the only way a page can
+    // have one before its socket is up. The dashboard used to read history with
+    // a `getSessionMessages` control over its own WebSocket, so a reload showed
+    // an empty transcript until the socket reconnected and backfilled; this runs
+    // the same control from here, against the machine's agent socket, and
+    // streams the answer back newest-entry-first as NDJSON.
+    //
+    // `machine`/`cwd`/`harness` come from a stored-transcript link. A live
+    // session carries none of them, so its own row answers for it — including
+    // the SDK session key, which is what the machine stores the transcript under.
+    .get(
+      '/api/instances/:id/messages',
+      {
+        query: t.Object({
+          machine: t.Optional(t.String()),
+          cwd: t.Optional(t.String()),
+          harness: t.Optional(t.String()),
+        }),
+      },
+      async ({ params, query, status }) => {
+        const row = query.machine ? undefined : db.listInstances().find((r) => r.id === params.id);
+        const machineId = query.machine ?? row?.machineId;
+        if (!machineId) return status(404, `no session ${params.id}`);
+        const sessionKey = query.machine ? params.id : (row?.sessionId ?? params.id);
+        const cwd = query.cwd || row?.cwd || undefined;
+        const harness = (query.harness || row?.harness || undefined) as HarnessKind | undefined;
+
+        const answer = await callAgent(
+          machineId,
+          CONTROL_GET_SESSION_MESSAGES,
+          [sessionKey, { dir: cwd }],
+          READ_TIMEOUT_MS,
+          harness
+        );
+        if (answer === 'offline') return status(503, `machine ${machineId} is not connected`);
+        if (answer === 'timeout') return status(504, `machine ${machineId} did not answer in time`);
+        if (!answer.ok) return status(500, answer.error ?? 'the transcript could not be read');
+
+        // A session the machine has never stored answers with nothing, which is
+        // an empty transcript rather than a fault — the same shape a brand new
+        // session has.
+        const transcript = Array.isArray(answer.result) ? answer.result : [];
+        return new Response(ndjsonNewestFirst(transcript), {
+          headers: { 'Content-Type': 'application/x-ndjson', 'Cache-Control': 'no-store' },
+        });
+      }
+    )
     .patch(
       '/api/instances/:id',
       {

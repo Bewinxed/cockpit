@@ -44,6 +44,7 @@ import {
   SESSION_CATALOG_LIMIT,
   TRANSCRIPT_CHUNK_SIZE,
   TRANSCRIPT_CHUNK_THRESHOLD,
+  TRANSCRIPT_FIRST_CHUNK,
   WS_RECONNECT_BASE_DELAY,
   WS_RECONNECT_MAX_ATTEMPTS,
   WS_RECONNECT_MAX_DELAY,
@@ -63,6 +64,7 @@ import {
   routedToParent,
   suppressesTaskLine,
   turnBoundaries,
+  turnStart,
 } from './frames';
 import { invalidateTasks, refreshTasks, TASK_LEDGER_TOOLS } from './tasks.svelte';
 import { workingSet } from './working-set.svelte';
@@ -1916,32 +1918,7 @@ export async function backfillSession(instanceId: string): Promise<void> {
     await ingestTranscript(instanceId, target, transcript, epoch, () => {
       target.streaming = '';
       clearTurnPhase(target);
-      // Anything seen live that the stored transcript does not carry yet — the
-      // newest turn is written to disk a moment after it is streamed, so this
-      // is what stops the last thing on screen vanishing on a switch.
-      const absorbed = new Set<Message>();
-      for (const message of live) {
-        if (message.sdkUuid && seeded.has(message.sdkUuid)) continue;
-        if (target.messages.some((existing) => existing.id === message.id)) continue;
-        // An unstamped local echo of a turn the transcript already carries.
-        // Its stamping frame is about to be dropped by replayHeld (the uuid is
-        // seeded), so left here it would double the stored turn — the "first
-        // prompt shows twice" bug. Absorbed one-to-one by content so a genuine
-        // repeated send keeps both bubbles.
-        const echoOfStored =
-          message.type === 'user' &&
-          !message.sdkUuid &&
-          target.messages.find(
-            (m) =>
-              m.type === 'user' && m.sdkUuid && !absorbed.has(m) && m.content === message.content
-          );
-        if (echoOfStored) {
-          absorbed.add(echoOfStored);
-          continue;
-        }
-        if (mergePeerMessage(target.messages, message)) continue;
-        target.messages.push(message);
-      }
+      absorbLive(target, live, seeded);
       // What was held belongs to the end of the transcript, which is now on
       // screen: it appends while the older chunks prepend, so neither waits.
       replayHeld(instanceId, seeded);
@@ -1952,6 +1929,247 @@ export async function backfillSession(instanceId: string): Promise<void> {
   } finally {
     target.loading = false;
     target.hydrating = false;
+  }
+}
+
+/** The content blocks of a stored entry, for the tool pairing a cut must not split. */
+function contentBlocks(entry: SessionMessage): { type?: string; id?: string; tool_use_id?: string }[] {
+  const content = (entry.message as { content?: unknown } | null)?.content;
+  return Array.isArray(content) ? (content as { type?: string; id?: string; tool_use_id?: string }[]) : [];
+}
+
+/** What a streamed history read carries, and how the URL that names it is built. */
+export interface HistorySource {
+  viewId: string;
+  machineId: string;
+  /** The key the transcript is stored under: the SDK session id, not the view. */
+  sessionId: string;
+  cwd: string;
+  harness?: HarnessKind;
+  /** A running session, whose live frames have to be held and reconciled behind the read. */
+  live?: boolean;
+}
+
+/**
+ * A session's stored transcript over HTTP, published as it arrives.
+ *
+ * The socket path (`backfillSession`, `openTranscript`) cannot answer until the
+ * WebSocket is up, which is why a reload showed an empty transcript until the
+ * hub reconnected. The hub answers `GET /api/instances/:id/messages` with the
+ * same `getSessionMessages` read, so this needs nothing but a page.
+ *
+ * It arrives newest entry first, one JSON object per line, and is published in
+ * turn-aligned chunks the moment each one is complete: the newest turns paint
+ * from the first flush — which is where the reader is looking — and the rest
+ * prepend behind them, exactly as a socket-read transcript hydrates. Time to
+ * the first message is one flush, not the whole file.
+ */
+export async function streamHistory({
+  viewId,
+  machineId,
+  sessionId,
+  cwd,
+  harness,
+  live,
+}: HistorySource): Promise<TranscriptOutcome> {
+  const target = session(viewId);
+  if (machineId) target.machineId = machineId;
+  if (cwd) target.cwd = cwd;
+  if (sessionId) target.sessionId = sessionId;
+  if (harness) target.harness = harness;
+  // A stored session's plan is still on its machine, and no frame will ever
+  // arrive to say so — opening it is the only moment there is to ask.
+  refreshTasks(viewId);
+
+  if (live) {
+    // The same latch the socket backfill takes, taken here: whichever path
+    // reads this session's history first is the only one that reads it.
+    if (backfilled.has(viewId) || backfilling.has(viewId) || target.loading) return { ok: true };
+    backfilled.add(viewId);
+    backfilling.set(viewId, []);
+  } else if (target.messages.length > 0 || target.loading) {
+    // Re-opening what is already read — or still hydrating, which has published
+    // its newest turns by now — must not start a second read over the top of it.
+    return { ok: true };
+  }
+
+  /** Undoes the latch, so a failed read leaves the socket path free to try. */
+  const release = (): void => {
+    if (!live) return;
+    backfilled.delete(viewId);
+    if (backfilling.has(viewId)) replayHeld(viewId, new Set());
+  };
+
+  // A live session carries neither the stored key nor the cwd in its URL; its
+  // own row on the hub answers for it. A stored one is addressed outright.
+  const url = live
+    ? `/api/instances/${encodeURIComponent(viewId)}/messages`
+    : `/api/instances/${encodeURIComponent(sessionId)}/messages?${new URLSearchParams({
+        machine: machineId,
+        harness: harness ?? 'claude',
+        ...(cwd && { cwd }),
+      })}`;
+
+  const epoch = claimTranscript(viewId);
+  // Whatever this session said while the reader was elsewhere. The transcript
+  // about to arrive replaces the message list wholesale, so these are kept and
+  // re-applied behind it — deduplicated against it by uuid, exactly like the
+  // frames that land *during* the read.
+  const seenLive = target.messages.slice();
+  target.loading = true;
+
+  /** Entries buffered newest-first, waiting for a cut a chunk can start at. */
+  let buffered: SessionMessage[] = [];
+  /** Tool results in the buffer whose `tool_use` is older still — a cut here would split them. */
+  const dangling = new Set<string>();
+  const seeded = new Set<string>();
+  let chunks = 0;
+
+  const publish = (chunk: SessionMessage[]): void => {
+    const mapped = mapTranscript(viewId, chunk);
+    if (chunks === 0) {
+      target.messages = mapped.messages;
+      target.subagents = mapped.subagents;
+      // A transcript that already has turns in it is a session that already
+      // started, so the banner announcing the start has had its moment.
+      if (chunk.length > 0) target.initialized = true;
+      target.loading = false;
+      target.hydrating = true;
+      if (live) {
+        target.streaming = '';
+        clearTurnPhase(target);
+        absorbLive(target, seenLive, seeded);
+        // What was held belongs to the end of the transcript, which is now on
+        // screen: it appends while the older chunks prepend, so neither waits.
+        replayHeld(viewId, seeded);
+      }
+    } else {
+      target.messages = [...mapped.messages, ...target.messages];
+      // Branches are keyed by the Task `tool_use_id` that opened them, so an
+      // older chunk mostly adds keys — except where a compacted transcript
+      // re-emits the same call, and then its turns belong in front of the ones
+      // already read back for it.
+      for (const [toolUseId, branch] of Object.entries(mapped.subagents)) {
+        const known = target.subagents[toolUseId];
+        if (known) known.messages = [...branch.messages, ...known.messages];
+        else target.subagents[toolUseId] = branch;
+      }
+    }
+    chunks++;
+  };
+
+  try {
+    const response = await fetch(url);
+    if (!response.ok || !response.body) {
+      const detail = (await response.text().catch(() => '')) || response.statusText;
+      release();
+      target.loading = false;
+      // 503 is the hub saying the machine is not connected — a state of the
+      // fleet, not a fault in the read, and a different sentence to say.
+      if (response.status === 503) {
+        const machine = state.machines.find((row) => row.machineId === machineId);
+        return {
+          ok: false,
+          reason: 'offline',
+          message: `${machine?.hostname || machineId} is offline — its stored transcript can't be read right now.`,
+        };
+      }
+      return { ok: false, reason: 'failed', message: detail };
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let carry = '';
+
+    /** One entry, oldest of everything read so far; flushes a chunk once one can start here. */
+    const consume = async (entry: SessionMessage): Promise<void> => {
+      for (const block of contentBlocks(entry)) {
+        if (block.type === 'tool_result' && block.tool_use_id) dangling.add(block.tool_use_id);
+        else if (block.type === 'tool_use' && block.id) dangling.delete(block.id);
+      }
+      buffered.push(entry);
+      seeded.add(entry.uuid);
+      // Only a turn opener with no tool pair left hanging can begin a chunk:
+      // anywhere else the slice would open mid-turn, with results arriving for
+      // a `tool_use` on the other side of the cut.
+      const size = chunks === 0 ? TRANSCRIPT_FIRST_CHUNK : TRANSCRIPT_CHUNK_SIZE;
+      if (buffered.length < size || dangling.size > 0 || !turnStart(entry)) return;
+      // Mapping a chunk is the blocking work, so the loop hands the event loop
+      // back between them — this is what the reader scrolls and types through.
+      if (chunks > 0) await new Promise((resolve) => setTimeout(resolve, 0));
+      publish(buffered.reverse());
+      buffered = [];
+    };
+
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      // A later read for this view supersedes this one; the rest of the stream
+      // is somebody else's transcript now.
+      if (hydrations.get(viewId) !== epoch) {
+        await reader.cancel();
+        return { ok: true };
+      }
+      carry += decoder.decode(value, { stream: true });
+      for (let newline = carry.indexOf('\n'); newline >= 0; newline = carry.indexOf('\n')) {
+        const line = carry.slice(0, newline);
+        carry = carry.slice(newline + 1);
+        if (line) await consume(JSON.parse(line) as SessionMessage);
+      }
+    }
+    carry += decoder.decode();
+    if (carry.trim()) await consume(JSON.parse(carry) as SessionMessage);
+    if (hydrations.get(viewId) !== epoch) return { ok: true };
+    // The head of a transcript is always somewhere a chunk can start, and an
+    // empty one still has to publish: it is what says the session is empty.
+    if (buffered.length > 0 || chunks === 0) publish(buffered.reverse());
+    return { ok: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    release();
+    // The newest turns may already be on screen; a failure reading the rest
+    // joins them rather than taking the transcript down with it. With nothing
+    // on screen there is no transcript to join, so the failure is handed back
+    // for the pane to state outright.
+    if (chunks > 0) {
+      target.messages = [errorMessage(viewId, `could not read transcript: ${message}`), ...target.messages];
+      return { ok: true };
+    }
+    return { ok: false, reason: 'failed', message };
+  } finally {
+    target.loading = false;
+    target.hydrating = false;
+  }
+}
+
+/**
+ * Puts back whatever was seen live that the stored transcript does not carry
+ * yet — the newest turn is written to disk a moment after it is streamed, so
+ * this is what stops the last thing on screen vanishing when history lands over
+ * the top of it.
+ */
+function absorbLive(target: SessionState, live: Message[], seeded: Set<string>): void {
+  const absorbed = new Set<Message>();
+  for (const message of live) {
+    if (message.sdkUuid && seeded.has(message.sdkUuid)) continue;
+    if (target.messages.some((existing) => existing.id === message.id)) continue;
+    // An unstamped local echo of a turn the transcript already carries. Its
+    // stamping frame is about to be dropped by replayHeld (the uuid is seeded),
+    // so left here it would double the stored turn — the "first prompt shows
+    // twice" bug. Absorbed one-to-one by content so a genuine repeated send
+    // keeps both bubbles.
+    const echoOfStored =
+      message.type === 'user' &&
+      !message.sdkUuid &&
+      target.messages.find(
+        (m) => m.type === 'user' && m.sdkUuid && !absorbed.has(m) && m.content === message.content
+      );
+    if (echoOfStored) {
+      absorbed.add(echoOfStored);
+      continue;
+    }
+    if (mergePeerMessage(target.messages, message)) continue;
+    target.messages.push(message);
   }
 }
 

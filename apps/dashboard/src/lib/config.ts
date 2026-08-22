@@ -27,3 +27,10 @@ export const TRANSCRIPT_CHUNK_THRESHOLD = 300;
 
 /** Entries per chunk beyond that, mapped one chunk per macrotask. */
 export const TRANSCRIPT_CHUNK_SIZE = 250;
+
+/**
+ * Entries in the first chunk of a *streamed* transcript. Small on purpose: it
+ * is the tail, the part the reader lands on, and it paints as soon as it is
+ * complete rather than after the chunk behind it has finished arriving.
+ */
+export const TRANSCRIPT_FIRST_CHUNK = 40;
