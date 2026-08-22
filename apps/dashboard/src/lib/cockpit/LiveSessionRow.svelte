@@ -21,7 +21,6 @@
   import { fly } from 'svelte/transition';
   import { quintOut } from 'svelte/easing';
   import { Badge } from '$lib/components/ui/badge';
-  import { ItemMark, StatusPill } from '$lib/outpost';
   import { markHue, harnessGlyphPath } from './mark';
   import { formatDuration } from '$lib/utils/time';
   import { ACTIVITY_LABEL, SLEEPING_HINT, SLEEPING_LABEL } from './activity';
@@ -57,6 +56,23 @@
   const pillStatus = $derived(
     failed ? 'fail' : activity === 'blocked' ? 'attn' : activity === 'working' ? 'live' : 'idle'
   );
+
+  /** StatusPill ported to ui/badge, token-dressed to the Quiet Ledger pill
+   *  recipe: a tint carries live/attn/done/fail, and idle carries NO fill
+   *  (bare muted label) per DESIGN.md. */
+  const PILL_FILL: Record<string, string> = {
+    live: 'bg-[var(--status-live-bg)] text-[var(--status-live-ink)]',
+    attn: 'bg-[var(--status-attn-bg)] text-[var(--status-attn-ink)]',
+    done: 'bg-[var(--status-done-bg)] text-[var(--status-done-ink)]',
+    fail: 'bg-[var(--status-fail-bg)] text-[var(--status-fail-ink)]',
+  };
+  function pillClass(status: 'live' | 'attn' | 'done' | 'fail' | 'idle'): string {
+    const base =
+      'h-[var(--c-pill-h)] rounded-[var(--radius-pill)] border-0 text-[length:var(--c-pill-fs)] leading-none whitespace-nowrap';
+    return status === 'idle'
+      ? `${base} gap-0 bg-transparent p-0 font-[450] text-[var(--status-idle-ink)]`
+      : `${base} gap-[var(--c-pill-gap)] px-2.5 py-0 font-medium ${PILL_FILL[status]}`;
+  }
 
   // What the session is about, not where it runs: the SDK's own title for the
   // transcript this instance is writing. A quest is tagged out of the catalog,
@@ -123,7 +139,7 @@
         class="flex shrink-0 items-center justify-center {sleeping ? 'opacity-60' : ''}"
         style="--c-mark:20px;--c-mark-glyph:11px"
       >
-        <ItemMark hue={markHue(instance.cwd || instance.machineId)}>
+        <span class="mark m{markHue(instance.cwd || instance.machineId)}">
           <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path
               d={harnessGlyphPath(instance.harness)}
@@ -133,7 +149,7 @@
               stroke-linejoin="round"
             />
           </svg>
-        </ItemMark>
+        </span>
       </span>
       <!-- `max-w-lg`: a title that runs on — a pasted URL, usually — stops at a
            readable measure instead of crushing the path beside it. -->
@@ -196,7 +212,7 @@
             in:fly={{ y: 5, duration: painted ? 180 : 0, easing: quintOut }}
             out:fly={{ y: -5, duration: painted ? 140 : 0, easing: quintOut }}
           >
-            <StatusPill status={pillStatus}>{label}</StatusPill>
+            <Badge class={pillClass(pillStatus)}>{label}</Badge>
           </span>
         {/key}
       </span>
@@ -209,3 +225,34 @@
     {/if}
   </a>
 </LiveSessionMenu>
+
+<style>
+  /* Item mark — inlined token primitive (identity hue + harness glyph, top-light
+     overlay). No clean shadcn equivalent; kept identical in recipe across the
+     four sidebar-cluster files. Size comes from --c-mark / --c-mark-glyph set on
+     the wrapper. */
+  .mark {
+    width: var(--c-mark);
+    height: var(--c-mark);
+    border-radius: var(--radius-mark);
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    background-image: var(--mark-overlay);
+    background-color: var(--mark-1);
+  }
+  .mark svg {
+    width: var(--c-mark-glyph);
+    height: var(--c-mark-glyph);
+    display: block;
+    color: var(--mark-glyph);
+    stroke: var(--mark-glyph);
+  }
+  .mark.m2 { background-color: var(--mark-2); }
+  .mark.m3 { background-color: var(--mark-3); }
+  .mark.m4 { background-color: var(--mark-4); }
+  .mark.m5 { background-color: var(--mark-5); }
+  .mark.m6 { background-color: var(--mark-6); }
+  .mark.m7 { background-color: var(--mark-7); }
+  .mark.m8 { background-color: var(--mark-8); }
+</style>

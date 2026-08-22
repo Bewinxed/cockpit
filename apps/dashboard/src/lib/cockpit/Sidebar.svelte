@@ -6,7 +6,7 @@
    * foot.
    */
   import { page } from '$app/state';
-  import { NavItem, ItemMark, StatusPill } from '$lib/outpost';
+  import { Badge } from '$lib/components/ui/badge';
   import { IconBoxDuo, IconRules, IconTools, IconUsage } from '$lib/icons';
   import { ACTIVITY_LABEL, type Activity } from './activity';
   import { cockpit } from './client.svelte';
@@ -32,6 +32,31 @@
     blocked: 'attn',
     idle: 'idle',
   };
+
+  /** StatusPill ported to ui/badge, token-dressed to the Quiet Ledger pill
+   *  recipe: a tint carries live/attn, idle carries NO fill (bare muted label). */
+  const PILL_FILL: Record<string, string> = {
+    live: 'bg-[var(--status-live-bg)] text-[var(--status-live-ink)]',
+    attn: 'bg-[var(--status-attn-bg)] text-[var(--status-attn-ink)]',
+    done: 'bg-[var(--status-done-bg)] text-[var(--status-done-ink)]',
+    fail: 'bg-[var(--status-fail-bg)] text-[var(--status-fail-ink)]',
+  };
+  function pillClass(status: 'live' | 'attn' | 'done' | 'fail' | 'idle'): string {
+    const base =
+      'h-[var(--c-pill-h)] rounded-[var(--radius-pill)] border-0 text-[length:var(--c-pill-fs)] leading-none whitespace-nowrap';
+    return status === 'idle'
+      ? `${base} gap-0 bg-transparent p-0 font-[450] text-[var(--status-idle-ink)]`
+      : `${base} gap-[var(--c-pill-gap)] px-2.5 py-0 font-medium ${PILL_FILL[status]}`;
+  }
+
+  /** The NavItem count pill, as a token-dressed ui/badge: the fleet count on the
+   *  live tint, or the attention tint while a session is blocked. */
+  function countClass(attn: boolean): string {
+    const tint = attn
+      ? 'bg-[var(--status-attn-bg)] text-[var(--status-attn-ink)]'
+      : 'bg-[var(--status-live-bg)] text-[var(--status-live-ink)]';
+    return `ml-auto rounded-[var(--radius-pill)] border-0 px-[7px] py-[3px] text-[length:var(--text-sm)] font-medium leading-none ${tint}`;
+  }
 </script>
 
 <div class="rail">
@@ -48,27 +73,30 @@
   <div class="body">
     <div class="sec">Fleet</div>
     <nav aria-label="Fleet">
-      <NavItem
-        href="/session"
-        active={path.startsWith('/session')}
-        count={fleetCount || undefined}
-        attn={cockpit.blockedCount > 0}
-      >
-        {#snippet icon()}<IconBoxDuo />{/snippet}
-        Fleet
-      </NavItem>
-      <NavItem href="/tools" active={path.startsWith('/tools')}>
-        {#snippet icon()}<IconTools />{/snippet}
-        Tools
-      </NavItem>
-      <NavItem href="/rules" active={path.startsWith('/rules')}>
-        {#snippet icon()}<IconRules />{/snippet}
-        Rules
-      </NavItem>
-      <NavItem href="/usage" active={path.startsWith('/usage')}>
-        {#snippet icon()}<IconUsage />{/snippet}
-        Usage
-      </NavItem>
+      {#snippet navItem(href: string, active: boolean, label: string, icon: import('svelte').Snippet, count?: number, attn = false)}
+        <a class="nav-i" class:on={active} {href} aria-current={active ? 'page' : undefined}>
+          <span class="ic">{@render icon()}</span>
+          <span class="lbl">{label}</span>
+          {#if count !== undefined && count !== null}
+            <Badge class={countClass(attn)}>{count}</Badge>
+          {/if}
+        </a>
+      {/snippet}
+      {#snippet boxIcon()}<IconBoxDuo />{/snippet}
+      {#snippet toolsIcon()}<IconTools />{/snippet}
+      {#snippet rulesIcon()}<IconRules />{/snippet}
+      {#snippet usageIcon()}<IconUsage />{/snippet}
+      {@render navItem(
+        '/session',
+        path.startsWith('/session'),
+        'Fleet',
+        boxIcon,
+        fleetCount || undefined,
+        cockpit.blockedCount > 0
+      )}
+      {@render navItem('/tools', path.startsWith('/tools'), 'Tools', toolsIcon)}
+      {@render navItem('/rules', path.startsWith('/rules'), 'Rules', rulesIcon)}
+      {@render navItem('/usage', path.startsWith('/usage'), 'Usage', usageIcon)}
     </nav>
 
     {#if cockpit.machines.length > 0}
@@ -95,13 +123,13 @@
         {#each cockpit.runningInstances as row (row.id)}
           {@const activity = cockpit.activityOf(row.id)}
           <a class="row" class:on={path === `/session/${row.id}`} href="/session/{row.id}">
-            <ItemMark hue={markHue(row.cwd || row.machineId)}>
+            <span class="mark m{markHue(row.cwd || row.machineId)}">
               <svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
                 <path d={harnessGlyphPath(row.harness)} />
               </svg>
-            </ItemMark>
+            </span>
             <span class="nm">{sessionName(row)}</span>
-            <StatusPill status={PILL[activity]}>{ACTIVITY_LABEL[activity]}</StatusPill>
+            <Badge class={pillClass(PILL[activity])}>{ACTIVITY_LABEL[activity]}</Badge>
           </a>
         {/each}
       </div>
@@ -188,6 +216,66 @@
     gap: 1px;
   }
 
+  /* NavItem ported to a token-styled anchor matching mock .nav-i (ui/sidebar's
+     sidebar-menu-button needs a SidebarProvider this rail does not mount, so the
+     token anchor is the clean fit). Active = raised fill on the sunken rail. */
+  .nav-i {
+    height: var(--c-nav-h);
+    border-radius: var(--radius-control);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 10px;
+    font-size: var(--text-md);
+    color: var(--ink-body);
+    font-weight: var(--weight-medium);
+    text-decoration: none;
+  }
+  .nav-i .ic {
+    width: 18px;
+    flex: 0 0 auto;
+    color: var(--ink-muted);
+    display: grid;
+    place-items: center;
+  }
+  .nav-i .ic :global(svg) {
+    width: 16px;
+    height: 16px;
+    display: block;
+  }
+  .nav-i .lbl {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .nav-i.on {
+    background: var(--surface-raised);
+    color: var(--ink-strong);
+    box-shadow: var(--shadow-tile);
+    font-weight: var(--weight-strong);
+  }
+  .nav-i.on .ic {
+    color: var(--ink-body);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .nav-i:hover {
+      background: var(--surface-hover);
+    }
+    .nav-i.on:hover {
+      background: var(--surface-raised);
+    }
+    .nav-i:active {
+      background: var(--surface-active);
+    }
+  }
+  .nav-i:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+    border-radius: var(--radius-control);
+  }
+
   .row {
     height: 30px;
     border-radius: var(--radius-tile);
@@ -220,15 +308,35 @@
     flex: 0 0 auto;
     color: var(--ink-muted);
   }
-  .row :global(.mark) {
+
+  /* Item mark — inlined token primitive (17px running-now recipe): identity hue
+     + harness glyph, top-light/bottom-shade overlay. No clean shadcn equivalent;
+     kept identical in recipe across the four sidebar-cluster files. */
+  .mark {
     width: 17px;
     height: 17px;
+    border-radius: var(--radius-mark);
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    background-image: var(--mark-overlay);
+    background-color: var(--mark-1);
   }
-  .row :global(.mark svg) {
+  .mark svg {
     width: 10px;
     height: 10px;
+    display: block;
+    color: var(--mark-glyph);
+    stroke: var(--mark-glyph);
     stroke-width: 1.8;
   }
+  .mark.m2 { background-color: var(--mark-2); }
+  .mark.m3 { background-color: var(--mark-3); }
+  .mark.m4 { background-color: var(--mark-4); }
+  .mark.m5 { background-color: var(--mark-5); }
+  .mark.m6 { background-color: var(--mark-6); }
+  .mark.m7 { background-color: var(--mark-7); }
+  .mark.m8 { background-color: var(--mark-8); }
   @media (hover: hover) and (pointer: fine) {
     .row:hover {
       background: var(--surface-hover);

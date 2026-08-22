@@ -9,7 +9,6 @@
    */
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
-  import { ItemMark } from '$lib/outpost';
   import { IconClose } from '$lib/icons';
   import { cockpit } from './client.svelte';
   import { harnessGlyphPath, markHue } from './mark';
@@ -51,11 +50,11 @@
     {@const active = path === `/session/${tab.id}`}
     <div class="tab" class:on={active}>
       <a class="tl" href="/session/{tab.id}" role="tab" aria-selected={active}>
-        <ItemMark hue={tab.hue}>
+        <span class="tm m{tab.hue}" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
             <path d={tab.glyph} />
           </svg>
-        </ItemMark>
+        </span>
         <span class="nm">{tab.label}</span>
       </a>
       <button type="button" class="tclose" aria-label="Close {tab.label}" onclick={() => close(tab.id)}>
@@ -123,15 +122,35 @@
     white-space: nowrap;
     min-width: 0;
   }
-  .tl :global(.mark) {
+  /* Item mark — inlined token primitive (17px recipe at 14px for the tab strip):
+     identity hue + harness glyph, top-light/bottom-shade overlay. No clean
+     shadcn equivalent, so a minimal token-styled mark stands in. Kept identical
+     in recipe across Sidebar / LiveSessionRow / StoredSessionRow / SessionTabs. */
+  .tm {
     width: 14px;
     height: 14px;
+    border-radius: var(--radius-mark);
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    background-image: var(--mark-overlay);
+    background-color: var(--mark-1);
   }
-  .tl :global(.mark svg) {
+  .tm svg {
     width: 8px;
     height: 8px;
+    display: block;
+    stroke: var(--mark-glyph);
+    color: var(--mark-glyph);
     stroke-width: 1.8;
   }
+  .tm.m2 { background-color: var(--mark-2); }
+  .tm.m3 { background-color: var(--mark-3); }
+  .tm.m4 { background-color: var(--mark-4); }
+  .tm.m5 { background-color: var(--mark-5); }
+  .tm.m6 { background-color: var(--mark-6); }
+  .tm.m7 { background-color: var(--mark-7); }
+  .tm.m8 { background-color: var(--mark-8); }
 
   .tclose {
     width: 18px;
