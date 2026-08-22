@@ -10,9 +10,9 @@
    * Ported from mocks/v5-workspace.html (.tabstrip): the active tab is raised
    * off the strip and carries strong ink, so the selection survives greyscale.
    */
+  import { onMount, type Component } from 'svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
-  import type { Component } from 'svelte';
   import { IconBoxDuo, IconClose } from '$lib/icons';
   import { cockpit } from './client.svelte';
   import { resolveSessionTitle } from './links';
@@ -28,9 +28,41 @@
     sprite: Component;
   }
 
+  /** One tab as the root layout's server load resolved it, from the cookie. */
+  interface ServerTab {
+    id: string;
+    href: string;
+    label: string;
+    seed: string;
+  }
+
   const path = $derived(page.url.pathname);
 
-  const tabs = $derived.by((): Tab[] =>
+  /**
+   * The strip is server-rendered from the working-set COOKIE, so a reload paints
+   * the reader's real tabs instead of an empty strip that fills in on mount.
+   * `workingSet` reads localStorage, which the server cannot — so the first
+   * client render has to draw the same list the server did, or hydration would
+   * mismatch. This gate is that: cookie list until mounted, live set after.
+   * The cookie is written on every mutation, so the two agree and the handover
+   * moves nothing.
+   */
+  let mounted = $state(false);
+  onMount(() => {
+    mounted = true;
+  });
+
+  const served = $derived(((page.data as { tabs?: ServerTab[] }).tabs ?? []).map(
+    (tab): Tab => ({
+      id: tab.id,
+      href: tab.href,
+      label: tab.label,
+      hue: markHue(tab.seed),
+      sprite: sessionSprite(tab.id),
+    })
+  ));
+
+  const held = $derived.by((): Tab[] =>
     workingSet.order.map((id) => {
       const row = cockpit.instances.find((instance) => instance.id === id);
       const view = cockpit.session(id);
@@ -57,6 +89,8 @@
       };
     })
   );
+
+  const tabs = $derived(mounted ? held : served);
 
   /** Closing the tab you are reading leaves you on the board, not on a dead id. */
   function close(id: string) {

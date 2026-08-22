@@ -10,12 +10,16 @@
  * Kept per browser rather than on the hub. It is a record of what *this* reader
  * has been looking at, not a property of the fleet.
  */
-const KEY = 'outpost-working-set';
+export const WORKING_SET_KEY = 'outpost-working-set';
+const KEY = WORKING_SET_KEY;
 
 /** Beyond this it stops being a working set and becomes history again. */
 const LIMIT = 10;
 
-interface Visit {
+/** A year: the set is a habit, not a session. */
+const COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
+
+export interface Visit {
   id: string;
   /** Only eviction reads this: the tab that goes is the coldest one. */
   at: number;
@@ -55,13 +59,31 @@ const load = (): Visit[] => {
 const visits = $state<Visit[]>(load());
 
 const save = () => {
-  if (typeof localStorage === 'undefined') return;
-  try {
-    localStorage.setItem(KEY, JSON.stringify(visits));
-  } catch {
-    // A browser that will not store just starts the set over next time.
+  const payload = JSON.stringify(visits);
+  if (typeof localStorage !== 'undefined') {
+    try {
+      localStorage.setItem(KEY, payload);
+    } catch {
+      // A browser that will not store just starts the set over next time.
+    }
+  }
+  // Mirrored to a cookie, because the SERVER renders the tab strip. localStorage
+  // is unreachable at render time, so without this the first paint could only
+  // ever show Fleet plus whatever the URL names — and the real strip popped in
+  // on mount. The cookie is written on every mutation, so it is never a stale
+  // second copy: what the server draws is what the client is about to hold.
+  if (typeof document !== 'undefined') {
+    try {
+      document.cookie = `${KEY}=${encodeURIComponent(payload)}; path=/; max-age=${COOKIE_MAX_AGE}; samesite=lax`;
+    } catch {
+      // Cookies refused: SSR falls back to Fleet + the open conversation.
+    }
   }
 };
+
+// A reader who already had a working set has it only in localStorage; seed the
+// cookie from it once so their next reload paints the strip they actually hold.
+if (typeof document !== 'undefined' && visits.length > 0) save();
 
 export const workingSet = {
   /** Left to right, oldest tab first. The strip, and what stepping walks. */
