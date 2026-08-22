@@ -93,7 +93,12 @@
      revealing it needs no second pass. `display:none` and `content-visibility`
      both throw that away. Hidden things are `inert` too, so the one on screen is
      the only one that can be clicked, focused or typed into. -->
-<div class="relative min-h-0 min-w-0 flex-1">
+<!-- overflow-hidden: the panes are `absolute inset-0` but only `visibility`-hidden,
+     so a tall hidden pane (the fleet board, another conversation) would otherwise
+     overflow this box and make the OUTER #main-content scrollable — scrolling the
+     whole active pane, session header included, up under the tab strip. Each pane
+     scrolls inside its own transcript; nothing here should. -->
+<div class="relative min-h-0 min-w-0 flex-1 overflow-hidden">
   <!-- Fleet is the strip's first tab, so the board is one more thing to switch
        between rather than somewhere the tabs stop: it is kept and hidden exactly
        as the conversations are, down to where it was scrolled and what it was
