@@ -1,24 +1,53 @@
+<script module lang="ts">
+  /** Something `@` can name: another session, or a machine. */
+  export interface Mention {
+    /** What gets inserted, without the `@`. */
+    handle: string;
+    label: string;
+    detail?: string;
+  }
+</script>
+
 <script lang="ts">
   /**
-   * The floating composer — a lifted shell holding the text input, a context-%
-   * readout, and any inline permission / question prompts stacked above it. Home,
-   * this input, and Stop are the surface's fixed anchors; the button is a single
-   * box that sends when idle and interrupts while a turn is in flight. Ported
-   * from the mock's `.composer` / `.cin`.
+   * The floating composer — a lifted shell holding the text input, the attach
+   * and send controls, and any inline permission / question prompts stacked
+   * above it. Home, this input and Stop are the surface's fixed anchors; the
+   * action button is a single box that sends when idle and interrupts while a
+   * turn is in flight. Ported from the mock's `.composer` / `.cin`.
+   *
+   * The shell does not change shape when it is focused. It used to grow and
+   * re-round on click, which moved one of the three fixed anchors every time
+   * the reader touched it; now there is one radius and one padding, and the
+   * only thing that grows is the textarea itself, under `field-sizing:content`.
+   * Attach and send stay bottom-aligned, so they hold their position as the
+   * text runs to a second and a third line.
+   *
+   * `/` and `@` are real: typing either opens a filtered menu above the input,
+   * driven from the textarea's own keyboard so focus never leaves the message
+   * being written.
    */
   import type { Snippet } from 'svelte';
+  import type { AvailableCommand } from '@cockpit/core';
   import { IconSend, IconStop, IconPlus, IconClose } from '$lib/icons';
+  import * as Command from '$lib/components/ui/command';
   import type { SendExtras } from '../client.svelte';
 
   let {
     value = $bindable(''),
     busy = false,
+    commands = [],
+    mentions = [],
     onsubmit,
     onstop,
     prompts,
   }: {
     value?: string;
     busy?: boolean;
+    /** What this session offers behind `/`. */
+    commands?: AvailableCommand[];
+    /** What `@` can name — the sessions and machines in reach. */
+    mentions?: Mention[];
     onsubmit: (text: string, extras: SendExtras) => void;
     onstop: () => void;
     prompts?: Snippet;
@@ -30,6 +59,7 @@
   let images = $state<PendingImage[]>([]);
   let texts = $state<PendingText[]>([]);
   let fileInput = $state<HTMLInputElement>();
+  let field = $state<HTMLTextAreaElement>();
 
   /** A paste longer than this rides as a named attachment, not inline text. */
   const LARGE_PASTE = 1200;
@@ -37,6 +67,105 @@
   const hasContent = $derived(
     value.trim().length > 0 || images.length > 0 || texts.length > 0
   );
+
+  /* ---- the `/` and `@` menu ------------------------------------------- */
+
+  /** One row of the menu, whichever sigil opened it. */
+  interface Entry {
+    /** Command.Item's value, and what the highlight is tracked by. */
+    id: string;
+    /** What replaces the typed token, sigil included. */
+    insert: string;
+    label: string;
+    detail?: string;
+  }
+
+  /** Where the caret is, so the token under it can be found on every keystroke. */
+  let caret = $state(0);
+  /** Dismissed with Escape: the token is still there, the menu is not. */
+  let dismissed = $state(false);
+  let highlight = $state('');
+
+  /**
+   * The `/…` or `@…` the caret sits in the middle of, or null.
+   *
+   * A sigil only opens a menu at the start of a word — mid-token it is a path
+   * separator or an email, both of which the reader is entitled to type without
+   * a menu landing on top of them.
+   */
+  const token = $derived.by((): { sigil: '/' | '@'; query: string; from: number } | null => {
+    const at = Math.min(caret, value.length);
+    const before = value.slice(0, at);
+    const start = Math.max(before.lastIndexOf(' '), before.lastIndexOf('\n')) + 1;
+    const word = before.slice(start);
+    if (word.length === 0) return null;
+    const sigil = word[0];
+    if (sigil !== '/' && sigil !== '@') return null;
+    const query = word.slice(1);
+    // A token with whitespace in it is no longer being typed as one.
+    if (/\s/.test(query)) return null;
+    return { sigil, query, from: start };
+  });
+
+  const entries = $derived.by((): Entry[] => {
+    const active = token;
+    if (!active) return [];
+    const needle = active.query.toLowerCase();
+    const rows: Entry[] =
+      active.sigil === '/'
+        ? commands.map((command) => ({
+            id: `/${command.name}`,
+            insert: `/${command.name}`,
+            label: `/${command.name}`,
+            detail: command.description || command.argumentHint || command.type,
+          }))
+        : mentions.map((mention) => ({
+            id: `@${mention.handle}`,
+            insert: `@${mention.handle}`,
+            label: mention.label,
+            detail: mention.detail,
+          }));
+    return rows
+      .filter((row) => !needle || row.id.toLowerCase().includes(needle))
+      .slice(0, 40);
+  });
+
+  const menuOpen = $derived(!dismissed && entries.length > 0);
+
+  // The highlight follows the list: a query that filters the selected row away
+  // must not leave Enter pointing at something that is no longer on screen.
+  $effect(() => {
+    if (!menuOpen) return;
+    if (!entries.some((entry) => entry.id === highlight)) highlight = entries[0].id;
+  });
+
+  function noteCaret(event: Event): void {
+    caret = (event.currentTarget as HTMLTextAreaElement).selectionStart ?? 0;
+    dismissed = false;
+  }
+
+  /** Puts the chosen row where the token was, with a space after it. */
+  function choose(entry: Entry): void {
+    const active = token;
+    if (!active) return;
+    const end = Math.min(caret, value.length);
+    value = `${value.slice(0, active.from)}${entry.insert} ${value.slice(end)}`;
+    const next = active.from + entry.insert.length + 1;
+    dismissed = true;
+    // After the value lands, so the caret is set on the text that is there now.
+    queueMicrotask(() => {
+      field?.focus();
+      field?.setSelectionRange(next, next);
+      caret = next;
+    });
+  }
+
+  function step(by: number): void {
+    if (entries.length === 0) return;
+    const at = entries.findIndex((entry) => entry.id === highlight);
+    const next = (at + by + entries.length) % entries.length;
+    highlight = entries[next].id;
+  }
 
   function submit(): void {
     if (!hasContent) return;
@@ -47,10 +176,38 @@
     value = '';
     images = [];
     texts = [];
+    dismissed = true;
     onsubmit(text, extras);
   }
 
   function onkeydown(event: KeyboardEvent): void {
+    if (menuOpen) {
+      // The menu owns these keys while it is up — Enter picks a command rather
+      // than sending the half-typed name of one.
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        step(1);
+        return;
+      }
+      if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        step(-1);
+        return;
+      }
+      if (event.key === 'Enter' || event.key === 'Tab') {
+        const picked = entries.find((entry) => entry.id === highlight);
+        if (picked) {
+          event.preventDefault();
+          choose(picked);
+          return;
+        }
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        dismissed = true;
+        return;
+      }
+    }
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
       submit();
@@ -136,6 +293,7 @@
       {/each}
     </div>
   {/if}
+
   <form class="cin" onsubmit={(e) => e.preventDefault()} aria-label="Message the agent">
     <input
       type="file"
@@ -145,19 +303,51 @@
       bind:this={fileInput}
       onchange={onpick}
     />
+
+    {#if menuOpen}
+      <!-- Above the input, not over it: the sentence being written stays legible
+           while its next word is being chosen. -->
+      <!-- Focus never leaves the textarea: the menu swallows the mousedown that
+           would blur it, so a clicked row lands on the message being written. -->
+      <div
+        class="menu"
+        id="composer-menu"
+        onmousedown={(event) => event.preventDefault()}
+        role="presentation"
+      >
+        <Command.Root shouldFilter={false} bind:value={highlight} loop>
+          <Command.List>
+            <Command.Group heading={token?.sigil === '/' ? 'Commands' : 'Mentions'}>
+              {#each entries as entry (entry.id)}
+                <Command.Item value={entry.id} onSelect={() => choose(entry)}>
+                  <span class="e-label">{entry.label}</span>
+                  {#if entry.detail}<span class="e-detail">{entry.detail}</span>{/if}
+                </Command.Item>
+              {/each}
+            </Command.Group>
+          </Command.List>
+        </Command.Root>
+      </div>
+    {/if}
+
     <textarea
+      bind:this={field}
       bind:value
       {onkeydown}
       onpaste={onpaste}
-      placeholder="Message the agent…"
+      onselect={noteCaret}
+      oninput={noteCaret}
+      onclick={noteCaret}
+      onkeyup={noteCaret}
+      onblur={() => (dismissed = true)}
+      placeholder="Message the agent…  /  for commands, @ to mention"
       aria-label="Message the agent"
+      aria-expanded={menuOpen}
+      aria-autocomplete="list"
+      role="combobox"
+      aria-controls="composer-menu"
     ></textarea>
-    <div class="aff-row">
-      <div class="inner">
-        <span>/ commands</span><span>@ mention</span>
-        <span class="hint">Enter sends · Shift+Enter for a new line</span>
-      </div>
-    </div>
+
     <div class="ctrls">
       <button
         class="att-btn"
@@ -215,29 +405,24 @@
     flex-direction: column;
     gap: var(--space-3);
   }
+
+  /* One shape, always. --radius-panel outside, --space-2 of inset, and the
+     controls inside carry (panel − inset) so the curves are concentric rather
+     than two unrelated roundings stacked. Nothing here changes on focus. */
   .cin {
+    --cin-pad: var(--space-2);
+    --cin-ctl: 34px;
     position: relative;
     border: 1px solid var(--border-control);
     background: oklch(from var(--surface-raised) l c h / 0.82);
     -webkit-backdrop-filter: blur(16px) saturate(1.6);
     backdrop-filter: blur(16px) saturate(1.6);
-    border-radius: var(--radius-shell);
-    /* A tight, even inset around a control cluster whose own height (44px)
-       sets the row: the send/attach buttons and the textarea share one
-       baseline instead of the textarea riding high in a taller box. */
-    padding: var(--space-1) var(--space-1) var(--space-1) var(--space-3);
+    border-radius: var(--radius-panel);
+    padding: var(--cin-pad) var(--cin-pad) var(--cin-pad) var(--space-3);
     display: flex;
-    align-items: center;
+    align-items: flex-end;
     gap: var(--space-2);
     box-shadow: var(--shadow-lifted);
-  }
-  /* Focused: the pill grows taller and squares its radius a touch, but stays a
-     single row — the textarea grows on the left while attach + send stay pinned
-     inline at the bottom-right, never dropping to a wasted row of their own. */
-  .composer:focus-within .cin {
-    border-radius: var(--radius-panel);
-    align-items: flex-end;
-    padding: var(--space-2) var(--space-1) var(--space-2) var(--space-3);
   }
   textarea {
     flex: 1 1 auto;
@@ -249,83 +434,80 @@
     font-size: var(--a-input-fs, 16px);
     line-height: var(--leading-ui);
     color: var(--ink-strong);
-    /* Collapsed: match the 44px control height and centre the single line
-       with symmetric padding, so the text sits on the buttons' midline
-       rather than kissing their tops. */
-    min-height: 44px;
-    height: auto;
-    padding: var(--space-3) 0;
-    min-width: 0;
-  }
-  .composer:focus-within textarea {
-    height: auto;
-    min-height: 66px;
-    max-height: 200px;
-    padding: 0;
+    /* Grows with what is in it, from one line's worth of the control height to
+       a ceiling, and scrolls past that. The control row sets the resting height
+       so a single line sits on the buttons' midline. */
     field-sizing: content;
+    min-height: var(--cin-ctl);
+    max-height: 200px;
+    padding: calc((var(--cin-ctl) - 1lh) / 2) 0;
+    min-width: 0;
   }
   textarea::placeholder {
     color: var(--ink-muted);
   }
-  /* Collapsed, the affordance row is taken OUT OF FLOW (absolute) so it claims
-     zero width — otherwise it squeezes the resting textarea to a sliver at
-     mobile widths. On focus it returns to flow and unfolds below the input. */
-  .aff-row {
-    position: absolute;
-    display: grid;
-    grid-template-rows: 0fr;
-    opacity: 0;
-    transform: translateY(-4px);
-    pointer-events: none;
-    transition:
-      opacity var(--c-300) var(--e-in),
-      transform var(--c-300) var(--e-in);
-  }
-  /* The affordance hints stay out of flow even on focus: unfolding them turned
-     the pill into a column and pushed attach + send onto a wasted row of their
-     own. `/` and `@` still work by typing; the placeholder carries the intent. */
-  .aff-row > .inner {
-    overflow: hidden;
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-    font-size: var(--text-sm);
-    color: var(--ink-muted);
-    padding-top: var(--space-2);
-    flex-wrap: wrap;
-    row-gap: var(--space-2);
-  }
-  .aff-row .hint {
-    margin-left: auto;
-  }
   .hidden-file {
     display: none;
   }
-  /* Attach + send, together, so the fold moves them as one cluster. */
+
+  /* The `/` and `@` menu, above the pill and matched to its width. */
+  .menu {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: calc(100% + var(--space-2));
+    max-height: 280px;
+    overflow: hidden;
+    border: 1px solid var(--border-hairline);
+    border-radius: var(--radius-panel);
+    background: var(--surface-raised);
+    box-shadow: var(--shadow-lifted);
+  }
+  .e-label {
+    font-weight: var(--weight-medium);
+    color: var(--ink-strong);
+    white-space: nowrap;
+  }
+  .e-detail {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--text-sm);
+    color: var(--ink-muted);
+  }
+
+  /* Attach + send, together and bottom-aligned, so they hold their box as the
+     text above them runs on. */
   .ctrls {
     display: flex;
     align-items: center;
     gap: var(--space-2);
     flex: 0 0 auto;
   }
-  .composer:focus-within .ctrls {
-    align-self: flex-end;
-  }
-  .att-btn {
-    width: 44px;
-    height: 44px;
-    border: 1px solid var(--border-control);
-    border-radius: var(--radius-pill);
-    background: var(--surface-raised);
-    color: var(--ink-muted);
+  .att-btn,
+  .stop {
+    width: var(--cin-ctl);
+    height: var(--cin-ctl);
+    flex: 0 0 auto;
     display: grid;
     place-items: center;
     cursor: pointer;
-    flex: 0 0 auto;
+    /* Concentric with the shell: outer radius less the inset that seats it. */
+    border-radius: calc(var(--radius-panel) - var(--cin-pad));
+    transition:
+      background-color var(--c-100) var(--e-in),
+      color var(--c-100) var(--e-in),
+      transform var(--c-100) var(--e-in);
+  }
+  .att-btn {
+    border: 1px solid var(--border-control);
+    background: var(--surface-raised);
+    color: var(--ink-muted);
   }
   .att-btn :global(svg) {
-    width: 18px;
-    height: 18px;
+    width: 17px;
+    height: 17px;
   }
   @media (hover: hover) and (pointer: fine) {
     .att-btn:hover {
@@ -334,24 +516,25 @@
     }
   }
   .stop {
-    width: 44px;
-    height: 44px;
-    min-width: 44px;
-    min-height: 44px;
     border: 0;
-    border-radius: var(--radius-pill);
-    flex: 0 0 auto;
     background: var(--brand-solid);
     background-image: var(--gradient-action);
     box-shadow: var(--shadow-action);
     color: var(--on-brand);
-    display: grid;
-    place-items: center;
-    cursor: pointer;
   }
   .stop :global(svg) {
     width: 16px;
     height: 16px;
+  }
+  /* Optical centring: the send plane's mass sits low-left of its box, so the
+     glyph is nudged up and right to look centred rather than measure centred.
+     The stop square is symmetric and needs none of it. */
+  .stop:not(:disabled) :global(svg) {
+    transform: translate(0.5px, -0.5px);
+  }
+  .att-btn:active,
+  .stop:active:not(:disabled) {
+    transform: scale(0.96);
   }
   .stop:disabled {
     opacity: 0.45;
@@ -359,6 +542,12 @@
     box-shadow: none;
     background-image: none;
   }
+  .att-btn:focus-visible,
+  .stop:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+  }
+
   /* Pending attachment chips, above the input pill. */
   .atts {
     display: flex;
@@ -408,6 +597,15 @@
     background: var(--surface-sunken);
     color: var(--ink-body);
   }
+
+  /* A thumb gets the platform's 44px floor; the shell's inset grows with the
+     controls so the curves stay concentric at both sizes. */
+  @media (pointer: coarse) {
+    .cin {
+      --cin-ctl: 44px;
+    }
+  }
+
   /* Mobile: the composer goes full-width, edge to edge. It stays absolute
      (docked at the bottom of the transcript pane) rather than viewport-fixed,
      so it sits ABOVE the thumb bar instead of overlapping it — the thumb bar
@@ -422,10 +620,16 @@
          area inset, so the composer never sits under the rounded-screen chrome. */
       bottom: calc(var(--space-2) + env(safe-area-inset-bottom));
     }
-    /* The Enter/Shift+Enter hint is desktop-only guidance; on a phone it just
-       wraps the affordance row to a second line. */
-    .aff-row .hint {
-      display: none;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .att-btn,
+    .stop {
+      transition: none;
+    }
+    .att-btn:active,
+    .stop:active:not(:disabled) {
+      transform: none;
     }
   }
 </style>

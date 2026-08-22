@@ -63,7 +63,21 @@
       // Being on screen is what puts a conversation in the working set — and
       // the set's own limit is what bounds how many panes are kept alive.
       workingSet.visit(id, { machine: machineId, cwd, harness });
-      if (!panes.some((pane) => pane.id === id)) panes.push({ id, browsing: machineId, cwd, harness });
+      const held = panes.find((pane) => pane.id === id);
+      if (!held) {
+        panes.push({ id, browsing: machineId, cwd, harness });
+        return;
+      }
+      // The same conversation, arrived at by a URL that says more about it than
+      // the one that opened the pane. A pane first opened as `/session/{id}` —
+      // no machine, no cwd — can never read a stored transcript, so a later
+      // visit carrying the browsing context has to reach the pane that is
+      // already mounted rather than be dropped on the floor.
+      if (machineId && !held.browsing) {
+        held.browsing = machineId;
+        held.cwd = cwd;
+        held.harness = harness;
+      }
     });
   });
 

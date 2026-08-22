@@ -1797,6 +1797,16 @@ function claimTranscript(viewId: string): number {
   return epoch;
 }
 
+/**
+ * How a stored transcript read ended. A read that fails with nothing on screen
+ * has to be *said* — a stored session whose machine is asleep otherwise sits on
+ * an empty pane forever, which reads as a broken link rather than an
+ * unreachable machine.
+ */
+export type TranscriptOutcome =
+  | { ok: true }
+  | { ok: false; reason: 'offline' | 'failed'; message: string };
+
 /** Loads a stored session's transcript into the view it is being browsed under. */
 export async function openTranscript({
   viewId,
@@ -1810,7 +1820,7 @@ export async function openTranscript({
   sessionId: string;
   cwd: string;
   harness?: HarnessKind;
-}): Promise<void> {
+}): Promise<TranscriptOutcome> {
   const target = session(viewId);
   target.machineId = machineId;
   target.cwd = cwd;
@@ -1821,7 +1831,19 @@ export async function openTranscript({
   refreshTasks(viewId);
   // Re-opening what is already read — or still hydrating, which has published
   // its newest turns by now — must not start a second read over the top of it.
-  if (target.messages.length > 0 || target.loading) return;
+  if (target.messages.length > 0 || target.loading) return { ok: true };
+
+  // Asked before the call rather than inferred from its failure: a machine the
+  // hub has not heard from cannot answer, and "offline" is a different sentence
+  // from "the read failed" — the first is a state, the second is a fault.
+  const machine = state.machines.find((row) => row.machineId === machineId);
+  if (machine && machine.status !== 'online') {
+    return {
+      ok: false,
+      reason: 'offline',
+      message: `${machine.hostname || machineId} is offline — its stored transcript can't be read right now.`,
+    };
+  }
 
   const epoch = claimTranscript(viewId);
   target.loading = true;
@@ -1834,13 +1856,19 @@ export async function openTranscript({
       harness
     );
     await ingestTranscript(viewId, target, transcript, epoch);
+    return { ok: true };
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
     // The newest turns may already be on screen; a failure reading the rest
-    // joins them rather than taking the transcript down with it.
-    target.messages = [
-      errorMessage(viewId, `could not read transcript: ${error instanceof Error ? error.message : error}`),
-      ...target.messages,
-    ];
+    // joins them rather than taking the transcript down with it. With nothing
+    // on screen there is no transcript to join, so the failure is handed back
+    // for the pane to state outright — a lone error row in an otherwise empty
+    // scroller is the blank this exists to stop.
+    if (target.messages.length > 0) {
+      target.messages = [errorMessage(viewId, `could not read transcript: ${message}`), ...target.messages];
+      return { ok: true };
+    }
+    return { ok: false, reason: 'failed', message };
   } finally {
     target.loading = false;
     target.hydrating = false;
