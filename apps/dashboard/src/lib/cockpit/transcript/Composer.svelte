@@ -59,21 +59,24 @@
       placeholder="Message the agent…"
       aria-label="Message the agent"
     ></textarea>
-    <div class="foot">
-      {#if contextPct !== null}
-        <span class="ctx" title="Context window used">{Math.round(contextPct)}% context</span>
-      {/if}
-      <span class="hint">Enter sends · Shift+Enter for a new line</span>
-      <button
-        class="stop"
-        type="button"
-        onclick={onaction}
-        disabled={!busy && !canSend}
-        aria-label={busy ? 'Stop the agent' : 'Send message'}
-      >
-        {#if busy}<IconStop />{:else}<IconSend />{/if}
-      </button>
+    <div class="aff-row">
+      <div class="inner">
+        <span>/ commands</span><span>@ mention</span><span>＋ attach</span>
+        {#if contextPct !== null}
+          <span class="ctx" title="Context window used">{Math.round(contextPct)}% context</span>
+        {/if}
+        <span class="hint">Enter sends · Shift+Enter for a new line</span>
+      </div>
     </div>
+    <button
+      class="stop"
+      type="button"
+      onclick={onaction}
+      disabled={!busy && !canSend}
+      aria-label={busy ? 'Stop the agent' : 'Send message'}
+    >
+      {#if busy}<IconStop />{:else}<IconSend />{/if}
+    </button>
   </form>
 </div>
 
@@ -118,46 +121,82 @@
     -webkit-backdrop-filter: blur(16px) saturate(1.6);
     backdrop-filter: blur(16px) saturate(1.6);
     border-radius: var(--radius-shell);
-    padding: 10px 12px;
+    padding: 5px 5px 5px 15px;
     display: flex;
-    flex-direction: column;
-    gap: 6px;
+    align-items: center;
+    gap: 10px;
     box-shadow: var(--shadow-lifted);
   }
+  /* Focused: the pill unfolds into a panel — textarea grows, affordances
+     reveal, and the send button drops to the bottom-right. */
+  .composer:focus-within .cin {
+    border-radius: var(--radius-panel);
+    flex-direction: column;
+    align-items: stretch;
+    padding: 12px 12px 9px;
+  }
   textarea {
+    flex: 1 1 auto;
     border: 0;
     outline: 0;
     background: transparent;
     resize: none;
     font-family: var(--font-body);
-    font-size: 16px;
+    font-size: var(--a-input-fs, 16px);
     line-height: var(--leading-ui);
     color: var(--ink-strong);
-    min-height: 34px;
-    max-height: 200px;
-    field-sizing: content;
+    height: 34px;
+    padding: 7px 0 0;
     min-width: 0;
+  }
+  .composer:focus-within textarea {
+    height: auto;
+    min-height: 66px;
+    max-height: 200px;
+    padding-top: 0;
+    field-sizing: content;
   }
   textarea::placeholder {
     color: var(--ink-muted);
   }
-  .foot {
+  .aff-row {
+    display: grid;
+    grid-template-rows: 0fr;
+    opacity: 0;
+    transform: translateY(-4px);
+    pointer-events: none;
+    transition:
+      opacity var(--c-300) var(--e-in),
+      transform var(--c-300) var(--e-in);
+  }
+  .composer:focus-within .aff-row {
+    grid-template-rows: 1fr;
+    opacity: 1;
+    transform: none;
+    pointer-events: auto;
+  }
+  .aff-row > .inner {
+    overflow: hidden;
     display: flex;
     align-items: center;
     gap: 12px;
     font-size: var(--text-sm);
     color: var(--ink-muted);
+    padding-top: 8px;
+    flex-wrap: wrap;
+    row-gap: 6px;
   }
   .ctx {
     font-variant-numeric: tabular-nums;
   }
-  .hint {
+  .aff-row .hint {
     margin-left: auto;
   }
   .stop {
-    width: 34px;
-    height: 34px;
-    min-width: 34px;
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
     border: 0;
     border-radius: var(--radius-pill);
     flex: 0 0 auto;
@@ -169,22 +208,18 @@
     place-items: center;
     cursor: pointer;
   }
+  .composer:focus-within .stop {
+    align-self: flex-end;
+    margin-top: -26px;
+  }
   .stop :global(svg) {
-    width: 15px;
-    height: 15px;
+    width: 16px;
+    height: 16px;
   }
   .stop:disabled {
     opacity: 0.45;
     cursor: default;
     box-shadow: none;
     background-image: none;
-  }
-  @media (pointer: coarse) {
-    .stop {
-      width: 44px;
-      height: 44px;
-      min-width: 44px;
-      min-height: 44px;
-    }
   }
 </style>
