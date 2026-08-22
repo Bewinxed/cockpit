@@ -88,44 +88,42 @@
   }
 </script>
 
-<div class="ml-[7px] w-[calc(100%-7px)] pl-3" style="background:var(--rail) left top/2px 100% no-repeat">
+<div class="tools">
   {#if tools.length > 1}
-    <div
-      class="flex items-center gap-2 px-3 py-2"
-      in:fly={{ y: -4, duration: 160, easing: quintOut }}
-    >
-      <span class="flex shrink-0 -space-x-1">
+    <!-- The turn's kind summary — heaviest families first, and how it went — so
+         the reader can skip the rows below without reading each one. A flat line
+         on the rail, never a card header. -->
+    <div class="ghead" in:fly={{ y: -4, duration: 160, easing: quintOut }}>
+      <span class="glyphs">
         {#each glyphs as family (family.id)}
           {@const Glyph = family.icon}
-          <span class="flex size-5 items-center justify-center rounded-full bg-card">
-            <Glyph class="size-4 {family.color}" />
-          </span>
+          <Glyph class="glyph {family.color}" />
         {/each}
       </span>
 
-      <span class="text-caption">{tools.length} step{tools.length === 1 ? '' : 's'}</span>
+      <span class="steps">{tools.length} steps</span>
       {#if summary}
-        <span class="hidden truncate text-micro text-muted-foreground sm:inline">{summary}</span>
+        <span class="summary">{summary}</span>
       {/if}
 
-      <div class="ml-auto flex shrink-0 items-center gap-1.5">
+      <span class="status">
         {#if pendingCount > 0}
           <IconSpinner class="size-4 animate-spin text-warning motion-reduce:animate-none" />
-          <span class="text-micro text-warning">{pendingCount} running</span>
+          <span class="warn">{pendingCount} running</span>
         {:else if errorCount > 0}
           <IconError class="size-4 text-error" />
-          <span class="text-micro text-error">{errorCount} failed</span>
+          <span class="bad">{errorCount} failed</span>
         {:else}
           <span in:scale={{ duration: startedPending ? 260 : 0, start: 0.25, easing: quintOut }}>
             <IconSuccess class="size-4 text-success" />
           </span>
-          <span class="text-micro text-success">Complete</span>
+          <span class="ok">Complete</span>
         {/if}
-      </div>
+      </span>
     </div>
   {/if}
 
-  <div class="divide-y divide-border/50 {tools.length > 1 ? 'border-t border-border/50' : ''}">
+  <div class="rows">
     {#each tools as tool, i (tool.id)}
       {@const toolId = tool.id || `tool-${i}`}
       <ToolRow
@@ -140,6 +138,64 @@
     {/each}
   </div>
 </div>
+
+<style>
+  /* A turn's tool calls read as compact rows on a rail — a fold, never a card. */
+  .tools {
+    margin: 6px 0 0 7px;
+    padding-left: 12px;
+    background: var(--rail) left top / 2px 100% no-repeat;
+  }
+
+  .ghead {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 26px;
+    padding: 2px 6px 2px 0;
+    font-size: var(--text-sm);
+    color: var(--ink-muted);
+  }
+  .glyphs {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    flex: 0 0 auto;
+  }
+  .glyphs :global(.glyph) {
+    width: 14px;
+    height: 14px;
+    display: block;
+  }
+  .steps {
+    flex: 0 0 auto;
+    font-weight: var(--weight-strong);
+    color: var(--ink-body);
+  }
+  .summary {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--ink-muted);
+  }
+  .status {
+    margin-left: auto;
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .status .ok {
+    color: var(--data-ok);
+  }
+  .status .warn {
+    color: var(--data-warn);
+  }
+  .status .bad {
+    color: var(--data-bad);
+  }
+</style>
 
 <!-- Diff Modal — the data outlives the close so the panel can animate out. -->
 {#if diffModalOpen && diffModalData}

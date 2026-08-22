@@ -101,108 +101,65 @@
 <Collapsible.Root {open} onOpenChange={onToggle}>
   <Collapsible.Trigger class="group/toolcard w-full text-left">
     <div
-      class="flex min-h-9 w-full cursor-pointer items-start gap-2 px-3 py-2 transition-colors
-        {status === 'error' ? 'bg-error/10 hover:bg-error/15' : 'hover:bg-accent/40'}"
+      class="trow {status === 'error' ? 'bad' : ''}"
       in:fly={{ y: 4, duration: entering ? 160 : 0, easing: quintOut }}
     >
-      <span class="relative mt-0.5 flex size-4 shrink-0 items-center justify-center">
+      <!-- The family glyph steps aside for the disclosure chevron on hover. -->
+      <span class="ic">
         {#if descriptor.favicon && !faviconFailed}
           <img
             src={descriptor.favicon}
             alt=""
-            class="size-4 rounded-full object-cover ring-1 ring-border transition-opacity duration-150 md:group-hover/toolcard:opacity-0 md:group-focus-within/toolcard:opacity-0"
+            class="fav"
             loading="lazy"
             onerror={() => (faviconFailed = true)}
           />
         {:else}
           {@const Glyph = descriptor.icon}
-          <Glyph
-            class="size-4 {descriptor.color} transition-opacity duration-150 md:group-hover/toolcard:opacity-0 md:group-focus-within/toolcard:opacity-0"
-          />
+          <Glyph class="glyph {descriptor.color}" />
         {/if}
-        <IconChevronRight
-          class="absolute inset-0 m-auto size-4 text-muted-foreground opacity-0 transition-all duration-240 ease-expo md:group-hover/toolcard:opacity-100 md:group-focus-within/toolcard:opacity-100 {open
-            ? 'rotate-90'
-            : ''}"
-        />
+        <IconChevronRight class="chev {open ? 'open' : ''}" />
       </span>
 
-      <span class="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span class="flex min-w-0 items-baseline gap-1.5">
-          {#if descriptor.label}
-            <!-- The verb never yields to its own object — it only refuses to
-                 take more than three fifths of the line on a narrow screen. -->
-            <span class="max-w-[60%] shrink-0 truncate text-[13px] leading-5 text-foreground">
-              {descriptor.label}
-            </span>
-          {/if}
-          {#if descriptor.object}
-            <span
-              class="min-w-0 truncate {descriptor.objectIsMono
-                ? 'font-mono text-micro'
-                : 'text-[13px]'} {descriptor.label ? 'text-muted-foreground' : 'text-foreground'}"
-              title={descriptor.object}
-            >
-              {descriptor.object}
-            </span>
-          {/if}
-          {#if descriptor.detail}
-            <!-- The dir yields three times as fast as the leaf and truncates
-                 from the left, because the deep end is what tells two
-                 checkouts apart. -->
-            <span
-              class="hidden max-w-[45%] min-w-0 shrink-[9] truncate text-muted-foreground sm:inline
-                {descriptor.detailIsMono ? 'font-mono text-micro [direction:rtl]' : 'text-micro'}"
-              title={descriptor.detail}
-            >
-              <bdi>{descriptor.detail}</bdi>
-            </span>
-          {/if}
-          {#if descriptor.chip}
-            <span
-              class="hidden shrink-0 rounded-md bg-muted px-1.5 py-px text-micro text-muted-foreground sm:inline"
-            >
-              {descriptor.chip}
-            </span>
-          {/if}
-        </span>
+      {#if descriptor.label}
+        <span class="tk">{descriptor.label}</span>
+      {/if}
 
-        {#if tail}
-          <span
-            class="block truncate font-mono text-micro {failure
-              ? 'text-error'
-              : 'text-muted-foreground'}"
+      <!-- The object leads the mono target; its dir, chip and first output line
+           trail off as dimmer continuations and truncate together. -->
+      <span class="arg" title={descriptor.object}>
+        {#if descriptor.object}<span class={descriptor.objectIsMono ? 'mono' : ''}
+            >{descriptor.object}</span
+          >{/if}{#if descriptor.detail}<span class="dim"> · {descriptor.detail}</span>{/if}{#if descriptor.chip}<span
+            class="dim"
           >
-            {tail}
-          </span>
-        {/if}
+            · {descriptor.chip}</span
+          >{/if}{#if tail}<span class="dim {failure ? 'err' : ''}"> — {tail}</span>{/if}
       </span>
 
       {#if descriptor.fact}
         {@const parts = descriptor.fact.split(' ')}
-        <span class="mt-0.5 ml-auto shrink-0 text-micro tabular-nums text-muted-foreground">
-          {#if descriptor.factTone === 'diff'}
-            <!-- Diff green and red are the diff's own reading, not a status. -->
-            <span class="text-success">{parts[0]}</span>
-            {#if parts[1]}<span class="ml-1 text-error">{parts[1]}</span>{/if}
-          {:else}
-            {descriptor.fact}
-          {/if}
-        </span>
+        {#if descriptor.factTone === 'diff'}
+          <!-- Diff green and red are the diff's own reading, not a status. -->
+          <span class="d">
+            <span class="add">{parts[0]}</span>{#if parts[1]}<span class="del"> {parts[1]}</span
+              >{/if}
+          </span>
+        {:else}
+          <span class="fact">{descriptor.fact}</span>
+        {/if}
       {/if}
 
-      <!-- No slot is reserved for silence: a finished row spends those pixels
-           on the path leaf instead, which is what a phone needs them for. -->
       {#if status === 'pending' || justFinished}
-        <span class="icon-swap mt-0.5 size-4 shrink-0" out:fade={{ duration: 240 }}>
-          <IconSpinner
-            class="size-4 animate-spin text-warning motion-reduce:animate-none"
-            data-active={status === 'pending'}
-          />
-          <IconCheck class="size-4 text-success" data-active={justFinished} />
+        <span class="stat" out:fade={{ duration: 240 }}>
+          {#if status === 'pending'}
+            <IconSpinner class="size-4 animate-spin text-warning motion-reduce:animate-none" />
+          {:else}
+            <IconCheck class="size-4 text-success" />
+          {/if}
         </span>
       {:else if status === 'error'}
-        <IconError class="mt-0.5 size-4 shrink-0 text-error" />
+        <IconError class="stat text-error" />
       {/if}
     </div>
   </Collapsible.Trigger>
@@ -276,3 +233,131 @@
     </div>
   </Collapsible.Content>
 </Collapsible.Root>
+
+<style>
+  /* One tool call, read as a compact row on the turn's rail: a family glyph, a
+     verb, a mono target, and what came back — never a card. */
+  .trow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 26px;
+    padding: 2px 6px 2px 0;
+    font-size: var(--text-sm);
+    color: var(--ink-body);
+    cursor: pointer;
+    border-radius: var(--radius-mark);
+    transition: background-color 0.12s ease;
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .trow:hover {
+      background: var(--surface-hover);
+    }
+  }
+  .trow.bad {
+    color: var(--data-bad);
+  }
+
+  /* The glyph and the disclosure chevron share one 15px cell; the chevron fades
+     in over the glyph on hover. */
+  .ic {
+    position: relative;
+    width: 15px;
+    height: 15px;
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    color: var(--ink-muted);
+  }
+  .ic :global(svg) {
+    width: 15px;
+    height: 15px;
+    display: block;
+  }
+  .ic .fav {
+    width: 15px;
+    height: 15px;
+    border-radius: 999px;
+    object-fit: cover;
+    box-shadow: 0 0 0 1px var(--border-hairline);
+  }
+  .ic .fav,
+  .ic :global(svg:not(.chev)) {
+    transition: opacity 0.15s ease;
+  }
+  .ic :global(svg.chev) {
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    color: var(--ink-muted);
+    opacity: 0;
+    transition:
+      opacity 0.15s ease,
+      transform 0.2s ease;
+  }
+  .ic :global(svg.chev.open) {
+    transform: rotate(90deg);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .trow:hover .ic .fav,
+    .trow:hover .ic :global(svg:not(.chev)) {
+      opacity: 0;
+    }
+    .trow:hover .ic :global(svg.chev) {
+      opacity: 1;
+    }
+  }
+
+  .tk {
+    flex: 0 0 auto;
+    font-weight: var(--weight-strong);
+    color: var(--ink-strong);
+    white-space: nowrap;
+  }
+  .trow.bad .tk {
+    color: var(--data-bad);
+  }
+
+  .arg {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--font-mono);
+    color: var(--ink-muted);
+  }
+  .arg .dim {
+    color: var(--ink-muted);
+    opacity: 0.72;
+  }
+  .arg .dim.err {
+    color: var(--data-bad);
+    opacity: 1;
+    font-family: var(--font-body);
+  }
+
+  .d,
+  .fact {
+    flex: 0 0 auto;
+    font-variant-numeric: tabular-nums;
+    font-size: var(--text-sm);
+  }
+  .fact {
+    color: var(--ink-muted);
+  }
+  .d .add {
+    color: var(--data-ok);
+  }
+  .d .del {
+    color: var(--data-bad);
+  }
+
+  .stat {
+    flex: 0 0 auto;
+    width: 16px;
+    height: 16px;
+    display: grid;
+    place-items: center;
+  }
+</style>

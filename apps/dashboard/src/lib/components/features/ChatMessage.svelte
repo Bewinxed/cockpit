@@ -1,9 +1,7 @@
 <script lang="ts">
 	import {
 		IconUser,
-		IconTools,
 		IconDocument,
-		IconAlert,
 		IconChevronRight,
 		IconSpinner,
 		IconSuccess,
@@ -350,115 +348,21 @@
 		};
 	});
 
-	const messageConfig = {
-		user: {
-			align: 'justify-end',
-			bubble:
-				'relative px-4 py-3 text-sm leading-relaxed rounded-xl bg-primary/8 text-foreground',
-			icon: IconUser,
-			iconBg: 'bg-primary text-primary-foreground',
-			iconColor: 'text-primary-foreground'
-		},
-		assistant: {
-			align: 'justify-start',
-			bubble:
-				// min(65ch, 100%) in ONE declaration: `max-w-prose max-w-full` looks
-				// right but only one max-width survives the cascade, and in this
-				// items-start flex column the bubble sizes to fit-content — 65ch won
-				// and overflowed a 390px phone (user report, 2026-08-09).
-				'relative max-w-[min(65ch,100%)] min-w-0 text-sm leading-relaxed text-foreground break-words',
-			icon: IconAgent,
-			iconBg: 'bg-secondary border border-border',
-			iconColor: 'text-muted-foreground'
-		},
-		'tool.use': {
-			align: 'justify-start',
-			bubble: 'px-3 py-2.5 text-sm rounded-xl bg-card border border-border shadow-sm',
-			icon: IconTools,
-			iconBg: 'bg-warning/10',
-			iconColor: 'text-warning'
-		},
-		'tool.result': {
-			align: 'justify-start',
-			bubble: 'px-3 py-2.5 text-sm rounded-xl bg-card border border-border shadow-sm',
-			icon: IconDocument,
-			iconBg: 'bg-success/10',
-			iconColor: 'text-success'
-		},
-		'ui.error': {
-			align: 'justify-start',
-			bubble:
-				'relative px-4 py-3 text-sm leading-relaxed rounded-xl bg-destructive/10 text-destructive border border-destructive/30 shadow-sm',
-			icon: IconAlert,
-			iconBg: 'bg-destructive/10 text-destructive',
-			iconColor: 'text-destructive'
-		},
-		'ui.session_error': {
-			align: 'justify-start',
-			bubble:
-				'relative px-4 py-3 text-sm leading-relaxed rounded-xl bg-warning/10 text-warning border border-warning/30 shadow-sm',
-			icon: IconWarningTriangle,
-			iconBg: 'bg-warning/10',
-			iconColor: 'text-warning'
-		},
-		system: {
-			align: 'justify-center',
-			bubble:
-				'inline-flex items-center gap-2 px-4 py-1.5 text-xs text-muted-foreground bg-muted/50 rounded-full',
-			icon: IconSettings,
-			iconBg: 'bg-accent text-accent-foreground',
-			iconColor: 'text-muted-foreground'
-		},
-		'system.hook_response': {
-			align: 'justify-start',
-			bubble: 'px-3 py-2.5 text-sm rounded-xl bg-card border border-border shadow-sm',
-			icon: IconTerminal,
-			iconBg: 'bg-info/10',
-			iconColor: 'text-info'
-		},
-		'ui.command_output': {
-			align: 'justify-start',
-			bubble:
-				'relative px-4 py-3 text-sm leading-relaxed rounded-2xl rounded-bl-sm bg-card text-card-foreground border border-border shadow-sm',
-			icon: IconTerminal,
-			iconBg: 'bg-accent text-accent-foreground',
-			iconColor: 'text-muted-foreground'
-		},
-		'ui.system_note': {
-			align: 'justify-start',
-			bubble: '',
-			icon: IconSettings,
-			iconBg: 'bg-muted',
-			iconColor: 'text-muted-foreground'
-		},
-		'ui.help_menu': {
-			align: 'justify-start',
-			bubble: '',
-			icon: IconHelp,
-			iconBg: 'bg-primary/10 text-primary',
-			iconColor: 'text-primary'
-		},
-		thinking: {
-			align: 'justify-start',
-			bubble: 'px-3 py-2.5 text-sm rounded-xl bg-muted/50 border border-border shadow-sm',
-			icon: IconAgent,
-			iconBg: 'bg-accent text-accent-foreground',
-			iconColor: 'text-muted-foreground'
-		},
-		'result.error': {
-			align: 'justify-start',
-			bubble:
-				'relative px-4 py-3 text-sm leading-relaxed rounded-xl bg-destructive/10 text-destructive border border-destructive/30 shadow-sm',
-			icon: IconAlert,
-			iconBg: 'bg-destructive/10 text-destructive',
-			iconColor: 'text-destructive'
-		}
+	// Who a turn is attributed to in its label row. `You` for the operator, the
+	// harness's product name for the agent — read off the instance the same way
+	// the suppression rules above read the fleet.
+	const HARNESS_LABELS: Record<string, string> = {
+		claude: 'Claude Code',
+		opencode: 'OpenCode',
+		pi: 'pi'
 	};
-
-	const config = $derived(
-		messageConfig[message.type as keyof typeof messageConfig] ||
-		(message.type.startsWith('system.') ? messageConfig.system : messageConfig.assistant)
-	);
+	const roleName = $derived.by(() => {
+		if (message.type === 'user') return 'You';
+		// The same harness the header names — the session's own, not a fleet row
+		// that a stored transcript may not have.
+		const harness = cockpit.session(instanceId || message.instanceId)?.harness ?? 'claude';
+		return HARNESS_LABELS[harness] ?? (harness || 'Assistant');
+	});
 
 	/** Past this, a single turn crowds out everything the session said after it. */
 	const HUGE_MESSAGE_CHARS = 1500;
@@ -489,106 +393,236 @@
 <!-- If there's a specialized renderer, use it -->
 {#if renderer}
 	<renderer.component {...rendererProps} />
-{:else}
-	<!-- Default rendering logic -->
-	<div class="flex {config.align} gap-3 group">
-		<!-- Tool rows carry their own family glyph now; a wrench avatar beside
-		     them said the same thing twice. -->
-		{#if message.type !== 'user' && message.type !== 'assistant' && message.type !== 'user.delegate_ask' && message.type !== 'tool.use' && message.type !== 'tool.result' && !message.type.startsWith('system.') && message.type !== 'ui.help_menu' && !suppressedAsDelegateTraffic}
-			<!-- Avatar: another session's words wear the sender's model mark. -->
-			<div
-				class="shrink-0 size-9 rounded-xl {config.iconBg} flex items-center justify-center mt-0.5"
-			>
-				{#if peerSenderModel && providerOf(peerSenderModel)}
-					<ProviderLogo model={peerSenderModel} size={18} />
+{:else if message.type === 'user' || message.type === 'assistant'}
+	<!-- A turn: a role label row, then plain body text — no bubble, no avatar
+	     column. The whole grammar of the transcript is label + prose. -->
+	<div class="turn group">
+		<h2 class="who">
+			<span class="dot {isUser ? 'u' : 'a'}">
+				{#if isUser}
+					<IconUser />
 				{:else}
-					<config.icon class="size-[18px] {config.iconColor}" />
+					<IconAgent />
+				{/if}
+			</span>
+			<span class="role">{roleName}</span>
+			{#if message.timestamp}
+				<span class="ts">{formatTimestamp(new Date(message.timestamp))}</span>
+			{/if}
+		</h2>
+
+		{#if isUser && isEditing}
+			<!-- User message in edit mode -->
+			<div class="edit">
+				<textarea
+					class="w-full min-h-[80px] px-3 py-2 bg-background border border-border rounded-lg text-base sm:text-sm
+                       placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20
+                       resize-y transition-colors"
+					aria-label="Edited message"
+					placeholder="Edit your message..."
+					bind:value={editContent}
+					onkeydown={handleEditKeydown}
+					disabled={editLoading}
+				></textarea>
+				<div class="flex items-center justify-between">
+					<p class="text-xs text-muted-foreground">
+						This will restart the conversation from this point
+					</p>
+					<div class="flex items-center gap-2">
+						<button
+							onclick={cancelEditing}
+							disabled={editLoading}
+							class="px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+						>
+							Cancel
+						</button>
+						<button
+							onclick={submitEdit}
+							disabled={!editContent.trim() || editLoading}
+							class="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground rounded-md text-sm font-medium
+                           hover:bg-primary/90 hover:text-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+						>
+							{#if editLoading}
+								<IconSpinner class="w-3.5 h-3.5 animate-spin" />
+							{:else}
+								<IconCheck class="w-3.5 h-3.5" />
+							{/if}
+							<span>Submit</span>
+						</button>
+					</div>
+				</div>
+			</div>
+		{:else}
+			<div class="msg">
+				{#if bubbleImages.length > 0}
+					<div class="flex flex-wrap gap-2 mb-2">
+						{#each bubbleImages as image, index (index)}
+							{#if image.dataUri}
+								<img
+									src={image.dataUri}
+									alt="Attachment"
+									class="max-h-40 rounded-lg outline outline-1 outline-[oklch(0_0_0/0.1)] dark:outline-[oklch(1_0_0/0.1)]"
+								/>
+							{:else}
+								<!-- A stored turn that named an image the transcript no longer carries -->
+								<span
+									class="inline-flex items-center gap-1.5 rounded-lg border border-border px-2 py-1 text-xs text-muted-foreground"
+								>
+									<IconGallery class="size-3.5" />
+									{image.mediaType.replace('image/', '')} image
+								</span>
+							{/if}
+						{/each}
+					</div>
+				{/if}
+
+				{#if bubbleAttachments.length > 0}
+					<div class="flex flex-wrap gap-1.5 mb-2">
+						{#each bubbleAttachments as attachment, index (index)}
+							<span
+								class="inline-flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground"
+							>
+								<IconDocument class="size-3.5" />
+								{attachment.name}
+								<span class="tabular-nums">{attachment.chars.toLocaleString()} chars</span>
+							</span>
+						{/each}
+					</div>
+				{/if}
+
+				{#if isHuge}
+					<Collapsible.Root bind:open={fullMessageOpen}>
+						<Markdown source={fullMessageOpen ? messageHead : `${messageHead}…`} />
+						<Collapsible.Content>
+							<Markdown source={messageRest} />
+						</Collapsible.Content>
+						<Collapsible.Trigger
+							class="mt-2 flex items-center gap-1.5 text-xs opacity-70 transition-opacity hover:opacity-100"
+						>
+							<IconChevronRight
+								class="w-3.5 h-3.5 transition-transform duration-200 ease-out {fullMessageOpen
+									? 'rotate-90'
+									: ''}"
+							/>
+							{fullMessageOpen
+								? 'Show less'
+								: `Show full message (${message.content.length.toLocaleString()} chars)`}
+						</Collapsible.Trigger>
+					</Collapsible.Root>
+				{:else}
+					<Markdown source={message.content} />
+				{/if}
+
+				{#if sources.length > 0}
+					<SourcesStrip {sources} />
 				{/if}
 			</div>
+
+			<!-- Turn controls, revealed on hover — the row has no corner to hide
+			     them in, so they sit under the words as a quiet strip. -->
+			<div class="acts">
+				{#if message.type === 'user' && canEdit && onEditMessage}
+					<Button
+						variant="outline"
+						size="icon-sm"
+						class="shadow-sm"
+						onclick={startEditing}
+						aria-label="Edit message"
+						title="Edit message and restart from here"
+					>
+						<IconPen class="text-muted-foreground" />
+					</Button>
+				{/if}
+				{#if message.type === 'user' && canFork && onForkFrom}
+					<Button
+						variant="outline"
+						size="icon-sm"
+						class="shadow-sm"
+						disabled={forkLoading}
+						onclick={forkFromHere}
+						aria-label="Fork from here"
+						title="Branch a side quest from this point"
+					>
+						{#if forkLoading}
+							<IconSpinner class="animate-spin text-muted-foreground" />
+						{:else}
+							<IconFork class="text-muted-foreground" />
+						{/if}
+					</Button>
+				{/if}
+				<CopyButton
+					text={message.content}
+					variant="outline"
+					size="icon-sm"
+					class="shadow-sm [&_svg]:text-muted-foreground"
+				/>
+			</div>
 		{/if}
-
-		<!-- Message Content -->
-		<div
-			class="flex flex-col gap-1 {message.type === 'user'
-				? 'items-end'
-				: 'items-start'} min-w-0 {message.type === 'ui.help_menu' ? 'w-full' : 'max-w-[85%]'}"
-		>
-			{#if message.type === 'tool.use' || message.type === 'tool.result'}
-				<!-- One tool call standing on its own: the same row a group holds,
-				     in a card of its own. -->
-				<div class="w-full overflow-hidden rounded-xl bg-card shadow-sm">
-					<ToolRow
-						toolName={toolInfo?.name}
-						input={toolInfo?.input as Record<string, unknown> | undefined}
-						result={resultText(toolInfo?.result)}
-						status={(toolInfo?.status ?? 'pending') as ToolStatus}
-						open={isExpanded}
-						onToggle={toggleExpanded}
-					/>
+	</div>
+{:else if message.type === 'tool.use' || message.type === 'tool.result'}
+	<!-- One tool call standing on its own: the same compact row a group holds,
+	     on its own rail. No card. -->
+	<div class="tools">
+		<ToolRow
+			toolName={toolInfo?.name}
+			input={toolInfo?.input as Record<string, unknown> | undefined}
+			result={resultText(toolInfo?.result)}
+			status={(toolInfo?.status ?? 'pending') as ToolStatus}
+			open={isExpanded}
+			onToggle={toggleExpanded}
+		/>
+	</div>
+{:else if message.type === 'system.hook_response'}
+	<!-- Hook response — a rail-led collapsible row, same grammar as a tool. -->
+	<div class="tools">
+		<Collapsible.Root open={isExpanded} onOpenChange={toggleExpanded}>
+			<Collapsible.Trigger class="w-full text-left">
+				<div class="trow {isExpanded ? 'open' : ''} {(hookInfo?.exitCode ?? 0) !== 0 ? 'bad' : ''}">
+					<span class="ic">
+						<IconChevronRight class="chev {isExpanded ? 'open' : ''}" />
+					</span>
+					<span class="tk">Hook</span>
+					<span class="arg">{hookInfo?.name || 'Hook'}</span>
+					{#if hookInfo?.exitCode === 0}
+						<IconSuccess class="size-4 shrink-0 text-success" />
+					{:else}
+						<IconError class="size-4 shrink-0 text-error" />
+					{/if}
+					<span class="ec">exit {hookInfo?.exitCode}</span>
 				</div>
-			{:else if message.type === 'system.hook_response'}
-				<!-- Hook response - collapsible card -->
-				<div class="w-full bg-card border border-border rounded-xl overflow-hidden shadow-sm">
-					<Collapsible.Root open={isExpanded} onOpenChange={toggleExpanded}>
-						<Collapsible.Trigger class="w-full text-left">
-							<div
-								class="w-full px-3 py-2.5 text-left cursor-pointer hover:bg-muted/50 transition-colors flex items-center gap-2"
-							>
-								<IconChevronRight
-									class="w-4 h-4 text-muted-foreground shrink-0 transition-transform duration-200 ease-out {isExpanded
-										? 'rotate-90'
-										: ''}"
-								/>
-								<span class="font-medium text-foreground text-sm">
-									{hookInfo?.name || 'Hook'}
-								</span>
-								<!-- Exit code indicator -->
-								{#if hookInfo?.exitCode === 0}
-									<IconSuccess class="w-4 h-4 text-success ml-auto" />
-								{:else}
-									<IconError class="w-4 h-4 text-destructive ml-auto" />
-								{/if}
-								<span class="text-xs text-muted-foreground font-mono">
-									exit {hookInfo?.exitCode}
-								</span>
-							</div>
-						</Collapsible.Trigger>
+			</Collapsible.Trigger>
 
-						<Collapsible.Content>
-							{@const hook = hookInfo}
-							<div class="p-3 pt-0 space-y-3 border-t border-border">
-								<!-- stdout -->
-								{#if hook?.stdout}
-									<div
-										class="bg-success/5 border border-success/20 rounded-lg p-3 font-mono text-xs overflow-x-auto mt-3"
-									>
-										<div
-											class="text-success text-xs uppercase tracking-wide mb-1.5 font-medium"
-										>
-											stdout
-										</div>
-										<pre class="whitespace-pre-wrap break-all text-muted-foreground">{hook.stdout}</pre>
-									</div>
-								{/if}
-
-								<!-- stderr -->
-								{#if hook?.stderr}
-									<div
-										class="bg-destructive/5 text-destructive border border-destructive/20 rounded-lg p-3 font-mono text-xs overflow-x-auto"
-									>
-										<div
-											class="text-destructive text-xs uppercase tracking-wide mb-1.5 font-medium"
-										>
-											stderr
-										</div>
-										<pre class="whitespace-pre-wrap break-all text-muted-foreground">{hook.stderr}</pre>
-									</div>
-								{/if}
+			<Collapsible.Content>
+				{@const hook = hookInfo}
+				<div class="trow-body space-y-3">
+					<!-- stdout -->
+					{#if hook?.stdout}
+						<div
+							class="bg-success/5 border border-success/20 rounded-lg p-3 font-mono text-xs overflow-x-auto"
+						>
+							<div class="text-success text-xs uppercase tracking-wide mb-1.5 font-medium">
+								stdout
 							</div>
-						</Collapsible.Content>
-					</Collapsible.Root>
+							<pre class="whitespace-pre-wrap break-all text-muted-foreground">{hook.stdout}</pre>
+						</div>
+					{/if}
+
+					<!-- stderr -->
+					{#if hook?.stderr}
+						<div
+							class="bg-destructive/5 text-destructive border border-destructive/20 rounded-lg p-3 font-mono text-xs overflow-x-auto"
+						>
+							<div class="text-destructive text-xs uppercase tracking-wide mb-1.5 font-medium">
+								stderr
+							</div>
+							<pre class="whitespace-pre-wrap break-all text-muted-foreground">{hook.stderr}</pre>
+						</div>
+					{/if}
 				</div>
-			{:else if message.type === 'tool.handoff'}
+			</Collapsible.Content>
+		</Collapsible.Root>
+	</div>
+{:else if message.type === 'tool.handoff'}
 				<!-- The sender's receipt. Firing a hand-off and seeing nothing is
 				     indistinguishable from it never happening, which is the whole
 				     reason this exists. -->
@@ -815,7 +849,9 @@
 				</div>
 			{:else if message.type === 'ui.session_error'}
 				<!-- Session error with recovery actions -->
-				<div class="{config.bubble} flex flex-col gap-3">
+				<div
+					class="flex flex-col gap-3 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm leading-relaxed text-warning shadow-sm"
+				>
 					<div class="flex items-start gap-2">
 						<IconWarningTriangle class="w-4 h-4 shrink-0 mt-0.5" />
 						<div class="flex flex-col gap-1">
@@ -857,7 +893,9 @@
 			{:else if message.type.startsWith('system.')}
 				<!-- Simple system message - subtle banner -->
 				<div class="flex flex-col max-w-md">
-					<div class="{config.bubble}">
+					<div
+						class="inline-flex items-center gap-2 rounded-full bg-muted/50 px-4 py-1.5 text-xs text-muted-foreground"
+					>
 						<IconSettings class="w-3 h-3" />
 						<span>{message.content}</span>
 					</div>
@@ -865,183 +903,169 @@
 						<MCPStatus servers={message.metadata.mcpServers} />
 					{/if}
 				</div>
-			{:else}
-				<!-- Regular message with markdown support -->
-				{#if message.type === 'user' && isEditing}
-					<!-- User message in edit mode -->
-					<div class="w-full max-w-[85%]">
-						<div class="bg-card border border-primary/30 rounded-lg p-3 space-y-3">
-							<textarea
-								class="w-full min-h-[80px] px-3 py-2 bg-background border border-border rounded-lg text-base sm:text-sm
-                       placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20
-                       resize-y transition-colors"
-								aria-label="Edited message"
-								placeholder="Edit your message..."
-								bind:value={editContent}
-								onkeydown={handleEditKeydown}
-								disabled={editLoading}
-							></textarea>
-							<div class="flex items-center justify-between">
-								<p class="text-xs text-muted-foreground">
-									This will restart the conversation from this point
-								</p>
-								<div class="flex items-center gap-2">
-									<button
-										onclick={cancelEditing}
-										disabled={editLoading}
-										class="px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-									>
-										Cancel
-									</button>
-									<button
-										onclick={submitEdit}
-										disabled={!editContent.trim() || editLoading}
-										class="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground rounded-md text-sm font-medium
-                           hover:bg-primary/90 hover:text-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-									>
-										{#if editLoading}
-											<IconSpinner class="w-3.5 h-3.5 animate-spin" />
-										{:else}
-											<IconCheck class="w-3.5 h-3.5" />
-										{/if}
-										<span>Submit</span>
-									</button>
-								</div>
-							</div>
-						</div>
-					</div>
-				{:else}
-					<div class={config.bubble}>
-						{#if bubbleImages.length > 0}
-							<div class="flex flex-wrap gap-2 mb-2">
-								{#each bubbleImages as image, index (index)}
-									{#if image.dataUri}
-										<img
-											src={image.dataUri}
-											alt="Attachment"
-											class="max-h-40 rounded-lg outline outline-1 outline-[oklch(0_0_0/0.1)] dark:outline-[oklch(1_0_0/0.1)]"
-										/>
-									{:else}
-										<!-- A stored turn that named an image the transcript no longer carries -->
-										<span
-											class="inline-flex items-center gap-1.5 rounded-lg border border-current/20 px-2 py-1 text-xs opacity-80"
-										>
-											<IconGallery class="size-3.5" />
-											{image.mediaType.replace('image/', '')} image
-										</span>
-									{/if}
-								{/each}
-							</div>
-						{/if}
-
-						{#if bubbleAttachments.length > 0}
-							<div class="flex flex-wrap gap-1.5 mb-2">
-								{#each bubbleAttachments as attachment, index (index)}
-									<span
-										class="inline-flex items-center gap-1.5 rounded-md border border-current/20 px-2 py-1 text-xs opacity-80"
-									>
-										<IconDocument class="size-3.5" />
-										{attachment.name}
-										<span class="tabular-nums">{attachment.chars.toLocaleString()} chars</span>
-									</span>
-								{/each}
-							</div>
-						{/if}
-
-						{#if isHuge}
-							<Collapsible.Root bind:open={fullMessageOpen}>
-								<Markdown source={fullMessageOpen ? messageHead : `${messageHead}…`} />
-								<Collapsible.Content>
-									<Markdown source={messageRest} />
-								</Collapsible.Content>
-								<Collapsible.Trigger
-									class="mt-2 flex items-center gap-1.5 text-xs opacity-70 transition-opacity hover:opacity-100"
-								>
-									<IconChevronRight
-										class="w-3.5 h-3.5 transition-transform duration-200 ease-out {fullMessageOpen
-											? 'rotate-90'
-											: ''}"
-									/>
-									{fullMessageOpen
-										? 'Show less'
-										: `Show full message (${message.content.length.toLocaleString()} chars)`}
-								</Collapsible.Trigger>
-							</Collapsible.Root>
-						{:else}
-							<Markdown source={message.content} />
-						{/if}
-
-						{#if sources.length > 0}
-							<SourcesStrip {sources} />
-						{/if}
-
-						<!-- Action buttons. Above the bubble rather than over its corner:
-						     a one-line turn has no corner to spare, and a 32px control
-						     parked there sits on the words it belongs to. -->
-						<div
-							class="absolute right-0 bottom-full mb-1 flex items-center gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity"
-						>
-							{#if message.type === 'user' && canEdit && onEditMessage}
-								<!-- Edit button for user messages -->
-								<Button
-									variant="outline"
-									size="icon-sm"
-									class="shadow-sm"
-									onclick={startEditing}
-									aria-label="Edit message"
-									title="Edit message and restart from here"
-								>
-									<IconPen class="text-muted-foreground" />
-								</Button>
-							{/if}
-							{#if message.type === 'user' && canFork && onForkFrom}
-								<!-- Branch a side quest from this point in the conversation -->
-								<Button
-									variant="outline"
-									size="icon-sm"
-									class="shadow-sm"
-									disabled={forkLoading}
-									onclick={forkFromHere}
-									aria-label="Fork from here"
-									title="Branch a side quest from this point"
-								>
-									{#if forkLoading}
-										<IconSpinner class="animate-spin text-muted-foreground" />
-									{:else}
-										<IconFork class="text-muted-foreground" />
-									{/if}
-								</Button>
-							{/if}
-							<!-- Copy button -->
-							<CopyButton
-								text={message.content}
-								variant="outline"
-								size="icon-sm"
-								class="shadow-sm [&_svg]:text-muted-foreground"
-							/>
-						</div>
-					</div>
-				{/if}
-			{/if}
-
-			<!-- Timestamp (shown on hover) -->
-			{#if message.timestamp}
-				<span
-					class="text-xs text-muted-foreground mt-0.5 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity"
-				>
-					{formatTimestamp(new Date(message.timestamp))}
-				</span>
-			{/if}
-		</div>
-
-		{#if message.type === 'user'}
-			<!-- User Avatar -->
-			<div
-				class="shrink-0 size-9 rounded-xl {config.iconBg} flex items-center justify-center mt-0.5"
-			>
-				<IconUser class="size-[18px] {config.iconColor}" />
-			</div>
-		{/if}
+{:else}
+	<!-- Any other turn (ui.error, result.error, or an unmapped type): plain body
+	     text in the transcript voice, tinted for the error kinds, never a bubble. -->
+	<div class="msg {message.type.includes('error') ? 'err' : ''}">
+		<Markdown source={message.content} />
 	</div>
 {/if}
 
+<style>
+	/* The transcript's whole grammar: a role label row, then plain body text.
+	   No bubble, no border, no avatar column — the tokens carry every distinction
+	   the old chrome used to draw. */
+	.turn {
+		min-width: 0;
+	}
+
+	.who {
+		display: flex;
+		align-items: center;
+		gap: 7px;
+		margin-bottom: 4px;
+		font-size: var(--text-sm);
+		font-weight: var(--weight-medium);
+		color: var(--ink-muted);
+	}
+	.who .dot {
+		width: 14px;
+		height: 14px;
+		flex: 0 0 auto;
+		border-radius: var(--radius-mark);
+		display: grid;
+		place-items: center;
+	}
+	.who .dot.u {
+		background: var(--surface-sunken);
+		color: var(--ink-body);
+	}
+	.who .dot.a {
+		background: var(--brand-lo);
+		color: var(--on-brand);
+	}
+	.who .dot :global(svg) {
+		width: 9px;
+		height: 9px;
+		display: block;
+	}
+	.who .role {
+		font-size: var(--text-sm);
+		font-weight: var(--weight-strong);
+		color: var(--ink-strong);
+	}
+	.who .ts {
+		margin-left: auto;
+		font-size: var(--text-xs);
+		color: var(--ink-muted);
+		opacity: 0;
+		transition: opacity 0.15s ease;
+	}
+	.turn:hover .ts,
+	.turn:focus-within .ts {
+		opacity: 1;
+	}
+
+	.msg {
+		max-width: 74ch;
+		min-width: 0;
+		font-size: var(--text-base);
+		line-height: var(--leading-body);
+		color: var(--ink-strong);
+		overflow-wrap: break-word;
+	}
+	.msg.err {
+		color: var(--data-bad);
+	}
+
+	.edit {
+		max-width: 74ch;
+		border: 1px solid var(--border-control);
+		border-radius: var(--radius-control);
+		background: var(--surface-raised);
+		padding: 12px;
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+	}
+
+	/* Turn controls sit under the words as a quiet strip, revealed on hover. */
+	.acts {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		margin-top: 6px;
+		opacity: 0;
+		transition: opacity 0.15s ease;
+	}
+	.turn:hover .acts,
+	.turn:focus-within .acts {
+		opacity: 1;
+	}
+
+	/* A tool run — one call or a hook — reads on a rail, never in a card. */
+	.tools {
+		margin: 6px 0 0 7px;
+		padding-left: 12px;
+		background: var(--rail) left top / 2px 100% no-repeat;
+	}
+
+	/* The hook row shares the compact tool grammar. */
+	.trow {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		min-height: 26px;
+		padding: 2px 0;
+		font-size: var(--text-sm);
+		color: var(--ink-body);
+		cursor: pointer;
+	}
+	.trow.bad {
+		color: var(--data-bad);
+	}
+	.trow .ic {
+		width: 15px;
+		height: 15px;
+		flex: 0 0 auto;
+		display: grid;
+		place-items: center;
+		color: var(--ink-muted);
+	}
+	.trow .ic :global(svg) {
+		width: 15px;
+		height: 15px;
+		display: block;
+	}
+	.trow .ic :global(.chev) {
+		transition: transform 0.2s ease;
+	}
+	.trow .ic :global(.chev.open) {
+		transform: rotate(90deg);
+	}
+	.trow .tk {
+		flex: 0 0 auto;
+		font-weight: var(--weight-strong);
+		color: var(--ink-strong);
+	}
+	.trow .arg {
+		flex: 1 1 auto;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		color: var(--ink-muted);
+	}
+	.trow .ec {
+		flex: 0 0 auto;
+		font-family: var(--font-mono);
+		font-size: var(--text-xs);
+		color: var(--ink-muted);
+		font-variant-numeric: tabular-nums;
+	}
+	.trow-body {
+		margin-left: 22px;
+		padding: 6px 12px 6px 4px;
+		border-left: 1px solid var(--border-divider);
+	}
+</style>
