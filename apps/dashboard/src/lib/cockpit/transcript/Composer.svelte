@@ -78,7 +78,29 @@
     insert: string;
     label: string;
     detail?: string;
+    /** Which `/` family it belongs to — the menu is sectioned by this. */
+    kind?: AvailableCommand['type'];
+    /** The plugin or MCP server it came from, shown as a quiet origin tag. */
+    source?: string;
   }
+
+  /** One titled section of the menu. */
+  interface Section {
+    key: string;
+    heading: string;
+    entries: Entry[];
+  }
+
+  /** The `/` families, in the order they read, with the heading each wears. A
+      skill is the app's own, a command the user's, then the harness built-ins,
+      then anything an MCP server lent — most-specific-to-least. */
+  const KIND_HEADING: Record<AvailableCommand['type'], string> = {
+    skill: 'Skills',
+    custom: 'Commands',
+    builtin: 'Built-in',
+    mcp: 'MCP',
+  };
+  const KIND_ORDER: AvailableCommand['type'][] = ['skill', 'custom', 'builtin', 'mcp'];
 
   /** Where the caret is, so the token under it can be found on every keystroke. */
   let caret = $state(0);
@@ -116,8 +138,13 @@
         ? commands.map((command) => ({
             id: `/${command.name}`,
             insert: `/${command.name}`,
+            // The family is the section heading now, so the row shows the prose,
+            // its argument shape, or nothing — never the word "builtin" as a
+            // stand-in description.
             label: `/${command.name}`,
-            detail: command.description || command.argumentHint || command.type,
+            detail: command.description || command.argumentHint || undefined,
+            kind: command.type,
+            source: command.source,
           }))
         : mentions.map((mention) => ({
             id: `@${mention.handle}`,
@@ -128,6 +155,28 @@
     return rows
       .filter((row) => !needle || row.id.toLowerCase().includes(needle))
       .slice(0, 40);
+  });
+
+  /**
+   * The same entries, cut into titled sections. `/` sections by family in
+   * `KIND_ORDER`; `@` is one "Mentions" section. Empty families are dropped, so
+   * a session with no skills shows no Skills heading.
+   */
+  const sections = $derived.by((): Section[] => {
+    if (entries.length === 0) return [];
+    if (token?.sigil !== '/') return [{ key: 'mentions', heading: 'Mentions', entries }];
+    const byKind = new Map<AvailableCommand['type'], Entry[]>();
+    for (const entry of entries) {
+      const kind = entry.kind ?? 'custom';
+      const bucket = byKind.get(kind);
+      if (bucket) bucket.push(entry);
+      else byKind.set(kind, [entry]);
+    }
+    return KIND_ORDER.filter((kind) => byKind.has(kind)).map((kind) => ({
+      key: kind,
+      heading: KIND_HEADING[kind],
+      entries: byKind.get(kind) ?? [],
+    }));
   });
 
   const menuOpen = $derived(!dismissed && entries.length > 0);
@@ -317,14 +366,17 @@
       >
         <Command.Root shouldFilter={false} bind:value={highlight} loop>
           <Command.List>
-            <Command.Group heading={token?.sigil === '/' ? 'Commands' : 'Mentions'}>
-              {#each entries as entry (entry.id)}
-                <Command.Item value={entry.id} onSelect={() => choose(entry)}>
-                  <span class="e-label">{entry.label}</span>
-                  {#if entry.detail}<span class="e-detail">{entry.detail}</span>{/if}
-                </Command.Item>
-              {/each}
-            </Command.Group>
+            {#each sections as section (section.key)}
+              <Command.Group heading={section.heading}>
+                {#each section.entries as entry (entry.id)}
+                  <Command.Item value={entry.id} onSelect={() => choose(entry)}>
+                    <span class="e-label">{entry.label}</span>
+                    {#if entry.detail}<span class="e-detail">{entry.detail}</span>{/if}
+                    {#if entry.source}<span class="e-source">{entry.source}</span>{/if}
+                  </Command.Item>
+                {/each}
+              </Command.Group>
+            {/each}
           </Command.List>
         </Command.Root>
       </div>

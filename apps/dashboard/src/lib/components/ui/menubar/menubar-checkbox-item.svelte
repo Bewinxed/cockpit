@@ -27,7 +27,7 @@
 	data-slot="menubar-checkbox-item"
 	data-inset={inset}
 	class={cn(
-		"gap-2.5 rounded-xl py-2 pr-3 pl-9.5 text-sm focus:bg-accent focus:text-accent-foreground focus:**:text-accent-foreground data-inset:pl-9.5 relative flex cursor-default items-center outline-hidden select-none data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+		"gap-2.5 rounded-[var(--radius-card)] py-2 pr-3 pl-9.5 text-sm focus:bg-accent focus:text-accent-foreground focus:**:text-accent-foreground data-inset:pl-9.5 relative flex cursor-default items-center outline-hidden select-none data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0",
 		className
 	)}
 	{...restProps}

@@ -7,7 +7,7 @@
 			variant: {
 				default: "bg-transparent",
 				icon: "[&_svg:not([class*='size-'])]:size-4",
-				image: "size-10 overflow-hidden rounded-lg group-data-[size=sm]/item:size-8 group-data-[size=xs]/item:size-6 group-data-[size=xs]/item:rounded-md [&_img]:size-full [&_img]:object-cover",
+				image: "size-10 overflow-hidden rounded-[var(--radius-control)] group-data-[size=sm]/item:size-8 group-data-[size=xs]/item:size-6 group-data-[size=xs]/item:rounded-[var(--radius-mark)] [&_img]:size-full [&_img]:object-cover",
 			},
 		},
 		defaultVariants: {

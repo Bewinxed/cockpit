@@ -14,7 +14,7 @@
 
 <span
 	class={cn(
-		"relative flex rounded-md border border-input shadow-xs has-focus:border-ring has-focus:ring-[3px] has-focus:ring-ring/50",
+		"relative flex rounded-[var(--radius-control)] border border-input shadow-xs has-focus:border-ring has-focus:ring-[3px] has-focus:ring-ring/50",
 		className
 	)}
 >
@@ -37,7 +37,7 @@
 				{/each}
 			</select>
 			<span
-				class="flex h-(--cell-size) items-center gap-1 rounded-md ps-2 pe-1 text-sm font-medium select-none [&>svg]:size-3.5 [&>svg]:text-muted-foreground"
+				class="flex h-(--cell-size) items-center gap-1 rounded-[var(--radius-control)] ps-2 pe-1 text-sm font-medium select-none [&>svg]:size-3.5 [&>svg]:text-muted-foreground"
 				aria-hidden="true"
 			>
 				{yearItems.find((item) => item.value === value)?.label || selectedYearItem.label}
