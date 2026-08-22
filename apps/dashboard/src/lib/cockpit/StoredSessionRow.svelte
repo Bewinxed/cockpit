@@ -4,7 +4,7 @@
   import { formatDistanceToNow } from '$lib/utils/time';
   import { sessionTitle, transcriptHref } from './links';
   import StoredSessionMenu from './StoredSessionMenu.svelte';
-  import { markHue, harnessGlyphPath } from './mark';
+  import { markHue, sessionSprite } from './mark';
 
   interface Props {
     machineId: string;
@@ -16,6 +16,10 @@
   let { machineId, info, groupCwd }: Props = $props();
 
   const showCwd = $derived(Boolean(info.cwd) && info.cwd !== groupCwd);
+
+  // Distinct per stored session (seeded by its SDK session id). These rows all
+  // drew the same cube before; the sprite gives each transcript its own face.
+  const Sprite = $derived(sessionSprite(info.sessionId));
 </script>
 
 <StoredSessionMenu {machineId} {info}>
@@ -34,15 +38,7 @@
         aria-hidden="true"
       >
         <span class="mark m{markHue(info.cwd || machineId)}">
-          <svg viewBox="0 0 24 24" fill="none">
-            <path
-              d={harnessGlyphPath(null)}
-              stroke="currentColor"
-              stroke-width="1.6"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            />
-          </svg>
+          <Sprite aria-hidden="true" />
         </span>
       </span>
       <!-- Stops at a readable measure, as the live rows do, so a runaway title
@@ -79,12 +75,11 @@
     background-image: var(--mark-overlay);
     background-color: var(--mark-1);
   }
-  .mark svg {
+  .mark :global(svg) {
     width: var(--c-mark-glyph);
     height: var(--c-mark-glyph);
     display: block;
     color: var(--mark-glyph);
-    stroke: var(--mark-glyph);
   }
   .mark.m2 { background-color: var(--mark-2); }
   .mark.m3 { background-color: var(--mark-3); }

@@ -14,39 +14,47 @@
   import * as Sheet from '$lib/components/ui/sheet';
   import ThemeSwitcher from '$lib/components/ui/ThemeSwitcher.svelte';
   import { Button } from '$lib/components/ui/button';
-  import { IconCommand, IconSearch, IconShield, IconSidebar } from '$lib/icons';
+  import { IconSearch, IconShield, IconSidebar } from '$lib/icons';
   import { isTyping } from '$lib/utils/typing';
   import { cockpit, hubSocketUrl, reconnectNow } from './client.svelte';
   import JumpPalette from './JumpPalette.svelte';
-  import ShortcutSheet from './ShortcutSheet.svelte';
   import Sidebar from './Sidebar.svelte';
   import SessionTabs from './SessionTabs.svelte';
-  import ThumbBar from './ThumbBar.svelte';
   import UsageMeter from './UsageMeter.svelte';
-
-  let { children }: { children: import('svelte').Snippet } = $props();
 
   const RAIL_KEY = 'cockpit-rail-width';
   const RAIL_MIN = 216;
   const RAIL_MAX = 520;
   const RAIL_DEFAULT = 288;
 
-  let railWidth = $state(RAIL_DEFAULT);
+  const clamp = (px: number) => Math.min(RAIL_MAX, Math.max(RAIL_MIN, Math.round(px || RAIL_DEFAULT)));
+
+  let {
+    children,
+    /** Read from the `cockpit-rail-width` cookie server-side (see
+     *  +layout.server.ts) so the first paint is already the resolved width —
+     *  the rail no longer renders the default and jumps on hydration. */
+    railWidth: initialRailWidth = RAIL_DEFAULT,
+  }: { children: import('svelte').Snippet; railWidth?: number } = $props();
+
+  let railWidth = $state(clamp(initialRailWidth));
   let jumpOpen = $state(false);
-  let shortcutsOpen = $state(false);
   let railOpen = $state(false);
 
-  const clamp = (px: number) => Math.min(RAIL_MAX, Math.max(RAIL_MIN, Math.round(px)));
-
+  // Installs that stored their width before the cookie existed still have it in
+  // localStorage; seed the cookie from it once so the server can read it next
+  // load. New resizes write both from here on.
   onMount(() => {
+    if (document.cookie.includes(`${RAIL_KEY}=`)) return;
     const stored = Number(localStorage.getItem(RAIL_KEY));
-    if (Number.isFinite(stored) && stored > 0) railWidth = clamp(stored);
+    if (Number.isFinite(stored) && stored > 0) setRail(stored);
   });
 
   function setRail(px: number) {
     railWidth = clamp(px);
     try {
       localStorage.setItem(RAIL_KEY, String(railWidth));
+      document.cookie = `${RAIL_KEY}=${railWidth};path=/;max-age=31536000;samesite=lax`;
     } catch {
       // A browser that will not store just starts at the default next time.
     }
@@ -115,17 +123,6 @@
     }
   });
 
-  const HUB_DOT: Record<string, string> = {
-    connected: 'bg-success',
-    connecting: 'bg-warning animate-pulse',
-    unreachable: 'bg-error',
-  };
-  const HUB_TITLE: Record<string, string> = {
-    connected: 'Hub connected',
-    connecting: 'Connecting to the hub…',
-    unreachable: 'Cannot reach the hub',
-  };
-
   /**
    * Whether this tab has ever had the hub. A socket that dropped is retrying
    * and will say so; one that never landed is a wrong address, and the two want
@@ -189,10 +186,14 @@
       >
         <IconSidebar />
       </button>
-      <a class="wordmark min-[900px]:hidden" href="/session">Outpost</a>
-      <span class="crumb hidden min-[900px]:inline">{crumb}</span>
+      <!-- The one "where am I" label, now visible at every width — the brand
+           lives in the rail, and the crumb is what the top bar owes a reader
+           who arrived by URL. -->
+      <span class="crumb">{crumb}</span>
 
       <div class="right">
+        <!-- Jump is a single entry: the one command surface the top bar opens.
+             The old phone thumb bar duplicated it; that bar is gone. -->
         <Button
           variant="outline"
           size="sm"
@@ -210,18 +211,9 @@
             <span class="badge">{cockpit.blockedCount}</span>
           </a>
         {/if}
-        <span class="hub {HUB_DOT[cockpit.hub]}" title={HUB_TITLE[cockpit.hub]}></span>
-        <!-- Keyboard shortcuts are a pointer-fine affordance; a phone has no
-             keyboard to shortcut, so the button retires on coarse pointers
-             rather than crowding a 390px row. -->
-        <button
-          type="button"
-          class="icobtn shortcuts"
-          aria-label="Keyboard shortcuts"
-          onclick={() => (shortcutsOpen = true)}
-        >
-          <IconCommand />
-        </button>
+        <!-- No always-on hub dot: a green light that is green 99% of the time
+             says nothing. Connection health folds into the banner below, which
+             is shown only when the hub is NOT connected. -->
         <ThemeSwitcher />
       </div>
     </header>
@@ -244,18 +236,17 @@
       <SessionTabs />
     {/if}
 
-    <main id="main-content" class="content">
+    <!-- The old thumb bar is gone, so this region reclaims its height. On a
+         session route the composer owns its own bottom inset; everywhere else
+         the scroll region pads the home-indicator safe area itself so the last
+         row is never tucked under it. -->
+    <main id="main-content" class="content" class:safe={!onSession}>
       {@render children()}
     </main>
-
-    {#if onSession}
-      <ThumbBar onjump={() => (jumpOpen = true)} />
-    {/if}
   </div>
 </div>
 
 <JumpPalette bind:open={jumpOpen} />
-<ShortcutSheet bind:open={shortcutsOpen} />
 
 <style>
   .skip {
@@ -344,13 +335,6 @@
     width: 19px;
     height: 19px;
   }
-  .wordmark {
-    font-size: var(--text-md);
-    font-weight: var(--weight-strong);
-    letter-spacing: var(--track-display);
-    color: var(--ink-strong);
-    text-decoration: none;
-  }
   .crumb {
     font-size: var(--text-md);
     color: var(--ink-body);
@@ -395,12 +379,23 @@
       background: var(--surface-hover);
     }
   }
-  /* A phone has no keyboard to shortcut; the button retires so the coarse row
-     stays uncrowded, and the remaining affordances take the 44px thumb floor. */
-  @media (pointer: coarse) {
-    .shortcuts {
-      display: none;
+  /* Tactile press — the affordance dips under the finger, only the transform
+     transitions, and it is suppressed for reduced-motion. */
+  .icobtn,
+  .burger {
+    transition: background var(--motion-fast) var(--ease-toggle);
+  }
+  .icobtn:active,
+  .burger:active {
+    transform: scale(0.96);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .icobtn:active,
+    .burger:active {
+      transform: none;
     }
+  }
+  @media (pointer: coarse) {
     .icobtn {
       width: 44px;
       height: 44px;
@@ -431,13 +426,6 @@
     place-items: center;
   }
 
-  .hub {
-    width: 8px;
-    height: 8px;
-    border-radius: var(--radius-pill);
-    flex: 0 0 auto;
-  }
-
   .banner {
     flex-shrink: 0;
     display: flex;
@@ -466,5 +454,11 @@
     display: flex;
     flex-direction: column;
     overflow: auto;
+  }
+  /* Own the home-indicator inset where no composer is present to own it. */
+  @media (pointer: coarse) {
+    .content.safe {
+      padding-bottom: env(safe-area-inset-bottom);
+    }
   }
 </style>

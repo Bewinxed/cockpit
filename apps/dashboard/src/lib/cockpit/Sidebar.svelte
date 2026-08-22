@@ -1,25 +1,103 @@
 <script lang="ts">
   /**
-   * The management rail: what the fleet is, which boxes it runs on, and what is
-   * running right now. Ported from mocks/v5-workspace.html (`aside`) — a sunken
-   * rail whose only raised things are the active nav item and the cards at the
-   * foot.
+   * The management rail: what the fleet is, which boxes it runs on, the projects
+   * it groups work under, and what is running right now. Ported from
+   * mocks/v5-workspace.html (`aside`) — a sunken rail whose only raised things
+   * are the active nav item, the primary action, and the cards at the foot.
+   *
+   * The rail is also the project index (JOURNEY §Projects rail / Flow 4): every
+   * project is listed whether or not it has live work, with the creation control
+   * beside its label, and running sessions fold under the project they belong to
+   * — Linear/Slack-style grouping. Sessions no project claims stay flat under
+   * "Running now". This is the same rail the phone opens as a sheet, so the
+   * "New session" action lives here rather than in a bottom bar.
    */
   import { page } from '$app/state';
   import { Badge } from '$lib/components/ui/badge';
-  import { IconBoxDuo, IconRules, IconTools, IconUsage } from '$lib/icons';
+  import { Button } from '$lib/components/ui/button';
+  import {
+    IconBoxDuo,
+    IconChevronRight,
+    IconFolderDuo,
+    IconPlus,
+    IconRules,
+    IconTools,
+    IconUsage,
+  } from '$lib/icons';
   import { ACTIVITY_LABEL, type Activity } from './activity';
-  import { cockpit } from './client.svelte';
+  import { cockpit, type InstanceRow, type ProjectRow } from './client.svelte';
   import { machineLabel } from './machine';
-  import { harnessGlyphPath, markHue } from './mark';
+  import { markHue, sessionSprite } from './mark';
+  import { rail } from './rail.svelte';
+  import FolderMenu from './FolderMenu.svelte';
   import MachineMenu from './MachineMenu.svelte';
+  import NewProjectPopover from './NewProjectPopover.svelte';
   import OsMark from './OsMark.svelte';
+  import SpawnPanel from './SpawnPanel.svelte';
   import UsageMeter from './UsageMeter.svelte';
 
   const path = $derived(page.url.pathname);
 
+  /* ---- spawn ---------------------------------------------------------- */
+
+  let spawnOpen = $state(false);
+  let spawnPrefill = $state<{ machineId?: string; cwd?: string; projectId?: string } | undefined>(
+    undefined
+  );
+
+  function newSession(prefill?: { machineId?: string; cwd?: string; projectId?: string }) {
+    spawnPrefill = prefill;
+    spawnOpen = true;
+  }
+
+  /* ---- projects ------------------------------------------------------- */
+
+  /** Projects the reader has folded shut in the rail, by id. Expanded default. */
+  let collapsed = $state<Set<string>>(new Set());
+
+  function toggle(id: string) {
+    const next = new Set(collapsed);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    collapsed = next;
+  }
+
+  function collapseOthers(id: string) {
+    collapsed = new Set(orderedProjects.filter((p) => p.id !== id).map((p) => p.id));
+  }
+
+  /** A running session belongs to a project by explicit link, or by living
+   *  inside its checkout on the same machine — mirrors the hub's own `under`. */
+  const inProject = (row: InstanceRow, project: ProjectRow): boolean =>
+    row.projectId === project.id ||
+    (row.machineId === project.machineId &&
+      !!row.cwd &&
+      (row.cwd === project.cwd || row.cwd.startsWith(`${project.cwd}/`)));
+
+  const running = $derived(cockpit.runningInstances);
+
+  /** Pinned projects first (giving the pin action a visible effect), then A–Z. */
+  const orderedProjects = $derived.by(() =>
+    [...cockpit.projects].sort((a, b) => {
+      const pa = rail.isPinned('project', a.id) ? 0 : 1;
+      const pb = rail.isPinned('project', b.id) ? 0 : 1;
+      if (pa !== pb) return pa - pb;
+      return a.name.localeCompare(b.name);
+    })
+  );
+
+  const sessionsOf = (project: ProjectRow): InstanceRow[] =>
+    running.filter((row) => inProject(row, project));
+
+  /** Live sessions no listed project claims — the flat "Running now" tail. */
+  const ungrouped = $derived(
+    running.filter((row) => !cockpit.projects.some((project) => inProject(row, project)))
+  );
+
+  /* ---- helpers -------------------------------------------------------- */
+
   /** The rail's own wording for a session that never carried a title. */
-  const sessionName = (row: { title?: string | null; cwd: string; id: string }): string =>
+  const sessionName = (row: InstanceRow): string =>
     row.title?.trim() || row.cwd.split('/').filter(Boolean).pop() || row.id.slice(0, 8);
 
   /** Blocked wins the Fleet pill: it is the only count anyone acts on. */
@@ -70,6 +148,16 @@
     <b>Outpost</b>
   </a>
 
+  <!-- The primary action, kept where both the desktop rail and the phone sheet
+       reach it in one place — this is where the removed thumb bar's only unique
+       control now lives. -->
+  <div class="new">
+    <Button class="new-btn" onclick={() => newSession()}>
+      <IconPlus />
+      New session
+    </Button>
+  </div>
+
   <div class="body">
     <div class="sec">Fleet</div>
     <nav aria-label="Fleet">
@@ -117,16 +205,89 @@
       </div>
     {/if}
 
-    {#if cockpit.runningInstances.length > 0}
+    <!-- Projects — the rail's project index. A label, the creation control
+         beside it, and every project as a foldable group of its live work. -->
+    <div class="sec sec-row">
+      <span>Projects</span>
+      <NewProjectPopover />
+    </div>
+    {#if orderedProjects.length === 0}
+      <p class="hint">
+        {#if cockpit.machines.length === 0}
+          Run <code>cockpit</code> on a machine, then group its checkouts here.
+        {:else}
+          No projects yet — name a checkout to group its sessions.
+        {/if}
+      </p>
+    {:else}
+      <div class="rows" role="list">
+        {#each orderedProjects as project (project.id)}
+          {@const sessions = sessionsOf(project)}
+          {@const open = !collapsed.has(project.id)}
+          <FolderMenu
+            name={project.name}
+            cwd={project.cwd}
+            {project}
+            onnew={() =>
+              newSession({ projectId: project.id, machineId: project.machineId, cwd: project.cwd })}
+            oncollapseothers={() => collapseOthers(project.id)}
+          >
+            <div class="folder" role="listitem">
+              <button
+                type="button"
+                class="folder-h"
+                class:on={path === `/project/${project.id}`}
+                aria-expanded={open}
+                onclick={() => toggle(project.id)}
+              >
+                <span class="tw" class:open aria-hidden="true"><IconChevronRight /></span>
+                <span class="mark m{markHue(project.cwd)}"><IconFolderDuo /></span>
+                <span class="nm">{project.name}</span>
+                {#if sessions.length > 0}<span class="cnt">{sessions.length}</span>{/if}
+              </button>
+            </div>
+          </FolderMenu>
+          {#if open}
+            <div class="sub">
+              {#each sessions as row (row.id)}
+                {@const Sprite = sessionSprite(row.id)}
+                {@const activity = cockpit.activityOf(row.id)}
+                <a class="row sub-i" class:on={path === `/session/${row.id}`} href="/session/{row.id}">
+                  <span class="mark m{markHue(row.cwd || row.machineId)}">
+                    <Sprite aria-hidden="true" />
+                  </span>
+                  <span class="nm">{sessionName(row)}</span>
+                  <Badge class={pillClass(PILL[activity])}>{ACTIVITY_LABEL[activity]}</Badge>
+                </a>
+              {:else}
+                <button
+                  type="button"
+                  class="row sub-i empty"
+                  onclick={() =>
+                    newSession({
+                      projectId: project.id,
+                      machineId: project.machineId,
+                      cwd: project.cwd,
+                    })}
+                >
+                  <span class="nm dim">No sessions — start one</span>
+                </button>
+              {/each}
+            </div>
+          {/if}
+        {/each}
+      </div>
+    {/if}
+
+    {#if ungrouped.length > 0}
       <div class="sec">Running now</div>
       <div class="rows">
-        {#each cockpit.runningInstances as row (row.id)}
+        {#each ungrouped as row (row.id)}
           {@const activity = cockpit.activityOf(row.id)}
+          {@const Sprite = sessionSprite(row.id)}
           <a class="row" class:on={path === `/session/${row.id}`} href="/session/{row.id}">
             <span class="mark m{markHue(row.cwd || row.machineId)}">
-              <svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
-                <path d={harnessGlyphPath(row.harness)} />
-              </svg>
+              <Sprite aria-hidden="true" />
             </span>
             <span class="nm">{sessionName(row)}</span>
             <Badge class={pillClass(PILL[activity])}>{ACTIVITY_LABEL[activity]}</Badge>
@@ -147,6 +308,8 @@
     </div>
   </div>
 </div>
+
+<SpawnPanel open={spawnOpen} prefill={spawnPrefill} onclose={() => (spawnOpen = false)} />
 
 <style>
   .rail {
@@ -191,6 +354,17 @@
     letter-spacing: var(--track-display);
   }
 
+  /* The primary action reads as the one lifted control in the sunken rail. */
+  .new {
+    flex-shrink: 0;
+    padding: 0 10px var(--space-2);
+  }
+  .new :global(.new-btn) {
+    width: 100%;
+    justify-content: center;
+    gap: var(--space-2);
+  }
+
   .body {
     flex: 1 1 auto;
     min-height: 0;
@@ -206,6 +380,25 @@
     letter-spacing: var(--track-caps);
     padding: 0 var(--space-6);
     margin: var(--space-4) 0 var(--space-2);
+  }
+  /* The Projects label carries its creation control at the trailing edge. */
+  .sec-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-right: 10px;
+  }
+
+  .hint {
+    padding: 0 var(--space-6);
+    font-size: var(--text-sm);
+    line-height: var(--leading-body);
+    color: var(--ink-muted);
+  }
+  .hint code {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--ink-body);
   }
 
   nav,
@@ -309,9 +502,133 @@
     color: var(--ink-muted);
   }
 
+  /* ---- projects group -------------------------------------------------- */
+
+  .folder {
+    display: flex;
+  }
+  .folder-h {
+    flex: 1 1 auto;
+    height: 30px;
+    border: 0;
+    background: none;
+    /* Outer radius = the inner mark's radius + its inset, so the fill sits
+       concentric with the mark rather than sharing one radius. */
+    border-radius: var(--radius-tile);
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 0 10px 0 6px;
+    min-width: 0;
+    cursor: pointer;
+    color: var(--ink-body);
+    font-size: var(--text-base);
+    font-weight: var(--weight-medium);
+    /* Only the surface transitions, and it stays interruptible. */
+    transition: background var(--motion-fast) var(--ease-toggle);
+  }
+  .folder-h .nm {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: left;
+  }
+  .folder-h.on {
+    color: var(--ink-strong);
+    font-weight: var(--weight-strong);
+  }
+  .tw {
+    width: 14px;
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    color: var(--ink-muted);
+    /* The static cue for open/closed is the direction the chevron points; the
+       rotation is only the transition between those two static states. */
+    transition: transform var(--motion-fast) var(--ease-toggle);
+  }
+  .tw.open {
+    transform: rotate(90deg);
+  }
+  .tw :global(svg) {
+    width: 13px;
+    height: 13px;
+    display: block;
+  }
+  .cnt {
+    flex: 0 0 auto;
+    font-size: var(--text-sm);
+    color: var(--ink-muted);
+    font-variant-numeric: tabular-nums;
+  }
+  /* Sessions sit indented under their folder header, aligned past the twist. */
+  .sub {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+  .sub-i {
+    padding-left: 29px;
+  }
+  .sub-i.empty {
+    border: 0;
+    background: none;
+    cursor: pointer;
+    width: 100%;
+    text-align: left;
+    font: inherit;
+  }
+  .sub-i .dim {
+    color: var(--ink-muted);
+    font-size: var(--text-sm);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .folder-h:hover,
+    .sub-i.empty:hover {
+      background: var(--surface-hover);
+    }
+  }
+  .folder-h:focus-visible,
+  .sub-i.empty:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+  }
+  /* Tactile press on the rail's own buttons; suppressed for reduced motion. */
+  .folder-h:active,
+  .tw:active,
+  .sub-i.empty:active {
+    transform: scale(0.98);
+  }
+  .tw:active {
+    /* the twist keeps its rotation cue while dipping under the press */
+    transform: rotate(0deg) scale(0.98);
+  }
+  .tw.open:active {
+    transform: rotate(90deg) scale(0.98);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .folder-h,
+    .tw {
+      transition: none;
+    }
+    .folder-h:active,
+    .sub-i.empty:active {
+      transform: none;
+    }
+    .tw:active {
+      transform: rotate(0deg);
+    }
+    .tw.open:active {
+      transform: rotate(90deg);
+    }
+  }
+
   /* Item mark — inlined token primitive (17px running-now recipe): identity hue
-     + harness glyph, top-light/bottom-shade overlay. No clean shadcn equivalent;
-     kept identical in recipe across the four sidebar-cluster files. */
+     square carrying the per-session duotone sprite (or the folder glyph), with
+     the top-light / bottom-shade overlay. Sized ~10px, optically centred by the
+     grid, white-glyph convention. Kept identical across the sidebar cluster. */
   .mark {
     width: 17px;
     height: 17px;
@@ -322,13 +639,11 @@
     background-image: var(--mark-overlay);
     background-color: var(--mark-1);
   }
-  .mark svg {
-    width: 10px;
-    height: 10px;
+  .mark :global(svg) {
+    width: 11px;
+    height: 11px;
     display: block;
     color: var(--mark-glyph);
-    stroke: var(--mark-glyph);
-    stroke-width: 1.8;
   }
   .mark.m2 { background-color: var(--mark-2); }
   .mark.m3 { background-color: var(--mark-3); }

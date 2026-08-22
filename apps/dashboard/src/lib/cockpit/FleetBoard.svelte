@@ -12,6 +12,7 @@
    * whose transcript is already running somewhere is dropped — the live row is
    * the same conversation, and it is the one that can still be spoken to.
    */
+  import type { Component } from 'svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import type { SDKSessionInfo } from '@cockpit/core';
@@ -33,7 +34,7 @@
     setPeeked,
     type InstanceRow,
   } from './client.svelte';
-  import { markHue, harnessGlyphPath, type MarkHue } from './mark';
+  import { markHue, sessionSprite, type MarkHue } from './mark';
   import { machineLabel } from './machine';
   import { sessionTitle, transcriptHref } from './links';
   import { formatDistanceToNow } from '$lib/utils/time';
@@ -61,7 +62,7 @@
     harness: string;
     harnessLabel: string;
     hue: MarkHue;
-    glyph: string;
+    sprite: Component;
     status: PillStatus;
     stateLabel: string;
     turns: number | null;
@@ -113,7 +114,7 @@
         harness,
         harnessLabel: harnessLabelOf(harness),
         hue: markHue(instance.cwd || instance.machineId),
-        glyph: harnessGlyphPath(harness),
+        sprite: sessionSprite(instance.id),
         status: state.status,
         stateLabel: state.label,
         turns: stats.turns,
@@ -141,7 +142,7 @@
             harness: info.harness,
             harnessLabel: harnessLabelOf(info.harness),
             hue: markHue(info.cwd || machine.machineId),
-            glyph: harnessGlyphPath(info.harness),
+            sprite: sessionSprite(info.sessionId),
             status: 'idle',
             stateLabel: 'Idle',
             turns: null,
@@ -427,6 +428,7 @@
             </Table.Header>
             <Table.Body>
               {#each paged as row (row.key)}
+                {@const Sprite = row.sprite}
                 <Table.Row>
                   <Table.Cell>
                     <div class="nm">
@@ -435,14 +437,7 @@
                         style="background-color: var(--mark-{row.hue});"
                         aria-hidden="true"
                       >
-                        <svg viewBox="0 0 24 24" fill="none">
-                          <path
-                            d={row.glyph}
-                            stroke="currentColor"
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                          />
-                        </svg>
+                        <Sprite />
                       </span>
                       <a href={row.href}>{row.title}</a>
                     </div>
@@ -705,13 +700,11 @@
     place-items: center;
     background-image: var(--mark-overlay);
   }
-  .mark svg {
+  .mark :global(svg) {
     width: var(--c-mark-glyph);
     height: var(--c-mark-glyph);
     display: block;
-    stroke: var(--mark-glyph);
     color: var(--mark-glyph);
-    stroke-width: 1.6;
   }
 
   .nm {

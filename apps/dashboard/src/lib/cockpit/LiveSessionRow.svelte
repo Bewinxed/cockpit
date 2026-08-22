@@ -21,7 +21,7 @@
   import { fly } from 'svelte/transition';
   import { quintOut } from 'svelte/easing';
   import { Badge } from '$lib/components/ui/badge';
-  import { markHue, harnessGlyphPath } from './mark';
+  import { markHue, sessionSprite } from './mark';
   import { formatDuration } from '$lib/utils/time';
   import { ACTIVITY_LABEL, SLEEPING_HINT, SLEEPING_LABEL } from './activity';
   import { cockpit, isFailed, isResumable, type InstanceRow } from './client.svelte';
@@ -41,6 +41,11 @@
   let { instance, groupCwd }: Props = $props();
 
   const showCwd = $derived(Boolean(instance.cwd) && instance.cwd !== groupCwd);
+
+  // The per-session identity sprite: distinct per session (seeded by the
+  // instance id), so two sessions in one project are told apart by SHAPE, not
+  // only by the project hue. markHue below still carries the project colour.
+  const Sprite = $derived(sessionSprite(instance.id));
 
   const activity = $derived(cockpit.activityOf(instance.id));
   const tool = $derived(cockpit.currentToolOf(instance.id));
@@ -140,15 +145,7 @@
         style="--c-mark:20px;--c-mark-glyph:11px"
       >
         <span class="mark m{markHue(instance.cwd || instance.machineId)}">
-          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path
-              d={harnessGlyphPath(instance.harness)}
-              stroke="currentColor"
-              stroke-width="1.6"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            />
-          </svg>
+          <Sprite aria-hidden="true" />
         </span>
       </span>
       <!-- `max-w-lg`: a title that runs on — a pasted URL, usually — stops at a
@@ -241,12 +238,11 @@
     background-image: var(--mark-overlay);
     background-color: var(--mark-1);
   }
-  .mark svg {
+  .mark :global(svg) {
     width: var(--c-mark-glyph);
     height: var(--c-mark-glyph);
     display: block;
     color: var(--mark-glyph);
-    stroke: var(--mark-glyph);
   }
   .mark.m2 { background-color: var(--mark-2); }
   .mark.m3 { background-color: var(--mark-3); }

@@ -8,8 +8,9 @@
   import Shell from '$lib/cockpit/Shell.svelte';
   import { ensureConnected } from '$lib/cockpit/client.svelte';
   import { enableLongPressMenus } from '$lib/utils/longpress';
+  import type { LayoutServerData } from './$types';
 
-  let { children }: { children: Snippet } = $props();
+  let { children, data }: { children: Snippet; data: LayoutServerData } = $props();
 
   // One socket for the whole app; routes only read the state it fills in.
   onMount(ensureConnected);
@@ -66,6 +67,6 @@
 </script>
 
 <Toaster position="bottom-right" />
-<Shell>
+<Shell railWidth={data.railWidth}>
   {@render children()}
 </Shell>
