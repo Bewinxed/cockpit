@@ -14,7 +14,7 @@
 <ProgressPrimitive.Root
 	bind:ref
 	data-slot="progress"
-	class={cn("h-3 rounded-4xl bg-muted relative flex w-full items-center overflow-x-hidden", className)}
+	class={cn("h-3 rounded-[var(--radius-pill)] bg-muted relative flex w-full items-center overflow-x-hidden", className)}
 	{value}
 	{max}
 	{...restProps}
