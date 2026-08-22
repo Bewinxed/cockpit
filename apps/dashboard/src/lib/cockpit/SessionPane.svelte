@@ -6,6 +6,7 @@
    * scroll offset and half-typed message survive a switch — nothing here
    * unmounts on navigation.
    */
+  import type { EffortLevel, PermissionMode } from '@cockpit/core';
   import {
     cockpit,
     openSession,
@@ -14,9 +15,16 @@
     sendOrRevive,
     interrupt,
     loadMcpServers,
+    setModel,
+    setPermissionMode,
+    setEffort,
+    relaunchSession,
     type PendingPermission,
     type SendExtras,
   } from './client.svelte';
+  import { PERMISSION_MODES } from './permission-modes';
+  import { effortStops, hasEffortScale } from './effort-levels';
+  import { covers, ensureModels, models } from './models.svelte';
   import { routedToParent } from './frames';
   import SessionHeader from './transcript/SessionHeader.svelte';
   import Transcript from './transcript/Transcript.svelte';
@@ -88,6 +96,58 @@
   const stats = $derived(cockpit.statsOf(viewId));
   const activity = $derived(cockpit.activityOf(viewId));
 
+  // The session settings — model, permission mode, effort — are switchable from
+  // the header now, so the same reference data the spawn form uses is derived
+  // here and the store setters are the exact desktop path a change takes.
+  const machineRow = $derived(cockpit.machines.find((m) => m.machineId === machineId) ?? null);
+  const harnessReport = $derived(
+    machineRow?.harnesses?.find((report) => report.harness === session?.harness) ?? null
+  );
+  /** The permission modes this session's harness can honour; empty hides the picker. */
+  const offeredModes = $derived(
+    harnessReport
+      ? PERMISSION_MODES.filter((mode) =>
+          harnessReport.capabilities.permissionModes.includes(mode.value)
+        )
+      : PERMISSION_MODES
+  );
+  /** The offered row for the model in force, which is what carries its scale. */
+  const chosenModel = $derived(
+    session?.model ? (models.offered.find((row) => covers(row, session.model!)) ?? null) : null
+  );
+  /** Only drawn when the harness and the model both report an effort scale. */
+  const showEffort = $derived(
+    harnessReport?.capabilities.effort === true && hasEffortScale(chosenModel)
+  );
+  const effortStopsForModel = $derived(effortStops(chosenModel));
+
+  // Populate the model list so the effort scale can be read even before the
+  // picker is opened; a session with nothing to ask just leaves it empty.
+  $effect(() => {
+    ensureModels();
+  });
+
+  function onmodel(model: string): void {
+    if (!machineId) return;
+    void setModel(viewId, machineId, model).catch(() => {});
+  }
+
+  function onpermission(mode: PermissionMode): void {
+    if (!machineId) return;
+    // bypassPermissions is a launch decision the SDK refuses to switch into, so
+    // that one mode relaunches the session in place; the rest switch live.
+    const apply =
+      mode === 'bypassPermissions'
+        ? relaunchSession(viewId, machineId, mode)
+        : setPermissionMode(viewId, machineId, mode);
+    void apply.catch(() => {});
+  }
+
+  function oneffort(level: EffortLevel): void {
+    if (!machineId) return;
+    void setEffort(viewId, machineId, level).catch(() => {});
+  }
+
   // A delegate's ask belongs to its parent, never the reader's queue.
   const parked = $derived<PendingPermission[]>(
     (session?.pending ?? []).filter((p) => !routedToParent(p))
@@ -119,6 +179,7 @@
       {activity}
       model={session.model}
       permissionMode={session.permissionMode}
+      effort={session.effort}
       mcpCount={session.mcp?.length ?? null}
       turns={stats.turns}
       totalTokens={stats.totalTokens}
@@ -126,6 +187,12 @@
       cost={stats.cost}
       {view}
       onview={(v) => (view = v)}
+      {offeredModes}
+      effortStops={effortStopsForModel}
+      {showEffort}
+      {onmodel}
+      {onpermission}
+      {oneffort}
     />
 
     <div class="body">

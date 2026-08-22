@@ -13,7 +13,7 @@
   import { page } from '$app/state';
   import * as Sheet from '$lib/components/ui/sheet';
   import ThemeSwitcher from '$lib/components/ui/ThemeSwitcher.svelte';
-  import { Button } from '$lib/outpost';
+  import { Button } from '$lib/components/ui/button';
   import { IconCommand, IconSearch, IconShield, IconSidebar } from '$lib/icons';
   import { isTyping } from '$lib/utils/typing';
   import { cockpit, hubSocketUrl, reconnectNow } from './client.svelte';
@@ -193,7 +193,13 @@
       <span class="crumb hidden min-[900px]:inline">{crumb}</span>
 
       <div class="right">
-        <Button class="jump" onclick={() => (jumpOpen = true)} title="Jump to session (⌘K)">
+        <Button
+          variant="outline"
+          size="sm"
+          class="jump"
+          onclick={() => (jumpOpen = true)}
+          title="Jump to session (⌘K)"
+        >
           <IconSearch />
           <span class="hidden sm:inline">Jump</span>
         </Button>
@@ -205,9 +211,12 @@
           </a>
         {/if}
         <span class="hub {HUB_DOT[cockpit.hub]}" title={HUB_TITLE[cockpit.hub]}></span>
+        <!-- Keyboard shortcuts are a pointer-fine affordance; a phone has no
+             keyboard to shortcut, so the button retires on coarse pointers
+             rather than crowding a 390px row. -->
         <button
           type="button"
-          class="icobtn"
+          class="icobtn shortcuts"
           aria-label="Keyboard shortcuts"
           onclick={() => (shortcutsOpen = true)}
         >
@@ -223,10 +232,10 @@
       <div class="banner {everConnected ? 'warn' : 'bad'}" role="status">
         {#if everConnected}
           <span>Hub connection lost — retrying in {retryIn}s</span>
-          <Button onclick={reconnectNow}>Reconnect</Button>
+          <Button variant="outline" size="sm" onclick={reconnectNow}>Reconnect</Button>
         {:else}
           <span>Can't reach the hub at <code>{hubSocketUrl()}</code></span>
-          <Button onclick={reconnectNow}>Retry</Button>
+          <Button variant="outline" size="sm" onclick={reconnectNow}>Retry</Button>
         {/if}
       </div>
     {/if}
@@ -303,11 +312,11 @@
   }
 
   .top {
-    height: 57px;
+    height: 57px; /* the mock's fixed top-bar height; a magic layout value */
     flex-shrink: 0;
     display: flex;
     align-items: center;
-    gap: 9px;
+    gap: var(--space-2);
     padding: 0 var(--space-6) 0 var(--space-7);
     background: var(--surface-raised);
     border-bottom: 1px solid var(--border-hairline);
@@ -315,7 +324,7 @@
   .burger {
     width: 44px;
     height: 44px;
-    margin-left: -10px;
+    margin-left: calc(-1 * var(--space-2));
     display: grid;
     place-items: center;
     border: 0;
@@ -352,10 +361,11 @@
     margin-left: auto;
     display: flex;
     align-items: center;
-    gap: 9px;
+    gap: var(--space-2);
+    min-width: 0;
   }
   .right :global(.jump) {
-    gap: 7px;
+    gap: var(--space-2);
   }
   .right :global(.jump svg) {
     width: 15px;
@@ -383,6 +393,26 @@
     .icobtn:hover,
     .burger:hover {
       background: var(--surface-hover);
+    }
+  }
+  /* A phone has no keyboard to shortcut; the button retires so the coarse row
+     stays uncrowded, and the remaining affordances take the 44px thumb floor. */
+  @media (pointer: coarse) {
+    .shortcuts {
+      display: none;
+    }
+    .icobtn {
+      width: 44px;
+      height: 44px;
+    }
+    /* Every affordance in the right cluster takes the 44px thumb floor —
+       the Jump button, the usage meter's pill and the theme toggle included,
+       so a phone tap never lands on a 32px target. */
+    .right :global(.jump),
+    .right :global(button),
+    .right :global(a) {
+      min-height: 44px;
+      min-width: 44px;
     }
   }
   .badge {
