@@ -39,6 +39,8 @@
   import DirectoryPicker from '$lib/components/features/DirectoryPicker.svelte';
   import { IsMobile } from '$lib/hooks/is-mobile.svelte';
   import { Button } from '$lib/components/ui/button';
+  import { Input } from '$lib/components/ui/input';
+  import { Textarea } from '$lib/components/ui/textarea';
   import { Checkbox } from '$lib/components/ui/checkbox';
   import * as Select from '$lib/components/ui/select';
   import * as ToggleGroup from '$lib/components/ui/toggle-group';
@@ -581,14 +583,13 @@
 
   <div class="relative flex flex-col gap-1">
     <label for="spawn-project" class="text-micro text-muted-foreground">Project (optional)</label>
-    <input
+    <Input
       id="spawn-project"
-      bind:this={projectInput}
+      bind:ref={projectInput}
       bind:value={projectQuery}
       placeholder="Search projects…"
       autocomplete="off"
       spellcheck="false"
-      class="input"
       onfocus={openProjects}
       oninput={() => {
         projectOpen = true;
@@ -647,15 +648,14 @@
   {#if source === 'repo'}
     <div class="relative flex flex-col gap-1" transition:slide={{ duration: 160 }}>
       <label for="spawn-repo" class="text-micro text-muted-foreground">Repository</label>
-      <input
+      <Input
         id="spawn-repo"
-        bind:this={repoInput}
+        bind:ref={repoInput}
         bind:value={repo}
         placeholder="owner/name, or a clone URL"
         autocomplete="off"
         spellcheck="false"
-        class="input font-mono motion-reduce:animate-none {invalid === 'repo' ? 'border-error' : ''}"
-        class:animate-shake={invalid === 'repo'}
+        class="font-mono motion-reduce:animate-none {invalid === 'repo' ? 'animate-shake border-error' : ''}"
         onfocus={openRepos}
         oninput={() => {
           repoOpen = true;
@@ -729,13 +729,12 @@
     <label for="spawn-cwd" class="text-micro text-muted-foreground">
       {source === 'repo' ? 'Clone into' : 'Working directory'}
     </label>
-    <input
+    <Input
       id="spawn-cwd"
-      bind:this={cwdInput}
+      bind:ref={cwdInput}
       bind:value={cwd}
       placeholder={source === 'repo' ? '~' : '/home/you/project'}
-      class="input font-mono motion-reduce:animate-none {invalid === 'cwd' ? 'border-error' : ''}"
-      class:animate-shake={invalid === 'cwd'}
+      class="font-mono motion-reduce:animate-none {invalid === 'cwd' ? 'animate-shake border-error' : ''}"
       oninput={() => {
         diverge();
         inspectTyped();
@@ -877,14 +876,14 @@
 
     <div class="flex flex-col gap-1">
       <label for="spawn-prompt" class="text-micro text-muted-foreground">First prompt (optional)</label>
-      <textarea
+      <Textarea
         id="spawn-prompt"
-        bind:this={promptField}
+        bind:ref={promptField}
         bind:value={prompt}
-        rows="1"
+        rows={1}
         placeholder="What should it work on?"
-        class="input field-sizing-content max-h-40 min-h-9 resize-none"
-      ></textarea>
+        class="rounded-[var(--radius-control)] border-[var(--border-control)] bg-[var(--surface-raised)] text-[var(--ink-strong)] field-sizing-content max-h-40 min-h-9"
+      />
     </div>
 
     <div class="flex flex-col gap-2">
@@ -924,7 +923,7 @@
             transition:slide={{ duration: 160 }}
           >
             Project name
-            <input bind:value={projectName} placeholder={leaf(workdir)} class="input" />
+            <Input bind:value={projectName} placeholder={leaf(workdir)} />
           </label>
         {/if}
       </div>
