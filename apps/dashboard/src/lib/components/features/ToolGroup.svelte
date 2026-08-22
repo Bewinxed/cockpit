@@ -88,7 +88,7 @@
   }
 </script>
 
-<div class="w-full overflow-hidden rounded-xl bg-card shadow-sm">
+<div class="ml-[7px] w-[calc(100%-7px)] pl-3" style="background:var(--rail) left top/2px 100% no-repeat">
   {#if tools.length > 1}
     <div
       class="flex items-center gap-2 px-3 py-2"
