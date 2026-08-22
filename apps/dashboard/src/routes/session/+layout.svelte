@@ -49,7 +49,13 @@
    * move a pane's DOM, and a scroller taken out of the document and put back
    * loses the offset this whole arrangement exists to keep.
    */
-  let panes = $state<Pane[]>([]);
+  let panes = $state<Pane[]>(
+    // Seeded, not left empty: the effect below is what normally opens a pane,
+    // and effects do not run on the server — so an empty start meant the page
+    // the URL names rendered nothing at all in the server's HTML. The client's
+    // first render seeds it from the same URL, so hydration matches.
+    viewId ? [{ id: viewId, browsing, cwd: browsingCwd, harness: browsingHarness }] : []
+  );
 
   // Before the DOM is patched rather than after: a pane that arrives a frame
   // late is a frame of empty route, which is the flash being fixed here.

@@ -422,11 +422,17 @@ const listedOn = (machineId: string): InstanceRow[] =>
     (row) => row.machineId === machineId && isListed(row) && row.kind !== 'scratch'
   );
 
-function session(instanceId: string): SessionState {
-  const existing = state.sessions[instanceId];
-  if (existing) return existing;
-
-  const created: SessionState = {
+/**
+ * A session with nothing in it, and nothing registered anywhere.
+ *
+ * The store is a module singleton, so on the server it is shared by every
+ * request — writing one reader's conversation into it would hand it to the
+ * next. So the server never touches the store: `SessionPane` builds one of
+ * these from its `load` data instead, renders the page out of it, and drops it
+ * the moment the real store session has the conversation.
+ */
+export function blankSession(instanceId: string): SessionState {
+  return {
     instanceId,
     machineId: '',
     cwd: '',
@@ -462,6 +468,13 @@ function session(instanceId: string): SessionState {
     sdkStatus: null,
     lastCompaction: null,
   };
+}
+
+function session(instanceId: string): SessionState {
+  const existing = state.sessions[instanceId];
+  if (existing) return existing;
+
+  const created: SessionState = blankSession(instanceId);
   state.sessions[instanceId] = created;
   // Read it back: the literal above is the raw target, and `$state` writes land
   // on the proxy's signals, never on it. Handing out the raw object would give

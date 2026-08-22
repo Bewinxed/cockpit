@@ -8,8 +8,9 @@
    */
   import { untrack } from 'svelte';
   import { page } from '$app/state';
-  import type { EffortLevel, PermissionMode } from '@cockpit/core';
+  import type { EffortLevel, HarnessKind, PermissionMode, SessionMessage } from '@cockpit/core';
   import {
+    blankSession,
     cockpit,
     openSession,
     openTranscript,
@@ -26,14 +27,16 @@
     relaunchSession,
     type PendingPermission,
     type SendExtras,
+    type SessionState,
   } from './client.svelte';
   import { PERMISSION_MODES } from './permission-modes';
   import { effortStops, hasEffortScale } from './effort-levels';
   import { covers, ensureModels, models } from './models.svelte';
-  import { routedToParent } from './frames';
+  import { mapTranscript, routedToParent } from './frames';
   import { delegateHandle, resolveSessionTitle } from './links';
   import SessionHeader from './transcript/SessionHeader.svelte';
   import Transcript from './transcript/Transcript.svelte';
+  import StaticTail from './transcript/StaticTail.svelte';
   import Composer, { type Mention } from './transcript/Composer.svelte';
   import Prompt from './transcript/Prompt.svelte';
   import FlowView from '$lib/components/features/flow/FlowView.svelte';
@@ -51,6 +54,16 @@
     browsingHarness: string;
     active: boolean;
   } = $props();
+
+  /** The newest turns the server read back, and the identity that names them. */
+  interface ServerTail {
+    viewId: string;
+    machineId: string;
+    sessionId: string;
+    cwd: string;
+    harness: string;
+    messages: SessionMessage[];
+  }
 
   /** Why this pane has nothing to show, when it has nothing to show. */
   let failure = $state<{ reason: 'offline' | 'failed'; message: string } | null>(null);
@@ -150,8 +163,60 @@
     });
   });
 
-  const session = $derived(cockpit.session(viewId));
-  const machineId = $derived(session?.machineId ?? '');
+  /**
+   * The newest turns, read at render time and shipped with the page. This is
+   * what the SERVER paints: without it the first response carried an empty pane
+   * and the conversation only appeared once the bundle had hydrated and the
+   * stream had answered. Claimed by the pane the URL names, exactly as the
+   * history descriptor above is.
+   */
+  const tail = $derived(
+    page.params.id === viewId
+      ? ((page.data as { tail?: ServerTail | null }).tail ?? null)
+      : null
+  );
+
+  /**
+   * The conversation as a session, built from the page's own data.
+   *
+   * The cockpit store is a module singleton, so on the server it is shared by
+   * every request — filling it in during a render would hand one reader's
+   * transcript to the next. Nothing here touches it: this is request-local, it
+   * renders the server's HTML and the client's first (hydrating) render, and it
+   * is dropped the moment the real store session carries the conversation.
+   */
+  const seeded = $derived.by<SessionState | null>(() => {
+    // Nothing read back means nothing to stand in for: the store's own empty
+    // and loading states are better than a blank pane pretending to be one.
+    if (!tail || tail.messages.length === 0) return null;
+    const blank = blankSession(viewId);
+    const mapped = mapTranscript(viewId, tail.messages);
+    blank.machineId = tail.machineId;
+    blank.cwd = tail.cwd;
+    blank.sessionId = tail.sessionId;
+    blank.harness = tail.harness as HarnessKind;
+    blank.messages = mapped.messages;
+    blank.subagents = mapped.subagents;
+    blank.initialized = mapped.messages.length > 0;
+    return blank;
+  });
+
+  /**
+   * Whether the live store has taken this conversation over. A one-way latch:
+   * the store session exists from the first effect (empty), and swapping to it
+   * then would blank the transcript the server just painted. It earns the pane
+   * once it has something to show — history read back, a turn in flight, or a
+   * permission waiting.
+   */
+  let live = $state(false);
+  $effect(() => {
+    const held = cockpit.session(viewId);
+    if (!held) return;
+    if (held.messages.length > 0 || held.busy || held.pending.length > 0) live = true;
+  });
+
+  const session = $derived(live || !seeded ? cockpit.session(viewId) : seeded);
+  const machineId = $derived(cockpit.session(viewId)?.machineId ?? '');
 
   /**
    * A live session addressed by id alone that the hub has never heard of. There
@@ -369,6 +434,11 @@
           streamingToolId={session.currentTool?.toolId}
           totalCostUsd={session.totalCost}
         />
+      {:else if session === seeded}
+        <!-- The server's own render, and the client's until the store has the
+             conversation. virtua measures a live viewport, so it has nothing to
+             say on a server — this is the same rows, flat. -->
+        <StaticTail {viewId} messages={tail?.messages ?? []} {agentName} />
       {:else}
         <Transcript {session} {agentName} {active} />
       {/if}
