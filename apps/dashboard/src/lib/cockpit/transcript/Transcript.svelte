@@ -82,7 +82,7 @@
   .tr {
     flex: 1 1 auto;
     overflow-y: auto;
-    padding: 14px 21px 96px 25px;
+    padding: 0 21px 96px 25px;
     min-height: 0;
     position: relative;
   }
@@ -92,7 +92,7 @@
     padding: 20px 0;
   }
   .turn {
-    margin-bottom: 14px;
+    margin-top: 14px;
   }
   .livetool {
     margin: 6px 0 0 7px;
