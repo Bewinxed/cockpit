@@ -66,7 +66,7 @@
 
 <button
   type="button"
-  class="flex h-7 w-full items-center gap-1.5 rounded-lg pr-2 pl-8
+  class="flex h-7 w-full items-center gap-1.5 rounded-[var(--radius-control)] pr-2 pl-8
          transition-colors duration-150
          hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-ring
          focus-visible:outline-none {className}"

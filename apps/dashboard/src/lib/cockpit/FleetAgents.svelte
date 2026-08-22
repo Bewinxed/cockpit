@@ -269,7 +269,7 @@
 <AgentEditor bind:open agent={editing} onsaved={landed} />
 
 <AlertDialog.Root open={forgetting !== null} onOpenChange={(next) => { if (!next) forgetting = null; }}>
-  <AlertDialog.Content class="rounded-2xl shadow-xl">
+  <AlertDialog.Content class="rounded-[var(--radius-shell)] shadow-xl">
     <AlertDialog.Header>
       <AlertDialog.Title>Remove {forgetting?.name}?</AlertDialog.Title>
       <AlertDialog.Description>

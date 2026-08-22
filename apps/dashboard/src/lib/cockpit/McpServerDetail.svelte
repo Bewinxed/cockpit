@@ -63,7 +63,7 @@
       <img
         src={candidates[step]}
         alt=""
-        class="size-5 shrink-0 rounded-sm"
+        class="size-5 shrink-0 rounded-[var(--radius-mark)]"
         onerror={() => (step += 1)}
       />
     {:else}
@@ -91,7 +91,7 @@
 
   {#if server.error}
     <p
-      class="mt-2 max-h-24 overflow-y-auto rounded-xl bg-destructive/10 p-2.5 font-mono text-micro text-destructive"
+      class="mt-2 max-h-24 overflow-y-auto rounded-[var(--radius-well)] bg-destructive/10 p-2.5 font-mono text-micro text-destructive"
     >
       {server.error}
     </p>
@@ -108,15 +108,15 @@
 
   <!-- A phone has no right-click, so the menu's verbs sit here too. -->
   <div class="mt-3 flex gap-1.5">
-    <Button variant="ghost" size="sm" class="rounded-lg text-xs" disabled={busy} onclick={restart}>
+    <Button variant="ghost" size="sm" class="rounded-[var(--radius-control)] text-xs" disabled={busy} onclick={restart}>
       Restart
     </Button>
     {#if server.status === 'disabled'}
-      <Button variant="ghost" size="sm" class="rounded-lg text-xs" disabled={busy} onclick={() => setEnabled(true)}>
+      <Button variant="ghost" size="sm" class="rounded-[var(--radius-control)] text-xs" disabled={busy} onclick={() => setEnabled(true)}>
         Start
       </Button>
     {:else}
-      <Button variant="ghost" size="sm" class="rounded-lg text-xs" disabled={busy} onclick={() => setEnabled(false)}>
+      <Button variant="ghost" size="sm" class="rounded-[var(--radius-control)] text-xs" disabled={busy} onclick={() => setEnabled(false)}>
         Stop
       </Button>
     {/if}

@@ -40,7 +40,7 @@
 </script>
 
 <Dialog.Root bind:open onOpenChange={(next) => { if (next) return; typed = ''; name = ''; named = false; failed = undefined; choices = []; }}>
-  <Dialog.Content class="rounded-2xl shadow-xl sm:max-w-lg">
+  <Dialog.Content class="rounded-[var(--radius-shell)] shadow-xl sm:max-w-lg">
     <Dialog.Header>
       <Dialog.Title>Add skill</Dialog.Title>
       <Dialog.Description>The hub downloads the files once and every machine writes them into <span class="font-mono">~/.claude/skills</span>. No installer runs anywhere.</Dialog.Description>
@@ -63,7 +63,7 @@
       {#if choices.length > 0}
         <fieldset class="flex flex-col gap-1.5">
           <legend class="mb-1 text-caption">That repo holds several skills. Pick the one to fetch.</legend>
-          <ul class="flex max-h-52 flex-col overflow-y-auto rounded-lg border border-border">
+          <ul class="flex max-h-52 flex-col overflow-y-auto rounded-[var(--radius-card)] border border-border">
             {#each choices as choice (choice)}
               <li class="border-t border-border first:border-t-0">
                 <button type="button" class="w-full px-3 py-2 text-left font-mono text-caption transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:outline-none" disabled={busy} onclick={() => choose(choice)}>{choice}</button>

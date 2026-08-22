@@ -143,7 +143,7 @@
     aria-valuenow={index < 0 ? undefined : index}
     aria-valuetext={selected ? `${selected.label} — ${selected.description}` : 'not chosen'}
     aria-disabled={disabled}
-    class="relative flex h-6 w-full cursor-pointer touch-none items-center rounded-md outline-none select-none
+    class="relative flex h-6 w-full cursor-pointer touch-none items-center rounded-[var(--radius-control)] outline-none select-none
       focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring
       {disabled ? 'pointer-events-none opacity-50' : ''}"
     onkeydown={handleKeydown}

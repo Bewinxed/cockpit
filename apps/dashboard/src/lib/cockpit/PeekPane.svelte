@@ -235,7 +235,7 @@
      nothing for a surface to hold, and a card-sized blank reads as a pane that
      failed to load rather than one waiting to be used. -->
 <div
-  class="flex h-full min-h-0 flex-col overflow-hidden rounded-xl
+  class="flex h-full min-h-0 flex-col overflow-hidden rounded-[var(--radius-panel)]
     transition-[background-color,box-shadow] duration-200 ease-out {target
     ? 'bg-card shadow-md'
     : ''}"
@@ -408,7 +408,7 @@
                 {:else if message.type === 'user' || message.type === 'user.peer'}
                   <!-- The one voice worth tinting: what the session was asked. -->
                   <p
-                    class="line-clamp-4 rounded-lg bg-primary/10 px-3 py-2 text-body break-words whitespace-pre-wrap"
+                    class="line-clamp-4 rounded-[var(--radius-card)] bg-primary/10 px-3 py-2 text-body break-words whitespace-pre-wrap"
                   >
                     {message.content}
                   </p>
@@ -421,7 +421,7 @@
               {#if session?.streaming}
                 <p class="text-body break-words whitespace-pre-wrap">
                   {stream.text}<span
-                    class="inline-block h-4 w-[3px] animate-pulse rounded-sm bg-primary/60 align-text-bottom"
+                    class="inline-block h-4 w-[3px] animate-pulse rounded-[var(--radius-mark)] bg-primary/60 align-text-bottom"
                   ></span>
                 </p>
               {/if}

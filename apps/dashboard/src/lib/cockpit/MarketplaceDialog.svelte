@@ -29,7 +29,7 @@
 </script>
 
 <Dialog.Root bind:open onOpenChange={(next) => { if (next) return; name = ''; source = ''; failed = undefined; }}>
-  <Dialog.Content class="rounded-2xl shadow-xl sm:max-w-lg">
+  <Dialog.Content class="rounded-[var(--radius-shell)] shadow-xl sm:max-w-lg">
     <Dialog.Header>
       <Dialog.Title>Link a marketplace</Dialog.Title>
       <Dialog.Description>Every machine clones it. Nothing is installed until you pick a plugin from it.</Dialog.Description>

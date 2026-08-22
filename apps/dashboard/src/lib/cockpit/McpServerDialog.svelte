@@ -78,7 +78,7 @@
 </script>
 
 <Dialog.Root bind:open>
-  <Dialog.Content class="rounded-2xl shadow-xl sm:max-w-lg">
+  <Dialog.Content class="rounded-[var(--radius-shell)] shadow-xl sm:max-w-lg">
     <Dialog.Header>
       <Dialog.Title>{editing ? `Edit ${editing.name}` : 'Add MCP server'}</Dialog.Title>
       <Dialog.Description>Every machine gets it, and every session started after that can reach it.</Dialog.Description>

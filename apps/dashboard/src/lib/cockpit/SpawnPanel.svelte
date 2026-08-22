@@ -525,7 +525,7 @@
 {#snippet prefillSummary()}
   {@const proj = projectId ? cockpit.project(projectId) : null}
   <div
-    class="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-muted/30 px-3 py-2.5"
+    class="flex items-center justify-between gap-3 rounded-[var(--radius-card)] border border-border/60 bg-muted/30 px-3 py-2.5"
   >
     <div class="flex min-w-0 flex-col gap-0.5">
       <span class="text-micro text-muted-foreground">Spawning on</span>
@@ -603,7 +603,7 @@
 
     {#if projectOpen}
       <div
-        class="absolute top-full right-0 left-0 z-10 mt-1 max-h-56 overflow-y-auto rounded-md border border-border bg-popover shadow-md"
+        class="absolute top-full right-0 left-0 z-10 mt-1 max-h-56 overflow-y-auto rounded-[var(--radius-card)] border border-border bg-popover shadow-md"
         transition:slide={{ duration: 160 }}
       >
         {#each projectMatches as row (row.id)}
@@ -669,7 +669,7 @@
 
       {#if repoOpen}
         <div
-          class="absolute top-full right-0 left-0 z-10 mt-1 max-h-56 overflow-y-auto rounded-md border border-border bg-popover shadow-md"
+          class="absolute top-full right-0 left-0 z-10 mt-1 max-h-56 overflow-y-auto rounded-[var(--radius-card)] border border-border bg-popover shadow-md"
           transition:slide={{ duration: 160 }}
         >
           {#if reposLoading}
@@ -907,7 +907,7 @@
 
     {#if workdir && !existingProject && !projectId}
       <div
-        class="flex flex-col gap-2 rounded-xl border border-border/60 px-3 py-2.5"
+        class="flex flex-col gap-2 rounded-[var(--radius-card)] border border-border/60 px-3 py-2.5"
         transition:slide={{ duration: 160 }}
       >
         <div class="flex items-center gap-2 text-micro text-muted-foreground">
@@ -949,7 +949,7 @@
   <Sheet.Root {open} onOpenChange={(next) => !next && close()}>
     <Sheet.Content
       side="bottom"
-      class="material-panel flex max-h-[92vh] flex-col gap-0 rounded-t-2xl border-t border-border/60 p-0 shadow-xl duration-[240ms] ease-[var(--ease-out-expo)]"
+      class="material-panel flex max-h-[92vh] flex-col gap-0 rounded-t-[var(--radius-shell)] border-t border-border/60 p-0 shadow-xl duration-[240ms] ease-[var(--ease-out-expo)]"
     >
       <Sheet.Title class="text-title px-5 pt-5 pb-1">New session</Sheet.Title>
       <Sheet.Description class="sr-only">Start a Claude Code session on a machine</Sheet.Description>
@@ -980,7 +980,7 @@
       align="end"
       sideOffset={10}
       aria-label="New session"
-      class="material-panel w-[480px] max-w-[calc(100vw-2rem)] rounded-2xl border border-border/60 p-0 shadow-xl duration-[240ms] ease-[var(--ease-out-expo)]"
+      class="material-panel w-[480px] max-w-[calc(100vw-2rem)] rounded-[var(--radius-shell)] border border-border/60 p-0 shadow-xl duration-[240ms] ease-[var(--ease-out-expo)]"
     >
       <div class="flex items-center justify-between border-b border-border/60 px-5 py-3.5">
         <h2 class="text-title">New session</h2>

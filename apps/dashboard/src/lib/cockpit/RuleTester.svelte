@@ -44,7 +44,7 @@
   const firing = $derived(hits.length > 0);
 </script>
 
-<div class="flex flex-col gap-2 rounded-lg bg-muted/40 p-4">
+<div class="flex flex-col gap-2 rounded-[var(--radius-card)] bg-muted/40 p-4">
   <div class="flex flex-wrap items-baseline justify-between gap-2">
     <span class="text-caption font-medium text-foreground">Try it</span>
     <span
@@ -69,11 +69,11 @@
 
   {#if sample.trim() && draft.pattern.trim()}
     <p
-      class="max-h-40 overflow-y-auto rounded-md bg-background p-3 font-mono text-micro leading-relaxed break-words whitespace-pre-wrap"
+      class="max-h-40 overflow-y-auto rounded-[var(--radius-well)] bg-background p-3 font-mono text-micro leading-relaxed break-words whitespace-pre-wrap"
     >
       {#each segments as segment, index (index)}
         {#if segment.hit}
-          <mark class="rounded-sm bg-success/25 px-0.5 text-foreground">{segment.text}</mark>
+          <mark class="rounded-[var(--radius-mark)] bg-success/25 px-0.5 text-foreground">{segment.text}</mark>
         {:else}{segment.text}{/if}
       {/each}
     </p>

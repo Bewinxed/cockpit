@@ -163,7 +163,7 @@
                 {/snippet}
               </Popover.Trigger>
 
-              <Popover.Content class="w-64 rounded-xl p-3 shadow-lg" align="end">
+              <Popover.Content class="w-64 rounded-[var(--radius-panel)] p-3 shadow-lg" align="end">
                 <McpServerDetail {server} {instanceId} {machineId} />
               </Popover.Content>
             </Popover.Root>
@@ -225,7 +225,7 @@
     {/snippet}
   </Popover.Trigger>
 
-  <Popover.Content class="w-72 rounded-xl p-1.5 shadow-lg" align="end">
+  <Popover.Content class="w-72 rounded-[var(--radius-panel)] p-1.5 shadow-lg" align="end">
     <ul class="flex max-h-[60vh] flex-col overflow-y-auto">
       {#each servers as server (server.name)}
         {@const open = foldedDetail === server.name}
@@ -235,7 +235,7 @@
         <li class="flex flex-col">
           <button
             type="button"
-            class="flex min-h-9 items-center gap-2.5 rounded-lg px-2 text-left transition-colors
+            class="flex min-h-9 items-center gap-2.5 rounded-[var(--radius-control)] px-2 text-left transition-colors
                    hover:bg-accent hover:text-accent-foreground"
             aria-expanded={open}
             onclick={() => (foldedDetail = open ? null : server.name)}

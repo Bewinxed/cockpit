@@ -76,7 +76,7 @@
           <h3 class="mb-2 text-[13px] font-medium text-muted-foreground">{group.name}</h3>
           <div class="grid gap-1">
             {#each group.shortcuts as shortcut (shortcut.label + shortcut.keys.join(''))}
-              <div class="flex items-center justify-between rounded-lg px-2 py-1.5 hover:bg-accent">
+              <div class="flex items-center justify-between rounded-[var(--radius-control)] px-2 py-1.5 hover:bg-accent">
                 <span class="text-[14px]">{shortcut.label}</span>
                 <span class="flex items-center gap-0.5">
                   {#each shortcut.keys as key}

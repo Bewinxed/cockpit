@@ -37,7 +37,7 @@
   const waiting = $derived(rows.filter((row) => row.status === 'pending').length);
 </script>
 
-<section class="flex flex-col gap-4 rounded-xl bg-card p-5 shadow-md">
+<section class="flex flex-col gap-4 rounded-[var(--radius-panel)] bg-card p-5 shadow-md">
   <div class="flex flex-col gap-1">
     <h2 class="text-body font-medium">What it has caught</h2>
     <p class="max-w-prose text-micro text-muted-foreground">
@@ -63,7 +63,7 @@
     {/if}
     <ul class="flex flex-col gap-3">
       {#each rows as row (row.instanceId)}
-        <li class="flex flex-col gap-1.5 rounded-lg bg-muted/40 p-4">
+        <li class="flex flex-col gap-1.5 rounded-[var(--radius-card)] bg-muted/40 p-4">
           <div class="flex flex-wrap items-baseline justify-between gap-2">
             <span class="flex items-baseline gap-2">
               <span class="font-mono text-micro text-foreground">{row.where}</span>

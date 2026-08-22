@@ -25,6 +25,11 @@ export * from './usage';
 // editor's test box decide identically.
 export * from './rules';
 
+// How a session with no given title names itself: its first user message,
+// cleaned. Shared so the hub's derived title and the dashboard's transcript
+// title are the same string, character for character.
+export * from './title';
+
 /** The whole agent↔hub↔dashboard protocol. Adding a verb is a design decision. */
 export type Verb =
   | 'register'

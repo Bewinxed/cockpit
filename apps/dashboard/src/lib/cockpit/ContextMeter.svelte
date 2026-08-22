@@ -86,7 +86,7 @@
   }}
 >
   <Popover.Trigger
-    class="flex h-7 shrink-0 items-center gap-1.5 rounded-lg px-1.5
+    class="flex h-7 shrink-0 items-center gap-1.5 rounded-[var(--radius-control)] px-1.5
            text-micro tabular-nums
            hover:bg-muted
            focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring
@@ -128,7 +128,7 @@
     {/if}
   </Popover.Trigger>
 
-  <Popover.Content class="w-72 rounded-xl shadow-lg p-0" align="end" side="top">
+  <Popover.Content class="w-72 rounded-[var(--radius-panel)] shadow-lg p-0" align="end" side="top">
     <div class="flex items-center gap-2 border-b border-border px-3 py-2.5">
       <IconWindow class="size-4 text-muted-foreground" />
       <span class="text-sm font-medium">Context window</span>

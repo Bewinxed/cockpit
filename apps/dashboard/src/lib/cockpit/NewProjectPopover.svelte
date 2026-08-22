@@ -86,7 +86,7 @@
     align="start"
     sideOffset={6}
     aria-label="New project"
-    class="material-panel flex w-[340px] max-w-[calc(100vw-2rem)] flex-col gap-3 rounded-2xl p-4
+    class="material-panel flex w-[340px] max-w-[calc(100vw-2rem)] flex-col gap-3 rounded-[var(--radius-panel)] p-4
            shadow-xl duration-[180ms] ease-[var(--ease-out-expo)]"
   >
     <h2 class="text-body font-medium">New project</h2>

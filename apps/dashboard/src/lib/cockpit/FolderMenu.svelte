@@ -113,7 +113,7 @@
         <IconPalette class="size-4" />
         Customize
       </ContextMenu.SubTrigger>
-      <ContextMenu.SubContent class="w-64 rounded-2xl p-3 shadow-xl">
+      <ContextMenu.SubContent class="w-64 rounded-[var(--radius-panel)] p-3 shadow-xl">
         <div class="flex items-center justify-between pb-2 pl-1">
           <span class="text-micro font-medium text-muted-foreground">Colour</span>
           {#if pickedHue !== undefined}
@@ -166,7 +166,7 @@
 </ContextMenu.Root>
 
 <AlertDialog.Root bind:open={confirmingForget}>
-  <AlertDialog.Content class="rounded-2xl shadow-xl">
+  <AlertDialog.Content class="rounded-[var(--radius-shell)] shadow-xl">
     <AlertDialog.Header>
       <AlertDialog.Title>Forget {name}?</AlertDialog.Title>
       <AlertDialog.Description>

@@ -108,10 +108,10 @@
       <h2 class="text-title">Daily</h2>
       <p class="text-caption">Tokens per day, stacked by harness.</p>
     </div>
-    <div class="flex gap-1 rounded-lg bg-muted p-0.5">
+    <div class="flex gap-1 rounded-[var(--radius-control)] bg-muted p-0.5">
       {#each RANGES as r (r.id)}
         <button
-          class="rounded-md px-2.5 py-1 text-micro tabular-nums transition-colors duration-150 ease-out
+          class="rounded-[var(--radius-tile)] px-2.5 py-1 text-micro tabular-nums transition-colors duration-150 ease-out
                  {range === r.id
             ? 'bg-card text-foreground shadow-sm'
             : 'text-muted-foreground hover:text-foreground'}"
@@ -127,7 +127,7 @@
   {#if error}
     <p class="text-caption text-error" role="alert">{error}</p>
   {:else if loading}
-    <div class="h-56 w-full rounded-xl bg-muted/40"></div>
+    <div class="h-56 w-full rounded-[var(--radius-card)] bg-muted/40"></div>
   {:else}
     <ChartContainer config={chartConfig} class="h-56 w-full">
       <BarChart

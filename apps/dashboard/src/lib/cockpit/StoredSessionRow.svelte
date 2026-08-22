@@ -25,7 +25,7 @@
 <StoredSessionMenu {machineId} {info}>
   <a
     href={transcriptHref(machineId, info)}
-    class="flex min-h-9 items-center rounded-lg px-4 py-1.5
+    class="flex min-h-9 items-center rounded-[var(--radius-control)] px-4 py-1.5
       transition-colors duration-150 ease-out hover:bg-accent hover:text-accent-foreground"
   >
     <!-- Full-width band, measured content: the same bargain the live rows make. -->

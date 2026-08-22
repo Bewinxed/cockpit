@@ -37,10 +37,10 @@
   const rule = $derived(request.suggestions?.length ? suggestedRule(request.suggestions) : null);
 
   const kbd =
-    'rounded-md bg-muted px-1.5 py-0.5 font-mono text-micro text-muted-foreground shadow-sm border border-border/50';
+    'rounded-[var(--radius-mark)] bg-muted px-1.5 py-0.5 font-mono text-micro text-muted-foreground shadow-sm border border-border/50';
 </script>
 
-<div class="bg-card rounded-xl shadow-sm p-4" role="alert">
+<div class="bg-card rounded-[var(--radius-card)] shadow-sm p-4" role="alert">
   <div class="flex gap-2.5 items-start">
     <div class="text-muted-foreground shrink-0 mt-0.5">
       <IconShield class="size-[18px]" />
@@ -63,10 +63,10 @@
         </Collapsible.Trigger>
 
         <Collapsible.Content>
-          <div class="bg-muted/50 rounded-lg p-3 mt-1 text-micro flex flex-col gap-2.5">
+          <div class="bg-muted/50 rounded-[var(--radius-well)] p-3 mt-1 text-micro flex flex-col gap-2.5">
             {#if command}
               <pre
-                class="bg-background/60 px-3 py-2 rounded-md font-mono text-micro whitespace-pre-wrap break-all max-h-[200px] overflow-auto m-0"
+                class="bg-background/60 px-3 py-2 rounded-[var(--radius-mark)] font-mono text-micro whitespace-pre-wrap break-all max-h-[200px] overflow-auto m-0"
               >{command}</pre>
             {:else}
               {#each Object.entries(request.input) as [key, value]}
@@ -77,7 +77,7 @@
                   <div>
                     <div class="font-medium text-muted-foreground">{key}:</div>
                     <pre
-                      class="bg-background/60 px-3 py-2 rounded-md font-mono text-micro whitespace-pre-wrap break-all max-h-[200px] overflow-auto mt-1 m-0"
+                      class="bg-background/60 px-3 py-2 rounded-[var(--radius-mark)] font-mono text-micro whitespace-pre-wrap break-all max-h-[200px] overflow-auto mt-1 m-0"
                     >{text}</pre>
                   </div>
                 {:else}
@@ -97,7 +97,7 @@
                 Raw
               </summary>
               <pre
-                class="bg-background/60 px-3 py-2 rounded-md font-mono text-micro whitespace-pre-wrap break-all max-h-[200px] overflow-auto mt-1.5 m-0"
+                class="bg-background/60 px-3 py-2 rounded-[var(--radius-mark)] font-mono text-micro whitespace-pre-wrap break-all max-h-[200px] overflow-auto mt-1.5 m-0"
               >{JSON.stringify(request.input, null, 2)}</pre>
             </details>
           </div>
@@ -115,7 +115,7 @@
           <button
             type="button"
             disabled={!!resolved}
-            class="inline-flex min-h-11 min-w-0 items-center gap-1.5 rounded-lg bg-secondary px-3.5 py-2 text-micro font-medium text-secondary-foreground
+            class="inline-flex min-h-11 min-w-0 items-center gap-1.5 rounded-[var(--radius-control)] bg-secondary px-3.5 py-2 text-micro font-medium text-secondary-foreground
                    transition-[color,background-color,opacity] duration-[160ms] ease-[var(--ease-out-expo)]
                    hover:bg-secondary/80 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:opacity-40"
             title={rule.full}
@@ -137,7 +137,7 @@
         <button
           type="button"
           disabled={!!resolved}
-          class="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-border px-4 py-2 text-micro font-medium
+          class="inline-flex min-h-11 items-center gap-1.5 rounded-[var(--radius-control)] border border-border px-4 py-2 text-micro font-medium
                  transition-[color,background-color,border-color,opacity] duration-[160ms] ease-[var(--ease-out-expo)]
                  focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none
                  {resolved === 'deny'
@@ -160,7 +160,7 @@
         <button
           type="button"
           disabled={!!resolved}
-          class="inline-flex min-h-11 items-center gap-1.5 rounded-lg px-4 py-2 text-micro font-medium
+          class="inline-flex min-h-11 items-center gap-1.5 rounded-[var(--radius-control)] px-4 py-2 text-micro font-medium
                  transition-[color,background-color,opacity] duration-[160ms] ease-[var(--ease-out-expo)]
                  focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none
                  {resolved === 'allow'

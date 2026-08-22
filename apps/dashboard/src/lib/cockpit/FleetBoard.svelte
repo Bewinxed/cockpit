@@ -283,7 +283,7 @@
 
   // The stat tile IS the recessed-well signature: a shadcn Card (raised) whose
   // body is a sunken hairline well — a number sits *in* something, never on it.
-  // tailwind-merge drops the stock rounded-2xl / bg-card / ring defaults.
+  // tailwind-merge drops the stock rounded-[var(--radius-card)] / bg-card / ring defaults.
   const tileClass =
     'h-full gap-0 overflow-visible rounded-[var(--radius-panel)] bg-[var(--surface-raised)] p-[var(--c-card-pad)] shadow-[var(--shadow-lifted)] ring-0';
 

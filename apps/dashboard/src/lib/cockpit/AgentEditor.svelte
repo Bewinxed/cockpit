@@ -72,7 +72,7 @@ You are a <role>, working in one repository at a time.
 </script>
 
 <Dialog.Root bind:open>
-  <Dialog.Content class="material-panel rounded-2xl shadow-xl sm:max-w-2xl">
+  <Dialog.Content class="material-panel rounded-[var(--radius-shell)] shadow-xl sm:max-w-2xl">
     <Dialog.Header>
       <Dialog.Title>{agent ? agent.name : 'New subagent'}</Dialog.Title>
       <Dialog.Description>
@@ -82,7 +82,7 @@ You are a <role>, working in one repository at a time.
       </Dialog.Description>
     </Dialog.Header>
 
-    <div class="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg bg-muted px-3 py-2">
+    <div class="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-[var(--radius-well)] bg-muted px-3 py-2">
       {#if front.name}
         <span class="shrink-0 font-mono text-micro text-foreground">{front.name}</span>
       {/if}

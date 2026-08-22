@@ -39,7 +39,7 @@
         <OsMark os={machine.os} class="size-3.5 shrink-0" />
         <span class="truncate">{machineLabel(machine.hostname)}</span>
       </Popover.Trigger>
-      <Popover.Content class="w-80 rounded-2xl p-0 shadow-xl" align="start">
+      <Popover.Content class="w-80 rounded-[var(--radius-panel)] p-0 shadow-xl" align="start">
         <header class="flex items-baseline gap-2 border-b border-border px-3 py-2">
           <span class="truncate text-caption font-medium text-foreground">{machineLabel(machine.hostname)}</span>
           <span class="ml-auto shrink-0 text-micro text-muted-foreground">{os.label}{online ? '' : ' · offline'}</span>
@@ -52,7 +52,7 @@
             {:else}This machine has not reported on the {what} yet.{/if}
           </p>
           {#if item?.detail}
-            <pre class="max-h-40 overflow-auto rounded-lg bg-muted px-2 py-1.5 font-mono text-micro whitespace-pre-wrap">{item.detail}</pre>
+            <pre class="max-h-40 overflow-auto rounded-[var(--radius-well)] bg-muted px-2 py-1.5 font-mono text-micro whitespace-pre-wrap">{item.detail}</pre>
           {/if}
           <Button variant="outline" size="xs" class="self-start" disabled={!online || asked[machine.machineId] === true} onclick={() => resync(machine)}>
             <IconRefresh class="shrink-0" />

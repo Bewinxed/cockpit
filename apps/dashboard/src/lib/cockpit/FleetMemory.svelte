@@ -237,7 +237,7 @@
         <Button variant="outline" size="xs" class="shrink-0" disabled={!online || busy[machine.machineId] === true} onclick={() => overwrite(machine)}>Overwrite</Button>
       {/if}
     </div>
-    {#if item?.detail}<pre class="max-h-24 overflow-auto rounded-lg bg-muted px-2 py-1.5 font-mono text-micro whitespace-pre-wrap">{item.detail}</pre>{/if}
+    {#if item?.detail}<pre class="max-h-24 overflow-auto rounded-[var(--radius-well)] bg-muted px-2 py-1.5 font-mono text-micro whitespace-pre-wrap">{item.detail}</pre>{/if}
     {#if isOpen}
       <div class="flex flex-col gap-2">
         {#if peeking[machine.machineId]}

@@ -114,7 +114,7 @@
           href={url}
           target="_blank"
           rel="noopener noreferrer"
-          class="flex items-center justify-center gap-2 rounded-xl bg-primary px-3 py-2 text-sm
+          class="flex items-center justify-center gap-2 rounded-[var(--radius-control)] bg-primary px-3 py-2 text-sm
                  font-medium text-primary-foreground transition-colors hover:bg-primary/90"
         >
           <IconExternal class="size-4" />

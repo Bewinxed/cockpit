@@ -172,9 +172,9 @@
   <Card class="flex flex-col gap-[var(--space-3)] rounded-[var(--radius-panel)] p-[var(--space-6)] shadow-md" role="status" aria-label="Reading the fleet">
     {#each [0, 1, 2] as row (row)}
       <div class="flex items-center gap-[var(--space-6)]">
-        <Skeleton class="h-4 w-40 rounded-md" />
+        <Skeleton class="h-4 w-40 rounded-[var(--radius-mark)]" />
         {#each columns as spec (spec.id)}
-          <Skeleton class="h-4 w-20 rounded-md" />
+          <Skeleton class="h-4 w-20 rounded-[var(--radius-mark)]" />
         {/each}
       </div>
     {/each}
@@ -187,7 +187,7 @@
       a machine says it is here. Start the agent daemon on one, pointed at this hub, and it reports
       what it already has the moment it registers.
     </p>
-    <pre class="overflow-x-auto rounded-lg bg-muted px-[var(--space-3)] py-[var(--space-2)] font-mono text-micro">COCKPIT_HUB_URL=ws://&lt;this-host&gt;:3456/ws bun run agent</pre>
+    <pre class="overflow-x-auto rounded-[var(--radius-well)] bg-muted px-[var(--space-3)] py-[var(--space-2)] font-mono text-micro">COCKPIT_HUB_URL=ws://&lt;this-host&gt;:3456/ws bun run agent</pre>
   </Card>
 {:else}
   <Card class="gap-0 overflow-hidden rounded-[var(--radius-panel)] py-0 shadow-md">

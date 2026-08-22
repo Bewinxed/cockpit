@@ -121,7 +121,7 @@
     }
   }
 
-  const kbd = 'rounded-md bg-muted px-1.5 py-0.5 font-mono text-micro text-muted-foreground shadow-sm border border-border/50';
+  const kbd = 'rounded-[var(--radius-mark)] bg-muted px-1.5 py-0.5 font-mono text-micro text-muted-foreground shadow-sm border border-border/50';
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
@@ -149,7 +149,7 @@
             type="button"
             disabled={sent}
             class="text-muted-foreground hover:text-error hover:bg-error/10 flex size-7 items-center
-                   justify-center rounded-md transition-[color,background-color] duration-200 ease-out
+                   justify-center rounded-[var(--radius-control)] transition-[color,background-color] duration-200 ease-out
                    disabled:opacity-40"
             onclick={dismiss}
             aria-label="Dismiss without answering"
@@ -202,7 +202,7 @@
               >
                 <span
                   class="mt-0.5 flex size-4 shrink-0 items-center justify-center border-2
-                         {question.multiSelect ? 'rounded-sm' : 'rounded-full'}
+                         {question.multiSelect ? 'rounded-[var(--radius-mark)]' : 'rounded-full'}
                          {picked
                     ? 'border-primary bg-primary text-primary-foreground'
                     : 'border-muted-foreground/40'}"

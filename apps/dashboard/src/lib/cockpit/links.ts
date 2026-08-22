@@ -3,7 +3,7 @@
  * `sessionId` and the machine it lives on rides in the query, so a transcript
  * link is shareable and survives a reload with nothing cached.
  */
-import type { SDKSessionInfo } from '@cockpit/core';
+import { deriveTitleFromFirstMessage, type SDKSessionInfo } from '@cockpit/core';
 
 export function transcriptHref(machineId: string, info: SDKSessionInfo): string {
   const query = new URLSearchParams({ machine: machineId });
@@ -12,22 +12,12 @@ export function transcriptHref(machineId: string, info: SDKSessionInfo): string 
   return `/session/${info.sessionId}?${query}`;
 }
 
-/** How long a title derived from a first message runs before it is cut. */
-const TITLE_LIMIT = 80;
-
 /**
- * A session's first message as a title. A slash command's first message is the
- * harness echo, which wraps the invocation in `<command-message>` /
- * `<command-name>` — show the command, not the raw XML. Anything else has its
- * markup stripped and is folded onto one line.
+ * A session's first message as a title — the shared cleaning, so the name the
+ * hub already derived for the row and the one the loaded transcript derives are
+ * the same string and the label never changes under the reader.
  */
-function fromFirstMessage(raw: string): string {
-  const command = /<command-(?:message|name)>([\s\S]*?)<\/command-(?:message|name)>/
-    .exec(raw)?.[1]
-    ?.trim();
-  const cleaned = (command ?? raw.replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();
-  return cleaned.slice(0, TITLE_LIMIT);
-}
+const fromFirstMessage = deriveTitleFromFirstMessage;
 
 /**
  * What a session is called, wherever it is named — the tab strip, the session

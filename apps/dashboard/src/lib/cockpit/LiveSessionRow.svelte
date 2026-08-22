@@ -129,7 +129,7 @@
   <a
     href="/session/{instance.id}"
     title={sleeping ? SLEEPING_HINT : undefined}
-    class="group flex min-h-9 flex-col justify-center gap-0.5 rounded-lg px-4 py-1.5
+    class="group flex min-h-9 flex-col justify-center gap-0.5 rounded-[var(--radius-control)] px-4 py-1.5
       transition-colors duration-150 ease-out hover:bg-accent hover:text-accent-foreground
       {failed || activity === 'blocked' ? 'bg-error/10' : ''}"
   >

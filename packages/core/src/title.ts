@@ -1,0 +1,26 @@
+/**
+ * What a session is called when nobody named it: its first user message,
+ * cleaned. One implementation, because two would drift — the hub derives a
+ * title from the first message it sees so `/api/instances` already carries the
+ * name, and the dashboard derives one from the transcript it loads. If those
+ * two cleanings disagreed by a character the label would visibly change under
+ * the reader the moment the transcript arrived, which is the exact flash
+ * deriving it on the hub is meant to remove.
+ */
+
+/** How long a title derived from a first message runs before it is cut. */
+export const TITLE_LIMIT = 80;
+
+/**
+ * A session's first message as a title. A slash command's first message is the
+ * harness echo, which wraps the invocation in `<command-message>` /
+ * `<command-name>` — show the command, not the raw XML. Anything else has its
+ * markup stripped and is folded onto one line.
+ */
+export function deriveTitleFromFirstMessage(raw: string): string {
+  const command = /<command-(?:message|name)>([\s\S]*?)<\/command-(?:message|name)>/
+    .exec(raw)?.[1]
+    ?.trim();
+  const cleaned = (command ?? raw.replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();
+  return cleaned.slice(0, TITLE_LIMIT);
+}

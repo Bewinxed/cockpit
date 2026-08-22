@@ -283,7 +283,7 @@
             {#if browsing === row.name}
               {#if reading[row.name]}
                 <div class="flex flex-col gap-2 pt-1" role="status" aria-label="Reading {row.name}">
-                  {#each [0, 1, 2] as line (line)}<Skeleton class="h-8 w-full rounded-lg" />{/each}
+                  {#each [0, 1, 2] as line (line)}<Skeleton class="h-8 w-full rounded-[var(--radius-control)]" />{/each}
                 </div>
               {:else if unread[row.name]}
                 <p class="pt-1 text-caption text-warning" role="alert">{unread[row.name]}</p>

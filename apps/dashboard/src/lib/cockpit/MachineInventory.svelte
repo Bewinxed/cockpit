@@ -88,7 +88,7 @@
             {:else if rows.length === 0}
               <p class="text-caption text-muted-foreground">{kind === 'mcp' ? 'This machine has no MCP servers at all.' : 'This machine has no skills at all.'}</p>
             {:else}
-              <ul class="flex flex-col rounded-lg border border-border">
+              <ul class="flex flex-col rounded-[var(--radius-card)] border border-border">
                 {#each rows as row (`${row.scope}:${row.name}`)}
                   {@const key = keyOf(machine.machineId, row.scope, row.name)}
                   <li class="flex flex-wrap items-start gap-x-[var(--space-3)] gap-y-[var(--space-1)] border-t border-border px-[var(--space-3)] py-[var(--space-2)] first:border-t-0">
