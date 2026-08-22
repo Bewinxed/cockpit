@@ -70,6 +70,14 @@
     const harness = browsingHarness;
     void attempt;
     if (!id) return;
+    // Retry the read once the hub can actually answer. On a reload the effect
+    // first runs while the socket is still reconnecting — a live session's
+    // machineId isn't known yet (backfill bails) and a stored read can't reach
+    // the socket. Tracking the connection and the live session's machineId
+    // (neither written by the read below) re-runs this the moment it becomes
+    // answerable, so the transcript backfills instead of staying empty.
+    void cockpit.status;
+    void cockpit.session(id)?.machineId;
     untrack(() => {
       failure = null;
       if (machineId) {
