@@ -7,12 +7,15 @@
    * unmounts on navigation.
    */
   import { untrack } from 'svelte';
+  import { page } from '$app/state';
   import type { EffortLevel, PermissionMode } from '@cockpit/core';
   import {
     cockpit,
     openSession,
     openTranscript,
     backfillSession,
+    streamHistory,
+    type HistorySource,
     sendOrRevive,
     interrupt,
     loadMcpServers,
@@ -23,7 +26,6 @@
     relaunchSession,
     type PendingPermission,
     type SendExtras,
-    type TranscriptOutcome,
   } from './client.svelte';
   import { PERMISSION_MODES } from './permission-modes';
   import { effortStops, hasEffortScale } from './effort-levels';
@@ -55,6 +57,54 @@
   /** Bumped by Retry: the one thing that re-runs the read after it has failed. */
   let attempt = $state(0);
 
+  /**
+   * Where the server said this conversation's transcript can be read from —
+   * streamed with the page, so it is in hand before the socket is. Only the
+   * pane the URL points at may claim it; the others are open tabs, not this
+   * navigation.
+   */
+  const history = $derived<Promise<HistorySource | null> | null>(
+    page.params.id === viewId
+      ? ((page.data as { history?: Promise<HistorySource | null> | null }).history ?? null)
+      : null
+  );
+
+  /**
+   * Reads a conversation's history over HTTP, falling back to the socket. The
+   * HTTP read answers on a page that has only just loaded; the socket read is
+   * what answers when the hub's REST side cannot (an old hub, a proxy in the
+   * way), so neither path is given up.
+   */
+  async function readHistory(
+    id: string,
+    source: Promise<HistorySource | null> | null,
+    stored: { machineId: string; cwd: string; harness: string } | null
+  ): Promise<void> {
+    const named = await source;
+    if (named && named.viewId === id) {
+      const outcome = await streamHistory(named);
+      if (outcome.ok) return;
+      // Offline is the fleet's own state, not a fault in the read: say it
+      // rather than asking a machine that is asleep a second time.
+      if (outcome.reason === 'offline') {
+        failure = { reason: outcome.reason, message: outcome.message };
+        return;
+      }
+    }
+    if (!stored) {
+      void backfillSession(id);
+      return;
+    }
+    const outcome = await openTranscript({
+      viewId: id,
+      machineId: stored.machineId,
+      sessionId: id,
+      cwd: stored.cwd,
+      harness: stored.harness as never,
+    });
+    if (!outcome.ok) failure = { reason: outcome.reason, message: outcome.message };
+  }
+
   // Bring the conversation into being: a stored session reads its transcript
   // back, a live one is opened (subscribed) and backfilled with what it said
   // before this tab joined.
@@ -78,22 +128,25 @@
     // answerable, so the transcript backfills instead of staying empty.
     void cockpit.status;
     void cockpit.session(id)?.machineId;
+    // The server's answer for whichever conversation the URL names; a pane the
+    // reader left open in another tab was never part of this navigation, and
+    // says for itself where its stored transcript lives.
+    const named =
+      history ??
+      (machineId
+        ? Promise.resolve<HistorySource>({
+            viewId: id,
+            machineId,
+            sessionId: id,
+            cwd,
+            harness: harness as never,
+            live: false,
+          })
+        : null);
     untrack(() => {
       failure = null;
-      if (machineId) {
-        void openTranscript({
-          viewId: id,
-          machineId,
-          sessionId: id,
-          cwd,
-          harness: harness as never,
-        }).then((outcome: TranscriptOutcome) => {
-          if (!outcome.ok) failure = { reason: outcome.reason, message: outcome.message };
-        });
-      } else {
-        openSession(id);
-        void backfillSession(id);
-      }
+      if (!machineId) openSession(id);
+      void readHistory(id, named, machineId ? { machineId, cwd, harness } : null);
     });
   });
 
@@ -119,11 +172,23 @@
 
   // The header's MCP count wants a reading, and the composer's `/` menu wants
   // the descriptions; only a live session answers either.
+  //
+  // Untracked around the store, for the same reason the read effect above is:
+  // both loaders read their own `commandsPending` / mcp guard AND write it, so a
+  // plainly-tracked effect takes those flags as dependencies and re-runs itself
+  // the instant the call it just fired flips them — on a session that can't
+  // answer, the rejection clears the guard and the effect re-fires in a tight
+  // loop (thousands of `supportedCommands … failed` a second). Only a change in
+  // whether this pane addresses a live session should start a load.
   $effect(() => {
-    if (session && !browsing && machineId) {
-      void loadMcpServers(viewId, machineId);
-      void loadCommands(viewId, machineId);
-    }
+    const live = !!session && !browsing && !!machineId;
+    if (!live) return;
+    const id = viewId;
+    const mid = machineId;
+    untrack(() => {
+      void loadMcpServers(id, mid);
+      void loadCommands(id, mid);
+    });
   });
 
   const HARNESS_LABEL: Record<string, string> = {
