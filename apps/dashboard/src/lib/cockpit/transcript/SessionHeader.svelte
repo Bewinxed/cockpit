@@ -21,8 +21,9 @@
     permissionMode,
     mcpCount,
     turns,
-    contextPct,
+    totalTokens,
     maxTokens,
+    cost,
     view,
     onview,
   }: {
@@ -36,11 +37,14 @@
     permissionMode: string | null;
     mcpCount: number | null;
     turns: number | null;
-    contextPct: number | null;
+    totalTokens: number | null;
     maxTokens: number | null;
+    cost: number | null;
     view: 'chat' | 'flow';
     onview: (v: 'chat' | 'flow') => void;
   } = $props();
+
+  const k = (n: number): string => `${Math.round(n / 1000)}k`;
 
   const pill = $derived(
     activity === 'blocked'
@@ -80,9 +84,8 @@
   <div class="meta">
     <span>{harness}</span>
     {#if turns !== null}<span><b>{turns}</b> turns</span>{/if}
-    {#if contextPct !== null}
-      <span><b>{Math.round(contextPct)}%</b>{#if maxTokens} / {Math.round(maxTokens / 1000)}k{/if}</span>
-    {/if}
+    {#if totalTokens !== null && maxTokens}<span><b>{k(totalTokens)}</b>/{k(maxTokens)}</span>{/if}
+    {#if cost !== null}<span><b>${cost.toFixed(2)}</b></span>{/if}
   </div>
 </header>
 
@@ -196,5 +199,24 @@
     font-weight: var(--weight-strong);
     color: var(--ink-body);
     font-variant-numeric: tabular-nums;
+  }
+  /* Mobile: the bar wraps to its own rows, hugs the edges, and sheds the
+     turns/context/cost meta — the same reshape as the mock's narrow header. */
+  @media (max-width: 900px) {
+    .shead {
+      height: auto;
+      flex-wrap: wrap;
+      padding: 10px 16px;
+      row-gap: 8px;
+    }
+    .meta {
+      display: none;
+    }
+  }
+  @media (pointer: coarse) {
+    .back {
+      min-width: 44px;
+      min-height: 44px;
+    }
   }
 </style>

@@ -102,4 +102,14 @@
   .d.bad {
     color: var(--data-bad);
   }
+  @media (max-width: 900px) {
+    .tools {
+      margin-left: 0;
+    }
+  }
+  @media (pointer: coarse) {
+    .trow {
+      min-height: 44px;
+    }
+  }
 </style>

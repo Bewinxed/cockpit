@@ -131,4 +131,14 @@
   .inner {
     margin: 4px 0 0 22px;
   }
+  @media (max-width: 900px) {
+    .branch {
+      margin-left: 0;
+    }
+  }
+  @media (pointer: coarse) {
+    .bhead {
+      min-height: 44px;
+    }
+  }
 </style>

@@ -40,4 +40,9 @@
       animation: none;
     }
   }
+  @media (max-width: 900px) {
+    .think {
+      margin-left: 0;
+    }
+  }
 </style>

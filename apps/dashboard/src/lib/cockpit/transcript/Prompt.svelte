@@ -317,4 +317,12 @@
     opacity: 0.45;
     cursor: default;
   }
+  @media (pointer: coarse) {
+    .choice button,
+    .widen button,
+    .qopts button,
+    .qact button {
+      min-height: 44px;
+    }
+  }
 </style>

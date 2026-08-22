@@ -120,8 +120,9 @@
       permissionMode={session.permissionMode}
       mcpCount={session.mcp?.length ?? null}
       turns={stats.turns}
-      contextPct={stats.contextPct}
-      maxTokens={session.context?.maxTokens ?? null}
+      totalTokens={stats.totalTokens}
+      maxTokens={stats.maxTokens}
+      cost={stats.cost}
       {view}
       onview={(v) => (view = v)}
     />

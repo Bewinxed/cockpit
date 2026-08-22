@@ -94,6 +94,12 @@
     color: var(--ink-muted);
     padding: 20px 0;
   }
+  @media (max-width: 900px) {
+    .tr {
+      padding-left: 16px;
+      padding-right: 16px;
+    }
+  }
   .turn {
     margin-top: 14px;
   }

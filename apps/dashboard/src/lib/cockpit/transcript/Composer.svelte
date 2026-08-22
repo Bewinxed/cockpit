@@ -214,4 +214,17 @@
     box-shadow: none;
     background-image: none;
   }
+  /* Mobile: the composer stays a fixed anchor docked flush to the bottom of
+     the viewport (above the safe-area), full width, per the mock. */
+  @media (max-width: 900px) {
+    .composer {
+      position: fixed;
+      left: 12px;
+      right: 12px;
+      width: auto;
+      transform: none;
+      bottom: calc(10px + env(safe-area-inset-bottom));
+      z-index: 21;
+    }
+  }
 </style>

@@ -2702,13 +2702,22 @@ export const cockpit = {
    */
   statsOf: (
     instanceId: string
-  ): { turns: number | null; contextPct: number | null; cost: number | null } => {
+  ): {
+    turns: number | null;
+    contextPct: number | null;
+    totalTokens: number | null;
+    maxTokens: number | null;
+    cost: number | null;
+  } => {
     const t = state.sessions[instanceId];
-    if (!t) return { turns: null, contextPct: null, cost: null };
+    if (!t)
+      return { turns: null, contextPct: null, totalTokens: null, maxTokens: null, cost: null };
     const turns = t.messages.filter((m) => m.type === 'assistant').length;
     return {
       turns: turns > 0 ? turns : null,
       contextPct: t.context?.percentage ?? null,
+      totalTokens: t.context?.totalTokens ?? null,
+      maxTokens: t.context?.maxTokens ?? null,
       cost: t.totalCost ?? null,
     };
   },

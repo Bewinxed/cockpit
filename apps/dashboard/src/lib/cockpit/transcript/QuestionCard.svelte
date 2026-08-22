@@ -181,4 +181,14 @@
     color: var(--ink-muted);
     flex: 0 0 auto;
   }
+  @media (max-width: 900px) {
+    .hitl {
+      margin-left: 0;
+    }
+  }
+  @media (pointer: coarse) {
+    .opt {
+      min-height: 44px;
+    }
+  }
 </style>
