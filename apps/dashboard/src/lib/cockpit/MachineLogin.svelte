@@ -13,6 +13,7 @@
   import { toast } from 'svelte-sonner';
   import * as Dialog from '$lib/components/ui/dialog';
   import { Button } from '$lib/components/ui/button';
+  import { Input } from '$lib/components/ui/input';
   import { machineControl, type Machine } from './client.svelte';
   import type { AuthState } from '@cockpit/core';
 
@@ -107,7 +108,7 @@
       </Dialog.Description>
     </Dialog.Header>
 
-    <form class="flex flex-col gap-4" onsubmit={finish}>
+    <form class="flex flex-col gap-[var(--space-4)]" onsubmit={finish}>
       {#if url}
         <a
           href={url}
@@ -123,7 +124,7 @@
         <p class="text-sm text-muted-foreground">Asking {machine.hostname} for a login link…</p>
       {/if}
 
-      <input
+      <Input
         bind:value={code}
         autocomplete="off"
         spellcheck="false"
@@ -131,16 +132,14 @@
         aria-label="Authorisation code"
         aria-invalid={failed ? 'true' : undefined}
         disabled={busy || !url}
-        class="w-full rounded-xl border border-border bg-card px-3 py-2 font-mono text-base
-               shadow-sm sm:text-sm focus:border-ring focus:ring-2 focus:ring-ring/30
-               focus:outline-none disabled:opacity-60"
+        class="font-mono"
       />
 
       {#if failed}
         <p class="text-caption text-destructive">{failed}</p>
       {/if}
 
-      <div class="flex justify-end gap-2">
+      <div class="flex justify-end gap-[var(--space-2)]">
         <Button type="button" variant="outline" onclick={() => (open = false)} disabled={busy}>
           Cancel
         </Button>

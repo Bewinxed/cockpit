@@ -3,6 +3,7 @@
    *  sees the handful of groups currently mounted — this matches the store's
    *  text instead and asks the page to scroll the hit into view. */
   import { IconChevronDown, IconChevronUp, IconClose, IconSearch } from '$lib/icons';
+  import { Input } from '$lib/components/ui/input';
   import { untrack } from 'svelte';
   import { fly } from 'svelte/transition';
   import { quintOut } from 'svelte/easing';
@@ -99,10 +100,10 @@
   out:fly={{ y: -8, duration: 150, easing: quintOut }}
 >
   <IconSearch class="size-3.5 shrink-0 text-muted-foreground" />
-  <input
-    bind:this={input}
+  <Input
+    bind:ref={input}
     bind:value={query}
-    class="w-56 bg-transparent text-sm placeholder:text-muted-foreground focus:outline-none"
+    class="h-auto w-56 border-0 bg-transparent p-0 text-sm shadow-none focus-visible:ring-0"
     placeholder="Find in session"
     aria-label="Find in session"
     oninput={() => (current = 0)}

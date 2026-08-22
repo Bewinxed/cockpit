@@ -11,6 +11,7 @@
   import type { PendingPermission } from './client.svelte';
   import { questionAnswer, questionDismissal } from './question';
   import { Button } from '$lib/components/ui/button';
+  import { Input } from '$lib/components/ui/input';
 
   /* shadcn <Button> dressed on the DESIGN.md scale — never the stock ladder.
      Send answer is a primary, non-destructive action → the never-flat brand
@@ -229,14 +230,12 @@
             <!-- The tool tells the model not to offer an "Other" because this is
                  where it comes from; without it the only answer to four options
                  the reader disagrees with is to dismiss the question. -->
-            <input
+            <Input
               type="text"
               disabled={sent}
               aria-label="Answer in your own words"
               placeholder="Or answer in your own words…"
-              class="border-border bg-card text-foreground placeholder:text-muted-foreground
-                     focus:border-primary/50 focus:ring-primary/20 w-full rounded-[var(--radius-control)] border px-[var(--space-3)] py-[var(--space-2)]
-                     text-sm focus:ring-2 focus:outline-none disabled:opacity-60"
+              class="text-sm"
               value={custom[index] ?? ''}
               oninput={(event) => type(index, event.currentTarget.value)}
               onfocus={() => (current = index)}

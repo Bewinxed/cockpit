@@ -16,6 +16,7 @@
   import { toast } from 'svelte-sonner';
   import * as Dialog from '$lib/components/ui/dialog';
   import { Button } from '$lib/components/ui/button';
+  import { Input } from '$lib/components/ui/input';
   import { machineControl, type Machine } from './client.svelte';
   import type { AuthState } from '@cockpit/core';
 
@@ -73,8 +74,8 @@
       </Dialog.Description>
     </Dialog.Header>
 
-    <form class="flex flex-col gap-3" onsubmit={unlock}>
-      <input
+    <form class="flex flex-col gap-[var(--space-3)]" onsubmit={unlock}>
+      <Input
         type="password"
         bind:value={password}
         autocomplete="current-password"
@@ -83,9 +84,6 @@
         aria-invalid={failed ? 'true' : undefined}
         aria-describedby={failed ? 'unlock-error' : 'unlock-note'}
         disabled={busy}
-        class="w-full rounded-md border border-border bg-background px-3 py-2 text-base sm:text-sm
-               focus:border-ring focus:ring-2 focus:ring-ring/30 focus:outline-none
-               disabled:opacity-60"
       />
 
       {#if failed}
@@ -96,7 +94,7 @@
         </p>
       {/if}
 
-      <div class="flex justify-end gap-2">
+      <div class="flex justify-end gap-[var(--space-2)]">
         <Button type="button" variant="outline" onclick={() => (open = false)} disabled={busy}>
           Cancel
         </Button>

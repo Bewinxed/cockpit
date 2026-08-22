@@ -7,6 +7,7 @@
   import { tick } from 'svelte';
   import DirectoryPicker from '$lib/components/features/DirectoryPicker.svelte';
   import { Button } from '$lib/components/ui/button';
+  import { Input } from '$lib/components/ui/input';
   import * as Popover from '$lib/components/ui/popover';
   import * as Select from '$lib/components/ui/select';
   import { IconPlus, IconSpinner } from '$lib/icons';
@@ -93,14 +94,13 @@
     <form class="flex flex-col gap-3" onsubmit={create}>
       <div class="flex flex-col gap-1">
         <label for="project-name" class="text-micro text-muted-foreground">Name</label>
-        <input
+        <Input
           id="project-name"
-          bind:this={nameInput}
+          bind:ref={nameInput}
           bind:value={name}
           placeholder={dir ? leaf(dir) : 'What you call it'}
           autocomplete="off"
           spellcheck="false"
-          class="input"
           oninput={() => (error = null)}
         />
       </div>
@@ -129,13 +129,13 @@
 
       <div class="flex flex-col gap-1">
         <label for="project-cwd" class="text-micro text-muted-foreground">Directory</label>
-        <input
+        <Input
           id="project-cwd"
           bind:value={cwd}
           placeholder="/home/you/project"
           autocomplete="off"
           spellcheck="false"
-          class="input font-mono"
+          class="font-mono"
           oninput={() => (error = null)}
         />
       </div>
