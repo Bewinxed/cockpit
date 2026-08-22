@@ -10,7 +10,7 @@
    * Ported from mocks/v5-workspace.html (.tabstrip): the active tab is raised
    * off the strip and carries strong ink, so the selection survives greyscale.
    */
-  import { onMount, type Component } from 'svelte';
+  import { onMount, untrack, type Component } from 'svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { IconBoxDuo, IconClose } from '$lib/icons';
@@ -52,7 +52,18 @@
     mounted = true;
   });
 
-  const served = $derived(((page.data as { tabs?: ServerTab[] }).tabs ?? []).map(
+  const servedTabs = $derived((page.data as { tabs?: ServerTab[] }).tabs ?? []);
+
+  /**
+   * What the server called each tab. Held as the client's own fallback, because
+   * for a beat after mount the client knows LESS than the server did: the fleet
+   * rows arrive over the socket, so a tab whose name came from its folder would
+   * drop to a bare id until they land. Falling back to the server's own answer
+   * is what makes the handover invisible for every tab, not just the open one.
+   */
+  const servedLabels = $derived(new Map(servedTabs.map((tab) => [tab.id, tab.label])));
+
+  const served = $derived(servedTabs.map(
     (tab): Tab => ({
       id: tab.id,
       href: tab.href,
@@ -62,35 +73,65 @@
     })
   ));
 
-  const held = $derived.by((): Tab[] =>
-    workingSet.order.map((id) => {
-      const row = cockpit.instances.find((instance) => instance.id === id);
-      const view = cockpit.session(id);
-      // A stored session addresses itself with its machine/cwd/harness; drop
-      // that and /session/{id} opens a different session with the same id. Live
-      // sessions have no context and are addressed by id alone.
-      const ctx = workingSet.contextOf(id);
-      const href = ctx
-        ? `/session/${id}?${new URLSearchParams({ machine: ctx.machine, cwd: ctx.cwd, harness: ctx.harness })}`
-        : `/session/${id}`;
-      return {
-        id,
-        href,
-        // The same helper the header names the session with, so the tab and the
-        // bar under it can never be reading two different conversations.
-        label: resolveSessionTitle({
-          title: row?.title,
-          firstMessage: view?.messages.find((m) => m.type === 'user' && m.content.trim())?.content,
-          cwd: view?.cwd || row?.cwd || ctx?.cwd,
-          id,
-        }),
-        hue: markHue(view?.cwd || row?.cwd || ctx?.cwd || id),
-        sprite: sessionSprite(id),
-      };
-    })
-  );
+  /**
+   * One tab, named. `named` says whether the label came from what the session
+   * IS — a title somebody or the harness gave it, or the first thing it was
+   * asked — rather than from the folder-and-id fallback. Only a named label is
+   * worth remembering: the fallback is what the server can work out for itself.
+   */
+  function resolve(id: string): Tab & { named: boolean } {
+    const row = cockpit.instances.find((instance) => instance.id === id);
+    const view = cockpit.session(id);
+    // A stored session addresses itself with its machine/cwd/harness; drop
+    // that and /session/{id} opens a different session with the same id. Live
+    // sessions have no context and are addressed by id alone.
+    const ctx = workingSet.contextOf(id);
+    const href = ctx
+      ? `/session/${id}?${new URLSearchParams({ machine: ctx.machine, cwd: ctx.cwd, harness: ctx.harness })}`
+      : `/session/${id}`;
+    const title = row?.title;
+    const firstMessage = view?.messages.find((m) => m.type === 'user' && m.content.trim())?.content;
+    const named = !!title?.trim() || !!firstMessage?.trim();
+    // The same helper the header names the session with, so the tab and the
+    // bar under it can never be reading two different conversations.
+    const resolved = resolveSessionTitle({
+      title,
+      firstMessage,
+      cwd: view?.cwd || row?.cwd || ctx?.cwd,
+      id,
+    });
+    return {
+      id,
+      href,
+      // Until the fleet and the transcript have both answered, a conversation
+      // this browser has named before keeps that name. Falling back to the
+      // folder for the moment between mount and the first frame is the flash
+      // the remembered title exists to remove — in the other direction.
+      label: named ? resolved : (workingSet.titleOf(id) ?? servedLabels.get(id) ?? resolved),
+      hue: markHue(view?.cwd || row?.cwd || ctx?.cwd || id),
+      sprite: sessionSprite(id),
+      named,
+    };
+  }
+
+  const held = $derived.by(() => workingSet.order.map(resolve));
 
   const tabs = $derived(mounted ? held : served);
+
+  // Remember every name the strip works out, so the SERVER can draw the strip
+  // with it next time. A title is mostly derived from the transcript, which a
+  // render has no access to — so without this the tab was server-rendered as
+  // its folder and renamed itself the moment the page hydrated. Writing it back
+  // is what makes the server's label the final one.
+  $effect(() => {
+    const named = held.filter((tab) => tab.named).map((tab) => [tab.id, tab.label] as const);
+    // Untracked: the write reads the record it is writing to (the cookie is the
+    // whole set serialised), and a tracked effect would take its own write as a
+    // dependency and re-run itself for as long as it kept changing anything.
+    untrack(() => {
+      for (const [id, label] of named) workingSet.setTitle(id, label);
+    });
+  });
 
   /** Closing the tab you are reading leaves you on the board, not on a dead id. */
   function close(id: string) {

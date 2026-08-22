@@ -33,6 +33,15 @@ export interface Visit {
   machine?: string | null;
   cwd?: string;
   harness?: string;
+  /**
+   * What this conversation resolved to being CALLED, last time the strip
+   * resolved it. Kept because the server renders the strip from this record and
+   * has no transcript to derive a name from — without it a tab was drawn as its
+   * folder and renamed itself to the real title the moment the page hydrated.
+   * Only ever a name derived from what the session IS (a given title, or what
+   * it was first asked), never the folder or id placeholder.
+   */
+  title?: string;
 }
 
 /** The query a stored session's tab needs to rebuild the URL that opened it. */
@@ -148,6 +157,25 @@ export const workingSet = {
       }
       visits.splice(coldest, 1);
     }
+    save();
+  },
+
+  /** The remembered name, or `null` for a conversation nothing has named yet. */
+  titleOf(id: string): string | null {
+    return visits.find((visit) => visit.id === id)?.title ?? null;
+  },
+
+  /**
+   * Remembers what a conversation is called, so the next server render names it
+   * the same. Written only when the name actually changed — this is called from
+   * a render effect, and a write every pass would be a write every frame.
+   */
+  setTitle(id: string, title: string): void {
+    const at = visits.findIndex((visit) => visit.id === id);
+    if (at === -1) return;
+    const named = title.trim();
+    if (!named || visits[at].title === named) return;
+    visits[at].title = named;
     save();
   },
 

@@ -16,6 +16,8 @@ interface Visit {
   machine?: string | null;
   cwd?: string;
   harness?: string;
+  /** What the strip last resolved this conversation to being called. */
+  title?: string;
 }
 
 /**
@@ -111,7 +113,12 @@ export const load: LayoutServerLoad = async ({ cookies, fetch, url }) => {
     return {
       id: visit.id,
       href,
-      label: resolveSessionTitle({ title: row?.title, cwd, id: visit.id }),
+      // The name the strip itself resolved, when it has resolved one. A title
+      // is mostly derived from the FIRST THING THE SESSION WAS ASKED, which
+      // lives in the transcript — so a server with only the fleet's rows would
+      // fall to the folder leaf and be corrected on hydration. Reading the
+      // browser's own answer back out of the cookie is what removes that.
+      label: visit.title || resolveSessionTitle({ title: row?.title, cwd, id: visit.id }),
       seed: cwd || visit.id,
     };
   });
