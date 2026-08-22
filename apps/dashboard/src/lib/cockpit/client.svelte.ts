@@ -1743,6 +1743,24 @@ export async function loadCatalog(machineId: string): Promise<void> {
  * the event loop free in between. `onPublished` runs once the last turns are on
  * screen, and the loop stops early if a later read for this view supersedes it.
  */
+/**
+ * The `/` menu, harvested from a hydrated transcript. `commands.names` is set
+ * only by the live `system.init` frame handler — but a session read back from
+ * history (a reload, a stored session, or the HTTP stream) never runs that
+ * handler, so its command menu came up empty and typing `/` opened nothing.
+ * `system.init` is re-emitted every turn and carries the current list, so the
+ * newest one in what was just mapped is the session's own word for it.
+ */
+function harvestCommands(target: SessionState, messages: Message[]): void {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const init = messages[i];
+    if (init.type !== 'system.init') continue;
+    if (init.metadata?.slashCommands) target.commands.names = init.metadata.slashCommands;
+    if (init.metadata?.skills) target.commands.skills = init.metadata.skills;
+    return;
+  }
+}
+
 async function ingestTranscript(
   viewId: string,
   target: SessionState,
@@ -1761,6 +1779,7 @@ async function ingestTranscript(
     const { messages, subagents } = mapTranscript(viewId, transcript);
     target.messages = messages;
     target.subagents = subagents;
+    harvestCommands(target, messages);
     onPublished?.();
     return;
   }
@@ -1769,6 +1788,7 @@ async function ingestTranscript(
   const newest = mapTranscript(viewId, transcript.slice(bounds[bounds.length - 1]));
   target.messages = newest.messages;
   target.subagents = newest.subagents;
+  harvestCommands(target, newest.messages);
   target.hydrating = true;
   target.loading = false;
   onPublished?.();
@@ -2030,6 +2050,10 @@ export async function streamHistory({
     if (chunks === 0) {
       target.messages = mapped.messages;
       target.subagents = mapped.subagents;
+      // The tail chunk is newest-first, so it carries the latest `system.init`:
+      // harvest the `/` menu from it, which the live-frame handler is otherwise
+      // the only thing that sets.
+      harvestCommands(target, mapped.messages);
       // A transcript that already has turns in it is a session that already
       // started, so the banner announcing the start has had its moment.
       if (chunk.length > 0) target.initialized = true;
