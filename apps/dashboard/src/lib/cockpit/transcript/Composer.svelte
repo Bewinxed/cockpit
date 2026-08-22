@@ -91,16 +91,56 @@
     entries: Entry[];
   }
 
-  /** The `/` families, in the order they read, with the heading each wears. A
-      skill is the app's own, a command the user's, then the harness built-ins,
-      then anything an MCP server lent — most-specific-to-least. */
-  const KIND_HEADING: Record<AvailableCommand['type'], string> = {
-    skill: 'Skills',
-    custom: 'Commands',
-    builtin: 'Built-in',
-    mcp: 'MCP',
-  };
-  const KIND_ORDER: AvailableCommand['type'][] = ['skill', 'custom', 'builtin', 'mcp'];
+  /**
+   * Which section a command belongs to. A plugin-heavy session's `/` list is
+   * almost entirely namespaced (`interfaces:better-ui`, `code-foundations:build`)
+   * — grouping by the four coarse families would file them all under one
+   * "Commands" heading, which is the mess. So the section is the command's
+   * SOURCE when it has one: its plugin, or the MCP server that lent it. Skills
+   * and bare built-ins, which carry no namespace, keep their family name.
+   *
+   * `rank` orders the sections: skills first, then plugins (by name), then the
+   * built-ins, then MCP servers (by name).
+   */
+  function sectionMeta(entry: Entry): { key: string; heading: string; rank: number; sub: string } {
+    if (entry.kind === 'skill') return { key: 'skills', heading: 'Skills', rank: 0, sub: '' };
+    if (entry.kind === 'mcp') {
+      const server = entry.source ?? '';
+      return { key: `mcp:${server}`, heading: server || 'MCP', rank: 3, sub: server };
+    }
+    if (entry.source) return { key: `src:${entry.source}`, heading: entry.source, rank: 1, sub: entry.source };
+    if (entry.kind === 'builtin') return { key: 'builtin', heading: 'Built-in', rank: 2, sub: '' };
+    return { key: 'commands', heading: 'Commands', rank: 1, sub: '' };
+  }
+
+  /**
+   * The name a row shows. Under a source heading the namespace is redundant, so
+   * `interfaces:better-ui` reads as `/better-ui` beneath "interfaces", and an
+   * MCP prompt drops its `mcp__server__` prefix. The value inserted keeps the
+   * full name — only the label is shortened.
+   */
+  function displayLabel(name: string, source?: string): string {
+    if (name.startsWith('mcp__')) {
+      const rest = name.split('__').slice(2).join('__');
+      return `/${rest || name}`;
+    }
+    if (source && name.startsWith(`${source}:`)) return `/${name.slice(source.length + 1)}`;
+    return `/${name}`;
+  }
+
+  /**
+   * The prose a row shows. Plugin descriptions often lead with their own name in
+   * parens — `(code-foundations) Execute…` — which is exactly the section heading
+   * above the row, so it is stripped here rather than printed twice.
+   */
+  function cleanDetail(description?: string, argumentHint?: string, source?: string): string | undefined {
+    const prose = description?.trim();
+    if (prose) {
+      if (source && prose.startsWith(`(${source})`)) return prose.slice(source.length + 2).trim();
+      return prose;
+    }
+    return argumentHint || undefined;
+  }
 
   /** Where the caret is, so the token under it can be found on every keystroke. */
   let caret = $state(0);
@@ -138,11 +178,11 @@
         ? commands.map((command) => ({
             id: `/${command.name}`,
             insert: `/${command.name}`,
-            // The family is the section heading now, so the row shows the prose,
-            // its argument shape, or nothing — never the word "builtin" as a
-            // stand-in description.
-            label: `/${command.name}`,
-            detail: command.description || command.argumentHint || undefined,
+            // The source is the section heading now, so the row shows the short
+            // name, then its prose or argument shape — never the word "builtin"
+            // as a stand-in description.
+            label: displayLabel(command.name, command.source),
+            detail: cleanDetail(command.description, command.argumentHint, command.source),
             kind: command.type,
             source: command.source,
           }))
@@ -154,29 +194,30 @@
           }));
     return rows
       .filter((row) => !needle || row.id.toLowerCase().includes(needle))
-      .slice(0, 40);
+      // Grouped and scrollable, so the cap only guards a pathological list; a
+      // real session's commands all fit inside it and read under their source.
+      .slice(0, 100);
   });
 
   /**
-   * The same entries, cut into titled sections. `/` sections by family in
-   * `KIND_ORDER`; `@` is one "Mentions" section. Empty families are dropped, so
-   * a session with no skills shows no Skills heading.
+   * The entries cut into titled sections. `/` groups by source — one heading per
+   * plugin and per MCP server, with skills and built-ins under their family name
+   * — ordered skills, plugins (by name), built-ins, MCP servers. `@` is one
+   * "Mentions" section. A section with no rows is never emitted.
    */
   const sections = $derived.by((): Section[] => {
     if (entries.length === 0) return [];
     if (token?.sigil !== '/') return [{ key: 'mentions', heading: 'Mentions', entries }];
-    const byKind = new Map<AvailableCommand['type'], Entry[]>();
+    const groups = new Map<string, { heading: string; rank: number; sub: string; entries: Entry[] }>();
     for (const entry of entries) {
-      const kind = entry.kind ?? 'custom';
-      const bucket = byKind.get(kind);
-      if (bucket) bucket.push(entry);
-      else byKind.set(kind, [entry]);
+      const meta = sectionMeta(entry);
+      const bucket = groups.get(meta.key);
+      if (bucket) bucket.entries.push(entry);
+      else groups.set(meta.key, { heading: meta.heading, rank: meta.rank, sub: meta.sub, entries: [entry] });
     }
-    return KIND_ORDER.filter((kind) => byKind.has(kind)).map((kind) => ({
-      key: kind,
-      heading: KIND_HEADING[kind],
-      entries: byKind.get(kind) ?? [],
-    }));
+    return [...groups.values()]
+      .sort((a, b) => a.rank - b.rank || a.sub.localeCompare(b.sub) || a.heading.localeCompare(b.heading))
+      .map((group) => ({ key: `${group.rank}:${group.heading}`, heading: group.heading, entries: group.entries }));
   });
 
   const menuOpen = $derived(!dismissed && entries.length > 0);
@@ -372,7 +413,6 @@
                   <Command.Item value={entry.id} onSelect={() => choose(entry)}>
                     <span class="e-label">{entry.label}</span>
                     {#if entry.detail}<span class="e-detail">{entry.detail}</span>{/if}
-                    {#if entry.source}<span class="e-source">{entry.source}</span>{/if}
                   </Command.Item>
                 {/each}
               </Command.Group>
@@ -537,7 +577,7 @@
   :global(.menu [data-slot='command-group'] + [data-slot='command-group']) {
     border-top: 1px solid var(--border-hairline);
   }
-  :global(.menu [data-slot='command-group'] [cmdk-group-heading]) {
+  :global(.menu [data-slot='command-group'] [data-command-group-heading]) {
     padding: var(--space-1) var(--space-2) var(--space-2);
     font-size: var(--text-xs);
     font-weight: var(--weight-medium);
@@ -587,18 +627,6 @@
     font-size: var(--text-sm);
     color: var(--ink-muted);
     flex: 1 1 auto;
-  }
-  /* The origin tag: which plugin or MCP server lent the command, held to the
-     right in a quiet well so it reads as provenance, not as the name. */
-  .e-source {
-    flex: 0 0 auto;
-    margin-left: auto;
-    padding: 1px var(--space-2);
-    border-radius: var(--radius-mark);
-    background: var(--surface-sunken);
-    font-size: var(--text-xs);
-    color: var(--ink-muted);
-    white-space: nowrap;
   }
 
   /* Attach + send, together and bottom-aligned, so they hold their box as the
