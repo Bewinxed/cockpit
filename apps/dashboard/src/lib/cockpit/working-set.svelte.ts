@@ -42,18 +42,45 @@ export interface VisitContext {
   harness: string;
 }
 
-const load = (): Visit[] => {
-  if (typeof localStorage === 'undefined') return [];
+const parse = (raw: string | null | undefined): Visit[] => {
+  if (!raw) return [];
   try {
-    const stored = localStorage.getItem(KEY);
-    if (!stored) return [];
-    const parsed = JSON.parse(stored) as Visit[];
+    const parsed = JSON.parse(raw) as Visit[];
     return Array.isArray(parsed)
       ? parsed.filter((visit) => typeof visit?.id === 'string' && typeof visit?.at === 'number')
       : [];
   } catch {
     return [];
   }
+};
+
+/** The cookie copy, which is what the server rendered the strip from. */
+const fromCookie = (): string | null => {
+  if (typeof document === 'undefined') return null;
+  const match = new RegExp(`(?:^|;\\s*)${KEY}=([^;]*)`).exec(document.cookie);
+  if (!match) return null;
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * localStorage first, the cookie behind it. The cookie is the copy the SERVER
+ * drew the tab strip from, so falling back to it is what stops the strip
+ * shrinking on mount when the two have come apart — a cleared localStorage, a
+ * cookie restored from a profile sync.
+ */
+const load = (): Visit[] => {
+  let stored: string | null = null;
+  try {
+    if (typeof localStorage !== 'undefined') stored = localStorage.getItem(KEY);
+  } catch {
+    // A browser that will not read storage still has the cookie.
+  }
+  const held = parse(stored);
+  return held.length > 0 ? held : parse(fromCookie());
 };
 
 const visits = $state<Visit[]>(load());

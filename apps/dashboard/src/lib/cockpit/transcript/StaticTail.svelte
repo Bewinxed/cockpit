@@ -38,6 +38,7 @@
 <!-- Not `role="log"`: the live region belongs to the transcript that will
      announce into it. Two logs on one screen would double every announcement
      for the instant both exist. -->
+<div class="tail">
 <div class="tr" aria-label="Session transcript">
   {#if rows.length === 0}
     <p class="empty">Loading transcript…</p>
@@ -73,16 +74,28 @@
     </div>
   {/each}
 </div>
+</div>
 
 <style>
+  /**
+   * Pinned to the bottom, not scrolled to it. A server cannot scroll, and the
+   * reader lands on the LATEST message — so the tail is laid out from the
+   * bottom edge up and whatever runs off the top is clipped. The transcript
+   * that replaces this opens on the same row, so the swap does not jump.
+   */
+  .tail {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+  }
   /* Deliberately identical to Transcript.svelte's `.tr` — the scroller the
      virtualized transcript replaces this with, down to the asymmetric ledger
      padding, so the swap does not shift a single row. */
   .tr {
-    flex: 1 1 auto;
-    overflow-y: auto;
     padding: 0 var(--space-6) calc(var(--space-8) * 3) var(--space-7);
-    min-height: 0;
     position: relative;
   }
   .empty {
