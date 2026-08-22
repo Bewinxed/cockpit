@@ -104,8 +104,10 @@
       <path d={harnessGlyphPath(harness)} />
     </svg>
   </span>
-  <h1>{title}</h1>
-  <span class="path">{machineName} : {cwd}</span>
+  <div class="id">
+    <h1>{title}</h1>
+    <span class="path">{machineName} : {cwd}</span>
+  </div>
 
   {#if pill.status !== 'idle'}
     <span class="pill {pill.status}">{pill.label}</span>
@@ -119,7 +121,7 @@
       value={view}
       onValueChange={pickView}
       aria-label="Transcript view"
-      class="view-toggle"
+      class="view-toggle inline-toggle"
     >
       <ToggleGroup.Item value="chat" aria-label="Chat view" class="view-item">
         <IconChat />
@@ -136,18 +138,45 @@
         {#snippet child({ props })}
           <Button
             {...props}
-            variant="outline"
+            variant="ghost"
             size="sm"
-            class="settings-trigger {permissionMode === 'bypassPermissions' ? 'text-warning' : ''}"
-            aria-label="Session settings — model, permission mode and effort"
+            class="settings-trigger {permissionMode === 'bypassPermissions' ? 'is-bypass' : ''}"
+            aria-label="Session settings — model {modelText}, permission {permissionText}"
           >
-            <IconSettings class="size-4 opacity-70" />
+            <IconSettings class="settings-gear" />
             <span class="settings-label">{modelText} · {permissionText}</span>
-            <IconUnfold class="size-4 shrink-0 opacity-50" />
+            <IconUnfold class="settings-chev" />
           </Button>
         {/snippet}
       </Popover.Trigger>
       <Popover.Content align="end" class="w-[min(20rem,calc(100vw-2rem))] settings-panel">
+        <!-- The rows the collapsed mobile line folds away: what the run reads
+             at a glance (harness · turns · context · cost) and the view switch.
+             Desktop keeps these inline in the bar, so this block is mobile-only. -->
+        <div class="sh-compact">
+          <div class="sh-meta-row">
+            <span>{harness}</span>
+            {#if turns !== null}<span><b>{turns}</b> turns</span>{/if}
+            {#if totalTokens !== null && maxTokens}<span><b>{k(totalTokens)}</b>/{k(maxTokens)} ctx</span>{/if}
+            {#if cost !== null}<span><b>${cost.toFixed(2)}</b></span>{/if}
+          </div>
+          <ToggleGroup.Root
+            type="single"
+            value={view}
+            onValueChange={pickView}
+            aria-label="Transcript view"
+            class="view-toggle compact-toggle"
+          >
+            <ToggleGroup.Item value="chat" aria-label="Chat view" class="view-item">
+              <IconChat />
+              <span>Chat</span>
+            </ToggleGroup.Item>
+            <ToggleGroup.Item value="flow" aria-label="Flow view" class="view-item">
+              <IconFlow />
+              <span>Flow</span>
+            </ToggleGroup.Item>
+          </ToggleGroup.Root>
+        </div>
         <div class="ctl">
           <span class="ctl-label" id="sh-model-label">Model</span>
           <ModelCombobox
@@ -283,6 +312,15 @@
   .mark.m7 { background-color: var(--mark-7); }
   .mark.m8 { background-color: var(--mark-8); }
 
+  /* Title + path as one identity block: inline on desktop, stacked on mobile
+     so the whole identity claims a single row instead of three. */
+  .id {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-2);
+    min-width: 0;
+    flex: 0 1 auto;
+  }
   h1 {
     font-size: var(--text-md);
     font-weight: var(--weight-strong);
@@ -335,39 +373,105 @@
 
   /* The shadcn toggle-group is a rounded segmented control; these token rules
      seat it in the Quiet Ledger surface ladder (inset field, raised active). */
-  .mid :global(.view-toggle) {
+  /* Global (not scoped under .mid): the view switch appears both inline on the
+     desktop bar and inside the mobile disclosure, and both must look the same. */
+  :global(.view-toggle) {
     border: 1px solid var(--border-control);
     background: var(--surface-field);
     border-radius: var(--radius-control);
     padding: 2px;
     gap: 2px;
   }
-  .mid :global(.view-item) {
+  :global(.view-toggle .view-item) {
     height: 26px;
-    gap: 5px;
+    gap: var(--space-1);
     padding: 0 var(--space-3);
     border-radius: calc(var(--radius-control) - 2px);
     color: var(--ink-muted);
     font-size: var(--text-sm);
     font-weight: var(--weight-medium);
   }
-  .mid :global(.view-item[data-state='on']) {
+  :global(.view-toggle .view-item[data-state='on']) {
     background: var(--surface-raised);
     color: var(--ink-strong);
     box-shadow: var(--shadow-tile);
     font-weight: var(--weight-strong);
   }
-  .mid :global(.view-item svg) {
+  :global(.view-toggle .view-item svg) {
     width: 14px;
     height: 14px;
   }
+  /* The mobile disclosure's view switch stretches full-width in the panel. */
+  :global(.compact-toggle) {
+    width: 100%;
+  }
+  :global(.compact-toggle .view-item) {
+    flex: 1 1 0;
+    justify-content: center;
+  }
+  /* Quiet inline meta, not a plastered-on outline button: muted ink, no border
+     or fill at rest, a hairline surface only on hover — the same register as
+     the harness/turns/context meta on the right. */
   .mid :global(.settings-trigger) {
-    max-width: 42ch;
+    height: auto;
+    max-width: 100%;
+    padding: var(--space-1) var(--space-2);
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    border-radius: var(--radius-control);
+    gap: var(--space-1);
+    font-size: var(--text-sm);
+    font-weight: var(--weight-medium);
+    color: var(--ink-muted);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .mid :global(.settings-trigger:hover) {
+      background: var(--surface-hover);
+      color: var(--ink-body);
+    }
+  }
+  .mid :global(.settings-trigger.is-bypass) {
+    color: var(--status-attn-ink);
+  }
+  .mid :global(.settings-chev) {
+    width: 13px;
+    height: 13px;
+    flex-shrink: 0;
+    opacity: 0.6;
+  }
+  /* The gear stands in for the model·permission label once the label is folded
+     away on mobile, so the disclosure is still legible as "session settings". */
+  .mid :global(.settings-gear) {
+    display: none;
+    width: 17px;
+    height: 17px;
+    flex-shrink: 0;
+    opacity: 0.7;
   }
   .settings-label {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  /* The disclosure's mobile-only head: the glance meta and the view switch that
+     the collapsed summary line folds away (JOURNEY §Narrow width). */
+  .sh-compact {
+    display: none;
+  }
+  .sh-meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-3);
+    font-size: var(--text-sm);
+    color: var(--ink-muted);
+  }
+  .sh-meta-row b {
+    font-weight: var(--weight-strong);
+    color: var(--ink-body);
+    font-variant-numeric: tabular-nums;
   }
 
   .ctl {
@@ -414,19 +518,51 @@
       padding: var(--space-2) var(--space-4);
       row-gap: var(--space-2);
     }
+    /* One summary line: back · mark · title · state · disclosure. Identity
+       shrinks (basis 0, min-width 0) so the title ellipsizes and everything
+       stays on a single row; machine:path is desktop chrome the tab strip
+       already implies, so it's dropped here. The view switch, the glance meta,
+       and the model/permission/effort controls all fold into the one
+       disclosure (JOURNEY §Narrow width: "collapses to a single summary line
+       with the rest behind a disclosure"). */
+    .id {
+      flex: 1 1 0;
+      min-width: 0;
+    }
     h1 {
       max-width: 100%;
+      min-width: 0;
+    }
+    .path {
+      display: none;
     }
     .mid {
       margin-left: 0;
-      width: 100%;
+      flex: 0 0 auto;
+    }
+    .mid :global(.inline-toggle) {
+      display: none;
     }
     .mid :global(.settings-trigger) {
-      flex: 1 1 auto;
-      min-width: 0;
+      padding: var(--space-1);
+    }
+    .mid :global(.settings-gear) {
+      display: block;
+    }
+    .settings-label,
+    .mid :global(.settings-chev) {
+      display: none;
     }
     .meta {
       display: none;
+    }
+    .sh-compact {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-3);
+      margin-bottom: var(--space-3);
+      padding-bottom: var(--space-3);
+      border-bottom: 1px solid var(--border-hairline);
     }
   }
 
