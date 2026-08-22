@@ -22,6 +22,7 @@
     TextField,
   } from '$lib/outpost';
   import SpawnPanel from '$lib/cockpit/SpawnPanel.svelte';
+  import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
   import {
     cockpit,
     isFailed,
@@ -173,6 +174,11 @@
     { value: 'idle', label: 'Idle' },
   ];
   let stateFilter = $state(0);
+  const SORTS: { value: 'recent' | 'name'; label: string }[] = [
+    { value: 'recent', label: 'Last active' },
+    { value: 'name', label: 'Name (A–Z)' },
+  ];
+  let sortBy = $state(0);
   let pageNo = $state(1);
 
   const machineName = $derived(
@@ -180,19 +186,6 @@
       ? (rows.find((row) => row.machineId === machineFilter)?.machine ?? machineFilter)
       : 'All machines'
   );
-
-  function cycleMachine() {
-    const ids = cockpit.machines.map((machine) => machine.machineId);
-    const next = ids.indexOf(machineFilter) + 1;
-    machineFilter =
-      next > 0 && next < ids.length ? ids[next] : machineFilter ? '' : (ids[0] ?? '');
-    pageNo = 1;
-  }
-
-  function cycleState() {
-    stateFilter = (stateFilter + 1) % STATES.length;
-    pageNo = 1;
-  }
 
   const filtered = $derived(
     rows.filter((row) => {
@@ -205,8 +198,14 @@
     })
   );
 
-  const pageCount = $derived(Math.max(1, Math.ceil(filtered.length / PAGE_SIZE)));
-  const paged = $derived(filtered.slice((pageNo - 1) * PAGE_SIZE, pageNo * PAGE_SIZE));
+  const sorted = $derived(
+    SORTS[sortBy].value === 'name'
+      ? [...filtered].sort((a, b) => a.title.localeCompare(b.title))
+      : [...filtered].sort((a, b) => (b.at ?? 0) - (a.at ?? 0))
+  );
+
+  const pageCount = $derived(Math.max(1, Math.ceil(sorted.length / PAGE_SIZE)));
+  const paged = $derived(sorted.slice((pageNo - 1) * PAGE_SIZE, pageNo * PAGE_SIZE));
 
   // A filter that shrinks the list out from under the current page leaves it
   // showing nothing at all; the first page always has rows.
@@ -335,9 +334,51 @@
           >
             {#snippet lead()}<IconSearch />{/snippet}
           </TextField>
-          <FilterSelect label={machineName} onclick={cycleMachine} />
-          <FilterSelect label={STATES[stateFilter].label} onclick={cycleState} />
-          <FilterSelect label="Last active" />
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger>
+              {#snippet child({ props })}<FilterSelect label={machineName} {...props} />{/snippet}
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Content align="start">
+              <DropdownMenu.Item onSelect={() => ((machineFilter = ''), (pageNo = 1))}>
+                All machines
+              </DropdownMenu.Item>
+              {#each cockpit.machines as m (m.machineId)}
+                <DropdownMenu.Item
+                  onSelect={() => ((machineFilter = m.machineId), (pageNo = 1))}
+                >
+                  {machineLabel(m.hostname)}
+                </DropdownMenu.Item>
+              {/each}
+            </DropdownMenu.Content>
+          </DropdownMenu.Root>
+
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger>
+              {#snippet child({ props })}
+                <FilterSelect label={STATES[stateFilter].label} {...props} />
+              {/snippet}
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Content align="start">
+              {#each STATES as s, i (s.label)}
+                <DropdownMenu.Item onSelect={() => ((stateFilter = i), (pageNo = 1))}>
+                  {s.label}
+                </DropdownMenu.Item>
+              {/each}
+            </DropdownMenu.Content>
+          </DropdownMenu.Root>
+
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger>
+              {#snippet child({ props })}
+                <FilterSelect label={SORTS[sortBy].label} {...props} />
+              {/snippet}
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Content align="start">
+              {#each SORTS as s, i (s.value)}
+                <DropdownMenu.Item onSelect={() => (sortBy = i)}>{s.label}</DropdownMenu.Item>
+              {/each}
+            </DropdownMenu.Content>
+          </DropdownMenu.Root>
           <Button class="exp" onclick={exportCsv}>
             <IconDownload />
             Export CSV
