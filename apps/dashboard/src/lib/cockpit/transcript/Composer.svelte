@@ -231,13 +231,13 @@
     gap: var(--space-2);
     box-shadow: var(--shadow-lifted);
   }
-  /* Focused: the pill unfolds into a panel — textarea grows, affordances
-     reveal, and the send button drops to the bottom-right. */
+  /* Focused: the pill grows taller and squares its radius a touch, but stays a
+     single row — the textarea grows on the left while attach + send stay pinned
+     inline at the bottom-right, never dropping to a wasted row of their own. */
   .composer:focus-within .cin {
     border-radius: var(--radius-panel);
-    flex-direction: column;
-    align-items: stretch;
-    padding: var(--space-3) var(--space-3) var(--space-2);
+    align-items: flex-end;
+    padding: var(--space-2) var(--space-1) var(--space-2) var(--space-3);
   }
   textarea {
     flex: 1 1 auto;
@@ -281,13 +281,9 @@
       opacity var(--c-300) var(--e-in),
       transform var(--c-300) var(--e-in);
   }
-  .composer:focus-within .aff-row {
-    position: static;
-    grid-template-rows: 1fr;
-    opacity: 1;
-    transform: none;
-    pointer-events: auto;
-  }
+  /* The affordance hints stay out of flow even on focus: unfolding them turned
+     the pill into a column and pushed attach + send onto a wasted row of their
+     own. `/` and `@` still work by typing; the placeholder carries the intent. */
   .aff-row > .inner {
     overflow: hidden;
     display: flex;
@@ -422,7 +418,9 @@
       right: var(--space-3);
       width: auto;
       transform: none;
-      bottom: var(--space-2);
+      /* Clear the home indicator / gesture bar — the resting gap plus the safe
+         area inset, so the composer never sits under the rounded-screen chrome. */
+      bottom: calc(var(--space-2) + env(safe-area-inset-bottom));
     }
     /* The Enter/Shift+Enter hint is desktop-only guidance; on a phone it just
        wraps the affordance row to a second line. */

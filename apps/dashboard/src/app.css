@@ -576,7 +576,10 @@
   :focus-visible {
     outline: 2px solid var(--ring);
     outline-offset: 2px;
-    border-radius: inherit;
+    /* No `border-radius: inherit` — it reshapes the focused element to its
+       parent's radius (ballooning focus rings, and clipping a borderless
+       textarea's text to the composer pill's corners). The outline already
+       tracks each element's own radius. */
   }
 
   /* Numbers that sit in columns line up. */
@@ -740,16 +743,6 @@
 }
 .pressable:active {
   transform: scale(0.97);
-}
-
-/* Form inputs */
-.input {
-  @apply w-full rounded-lg border border-input bg-card px-3.5 py-2 text-base sm:text-sm;
-  @apply placeholder:text-muted-foreground/70;
-  @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:border-transparent;
-  @apply disabled:cursor-not-allowed disabled:opacity-50;
-  box-shadow: var(--shadow-sm);
-  transition: box-shadow 160ms var(--ease-out-expo), border-color 160ms var(--ease-out-expo);
 }
 
 /* Two icons sharing one slot; the outgoing icon animates out too. */
