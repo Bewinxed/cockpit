@@ -219,6 +219,27 @@
     white-space: nowrap;
     min-width: 0;
   }
+  /* The in-flight tool's glyph breathes — the one live channel — so the running
+     row reads as in-progress against the still, completed rows in ToolGroup.
+     This IS the progress indicator on tool usage; done rows hold their glyph. */
+  .livetool .ic.breathe :global(svg) {
+    animation: breathe var(--breath) var(--e-toggle) infinite;
+  }
+  @keyframes breathe {
+    0%,
+    100% {
+      opacity: 0.5;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .livetool .ic.breathe :global(svg) {
+      animation: none;
+      opacity: 1;
+    }
+  }
 
   /* Per-row enter wrapper: carries the mount-only fade+rise driven imperatively
      in `enterMotion`. No box of its own — the child's margin collapses through,

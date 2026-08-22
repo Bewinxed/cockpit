@@ -35,8 +35,9 @@
   {#each messages as m (m.id ?? m.toolCallId)}
     {@const d = describe(m)}
     {@const Icon = d.icon}
-    <div class="trow">
-      <span class="ic"><Icon /></span>
+    {@const failed = m.metadata?.toolStatus === 'error'}
+    <div class="trow" class:err={failed}>
+      <span class="ic" class:err={failed}><Icon /></span>
       {#if d.label}<span class="tk">{d.label}</span>{/if}
       <span class="arg" title={[d.object, d.detail].filter(Boolean).join(' ') || undefined}>
         {#if d.object}{d.object}{/if}{#if d.detail}<span class="tail"> {d.detail}</span>{/if}
@@ -73,6 +74,11 @@
     width: 15px;
     height: 15px;
     display: block;
+  }
+  /* A failed call carries its state on the glyph — the completed row's done/failed
+     cue, next to the running row's breathing glyph in the live tool. */
+  .ic.err {
+    color: var(--data-bad);
   }
   .tk {
     font-weight: var(--weight-strong);
