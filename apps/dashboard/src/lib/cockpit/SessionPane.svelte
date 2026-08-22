@@ -88,7 +88,19 @@
 
   const title = $derived.by(() => {
     const first = session?.messages.find((m) => m.type === 'user' && m.content.trim());
-    if (first) return first.content.split('\n')[0].slice(0, 80);
+    if (first) {
+      const raw = first.content;
+      // A slash command's first message is the harness echo, which wraps the
+      // invocation in <command-message>/<command-name>. Show the command, not
+      // the raw XML tag. Otherwise strip any wrapping markup and take line one.
+      const command = /<command-(?:message|name)>([\s\S]*?)<\/command-(?:message|name)>/
+        .exec(raw)?.[1]
+        ?.trim();
+      const cleaned = (command ?? raw.replace(/<[^>]+>/g, ' '))
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (cleaned) return cleaned.slice(0, 80);
+    }
     const leaf = (session?.cwd ?? browsingCwd).split('/').filter(Boolean).pop();
     return leaf || 'session';
   });
