@@ -142,7 +142,6 @@
       <Composer
         bind:value={draft}
         busy={session.busy}
-        contextPct={stats.contextPct}
         {onsubmit}
         {onstop}
       >

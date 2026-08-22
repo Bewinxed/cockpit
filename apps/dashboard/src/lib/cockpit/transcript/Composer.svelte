@@ -12,14 +12,12 @@
   let {
     value = $bindable(''),
     busy = false,
-    contextPct = null,
     onsubmit,
     onstop,
     prompts,
   }: {
     value?: string;
     busy?: boolean;
-    contextPct?: number | null;
     onsubmit: (text: string) => void;
     onstop: () => void;
     prompts?: Snippet;
@@ -62,9 +60,6 @@
     <div class="aff-row">
       <div class="inner">
         <span>/ commands</span><span>@ mention</span><span>＋ attach</span>
-        {#if contextPct !== null}
-          <span class="ctx" title="Context window used">{Math.round(contextPct)}% context</span>
-        {/if}
         <span class="hint">Enter sends · Shift+Enter for a new line</span>
       </div>
     </div>
@@ -185,9 +180,6 @@
     padding-top: 8px;
     flex-wrap: wrap;
     row-gap: 6px;
-  }
-  .ctx {
-    font-variant-numeric: tabular-nums;
   }
   .aff-row .hint {
     margin-left: auto;
