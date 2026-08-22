@@ -471,6 +471,45 @@ const peekInit = (payload: unknown): { sessionId: string; cwd?: string } | undef
   return { sessionId: sdk.session_id, cwd: typeof sdk.cwd === 'string' ? sdk.cwd : undefined };
 };
 
+/**
+ * What a user turn actually says, as a title could use it: the text the reader
+ * typed. A user-shaped message is not always a reader — a tool result comes
+ * back on the same channel — so a turn carrying no text of its own reads as
+ * nothing here rather than as an empty name.
+ */
+const userTurnText = (message: unknown): string | undefined => {
+  if (typeof message !== 'object' || message === null) return undefined;
+  const outer = message as { type?: unknown; message?: { role?: unknown; content?: unknown } };
+  if (outer.type !== 'user') return undefined;
+  const content = outer.message?.content;
+  const text =
+    typeof content === 'string'
+      ? content
+      : Array.isArray(content)
+        ? content
+            .filter((block): block is { type: 'text'; text: string } => {
+              const b = block as { type?: unknown; text?: unknown };
+              return b.type === 'text' && typeof b.text === 'string';
+            })
+            .map((block) => block.text)
+            .join('\n')
+        : '';
+  return text.trim() ? text : undefined;
+};
+
+/**
+ * A `send` whose turn carries pasted material. The agent folds attachments into
+ * the message it hands the harness, so what the transcript stores is not what
+ * the hub saw — and a title derived from the hub's copy would then disagree
+ * with the one a loaded transcript derives, which is the disagreement this
+ * whole path exists to remove. Such a send names nothing; the transcript will.
+ */
+const hasAttachments = (payload: unknown): boolean =>
+  typeof payload === 'object' &&
+  payload !== null &&
+  Array.isArray((payload as { attachments?: unknown }).attachments) &&
+  (payload as { attachments: unknown[] }).attachments.length > 0;
+
 /** `stop { discard: true }`: the side quest is being thrown away, not paused. */
 const peekDiscard = (payload: unknown): boolean =>
   typeof payload === 'object' &&

@@ -52,8 +52,6 @@
 }
 
 :root {
-  /* Radius ladder: item marks 6, controls/nav/inputs 10, cards 14, window 20. */
-  --radius: 0.625rem;
   /* The app window's own corner, and the field it floats in. */
   --radius-window: 20px;
   --window-inset: 20px;
@@ -415,14 +413,6 @@
 }
 
 @theme inline {
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: var(--radius);
-  --radius-lg: calc(var(--radius) + 4px);
-  --radius-xl: calc(var(--radius) + 10px);
-  --radius-2xl: calc(var(--radius) + 14px);
-  --radius-3xl: calc(var(--radius) + 22px);
-  --radius-4xl: calc(var(--radius) + 30px);
-
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
