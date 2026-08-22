@@ -7,7 +7,8 @@
    * from the mock's `.composer` / `.cin`.
    */
   import type { Snippet } from 'svelte';
-  import { IconSend, IconStop } from '$lib/icons';
+  import { IconSend, IconStop, IconPlus, IconClose } from '$lib/icons';
+  import type { SendExtras } from '../client.svelte';
 
   let {
     value = $bindable(''),
@@ -18,18 +19,35 @@
   }: {
     value?: string;
     busy?: boolean;
-    onsubmit: (text: string) => void;
+    onsubmit: (text: string, extras: SendExtras) => void;
     onstop: () => void;
     prompts?: Snippet;
   } = $props();
 
-  const canSend = $derived(value.trim().length > 0);
+  type PendingImage = { mediaType: string; data: string; name: string };
+  type PendingText = { kind: 'text'; name: string; content: string };
+
+  let images = $state<PendingImage[]>([]);
+  let texts = $state<PendingText[]>([]);
+  let fileInput = $state<HTMLInputElement>();
+
+  /** A paste longer than this rides as a named attachment, not inline text. */
+  const LARGE_PASTE = 1200;
+
+  const hasContent = $derived(
+    value.trim().length > 0 || images.length > 0 || texts.length > 0
+  );
 
   function submit(): void {
+    if (!hasContent) return;
+    const extras: SendExtras = {};
+    if (texts.length) extras.attachments = texts.map((t) => ({ ...t }));
+    if (images.length) extras.images = images.map((i) => ({ mediaType: i.mediaType, data: i.data }));
     const text = value.trim();
-    if (!text) return;
     value = '';
-    onsubmit(text);
+    images = [];
+    texts = [];
+    onsubmit(text, extras);
   }
 
   function onkeydown(event: KeyboardEvent): void {
@@ -43,6 +61,57 @@
     if (busy) onstop();
     else submit();
   }
+
+  /** base64 without the `data:` prefix — the wire shape images travel in. */
+  function readImage(file: File): Promise<PendingImage> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = String(reader.result);
+        resolve({ mediaType: file.type, data: result.slice(result.indexOf(',') + 1), name: file.name });
+      };
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function addFiles(files: Iterable<File>): Promise<void> {
+    for (const file of files) {
+      if (file.type.startsWith('image/')) {
+        images = [...images, await readImage(file)];
+      } else {
+        texts = [...texts, { kind: 'text', name: file.name, content: await file.text() }];
+      }
+    }
+  }
+
+  function onpick(event: Event): void {
+    const input = event.currentTarget as HTMLInputElement;
+    if (input.files?.length) void addFiles(input.files);
+    input.value = '';
+  }
+
+  function onpaste(event: ClipboardEvent): void {
+    const data = event.clipboardData;
+    if (!data) return;
+    const files = [...data.items]
+      .filter((item) => item.kind === 'file')
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => !!file);
+    if (files.length) {
+      event.preventDefault();
+      void addFiles(files);
+      return;
+    }
+    const text = data.getData('text/plain');
+    if (text.length > LARGE_PASTE) {
+      event.preventDefault();
+      texts = [...texts, { kind: 'text', name: `Pasted text · ${text.length.toLocaleString()} chars`, content: text }];
+    }
+  }
+
+  const removeImage = (i: number) => (images = images.filter((_, n) => n !== i));
+  const removeText = (i: number) => (texts = texts.filter((_, n) => n !== i));
 </script>
 
 <div class="fade"></div>
@@ -50,28 +119,64 @@
   {#if prompts}
     <div class="prompts">{@render prompts()}</div>
   {/if}
+  {#if images.length || texts.length}
+    <div class="atts">
+      {#each images as img, i (img.name + i)}
+        <span class="att">
+          <img src="data:{img.mediaType};base64,{img.data}" alt="" />
+          {img.name}
+          <button type="button" aria-label="Remove" onclick={() => removeImage(i)}><IconClose /></button>
+        </span>
+      {/each}
+      {#each texts as t, i (t.name + i)}
+        <span class="att">
+          {t.name}
+          <button type="button" aria-label="Remove" onclick={() => removeText(i)}><IconClose /></button>
+        </span>
+      {/each}
+    </div>
+  {/if}
   <form class="cin" onsubmit={(e) => e.preventDefault()} aria-label="Message the agent">
+    <input
+      type="file"
+      class="hidden-file"
+      accept="image/*,text/*,.md,.json,.csv,.log"
+      multiple
+      bind:this={fileInput}
+      onchange={onpick}
+    />
     <textarea
       bind:value
       {onkeydown}
+      onpaste={onpaste}
       placeholder="Message the agent…"
       aria-label="Message the agent"
     ></textarea>
     <div class="aff-row">
       <div class="inner">
-        <span>/ commands</span><span>@ mention</span><span>＋ attach</span>
+        <span>/ commands</span><span>@ mention</span>
         <span class="hint">Enter sends · Shift+Enter for a new line</span>
       </div>
     </div>
-    <button
-      class="stop"
-      type="button"
-      onclick={onaction}
-      disabled={!busy && !canSend}
-      aria-label={busy ? 'Stop the agent' : 'Send message'}
-    >
-      {#if busy}<IconStop />{:else}<IconSend />{/if}
-    </button>
+    <div class="ctrls">
+      <button
+        class="att-btn"
+        type="button"
+        onclick={() => fileInput?.click()}
+        aria-label="Attach a file or image"
+      >
+        <IconPlus />
+      </button>
+      <button
+        class="stop"
+        type="button"
+        onclick={onaction}
+        disabled={!busy && !hasContent}
+        aria-label={busy ? 'Stop the agent' : 'Send message'}
+      >
+        {#if busy}<IconStop />{:else}<IconSend />{/if}
+      </button>
+    </div>
   </form>
 </div>
 
@@ -184,13 +289,46 @@
     font-size: var(--text-sm);
     color: var(--ink-muted);
     padding-top: 8px;
-    /* Reserve the send button's corner so the hint never runs under it. */
-    padding-right: 52px;
     flex-wrap: wrap;
     row-gap: 6px;
   }
   .aff-row .hint {
     margin-left: auto;
+  }
+  .hidden-file {
+    display: none;
+  }
+  /* Attach + send, together, so the fold moves them as one cluster. */
+  .ctrls {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 0 0 auto;
+  }
+  .composer:focus-within .ctrls {
+    align-self: flex-end;
+  }
+  .att-btn {
+    width: 44px;
+    height: 44px;
+    border: 1px solid var(--border-control);
+    border-radius: var(--radius-pill);
+    background: var(--surface-raised);
+    color: var(--ink-muted);
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    flex: 0 0 auto;
+  }
+  .att-btn :global(svg) {
+    width: 18px;
+    height: 18px;
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .att-btn:hover {
+      background: var(--surface-hover);
+      color: var(--ink-body);
+    }
   }
   .stop {
     width: 44px;
@@ -208,10 +346,6 @@
     place-items: center;
     cursor: pointer;
   }
-  .composer:focus-within .stop {
-    align-self: flex-end;
-    margin-top: -26px;
-  }
   .stop :global(svg) {
     width: 16px;
     height: 16px;
@@ -221,6 +355,55 @@
     cursor: default;
     box-shadow: none;
     background-image: none;
+  }
+  /* Pending attachment chips, above the input pill. */
+  .atts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .att {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 100%;
+    padding: 3px 4px 3px 8px;
+    border: 1px solid var(--border-hairline);
+    border-radius: var(--radius-control);
+    background: var(--surface-raised);
+    box-shadow: var(--shadow-tile);
+    font-size: var(--text-sm);
+    color: var(--ink-body);
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .att img {
+    width: 20px;
+    height: 20px;
+    border-radius: var(--radius-mark);
+    object-fit: cover;
+    flex: 0 0 auto;
+  }
+  .att button {
+    display: grid;
+    place-items: center;
+    width: 20px;
+    height: 20px;
+    border: 0;
+    border-radius: var(--radius-mark);
+    background: none;
+    color: var(--ink-muted);
+    cursor: pointer;
+    flex: 0 0 auto;
+  }
+  .att button :global(svg) {
+    width: 13px;
+    height: 13px;
+  }
+  .att button:hover {
+    background: var(--surface-sunken);
+    color: var(--ink-body);
   }
   /* Mobile: the composer goes full-width, edge to edge. It stays absolute
      (docked at the bottom of the transcript pane) rather than viewport-fixed,
@@ -233,6 +416,11 @@
       width: auto;
       transform: none;
       bottom: 10px;
+    }
+    /* The Enter/Shift+Enter hint is desktop-only guidance; on a phone it just
+       wraps the affordance row to a second line. */
+    .aff-row .hint {
+      display: none;
     }
   }
 </style>

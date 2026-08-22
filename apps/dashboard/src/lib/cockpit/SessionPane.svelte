@@ -15,6 +15,7 @@
     interrupt,
     loadMcpServers,
     type PendingPermission,
+    type SendExtras,
   } from './client.svelte';
   import { routedToParent } from './frames';
   import SessionHeader from './transcript/SessionHeader.svelte';
@@ -97,9 +98,9 @@
 
   const flowSubagents = $derived(new Map(Object.entries(session?.subagents ?? {})));
 
-  function onsubmit(text: string): void {
+  function onsubmit(text: string, extras: SendExtras = {}): void {
     if (!machineId) return;
-    void sendOrRevive(viewId, machineId, text);
+    void sendOrRevive(viewId, machineId, text, extras);
   }
 
   function onstop(): void {
