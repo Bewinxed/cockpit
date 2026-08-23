@@ -10,13 +10,14 @@
    * Ported from mocks/v5-workspace.html (.tabstrip): the active tab is raised
    * off the strip and carries strong ink, so the selection survives greyscale.
    */
-  import { onMount, untrack, type Component } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { IconBoxDuo, IconClose } from '$lib/icons';
   import { cockpit } from './client.svelte';
   import { resolveSessionTitle } from './links';
-  import { markHue, sessionSprite } from './mark';
+  import { markHue } from './mark';
+  import HarnessGlyph from './HarnessGlyph.svelte';
   import { workingSet } from './working-set.svelte';
 
   interface Tab {
@@ -24,8 +25,9 @@
     href: string;
     label: string;
     hue: ReturnType<typeof markHue>;
-    /** The session's own face — keyed to the id, so two tabs on one repo differ. */
-    sprite: Component;
+    /** Which agent runs it — the mark draws the vendor glyph, the hue tells two
+        sessions of the same vendor apart. */
+    harness: string;
   }
 
   /** One tab as the root layout's server load resolved it, from the cookie. */
@@ -34,6 +36,7 @@
     href: string;
     label: string;
     seed: string;
+    harness: string;
   }
 
   const path = $derived(page.url.pathname);
@@ -69,7 +72,7 @@
       href: tab.href,
       label: tab.label,
       hue: markHue(tab.seed),
-      sprite: sessionSprite(tab.id),
+      harness: tab.harness,
     })
   ));
 
@@ -109,7 +112,7 @@
       // the remembered title exists to remove — in the other direction.
       label: named ? resolved : (workingSet.titleOf(id) ?? servedLabels.get(id) ?? resolved),
       hue: markHue(view?.cwd || row?.cwd || ctx?.cwd || id),
-      sprite: sessionSprite(id),
+      harness: ctx?.harness || row?.harness || view?.harness || 'claude',
       named,
     };
   }
@@ -156,10 +159,9 @@
   {/if}
   {#each tabs as tab (tab.id)}
     {@const active = path === `/session/${tab.id}`}
-    {@const Sprite = tab.sprite}
     <div class="tab" class:on={active}>
       <a class="tl" href={tab.href} role="tab" aria-selected={active} title={tab.label}>
-        <span class="tm m{tab.hue}" aria-hidden="true"><Sprite /></span>
+        <span class="tm m{tab.hue}" aria-hidden="true"><HarnessGlyph harness={tab.harness} /></span>
         <span class="nm">{tab.label}</span>
       </a>
       <button type="button" class="tclose" aria-label="Close {tab.label}" onclick={() => close(tab.id)}>

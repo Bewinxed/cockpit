@@ -43,6 +43,8 @@ export interface ServerTab {
   label: string;
   /** The seed the identity hue is mixed from — the folder, or the id. */
   seed: string;
+  /** Which agent runs it — the mark draws the vendor glyph from this. */
+  harness: string;
 }
 
 /** The conversation the URL names, or '' on the board and everywhere else. */
@@ -159,6 +161,7 @@ export const load: LayoutServerLoad = async ({ cookies, fetch, url }) => {
         visit.title ||
         resolveSessionTitle({ title: row?.title || named.get(visit.id), cwd, id: visit.id }),
       seed: cwd || visit.id,
+      harness: visit.harness || row?.harness || 'claude',
     };
   });
 

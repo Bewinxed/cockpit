@@ -16,7 +16,8 @@
    * popover, a phone as a bottom sheet — the same panel either way.
    */
   import type { EffortLevel, PermissionMode } from '@cockpit/core';
-  import { markHue, sessionSprite } from '../mark';
+  import { markHue } from '../mark';
+  import HarnessGlyph from '../HarnessGlyph.svelte';
   import type { Activity } from '../activity';
   import { modelLabel } from '../models.svelte';
   import { permissionModeLabel, type PermissionModeOption } from '../permission-modes';
@@ -34,7 +35,6 @@
   let {
     title,
     seed,
-    spriteSeed,
     harness,
     machineName,
     cwd,
@@ -91,7 +91,6 @@
 
   const k = (n: number): string => `${Math.round(n / 1000)}k`;
 
-  const Sprite = $derived(sessionSprite(spriteSeed));
 
   const pill = $derived(
     activity === 'blocked'
@@ -212,7 +211,7 @@
 {/snippet}
 
 <header class="shead">
-  <span class="mark m{markHue(seed)}" aria-hidden="true"><Sprite /></span>
+  <span class="mark m{markHue(seed)}" aria-hidden="true"><HarnessGlyph {harness} /></span>
   <h1>{title}</h1>
   <span class="path">{machineName} : {cwd}</span>
   <span class="pill {pill.status}">{pill.label}</span>
