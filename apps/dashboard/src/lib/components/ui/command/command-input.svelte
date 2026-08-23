@@ -14,7 +14,7 @@
 </script>
 
 <div data-slot="command-input-wrapper" class="p-1 pb-0">
-	<InputGroup.Root class="h-9 bg-input/30">
+	<InputGroup.Root class="h-[var(--c-nav-h)] bg-input/30">
 		<CommandPrimitive.Input
 			{value}
 			data-slot="command-input"
