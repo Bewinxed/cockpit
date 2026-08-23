@@ -166,7 +166,11 @@
     <p class="empty">No messages yet.</p>
   {/if}
 
-  <Virtualizer bind:this={list} data={rows} getKey={(r) => r.key} scrollRef={scroller}>
+  <!-- The warp is one continuous field over the whole chat container (like the
+       reference shader over its element), not a per-message filter — so the
+       distortion and the sheen flow across the transcript as a single surface. -->
+  <div class="warp-layer">
+    <Virtualizer bind:this={list} data={rows} getKey={(r) => r.key} scrollRef={scroller}>
     {#snippet children(row)}
       <div class="renter" use:enterMotion={row.key}>
         {#if row.kind === 'single'}
@@ -195,7 +199,8 @@
         {/if}
       </div>
     {/snippet}
-  </Virtualizer>
+    </Virtualizer>
+  </div>
 </div>
 
 <style>
@@ -223,13 +228,18 @@
     pointer-events: none;
   }
 
+  .warp-layer {
+    /* the container the compaction field distorts as one surface */
+    will-change: filter;
+  }
+
   /* ── Compaction: the transcript is being rewritten ──────────────────────
-     Each visible message takes the subtle watery warp and a slow sheen that
-     sweeps left→right — the one live thing worth showing, per DESIGN.md
-     §motion. It rides `transform`/paint only via the SVG filter and a mask, so
-     virtua's box math is untouched. The crisp note is exempt (it is not a
-     `.renter`). Reduced motion gets none of it. */
-  .tr.compacting :global(.renter) {
+     The whole chat container takes one continuous watery warp and a slow sheen
+     that sweeps left→right across it — the one live thing worth showing, per
+     DESIGN.md §motion. It rides the SVG filter and a mask only, so virtua's box
+     math is untouched. The crisp note is exempt (it lives outside .warp-layer).
+     Reduced motion gets none of it. */
+  .tr.compacting .warp-layer {
     filter: url(#compaction-warp);
     -webkit-mask-image: linear-gradient(
       100deg,
@@ -298,7 +308,7 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .tr.compacting :global(.renter) {
+    .tr.compacting .warp-layer {
       filter: none;
       -webkit-mask-image: none;
       mask-image: none;
