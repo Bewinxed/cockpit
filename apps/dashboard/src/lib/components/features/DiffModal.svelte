@@ -149,7 +149,7 @@
         {#if isOpen}
           <div
             {...props}
-            class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm"
+            class="fixed inset-0 z-50 bg-[var(--scrim)] backdrop-blur-sm"
             in:fade={{ duration: 200 }}
             out:fade={{ duration: 150 }}
           ></div>
