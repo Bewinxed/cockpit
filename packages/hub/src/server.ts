@@ -846,18 +846,26 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
     if (answer === 'offline' || answer === 'timeout' || !answer.ok) return;
     if (!Array.isArray(answer.result)) return;
 
-    const prompts = new Map<string, string>();
+    // Name from whatever the catalog carries, in the SAME precedence the
+    // dashboard resolves a stored session by (`sessionTitle`): a given title
+    // (customTitle / summary) first, then the first prompt. claude reports
+    // `firstPrompt`; opencode and pi report a real `customTitle` and NO prompt,
+    // so reading only `firstPrompt` left every opencode/pi row unnamed at rest.
+    // The row's stored title wins in `resolveSessionTitle` either way, so naming
+    // from the given title is not a mismatch with what the client would show.
+    const names = new Map<string, string>();
     for (const info of answer.result as NeutralSessionInfo[]) {
-      if (typeof info?.sessionId === 'string' && typeof info.firstPrompt === 'string')
-        prompts.set(info.sessionId, info.firstPrompt);
+      if (typeof info?.sessionId !== 'string') continue;
+      const source = (info.customTitle || info.summary)?.trim() || info.firstPrompt;
+      const name = typeof source === 'string' ? deriveTitleFromFirstMessage(source) : '';
+      if (name) names.set(info.sessionId, name);
     }
 
     let named = false;
     for (const row of unnamed) {
-      const prompt = row.sessionId && prompts.get(row.sessionId);
-      if (!prompt) continue;
-      const derived = deriveTitleFromFirstMessage(prompt);
-      if (derived && db.noteDerivedTitle(row.id, derived)) named = true;
+      const name = row.sessionId && names.get(row.sessionId);
+      if (!name) continue;
+      if (db.noteDerivedTitle(row.id, name)) named = true;
     }
     if (named) publishInstances(machineId);
   };
