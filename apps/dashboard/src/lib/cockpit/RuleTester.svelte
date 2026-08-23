@@ -48,7 +48,7 @@
   <div class="flex flex-wrap items-baseline justify-between gap-2">
     <span class="text-caption font-medium text-foreground">Try it</span>
     <span
-      class="text-micro transition-colors duration-240 ease-expo {firing
+      class="text-micro transition-colors duration-240 ease-[var(--e-in)] {firing
         ? 'text-success'
         : 'text-muted-foreground'}"
       role="status"

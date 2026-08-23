@@ -75,7 +75,7 @@
   onclick={onToggle}
 >
   <IconChevronRight
-    class="size-3 shrink-0 text-muted-foreground transition-transform duration-240 ease-expo
+    class="size-3 shrink-0 text-muted-foreground transition-transform duration-240 ease-[var(--e-in)]
            {open ? 'rotate-90' : ''}"
   />
   <span class="flex min-w-0 items-center gap-1">

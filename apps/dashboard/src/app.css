@@ -484,12 +484,11 @@
   --color-tool-skill: var(--tool-skill);
   --color-tool-plan: var(--tool-plan);
 
-  /* Motion vocabulary. --ease-out-expo for entrances and state changes
-     (approximates a critically damped spring); --ease-inout-soft only for
-     reversible position swaps. Durations: press 100, quick 160, standard 240,
-     large surface 320. Gesture-driven motion uses real springs in JS, not CSS. */
-  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
-  --ease-inout-soft: cubic-bezier(0.45, 0, 0.15, 1);
+  /* Motion is the doctrine's three curves only: --e-in (entry) / --e-out (exit)
+     / --e-toggle (continuous). --ease-out-expo is a byte-identical alias of
+     --e-in kept ONLY until FleetBoard.svelte (edited by a concurrent pass) drops
+     its last two references; then this line goes and the alias is gone. */
+  --ease-out-expo: var(--e-in);
 }
 
 @theme {
@@ -600,10 +599,6 @@
   font-size: var(--text-sm); /* 11.5px — section labels / chips step */
   line-height: var(--leading-ui);
   letter-spacing: var(--track-caps);
-}
-
-@utility ease-expo {
-  transition-timing-function: var(--ease-out-expo);
 }
 
 /* ---- Rendered markdown. @tailwindcss/typography paints its own gray palette,
@@ -743,7 +738,7 @@
 
 /* ---- Instant press feedback: the hand feels the button before release. */
 @utility pressable {
-  transition: transform 100ms var(--ease-out-expo), box-shadow 100ms var(--ease-out-expo);
+  transition: transform 100ms var(--e-in), box-shadow 100ms var(--e-in);
 }
 .pressable:active {
   transform: scale(0.97);
@@ -759,9 +754,9 @@
   display: inline-flex;
   grid-area: 1 / 1;
   transition:
-    opacity var(--icon-swap-dur, 240ms) var(--ease-out-expo),
-    scale var(--icon-swap-dur, 240ms) var(--ease-out-expo),
-    filter var(--icon-swap-dur, 240ms) var(--ease-out-expo);
+    opacity var(--icon-swap-dur, 240ms) var(--e-in),
+    scale var(--icon-swap-dur, 240ms) var(--e-in),
+    filter var(--icon-swap-dur, 240ms) var(--e-in);
 }
 
 .icon-swap > [data-active='true'] {
@@ -782,11 +777,11 @@
    ======================================== */
 
 ::view-transition-old(root) {
-  animation: 120ms var(--ease-out-expo) both vt-out;
+  animation: 120ms var(--e-in) both vt-out;
 }
 
 ::view-transition-new(root) {
-  animation: 180ms var(--ease-out-expo) both vt-in;
+  animation: 180ms var(--e-in) both vt-in;
 }
 
 @keyframes vt-out {
@@ -847,7 +842,7 @@
 ::view-transition-old(instance-*),
 ::view-transition-new(instance-*) {
   animation-duration: 240ms;
-  animation-timing-function: var(--ease-inout-soft);
+  animation-timing-function: var(--e-toggle);
 }
 
 /* Reduced motion: comprehension keeps its cross-fades, nothing travels. What

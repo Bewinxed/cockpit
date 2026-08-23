@@ -175,7 +175,7 @@
 
       <!-- The rule, read back. It is the only place the whole thing is one thought. -->
       <p
-        class="max-w-prose rounded-[var(--radius-card)] bg-primary/8 p-4 text-body text-foreground transition-all duration-240 ease-expo"
+        class="max-w-prose rounded-[var(--radius-card)] bg-primary/8 p-4 text-body text-foreground transition-all duration-240 ease-[var(--e-in)]"
         aria-live="polite"
       >
         {ruleSentence(draft)}

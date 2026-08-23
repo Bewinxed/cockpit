@@ -106,15 +106,15 @@
 
 <style>
   .task-ring .arc {
-    transition: stroke-dashoffset 240ms var(--ease-out-expo);
+    transition: stroke-dashoffset 240ms var(--e-in);
   }
 
   .task-ring g {
     transform-box: fill-box;
     transform-origin: center;
     transition:
-      opacity 160ms var(--ease-out-expo),
-      scale 160ms var(--ease-out-expo);
+      opacity 160ms var(--e-in),
+      scale 160ms var(--e-in);
   }
 
   .task-ring g[data-shown='false'] {

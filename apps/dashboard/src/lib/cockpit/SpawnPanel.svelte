@@ -541,7 +541,7 @@
     </div>
     <button
       type="button"
-      class="shrink-0 text-micro text-muted-foreground transition-colors duration-[240ms] ease-[var(--ease-out-expo)] hover:text-foreground"
+      class="shrink-0 text-micro text-muted-foreground transition-colors duration-[240ms] ease-[var(--e-in)] hover:text-foreground"
       onclick={() => (editingPrefill = true)}
     >
       Edit
@@ -949,7 +949,7 @@
   <Sheet.Root {open} onOpenChange={(next) => !next && close()}>
     <Sheet.Content
       side="bottom"
-      class="material-panel flex max-h-[92vh] flex-col gap-0 rounded-t-[var(--radius-shell)] border-t border-border/60 p-0 shadow-xl duration-[240ms] ease-[var(--ease-out-expo)]"
+      class="material-panel flex max-h-[92vh] flex-col gap-0 rounded-t-[var(--radius-shell)] border-t border-border/60 p-0 shadow-xl duration-[240ms] ease-[var(--e-in)]"
     >
       <Sheet.Title class="text-title px-5 pt-5 pb-1">New session</Sheet.Title>
       <Sheet.Description class="sr-only">Start a Claude Code session on a machine</Sheet.Description>
@@ -980,7 +980,7 @@
       align="end"
       sideOffset={10}
       aria-label="New session"
-      class="material-panel w-[480px] max-w-[calc(100vw-2rem)] rounded-[var(--radius-shell)] border border-border/60 p-0 shadow-xl duration-[240ms] ease-[var(--ease-out-expo)]"
+      class="material-panel w-[480px] max-w-[calc(100vw-2rem)] rounded-[var(--radius-shell)] border border-border/60 p-0 shadow-xl duration-[240ms] ease-[var(--e-in)]"
     >
       <div class="flex items-center justify-between border-b border-border/60 px-5 py-3.5">
         <h2 class="text-title">New session</h2>

@@ -161,7 +161,7 @@
       {/if}
 
       <div
-        class="absolute inset-y-0 left-0 rounded-full bg-primary transition-[width] duration-[240ms] ease-[var(--ease-out-expo)] motion-reduce:transition-none"
+        class="absolute inset-y-0 left-0 rounded-full bg-primary transition-[width] duration-[240ms] ease-[var(--e-in)] motion-reduce:transition-none"
         style="width: {fill}%;"
       ></div>
 
@@ -179,7 +179,7 @@
 
       {#if index >= 0}
         <span
-          class="absolute top-1/2 size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border border-primary bg-background shadow-sm transition-[left] duration-[240ms] ease-[var(--ease-out-expo)] motion-reduce:transition-none"
+          class="absolute top-1/2 size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border border-primary bg-background shadow-sm transition-[left] duration-[240ms] ease-[var(--e-in)] motion-reduce:transition-none"
           style="left: {fill}%;"
         ></span>
       {/if}
@@ -192,7 +192,7 @@
         type="button"
         disabled={disabled || !stop.reachable}
         title={stop.reachable ? stop.description : `${stop.label} is not offered by this model`}
-        class="font-mono text-micro transition-colors duration-[240ms] ease-[var(--ease-out-expo)]
+        class="font-mono text-micro transition-colors duration-[240ms] ease-[var(--e-in)]
           {!stop.reachable
           ? 'cursor-default text-muted-foreground/40 line-through'
           : stop.value === value
