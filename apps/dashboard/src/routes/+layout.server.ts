@@ -30,7 +30,7 @@ interface Visit {
 const RAIL_KEY = 'cockpit-rail-width';
 const RAIL_MIN = 216;
 const RAIL_MAX = 520;
-const RAIL_DEFAULT = 288;
+const RAIL_DEFAULT = 340;
 
 /**
  * One tab of the strip, resolved on the server. Only what the server can know:

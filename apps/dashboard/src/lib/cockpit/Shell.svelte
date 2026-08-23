@@ -25,7 +25,7 @@
   const RAIL_KEY = 'cockpit-rail-width';
   const RAIL_MIN = 216;
   const RAIL_MAX = 520;
-  const RAIL_DEFAULT = 288;
+  const RAIL_DEFAULT = 340;
 
   const clamp = (px: number) => Math.min(RAIL_MAX, Math.max(RAIL_MIN, Math.round(px || RAIL_DEFAULT)));
 
