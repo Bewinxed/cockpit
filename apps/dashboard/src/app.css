@@ -498,6 +498,35 @@
 }
 
 @theme {
+  /* ---- The spacing ladder Tailwind actually resolves against.
+     --space-1..8 above are the measured comp values, but declaring them in
+     :root only names them: every numeric utility (p-3, gap-2, size-4, h-6…)
+     compiles to `calc(var(--spacing) * n)` on the stock 4px ladder unless the
+     step exists in the theme. So the eight rungs are restated here, and the
+     numeric utilities land on the doctrine values by index:
+
+       1 -> 4    2 -> 7    3 -> 11   4 -> 14
+       5 -> 18   6 -> 21   7 -> 25   8 -> 32
+
+     Index, not nearest-value, is the mapping: it keeps the utility names in
+     the order authors already reason about (gap-2 < gap-3 < gap-4), and the
+     deltas are small — 8->7, 12->11, 16->14, 20->18, 24->21, 28->25 — so
+     existing layouts tighten by a pixel or three rather than reflowing.
+
+     Rungs 1 and 8 are unchanged from the 4px ladder (4px and 32px are on both),
+     which is what keeps the scale continuous at the top: p-8 is 32 and p-9,
+     outside the doctrine ladder, still falls through to calc(--spacing * 9) =
+     36. Half-steps (p-1.5, p-2.5) fall through the same way; they are outside
+     the ladder by definition and DESIGN.md has no value for them. */
+  --spacing-1: var(--space-1);
+  --spacing-2: var(--space-2);
+  --spacing-3: var(--space-3);
+  --spacing-4: var(--space-4);
+  --spacing-5: var(--space-5);
+  --spacing-6: var(--space-6);
+  --spacing-7: var(--space-7);
+  --spacing-8: var(--space-8);
+
   /* One-shot "that is wrong" nudge. */
   --animate-shake: shake 280ms linear;
 
