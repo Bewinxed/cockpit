@@ -189,6 +189,8 @@
       : 'All machines'
   );
   const stateName = $derived(STATES.find((s) => s.value === stateFilter)?.label ?? 'All states');
+  /** The blocked list only means "nothing needs you" while the socket is live. */
+  const hubLive = $derived(cockpit.hub === 'connected');
   const sortName = $derived(SORTS.find((s) => s.value === sortBy)?.label ?? 'Last active');
 
   const filtered = $derived(
@@ -324,7 +326,40 @@
 
     <div class="stats">
       {@render stat('Sessions', cockpit.runningInstances.length)}
-      {@render stat('Needs you', cockpit.blocked.length)}
+
+      <!-- Needs you is not a readout. It names this surface's job, so it is the
+           control that reaches it (DESIGN.md §Open questions): pressing it
+           filters the board down to exactly the sessions it counts.
+
+           And it never says "0" on a guess. cockpit.blocked is only true when
+           the socket is live; while the hub is connecting or unreachable an
+           empty list means "not read yet", and printing 0 there is a false
+           all-clear — the one failure the Switch interview names by hand. -->
+      <button
+        type="button"
+        class="attn-tile"
+        aria-pressed={stateFilter === 'attn'}
+        aria-label={hubLive
+          ? `Needs you: ${cockpit.blocked.length}. Show only sessions that need you.`
+          : 'Needs you: unknown while reconnecting. Show only sessions that need you.'}
+        onclick={() => {
+          stateFilter = stateFilter === 'attn' ? '' : 'attn';
+          pageNo = 1;
+        }}
+      >
+        <Card.Root class={tileClass}>
+          <div class="well">
+            <span class="k">Needs you</span>
+            {#if hubLive}
+              <span class="v">{cockpit.blocked.length}</span>
+            {:else}
+              <span class="v unknown" title="Unknown while reconnecting">—</span>
+              <span class="u">unknown while reconnecting</span>
+            {/if}
+          </div>
+        </Card.Root>
+      </button>
+
       {@render stat('Machines', cockpit.onlineMachines.length, `of ${cockpit.machines.length}`)}
       {@render stat('Spend today', `$${spend.toFixed(2)}`)}
     </div>
@@ -569,6 +604,50 @@
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: var(--space-4);
+  }
+
+  /* The Needs-you tile is a real button wrapping the same card, so it keeps
+     the grid cell's geometry and picks up keyboard focus for free. */
+  .attn-tile {
+    display: block;
+    height: 100%;
+    text-align: left;
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+    border-radius: var(--radius-panel);
+    transition: transform 100ms var(--ease-out-expo);
+  }
+  .attn-tile:active {
+    transform: scale(0.99);
+  }
+  .attn-tile:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+  .attn-tile:hover .well,
+  .attn-tile[aria-pressed='true'] .well {
+    border-color: var(--status-attn-ink);
+  }
+  .attn-tile[aria-pressed='true'] .well {
+    background: var(--status-attn-bg);
+  }
+  .attn-tile[aria-pressed='true'] .v {
+    color: var(--status-attn-ink);
+  }
+  /* An unread count is muted: it is an absence of knowledge, not a number. */
+  .v.unknown {
+    color: var(--ink-muted);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .attn-tile,
+    .attn-tile:active {
+      transition: none;
+      transform: none;
+    }
   }
 
   /* the recessed well inside each raised stat card */
