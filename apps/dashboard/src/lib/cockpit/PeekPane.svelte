@@ -258,7 +258,7 @@
             <ContextMenu.Trigger class="contents">
               <header class="flex items-start gap-2 px-4 py-3">
                 <div class="min-w-0 flex-1">
-                  <h2 class="flex min-w-0 items-center gap-2 text-body font-semibold">
+                  <h2 class="flex min-w-0 items-center gap-2 text-body font-medium">
                     <!-- The directory's hue, the same one the card it was
                          picked from wears: the peek belongs to a project. -->
                     {#if cwd}

@@ -138,7 +138,7 @@
 
     <div class="flex min-w-0 flex-1 flex-col gap-[var(--space-3)]">
       <div class="flex items-start justify-between gap-[var(--space-3)]">
-        <div class="text-foreground text-sm font-semibold">
+        <div class="text-foreground text-sm font-medium">
           {questions.length > 1 ? `${questions.length} questions for you` : 'A question for you'}
         </div>
         <div class="-mt-0.5 flex shrink-0 items-center gap-[var(--space-2)]">
@@ -170,7 +170,7 @@
         <div class="flex max-h-[50vh] flex-col gap-[var(--space-2)] overflow-y-auto pr-1">
           <div class="flex flex-wrap items-baseline gap-[var(--space-2)]">
             <span
-              class="bg-primary/10 text-primary rounded-full px-[var(--space-2)] py-px text-xs font-semibold tracking-wider uppercase"
+              class="bg-primary/10 text-primary rounded-full px-[var(--space-2)] py-px text-xs font-medium tracking-wider uppercase"
             >
               {question.header}
             </span>

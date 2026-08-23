@@ -43,13 +43,9 @@
   font-display: swap;
 }
 
-@font-face {
-  font-family: 'TX-02';
-  src: url('/fonts/TX-02-Bold.otf') format('opentype');
-  font-weight: 700;
-  font-style: normal;
-  font-display: swap;
-}
+/* No Bold face is registered on purpose: DESIGN.md's weight ladder stops at
+   500, so TX-02-Bold could only ever be reached by a banned weight. The
+   Regular/Medium pair covers 400–500; anything heavier is a bug, not a face. */
 
 :root {
   /* The app window's own corner, and the field it floats in. */
@@ -644,6 +640,54 @@
   --tw-prose-invert-pre-bg: var(--tw-prose-pre-bg);
   --tw-prose-invert-th-borders: var(--tw-prose-th-borders);
   --tw-prose-invert-td-borders: var(--tw-prose-td-borders);
+}
+
+/* The typography plugin ships its own type scale — h1 at 800/2.14em, h2 at
+   700, strong and code at 600 — none of which exist in this product. Weight
+   above 500 is banned and sizes come from the nine --text-* steps, so the
+   rendered-markdown scale is restated here rather than inherited. Element
+   selectors on purpose: the plugin wraps its own in :where(), so these win
+   without !important. */
+.prose h1 {
+  font-size: var(--text-2xl);
+  line-height: var(--leading-tight);
+  letter-spacing: var(--track-display);
+  font-weight: var(--weight-strong);
+}
+.prose h2 {
+  font-size: var(--text-xl);
+  line-height: var(--leading-tight);
+  letter-spacing: var(--track-display);
+  font-weight: var(--weight-strong);
+}
+.prose h3 {
+  font-size: var(--text-lg);
+  line-height: var(--leading-tight);
+  font-weight: var(--weight-strong);
+}
+.prose h4,
+.prose h5,
+.prose h6 {
+  font-size: var(--text-md);
+  line-height: var(--leading-ui);
+  font-weight: var(--weight-strong);
+}
+/* Emphasis reads as ink weight, not as a second typeface. */
+.prose strong,
+.prose b,
+.prose th,
+.prose dt,
+.prose summary {
+  font-weight: var(--weight-strong);
+}
+.prose code,
+.prose kbd,
+.prose pre,
+.prose pre code {
+  font-weight: var(--weight-body);
+}
+.prose a {
+  font-weight: inherit;
 }
 
 /* ---- Project identity color (see lib/cockpit/identity.ts). Elements set

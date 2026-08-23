@@ -73,7 +73,7 @@
 >
   <!-- Header with tabs -->
   <div class="flex items-center gap-4 px-4 py-2 bg-accent text-accent-foreground border-b border-border">
-    <span class="text-foreground font-semibold">Claude Code v{version}</span>
+    <span class="text-foreground font-medium">Claude Code v{version}</span>
     <Tabs.List class="flex items-center gap-1 text-muted-foreground" aria-label="Help sections">
       {#each tabs as tab, i (tab)}
         <Tabs.Trigger value={tab} class={triggerClass}>
@@ -100,7 +100,7 @@
             <div class="space-y-1">
               {#each shortcuts as shortcut (shortcut.key)}
                 <div class="flex items-center gap-2">
-                  <span class="text-primary font-bold w-4 text-center">{shortcut.key}</span>
+                  <span class="text-primary font-medium w-4 text-center">{shortcut.key}</span>
                   <span class="text-muted-foreground">{shortcut.description}</span>
                 </div>
               {/each}

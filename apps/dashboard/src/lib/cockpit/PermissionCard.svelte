@@ -46,7 +46,7 @@
       <IconShield class="size-[18px]" />
     </div>
     <div class="flex-1 min-w-0">
-      <div class="font-semibold text-sm">Permission required</div>
+      <div class="font-medium text-sm">Permission required</div>
       <div class="text-caption mt-0.5 break-words">{summary}</div>
 
       <Collapsible.Root open={isExpanded} onOpenChange={() => (isExpanded = !isExpanded)}>
