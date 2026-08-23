@@ -491,10 +491,7 @@
   --color-tool-plan: var(--tool-plan);
 
   /* Motion is the doctrine's three curves only: --e-in (entry) / --e-out (exit)
-     / --e-toggle (continuous). --ease-out-expo is a byte-identical alias of
-     --e-in kept ONLY until FleetBoard.svelte (edited by a concurrent pass) drops
-     its last two references; then this line goes and the alias is gone. */
-  --ease-out-expo: var(--e-in);
+     / --e-toggle (continuous). No off-doctrine easing aliases remain. */
 }
 
 @theme {

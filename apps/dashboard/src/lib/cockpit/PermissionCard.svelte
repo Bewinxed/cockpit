@@ -52,10 +52,10 @@
       <Collapsible.Root open={isExpanded} onOpenChange={() => (isExpanded = !isExpanded)}>
         <Collapsible.Trigger
           class="flex items-center gap-1 bg-transparent border-none py-1 mt-1.5 text-muted-foreground text-micro cursor-pointer shrink-0
-                 transition-colors duration-[160ms] ease-[var(--ease-out-expo)] hover:text-foreground"
+                 transition-colors duration-[160ms] ease-[var(--e-in)] hover:text-foreground"
         >
           <IconChevronRight
-            class="size-3.5 transition-transform duration-[160ms] ease-[var(--ease-out-expo)] {isExpanded
+            class="size-3.5 transition-transform duration-[160ms] ease-[var(--e-in)] {isExpanded
               ? 'rotate-90'
               : ''}"
           />
@@ -92,7 +92,7 @@
             <details>
               <summary
                 class="text-muted-foreground text-micro cursor-pointer select-none
-                       transition-colors duration-[160ms] ease-[var(--ease-out-expo)] hover:text-foreground"
+                       transition-colors duration-[160ms] ease-[var(--e-in)] hover:text-foreground"
               >
                 Raw
               </summary>
@@ -116,7 +116,7 @@
             type="button"
             disabled={!!resolved}
             class="inline-flex min-h-11 min-w-0 items-center gap-1.5 rounded-[var(--radius-control)] bg-secondary px-3.5 py-2 text-micro font-medium text-secondary-foreground
-                   transition-[color,background-color,opacity] duration-[160ms] ease-[var(--ease-out-expo)]
+                   transition-[color,background-color,opacity] duration-[160ms] ease-[var(--e-in)]
                    hover:bg-secondary/80 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:opacity-40"
             title={rule.full}
             aria-label="Always allow {rule.full} — a standing grant on {rule.scope}, not just this time"
@@ -138,7 +138,7 @@
           type="button"
           disabled={!!resolved}
           class="inline-flex min-h-11 items-center gap-1.5 rounded-[var(--radius-control)] border border-border px-4 py-2 text-micro font-medium
-                 transition-[color,background-color,border-color,opacity] duration-[160ms] ease-[var(--ease-out-expo)]
+                 transition-[color,background-color,border-color,opacity] duration-[160ms] ease-[var(--e-in)]
                  focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none
                  {resolved === 'deny'
             ? 'bg-error/10 text-error border-error/20'
@@ -161,7 +161,7 @@
           type="button"
           disabled={!!resolved}
           class="inline-flex min-h-11 items-center gap-1.5 rounded-[var(--radius-control)] px-4 py-2 text-micro font-medium
-                 transition-[color,background-color,opacity] duration-[160ms] ease-[var(--ease-out-expo)]
+                 transition-[color,background-color,opacity] duration-[160ms] ease-[var(--e-in)]
                  focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none
                  {resolved === 'allow'
             ? 'bg-success text-success-foreground'
