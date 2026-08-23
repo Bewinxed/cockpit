@@ -78,6 +78,30 @@ test('nothing asked for is nothing queried', () => {
   expect(db.getInstancesByIds([])).toEqual([]);
 });
 
+test('the machine is only asked for its catalog when something is unnamed', () => {
+  // A stored conversation nobody has named: the one case a catalog read pays for.
+  db.openInstance({
+    id: 'stored-nameless',
+    machineId: MACHINE,
+    cwd: '/home/o/cockpit',
+    sessionId: 'sdk-session-1',
+    kind: 'mainline',
+  });
+  backdate('stored-nameless');
+
+  expect(db.unnamedSessions(MACHINE).map((row) => row.id)).toEqual(['stored-nameless']);
+
+  // Named, and the machine has nothing left to be asked about.
+  db.noteDerivedTitle('stored-nameless', 'Wire the strip to the hub');
+
+  expect(db.unnamedSessions(MACHINE)).toEqual([]);
+});
+
+test('a row with no stored conversation is not something a catalog could name', () => {
+  // `old-nameless` has no session id, so no catalog entry could ever match it.
+  expect(db.unnamedSessions(MACHINE).some((row) => row.id === 'old-nameless')).toBe(false);
+});
+
 /** No machine is connected, so nothing can be read off one. */
 const registry: RegistryShape = {
   registerAgent: () => {},

@@ -20,7 +20,7 @@ import type {
 } from '@cockpit/core';
 import { RESTART_LOST, RESTART_RESUMABLE, resolveRates } from '@cockpit/core';
 import { Context, Effect, Layer } from 'effect';
-import { and, desc, eq, gt, gte, inArray, isNull, lte, ne, notInArray, or, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, gte, inArray, isNotNull, isNull, lte, ne, notInArray, or, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
 import { migrate } from 'drizzle-orm/bun-sqlite/migrator';
 import { DB_PATH } from '../config';
@@ -300,6 +300,13 @@ export interface DbShape {
    * from a derived one.
    */
   readonly getInstancesByIds: (ids: string[]) => (typeof instances.$inferSelect)[];
+  /**
+   * The machine's sessions that nothing has ever put a name to, however old
+   * they are — a stored conversation the hub could name off the machine's own
+   * catalog, and the only rows worth spending a catalog read on. Empty is the
+   * steady state, which is what makes that read free to offer.
+   */
+  readonly unnamedSessions: (machineId: string) => (typeof instances.$inferSelect)[];
   readonly listProjects: () => (typeof projects.$inferSelect)[];
   readonly createProject: (project: {
     id: string;
@@ -1033,6 +1040,20 @@ const make = (path: string): DbShape => {
         .where(and(inArray(instances.id, ids), ne(instances.status, 'discarded')))
         .all();
     },
+    unnamedSessions: (machineId) =>
+      db
+        .select()
+        .from(instances)
+        .where(
+          and(
+            eq(instances.machineId, machineId),
+            ne(instances.status, 'discarded'),
+            isNull(instances.title),
+            isNull(instances.derivedTitle),
+            isNotNull(instances.sessionId)
+          )
+        )
+        .all(),
     listProjects: () => db.select().from(projects).all(),
     createProject: ({ id, machineId, name, cwd }) =>
       db.insert(projects).values({ id, machineId, name, cwd }).returning().get(),

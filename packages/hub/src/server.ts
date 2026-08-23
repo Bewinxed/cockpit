@@ -14,6 +14,7 @@ import type {
   HarnessReport,
   InstanceRow,
   MachineMemorySet,
+  NeutralSessionInfo,
   PermissionMode,
   Rule,
   RuleDraft,
@@ -30,6 +31,7 @@ import {
   agentProblem,
   ASK_USER_QUESTION,
   CONTROL_GET_SESSION_MESSAGES,
+  CONTROL_LIST_SESSIONS,
   deriveTitleFromFirstMessage,
   FLEET_STATUS,
   FLEET_SYNC,
@@ -823,6 +825,41 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
       if (text) return text;
     }
     return undefined;
+  };
+
+  /**
+   * Names the machine's stored conversations that nothing has ever named, off
+   * the catalog the machine keeps anyway — a catalog entry carries the session's
+   * first prompt, so this costs one control call and no transcript reads.
+   *
+   * Offered when a daemon registers, and free in the steady state: the query for
+   * unnamed rows comes back empty and the machine is never asked. Only the same
+   * `firstPrompt` the dashboard would name a stored session by is used — a
+   * harness summary is a different string, and a row named with one would
+   * disagree with the strip it is meant to agree with.
+   */
+  const nameStoredSessions = async (machineId: string): Promise<void> => {
+    const unnamed = db.unnamedSessions(machineId);
+    if (unnamed.length === 0) return;
+
+    const answer = await callAgent(machineId, CONTROL_LIST_SESSIONS, [{}], READ_TIMEOUT_MS);
+    if (answer === 'offline' || answer === 'timeout' || !answer.ok) return;
+    if (!Array.isArray(answer.result)) return;
+
+    const prompts = new Map<string, string>();
+    for (const info of answer.result as NeutralSessionInfo[]) {
+      if (typeof info?.sessionId === 'string' && typeof info.firstPrompt === 'string')
+        prompts.set(info.sessionId, info.firstPrompt);
+    }
+
+    let named = false;
+    for (const row of unnamed) {
+      const prompt = row.sessionId && prompts.get(row.sessionId);
+      if (!prompt) continue;
+      const derived = deriveTitleFromFirstMessage(prompt);
+      if (derived && db.noteDerivedTitle(row.id, derived)) named = true;
+    }
+    if (named) publishInstances(machineId);
   };
 
   const nameFromLiveTurn = (machineId: string, instanceId: string, message: unknown): void => {
@@ -2330,6 +2367,9 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
             // After `settleInstances`, so the rows this reads the machine's home
             // out of are the ones the returning daemon just accounted for.
             void pushAgents(message.machineId);
+            // And what its stored conversations are called, for the ones nobody
+            // has ever named — off the catalog the daemon just read anyway.
+            void nameStoredSessions(message.machineId);
             ws.send(ack(message));
             break;
           case 'heartbeat':
