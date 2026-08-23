@@ -8,6 +8,7 @@
    */
   import type { UserAnswers } from '@cockpit/core';
   import {
+    cockpit,
     permissionAnswer,
     resolvePermission,
     type PendingPermission,
@@ -58,7 +59,17 @@
     return Array.isArray(value) ? value.includes(label) : value === label;
   };
 
+  // A permission blocks the turn that asked it, so its answer must land exactly
+  // once and only when it can reach the daemon that asked. `sent` latches the
+  // row the instant it is answered — a double-tap, or an Enter after a click,
+  // cannot answer twice — and both paths refuse while the hub is unreachable,
+  // where the answer would resolve into nothing and leave the turn wedged.
+  let sent = $state(false);
+  const answerable = $derived(!sent && cockpit.hub === 'connected');
+
   function answer(kind: 'allow' | 'deny' | 'always'): void {
+    if (!answerable) return;
+    sent = true;
     resolvePermission(
       request.instanceId,
       machineId,
@@ -68,6 +79,8 @@
   }
 
   function submitQuestion(): void {
+    if (!answerable) return;
+    sent = true;
     resolvePermission(
       request.instanceId,
       machineId,
@@ -129,27 +142,29 @@
       </div>
     {/each}
     <div class="qact">
-      <Button class={primary} disabled={!allAnswered} onclick={submitQuestion}>
+      <Button class={primary} disabled={!allAnswered || !answerable} onclick={submitQuestion}>
         <IconCheck />Answer
       </Button>
-      <Button class={dismiss} onclick={() => answer('deny')}>Dismiss</Button>
+      <Button class={dismiss} disabled={!answerable} onclick={() => answer('deny')}>Dismiss</Button>
     </div>
+    {#if !answerable}<p class="wait">{sent ? 'Sent.' : "Reconnecting — can't answer yet."}</p>{/if}
   {:else}
     <h2><span class="pill attn"><IconArrowUp />needs you</span>Permission — {request.toolName}</h2>
     <p class="lede">{summary}</p>
     {#if command}<div class="cmd">{command}</div>{/if}
     <div class="choice">
-      <Button class={grant} onclick={() => answer('allow')}>
+      <Button class={grant} disabled={!answerable} onclick={() => answer('allow')}>
         <IconCheck />Approve
       </Button>
-      <Button class={refuse} onclick={() => answer('deny')}>
+      <Button class={refuse} disabled={!answerable} onclick={() => answer('deny')}>
         <IconClose />Deny
       </Button>
     </div>
+    {#if !answerable}<p class="wait">{sent ? 'Sent.' : "Reconnecting — can't answer yet."}</p>{/if}
     {#if rule}
       <div class="widen">
         <p>This would allow <span class="mono">{rule.full}</span> for {rule.scope} — a wider grant than the request above.</p>
-        <Button class={widen} onclick={() => answer('always')}>
+        <Button class={widen} disabled={!answerable} onclick={() => answer('always')}>
           <IconShield />Always allow {rule.short}
         </Button>
       </div>
@@ -189,6 +204,11 @@
     width: 9px;
     height: 9px;
     flex: 0 0 auto;
+  }
+  .wait {
+    margin-top: var(--space-2);
+    font-size: var(--text-xs);
+    color: var(--ink-muted);
   }
   .lede {
     font-size: var(--text-base);
