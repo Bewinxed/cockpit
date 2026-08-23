@@ -97,6 +97,43 @@ export const load: LayoutServerLoad = async ({ cookies, fetch, url }) => {
     rows = [];
   }
 
+  // The board is a working set: it drops a session that has not moved in a day.
+  // The strip is not — it carries whatever the reader left open, so a tab on an
+  // aged-out conversation had no row to read a name off and the first paint
+  // called it by eight characters of its id until the reader clicked it. The
+  // name is not missing, only filtered out of the listing, so ask for it by id:
+  // one batched call, and only for the tabs nothing else has already named.
+  const unnamed = open.filter(
+    (visit) =>
+      !visit.title?.trim() && !rows.find((instance) => instance.id === visit.id)?.title?.trim()
+  );
+  const named = new Map<string, string>();
+  if (unnamed.length > 0) {
+    try {
+      const response = await fetch('/api/instances/titles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          // The machine/cwd/harness a stored-session tab addresses itself with,
+          // so a conversation with no row of its own can still be read.
+          ids: unnamed.map((visit) => ({
+            id: visit.id,
+            machine: visit.machine ?? undefined,
+            cwd: visit.cwd,
+            harness: visit.harness,
+          })),
+        }),
+      });
+      if (response.ok) {
+        for (const { id, title } of (await response.json()) as { id: string; title: string | null }[])
+          if (title) named.set(id, title);
+      }
+    } catch {
+      // A hub that cannot answer leaves those tabs to their fallback, exactly as
+      // they were before this call existed.
+    }
+  }
+
   const tabs: ServerTab[] = open.map((visit) => {
     const row = rows.find((instance) => instance.id === visit.id);
     // A stored session addresses itself with its machine/cwd/harness; drop that
@@ -113,12 +150,14 @@ export const load: LayoutServerLoad = async ({ cookies, fetch, url }) => {
     return {
       id: visit.id,
       href,
-      // The name the strip itself resolved, when it has resolved one. A title
-      // is mostly derived from the FIRST THING THE SESSION WAS ASKED, which
-      // lives in the transcript — so a server with only the fleet's rows would
-      // fall to the folder leaf and be corrected on hydration. Reading the
-      // browser's own answer back out of the cookie is what removes that.
-      label: visit.title || resolveSessionTitle({ title: row?.title, cwd, id: visit.id }),
+      // In order: the name the strip itself last resolved, the fleet's own row,
+      // then the hub's answer for a conversation the board no longer lists.
+      // Only a session nobody has ever read — on a machine that is not
+      // connected, so nothing can read it now either — falls past all three to
+      // the folder it ran in and, failing that, to its id.
+      label:
+        visit.title ||
+        resolveSessionTitle({ title: row?.title || named.get(visit.id), cwd, id: visit.id }),
       seed: cwd || visit.id,
     };
   });

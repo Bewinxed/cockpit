@@ -70,6 +70,13 @@ const UPDATE_TIMEOUT_MS = 10 * 60_000;
 /** Reading one file off a machine: it answers about as fast as a disk does. */
 const READ_TIMEOUT_MS = 10_000;
 
+/**
+ * How many conversations one naming request may ask about. A reader's open tabs
+ * are a couple of dozen at the outside; the cap is what keeps a hand-written
+ * body from turning a single request into a fleet-wide transcript sweep.
+ */
+const TITLE_ASK_LIMIT = 64;
+
 /** Entries per flush of a streamed transcript — small enough to paint, big enough not to thrash. */
 const TRANSCRIPT_FLUSH = 25;
 
@@ -793,9 +800,10 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
    * from the transcript. Write-once and never over a given title, so this can
    * be called from every path that might see the first message first.
    */
-  const nameFromFirstTurn = (machineId: string, instanceId: string, raw: string): void => {
+  const nameFromFirstTurn = (machineId: string, instanceId: string, raw: string): string => {
     const derived = deriveTitleFromFirstMessage(raw);
     if (derived && db.noteDerivedTitle(instanceId, derived)) publishInstances(machineId);
+    return derived;
   };
 
   /**
@@ -803,6 +811,20 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
    * it is the session's name. Consumed either way — the second turn is not a
    * first message, and a turn with no text of its own never was.
    */
+  /**
+   * The words a stored transcript opens with: its oldest user turn that says
+   * anything. A transcript starts with the reader's own ask, so this is what
+   * the conversation is called — and it is the same entry the dashboard's
+   * folding layer picks when it names a session client-side.
+   */
+  const firstTurnOf = (transcript: unknown[]): string | undefined => {
+    for (const entry of transcript) {
+      const text = userTurnText(entry);
+      if (text) return text;
+    }
+    return undefined;
+  };
+
   const nameFromLiveTurn = (machineId: string, instanceId: string, message: unknown): void => {
     if (!awaitingFirstTurn.has(instanceId)) return;
     // Everything that is not a reader speaking — an init frame, a tool result
@@ -1197,6 +1219,94 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
       }
     )
     .get('/api/instances', () => db.listInstances())
+    // What these conversations are called — *whether or not the board still
+    // lists them*.
+    //
+    // The listing is a working board: it drops a session that has not moved in
+    // a day. A reader's open tabs are not a board, though — the strip carries
+    // whatever they left open, and a tab the listing has aged out had no row to
+    // read a name off, so the first server render called it by eight characters
+    // of its id and only found the real name once the reader clicked it. The
+    // name was never missing; it was filtered out. This answers by id straight
+    // off the row, past the cut-off.
+    //
+    // Each ask is an id, or an id with the machine/cwd/harness a stored-session
+    // link carries (the same context `/messages` takes). Cheap first: a name
+    // already written down costs one query for the whole batch. Only a row that
+    // has never been named at all reaches for its machine, and then only if the
+    // machine is connected — and what comes back is written down, so no session
+    // is ever read twice for its name.
+    .post(
+      '/api/instances/titles',
+      {
+        body: t.Object({
+          ids: t.Array(
+            t.Union([
+              t.String(),
+              t.Object({
+                id: t.String(),
+                machine: t.Optional(t.Nullable(t.String())),
+                cwd: t.Optional(t.String()),
+                harness: t.Optional(t.String()),
+              }),
+            ])
+          ),
+        }),
+      },
+      async ({ body }) => {
+        const asked = new Map<string, { id: string; machine?: string; cwd?: string; harness?: string }>();
+        for (const ask of body.ids) {
+          const one = typeof ask === 'string' ? { id: ask } : { ...ask, machine: ask.machine ?? undefined };
+          if (!one.id || asked.has(one.id)) continue;
+          // Bounded by what a reader can plausibly have open, so a hand-written
+          // body cannot turn one request into a fleet-wide transcript sweep.
+          if (asked.size >= TITLE_ASK_LIMIT) break;
+          asked.set(one.id, one);
+        }
+        if (asked.size === 0) return [];
+
+        const rows = new Map(
+          db.getInstancesByIds([...asked.keys()]).map((row) => [row.id, row] as const)
+        );
+
+        return await Promise.all(
+          [...asked.values()].map(async (ask) => {
+            const row = rows.get(ask.id);
+            const named = row?.title ?? row?.derivedTitle;
+            if (named) return { id: ask.id, title: named };
+
+            // Never named, so ask the machine that stores the conversation. A
+            // machine that is not connected leaves the tab to its fallback:
+            // nothing here can invent a name nobody has ever written down.
+            const machineId = ask.machine ?? row?.machineId;
+            if (!machineId || !registry.agent(machineId)) return { id: ask.id, title: null };
+
+            const answer = await callAgent(
+              machineId,
+              CONTROL_GET_SESSION_MESSAGES,
+              [
+                ask.machine ? ask.id : (row?.sessionId ?? ask.id),
+                { dir: ask.cwd || row?.cwd || undefined },
+              ],
+              READ_TIMEOUT_MS,
+              (ask.harness || row?.harness || undefined) as HarnessKind | undefined
+            );
+            if (answer === 'offline' || answer === 'timeout' || !answer.ok) {
+              return { id: ask.id, title: null };
+            }
+            const first = firstTurnOf(Array.isArray(answer.result) ? answer.result : []);
+            if (!first) return { id: ask.id, title: null };
+
+            // Written down on the way past, so the next render of this tab is
+            // the cheap path — and so is every other reader's.
+            const derived = row
+              ? nameFromFirstTurn(row.machineId, row.id, first)
+              : deriveTitleFromFirstMessage(first);
+            return { id: ask.id, title: derived || null };
+          })
+        );
+      }
+    )
     // A session's stored transcript over HTTP, which is the only way a page can
     // have one before its socket is up. The dashboard used to read history with
     // a `getSessionMessages` control over its own WebSocket, so a reload showed
@@ -1246,12 +1356,8 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
         // Write-once, so this costs one statement the first time a transcript
         // is read and nothing on every read after it.
         if (row && !row.title && !row.derivedTitle) {
-          for (const entry of transcript) {
-            const text = userTurnText(entry);
-            if (!text) continue;
-            nameFromFirstTurn(machineId, row.id, text);
-            break;
-          }
+          const first = firstTurnOf(transcript);
+          if (first) nameFromFirstTurn(machineId, row.id, first);
         }
 
         return new Response(ndjsonNewestFirst(transcript), {

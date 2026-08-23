@@ -291,6 +291,15 @@ export interface DbShape {
    */
   readonly listAgents: () => AgentRow[];
   readonly listInstances: () => (typeof instances.$inferSelect)[];
+  /**
+   * The named rows, however old they are — the listing's staleness cut-off does
+   * not apply here. A conversation the reader still has a tab open on is a row
+   * they are entitled to an answer about, and the answer (what it is called) was
+   * written down long before it aged out of the board. Discarded rows stay gone:
+   * those were thrown away on purpose. Raw, so a caller can tell a given title
+   * from a derived one.
+   */
+  readonly getInstancesByIds: (ids: string[]) => (typeof instances.$inferSelect)[];
   readonly listProjects: () => (typeof projects.$inferSelect)[];
   readonly createProject: (project: {
     id: string;
@@ -1016,6 +1025,14 @@ const make = (path: string): DbShape => {
         // already carries it and no label changes once a transcript loads. The
         // column itself stays as it was: a given title is still what wins here.
         .map((row) => (row.title ? row : { ...row, title: row.derivedTitle })),
+    getInstancesByIds: (ids) => {
+      if (ids.length === 0) return [];
+      return db
+        .select()
+        .from(instances)
+        .where(and(inArray(instances.id, ids), ne(instances.status, 'discarded')))
+        .all();
+    },
     listProjects: () => db.select().from(projects).all(),
     createProject: ({ id, machineId, name, cwd }) =>
       db.insert(projects).values({ id, machineId, name, cwd }).returning().get(),
