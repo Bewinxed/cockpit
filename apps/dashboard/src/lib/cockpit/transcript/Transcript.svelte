@@ -137,7 +137,22 @@
         repeatCount="indefinite"
       />
     </feTurbulence>
-    <feDisplacementMap in="SourceGraphic" in2="noise" scale="3" xChannelSelector="R" yChannelSelector="G" />
+    <!-- Chromatic refraction: split R/G/B, displace each by a slightly different
+         amount, recombine additively. Same displacement the reference's GL shader
+         does, plus the faint colour fringing that reads as glass — done on the
+         live DOM, so no snapshot/font/taint fragility. Scales stay close (4.2 /
+         3.4 / 2.6) so the fringe is a whisper, not a 3D-movie effect. -->
+    <feColorMatrix in="SourceGraphic" type="matrix" result="rC"
+      values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0" />
+    <feColorMatrix in="SourceGraphic" type="matrix" result="gC"
+      values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0" />
+    <feColorMatrix in="SourceGraphic" type="matrix" result="bC"
+      values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0" />
+    <feDisplacementMap in="rC" in2="noise" scale="4.2" xChannelSelector="R" yChannelSelector="G" result="rD" />
+    <feDisplacementMap in="gC" in2="noise" scale="3.4" xChannelSelector="R" yChannelSelector="G" result="gD" />
+    <feDisplacementMap in="bC" in2="noise" scale="2.6" xChannelSelector="R" yChannelSelector="G" result="bD" />
+    <feBlend in="rD" in2="gD" mode="screen" result="rg" />
+    <feBlend in="rg" in2="bD" mode="screen" />
   </filter>
 </svg>
 
