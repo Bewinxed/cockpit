@@ -5,25 +5,6 @@
     <link rel="icon" href="%sveltekit.assets%/favicon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Outpost — mission control for Claude Code</title>
-    <script>
-      // No-flash rail width. The server renders the rail from the
-      // `cockpit-rail-width` COOKIE, but a returning user's width may still live
-      // only in localStorage (it predates the cookie). Resolve it here — before
-      // the rail paints — into `--rail-preload`, and seed the cookie so the
-      // server has it next load. Without this the rail paints the default and
-      // then reflows to the real width on hydration.
-      (function () {
-        try {
-          var m = document.cookie.match(/(?:^|;\s*)cockpit-rail-width=(\d+)/);
-          var w = m ? +m[1] : +(localStorage.getItem('cockpit-rail-width') || 0);
-          if (w > 0) {
-            w = Math.min(520, Math.max(216, Math.round(w)));
-            document.documentElement.style.setProperty('--rail-preload', w + 'px');
-            if (!m) document.cookie = 'cockpit-rail-width=' + w + ';path=/;max-age=31536000;samesite=lax';
-          }
-        } catch (e) {}
-      })();
-    </script>
     %sveltekit.head%
   </head>
   <body data-sveltekit-preload-data="hover">

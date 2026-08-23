@@ -41,17 +41,13 @@
   let jumpOpen = $state(false);
   let railOpen = $state(false);
 
-  // The no-flash script in app.html already resolved the width (cookie, else
-  // localStorage) into `--rail-preload` and seeded the cookie before paint. Sync
-  // the reactive state to that resolved value, so a later keyboard/drag resize
-  // starts from what is on screen rather than the SSR default — otherwise the
-  // first arrow-key nudge would snap the rail back to 288.
+  // SSR renders the rail from the cookie, so a returning visit is already the
+  // right width on first paint — no client fixup needed. The one gap the server
+  // can't see is a legacy width still living only in localStorage (it predates
+  // the cookie): seed the cookie from it once, so the NEXT load is SSR-correct.
+  // That single migration load is the only time the rail can move on hydration.
   onMount(() => {
-    const cookie = document.cookie.match(new RegExp(`(?:^|;\\s*)${RAIL_KEY}=(\\d+)`));
-    if (cookie) {
-      railWidth = clamp(Number(cookie[1]));
-      return;
-    }
+    if (document.cookie.includes(`${RAIL_KEY}=`)) return;
     const stored = Number(localStorage.getItem(RAIL_KEY));
     if (Number.isFinite(stored) && stored > 0) setRail(stored);
   });
@@ -156,7 +152,7 @@
 
 <a class="skip" href="#main-content">Skip to content</a>
 
-<div class="shell" style="--sidebar-width: var(--rail-preload, {railWidth}px)">
+<div class="shell" style="--sidebar-width: {railWidth}px">
   <aside class="rail hidden min-[900px]:flex">
     <Sidebar />
     <div
