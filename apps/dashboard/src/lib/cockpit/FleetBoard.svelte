@@ -25,6 +25,7 @@
   import * as Table from '$lib/components/ui/table';
   import * as Pagination from '$lib/components/ui/pagination';
   import SpawnPanel from '$lib/cockpit/SpawnPanel.svelte';
+  import AttentionQueue from '$lib/cockpit/AttentionQueue.svelte';
   import {
     cockpit,
     isFailed,
@@ -364,6 +365,14 @@
       {@render stat('Spend today', `$${spend.toFixed(2)}`)}
     </div>
 
+    <!-- JOURNEY §1 block 3. Everything parked on a human sits above the roster,
+         longest wait first, with the answer one tap away — the roster below is
+         for choosing a session, this is for unblocking one. It renders itself
+         away when nothing is waiting. -->
+    <div class="queue">
+      <AttentionQueue />
+    </div>
+
     <div class="panel">
       {#if cockpit.hub === 'unreachable'}
         <div class="empty">
@@ -678,6 +687,15 @@
   .u {
     color: var(--ink-muted);
     font-size: var(--text-sm);
+  }
+
+  /* The wrapper is layout-transparent, so an empty queue leaves no gap behind:
+     the spacing belongs to the card, which only exists when something waits. */
+  .queue {
+    display: contents;
+  }
+  .queue > :global(*) {
+    margin-top: var(--space-6);
   }
 
   .panel {

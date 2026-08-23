@@ -11,6 +11,13 @@
    * Derived rather than tracked, so a queue is never stale: the moment a
    * session clears its permissions, the strip that named it is gone with it.
    *
+   * Ordered by how long the ask has been waiting, longest first — the one
+   * ordering that matches why the list exists. The hub does not stamp a
+   * permission with the moment it was raised, so the clock here is this
+   * browser's own first sighting of the request; for an ask replayed from
+   * `/api/pending` at page load that reads as "since you opened this tab",
+   * which is why a row says "waiting" rather than claiming an exact age.
+   *
    * Deliberately unalarming. The status dot already carries the one hue the
    * fleet uses for "needs you"; the rest of the strip reads like any other row
    * in the app, so a reader with six sessions waiting on them can scan this
@@ -26,18 +33,72 @@
   import { permissionSummary } from './permission-summary';
   import { questionsOf } from './question';
   import { isTyping } from '$lib/utils/typing';
+  import { reducedMotion } from './motion.svelte';
   import ActivityDot from './ActivityDot.svelte';
   import { Badge } from '$lib/components/ui/badge';
   import { Button } from '$lib/components/ui/button';
   import { Card } from '$lib/components/ui/card';
-  import { fly, slide } from 'svelte/transition';
+  import { fly } from 'svelte/transition';
   import { quintOut } from 'svelte/easing';
+
+  /** A request only ever belongs to one session, but the pair is the honest key. */
+  const rowKey = (item: BlockedRequest): string => `${item.instanceId}:${item.request.requestId}`;
+
+  /**
+   * When this tab first saw each parked ask. Module-scoped so the clock keeps
+   * running across the board mounting and unmounting, and pruned against the
+   * live list so an answered ask does not leak its entry.
+   */
+  const firstSeen = new Map<string, number>();
+
+  /** Ticks the relative ages without re-reading the store. */
+  let now = $state(Date.now());
+  $effect(() => {
+    const timer = setInterval(() => (now = Date.now()), 15_000);
+    return () => clearInterval(timer);
+  });
 
   const blocked = $derived(cockpit.blocked);
   const total = $derived(blocked.length);
 
-  /** A request only ever belongs to one session, but the pair is the honest key. */
-  const rowKey = (item: BlockedRequest): string => `${item.instanceId}:${item.request.requestId}`;
+  const queue = $derived.by(() => {
+    const at = Date.now();
+    const live = new Set(blocked.map(rowKey));
+    for (const key of firstSeen.keys()) if (!live.has(key)) firstSeen.delete(key);
+
+    const rows = blocked.map((item) => {
+      const key = rowKey(item);
+      let since = firstSeen.get(key);
+      if (since === undefined) {
+        since = at;
+        firstSeen.set(key, since);
+      }
+      const questions = questionsOf(item.request.toolName, item.request.input);
+      return {
+        key,
+        item,
+        since,
+        isQuestion: Boolean(questions),
+        summary: questions
+          ? questions.map((question) => question.question).join(' · ')
+          : permissionSummary(item.request.toolName, item.request.input),
+      };
+    });
+
+    // Longest wait first: the ask that has held a session up the longest is the
+    // one the reader should answer next.
+    return rows.sort((a, b) => a.since - b.since);
+  });
+
+  /** "waiting 4m" — deliberately vague under a minute, never a fake precision. */
+  function waited(since: number): string {
+    const seconds = Math.max(0, Math.floor((now - since) / 1000));
+    if (seconds < 60) return 'waiting';
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `waiting ${minutes}m`;
+    const hours = Math.floor(minutes / 60);
+    return hours < 24 ? `waiting ${hours}h` : `waiting ${Math.floor(hours / 24)}d`;
+  }
 
   function answer(item: BlockedRequest, kind: PermissionAnswer): void {
     resolvePermission(
@@ -50,13 +111,16 @@
 
   /**
    * The same two-letter pairs the permission card answers to (`y`/`a` allow,
-   * `n`/`d` deny), while the strip beneath them has focus. A question has no
-   * one-key answer — it wants an actual choice made in the session — so it
-   * never gets a shortcut here, and neither does a strip while the reader is
-   * typing somewhere else.
+   * `n`/`d` deny), while a control inside the row has focus — the handler sits
+   * on the row's own buttons and link, so every path into it is a real tab
+   * stop rather than a tabindex on a list item. A question has no one-key
+   * answer — it wants an actual choice made in the session — so it never gets
+   * a shortcut here, and neither does a row while the reader is typing
+   * somewhere else.
    */
   function onKeydown(event: KeyboardEvent, item: BlockedRequest, isQuestion: boolean): void {
     if (isQuestion || isTyping()) return;
+    if (event.metaKey || event.ctrlKey || event.altKey) return;
     const key = event.key.toLowerCase();
     if (key === 'y' || key === 'a') {
       event.preventDefault();
@@ -70,37 +134,31 @@
 
 {#if total > 0}
   <Card
-    class="flex flex-col gap-0 rounded-[var(--radius-panel)] py-0 shadow-md [--card-spacing:var(--space-4)]"
+    class="flex flex-col gap-0 rounded-[var(--radius-panel)] py-0 shadow-[var(--shadow-lifted)] [--card-spacing:var(--space-4)]"
     aria-labelledby="attention-queue-heading"
   >
-    <header class="flex items-center gap-[var(--space-1)] px-[var(--space-4)] pt-[var(--space-4)] pb-[var(--space-2)]">
+    <header
+      class="flex flex-wrap items-center gap-[var(--space-2)] px-[var(--space-4)] pt-[var(--space-4)] pb-[var(--space-2)]"
+    >
       <h2 id="attention-queue-heading" class="text-body font-medium text-foreground">Needs you</h2>
+      <!-- Needs-you is not failure: --status-attn-* is the fleet's one hue for
+           "a person is holding this up" (DESIGN.md Never #3 reserves red). -->
       <Badge
         variant="secondary"
-        class="min-w-5 bg-error/15 px-1.5 text-error tabular-nums"
+        class="min-w-5 bg-[var(--status-attn-bg)] px-1.5 text-[color:var(--status-attn-ink)] tabular-nums"
         aria-label="{total} {total === 1 ? 'session needs' : 'sessions need'} you"
       >
         {total}
       </Badge>
+      <span class="text-micro text-muted-foreground">Longest wait first</span>
     </header>
 
     <ul class="flex flex-col">
-      {#each blocked as item (rowKey(item))}
-        {@const isQuestion = Boolean(questionsOf(item.request.toolName, item.request.input))}
-        {@const summary = isQuestion
-          ? 'asked a question'
-          : permissionSummary(item.request.toolName, item.request.input)}
-        <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-        <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+      {#each queue as entry (entry.key)}
+        {@const item = entry.item}
         <li
-          tabindex="0"
-          aria-label="{item.hostname}: {summary}"
-          class="flex flex-wrap items-start gap-x-[var(--space-3)] gap-y-[var(--space-2)] border-t border-border/60 px-[var(--space-4)] py-[var(--space-3)]
-                 first:border-t-0 transition-colors duration-150 ease-out hover:bg-accent/40
-                 focus-visible:bg-accent/50"
-          onkeydown={(event) => onKeydown(event, item, isQuestion)}
-          in:fly={{ y: -8, duration: 240, easing: quintOut }}
-          out:slide={{ duration: 160, easing: quintOut }}
+          class="flex flex-wrap items-start gap-x-[var(--space-3)] gap-y-[var(--space-2)] border-t border-border/60 px-[var(--space-4)] py-[var(--space-3)] first:border-t-0"
+          in:fly={{ y: -8, duration: reducedMotion.current ? 0 : 240, easing: quintOut }}
         >
           <span class="mt-1 shrink-0">
             <ActivityDot activity="blocked" />
@@ -110,7 +168,8 @@
             <div class="flex flex-wrap items-baseline gap-x-2">
               <a
                 href="/session/{item.instanceId}"
-                class="text-body truncate font-medium text-foreground transition-colors hover:text-primary"
+                class="text-body truncate font-medium text-foreground transition-colors hover:text-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                onkeydown={(event) => onKeydown(event, item, entry.isQuestion)}
               >
                 {item.hostname}
               </a>
@@ -119,21 +178,55 @@
                      machine apart — TX-02, like every other path in the app. -->
                 <span class="text-caption truncate font-mono">{item.cwd}</span>
               {/if}
+              <span class="text-micro shrink-0 text-muted-foreground tabular-nums">
+                {waited(entry.since)}
+              </span>
             </div>
-            <p class="text-body truncate text-muted-foreground">{summary}</p>
+            <p class="text-body truncate text-muted-foreground">
+              {entry.isQuestion ? 'Asked a question' : entry.summary}
+            </p>
           </div>
 
-          {#if !isQuestion}
-            <!-- A phone gives the actions their own row rather than squeezing
-                 the reason that made them necessary down to three words. -->
-            <div class="flex w-full shrink-0 items-center justify-end gap-[var(--space-1)] sm:w-auto sm:pt-0.5">
-              <Button size="sm" onclick={() => answer(item, 'allow')}>Allow</Button>
-              <Button size="sm" variant="ghost" onclick={() => answer(item, 'deny')}>Deny</Button>
+          <!-- A phone gives the actions their own row rather than squeezing
+               the reason that made them necessary down to three words. -->
+          <div
+            class="flex w-full shrink-0 items-center justify-end gap-[var(--space-1)] sm:w-auto sm:pt-0.5"
+          >
+            {#if entry.isQuestion}
+              <Button size="sm" href="/session/{item.instanceId}">Answer</Button>
+            {:else}
+              <Button
+                size="sm"
+                aria-label="Approve {entry.summary} on {item.hostname}"
+                onkeydown={(event: KeyboardEvent) => onKeydown(event, item, false)}
+                onclick={() => answer(item, 'allow')}
+              >
+                Approve
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                aria-label="Deny {entry.summary} on {item.hostname}"
+                onkeydown={(event: KeyboardEvent) => onKeydown(event, item, false)}
+                onclick={() => answer(item, 'deny')}
+              >
+                Deny
+              </Button>
               <Button size="sm" variant="ghost" href="/session/{item.instanceId}">Open</Button>
-            </div>
-          {/if}
+            {/if}
+          </div>
         </li>
       {/each}
     </ul>
   </Card>
 {/if}
+
+<style>
+  /* Coarse pointers get the 44px floor DESIGN.md asks for at every width. */
+  @media (pointer: coarse) {
+    li :global([data-slot='button']) {
+      min-height: 44px;
+      min-width: 44px;
+    }
+  }
+</style>
