@@ -206,10 +206,19 @@
     margin-bottom: var(--space-2);
     white-space: pre-wrap;
   }
+  /* JOURNEY §Triage: the full row width sits between grant and refusal. At
+     --space-2 the two sat 7px apart, close enough that a hand aiming at
+     Approve lands on Deny. The gap is unfillable on purpose — no third
+     control belongs between a grant and a refusal — and --space-8 is the
+     floor it never falls below when the row is narrow. */
   .choice {
     display: flex;
-    gap: var(--space-2);
+    justify-content: space-between;
+    gap: var(--space-8);
     margin-top: var(--space-2);
+  }
+  .choice > :global(*) {
+    flex: 0 0 auto;
   }
   .widen {
     /* a clear break from the gate above, on the scale (--space-8 / --space-5) */
@@ -280,6 +289,10 @@
   @media (pointer: coarse) {
     .qopts button {
       min-height: 44px;
+    }
+    .choice > :global(*) {
+      min-height: 44px;
+      min-width: 44px;
     }
   }
 </style>
