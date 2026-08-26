@@ -17,6 +17,7 @@
   import RuleActivity from '$lib/cockpit/RuleActivity.svelte';
   import RuleTester from '$lib/cockpit/RuleTester.svelte';
   import { blankRule, draftOf, message, removeRule, saveRule } from '$lib/cockpit/rules';
+  import { confirm } from '$lib/cockpit/confirm.svelte';
   import type { PageData } from './$types';
 
   /**
@@ -119,6 +120,17 @@
     } finally {
       busy = false;
     }
+  }
+
+  async function askRemove() {
+    if (!id) return;
+    const ok = await confirm({
+      title: `Delete ${draft.name || 'this rule'}?`,
+      body: "This rule stops applying to every session and is removed for good. You can always write it again, but there's no undo.",
+      confirmLabel: 'Delete rule',
+      destructive: true,
+    });
+    if (ok) await remove();
   }
 
   async function remove() {
@@ -446,7 +458,11 @@
       <p class="text-caption text-destructive" role="alert">{failed}</p>
     {/if}
 
-    <div class="flex flex-wrap items-center justify-between gap-3 pb-6">
+    <!-- Pinned: on a long rule the Save used to scroll off, so the reader edited
+         with no way to commit in view. It rides the foot of the viewport now. -->
+    <div
+      class="sticky bottom-0 z-10 -mx-[var(--space-3)] flex flex-wrap items-center justify-between gap-3 border-t border-border/60 bg-[var(--surface-content)] px-[var(--space-3)] py-[var(--space-4)] [padding-bottom:calc(var(--space-4)+env(safe-area-inset-bottom))]"
+    >
       {#if id}
         <Button
           type="button"
@@ -454,7 +470,7 @@
           size="sm"
           class="text-muted-foreground hover:text-destructive"
           disabled={deleting || busy}
-          onclick={remove}
+          onclick={askRemove}
         >
           <IconTrash class="shrink-0" />
           {deleting ? 'Deleting…' : 'Delete rule'}
