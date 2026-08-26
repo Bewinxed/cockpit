@@ -182,7 +182,7 @@
               {/if}
             </button>
             <Button variant="outline" size="xs" class="shrink-0" onclick={() => edit(row)}>Edit</Button>
-            <span class="shrink-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 md:opacity-0">
+            <span class="shrink-0">
               <Tooltip.Root>
                 <Tooltip.Trigger>
                   {#snippet child({ props })}
