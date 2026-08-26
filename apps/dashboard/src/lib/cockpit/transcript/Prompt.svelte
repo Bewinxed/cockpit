@@ -152,6 +152,22 @@
     <h2><span class="pill attn"><IconArrowUp />needs you</span>Permission — {request.toolName}</h2>
     <p class="lede">{summary}</p>
     {#if command}<div class="cmd">{command}</div>{/if}
+    <!-- The disclosed payload: a summary line is not enough to grant on — an
+         Edit/Write/WebFetch shows one sentence and hides the file, the diff, the
+         URL it is actually about. Every field of the tool input is here, one
+         disclosure away, so the grant is informed. -->
+    <details class="disclose">
+      <summary>What this touches</summary>
+      <div class="fields">
+        {#each Object.entries(input) as [key, value]}
+          {@const text = typeof value === 'string' ? value : JSON.stringify(value, null, 2)}
+          <div class="field">
+            <span class="k">{key}</span>
+            <pre class="v">{text}</pre>
+          </div>
+        {/each}
+      </div>
+    </details>
     <div class="choice">
       <Button class={grant} disabled={!answerable} onclick={() => answer('allow')}>
         <IconCheck />Approve
@@ -225,6 +241,71 @@
     padding: 3px 0 3px var(--space-3);
     margin-bottom: var(--space-2);
     white-space: pre-wrap;
+  }
+
+  /* The disclosed payload — collapsed by default, every tool-input field inside. */
+  .disclose {
+    margin-bottom: var(--space-3);
+  }
+  .disclose > summary {
+    display: inline-flex;
+    align-items: center;
+    width: fit-content;
+    cursor: pointer;
+    list-style: none;
+    font-size: var(--text-xs);
+    color: var(--ink-muted);
+    transition: color var(--c-100) var(--e-in);
+  }
+  .disclose > summary::-webkit-details-marker {
+    display: none;
+  }
+  .disclose > summary::before {
+    content: '▸';
+    margin-right: var(--space-2);
+    transition: transform var(--c-100) var(--e-in);
+  }
+  .disclose[open] > summary::before {
+    transform: rotate(90deg);
+  }
+  .disclose > summary:hover {
+    color: var(--ink-body);
+  }
+  .fields {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin-top: var(--space-2);
+    padding: var(--space-3);
+    border-radius: var(--radius-well);
+    background: var(--surface-sunken);
+  }
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    min-width: 0;
+  }
+  .field .k {
+    font-size: var(--text-xs);
+    font-weight: var(--weight-medium);
+    color: var(--ink-muted);
+  }
+  .field .v {
+    margin: 0;
+    max-height: 200px;
+    overflow: auto;
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--ink-body);
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .disclose > summary,
+    .disclose > summary::before {
+      transition: none;
+    }
   }
   /* JOURNEY §Triage: the full row width sits between grant and refusal. At
      --space-2 the two sat 7px apart, close enough that a hand aiming at
