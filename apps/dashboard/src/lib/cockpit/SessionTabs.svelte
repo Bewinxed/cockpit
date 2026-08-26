@@ -18,6 +18,8 @@
   import { resolveSessionTitle } from './links';
   import { markHue } from './mark';
   import HarnessGlyph from './HarnessGlyph.svelte';
+  import * as ContextMenu from '$lib/components/ui/context-menu';
+  import { copyToClipboard } from './copy';
   import { workingSet } from './working-set.svelte';
 
   interface Tab {
@@ -141,6 +143,18 @@
     workingSet.forget(id);
     if (path === `/session/${id}`) goto('/session');
   }
+
+  /** Right-click actions beyond the close cross. */
+  function closeOthers(keep: string) {
+    for (const id of [...workingSet.order]) if (id !== keep) workingSet.forget(id);
+    if (path !== `/session/${keep}`) goto(`/session/${keep}`);
+  }
+  function closeAll() {
+    for (const id of [...workingSet.order]) workingSet.forget(id);
+    goto('/session');
+  }
+  const copyLink = (href: string) =>
+    copyToClipboard('Link', new URL(href, location.origin).href);
 </script>
 
 <div class="tabstrip" role="tablist" aria-label="Open sessions">
@@ -159,15 +173,33 @@
   {/if}
   {#each tabs as tab (tab.id)}
     {@const active = path === `/session/${tab.id}`}
-    <div class="tab" class:on={active}>
-      <a class="tl" href={tab.href} role="tab" aria-selected={active} title={tab.label}>
-        <span class="tm m{tab.hue}" aria-hidden="true"><HarnessGlyph harness={tab.harness} /></span>
-        <span class="nm">{tab.label}</span>
-      </a>
-      <button type="button" class="tclose" aria-label="Close {tab.label}" onclick={() => close(tab.id)}>
-        <IconClose />
-      </button>
-    </div>
+    <ContextMenu.Root>
+      <ContextMenu.Trigger class="contents">
+        <div class="tab" class:on={active}>
+          <a class="tl" href={tab.href} role="tab" aria-selected={active} title={tab.label}>
+            <span class="tm m{tab.hue}" aria-hidden="true"><HarnessGlyph harness={tab.harness} /></span>
+            <span class="nm">{tab.label}</span>
+          </a>
+          <button
+            type="button"
+            class="tclose"
+            aria-label="Close {tab.label}"
+            onclick={() => close(tab.id)}
+          >
+            <IconClose />
+          </button>
+        </div>
+      </ContextMenu.Trigger>
+      <ContextMenu.Content>
+        <ContextMenu.Item onSelect={() => close(tab.id)}>Close</ContextMenu.Item>
+        <ContextMenu.Item onSelect={() => closeOthers(tab.id)} disabled={tabs.length < 2}>
+          Close others
+        </ContextMenu.Item>
+        <ContextMenu.Item onSelect={closeAll}>Close all</ContextMenu.Item>
+        <ContextMenu.Separator />
+        <ContextMenu.Item onSelect={() => copyLink(tab.href)}>Copy link</ContextMenu.Item>
+      </ContextMenu.Content>
+    </ContextMenu.Root>
   {/each}
 </div>
 
