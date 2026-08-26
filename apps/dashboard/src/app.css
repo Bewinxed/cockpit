@@ -859,10 +859,16 @@
    single frame reads as a progress fraction it cannot know. Decorative loops
    and anything that travels do not qualify. */
 @media (prefers-reduced-motion: reduce) {
+  /* DESIGN.md §motion: reduced motion caps every animation and transition at 1ms
+     — not 120ms. At 120ms a fly/scale/slide still visibly TRAVELS, which is the
+     exact motion a vestibular-sensitive reader asked to be spared; Svelte's
+     built-in transitions compile to CSS animations, so this one rule snaps all
+     of them (the information survives — only the movement stops). Loops whose
+     looping is the information keep going via [data-motion-loop]. */
   *:not([data-motion-loop]), *::before, *::after {
-    animation-duration: 120ms !important;
+    animation-duration: 1ms !important;
     animation-iteration-count: 1 !important;
-    transition-duration: 120ms !important;
+    transition-duration: 1ms !important;
   }
   .pressable:active {
     transform: none;
