@@ -18,6 +18,7 @@
   import { isTyping } from '$lib/utils/typing';
   import { cockpit, hubSocketUrl, reconnectNow } from './client.svelte';
   import JumpPalette from './JumpPalette.svelte';
+  import ConfirmDialog from './ConfirmDialog.svelte';
   import Sidebar from './Sidebar.svelte';
   import SessionTabs from './SessionTabs.svelte';
   import UsageMeter from './UsageMeter.svelte';
@@ -249,6 +250,8 @@
 </div>
 
 <JumpPalette bind:open={jumpOpen} />
+<!-- One dialog for every destructive confirm in the app (see confirm.svelte.ts). -->
+<ConfirmDialog />
 
 <style>
   .skip {

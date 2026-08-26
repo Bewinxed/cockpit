@@ -15,8 +15,8 @@
     IconStop,
     IconTrash,
   } from '$lib/icons';
-  import * as AlertDialog from '$lib/components/ui/alert-dialog';
   import * as ContextMenu from '$lib/components/ui/context-menu';
+  import { confirm } from './confirm.svelte';
   import { discardSession, keepSession, stopSession, type InstanceRow } from './client.svelte';
   import { copyToClipboard } from './copy';
   import { rail } from './rail.svelte';
@@ -38,14 +38,19 @@
   const scratch = $derived(instance.kind === 'scratch');
   const pinned = $derived(rail.isPinned('session', instance.id));
 
-  let confirmingDiscard = $state(false);
   let busy = $state(false);
 
-  async function discard() {
+  async function askDiscard() {
+    const ok = await confirm({
+      title: 'Discard this side quest?',
+      body: 'The session stops, and whatever the spawn created for it — its worktree, its transcript — goes with it, for good.',
+      confirmLabel: 'Discard side quest',
+      destructive: true,
+    });
+    if (!ok) return;
     busy = true;
     try {
       await discardSession(instance.id, instance.machineId);
-      confirmingDiscard = false;
     } finally {
       busy = false;
     }
@@ -88,7 +93,7 @@
         <IconCheck />
         Keep
       </ContextMenu.Item>
-      <ContextMenu.Item variant="destructive" onSelect={() => (confirmingDiscard = true)}>
+      <ContextMenu.Item variant="destructive" onSelect={askDiscard}>
         <IconTrash />
         Discard
       </ContextMenu.Item>
@@ -106,21 +111,3 @@
     </ContextMenu.Item>
   </ContextMenu.Content>
 </ContextMenu.Root>
-
-<AlertDialog.Root bind:open={confirmingDiscard}>
-  <AlertDialog.Content>
-    <AlertDialog.Header>
-      <AlertDialog.Title>Discard this side quest?</AlertDialog.Title>
-      <AlertDialog.Description>
-        The session stops, and whatever the spawn created for it — its worktree, its transcript —
-        goes with it, for good.
-      </AlertDialog.Description>
-    </AlertDialog.Header>
-    <AlertDialog.Footer>
-      <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-      <AlertDialog.Action variant="destructive" disabled={busy} onclick={discard}>
-        Discard side quest
-      </AlertDialog.Action>
-    </AlertDialog.Footer>
-  </AlertDialog.Content>
-</AlertDialog.Root>

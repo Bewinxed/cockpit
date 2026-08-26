@@ -8,7 +8,7 @@
   import { Button } from '$lib/components/ui/button';
   import * as Card from '$lib/components/ui/card';
   import * as Alert from '$lib/components/ui/alert';
-  import * as AlertDialog from '$lib/components/ui/alert-dialog';
+  import { confirm } from '$lib/cockpit/confirm.svelte';
   import { Badge } from '$lib/components/ui/badge';
   import { Toggle } from '$lib/components/ui/toggle';
   import * as Tooltip from '$lib/components/ui/tooltip';
@@ -36,8 +36,17 @@
 
   let rules = $state<RuleRow[]>(untrack(() => data.rules));
   let busy = $state<Record<string, boolean>>({});
-  /** Deleting a rule is destructive and easy to mis-tap, so it goes through a confirm. */
-  let confirmRow = $state<RuleRow | null>(null);
+
+  /** Deleting a rule is destructive and easy to mis-tap, so it goes through the confirm. */
+  async function askRemove(row: RuleRow) {
+    const ok = await confirm({
+      title: `Delete ${row.name}?`,
+      body: "This rule stops applying to every session and is removed for good. You can always write it again, but there's no undo.",
+      confirmLabel: 'Delete rule',
+      destructive: true,
+    });
+    if (ok) await remove(row);
+  }
   let seeding = $state<string | null>(null);
 
   // Re-seed when SvelteKit hands the route a fresh load (a return from the
@@ -260,7 +269,7 @@
                             class="text-muted-foreground hover:text-destructive"
                             disabled={busy[row.id] === true}
                             aria-label="Delete {row.name}"
-                            onclick={() => (confirmRow = row)}
+                            onclick={() => askRemove(row)}
                           >
                             <IconTrash class="size-4" />
                           </Button>
@@ -278,36 +287,6 @@
     {/if}
   </div>
 </div>
-
-<AlertDialog.Root
-  open={confirmRow !== null}
-  onOpenChange={(next) => {
-    if (!next) confirmRow = null;
-  }}
->
-  <AlertDialog.Content>
-    <AlertDialog.Header>
-      <AlertDialog.Title>Delete {confirmRow?.name}?</AlertDialog.Title>
-      <AlertDialog.Description>
-        This rule stops applying to every session and is removed for good. You can always write it
-        again, but there's no undo.
-      </AlertDialog.Description>
-    </AlertDialog.Header>
-    <AlertDialog.Footer>
-      <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-      <AlertDialog.Action
-        variant="destructive"
-        onclick={() => {
-          const row = confirmRow;
-          confirmRow = null;
-          if (row) void remove(row);
-        }}
-      >
-        Delete rule
-      </AlertDialog.Action>
-    </AlertDialog.Footer>
-  </AlertDialog.Content>
-</AlertDialog.Root>
 
 <style>
   .page {

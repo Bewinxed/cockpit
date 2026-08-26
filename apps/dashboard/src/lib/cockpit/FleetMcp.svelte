@@ -3,7 +3,7 @@
   import type { FleetMcpServer } from '@cockpit/core';
   import { IconPen, IconPlus, IconRefresh, IconTrash, IconWarningTriangle } from '$lib/icons';
   import * as Alert from '$lib/components/ui/alert';
-  import * as AlertDialog from '$lib/components/ui/alert-dialog';
+  import { confirm } from './confirm.svelte';
   import { Badge } from '$lib/components/ui/badge';
   import { Button } from '$lib/components/ui/button';
   import * as Card from '$lib/components/ui/card';
@@ -65,9 +65,17 @@
     }
   }
 
-  // Removing an MCP server pulls it from EVERY machine, so it goes through a
-  // confirm that names the blast radius — never a bare hover-revealed click.
-  let confirmRow = $state<FleetMcpServer | null>(null);
+  // Removing an MCP server pulls it from EVERY machine, so it goes through the
+  // shared confirm that names the blast radius — never a bare click.
+  async function askRemove(row: FleetMcpServer) {
+    const ok = await confirm({
+      title: `Remove ${row.name}?`,
+      body: `This removes ${row.name} from every machine in the fleet — not just this one. It can't be undone.`,
+      confirmLabel: 'Remove everywhere',
+      destructive: true,
+    });
+    if (ok) await remove(row);
+  }
 
   async function remove(row: FleetMcpServer) {
     busy[row.name] = true;
@@ -184,7 +192,7 @@
                     class="text-muted-foreground hover:text-destructive"
                     aria-label="Delete {row.name}"
                     disabled={busy[row.name] === true}
-                    onclick={() => (confirmRow = row)}
+                    onclick={() => askRemove(row)}
                   >
                     <IconTrash />
                   </Button>
@@ -220,33 +228,3 @@
   taken={servers.filter((row) => row.name !== editing?.name).map((row) => row.name)}
   onsaved={saved}
 />
-
-<AlertDialog.Root
-  open={confirmRow !== null}
-  onOpenChange={(next) => {
-    if (!next) confirmRow = null;
-  }}
->
-  <AlertDialog.Content>
-    <AlertDialog.Header>
-      <AlertDialog.Title>Remove {confirmRow?.name}?</AlertDialog.Title>
-      <AlertDialog.Description>
-        This removes <span class="font-medium text-foreground">{confirmRow?.name}</span> from every
-        machine in the fleet — not just this one. It can't be undone.
-      </AlertDialog.Description>
-    </AlertDialog.Header>
-    <AlertDialog.Footer>
-      <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-      <AlertDialog.Action
-        variant="destructive"
-        onclick={() => {
-          const row = confirmRow;
-          confirmRow = null;
-          if (row) void remove(row);
-        }}
-      >
-        Remove everywhere
-      </AlertDialog.Action>
-    </AlertDialog.Footer>
-  </AlertDialog.Content>
-</AlertDialog.Root>

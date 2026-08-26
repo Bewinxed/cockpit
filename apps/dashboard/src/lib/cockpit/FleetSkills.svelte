@@ -8,6 +8,7 @@
   import { Skeleton } from '$lib/components/ui/skeleton';
   import { Toggle } from '$lib/components/ui/toggle';
   import * as Tooltip from '$lib/components/ui/tooltip';
+  import { confirm } from './confirm.svelte';
   import type { Machine } from './client.svelte';
   import {
     catalogHost, formatBytes, marketplaceCatalog, refreshSkill,
@@ -121,6 +122,33 @@
     } catch (error) { toast.error(message(error)); }
     finally { delete busy[id]; }
   }
+
+  // Every removal here reaches the whole fleet, so each goes through the shared
+  // confirm — no bare hover-revealed click takes a skill or plugin off every
+  // machine.
+  async function askForget(row: FleetSkillMeta) {
+    if (await confirm({
+      title: `Remove ${row.name}?`,
+      body: `This removes the ${row.name} skill from every machine in the fleet. It can't be undone.`,
+      confirmLabel: 'Remove everywhere',
+      destructive: true,
+    })) await forget(row);
+  }
+  async function askUnlink(name: string) {
+    if (await confirm({
+      title: `Unlink ${name}?`,
+      body: 'The fleet stops tracking this marketplace. Plugins already installed from it stay installed.',
+      confirmLabel: 'Unlink',
+    })) await unlinkMp(name);
+  }
+  async function askUninstall(id: string) {
+    if (await confirm({
+      title: `Remove ${id}?`,
+      body: 'This removes the plugin from every machine in the fleet. It can\'t be undone.',
+      confirmLabel: 'Remove everywhere',
+      destructive: true,
+    })) await uninstall(id);
+  }
 </script>
 
 <div class="flex flex-wrap items-start justify-between gap-3">
@@ -177,7 +205,7 @@
                 onPressedChange={(next) => switchSkill(row, next)}
                 title="A disabled skill is taken off the machines, not left switched off"
               >{row.enabled ? 'Enabled' : 'Disabled'}</Toggle>
-              <span class="flex shrink-0 items-center gap-0.5 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 md:opacity-0">
+              <span class="flex shrink-0 items-center gap-0.5">
                 <Tooltip.Root>
                   <Tooltip.Trigger>
                     {#snippet child({ props })}
@@ -191,7 +219,7 @@
                 <Tooltip.Root>
                   <Tooltip.Trigger>
                     {#snippet child({ props })}
-                      <Button {...props} variant="ghost" size="icon-sm" class="text-muted-foreground hover:text-destructive" aria-label="Delete {row.name}" disabled={working[row.name] === true} onclick={() => forget(row)}>
+                      <Button {...props} variant="ghost" size="icon-sm" class="text-muted-foreground hover:text-destructive" aria-label="Delete {row.name}" disabled={working[row.name] === true} onclick={() => askForget(row)}>
                         <IconTrash />
                       </Button>
                     {/snippet}
@@ -260,11 +288,11 @@
                 </Tooltip.Trigger>
                 <Tooltip.Content>{host ? `Read from ${host.hostname}` : 'No machine that is online has this marketplace yet'}</Tooltip.Content>
               </Tooltip.Root>
-              <span class="transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 md:opacity-0">
+              <span class="flex shrink-0 items-center">
                 <Tooltip.Root>
                   <Tooltip.Trigger>
                     {#snippet child({ props })}
-                      <Button {...props} variant="ghost" size="icon-sm" class="text-muted-foreground hover:text-destructive" aria-label="Unlink {row.name}" disabled={busy[row.name] === true} onclick={() => unlinkMp(row.name)}>
+                      <Button {...props} variant="ghost" size="icon-sm" class="text-muted-foreground hover:text-destructive" aria-label="Unlink {row.name}" disabled={busy[row.name] === true} onclick={() => askUnlink(row.name)}>
                         <IconTrash />
                       </Button>
                     {/snippet}
@@ -346,11 +374,11 @@
                 </Tooltip.Trigger>
                 <Tooltip.Content>Disabling uninstalls it from the machines and keeps the row here</Tooltip.Content>
               </Tooltip.Root>
-              <span class="transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 md:opacity-0">
+              <span class="flex shrink-0 items-center">
                 <Tooltip.Root>
                   <Tooltip.Trigger>
                     {#snippet child({ props })}
-                      <Button {...props} variant="ghost" size="icon-sm" class="text-muted-foreground hover:text-destructive" aria-label="Remove {row.id}" disabled={busy[row.id] === true} onclick={() => uninstall(row.id)}>
+                      <Button {...props} variant="ghost" size="icon-sm" class="text-muted-foreground hover:text-destructive" aria-label="Remove {row.id}" disabled={busy[row.id] === true} onclick={() => askUninstall(row.id)}>
                         <IconTrash />
                       </Button>
                     {/snippet}

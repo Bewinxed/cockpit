@@ -13,7 +13,7 @@
   import { parseAgentFrontMatter, type FleetAgent } from '@cockpit/core';
   import { IconPlus, IconSpinner, IconTrash, IconWarningTriangle } from '$lib/icons';
   import * as Alert from '$lib/components/ui/alert';
-  import * as AlertDialog from '$lib/components/ui/alert-dialog';
+  import { confirm } from './confirm.svelte';
   import { Badge } from '$lib/components/ui/badge';
   import { Button } from '$lib/components/ui/button';
   import * as Card from '$lib/components/ui/card';
@@ -33,7 +33,14 @@
 
   let editing = $state<FleetAgent | null>(null);
   let open = $state(false);
-  let forgetting = $state<FleetAgent | null>(null);
+  async function askForget(row: FleetAgent) {
+    const ok = await confirm({
+      title: `Remove ${row.name}?`,
+      body: 'The fleet forgets it. Every machine keeps the file it was already given, and lists it below as unmanaged, until the daemon can take one away itself.',
+      confirmLabel: 'Remove',
+    });
+    if (ok) await forget(row);
+  }
   let pushing = $state(false);
   let busy = $state<Record<string, boolean>>({});
   let unpushable = $state<Record<string, string>>({});
@@ -87,7 +94,6 @@
     try {
       await removeAgent(row.name);
       agents.splice(agents.findIndex((other) => other.name === row.name), 1);
-      forgetting = null;
     } catch (error) {
       toast.error(message(error));
     } finally {
@@ -186,7 +192,7 @@
               <Tooltip.Root>
                 <Tooltip.Trigger>
                   {#snippet child({ props })}
-                    <Button {...props} variant="ghost" size="icon-sm" class="text-muted-foreground hover:text-destructive" aria-label="Remove {row.name}" disabled={busy[row.name] === true} onclick={() => (forgetting = row)}>
+                    <Button {...props} variant="ghost" size="icon-sm" class="text-muted-foreground hover:text-destructive" aria-label="Remove {row.name}" disabled={busy[row.name] === true} onclick={() => askForget(row)}>
                       <IconTrash />
                     </Button>
                   {/snippet}
@@ -267,24 +273,3 @@
 {/if}
 
 <AgentEditor bind:open agent={editing} onsaved={landed} />
-
-<AlertDialog.Root open={forgetting !== null} onOpenChange={(next) => { if (!next) forgetting = null; }}>
-  <AlertDialog.Content class="rounded-[var(--radius-shell)] shadow-xl">
-    <AlertDialog.Header>
-      <AlertDialog.Title>Remove {forgetting?.name}?</AlertDialog.Title>
-      <AlertDialog.Description>
-        The fleet forgets it. Every machine keeps the file it was already given, and lists it below
-        as unmanaged, until the daemon can take one away itself.
-      </AlertDialog.Description>
-    </AlertDialog.Header>
-    <AlertDialog.Footer>
-      <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-      <AlertDialog.Action
-        disabled={forgetting !== null && busy[forgetting.name] === true}
-        onclick={() => forgetting && forget(forgetting)}
-      >
-        Remove
-      </AlertDialog.Action>
-    </AlertDialog.Footer>
-  </AlertDialog.Content>
-</AlertDialog.Root>
