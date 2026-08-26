@@ -3,6 +3,7 @@
   import type { FleetMcpServer } from '@cockpit/core';
   import { IconPen, IconPlus, IconRefresh, IconTrash, IconWarningTriangle } from '$lib/icons';
   import * as Alert from '$lib/components/ui/alert';
+  import * as AlertDialog from '$lib/components/ui/alert-dialog';
   import { Badge } from '$lib/components/ui/badge';
   import { Button } from '$lib/components/ui/button';
   import * as Card from '$lib/components/ui/card';
@@ -63,6 +64,10 @@
       delete busy[row.name];
     }
   }
+
+  // Removing an MCP server pulls it from EVERY machine, so it goes through a
+  // confirm that names the blast radius — never a bare hover-revealed click.
+  let confirmRow = $state<FleetMcpServer | null>(null);
 
   async function remove(row: FleetMcpServer) {
     busy[row.name] = true;
@@ -159,7 +164,7 @@
           >
             {row.enabled ? 'Enabled' : 'Disabled'}
           </Toggle>
-          <span class="flex shrink-0 items-center gap-0.5 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 md:opacity-0">
+          <span class="flex shrink-0 items-center gap-0.5">
             <Button
               variant="ghost"
               size="icon-sm"
@@ -179,7 +184,7 @@
                     class="text-muted-foreground hover:text-destructive"
                     aria-label="Delete {row.name}"
                     disabled={busy[row.name] === true}
-                    onclick={() => remove(row)}
+                    onclick={() => (confirmRow = row)}
                   >
                     <IconTrash />
                   </Button>
@@ -215,3 +220,33 @@
   taken={servers.filter((row) => row.name !== editing?.name).map((row) => row.name)}
   onsaved={saved}
 />
+
+<AlertDialog.Root
+  open={confirmRow !== null}
+  onOpenChange={(next) => {
+    if (!next) confirmRow = null;
+  }}
+>
+  <AlertDialog.Content>
+    <AlertDialog.Header>
+      <AlertDialog.Title>Remove {confirmRow?.name}?</AlertDialog.Title>
+      <AlertDialog.Description>
+        This removes <span class="font-medium text-foreground">{confirmRow?.name}</span> from every
+        machine in the fleet — not just this one. It can't be undone.
+      </AlertDialog.Description>
+    </AlertDialog.Header>
+    <AlertDialog.Footer>
+      <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
+      <AlertDialog.Action
+        variant="destructive"
+        onclick={() => {
+          const row = confirmRow;
+          confirmRow = null;
+          if (row) void remove(row);
+        }}
+      >
+        Remove everywhere
+      </AlertDialog.Action>
+    </AlertDialog.Footer>
+  </AlertDialog.Content>
+</AlertDialog.Root>
