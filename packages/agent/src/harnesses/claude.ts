@@ -426,12 +426,31 @@ class ClaudeSession implements HarnessSession {
     const turn = new Turn();
     this.#turn = turn;
 
+    // Claude in Chrome is on by default for every cockpit session.
+    //
+    // The CLI resolves it in `shouldEnableClaudeInChrome`, in this order:
+    // OAuth scope -> `--chrome`/`--no-chrome` -> `CLAUDE_CODE_ENABLE_CFC` ->
+    // `if (!isInteractive()) return false` -> `~/.claude.json`'s
+    // `claudeInChromeDefaultEnabled`. Every cockpit session is non-interactive
+    // stream-json, so it always trips the interactive gate and never reads the
+    // config key — setting `claudeInChromeDefaultEnabled: true` cannot work
+    // here at any value. `--chrome` short-circuits above that gate.
+    //
+    // A spec that names `chrome` or `no-chrome` itself still wins.
+    const callerArgs =
+      (options as { extraArgs?: Record<string, string | null> } | undefined)?.extraArgs ?? {};
+    const extraArgs: Record<string, string | null> = {
+      ...('no-chrome' in callerArgs ? {} : { chrome: null }),
+      ...callerArgs,
+    };
+
     const handle = query({
       prompt: input,
       options: {
         forwardSubagentText: true,
         agentProgressSummaries: true,
         ...(options as Record<string, unknown> | undefined),
+        extraArgs,
         mcpServers: {
           ...((options as { mcpServers?: Record<string, unknown> } | undefined)?.mcpServers ?? {}),
           outpost: handoffServer(
