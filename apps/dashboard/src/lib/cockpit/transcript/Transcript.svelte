@@ -211,8 +211,14 @@
         }
         return stopFollow();
       }
-      const backlog = Math.max(0, remaining - scroller.clientHeight / 2);
-      scroller.scrollTop += Math.min(remaining, ((FOLLOW_SPEED + backlog * 2) * dt) / 1000);
+      // Duration-bounded, not distance-bounded: any engagement finishes in
+      // ≤400ms (remaining/0.4 px/s closes the whole gap in 0.4s, recomputed
+      // per frame so it decelerates into place). Only a genuinely small hop —
+      // one message's worth — rides at the reading pace. Without this bound
+      // the loop trod water at 360px/s for the whole duration of a long
+      // stream it was chasing: a five-second crawl nobody asked for.
+      const speed = Math.max(FOLLOW_SPEED, remaining / 0.4);
+      scroller.scrollTop += Math.min(remaining, (speed * dt) / 1000);
       lastWrite = scroller.scrollTop;
       following = requestAnimationFrame(step);
     };
