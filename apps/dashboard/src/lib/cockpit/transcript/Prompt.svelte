@@ -15,15 +15,16 @@
    * The one human-in-the-loop surface, floating above the composer: a permission
    * gate (a measurably-symmetric Approve / Deny pair, with scope-widening kept
    * apart) or a question (selectable answers plus free text). Both settle their
-   * parked tool call through the client's permission answer. Ported from the
-   * mock's `.hitl`.
+   * parked tool call by handing the answer up, where it goes out as one tracked
+   * command whose stages this card's wait line reads. Ported from the mock's
+   * `.hitl`.
    */
   import { onMount } from 'svelte';
-  import type { UserAnswers, UserQuestion } from '@cockpit/core';
+  import type { PermissionResult, UserAnswers, UserQuestion } from '@cockpit/core';
   import {
     cockpit,
+    commandRecord,
     permissionAnswer,
-    resolvePermission,
     type PendingPermission,
   } from '../client.svelte';
   import { questionsOf, questionAnswer } from '../question';
@@ -34,8 +35,17 @@
 
   let {
     request,
-    machineId,
-  }: { request: PendingPermission; machineId: string } = $props();
+    onanswer,
+  }: {
+    request: PendingPermission;
+    /**
+     * Submits this card's answer and hands back the id of the command it went
+     * out as — what the wait line reads its stage from. `null` when nothing
+     * could be submitted, which leaves the line saying only what the latch and
+     * the socket already say.
+     */
+    onanswer: (result: PermissionResult) => string | null;
+  } = $props();
 
   const input = $derived(request.input as Record<string, unknown>);
   const questions = $derived(questionsOf(request.toolName, input));
@@ -102,15 +112,27 @@
   let sent = $state(false);
   const answerable = $derived(!sent && cockpit.hub === 'connected');
 
+  /**
+   * The command this card's answer went out as. The card reads its OWN id
+   * rather than the newest permission answer on the session: several cards can
+   * be parked at once and they all answer in the same kind, so the newest one
+   * belongs to whichever card was clicked last, not to this one.
+   */
+  let commandId = $state<string | null>(null);
+  const record = $derived(commandId ? commandRecord(commandId) : null);
+  /** What the answer was refused with, once the tracker has called it off. */
+  const refused = $derived(
+    record?.stage === 'failed'
+      ? record.reason
+        ? `Couldn't send that answer. ${record.reason}`
+        : "Couldn't send that answer."
+      : null
+  );
+
   function answer(kind: 'allow' | 'deny' | 'always'): void {
     if (!answerable) return;
     sent = true;
-    resolvePermission(
-      request.instanceId,
-      machineId,
-      request.requestId,
-      permissionAnswer(request, kind)
-    );
+    commandId = onanswer(permissionAnswer(request, kind));
   }
 
   /* Only a question card claims the digits, and only one of them at a time. */
@@ -158,12 +180,7 @@
   function submitQuestion(): void {
     if (!answerable) return;
     sent = true;
-    resolvePermission(
-      request.instanceId,
-      machineId,
-      request.requestId,
-      questionAnswer(input, answers)
-    );
+    commandId = onanswer(questionAnswer(input, answers));
   }
 
   /* shadcn <Button>, dressed in DESIGN.md tokens so nothing reads as stock
@@ -229,7 +246,14 @@
       </Button>
       <Button class={dismiss} disabled={!answerable} onclick={() => answer('deny')}>Dismiss</Button>
     </div>
-    {#if !answerable}<p class="wait">{sent ? 'Sent.' : "Reconnecting — can't answer yet."}</p>{/if}
+    <!-- One line, three truths: the answer is out, the socket cannot carry it
+         yet, or the hub called it off and said why. A live region, so the last
+         of those is heard when it replaces the first. -->
+    {#if !answerable}
+      <p class="wait" role="status">
+        {refused ?? (sent ? 'Sent.' : "Reconnecting — can't answer yet.")}
+      </p>
+    {/if}
   {:else}
     <h2><span class="pill attn"><IconArrowUp />needs you</span>Permission — {request.toolName}</h2>
     <p class="lede">{summary}</p>
@@ -258,7 +282,14 @@
         <IconClose />Deny
       </Button>
     </div>
-    {#if !answerable}<p class="wait">{sent ? 'Sent.' : "Reconnecting — can't answer yet."}</p>{/if}
+    <!-- One line, three truths: the answer is out, the socket cannot carry it
+         yet, or the hub called it off and said why. A live region, so the last
+         of those is heard when it replaces the first. -->
+    {#if !answerable}
+      <p class="wait" role="status">
+        {refused ?? (sent ? 'Sent.' : "Reconnecting — can't answer yet.")}
+      </p>
+    {/if}
     {#if rule}
       <div class="widen">
         <p>This would allow <span class="mono">{rule.full}</span> for {rule.scope} — a wider grant than the request above.</p>

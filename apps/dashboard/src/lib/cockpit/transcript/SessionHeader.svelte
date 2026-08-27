@@ -1,3 +1,17 @@
+<script module lang="ts">
+  /**
+   * What one settings change reports back.
+   *
+   * A change that the hub can acknowledge is a tracked COMMAND, and its id is
+   * how this bar reads its stages. The one exception is bypassPermissions,
+   * which the SDK refuses to switch into: that mode relaunches the session
+   * instead, which is a different operation on the wire and not a command — so
+   * it hands back its own promise and the row draws the same flight from that.
+   * `null` is "nothing was submitted at all", and the row never moves.
+   */
+  export type SettingChange = string | Promise<unknown> | null;
+</script>
+
 <script lang="ts">
   /**
    * The run's fixed identity bar, as ONE line (the mock's `.shead`): the
@@ -16,6 +30,7 @@
    * popover, a phone as a bottom sheet — the same panel either way.
    */
   import type { EffortLevel, PermissionMode } from '@cockpit/core';
+  import type { CommandRecord, CommandStage } from '../client.svelte';
   import { markHue } from '../mark';
   import HarnessGlyph from '../HarnessGlyph.svelte';
   import type { Activity } from '../activity';
@@ -56,6 +71,8 @@
     onmodel,
     onpermission,
     oneffort,
+    trackedCommand,
+    streaming,
   }: {
     title: string;
     /** What the identity HUE is keyed to — the project, so a repo reads as one. */
@@ -82,9 +99,18 @@
     showEffort: boolean;
     /** Whether the harness runs at an effort at all — the row is named either way. */
     harnessEffort: boolean;
-    onmodel: (model: string) => void | Promise<void>;
-    onpermission: (mode: PermissionMode) => void | Promise<void>;
-    oneffort: (level: EffortLevel) => void | Promise<void>;
+    onmodel: (model: string) => SettingChange;
+    onpermission: (mode: PermissionMode) => SettingChange;
+    oneffort: (level: EffortLevel) => SettingChange;
+    /** One submitted command's record, by the id its callback handed back. */
+    trackedCommand: (commandId: string) => CommandRecord | null;
+    /**
+     * Whether commands on this connection are hub-sequenced. It is the one
+     * thing that tells `accepted` apart: against a stream hub it means "taken,
+     * still being applied", and against a legacy one it is the last word the
+     * call will ever have — a row that waited on it there would recede for good.
+     */
+    streaming: boolean;
   } = $props();
 
   const k = (n: number): string => `${Math.round(n / 1000)}k`;
@@ -94,8 +120,15 @@
    * not a local toggle: it takes time and it can be refused. Each of the three
    * controls carries its own flight, so a slow model change never greys the
    * permission row beside it, and a second submission while one is still out is
-   * dropped rather than raced. Nothing here is optimistic — the displayed value
-   * still follows the prop, and only the *attempt* is drawn.
+   * dropped rather than raced. Nothing here invents a value — the control still
+   * shows the prop, and only the *attempt* is drawn.
+   *
+   * What a row knows about its flight is the command tracker's, not this
+   * component's: the callback hands back the id of the command it submitted and
+   * every state below is read off that record's stage. A row therefore holds
+   * only the id of ITS OWN latest attempt — never "the newest command of this
+   * kind" — so an ack that arrives for the attempt the reader has already
+   * replaced lands on a record nothing is reading.
    */
   type Slot = 'model' | 'permission' | 'effort';
   const SLOTS: Slot[] = ['model', 'permission', 'effort'];
@@ -106,33 +139,145 @@
   const SETTLE = 150;
   const REFUSED = "Didn't land — try again.";
 
-  let inflight = $state(per(false));
-  let slow = $state(per(false));
-  let failed = $state(per<string | null>(null));
-
-  async function apply<T>(
-    slot: Slot,
-    send: (value: T) => void | Promise<void>,
-    value: T
-  ): Promise<void> {
-    if (inflight[slot]) return;
-    inflight[slot] = true;
-    failed[slot] = null;
-    const settle = setTimeout(() => {
-      if (inflight[slot]) slow[slot] = true;
-    }, SETTLE);
-    try {
-      await send(value);
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : typeof error === 'string' ? error : '';
-      failed[slot] = detail ? `${REFUSED} ${detail}` : REFUSED;
-    } finally {
-      clearTimeout(settle);
-      inflight[slot] = false;
-      slow[slot] = false;
-    }
+  /** One row's last attempt — the only thing a row knows about its own flight. */
+  interface Attempt {
+    /** The tracked command it is waiting on, when the change was a command. */
+    commandId: string | null;
+    /** Still out on the untracked (relaunch) path. */
+    local: boolean;
+    /**
+     * What it was refused with, in the row's own words, from whichever path
+     * carried it. Written down rather than re-read, because the tracker prunes
+     * a settled record and a refusal on screen must not go with it.
+     */
+    refused: string | null;
+    /** Whether the hub will say more than "taken" about this one. */
+    sequenced: boolean;
+    /** Past the anti-flash window — the one thing that lets pending be drawn. */
+    settled: boolean;
+    /** What was asked for — on the sequenced path, the prop matching it is the answer. */
+    value: unknown;
   }
 
+  let attempt = $state(per<Attempt | null>(null));
+
+  /**
+   * Which attempt a row is on. Held outside `$state` on purpose: it is not
+   * drawn, it is what a late timer or a late promise checks itself against, so
+   * that a reply to a superseded attempt cannot write over the current one.
+   */
+  const counter = per(0);
+
+  /** What the session says is actually in force for a row, right now. */
+  function inForce(slot: Slot): unknown {
+    if (slot === 'model') return model;
+    if (slot === 'permission') return permissionMode;
+    return effort;
+  }
+
+  function stageOf(slot: Slot): CommandStage | null {
+    const id = attempt[slot]?.commandId;
+    return id ? (trackedCommand(id)?.stage ?? null) : null;
+  }
+
+  /**
+   * Whether a row's last attempt is still out — the one-in-flight guard, and
+   * what `aria-busy` says.
+   */
+  function out(slot: Slot): boolean {
+    const flight = attempt[slot];
+    if (!flight) return false;
+    // The value came back, so the row has its answer whatever the tracker still
+    // has to say — but only where the value moves when the MACHINE says so.
+    // Today's calls write it the instant they are asked and put it back if the
+    // switch is refused, so on that path a matching prop is the reader's own
+    // click coming back and says nothing about where the change got to.
+    if (flight.sequenced && inForce(slot) === flight.value) return false;
+    if (flight.local) return true;
+    const stage = stageOf(slot);
+    // No record left (swept) is not a flight: a row must never wait on
+    // something nothing will ever answer.
+    if (stage === null) return false;
+    if (stage === 'submitted') return true;
+    return stage === 'accepted' && flight.sequenced;
+  }
+
+  const refusal = (reason: string | undefined): string =>
+    reason ? `${REFUSED} ${reason}` : REFUSED;
+
+  /** What a row's last attempt was refused with, in the row's own words. */
+  function failure(slot: Slot): string | null {
+    const flight = attempt[slot];
+    if (!flight) return null;
+    if (flight.refused) return flight.refused;
+    const record = flight.commandId ? trackedCommand(flight.commandId) : null;
+    return record?.stage === 'failed' ? refusal(record.reason) : null;
+  }
+
+  /**
+   * A refusal is the row's to keep. The tracker holds a settled command for a
+   * few minutes and then drops it, so a row that only ever re-read the record
+   * would lose the words off the screen while the reader was still looking at
+   * them — this copies them down, once, the moment they exist.
+   */
+  $effect(() => {
+    for (const slot of SLOTS) {
+      const flight = attempt[slot];
+      if (!flight || flight.refused || !flight.commandId) continue;
+      const record = trackedCommand(flight.commandId);
+      if (record?.stage === 'failed') flight.refused = refusal(record.reason);
+    }
+  });
+
+  /** Pending — held back until the round trip has visibly failed to be instant. */
+  function pending(slot: Slot): boolean {
+    const flight = attempt[slot];
+    return !!flight && flight.settled && out(slot) && !failure(slot);
+  }
+
+  const thrown = (error: unknown): string =>
+    error instanceof Error ? error.message : typeof error === 'string' ? error : '';
+
+  function apply<T>(slot: Slot, send: (value: T) => SettingChange, value: T): void {
+    if (out(slot)) return;
+    const token = (counter[slot] += 1);
+    /** This row's attempt, or null once a newer one has replaced it. */
+    const mine = (): Attempt | null => (counter[slot] === token ? attempt[slot] : null);
+    attempt[slot] = {
+      commandId: null,
+      local: false,
+      refused: null,
+      sequenced: streaming,
+      settled: false,
+      value,
+    };
+    const change = send(value);
+    if (typeof change === 'string') {
+      attempt[slot]!.commandId = change;
+    } else if (change) {
+      attempt[slot]!.local = true;
+      void change.then(
+        () => {
+          const flight = mine();
+          if (flight) flight.local = false;
+        },
+        (error: unknown) => {
+          const flight = mine();
+          if (!flight) return;
+          flight.local = false;
+          flight.refused = refusal(thrown(error) || undefined);
+        }
+      );
+    } else {
+      // Nothing went out — the row has nothing to report and must not recede.
+      attempt[slot] = null;
+      return;
+    }
+    setTimeout(() => {
+      const flight = mine();
+      if (flight) flight.settled = true;
+    }, SETTLE);
+  }
 
   const pill = $derived(
     activity === 'blocked'
@@ -177,15 +322,16 @@
      round trip has visibly failed to be instant, so a fast machine never
      flashes; a refusal replaces it, and the next attempt clears it. -->
 {#snippet flight(slot: Slot)}
-  {#if failed[slot]}
-    <p class="ctl-fail" role="alert">{failed[slot]}</p>
-  {:else if slow[slot]}
+  {@const refused = failure(slot)}
+  {#if refused}
+    <p class="ctl-fail" role="alert">{refused}</p>
+  {:else if pending(slot)}
     <p class="ctl-note" role="status">Applying…</p>
   {/if}
 {/snippet}
 
 {#snippet settings()}
-  <div class="ctl" class:is-pending={slow.model} aria-busy={inflight.model}>
+  <div class="ctl" class:is-pending={pending('model')} aria-busy={out('model')}>
     <span class="ctl-label" id="sh-model-label">Model</span>
     <ModelCombobox
       value={model ?? ''}
@@ -197,12 +343,12 @@
   </div>
 
   {#if offeredModes.length > 0}
-    <div class="ctl" class:is-pending={slow.permission} aria-busy={inflight.permission}>
+    <div class="ctl" class:is-pending={pending('permission')} aria-busy={out('permission')}>
       <span class="ctl-label" id="sh-perm-label">Permissions</span>
       <Select.Root
         type="single"
         value={permissionMode ?? undefined}
-        onValueChange={(v) => void apply('permission', onpermission, v as PermissionMode)}
+        onValueChange={(v) => apply('permission', onpermission, v as PermissionMode)}
       >
         <Select.Trigger
           aria-labelledby="sh-perm-label"
@@ -238,7 +384,7 @@
   {/if}
 
   {#if showEffort}
-    <div class="ctl" class:is-pending={slow.effort} aria-busy={inflight.effort}>
+    <div class="ctl" class:is-pending={pending('effort')} aria-busy={out('effort')}>
       <span class="ctl-label">Reasoning effort</span>
       <EffortSlider
         stops={effortStops}

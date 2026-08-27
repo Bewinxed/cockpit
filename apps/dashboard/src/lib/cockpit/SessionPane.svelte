@@ -9,22 +9,29 @@
   import { untrack } from 'svelte';
   import type { TransitionConfig } from 'svelte/transition';
   import { page } from '$app/state';
-  import type { EffortLevel, HarnessKind, PermissionMode, SessionMessage } from '@cockpit/core';
+  import type {
+    EffortLevel,
+    HarnessKind,
+    PermissionMode,
+    PermissionResult,
+    SessionMessage,
+  } from '@cockpit/core';
   import {
     blankSession,
     cockpit,
+    commandRecord,
+    latestCommandFor,
+    streamCapable,
+    submitCommand,
     openSession,
     openTranscript,
     backfillSession,
     streamHistory,
     type HistorySource,
-    sendOrRevive,
+    ensureAlive,
     interrupt,
     loadMcpServers,
     loadCommands,
-    setModel,
-    setPermissionMode,
-    setEffort,
     relaunchSession,
     type PendingPermission,
     type SendExtras,
@@ -35,7 +42,7 @@
   import { covers, ensureModels, models } from './models.svelte';
   import { mapTranscript, routedToParent } from './frames';
   import { delegateHandle, resolveSessionTitle } from './links';
-  import SessionHeader from './transcript/SessionHeader.svelte';
+  import SessionHeader, { type SettingChange } from './transcript/SessionHeader.svelte';
   import Transcript from './transcript/Transcript.svelte';
   import StaticTail from './transcript/StaticTail.svelte';
   import Composer, { type Mention } from './transcript/Composer.svelte';
@@ -367,25 +374,45 @@
 
   const commands = $derived(cockpit.commandsOf(viewId));
 
-  function onmodel(model: string): void {
-    if (!machineId) return;
-    void setModel(viewId, machineId, model).catch(() => {});
+  /**
+   * Every operator action on this conversation goes out as ONE tracked command
+   * and reports back the id its stages are readable under. Nothing here wraps a
+   * promise to invent a state: what the header, the cards and the composer draw
+   * is the tracker's own account of the action, on both the stream path and the
+   * legacy one (where the same calls run and their promises are the stages).
+   */
+  function onmodel(model: string): SettingChange {
+    if (!machineId) return null;
+    return submitCommand(viewId, machineId, 'set-model', { model });
   }
 
-  function onpermission(mode: PermissionMode): void {
-    if (!machineId) return;
+  function onpermission(mode: PermissionMode): SettingChange {
+    if (!machineId) return null;
     // bypassPermissions is a launch decision the SDK refuses to switch into, so
-    // that one mode relaunches the session in place; the rest switch live.
-    const apply =
-      mode === 'bypassPermissions'
-        ? relaunchSession(viewId, machineId, mode)
-        : setPermissionMode(viewId, machineId, mode);
-    void apply.catch(() => {});
+    // that one mode relaunches the session in place; the rest switch live. A
+    // relaunch is a different operation on the wire, not a `set-permission-mode`
+    // command, so it stays its own call and hands the header its promise —
+    // sending it as that command would put the call the SDK refuses on the wire.
+    if (mode === 'bypassPermissions') return relaunchSession(viewId, machineId, mode);
+    return submitCommand(viewId, machineId, 'set-permission-mode', { mode });
   }
 
-  function oneffort(level: EffortLevel): void {
-    if (!machineId) return;
-    void setEffort(viewId, machineId, level).catch(() => {});
+  function oneffort(level: EffortLevel): SettingChange {
+    if (!machineId) return null;
+    return submitCommand(viewId, machineId, 'set-effort', { effort: level });
+  }
+
+  /**
+   * A parked request's answer, as a command. The id goes back to the card that
+   * asked, which is the only thing that reads it: several cards can be parked
+   * at once and they all answer in the same kind.
+   */
+  function onanswer(request: PendingPermission, result: PermissionResult): string | null {
+    if (!machineId) return null;
+    return submitCommand(request.instanceId, machineId, 'permission.answer', {
+      requestId: request.requestId,
+      result,
+    });
   }
 
   // A delegate's ask belongs to its parent, never the reader's queue.
@@ -408,9 +435,31 @@
 
   const flowSubagents = $derived(new Map(Object.entries(session?.subagents ?? {})));
 
+  /**
+   * The gap in front of the send command: a dead session is revived before the
+   * message goes out, and until it does there is no record to read a stage
+   * from. Without this the composer would take a second Enter during the revive
+   * and send the same thing twice.
+   */
+  let reviving = $state(false);
+
+  /** Whether this session's last message is out of this tab but not yet taken. */
+  const sending = $derived(
+    reviving || latestCommandFor(viewId, 'send')?.stage === 'submitted'
+  );
+
   function onsubmit(text: string, extras: SendExtras = {}): void {
-    if (!machineId) return;
-    void sendOrRevive(viewId, machineId, text, extras);
+    if (!machineId || sending) return;
+    const mid = machineId;
+    reviving = true;
+    // A message to a dead session revives it first — the same order
+    // `sendOrRevive` put them in; only the send itself is the command.
+    void ensureAlive(viewId, mid)
+      .then(() => {
+        submitCommand(viewId, mid, 'send', { text, extras });
+      })
+      .catch(() => {})
+      .finally(() => (reviving = false));
   }
 
   function onstop(): void {
@@ -497,6 +546,8 @@
       {onmodel}
       {onpermission}
       {oneffort}
+      trackedCommand={commandRecord}
+      streaming={streamCapable()}
     />
 
     <div
@@ -566,6 +617,7 @@
           bind:value={draft}
           bind:height={composerHeight}
           busy={session.busy}
+          {sending}
           {commands}
           {mentions}
           {onsubmit}
@@ -577,7 +629,7 @@
                    belongs to Prompt. This wrapper is layout-transparent — a
                    block box the section fills exactly. -->
               <div class="parked" out:promptExit>
-                <Prompt {request} {machineId} />
+                <Prompt {request} onanswer={(result) => onanswer(request, result)} />
               </div>
             {/each}
           {/snippet}

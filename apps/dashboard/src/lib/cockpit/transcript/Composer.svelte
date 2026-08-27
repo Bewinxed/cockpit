@@ -37,6 +37,7 @@
     value = $bindable(''),
     height = $bindable(0),
     busy = false,
+    sending = false,
     commands = [],
     mentions = [],
     onsubmit,
@@ -51,6 +52,14 @@
      */
     height?: number;
     busy?: boolean;
+    /**
+     * Whether the last message this composer sent is still unacknowledged — out
+     * of this tab, but not yet taken by the hub. `busy` is the AGENT's state and
+     * arrives with the first frame of the turn; this is the gap in front of it,
+     * and it is the only thing between one Enter and the next that can tell a
+     * second send from a duplicate of the first.
+     */
+    sending?: boolean;
     /** What this session offers behind `/`. */
     commands?: AvailableCommand[];
     /** What `@` can name — the sessions and machines in reach. */
@@ -278,7 +287,9 @@
   }
 
   function submit(): void {
-    if (!hasContent) return;
+    // Nothing to send, or the last one is still unanswered. The draft is left
+    // exactly as it is — a refused send must never eat what was typed.
+    if (!hasContent || sending) return;
     const extras: SendExtras = {};
     if (texts.length) extras.attachments = texts.map((t) => ({ ...t }));
     if (images.length) extras.images = images.map((i) => ({ mediaType: i.mediaType, data: i.data }));
@@ -479,6 +490,7 @@
         type="button"
         onclick={onaction}
         disabled={!busy && !hasContent}
+        aria-disabled={!busy && sending ? 'true' : undefined}
         aria-label={busy ? 'Stop the agent' : 'Send message'}
       >
         <!-- The one control that changes meaning mid-turn. `{#key}` re-creates
