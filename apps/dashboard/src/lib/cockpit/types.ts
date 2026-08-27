@@ -42,7 +42,15 @@ export interface Message {
   parentToolUseId?: string;
   type: MessageType;
   content: string;
-  timestamp: Date;
+  /**
+   * When the turn happened, on the client's own clock — set only on the live
+   * path, where that clock is the truth. A message folded out of a *stored*
+   * transcript carries none: `SessionMessage` (packages/core `harness.ts`) has
+   * no timestamp field, so the harness's real one never reaches this layer, and
+   * stamping the parse time instead would render a time that never happened.
+   * Absent beats invented; readers must handle it being unset.
+   */
+  timestamp?: Date;
   /** The SDK message's own uuid — the handle for rewind and fork. */
   sdkUuid?: string;
   toolCallId?: string | null;
@@ -154,6 +162,9 @@ export interface MessageMetadata {
   totalCost?: number;
   numTurns?: number;
   result?: string;
+  /** The task a `system.task` line reports — the dedupe key against the
+   *  harness's own XML notification for the same completion. */
+  taskId?: string;
   // Subagent spawning (Task tool)
   subagentType?: string;
   subagentDescription?: string;

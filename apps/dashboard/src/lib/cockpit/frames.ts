@@ -704,6 +704,21 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
           // `applyBranchEvent`'s call. The branch event still updates a real
           // subagent's report; the compact line keeps a plain task's completion
           // visible without a wall of logs.
+          //
+          // The line is ALWAYS emitted here and dropped at the seam
+          // (`suppressesTaskLine`) when a real subagent's branch owns it. It
+          // cannot be skipped at the source: a plain tool task mints no branch
+          // (see `applyBranchEvent`), so for a background Bash this line is the
+          // only place its completion ever shows — emitting nothing made those
+          // tasks finish invisibly.
+          mapping.messages.push(
+            systemLine(base, 'system.task', done ? 'task done' : 'task failed', {
+              result: truncateSummary(sdk.summary),
+              // Named so the fold can drop this line when the harness ALSO
+              // delivers its richer XML notification for the same task.
+              taskId: sdk.task_id,
+            })
+          );
           mapping.branch = {
             toolUseId: sdk.tool_use_id,
             taskId: sdk.task_id,
@@ -711,8 +726,6 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
             summary: sdk.summary,
             result: sdk.summary,
           };
-          // No system message — the branch card already shows completion/error
-          // status. A separate "task done" line below the card is pure noise.
           break;
         }
         case 'task_updated': {
@@ -992,6 +1005,9 @@ export function thinkingDurationMs(messages: Message[], index: number): number |
   const next = messages[index + 1];
   if (!message || !next) return null;
   if (next.type === 'user' || next.type.startsWith('user.')) return null;
+  // A stored transcript carries no timestamps at all (see `Message.timestamp`),
+  // so "missing" is the ordinary case here, not the exceptional one.
+  if (!message.timestamp || !next.timestamp) return null;
   const from = new Date(message.timestamp).getTime();
   const to = new Date(next.timestamp).getTime();
   if (!Number.isFinite(from) || !Number.isFinite(to)) return null;
@@ -1038,6 +1054,19 @@ function transcriptUserImages(message: unknown): MessageMetadata['images'] {
 }
 
 /**
+ * When a stored entry was actually written, as the harness recorded it — the
+ * only honest clock a replayed transcript has. `undefined` whenever the field
+ * is absent (a daemon older than it, or a harness with no source for one) or
+ * unparseable, because the alternative is dating the turn to the moment the
+ * reader opened the session.
+ */
+function storedAt(entry: SessionMessage): Date | undefined {
+  if (!entry.timestamp) return undefined;
+  const at = new Date(entry.timestamp);
+  return Number.isNaN(at.getTime()) ? undefined : at;
+}
+
+/**
  * What a user-role message renders as. Both the live and the stored path build
  * their user messages from this, so the harness's own voice is never mistaken
  * for the human's on one of them.
@@ -1062,7 +1091,11 @@ function userBody(
 /** Harness-injected content arrives with role "user" but is not the human. */
 function systemNote(text: string): { kind: string; title: string; taskToolId?: string } | null {
   const head = text.trimStart().slice(0, 200);
-  if (head.startsWith('[SYSTEM NOTIFICATION') || head.includes('<task-notification>')) {
+  // Anchored, not `includes`: an operator who merely TYPES the tag mid-sentence
+  // ("fix the <task-notification> renderer") must keep their own voice — only a
+  // message the block itself opens is the harness speaking. Matches the
+  // anchoring `rows.ts`'s `isHarnessNote` uses, so the two layers agree.
+  if (head.startsWith('[SYSTEM NOTIFICATION') || head.startsWith('<task-notification>')) {
     const summary = /<summary>([\s\S]*?)<\/summary>/.exec(text)?.[1]?.trim();
     // The tool-use id names the Task call this notification echoes. When that
     // call's branch is in the transcript, the branch already shows the same
@@ -1485,6 +1518,10 @@ export function mapTranscript(instanceId: string, transcript: SessionMessage[]):
       continue;
     }
 
+    // The one honest clock a replayed turn has; absent on entries an older
+    // daemon or a non-Claude harness wrote (see {@link storedAt}).
+    const recorded = storedAt(entry);
+
     // A hand-off is a user-role message and looks exactly like one the reader
     // typed — so this branch claimed it and rendered another agent's words as
     // the reader's own, which is the one thing the peer origin exists to stop.
@@ -1515,7 +1552,7 @@ export function mapTranscript(instanceId: string, transcript: SessionMessage[]):
           instanceId,
           type: 'user.delegate_ask',
           content: ask.body,
-          timestamp: new Date(),
+          ...(recorded ? { timestamp: recorded } : {}),
           sdkUuid: entry.uuid,
           metadata: { peerSession: ask.instance, askRequestId: ask.request, askLabel: ask.label },
         });
@@ -1530,7 +1567,7 @@ export function mapTranscript(instanceId: string, transcript: SessionMessage[]):
           instanceId,
           type: 'user.peer',
           content: report.body,
-          timestamp: new Date(),
+          ...(recorded ? { timestamp: recorded } : {}),
           sdkUuid: entry.uuid,
           metadata: {
             peerName: `${report.name}#${report.short}`,
@@ -1553,7 +1590,7 @@ export function mapTranscript(instanceId: string, transcript: SessionMessage[]):
               instanceId,
               type: 'user.peer',
               content: text,
-              timestamp: new Date(),
+              ...(recorded ? { timestamp: recorded } : {}),
               sdkUuid: entry.uuid,
               metadata: { peerName },
             }
@@ -1561,7 +1598,7 @@ export function mapTranscript(instanceId: string, transcript: SessionMessage[]):
               id: entry.uuid,
               instanceId,
               ...userBody(opening.text, opening.images),
-              timestamp: new Date(),
+              ...(recorded ? { timestamp: recorded } : {}),
               sdkUuid: entry.uuid,
             }
       );
@@ -1570,6 +1607,17 @@ export function mapTranscript(instanceId: string, transcript: SessionMessage[]):
 
     const mapping = mapFrame(instanceId, entry as unknown as SDKMessage);
     if (mapping.branch) applyBranchEvent(subagents, instanceId, mapping.branch);
+
+    // `mapFrame` stamps the client's clock, which is the truth for a frame
+    // arriving live and a fiction for one read back off disk — it would date
+    // every turn of a year-old session to the moment the reader opened it. The
+    // entry's own recorded time replaces it where the harness sent one, and
+    // where it did not (an older daemon, or a harness with no source for it)
+    // the message carries none and renders none.
+    for (const message of mapping.messages) {
+      if (recorded) message.timestamp = recorded;
+      else delete message.timestamp;
+    }
 
     const sink = mapping.agentId
       ? branchFor(subagents, instanceId, mapping.agentId).messages

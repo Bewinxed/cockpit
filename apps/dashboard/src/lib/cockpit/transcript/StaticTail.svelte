@@ -23,6 +23,7 @@
   import Subagent from './Subagent.svelte';
   import Thinking from './Thinking.svelte';
   import MessageBody from './MessageBody.svelte';
+  import SystemLine from './SystemLine.svelte';
   import Who from './Who.svelte';
 
   let {
@@ -33,6 +34,17 @@
 
   const folded = $derived(mapTranscript(viewId, messages));
   const rows = $derived(foldMessages(folded.messages, folded.subagents));
+
+  /**
+   * Newest FIRST — the DOM order is the reverse of the reading order, and
+   * `.tr`'s `column-reverse` puts it back. This is the whole progressive-parse
+   * fix: the browser paints this HTML as it streams, so with the oldest row
+   * first every newly parsed row pushed the already-painted ones up (1.27 of
+   * CLS on one load). Emitted newest-first into a bottom-anchored reversed
+   * column, the first row parsed lands at the foot and never moves; each older
+   * row stacks ABOVE it into space that is clipped anyway.
+   */
+  const painted = $derived([...rows].reverse());
 </script>
 
 <!-- Not `role="log"`: the live region belongs to the transcript that will
@@ -45,7 +57,7 @@
   {/if}
   <!-- The row switch is Transcript.svelte's, component for component, so the
        static tail and the virtualized transcript are the same picture. -->
-  {#each rows as row (row.key)}
+  {#each painted as row (row.key)}
     <div class="renter">
       {#if row.kind === 'single'}
         <MessageRow message={row.message} {agentName} />
@@ -53,6 +65,8 @@
         <ToolGroup messages={row.messages} />
       {:else if row.kind === 'question'}
         <QuestionCard message={row.message} />
+      {:else if row.kind === 'harness'}
+        <SystemLine harness={row.note} />
       {:else if row.kind === 'subagent'}
         <Subagent branch={row.branch} spawn={row.spawn} />
       {:else if row.kind === 'thinking'}
@@ -74,6 +88,10 @@
     </div>
   {/each}
 </div>
+<!-- The seal. It exists only once every row above it has parsed, which is the
+     one thing the stylesheet can ask about and the parser can answer honestly.
+     See `.tail > .tr` below. -->
+<i class="sealed" aria-hidden="true"></i>
 </div>
 
 <style>
@@ -93,10 +111,51 @@
   }
   /* Deliberately identical to Transcript.svelte's `.tr` — the scroller the
      virtualized transcript replaces this with, down to the asymmetric ledger
-     padding, so the swap does not shift a single row. */
+     padding, so the swap does not shift a single row.
+     `column-reverse` is the only departure, and it is invisible: the rows are
+     emitted newest-first (see `painted`) and read back bottom-up, so the
+     picture is identical while the DOM order is the one progressive parsing
+     can paint without moving anything. Every row root carries margin-top and
+     no margin-bottom, so flex losing margin-collapsing changes no gap. */
   .tr {
     padding: 0 var(--space-6) calc(var(--space-8) * 3) var(--space-7);
     position: relative;
+    display: flex;
+    flex-direction: column-reverse;
+    /* Its own content height, always: a tail taller than the viewport must
+       overflow the TOP (and be clipped), never be squeezed to fit. */
+    flex: 0 0 auto;
+  }
+  /**
+   * Nothing paints until the tail is whole.
+   *
+   * Reversing the ROWS (above) stops a newly parsed row from pushing the
+   * painted ones up, and it does — the newest row's box holds still while the
+   * other 23 stack above it into clipped space. What it cannot fix is growth
+   * INSIDE a row: the newest turn here is a single 1,200px answer, its own
+   * paragraphs parse top-down, and in a bottom-anchored box that walks its top
+   * edge upward — dragging every line already on screen with it. Measured at
+   * 535px of travel, which is most of a 1.06 CLS on its own.
+   *
+   * A box cannot be anchored at both ends, so the tail simply does not paint
+   * half-parsed. `.sealed` is emitted after the last row, so its existence *is*
+   * the statement that the markup is complete, and `:has()` re-evaluates as the
+   * parser goes. The cost is the few ms between the first row arriving and the
+   * last; the return is that every pixel this component ever paints is final.
+   *
+   * Guarded, because a browser without `:has()` would otherwise hide the tail
+   * for good — there is no script here to rescue it.
+   */
+  @supports selector(:has(*)) {
+    .tail > .tr {
+      visibility: hidden;
+    }
+    .tail:has(> .sealed) > .tr {
+      visibility: visible;
+    }
+  }
+  .sealed {
+    display: none;
   }
   .empty {
     font-size: var(--text-sm);

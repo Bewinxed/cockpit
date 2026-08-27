@@ -3,12 +3,13 @@
    * The scrolling transcript: the folded rows, virtualized. The live tail rides
    * as rows of its own (see `buildRows`), so streaming text, an open reasoning
    * block and the tool in flight all scroll with the conversation. Announces
-   * blocked-on-you through the log's live region.
+   * genuine arrivals — and blocked-on-you — through a dedicated live region
+   * beside the log, never through the virtualized container itself.
    */
   import { tick } from 'svelte';
   import { Virtualizer } from 'virtua/svelte';
   import type { SessionState } from '../client.svelte';
-  import { buildRows } from './rows';
+  import { buildRows, type Row } from './rows';
   import { describeTool } from '$lib/components/features/tool-cards/descriptors';
   import MessageRow from './MessageRow.svelte';
   import ToolGroup from './ToolGroup.svelte';
@@ -16,22 +17,85 @@
   import Subagent from './Subagent.svelte';
   import Thinking from './Thinking.svelte';
   import MessageBody from './MessageBody.svelte';
+  import SystemLine from './SystemLine.svelte';
   import Who from './Who.svelte';
 
   let {
     session,
     agentName,
     active,
-  }: { session: SessionState; agentName: string; active: boolean } = $props();
+    machineName = '',
+    cwd = '',
+    clearance = 0,
+    onlanded,
+  }: {
+    session: SessionState;
+    agentName: string;
+    active: boolean;
+    /** Where this session runs — named in the empty state, nowhere else. */
+    machineName?: string;
+    /** The folder it runs in — named in the empty state, nowhere else. */
+    cwd?: string;
+    /**
+     * The measured height of the floating composer stack, in px. The bottom
+     * padding is driven from `--composer-clearance` (set by the pane) — this is
+     * the same measurement, taken as a prop only so the tail-follow can re-land
+     * when a permission card grows the stack under the last row.
+     */
+    clearance?: number;
+    /**
+     * Fired once, the first time this transcript is actually settled on its
+     * latest row — mounted, measured by virtua, and scrolled home. The pane
+     * holds the server's static tail on screen until then, because virtua
+     * needs several frames to measure its way down and a swap before that
+     * shows a blank column for those frames.
+     */
+    onlanded?: () => void;
+  } = $props();
 
-  const rows = $derived(buildRows(session));
+  /**
+   * The folded rows — frozen while this pane is off screen.
+   *
+   * The session layout keeps one pane per open tab and never unmounts it, so
+   * the scroll offset and the half-typed message survive a switch. The cost of
+   * that was paid on every streamed frame: a session streaming into a tab the
+   * reader is NOT looking at rebuilt every row and re-parsed the streaming
+   * turn's markdown, frame after frame, forever. Measured at 1.09s of script
+   * and 513 layouts per 300 streamed frames — MORE than the same stream costs
+   * in the pane actually on screen, because the background session was the
+   * large one. With several tabs open and one session streaming, the reader
+   * pays that for a picture nobody can see.
+   *
+   * So an inactive transcript stops reading the session at all. While `active`
+   * is false the body below touches only `active` and the array it already
+   * built, which means nothing the session writes can invalidate it — there is
+   * no recompute to skip because there is no invalidation. virtua stays mounted
+   * on the rows it already has, so the DOM, the heights it measured and the
+   * scroll offset are all untouched and a frozen pane costs nothing per frame.
+   *
+   * `active` is tracked, so flipping it back on invalidates this once: the pane
+   * catches up in a single recompute, and the tail-follow effect below re-lands
+   * it if the reader was at the tail when they left.
+   */
+  let frozen: Row[] = [];
+  /** Whether `frozen` holds a real build yet — the first one is unconditional. */
+  let primed = false;
+  const rows = $derived.by<Row[]>(() => {
+    // A pane born off screen would otherwise hold an empty transcript until it
+    // was first looked at, so the first build never consults `active`.
+    if (!active && primed) return frozen;
+    primed = true;
+    frozen = buildRows(session);
+    return frozen;
+  });
 
-  // Compaction is a genuinely live process — the model is rewriting its own
-  // context — so it earns motion under DESIGN.md §motion ("only the live channel
-  // moves"). While `sdkStatus` is `compacting`, the transcript takes a very
-  // subtle watery warp + a slow sheen that sweeps each message left→right; the
-  // one thing left crisp is the note saying why. It all stops the instant the
-  // status clears, and `prefers-reduced-motion` gets none of it.
+  /**
+   * Compaction is a genuinely live process — the model is rewriting its own
+   * context — and it says so with one sticky pill and a beating dot. It used to
+   * warp the entire transcript through an SVG displacement filter; distorting
+   * text the operator may be mid-sentence in, and repainting the whole scroll
+   * surface every frame, is not a state indicator. The pill alone carries it.
+   */
   const compacting = $derived(session.sdkStatus === 'compacting');
 
   let scroller = $state<HTMLElement | undefined>();
@@ -50,20 +114,117 @@
     atBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 120;
   }
 
-  // Follow the tail while the reader is already at the bottom — a scroll up to
-  // read history is never yanked back by the next frame.
+  /**
+   * Put the last row fully in view, above the floating composer stack.
+   *
+   * `scrollToIndex(…, 'end')` seats the last row's foot on the VIEWPORT's foot,
+   * which is behind the composer: the clearance is padding under the list, and
+   * virtua's box math stops at the list. So the landing is two moves — virtua
+   * measures its way to the true last row, then one more frame runs the scroller
+   * to its own maximum, past the padding band, which is exactly the height of
+   * the composer column. A tall permission card therefore never sits on top of
+   * the message that raised it.
+   */
+  function land(): void {
+    if (list) list.scrollToIndex(rows.length - 1, { align: 'end' });
+    else if (scroller) scroller.scrollTop = scroller.scrollHeight;
+    requestAnimationFrame(() => {
+      if (scroller) scroller.scrollTop = scroller.scrollHeight;
+      watchForPaint();
+    });
+    atBottom = true;
+    landed = true;
+  }
+
+  /**
+   * Say, exactly once, that this transcript is settled on its latest row.
+   *
+   * `streamHistory` clears `loading` on the FIRST chunk — the tail, cut where
+   * the server's static tail is cut — so that is the moment this transcript
+   * shows the same picture the static tail does. Older chunks prepend above it
+   * afterwards and re-land it, which the reader never sees.
+   */
+  let settled = false;
+  function settle(): void {
+    if (settled || session.loading) return;
+    settled = true;
+    onlanded?.();
+  }
+
+  /** Whether a row is actually drawn where the reader is about to look. */
+  function paintedInView(): boolean {
+    if (!scroller) return false;
+    const top = scroller.getBoundingClientRect().top;
+    const bottom = top + scroller.clientHeight;
+    for (const row of scroller.querySelectorAll('.renter')) {
+      const box = row.getBoundingClientRect();
+      if (box.height > 0 && box.bottom > top && box.top < bottom) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Wait for the landing to be VISIBLE, not merely done, then say so.
+   *
+   * Setting `scrollTop` does not re-render a virtualizer synchronously: virtua
+   * learns where it is from the scroll event, recomputes its window, and Svelte
+   * patches the rows a frame or two later. For those frames the scroller is at
+   * the bottom of a 5,600px column with nothing rendered anywhere near it — an
+   * empty box. Announcing the landing on the scroll alone therefore handed the
+   * pane a transcript that was correct and blank, which is the white flash this
+   * whole handshake exists to remove. So the honest signal is a row with height
+   * inside the viewport; a dozen frames is the ceiling, after which the tail has
+   * outstayed its usefulness whatever the virtualizer is doing.
+   */
+  let watching = false;
+  function watchForPaint(): void {
+    if (settled || watching) return;
+    watching = true;
+    let frames = 0;
+    const check = (): void => {
+      if (settled) {
+        watching = false;
+        return;
+      }
+      frames += 1;
+      if (paintedInView() || frames > 12) {
+        watching = false;
+        settle();
+        return;
+      }
+      requestAnimationFrame(check);
+    };
+    requestAnimationFrame(check);
+  }
+
+  // A conversation with nothing in it never lands — `land` needs a row to
+  // scroll to — so the handshake would never be answered and a pane waiting on
+  // it would hold an invisible transcript for good. An empty read that has
+  // finished IS settled; say so.
   $effect(() => {
+    if (session.loading || rows.length > 0) return;
+    landed = true;
+    settle();
+  });
+
+  // Follow the tail while the reader is already at the bottom — a scroll up to
+  // read history is never yanked back by the next frame. `clearance` is a
+  // dependency too: when a permission card grows the composer column, the row
+  // that was flush with the composer is now behind it, so the tail re-lands.
+  //
+  // `active` is read FIRST, before the tail it follows. Reading `session.streaming`
+  // ahead of the guard re-ran this effect on every streamed frame of a pane
+  // nobody was looking at — the same cost `rows` above stops paying, arriving
+  // by the other door. Guarding first means an off-screen pane has no
+  // dependency on the stream at all; and because `active` is itself tracked,
+  // switching back re-runs this once, on rows that have just caught up.
+  $effect(() => {
+    if (!active) return;
     void rows.length;
     void session.streaming;
-    if (!active || rows.length === 0) return;
-    if (!landed || atBottom) {
-      void tick().then(() => {
-        if (list) list.scrollToIndex(rows.length - 1, { align: 'end' });
-        else if (scroller) scroller.scrollTop = scroller.scrollHeight;
-        atBottom = true;
-        landed = true;
-      });
-    }
+    void clearance;
+    if (rows.length === 0) return;
+    if (!landed || atBottom) void tick().then(land);
   });
 
   // ── Enter motion ────────────────────────────────────────────────────────
@@ -116,6 +277,99 @@
     for (const r of rows) seen.add(r.key);
   });
 
+  // ── The live region ─────────────────────────────────────────────────────
+  // The scroll container is NOT the live region. virtua mounts and unmounts
+  // rows as they cross the viewport, so `aria-live` on it re-reads history the
+  // moment the operator scrolls, and re-reads the streaming turn on every token.
+  // Instead: the same landed/seen-set guard the enter motion uses picks out
+  // genuine arrivals, and says one coarse sentence about each.
+
+  /**
+   * What identifies a row for announcement purposes. The streaming rows are
+   * deliberately unannounceable — their text arrives token by token, and a live
+   * region fed from it is a stutter. The settled `single` row the turn becomes
+   * is what says "replied". The in-flight tool is keyed by its call id rather
+   * than its row key, which virtua reuses for every tool in turn.
+   */
+  function announceKeyOf(row: Row): string {
+    if (row.kind === 'stream' || row.kind === 'thinking') return '';
+    // A harness notification is plumbing the operator never asked for. It is
+    // worth a line on the rail and nothing at all in the ear.
+    if (row.kind === 'harness') return '';
+    if (row.kind === 'livetool') return `livetool:${row.glance.toolId}`;
+    return row.key;
+  }
+
+  /**
+   * The whole announceable vocabulary, and it is five phrases long. A row that
+   * maps to nothing says nothing — a settled tool run, a prepended history
+   * chunk and the operator's own message are all visible on a surface the
+   * operator is looking at.
+   */
+  function phraseOf(row: Row): string {
+    if (row.kind === 'single') {
+      // The operator's own message needs no reading back to them.
+      return row.message.type === 'user' ? '' : 'Agent replied';
+    }
+    if (row.kind === 'livetool') return `${row.glance.name} running`;
+    return '';
+  }
+
+  /** What the polite region currently holds. Replaced, never appended to. */
+  let announcement = $state('');
+  const announced = new Set<string>();
+
+  $effect(() => {
+    // Before the transcript lands, everything on it is history, not an arrival.
+    // A pane that is off screen is the same case twice over: it has no business
+    // speaking about a surface the reader cannot see, and its rows are frozen
+    // anyway. Both branches still SEED `announced`, so coming back to a tab
+    // announces what arrived while it was away exactly once, rather than
+    // re-reading the whole transcript.
+    if (!landed || !active) {
+      for (const r of rows) announced.add(announceKeyOf(r));
+      return;
+    }
+    let phrase = '';
+    for (const r of rows) {
+      const key = announceKeyOf(r);
+      if (!key || announced.has(key)) continue;
+      announced.add(key);
+      const said = phraseOf(r);
+      if (said) phrase = said;
+    }
+    // A batch that lands in one frame says only its last line: three sentences
+    // read back-to-back is the spam this region exists to stop.
+    if (phrase) announcement = phrase;
+  });
+
+  // The end of a turn is a state change, not a row: the last thing the agent
+  // said may have landed several frames before it stopped working. `busy`
+  // falling is the only honest signal for it.
+  // `busy` is still TRACKED off screen — it flips once a turn, not once a
+  // frame, so it costs nothing — but only a pane on screen says so out loud.
+  // Following it either way is what keeps `wasBusy` honest: dropping the
+  // bookkeeping while hidden would make the next switch announce a turn that
+  // finished minutes ago.
+  let wasBusy = false;
+  $effect(() => {
+    const busy = session.busy;
+    if (active && landed && wasBusy && !busy) announcement = 'Turn finished';
+    wasBusy = busy;
+  });
+
+  /**
+   * The blocked-on-you line, which interrupts: it is the one state where the
+   * run has stopped and only the operator can restart it. Empty otherwise, so
+   * clearing the block does not itself announce anything.
+   */
+  const blockedNote = $derived.by(() => {
+    if (!landed) return '';
+    if (session.pending.length > 0) return 'Agent needs your permission';
+    if (rows[rows.length - 1]?.kind === 'question') return 'Question from the agent';
+    return '';
+  });
+
   // No separate "working"/status row: the live state is the streaming content
   // itself — the in-flight tool row (livetool), the thinking block, the streaming
   // turn, and the subagent branch each show their own progress inline. A second
@@ -124,51 +378,21 @@
   // "heard you" gap before the first frame.
 </script>
 
-<!-- The warp is an SVG displacement filter, referenced by CSS `filter: url(#…)`.
-     Rendered once, zero-size; its turbulence drifts on a slow SMIL loop so the
-     distortion breathes rather than sitting frozen. -->
-<svg class="warp-def" aria-hidden="true" focusable="false" width="0" height="0">
-  <filter id="compaction-warp" x="-6%" y="-6%" width="112%" height="112%" color-interpolation-filters="sRGB">
-    <feTurbulence type="fractalNoise" baseFrequency="0.006 0.013" numOctaves="1" seed="7" result="noise">
-      <animate
-        attributeName="baseFrequency"
-        dur="16s"
-        values="0.006 0.013;0.010 0.009;0.006 0.013"
-        repeatCount="indefinite"
-      />
-    </feTurbulence>
-    <!-- Chromatic refraction: split R/G/B, displace each by a slightly different
-         amount, recombine additively. Same displacement the reference's GL shader
-         does, plus the faint colour fringing that reads as glass — done on the
-         live DOM, so no snapshot/font/taint fragility. Scales stay close (4.2 /
-         3.4 / 2.6) so the fringe is a whisper, not a 3D-movie effect. -->
-    <feColorMatrix in="SourceGraphic" type="matrix" result="rC"
-      values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0" />
-    <feColorMatrix in="SourceGraphic" type="matrix" result="gC"
-      values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0" />
-    <feColorMatrix in="SourceGraphic" type="matrix" result="bC"
-      values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0" />
-    <feDisplacementMap in="rC" in2="noise" scale="4.2" xChannelSelector="R" yChannelSelector="G" result="rD" />
-    <feDisplacementMap in="gC" in2="noise" scale="3.4" xChannelSelector="R" yChannelSelector="G" result="gD" />
-    <feDisplacementMap in="bC" in2="noise" scale="2.6" xChannelSelector="R" yChannelSelector="G" result="bD" />
-    <feBlend in="rD" in2="gD" mode="screen" result="rg" />
-    <feBlend in="rg" in2="bD" mode="screen" />
-  </filter>
-</svg>
+<!-- Off-screen, and the only thing on this surface that speaks. Two channels:
+     what just arrived (polite, queued behind the reader), and what is blocking
+     (assertive, because the run has stopped). -->
+<p class="spoken" role="status" aria-live="polite" aria-atomic="true">{announcement}</p>
+<p class="spoken" aria-live="assertive" aria-atomic="true">{blockedNote}</p>
 
 <div
   class="tr"
-  class:compacting
   role="log"
-  aria-live="polite"
   aria-label="Session transcript"
   bind:this={scroller}
   {onscroll}
 >
-  <!-- The one thing that stays crisp while everything behind it warps: the note
-       saying why. Pinned to the top of the transcript viewport (the foot is the
-       composer's), first child so `position: sticky` actually holds, and outside
-       the virtualiser so no `.renter` warp rule reaches it. -->
+  <!-- Pinned to the top of the transcript viewport (the foot is the composer's),
+       first child so `position: sticky` actually holds. -->
   {#if compacting}
     <div class="compacting-note" role="status">
       <span class="beat" aria-hidden="true"></span>
@@ -178,14 +402,23 @@
   {#if session.loading && rows.length === 0}
     <p class="empty">Loading transcript…</p>
   {:else if rows.length === 0}
-    <p class="empty">No messages yet.</p>
+    <!-- Not a shrug: where this session runs, then the two keys that do anything
+         from the composer below. Left-aligned — this surface is a ledger. -->
+    <div class="blank">
+      <!-- Both halves or neither: the identity line is `machine : folder`, and
+           half of it is a dangling colon. -->
+      {#if machineName && cwd}
+        <p class="b-where">{machineName} : {cwd}</p>
+      {/if}
+      <h2 class="b-lead">No messages yet.</h2>
+      <p class="b-hint">
+        Send the first instruction below — / lists this session's commands, @ names a machine or
+        session.
+      </p>
+    </div>
   {/if}
 
-  <!-- The warp is one continuous field over the whole chat container (like the
-       reference shader over its element), not a per-message filter — so the
-       distortion and the sheen flow across the transcript as a single surface. -->
-  <div class="warp-layer">
-    <Virtualizer bind:this={list} data={rows} getKey={(r) => r.key} scrollRef={scroller}>
+  <Virtualizer bind:this={list} data={rows} getKey={(r) => r.key} scrollRef={scroller}>
     {#snippet children(row)}
       <div class="renter" use:enterMotion={row.key}>
         {#if row.kind === 'single'}
@@ -194,6 +427,8 @@
           <ToolGroup messages={row.messages} />
         {:else if row.kind === 'question'}
           <QuestionCard message={row.message} />
+        {:else if row.kind === 'harness'}
+          <SystemLine harness={row.note} />
         {:else if row.kind === 'subagent'}
           <Subagent branch={row.branch} spawn={row.spawn} />
         {:else if row.kind === 'thinking'}
@@ -208,14 +443,18 @@
           {@const LiveIcon = d.icon}
           <div class="livetool">
             <span class="ic breathe {d.color}"><LiveIcon /></span>
-            <span class="tk">{row.glance.name}</span>
+            <!-- The same anatomy the settled ToolGroup row has: the descriptor's
+                 verb, then the mono argument, the verb omitted where the object
+                 is the whole sentence. Printing `glance.name` here and `d.label`
+                 once it settled changed the call's vocabulary the instant it
+                 completed. -->
+            {#if d.label}<span class="tk">{d.label}</span>{/if}
             <span class="arg">{row.glance.glance}</span>
           </div>
         {/if}
       </div>
     {/snippet}
-    </Virtualizer>
-  </div>
+  </Virtualizer>
 </div>
 
 <style>
@@ -224,7 +463,16 @@
     overflow-y: auto;
     /* asymmetric content padding is the DESIGN.md ledger signature:
        left --space-7 (25), right --space-6 (21). */
-    padding: 0 var(--space-6) calc(var(--space-8) * 3) var(--space-7);
+    padding-top: 0;
+    padding-right: var(--space-6);
+    padding-left: var(--space-7);
+    /* The foot clears the floating composer COLUMN, not the bare pill: a
+       permission card stacks above the input inside it and can stand 400px
+       tall, which used to bury the very message that raised it.
+       `--composer-clearance` is that column's measured height plus its offsets,
+       published by the pane; the old fixed reserve is the floor, so a bare
+       composer looks exactly as it did. */
+    padding-bottom: max(calc(var(--space-8) * 3), var(--composer-clearance, 0px));
     min-height: 0;
     position: relative;
   }
@@ -234,58 +482,30 @@
     padding: var(--space-5) 0;
   }
 
-  /* The SVG filter host is a zero-box def, not layout. */
-  .warp-def {
-    position: absolute;
-    width: 0;
-    height: 0;
-    overflow: hidden;
-    pointer-events: none;
+  /* The empty transcript. Quiet by construction — no fill, no border, no
+     illustration; it is a caption on the ledger, so it sits where every other
+     row starts rather than in the middle of the pane. */
+  .blank {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-8) 0;
+    line-height: var(--leading-body);
   }
-
-  .warp-layer {
-    /* the container the compaction field distorts as one surface */
-    will-change: filter;
+  .b-where {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--ink-muted);
   }
-
-  /* ── Compaction: the transcript is being rewritten ──────────────────────
-     The whole chat container takes one continuous watery warp and a slow sheen
-     that sweeps left→right across it — the one live thing worth showing, per
-     DESIGN.md §motion. It rides the SVG filter and a mask only, so virtua's box
-     math is untouched. The crisp note is exempt (it lives outside .warp-layer).
-     Reduced motion gets none of it. */
-  .tr.compacting .warp-layer {
-    filter: url(#compaction-warp);
-    -webkit-mask-image: linear-gradient(
-      100deg,
-      #000 0%,
-      #000 38%,
-      oklch(0 0 0 / 0.72) 50%,
-      #000 62%,
-      #000 100%
-    );
-    mask-image: linear-gradient(
-      100deg,
-      #000 0%,
-      #000 38%,
-      oklch(0 0 0 / 0.72) 50%,
-      #000 62%,
-      #000 100%
-    );
-    -webkit-mask-size: 220% 100%;
-    mask-size: 220% 100%;
-    animation: compact-sheen 2600ms var(--e-toggle) infinite;
-    will-change: mask-position, filter;
+  .b-lead {
+    font-size: var(--text-base);
+    font-weight: var(--weight-strong);
+    color: var(--ink-strong);
   }
-  @keyframes compact-sheen {
-    from {
-      -webkit-mask-position: 220% 0;
-      mask-position: 220% 0;
-    }
-    to {
-      -webkit-mask-position: -120% 0;
-      mask-position: -120% 0;
-    }
+  .b-hint {
+    max-width: 44ch;
+    font-size: var(--text-sm);
+    color: var(--ink-muted);
   }
 
   .compacting-note {
@@ -305,8 +525,6 @@
     box-shadow: var(--shadow-lifted);
     font-size: var(--text-sm);
     color: var(--ink-body);
-    /* never warped, even sharing the scroll box with the rows that are */
-    filter: none;
   }
   .compacting-note .beat {
     width: 6px;
@@ -322,13 +540,23 @@
     }
   }
 
+  /* The live region is read, never seen: off-screen rather than
+     `display: none`, which assistive tech skips entirely. */
+  .spoken {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    border: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
   @media (prefers-reduced-motion: reduce) {
-    .tr.compacting .warp-layer {
-      filter: none;
-      -webkit-mask-image: none;
-      mask-image: none;
-      animation: none;
-    }
+    /* Compaction's only motion is the pill's dot; still it, and the state is
+       carried by the pill's presence alone. */
     .compacting-note .beat {
       animation: none;
     }

@@ -1,3 +1,15 @@
+<script module lang="ts">
+  /**
+   * The digits belong to exactly one card. The composer can park several
+   * requests at once, and two question cards both answering "2" is worse than
+   * neither answering it — so question cards register here in mount order and
+   * the first one standing owns the keyboard. This is the `shortcuts` prop the
+   * old card took from its parent, kept inside the component instead: the
+   * composer that renders the stack should not have to know the rule.
+   */
+  const claimants = $state<symbol[]>([]);
+</script>
+
 <script lang="ts">
   /**
    * The one human-in-the-loop surface, floating above the composer: a permission
@@ -6,7 +18,8 @@
    * parked tool call through the client's permission answer. Ported from the
    * mock's `.hitl`.
    */
-  import type { UserAnswers } from '@cockpit/core';
+  import { onMount } from 'svelte';
+  import type { UserAnswers, UserQuestion } from '@cockpit/core';
   import {
     cockpit,
     permissionAnswer,
@@ -17,6 +30,7 @@
   import { permissionSummary, suggestedRule } from '../permission-summary';
   import { IconArrowUp, IconCheck, IconClose, IconShield } from '$lib/icons';
   import { Button } from '$lib/components/ui/button';
+  import { isTyping } from '$lib/utils/typing';
 
   let {
     request,
@@ -34,23 +48,44 @@
   // The reader's selections, keyed by question text — the shape the tool reads.
   let answers = $state<UserAnswers>({});
 
-  const allAnswered = $derived(
-    !!questions && questions.every((q) => {
-      const value = answers[q.question];
-      return Array.isArray(value) ? value.length > 0 : !!value;
-    })
-  );
+  const isAnswered = (q: UserQuestion): boolean => {
+    const value = answers[q.question];
+    return Array.isArray(value) ? value.length > 0 : !!value;
+  };
 
-  function toggle(question: string, label: string, multi: boolean): void {
-    if (!multi) {
-      answers = { ...answers, [question]: label };
+  const allAnswered = $derived(!!questions && questions.every(isAnswered));
+
+  /**
+   * Which question the digits answer. A card usually asks one thing and this
+   * never moves; when it asks several, the digits follow the first question
+   * still unanswered, and only that question's keycaps are lit — a keycap that
+   * cannot be pressed is the defect this whole handler exists to fix.
+   */
+  let current = $state(0);
+
+  function advance(): void {
+    if (!questions) return;
+    const next = questions.findIndex((q) => !isAnswered(q));
+    if (next !== -1) current = next;
+  }
+
+  function toggle(index: number, label: string): void {
+    const q = questions?.[index];
+    if (!q || !answerable) return;
+    current = index;
+    if (!q.multiSelect) {
+      // Re-picking the chosen option clears it, so a mis-keyed digit is undoable
+      // with the same digit rather than only by picking something else.
+      const chosen = answers[q.question] === label;
+      answers = { ...answers, [q.question]: chosen ? '' : label };
+      if (!chosen) advance();
       return;
     }
-    const current = answers[question];
-    const list = Array.isArray(current) ? current : current ? [current] : [];
+    const value = answers[q.question];
+    const list = Array.isArray(value) ? value : value ? [value] : [];
     answers = {
       ...answers,
-      [question]: list.includes(label) ? list.filter((l) => l !== label) : [...list, label],
+      [q.question]: list.includes(label) ? list.filter((l) => l !== label) : [...list, label],
     };
   }
 
@@ -76,6 +111,48 @@
       request.requestId,
       permissionAnswer(request, kind)
     );
+  }
+
+  /* Only a question card claims the digits, and only one of them at a time. */
+  const claim = Symbol('prompt');
+  onMount(() => {
+    if (!questions) return;
+    claimants.push(claim);
+    return () => {
+      const at = claimants.indexOf(claim);
+      if (at !== -1) claimants.splice(at, 1);
+    };
+  });
+  const ownsKeys = $derived(!!questions && claimants[0] === claim);
+
+  /**
+   * The keys the card already advertises: a digit picks the option wearing that
+   * keycap, Enter sends once every question has an answer, Escape dismisses.
+   * They are inert while the reader is writing (`isTyping`) — which is what
+   * lets "2" mean an option here and a character in the composer — inert under
+   * a modifier, so browser and OS chords still reach their owners, and inert
+   * whenever the buttons are, so the `answerable` latch is the single gate on
+   * answering: an answer cannot be keyed in twice, or into a dead socket.
+   */
+  function handleKeydown(event: KeyboardEvent): void {
+    if (!ownsKeys || !answerable) return;
+    if (event.metaKey || event.ctrlKey || event.altKey || isTyping()) return;
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      answer('deny');
+      return;
+    }
+    if (event.key >= '1' && event.key <= '9') {
+      const option = questions?.[current]?.options[Number(event.key) - 1];
+      if (!option) return;
+      event.preventDefault();
+      toggle(current, option.label);
+      return;
+    }
+    if (event.key === 'Enter' && allAnswered) {
+      event.preventDefault();
+      submitQuestion();
+    }
   }
 
   function submitQuestion(): void {
@@ -124,19 +201,24 @@
     'text-[color:var(--status-attn-ink)]';
 </script>
 
+<svelte:window onkeydown={handleKeydown} />
+
 <section class="hitl" aria-label={questions ? 'Question from the agent' : 'Permission request'}>
   {#if questions}
     <h2><span class="pill attn"><IconArrowUp />needs you</span>Question from the agent</h2>
-    {#each questions as q (q.question)}
+    {#each questions as q, qi (q.question)}
       <p class="lede">{q.question}</p>
       <div class="qopts">
         {#each q.options as opt, i (opt.label)}
+          {@const live = ownsKeys && qi === current && i < 9}
           <button
             type="button"
+            aria-pressed={isSelected(q.question, opt.label)}
+            aria-keyshortcuts={live ? String(i + 1) : undefined}
             class:sel={isSelected(q.question, opt.label)}
-            onclick={() => toggle(q.question, opt.label, q.multiSelect)}
+            onclick={() => toggle(qi, opt.label)}
           >
-            <span class="kc">{i + 1}</span><span>{opt.label}</span>
+            <span class="kc" class:dim={!live}>{i + 1}</span><span>{opt.label}</span>
           </button>
         {/each}
       </div>
@@ -189,12 +271,34 @@
 </section>
 
 <style>
+  /* The focal moment: the card arrives with ONE settle and is then completely
+     still. No pulse, no attention loop — the arrival is the whole signal, and a
+     card that keeps moving after it has landed is asking twice. 200ms is written
+     on the token scale (--c-100 × 2) so it moves with the scale if the scale
+     moves. `both` holds the from-frame before the first tick, so the card never
+     flashes at full opacity for a frame before it settles. */
+  @keyframes hitl-settle {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
   .hitl {
     border: 1px solid var(--border-control);
     border-radius: var(--radius-panel);
     background: var(--surface-raised);
     padding: var(--space-3);
     box-shadow: var(--shadow-hairline, var(--shadow-tile));
+    animation: hitl-settle calc(var(--c-100) * 2) var(--e-in) both;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .hitl {
+      animation: none;
+    }
   }
   h2 {
     font-size: var(--text-base);
@@ -351,7 +455,7 @@
     border: 1px solid var(--border-control);
     border-radius: var(--radius-control);
     background: var(--surface-raised);
-    color: var(--ink-strong);
+    color: var(--ink-body);
     font-family: var(--font-body);
     font-size: var(--text-base);
     font-weight: var(--weight-medium);
@@ -362,12 +466,31 @@
     text-align: left;
     max-width: 100%;
   }
-  .qopts button.sel {
-    border-color: var(--status-attn-ink);
-    background: var(--status-attn-bg);
-  }
-  .qopts button:hover {
+  .qopts button:not(.sel):hover {
     background: var(--surface-hover);
+  }
+  /* A picked option is a state, not a warning. --status-attn-* is the fleet's
+     one hue for "a person is holding this up" (the needs-you pill above, the
+     standing grant below); spending it on selection says the reader chose
+     wrong. Selection takes the brand instead — brand edge, sunken fill,
+     promoted ink, and a keycap that inverts. The brand is monochrome in this
+     palette, so those three differences survive greyscale by construction, and
+     none of them is a weight or size change: the chip never reflows on pick. */
+  .qopts button.sel {
+    border-color: var(--brand-solid);
+    background: var(--surface-sunken);
+    color: var(--ink-strong);
+  }
+  .qopts button.sel .kc {
+    background: var(--brand-solid);
+    color: var(--on-brand);
+  }
+  /* A digit that answers nothing must not look like a digit that does: keycaps
+     go quiet on every question the keys are not currently pointed at. A picked
+     option keeps its bright keycap either way — there it is a record of which
+     digit was pressed, not an offer to press it. */
+  .qopts button:not(.sel) .kc.dim {
+    opacity: 0.45;
   }
   .kc {
     display: inline-grid;

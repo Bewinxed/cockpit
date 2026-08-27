@@ -135,7 +135,7 @@
     border: 1px solid var(--border-control);
     border-radius: var(--radius-control);
     background: var(--surface-raised);
-    color: var(--ink-muted);
+    color: var(--ink-body);
     font-family: var(--font-body);
     font-size: var(--text-base);
     font-weight: var(--weight-medium);
@@ -145,10 +145,18 @@
     text-align: left;
     max-width: 100%;
   }
+  /* Identical to the live card's `.qopts button.sel` — the settled record is
+     the same anatomy as the prompt that produced it, just inert, so what the
+     reader picked must look picked and not flagged. --status-attn-* stays
+     reserved for "a person is holding this up". */
   .opt.sel {
-    border-color: var(--status-attn-ink);
-    background: var(--status-attn-bg);
+    border-color: var(--brand-solid);
+    background: var(--surface-sunken);
     color: var(--ink-strong);
+  }
+  .opt.sel .kc {
+    background: var(--brand-solid);
+    color: var(--on-brand);
   }
   .kc {
     display: inline-grid;

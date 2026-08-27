@@ -5,6 +5,22 @@
     <link rel="icon" href="%sveltekit.assets%/favicon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Outpost — mission control for Claude Code</title>
+    <!--
+      The two faces the first viewport is actually set in, fetched alongside the
+      stylesheet rather than after it. Both are `font-display: swap`, so without
+      this the page painted in the fallback and reflowed every line when the real
+      faces landed (~1.45s on a cold load). TX-02 lives at a fixed path under
+      `static/`, so it can be named here; Geist is a bundled asset whose URL Vite
+      hashes, so its preload is emitted from the root layout, where the build can
+      hand us the resolved name.
+    -->
+    <link
+      rel="preload"
+      as="font"
+      type="font/otf"
+      href="%sveltekit.assets%/fonts/TX-02-Regular.otf"
+      crossorigin
+    />
     %sveltekit.head%
   </head>
   <body data-sveltekit-preload-data="hover">
@@ -31,6 +47,27 @@
     FINISH: unreviewed and undocumented is unfinished; this build ends with
     the finish review, the verdict, and DESIGN.md.
     -->
+    <!--
+      The sidebar's width, before anything can paint it wrong.
+
+      The rail is this browser's preference, not the fleet's, and it lives in
+      localStorage — which the server cannot read. It is mirrored into a cookie
+      so SSR usually gets it right, but a browser that has a width and no cookie
+      (the migration case, and every fresh profile that has resized once) painted
+      the default and snapped on hydration. Six lines here, before the body, and
+      the first paint is already the stored width: `--rail-w` is what the rail's
+      `--sidebar-width` resolves to, with the server's cookie value as the
+      fallback. Shell.svelte owns the property from hydration onward.
+    -->
+    <script>
+      try {
+        var w = parseInt(localStorage.getItem('cockpit-rail-width'), 10);
+        if (w >= 216 && w <= 520)
+          document.documentElement.style.setProperty('--rail-w', w + 'px');
+      } catch (e) {
+        /* No storage, or a value that is not a width: the cookie default stands. */
+      }
+    </script>
     <div style="display: contents">%sveltekit.body%</div>
   </body>
 </html>

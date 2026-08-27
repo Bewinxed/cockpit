@@ -316,6 +316,14 @@ const state = $state({
    * attempt failed, and only the second of those is a fault worth shouting.
    */
   attempted: false,
+  /**
+   * Whether an attempt has actually FAILED — the socket errored, or closed
+   * without ever opening. `attempted` says a socket was made; this says one came
+   * back empty-handed, which is the only thing that justifies telling the reader
+   * the hub cannot be reached. Cleared on every open, so a healthy load never
+   * carries a fault forward.
+   */
+  failed: false,
   /** When the next reconnect attempt fires, so the banner can count it down. */
   retryAt: null as number | null,
   machines: [] as Machine[],
@@ -1181,6 +1189,7 @@ function connect(): void {
   socket.onopen = () => {
     state.status = 'connected';
     state.retryAt = null;
+    state.failed = false;
     globalThis.__cockpitReconnectAttempts = 0;
     void refresh().then(refreshCatalogs);
     // Re-state the subscription on every (re)connect — the hub's registry forgot
@@ -1215,6 +1224,8 @@ function bind(socket: WebSocket): void {
 
   socket.onclose = () => {
     state.status = 'disconnected';
+    // A socket that closed is an attempt that is over, one way or the other.
+    state.failed = true;
     abandonInflight('The connection to the hub dropped before that finished.');
     if (!globalThis.__cockpitDisposing) scheduleReconnect();
   };
@@ -1223,6 +1234,7 @@ function bind(socket: WebSocket): void {
     // Always followed by `onclose`, which schedules the retry — this only
     // records that the last attempt failed, never that trying has stopped.
     state.status = 'error';
+    state.failed = true;
   };
 }
 
@@ -2860,6 +2872,14 @@ export const cockpit = {
     if (state.status === 'connected') return 'connected';
     if (state.status === 'connecting' || !state.attempted) return 'connecting';
     return 'unreachable';
+  },
+  /**
+   * Whether the last attempt to reach the hub came back empty-handed. What
+   * separates "still connecting, on a cold load" from "cannot be reached" —
+   * the banner is only ever true of the second.
+   */
+  get connectFailed() {
+    return state.failed;
   },
   get retryAt() {
     return state.retryAt;

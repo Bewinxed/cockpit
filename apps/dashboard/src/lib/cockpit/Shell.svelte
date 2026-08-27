@@ -42,19 +42,31 @@
   let jumpOpen = $state(false);
   let railOpen = $state(false);
 
-  // SSR renders the rail from the cookie, so a returning visit is already the
-  // right width on first paint — no client fixup needed. The one gap the server
-  // can't see is a legacy width still living only in localStorage (it predates
-  // the cookie): seed the cookie from it once, so the NEXT load is SSR-correct.
-  // That single migration load is the only time the rail can move on hydration.
+  /**
+   * The rail's width is settled before the first paint, in two places at once.
+   *
+   * SSR draws it from the `cockpit-rail-width` cookie, and the inline script in
+   * `app.html` overwrites `--rail-w` from localStorage — which is where the
+   * width is actually authored, and which the server cannot read. A browser with
+   * a stored width and no cookie (a fresh profile, or the pre-cookie migration)
+   * used to paint the default and snap once this component mounted; now the
+   * property is already right when the first pixel goes down and this only
+   * adopts it.
+   *
+   * From here on the property is this component's: `setRail` writes it, so the
+   * drag handle and the cookie and localStorage never disagree.
+   */
   onMount(() => {
-    if (document.cookie.includes(`${RAIL_KEY}=`)) return;
     const stored = Number(localStorage.getItem(RAIL_KEY));
-    if (Number.isFinite(stored) && stored > 0) setRail(stored);
+    setRail(Number.isFinite(stored) && stored > 0 ? stored : railWidth);
   });
 
   function setRail(px: number) {
     railWidth = clamp(px);
+    // The one place the width is applied. `--sidebar-width` resolves through it
+    // (see the shell's inline style), so the value the inline script established
+    // is replaced rather than fought with.
+    document.documentElement.style.setProperty('--rail-w', `${railWidth}px`);
     try {
       localStorage.setItem(RAIL_KEY, String(railWidth));
       document.cookie = `${RAIL_KEY}=${railWidth};path=/;max-age=31536000;samesite=lax`;
@@ -136,6 +148,31 @@
     if (cockpit.status === 'connected') everConnected = true;
   });
 
+  /**
+   * The first connection is not a fault, and it used to be drawn as one.
+   *
+   * `status` starts at `disconnected` — a socket that has not been made yet
+   * reads exactly like one that failed — so every cold load hydrated with the
+   * red "can't reach the hub" banner up, then tore it down a frame later when
+   * the socket opened. That is a 47px band inserted and removed between the top
+   * bar and the tab strip: two layout shifts, ±47px, on a load where nothing
+   * was ever wrong.
+   *
+   * So the banner waits for evidence. It appears when an attempt has actually
+   * failed, when a connection that once worked has dropped, or when the socket
+   * has simply not answered inside the grace below — never merely because the
+   * page is younger than the socket.
+   */
+  const CONNECT_GRACE = 4000;
+  let graceOver = $state(false);
+  onMount(() => {
+    const timer = setTimeout(() => (graceOver = true), CONNECT_GRACE);
+    return () => clearTimeout(timer);
+  });
+  const showBanner = $derived(
+    cockpit.status !== 'connected' && (everConnected || cockpit.connectFailed || graceOver)
+  );
+
   // The countdown is a clock, not a frame: 250ms is fast enough that the number
   // never looks stuck and slow enough to cost nothing.
   let now = $state(Date.now());
@@ -153,7 +190,11 @@
 
 <a class="skip" href="#main-content">Skip to content</a>
 
-<div class="shell" style="--sidebar-width: {railWidth}px">
+<!-- `--rail-w` is set before the body parses (app.html) from the same key this
+     component writes; the server's cookie width is the fallback under it. SSR
+     therefore emits no committed width of its own, and there is nothing to
+     snap away from on hydration. -->
+<div class="shell" style="--sidebar-width: var(--rail-w, {railWidth}px)">
   <aside class="rail hidden min-[900px]:flex">
     <Sidebar />
     <div
@@ -223,7 +264,7 @@
 
     <!-- Server-side there is no socket to have lost, so the banner would render
          into every first paint and flash away on hydration. -->
-    {#if browser && cockpit.status !== 'connected'}
+    {#if browser && showBanner}
       <div class="banner {everConnected ? 'warn' : 'bad'}" role="status">
         {#if everConnected}
           <span>Hub connection lost — retrying in {retryIn}s</span>

@@ -35,6 +35,7 @@
 
   let {
     value = $bindable(''),
+    height = $bindable(0),
     busy = false,
     commands = [],
     mentions = [],
@@ -43,6 +44,12 @@
     prompts,
   }: {
     value?: string;
+    /**
+     * The floating column's measured height, published upward. The transcript
+     * behind it reserves exactly this much foot-room, so a permission card
+     * stacked above the input never covers the message that raised it.
+     */
+    height?: number;
     busy?: boolean;
     /** What this session offers behind `/`. */
     commands?: AvailableCommand[];
@@ -222,6 +229,19 @@
 
   const menuOpen = $derived(!dismissed && entries.length > 0);
 
+  /**
+   * A DOM id per visible row, so the textarea can point `aria-activedescendant`
+   * at the highlighted one. A screen reader on a combobox reads the active
+   * descendant, not the input's value — without this the menu is invisible to
+   * it, however well the arrow keys work. Keyed by position in the filtered
+   * list, which is unique where the entry's own id (`/foo`, `@bar`) is not a
+   * safe id token.
+   */
+  const domIds = $derived(
+    new Map(entries.map((entry, index) => [entry.id, `composer-entry-${index}`]))
+  );
+  const activeDescendant = $derived(menuOpen ? domIds.get(highlight) : undefined);
+
   // The highlight follows the list: a query that filters the selected row away
   // must not leave Enter pointing at something that is no longer on screen.
   $effect(() => {
@@ -362,7 +382,7 @@
 </script>
 
 <div class="fade"></div>
-<div class="composer">
+<div class="composer" bind:clientHeight={height}>
   {#if prompts}
     <div class="prompts">{@render prompts()}</div>
   {/if}
@@ -410,7 +430,11 @@
             {#each sections as section (section.key)}
               <Command.Group heading={section.heading}>
                 {#each section.entries as entry (entry.id)}
-                  <Command.Item value={entry.id} onSelect={() => choose(entry)}>
+                  <Command.Item
+                    id={domIds.get(entry.id)}
+                    value={entry.id}
+                    onSelect={() => choose(entry)}
+                  >
                     <span class="e-label">{entry.label}</span>
                     {#if entry.detail}<span class="e-detail">{entry.detail}</span>{/if}
                   </Command.Item>
@@ -438,6 +462,7 @@
       aria-autocomplete="list"
       role="combobox"
       aria-controls="composer-menu"
+      aria-activedescendant={activeDescendant}
     ></textarea>
 
     <div class="ctrls">
@@ -456,7 +481,15 @@
         disabled={!busy && !hasContent}
         aria-label={busy ? 'Stop the agent' : 'Send message'}
       >
-        {#if busy}<IconStop />{:else}<IconSend />{/if}
+        <!-- The one control that changes meaning mid-turn. `{#key}` re-creates
+             the glyph on every flip, so BOTH directions of the swap animate in;
+             the box it sits in is untouched, so send↔stop never moves or
+             resizes under a thumb already travelling toward it. -->
+        {#key busy}
+          <span class="swap">
+            {#if busy}<IconStop />{:else}<IconSend />{/if}
+          </span>
+        {/key}
       </button>
     </div>
   </form>
@@ -554,6 +587,25 @@
     border-radius: var(--radius-panel);
     background: var(--surface-raised);
     box-shadow: var(--shadow-lifted);
+    /* It floats above the input, so it settles UPWARD into place — 4px of
+       travel, one --c-100, and then it is still. Dismissal is instant: a menu
+       that lingers on the way out sits over the sentence being written. */
+    animation: menu-open var(--c-100) var(--e-in) both;
+  }
+  @keyframes menu-open {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .menu {
+      animation: none;
+    }
   }
 
   /* The Command primitive is shadcn's; its parts are addressed by slot so the
@@ -678,6 +730,23 @@
     width: 16px;
     height: 16px;
   }
+  /* The glyph carrier, not the button: it is content-sized and centred, so
+     scaling it in cannot change the control's box. */
+  .stop .swap {
+    display: grid;
+    place-items: center;
+    animation: icon-swap var(--c-100) var(--e-in) both;
+  }
+  @keyframes icon-swap {
+    from {
+      opacity: 0;
+      transform: scale(0.6);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
   /* Optical centring: the send plane's mass sits low-left of its box, so the
      glyph is nudged up and right to look centred rather than measure centred.
      The stop square is symmetric and needs none of it. */
@@ -721,6 +790,20 @@
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
+    /* A chip appearing under the input is a small confirmation, so it gets a
+       small one: 2px of travel and one --c-100. Removal stays instant — the
+       reader who clicked × has already decided. */
+    animation: att-in var(--c-100) var(--e-in) both;
+  }
+  @keyframes att-in {
+    from {
+      opacity: 0;
+      transform: translateY(2px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
   .att img {
     width: 20px;
@@ -782,6 +865,10 @@
     .att-btn:active,
     .stop:active:not(:disabled) {
       transform: none;
+    }
+    .stop .swap,
+    .att {
+      animation: none;
     }
   }
 </style>

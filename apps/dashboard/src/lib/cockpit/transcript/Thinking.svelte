@@ -3,11 +3,43 @@
    * A reasoning trace on the rail — truncated, italic, muted, with a blinking
    * caret while the block is still being generated. Ported from the mock's
    * `.think`.
+   *
+   * "Truncated" was a promise the styling never kept: a long trace ran its full
+   * length and drowned the ledger. Settled traces clamp to four lines behind a
+   * quiet toggle; a live one stays open so its tail keeps arriving in view.
    */
+  import { IconChevronRight } from '$lib/icons';
+
   let { text, live = false }: { text: string; live?: boolean } = $props();
+
+  let expanded = $state(false);
+  let bodyEl = $state<HTMLElement | null>(null);
+  let overflows = $state(false);
+
+  const clamped = $derived(!live && !expanded);
+
+  /* Only a trace that is actually cut off earns a toggle — measured, because
+     four lines of wrapped prose is not a character count. */
+  $effect(() => {
+    void text;
+    void expanded;
+    void live;
+    const el = bodyEl;
+    if (!el) return;
+    overflows = expanded || el.scrollHeight - el.clientHeight > 1;
+  });
 </script>
 
-<div class="think">{#if text}{text}{:else}Thinking…{/if}{#if live}<span class="caret"></span>{/if}</div>
+<div class="think">
+  <div class="body" class:clamp={clamped} bind:this={bodyEl}
+    >{#if text}{text}{:else}Thinking…{/if}{#if live}<span class="caret"></span>{/if}</div>
+  {#if !live && text && overflows}
+    <button type="button" class="more" aria-expanded={expanded} onclick={() => (expanded = !expanded)}>
+      <span class="chev" class:open={expanded}><IconChevronRight /></span
+      >{expanded ? 'Collapse' : 'Show all reasoning'}
+    </button>
+  {/if}
+</div>
 
 <style>
   .think {
@@ -19,7 +51,51 @@
     font-size: var(--text-sm);
     line-height: var(--leading-body);
     max-width: 70ch;
+  }
+  .body {
     white-space: pre-wrap;
+  }
+  .clamp {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 4;
+    line-clamp: 4;
+    overflow: hidden;
+  }
+  .more {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    margin-top: var(--space-1);
+    background: none;
+    border: 0;
+    padding: 0;
+    font-family: inherit;
+    font-style: normal;
+    font-size: var(--text-xs);
+    color: var(--ink-muted);
+    cursor: pointer;
+  }
+  .more:hover {
+    color: var(--ink-body);
+  }
+  .more:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+    border-radius: var(--radius-mark);
+  }
+  .chev {
+    display: grid;
+    place-items: center;
+    transition: transform var(--c-100) var(--e-in);
+  }
+  .chev.open {
+    transform: rotate(90deg);
+  }
+  .chev :global(svg) {
+    width: 14px;
+    height: 14px;
+    display: block;
   }
   .caret {
     display: inline-block;
@@ -38,6 +114,14 @@
   @media (prefers-reduced-motion: reduce) {
     .caret {
       animation: none;
+    }
+    .chev {
+      transition: none;
+    }
+  }
+  @media (pointer: coarse) {
+    .more {
+      min-height: 44px;
     }
   }
   @media (max-width: 900px) {

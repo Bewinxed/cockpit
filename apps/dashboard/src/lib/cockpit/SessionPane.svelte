@@ -7,6 +7,7 @@
    * unmounts on navigation.
    */
   import { untrack } from 'svelte';
+  import type { TransitionConfig } from 'svelte/transition';
   import { page } from '$app/state';
   import type { EffortLevel, HarnessKind, PermissionMode, SessionMessage } from '@cockpit/core';
   import {
@@ -219,6 +220,38 @@
   const machineId = $derived(cockpit.session(viewId)?.machineId ?? '');
 
   /**
+   * Whether the virtualized transcript may be shown.
+   *
+   * `live` above is the moment the STORE has the conversation, which is several
+   * frames before the transcript can draw it: virtua mounts, measures its rows
+   * (the scroll height doubles as it goes), and only then scrolls home. Swapping
+   * on `live` alone therefore replaced the server's painted tail with a column
+   * that was still being measured — a blank content area for those frames.
+   *
+   * So the two are handed over instead of swapped. The static tail stays on
+   * screen, the transcript mounts *behind* it under `visibility: hidden` (which
+   * still lays out and measures, unlike `display: none`), and this flips the
+   * instant `Transcript` says it has landed. Both boxes are the same rect by the
+   * `.tr` padding contract, so the flip moves nothing — and because it is one
+   * assignment, the two are never both painted.
+   */
+  let revealed = $state(false);
+  /** Whether the real transcript is mounted at all — the same test `session` uses. */
+  const showTranscript = $derived(live || !seeded);
+  /** Nothing to hand over from: with no server tail the transcript is the first paint. */
+  const veiled = $derived(!!seeded && !revealed);
+
+  // The handshake has one failure mode worth insuring against: a transcript
+  // that never lands (a pane switched away from before virtua could measure it)
+  // would keep the static tail up for good. The tail is a stand-in, never a
+  // destination — a second after the transcript mounts it stands down anyway.
+  $effect(() => {
+    if (!veiled || !showTranscript) return;
+    const timer = setTimeout(() => (revealed = true), 1000);
+    return () => clearTimeout(timer);
+  });
+
+  /**
    * A live session addressed by id alone that the hub has never heard of. There
    * is nothing to subscribe to and nothing to read back — without the machine
    * and stored-session id a transcript link carries, this pane can only sit
@@ -363,6 +396,16 @@
   let view = $state<'chat' | 'flow'>('chat');
   let draft = $state('');
 
+  /**
+   * How tall the floating composer column actually is, measured by the composer
+   * itself. The bare input is ~50px; a parked permission stacks above it and can
+   * stand several hundred. Published to the body as `--composer-clearance` — the
+   * measured height plus the column's bottom offset and one more step of
+   * breathing room — which is what the transcript reserves at its foot, so the
+   * row that raised a permission is never the row the permission covers.
+   */
+  let composerHeight = $state(0);
+
   const flowSubagents = $derived(new Map(Object.entries(session?.subagents ?? {})));
 
   function onsubmit(text: string, extras: SendExtras = {}): void {
@@ -373,6 +416,59 @@
   function onstop(): void {
     if (machineId) interrupt(viewId, machineId);
   }
+
+  /* ---- the parked prompt's exit --------------------------------------- */
+
+  const reduceMotionQuery =
+    typeof window !== 'undefined'
+      ? window.matchMedia('(prefers-reduced-motion: reduce)')
+      : null;
+
+  /**
+   * `cubic-bezier(x1, y1, x2, y2)` as a JS easing, so a Svelte transition rides
+   * the exact curve the CSS token names rather than a look-alike from
+   * `svelte/easing`. Svelte samples the `css` function through this and bakes
+   * linear keyframes, so the curve has to live here to survive the trip.
+   */
+  function cubicBezier(x1: number, y1: number, x2: number, y2: number): (t: number) => number {
+    const at = (a: number, b: number, t: number): number =>
+      3 * (1 - t) ** 2 * t * a + 3 * (1 - t) * t ** 2 * b + t ** 3;
+    return (t) => {
+      // Newton–Raphson for the parameter whose x is t, then read that point's y
+      // — the same solve the compositor does for a CSS timing function.
+      let g = t;
+      for (let i = 0; i < 8; i += 1) {
+        const err = at(x1, x2, g) - t;
+        const slope = 3 * (1 - g) ** 2 * x1 + 6 * (1 - g) * g * (x2 - x1) + 3 * g ** 2 * (1 - x2);
+        if (Math.abs(err) < 1e-5 || slope === 0) break;
+        g -= err / slope;
+      }
+      return at(y1, y2, g);
+    };
+  }
+
+  /** --e-out, the doctrine's exit curve. */
+  const easeOut = cubicBezier(0.7, 0, 0.84, 0);
+
+  /**
+   * An answered prompt leaves DOWNWARD and fast — it is dismissed, not
+   * withdrawn upward toward the transcript it came from — at 120ms on --e-out,
+   * because an exit that takes as long as its entrance reads as hesitation.
+   *
+   * Only opacity and transform move: the card holds its box for the whole
+   * 120ms, so the cards below it do not creep during the flight and the
+   * composer's measured height (and with it `--composer-clearance`) settles in
+   * one step when the node is actually gone. Under reduced motion the node is
+   * simply removed.
+   */
+  function promptExit(_node: Element): TransitionConfig {
+    if (reduceMotionQuery?.matches) return { duration: 0 };
+    return {
+      duration: 120,
+      easing: easeOut,
+      css: (t, u) => `opacity: ${t}; transform: translateY(${u * 4}px);`,
+    };
+  }
 </script>
 
 <div class="pane">
@@ -380,7 +476,6 @@
     <SessionHeader
       {title}
       seed={session.cwd || browsingCwd || viewId}
-      spriteSeed={viewId}
       harness={session.harness}
       {machineName}
       cwd={session.cwd || browsingCwd}
@@ -404,7 +499,11 @@
       {oneffort}
     />
 
-    <div class="body">
+    <div
+      class="body"
+      class:veiled
+      style="--composer-clearance: calc({composerHeight}px + var(--space-4) + var(--space-4))"
+    >
       {#if failure}
         <!-- A valid URL that cannot be read says why. An empty scroller for a
              link that resolves is indistinguishable from a broken app. -->
@@ -434,18 +533,38 @@
           streamingToolId={session.currentTool?.toolId}
           totalCostUsd={session.totalCost}
         />
-      {:else if session === seeded}
-        <!-- The server's own render, and the client's until the store has the
-             conversation. virtua measures a live viewport, so it has nothing to
-             say on a server — this is the same rows, flat. -->
-        <StaticTail {viewId} messages={tail?.messages ?? []} {agentName} />
       {:else}
-        <Transcript {session} {agentName} {active} />
+        <!-- Handed over, not swapped. The transcript mounts underneath and
+             measures itself while the server's tail is still the thing on
+             screen; `revealed` lifts the veil and drops the tail in one tick.
+             See `revealed` above. -->
+        {#if showTranscript}
+          <Transcript
+            {session}
+            {agentName}
+            {active}
+            {machineName}
+            cwd={session.cwd || browsingCwd}
+            clearance={composerHeight}
+            onlanded={() => (revealed = true)}
+          />
+        {/if}
+        {#if veiled}
+          <!-- The server's own render, and the client's until the transcript has
+               landed. virtua measures a live viewport, so it has nothing to say
+               on a server — this is the same rows, flat. Laid over the
+               transcript rather than beside it: both are `.body`'s full box, so
+               two in flow would split it in half. -->
+          <div class="standin">
+            <StaticTail {viewId} messages={tail?.messages ?? []} {agentName} />
+          </div>
+        {/if}
       {/if}
 
       {#if !failure && !unaddressable}
         <Composer
           bind:value={draft}
+          bind:height={composerHeight}
           busy={session.busy}
           {commands}
           {mentions}
@@ -454,7 +573,12 @@
         >
           {#snippet prompts()}
             {#each parked as request (request.requestId)}
-              <Prompt {request} {machineId} />
+              <!-- The transition needs an element to hold; the card's own root
+                   belongs to Prompt. This wrapper is layout-transparent — a
+                   block box the section fills exactly. -->
+              <div class="parked" out:promptExit>
+                <Prompt {request} {machineId} />
+              </div>
             {/each}
           {/snippet}
         </Composer>
@@ -487,6 +611,26 @@
     flex: 1 1 auto;
     color: var(--ink-muted);
     font-size: var(--text-sm);
+  }
+
+  /**
+   * The handover. The transcript is IN FLOW the whole time — it is the thing
+   * that stays — so revealing it moves nothing; it is merely unpainted while it
+   * measures. The server's tail is the one lifted out of flow and laid over it,
+   * because both want to be `.body`'s whole box and two in-flow flex children
+   * would take half each.
+   */
+  .body.veiled > :global(.tr) {
+    /* Not `display: none` / `content-visibility`: virtua has to lay this out
+       and observe its rows to be able to land, and both of those stop it. */
+    visibility: hidden;
+  }
+  .standin {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
   }
 
   /* A named state, not an empty pane: what happened, in one line, and the one
