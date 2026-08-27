@@ -99,9 +99,25 @@
     if (hadLiveTail && !hasLiveTail) {
       for (const row of next) if (!prevKeys.has(row.key)) seen.add(row.key);
     }
+    // PREPEND DETECTION for virtua's `shift` mode: an older history chunk
+    // arriving puts new rows ABOVE everything on screen — without `shift`,
+    // virtua keeps the scroll OFFSET and the content lurches toward the top
+    // (the post-SSR "jumps to the top then back" flash). A prepend is exact:
+    // the tail row is unchanged and the old first row now sits deeper. Same
+    // pre-DOM decision point as the seen-marking above, for the same reason.
+    const oldFirst = frozen[0]?.key;
+    const oldLast = frozen[frozen.length - 1]?.key;
+    shifted =
+      frozen.length > 0 &&
+      next.length > frozen.length &&
+      next[next.length - 1]?.key === oldLast &&
+      oldFirst !== undefined &&
+      next.findIndex((row) => row.key === oldFirst) > 0;
     frozen = next;
     return frozen;
   });
+  /** Whether the LAST rows update was a history prepend — virtua's `shift`. */
+  let shifted = $state(false);
 
   /**
    * Compaction is a genuinely live process — the model is rewriting its own
@@ -524,7 +540,7 @@
     </div>
   {/if}
 
-  <Virtualizer bind:this={list} data={rows} getKey={(r) => r.key} scrollRef={scroller}>
+  <Virtualizer bind:this={list} data={rows} getKey={(r) => r.key} scrollRef={scroller} shift={shifted}>
     {#snippet children(row)}
       <div class="renter" use:enterMotion={row.key}>
         {#if row.kind === 'single'}
