@@ -149,6 +149,15 @@
     // answerable, so the transcript backfills instead of staying empty.
     void cockpit.status;
     void cockpit.session(id)?.machineId;
+    // A pane the reader RETURNS to needs no re-read: the store kept ingesting
+    // while the tab was hidden (only the transcript's row-building froze), so
+    // re-reading replaced a full transcript with the tail chunk — content
+    // collapsed, scrollTop clamped, the view lurched, and the follow rode the
+    // rebuild. That was the tab-switch scroll hijack. On a stream-capable hub
+    // the stream heals any gap on its own; on a legacy hub the re-read stays,
+    // because there a reconnect really can have dropped frames on the floor.
+    const held = cockpit.session(id);
+    if (held?.initialized && held.messages.length > 0 && streamCapable()) return;
     // The server's answer for whichever conversation the URL names; a pane the
     // reader left open in another tab was never part of this navigation, and
     // says for itself where its stored transcript lives.

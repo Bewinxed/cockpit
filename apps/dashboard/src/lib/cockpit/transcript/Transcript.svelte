@@ -227,16 +227,18 @@
     const gap = scroller
       ? scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop
       : 0;
-    const followable = landed && !!scroller && gap <= (scroller?.clientHeight ?? 0) * 2;
+    const instant = !landed || reactivating;
+    reactivating = false;
+    const followable = !instant && !!scroller && gap <= (scroller?.clientHeight ?? 0) * 2;
     if (!followable) {
       if (list) list.scrollToIndex(rows.length - 1, { align: 'end' });
       else if (scroller) scroller.scrollTop = scroller.scrollHeight;
     }
     requestAnimationFrame(() => {
       if (!scroller) return;
-      // The first landing teleports (the reader has no continuity to keep);
-      // every follow after it rides the loop.
-      if (landed) followBottom();
+      // First landings and tab-returns teleport — there is no continuity to
+      // keep; only the live follow rides the loop.
+      if (followable) followBottom();
       else scroller.scrollTop = scroller.scrollHeight;
       watchForPaint();
     });
@@ -326,13 +328,26 @@
   // by the other door. Guarding first means an off-screen pane has no
   // dependency on the stream at all; and because `active` is itself tracked,
   // switching back re-runs this once, on rows that have just caught up.
+  /** Whether the CURRENT land is a tab-return. A reactivated pane seats
+   *  instantly — the ride is for watching words arrive, not for coming back
+   *  to a room; a constant-pace crawl across everything missed while away
+   *  reads as sluggish, not smooth. Plain var: consumed by the very next
+   *  land() and never rendered. */
+  let reactivating = false;
+  // svelte-ignore state_referenced_locally -- the initial value is the point:
+  // the first effect run must not read as a reactivation.
+  let prevActive = active;
   $effect(() => {
-    if (!active) return;
+    const nowActive = active;
+    if (nowActive && !prevActive) reactivating = true;
+    prevActive = nowActive;
+    if (!nowActive) return;
     void rows.length;
     void session.streaming;
     void clearance;
     if (rows.length === 0) return;
     if (!landed || atBottom) void tick().then(land);
+    else reactivating = false;
   });
 
   // ── Enter motion ────────────────────────────────────────────────────────
