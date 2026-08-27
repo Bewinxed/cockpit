@@ -462,6 +462,21 @@
       .finally(() => (reviving = false));
   }
 
+  /**
+   * The queue-jump the shortcut sheet has promised all along (mod+Enter,
+   * "Interrupt and send"): stop the turn in flight, then send — "do this
+   * INSTEAD", where plain Enter's queue is "do this next". Two tracked
+   * commands, deliberately: the interrupt's local half drops the working pill
+   * at once, the send's echo renders at once, and any gap between the turn
+   * dying and the message being taken is narrated by the queued row rather
+   * than guessed at. On an idle session it is exactly a send.
+   */
+  function oninterruptsend(text: string, extras: SendExtras = {}): void {
+    if (!machineId || sending) return;
+    if (session?.busy) submitCommand(viewId, machineId, 'interrupt', {});
+    onsubmit(text, extras);
+  }
+
   function onstop(): void {
     if (machineId) interrupt(viewId, machineId);
   }
@@ -621,6 +636,7 @@
           {commands}
           {mentions}
           {onsubmit}
+          {oninterruptsend}
           {onstop}
         >
           {#snippet prompts()}

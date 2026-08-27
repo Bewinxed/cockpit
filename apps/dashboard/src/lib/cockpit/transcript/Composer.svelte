@@ -41,6 +41,7 @@
     commands = [],
     mentions = [],
     onsubmit,
+    oninterruptsend,
     onstop,
     prompts,
   }: {
@@ -65,6 +66,12 @@
     /** What `@` can name — the sessions and machines in reach. */
     mentions?: Mention[];
     onsubmit: (text: string, extras: SendExtras) => void;
+    /**
+     * The queue-jump (mod+Enter): interrupt the turn in flight, then send.
+     * Optional — a composer without it (the spawn form) treats mod+Enter as a
+     * plain send, which on an idle surface is the same thing.
+     */
+    oninterruptsend?: (text: string, extras: SendExtras) => void;
     onstop: () => void;
     prompts?: Snippet;
   } = $props();
@@ -286,7 +293,7 @@
     highlight = entries[next].id;
   }
 
-  function submit(): void {
+  function submit(via: (text: string, extras: SendExtras) => void = onsubmit): void {
     // Nothing to send, or the last one is still unanswered. The draft is left
     // exactly as it is — a refused send must never eat what was typed.
     if (!hasContent || sending) return;
@@ -298,10 +305,18 @@
     images = [];
     texts = [];
     dismissed = true;
-    onsubmit(text, extras);
+    via(text, extras);
   }
 
   function onkeydown(event: KeyboardEvent): void {
+    // BEFORE the menu: mod+Enter is "interrupt and send" (the shortcut sheet's
+    // long-standing promise), and a half-picked menu must not swallow it — the
+    // urgency is the point. The menu is dismissed by the submit itself.
+    if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+      event.preventDefault();
+      submit(oninterruptsend ?? onsubmit);
+      return;
+    }
     if (menuOpen) {
       // The menu owns these keys while it is up — Enter picks a command rather
       // than sending the half-typed name of one.
