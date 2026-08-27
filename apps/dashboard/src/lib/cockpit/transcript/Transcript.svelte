@@ -125,6 +125,13 @@
 
   function onscroll(): void {
     if (!scroller || !landed) return;
+    // The follow loop tags every write it makes. A scroll event anywhere else
+    // is the READER — wheel, scrollbar drag, keyboard, momentum, anything —
+    // and it ends the follow before `atBottom` is computed honestly below.
+    if (following !== null) {
+      if (Math.abs(scroller.scrollTop - lastWrite) <= 1) return;
+      stopFollow();
+    }
     atBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 120;
   }
 
@@ -139,72 +146,80 @@
    * the composer column. A tall permission card therefore never sits on top of
    * the message that raised it.
    */
-  /** The doctrine's entry curve, solved numerically — Svelte/rAF tweens take a
-   *  function, not a CSS keyword, and an approximation would be a second,
-   *  slightly wrong vocabulary. cubic-bezier(0.16, 1, 0.3, 1) = --e-in. */
-  function easeEntry(t: number): number {
-    if (t <= 0) return 0;
-    if (t >= 1) return 1;
-    // Newton–Raphson on the bezier's x(t) to find the parameter for this time.
-    const cx = (u: number) => 3 * u * (1 - u) * (1 - u) * 0.16 + 3 * u * u * (1 - u) * 0.3 + u ** 3;
-    const cy = (u: number) => 3 * u * (1 - u) * (1 - u) * 1 + 3 * u * u * (1 - u) * 1 + u ** 3;
-    let u = t;
-    for (let i = 0; i < 6; i++) {
-      const x = cx(u) - t;
-      const dx = 3 * (1 - u) * (1 - u) * 0.16 + 6 * u * (1 - u) * (0.3 - 0.16) + 3 * u * u * (1 - 0.3);
-      if (Math.abs(dx) < 1e-6) break;
-      u -= x / dx;
-    }
-    return cy(Math.min(1, Math.max(0, u)));
-  }
-
-  /** The one scroll tween in flight; a wheel, a new target or reduced motion kills it. */
-  let glide: number | null = null;
-  function cancelGlide(): void {
-    if (glide !== null) cancelAnimationFrame(glide);
-    glide = null;
+  /** The follow loop's handle, and its own LAST WRITE — the tag that tells the
+   *  loop's scroll events from the reader's without caring which input device
+   *  made them (a scrollbar drag fires no wheel event; a tagged write needs no
+   *  event taxonomy at all). */
+  let following: number | null = null;
+  let lastWrite = -1;
+  function stopFollow(): void {
+    if (following !== null) cancelAnimationFrame(following);
+    following = null;
+    lastWrite = -1;
   }
 
   /**
-   * A NEW MESSAGE slides the transcript up rather than teleporting it: a
-   * 300ms scroll tween on the entry curve, but only for a message-sized hop
-   * (≤ two viewports). Landings, backlogs and anything farther stay instant —
-   * animating a five-thousand-pixel jump is disorientation, not continuity —
-   * and the reader's own wheel always wins (`onscroll` recomputes `atBottom`,
-   * and a glide whose target stopped being the bottom is cancelled below).
+   * TELEPROMPTER FOLLOW. Streaming arrives in irregular bursts, and any scheme
+   * that moves per-arrival — a tween, native smooth scroll, damped chasing —
+   * inherits that jitter, because the impulse IS the burst. So the follow is
+   * decoupled: one loop at a CONSTANT reading pace, and bursts merely
+   * accumulate below the fold while the viewport advances steadily. Velocity,
+   * not distance, is what the eye judges as smooth. The pace ramps only under
+   * a real backlog (more than half a viewport behind); past two viewports it
+   * is a teleport, not a ride; reduced motion always snaps; and the loop
+   * yields to the reader two ways — `atBottom` going false ends it, and any
+   * scroll event that is not its own tagged write ends it in `onscroll`.
    */
-  function glideToBottom(): void {
+  const FOLLOW_SPEED = 360; // px/s — a calm reading pace
+  function followBottom(): void {
     if (!scroller) return;
     const target = () => (scroller ? scroller.scrollHeight - scroller.clientHeight : 0);
-    const from = scroller.scrollTop;
-    const delta = target() - from;
-    const short = delta > 0 && delta <= scroller.clientHeight * 2;
-    if (!short || reduceMotionQuery?.matches) {
+    const gap = target() - scroller.scrollTop;
+    if (gap <= 0) return;
+    if (reduceMotionQuery?.matches || gap > scroller.clientHeight * 2) {
       scroller.scrollTop = scroller.scrollHeight;
       return;
     }
-    cancelGlide();
-    const started = performance.now();
-    const DURATION = 300; // var(--c-300), the layout-change tier
+    if (following !== null) return; // one loop; it reads the live target
+    let last = performance.now();
     const step = (now: number): void => {
-      if (!scroller) return;
-      const t = Math.min(1, (now - started) / DURATION);
-      // Retarget live: streamed rows keep growing the height mid-glide.
-      scroller.scrollTop = from + (target() - from) * easeEntry(t);
-      if (t < 1 && atBottom) glide = requestAnimationFrame(step);
-      else glide = null;
+      if (!scroller || !atBottom) return stopFollow();
+      const dt = Math.min(64, now - last);
+      last = now;
+      const remaining = target() - scroller.scrollTop;
+      if (remaining <= 0.5) {
+        if (remaining > 0) {
+          scroller.scrollTop = target();
+          lastWrite = scroller.scrollTop;
+        }
+        return stopFollow();
+      }
+      const backlog = Math.max(0, remaining - scroller.clientHeight / 2);
+      scroller.scrollTop += Math.min(remaining, ((FOLLOW_SPEED + backlog * 2) * dt) / 1000);
+      lastWrite = scroller.scrollTop;
+      following = requestAnimationFrame(step);
     };
-    glide = requestAnimationFrame(step);
+    following = requestAnimationFrame(step);
   }
 
   function land(): void {
-    if (list) list.scrollToIndex(rows.length - 1, { align: 'end' });
-    else if (scroller) scroller.scrollTop = scroller.scrollHeight;
+    // `scrollToIndex` is virtua's far-row measuring power — needed for the
+    // first landing and for catching up from a real distance. For the
+    // message-sized follow it was the hard jump per stream batch that read as
+    // jitter, so a followable gap goes to the loop untouched.
+    const gap = scroller
+      ? scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop
+      : 0;
+    const followable = landed && !!scroller && gap <= (scroller?.clientHeight ?? 0) * 2;
+    if (!followable) {
+      if (list) list.scrollToIndex(rows.length - 1, { align: 'end' });
+      else if (scroller) scroller.scrollTop = scroller.scrollHeight;
+    }
     requestAnimationFrame(() => {
       if (!scroller) return;
       // The first landing teleports (the reader has no continuity to keep);
-      // every follow after it glides.
-      if (landed) glideToBottom();
+      // every follow after it rides the loop.
+      if (landed) followBottom();
       else scroller.scrollTop = scroller.scrollHeight;
       watchForPaint();
     });
