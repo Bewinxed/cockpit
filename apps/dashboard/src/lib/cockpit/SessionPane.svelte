@@ -257,15 +257,14 @@
   /** Nothing to hand over from: with no server tail the transcript is the first paint. */
   const veiled = $derived(!!seeded && !revealed);
 
-  // The handshake has one failure mode worth insuring against: a transcript
-  // that never lands (a pane switched away from before virtua could measure it)
-  // would keep the static tail up for good. The tail is a stand-in, never a
-  // destination — a second after the transcript mounts it stands down anyway.
-  $effect(() => {
-    if (!veiled || !showTranscript) return;
-    const timer = setTimeout(() => (revealed = true), 1000);
-    return () => clearTimeout(timer);
-  });
+  // No reveal-by-timeout. The insurance timer this replaced unveiled after a
+  // second whether or not the transcript had seated — a top-flash on slow
+  // landings, a timeout burying the failure instead of fixing it. Every path
+  // now ends deterministically: a landing reveals when a row is painted in
+  // view (and re-arms on every rows change until it is), an empty transcript
+  // settles through its own path, a failed read renders the failure card
+  // outside the veil, and a pane switched away from simply lands when the
+  // reader returns — until then it is invisible anyway.
 
   /**
    * A live session addressed by id alone that the hub has never heard of. There

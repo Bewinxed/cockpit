@@ -297,9 +297,18 @@
         return;
       }
       frames += 1;
-      if (paintedInView() || frames > 12) {
+      if (paintedInView()) {
         watching = false;
         settle();
+        return;
+      }
+      // The cap bounds THIS watch, never the outcome: settling on a give-up
+      // was revealing an unseated transcript — a timeout burying the failure
+      // instead of fixing it. Every land() re-arms the watch, so a slow
+      // measure retries on the next rows change and the reveal happens only
+      // when a row is genuinely painted in view.
+      if (frames > 12) {
+        watching = false;
         return;
       }
       requestAnimationFrame(check);
