@@ -2,6 +2,13 @@
 
 Guidance for Claude Code (and other agents) working in this repository.
 
+## UI/UX analysis
+
+When analyzing, critiquing, or reviewing UI/UX in this repository, use the
+`interface-craft` skill (its Design Critique methodology) as the analytical
+frame. It composes with, not replaces, the measurement tools: clearshot for
+incoming screenshots, ui-observer for rendered-layout ground truth.
+
 ## Project
 
 Cockpit (UI wordmark "Outpost") is a self-hosted fleet control plane for AI coding agents. A
