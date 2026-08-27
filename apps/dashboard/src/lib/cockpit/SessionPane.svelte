@@ -478,7 +478,10 @@
   }
 
   function onstop(): void {
-    if (machineId) interrupt(viewId, machineId);
+    // Through the tracker, not the bare legacy call: the record it leaves is
+    // how the transcript recognises the coming `result.error` as the receipt
+    // of THIS stop and renders "Interrupted" instead of a failure card.
+    if (machineId) submitCommand(viewId, machineId, 'interrupt', {});
   }
 
   /* ---- the parked prompt's exit --------------------------------------- */

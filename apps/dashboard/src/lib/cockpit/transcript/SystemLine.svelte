@@ -8,7 +8,7 @@
   import type { Message } from '../types';
   import type { HarnessNote } from './rows';
   import * as Collapsible from '$lib/components/ui/collapsible';
-  import { IconInfo, IconChevronRight } from '$lib/icons';
+  import { IconInfo, IconChevronRight, IconStop } from '$lib/icons';
   import MessageBody from './MessageBody.svelte';
 
   let {
@@ -27,9 +27,13 @@
     type === 'ui.error' || type === 'ui.session_error' || type === 'result.error'
   );
   const isDelegateAsk = $derived(type === 'user.delegate_ask');
+  /** The operator's own stop, acknowledged — never a failure card. */
+  const isInterrupted = $derived(type === 'ui.interrupted');
   const title = $derived(
     message?.metadata?.errorTitle ?? message?.metadata?.noteTitle ?? 'Note'
   );
+  /** A failure card's heading is never the meaningless "Note". */
+  const failTitle = $derived(message?.metadata?.errorTitle ?? 'Turn failed');
   /**
    * What the folded line SAYS. A note that carries a real title (a compaction
    * summary, a local command's name) shows that title — its content is the
@@ -97,9 +101,18 @@
   </div>
 {:else if isOutput}
   <pre class="well">{message?.content}</pre>
+{:else if isInterrupted}
+  <!-- One quiet word for a deliberate act. The colour budget is for things
+       that happened TO the operator, not things they did. -->
+  <div class="note fold">
+    <span class="hline">
+      <IconStop />
+      <span class="ftitle">Interrupted</span>
+    </span>
+  </div>
 {:else if isFail}
   <div class="failcard">
-    <b>{title}</b>
+    <b>{failTitle}</b>
     <span class="handoff">{message?.content}</span>
   </div>
 {:else if isDelegateAsk}

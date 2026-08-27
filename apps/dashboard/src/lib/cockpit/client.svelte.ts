@@ -73,6 +73,7 @@ import type { CommandRecord, StreamEffects, StreamHost } from './stream';
 import {
   createStreamState,
   handleStreamMessage,
+  interruptedRecently,
   latestCommand,
   noteCapabilities,
   noteDisconnect,
@@ -961,6 +962,17 @@ function handleFrame(frame: FramePayload): void {
         // event above ran first, so the registry already answers whether this
         // line is redundant; a plain tool task has no branch and keeps its line.
         if (suppressesTaskLine(target.subagents, message, mapping.branch?.toolUseId)) continue;
+        // A `result.error` in the shadow of this client's own interrupt is the
+        // receipt of a deliberate stop, not a failure — the crimson card is
+        // the ledger's loudest treatment and must not be spent on the
+        // operator's own action. Retyped to the quiet one-word line.
+        if (
+          message.type === 'result.error' &&
+          interruptedRecently(streamState, frame.instanceId, Date.now())
+        ) {
+          message.type = 'ui.interrupted';
+          message.metadata = { ...message.metadata, noteTitle: 'Interrupted' };
+        }
         sink.push(message);
       }
       // The frame for a turn the reader typed: stamp their local copy with the

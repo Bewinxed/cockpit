@@ -679,3 +679,26 @@ export function latestCommand(
   }
   return latest;
 }
+
+/**
+ * Whether THIS client interrupted the session moments ago — the classifier
+ * that turns the SDK's `result.error` receipt of a deliberate stop into a
+ * quiet "Interrupted" line instead of a failure card. The command records are
+ * the memory: any interrupt on the session inside the window that was not
+ * refused counts. Only this client's own stops are recognisable — another
+ * device's interrupt still reads as an error here until the daemon tags the
+ * result itself (protocol v2, noted in the plan).
+ */
+export function interruptedRecently(
+  state: StreamState,
+  sessionId: string,
+  now: number,
+  windowMs = 15_000
+): boolean {
+  for (const record of Object.values(state.commands)) {
+    if (record.kind !== 'interrupt' || record.sessionId !== sessionId) continue;
+    if (record.stage === 'failed') continue;
+    if (now - record.at <= windowMs) return true;
+  }
+  return false;
+}

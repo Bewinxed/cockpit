@@ -20,6 +20,7 @@ import {
   COMMAND_ACK_TIMEOUT_MS,
   createStreamState,
   handleStreamMessage,
+  interruptedRecently,
   latestCommand,
   MAX_RESYNC_ATTEMPTS,
   noteCapabilities,
@@ -693,4 +694,22 @@ test('the legacy dialect never reads stream effects — its thunk owns the local
     },
   });
   expect(calls).toEqual(['legacy']);
+});
+
+test('a result.error inside the shadow of this client\'s own interrupt command is recognisable — outside it, or after a refusal, it is not', () => {
+  const h = harness({ capable: true });
+  submitCommand(h.state, h.host, {
+    commandId: 'int-1',
+    sessionId: SESSION,
+    machineId: 'mac-1',
+    kind: 'interrupt',
+    payload: { instanceId: SESSION },
+    legacy: () => {},
+  });
+  const submittedAt = h.state.commands['int-1'].at;
+  expect(interruptedRecently(h.state, SESSION, submittedAt + 5_000)).toBe(true);
+  expect(interruptedRecently(h.state, 'someone-else', submittedAt + 5_000)).toBe(false);
+  expect(interruptedRecently(h.state, SESSION, submittedAt + 60_000)).toBe(false);
+  h.receive(ack('int-1', 'failed', 'no such session'));
+  expect(interruptedRecently(h.state, SESSION, submittedAt + 5_000)).toBe(false);
 });
