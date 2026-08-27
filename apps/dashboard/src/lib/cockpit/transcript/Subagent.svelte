@@ -143,11 +143,15 @@
   :global(.branch [data-slot='collapsible-content']) {
     overflow: hidden;
   }
+  /* 200ms, matched to collapsible-lazy's 220ms unmount hold — at the old
+     var(--c-300) the content vanished at 220ms, mid-collapse, and the last
+     80ms animated an emptying box. Entry decelerates (--e-in), exit
+     accelerates (--e-out): the rail's one collapsible vocabulary. */
   :global(.branch [data-slot='collapsible-content'][data-state='open']) {
-    animation: branch-down var(--c-300) var(--e-out);
+    animation: branch-down calc(var(--c-100) * 2) var(--e-in);
   }
   :global(.branch [data-slot='collapsible-content'][data-state='closed']) {
-    animation: branch-up var(--c-300) var(--e-out);
+    animation: branch-up calc(var(--c-100) * 2) var(--e-out);
   }
   @keyframes branch-down {
     from {

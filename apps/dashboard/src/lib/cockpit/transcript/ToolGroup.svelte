@@ -306,4 +306,41 @@
       min-height: 44px;
     }
   }
+
+  /* The disclosure opens as a reveal, not a pop — bits-ui measures the content
+     into --bits-collapsible-content-height; these keyframes use it. 200ms is
+     the rail's one collapsible vocabulary (collapsible-lazy holds unmounting
+     children for exactly this duration plus slack): entry decelerates on
+     --e-in, exit accelerates on --e-out, exactly the doctrine's curves. */
+  .tools :global([data-slot='collapsible-content']) {
+    overflow: hidden;
+  }
+  .tools :global([data-slot='collapsible-content'][data-state='open']) {
+    animation: tool-down calc(var(--c-100) * 2) var(--e-in);
+  }
+  .tools :global([data-slot='collapsible-content'][data-state='closed']) {
+    animation: tool-up calc(var(--c-100) * 2) var(--e-out);
+  }
+  @keyframes tool-down {
+    from {
+      height: 0;
+    }
+    to {
+      height: var(--bits-collapsible-content-height);
+    }
+  }
+  @keyframes tool-up {
+    from {
+      height: var(--bits-collapsible-content-height);
+    }
+    to {
+      height: 0;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .tools :global([data-slot='collapsible-content'][data-state='open']),
+    .tools :global([data-slot='collapsible-content'][data-state='closed']) {
+      animation: none;
+    }
+  }
 </style>
