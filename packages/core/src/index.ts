@@ -30,6 +30,8 @@ export * from './rules';
 // Shared because the tool's schema is unforgiving: the answers go back inside
 // the tool's own input or the call fails validation.
 export * from './question';
+// The Ledger Protocol: canonical session streams + acknowledged commands.
+export * from './stream';
 
 // How a session with no given title names itself: its first user message,
 // cleaned. Shared so the hub's derived title and the dashboard's transcript
