@@ -14,7 +14,19 @@
     you = false,
     name,
     timestamp,
-  }: { you?: boolean; name: string; timestamp?: Date | string } = $props();
+    note,
+  }: {
+    you?: boolean;
+    name: string;
+    timestamp?: Date | string;
+    /**
+     * A word in the clock's place, for a turn that has no clock: a queued
+     * message has not happened yet, so it has no time to show and this says
+     * what it is instead. Always visible — unlike the clock, which is context
+     * the reader hovers for, this is the row's whole status.
+     */
+    note?: string;
+  } = $props();
 
   /** A transcript may arrive with its timestamp already serialised to a string. */
   const at = $derived(timestamp ? new Date(timestamp) : null);
@@ -31,7 +43,8 @@
     {#if you}<IconUser />{:else}<IconAgent />{/if}
   </span>
   <span class="role">{name}</span>
-  {#if valid}<time class="when" datetime={at!.toISOString()}>{clock}</time>{/if}
+  {#if valid}<time class="when" datetime={at!.toISOString()}>{clock}</time>
+  {:else if note}<span class="note">{note}</span>{/if}
 </h2>
 
 <style>
@@ -82,6 +95,15 @@
     font-size: var(--text-base);
     font-weight: var(--weight-strong);
     color: var(--ink-strong);
+  }
+  /* Where the clock would be, at the same size and colour, because it is the
+     same slot answering a different question: not "when did this happen" but
+     "this has not happened yet". */
+  .note {
+    margin-left: auto;
+    font-size: var(--text-xs);
+    font-weight: var(--weight-body);
+    color: var(--ink-muted);
   }
   /* The clock is context, not content: it appears when the reader is on the
      turn and is otherwise absent from the skim. */

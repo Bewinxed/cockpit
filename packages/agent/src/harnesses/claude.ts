@@ -32,6 +32,7 @@ import type {
   NeutralMessage,
   NeutralSessionInfo,
   NeutralUserMessage,
+  QueuedMessage,
   SendPayload,
   SessionMessage,
   SpawnPayload,
@@ -45,6 +46,8 @@ import {
   CONTROL_SET_EFFORT,
   INSPECT_CONFIG,
   MARKETPLACE_CATALOG,
+  MESSAGE_DEQUEUED,
+  MESSAGE_QUEUED,
   READ_MEMORY_FILE,
   READ_SKILL_FILES,
   isInjected,
@@ -319,20 +322,37 @@ function withExtras(
   return { ...message, message: { ...message.message, content } };
 }
 
-/** The prompt `query()` iterates, kept unresolved between turns. */
-class InputStream implements AsyncIterable<SDKUserMessage> {
-  #queue: SDKUserMessage[] = [];
+/**
+ * The prompt `query()` iterates, kept unresolved between turns.
+ *
+ * Whether a push WAITS here is the whole of what "queued" means for this
+ * harness: the iterator is parked on `next()` exactly when the model is ready
+ * for its next turn, so a push that finds it parked flows straight through and
+ * one that does not is a message the session is too busy to start. That is a
+ * fact only this class knows, so it is the one that reports it — {@link push}
+ * answers with it, and {@link onConsume} fires at the moment the wait ends.
+ */
+export class InputStream implements AsyncIterable<SDKUserMessage> {
+  #queue: { message: SDKUserMessage; queueId?: string }[] = [];
   #waiting: ((result: IteratorResult<SDKUserMessage>) => void) | null = null;
   #ended = false;
 
-  push(message: SDKUserMessage): void {
+  /** Called with the id of a tagged message at the moment the model pulls it. */
+  constructor(private readonly onConsume: (queueId: string) => void = () => {}) {}
+
+  /**
+   * Hands one turn to the model, or holds it until the running one is done.
+   * Returns whether it had to wait — `false` means the model took it now.
+   */
+  push(message: SDKUserMessage, queueId?: string): boolean {
     const waiting = this.#waiting;
     if (waiting) {
       this.#waiting = null;
       waiting({ done: false, value: message });
-      return;
+      return false;
     }
-    this.#queue.push(message);
+    this.#queue.push({ message, ...(queueId ? { queueId } : {}) });
+    return true;
   }
 
   end(): void {
@@ -345,7 +365,10 @@ class InputStream implements AsyncIterable<SDKUserMessage> {
     return {
       next: () => {
         const queued = this.#queue.shift();
-        if (queued) return Promise.resolve({ done: false, value: queued });
+        if (queued) {
+          if (queued.queueId) this.onConsume(queued.queueId);
+          return Promise.resolve({ done: false, value: queued.message });
+        }
         if (this.#ended) return Promise.resolve({ done: true, value: undefined });
         return new Promise((resolve) => {
           this.#waiting = resolve;
@@ -354,6 +377,43 @@ class InputStream implements AsyncIterable<SDKUserMessage> {
     };
   }
 }
+
+/**
+ * What a turn was typed as, before the adapter folded pastes and images into
+ * it. This is what a queued row renders, and it is deliberately the text the
+ * dashboard's own local copy holds — matching them is how the queue's truth
+ * replaces the client's guess without doubling the message on screen.
+ */
+export const queuedText = (message: NeutralUserMessage): string => {
+  const content = message.message.content;
+  if (typeof content === 'string') return content;
+  return content
+    .filter((block): block is { type: 'text'; text: string } => block.type === 'text')
+    .map((block) => block.text)
+    .join('\n');
+};
+
+/** The `message_queued` announcement for one held turn. */
+export const queuedFrame = (
+  queued: QueuedMessage,
+  sessionId: string | null
+): NeutralMessage => ({
+  type: 'system',
+  subtype: MESSAGE_QUEUED,
+  ...(sessionId ? { session_id: sessionId } : {}),
+  queueId: queued.queueId,
+  text: queued.text,
+  timestamp: queued.timestamp,
+  ...(queued.images ? { images: queued.images } : {}),
+});
+
+/** And the one that retires it, at the moment the model pulled it. */
+export const dequeuedFrame = (queueId: string, sessionId: string | null): NeutralMessage => ({
+  type: 'system',
+  subtype: MESSAGE_DEQUEUED,
+  ...(sessionId ? { session_id: sessionId } : {}),
+  queueId,
+});
 
 /** Whether a turn is in flight, and a way to wait for the one that is. */
 class Turn {
@@ -377,6 +437,9 @@ class Turn {
 }
 
 const SETTLE_TIMEOUT_MS = 5_000;
+
+/** How many consumed turns wait to be matched to their frame before the oldest is dropped. */
+const AWAITING_ECHO_LIMIT = 32;
 
 /** The `canUseTool` callback, parked until `resolvePermission` answers it. */
 type PermissionResolver = (result: PermissionResult) => void;
@@ -417,6 +480,21 @@ class ClaudeSession implements HarnessSession {
   >();
   /** Denied questions, keyed by tool call, until their `tool_result` goes past. */
   readonly #dismissedQuestions = new Map<string, UserQuestionResult>();
+  /**
+   * Messages waiting for a turn to end, oldest first — the queue as observable
+   * state ({@link QueuedMessage}). This is the daemon's own copy of what
+   * {@link InputStream} is holding, kept so the queue can be announced,
+   * snapshotted and retired by id rather than inferred by a client.
+   */
+  readonly #queued: QueuedMessage[] = [];
+  /**
+   * Turns the model has pulled but whose own frame has not gone past yet,
+   * oldest first. The SDK echoes a consumed turn back as an ordinary `user`
+   * message with a uuid of its own making — there is no id on it that says
+   * which send it was — so the text is what matches it to its queue entry, and
+   * {@link #pumpMessages} tags the frame before it leaves the daemon.
+   */
+  readonly #awaitingEcho: { queueId: string; text: string }[] = [];
 
   constructor(
     readonly instanceId: string,
@@ -431,7 +509,9 @@ class ClaudeSession implements HarnessSession {
     skills?: string[]
   ) {
     this.#ctx = ctx;
-    const input = new InputStream();
+    // The model just pulled a held turn: retire the queue entry, and remember
+    // the text so the frame that echoes it can be tagged with the same id.
+    const input = new InputStream((queueId) => this.#dequeue(queueId));
     this.#input = input;
     const turn = new Turn();
     this.#turn = turn;
@@ -543,10 +623,55 @@ class ClaudeSession implements HarnessSession {
     this.#pump = this.#pumpMessages(ctx, handle, turn);
   }
 
+  /**
+   * The model pulled a held turn. Announced immediately rather than waiting for
+   * the turn's own frame: the two can be seconds apart, and a row that is no
+   * longer waiting should stop saying it is.
+   */
+  #dequeue(queueId: string): void {
+    const at = this.#queued.findIndex((entry) => entry.queueId === queueId);
+    if (at === -1) return;
+    const [entry] = this.#queued.splice(at, 1);
+    this.#awaitingEcho.push({ queueId, text: entry.text });
+    // A turn nothing ever echoed would otherwise sit here for the session's
+    // life. The tag is a nicety — `message_dequeued` already retired the row —
+    // so the oldest unmatched entries are simply dropped.
+    if (this.#awaitingEcho.length > AWAITING_ECHO_LIMIT) {
+      this.#awaitingEcho.splice(0, this.#awaitingEcho.length - AWAITING_ECHO_LIMIT);
+    }
+    this.#ctx.frame(dequeuedFrame(queueId, this.sessionId));
+  }
+
+  /**
+   * Tags a consumed turn's own frame with the queue entry it came from, so a
+   * client retires the queued row even if the `message_dequeued` frame raced it
+   * or never arrived. Matched on text, oldest first — the queue is a queue —
+   * and only for the main loop's own plain turns: a subagent's frames and the
+   * tool_result traffic are nobody's send.
+   */
+  #tagEcho(neutral: NeutralMessage): void {
+    if (neutral.type !== 'user' || this.#awaitingEcho.length === 0) return;
+    if (neutral.parent_tool_use_id) return;
+    const text = queuedText(neutral);
+    if (!text) return;
+    // `startsWith`, not equality: a turn that carried pasted text has it folded
+    // in after the sentence (`withExtras`). An entry with no text of its own —
+    // an images-only send — is never matched by prefix, which every string
+    // would satisfy; its `message_dequeued` is what retires it.
+    const at = this.#awaitingEcho.findIndex(
+      (entry) => entry.text !== '' && text.startsWith(entry.text)
+    );
+    if (at === -1) return;
+    const [entry] = this.#awaitingEcho.splice(at, 1);
+    neutral.queueId = entry.queueId;
+  }
+
   async #pumpMessages(ctx: HarnessContext, handle: Query, turn: Turn): Promise<void> {
     try {
       for await (const message of handle) {
         const neutral = toNeutral(message);
+        // The turn this frame is, when it is one the session had to hold.
+        this.#tagEcho(neutral);
         // The Claude SDK emits `AskUserQuestion`'s structured output as a
         // top-level `tool_use_result` on the user message (the prose alone is
         // what lands in the `tool_result` block's `content`). Normalise it onto
@@ -648,8 +773,34 @@ class ClaudeSession implements HarnessSession {
     if (!queued || wake) this.#ctx.busy(true);
     const outgoing = wake ? ({ ...sdk, shouldQuery: undefined } as typeof sdk) : sdk;
 
+    // Announced only if it actually waits, and only for what the reader typed.
+    //
+    // Two conditions, because either alone lies. A turn already in flight is
+    // what makes a send wait — but the input stream is the only thing that
+    // knows whether the model was in fact ready for it, and between `query()`
+    // being constructed and its first pull nothing is waiting on the stream
+    // while the session is plainly idle. So: the turn says it is busy AND the
+    // push had to hold it. Anything cockpit INJECTS (a hand-off brief, a rule's
+    // message) is already echoed as a real user frame at the bottom of this
+    // method — announcing it here would draw the same message twice, once
+    // waiting and once said.
+    const holding = this.#turn.busy && !isInjected(message.origin);
     this.#turn.start();
-    this.#input.push(withExtras(outgoing, extras.attachments, extras.images));
+    const queueId = holding ? crypto.randomUUID() : undefined;
+    const waiting = this.#input.push(
+      withExtras(outgoing, extras.attachments, extras.images),
+      queueId
+    );
+    if (waiting && queueId) {
+      const entry: QueuedMessage = {
+        queueId,
+        text: queuedText(message),
+        timestamp: new Date().toISOString(),
+        ...(extras.images?.length ? { images: extras.images.length } : {}),
+      };
+      this.#queued.push(entry);
+      this.#ctx.frame(queuedFrame(entry, this.sessionId));
+    }
 
     // A hand-off is queued rather than asked (`shouldQuery: false`), so the SDK
     // appends it and emits nothing until the session next takes a turn. Echoed
@@ -706,6 +857,12 @@ class ClaudeSession implements HarnessSession {
 
   async stop(): Promise<void> {
     this.#input.end();
+    // Nothing left to hold these for: the stream is closed, so no queue entry
+    // here will ever be pulled, and the hub drops the session's queue with the
+    // row. Retired quietly rather than announced — the reader is watching a
+    // session end, not a message being read.
+    this.#queued.length = 0;
+    this.#awaitingEcho.length = 0;
     for (const resolve of this.#permissions.values()) resolve({ behavior: 'deny', message: 'session stopped' });
     this.#permissions.clear();
     // Not dismissals: the session is going away, and no `tool_result` will

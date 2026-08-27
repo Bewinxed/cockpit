@@ -16,6 +16,7 @@
   import QuestionCard from './QuestionCard.svelte';
   import Subagent from './Subagent.svelte';
   import Thinking from './Thinking.svelte';
+  import Queued from './Queued.svelte';
   import MessageBody from './MessageBody.svelte';
   import SystemLine from './SystemLine.svelte';
   import Who from './Who.svelte';
@@ -296,6 +297,9 @@
     // A harness notification is plumbing the operator never asked for. It is
     // worth a line on the rail and nothing at all in the ear.
     if (row.kind === 'harness') return '';
+    // Nor a queued message: the operator just sent it. Reading their own words
+    // back to them, then again when the session starts on them, is noise.
+    if (row.kind === 'queued') return '';
     if (row.kind === 'livetool') return `livetool:${row.glance.toolId}`;
     return row.key;
   }
@@ -438,6 +442,8 @@
             <Who name={agentName} />
             <MessageBody source={row.text} streaming />
           </section>
+        {:else if row.kind === 'queued'}
+          <Queued queued={row.queued} />
         {:else if row.kind === 'livetool'}
           {@const d = describeTool(row.glance.name, undefined, undefined, 'pending')}
           {@const LiveIcon = d.icon}

@@ -22,6 +22,7 @@
   import QuestionCard from './QuestionCard.svelte';
   import Subagent from './Subagent.svelte';
   import Thinking from './Thinking.svelte';
+  import Queued from './Queued.svelte';
   import MessageBody from './MessageBody.svelte';
   import SystemLine from './SystemLine.svelte';
   import Who from './Who.svelte';
@@ -76,6 +77,8 @@
           <Who name={agentName} />
           <MessageBody source={row.text} streaming />
         </section>
+      {:else if row.kind === 'queued'}
+        <Queued queued={row.queued} />
       {:else if row.kind === 'livetool'}
         {@const d = describeTool(row.glance.name, undefined, undefined, 'pending')}
         {@const LiveIcon = d.icon}

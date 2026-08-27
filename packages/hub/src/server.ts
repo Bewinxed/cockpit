@@ -16,6 +16,7 @@ import type {
   MachineMemorySet,
   NeutralSessionInfo,
   PermissionMode,
+  QueuedMessage,
   Rule,
   RuleDraft,
   SkillFile,
@@ -40,6 +41,8 @@ import {
   RULE_TEMPLATES,
   ruleProblem,
   memoryDocProblem,
+  MESSAGE_DEQUEUED,
+  MESSAGE_QUEUED,
   parseAgentFrontMatter,
   READ_MEMORY_FILE,
   READ_SKILL_FILES,
@@ -471,6 +474,40 @@ type MemoryRead = { ok: true; copy: MachineMemory } | { ok: false; code: 404 | 5
  * directory the agent really opened it in — the spawn's `cwd` after the agent
  * expanded it.
  */
+/**
+ * The queue news a `frame` carries, if it carries any: a session announcing a
+ * message it was too busy to start, or retiring one it has now read.
+ *
+ * Read off the frame structurally rather than by narrowing the neutral union,
+ * the way `peekInit` above reads an init: a daemon older than these subtypes
+ * simply never sends one, and this answers `undefined` for every other frame.
+ * The real turn retires its own entry too ({@link QueuedMessage}) — the
+ * dequeue frame can race it or be dropped, and a queued row that outlives the
+ * message is the same lie the local echo used to tell.
+ */
+const peekQueue = (
+  payload: unknown
+): { queued: QueuedMessage } | { retired: string } | undefined => {
+  if (typeof payload !== 'object' || payload === null) return undefined;
+  const message = (payload as { message?: unknown }).message;
+  if (typeof message !== 'object' || message === null) return undefined;
+  const sdk = message as Record<string, unknown>;
+  if (typeof sdk.queueId !== 'string') return undefined;
+  if (sdk.type === 'user') return { retired: sdk.queueId };
+  if (sdk.type !== 'system') return undefined;
+  if (sdk.subtype === MESSAGE_DEQUEUED) return { retired: sdk.queueId };
+  if (sdk.subtype !== MESSAGE_QUEUED) return undefined;
+  if (typeof sdk.text !== 'string' || typeof sdk.timestamp !== 'string') return undefined;
+  return {
+    queued: {
+      queueId: sdk.queueId,
+      text: sdk.text,
+      timestamp: sdk.timestamp,
+      ...(typeof sdk.images === 'number' ? { images: sdk.images } : {}),
+    },
+  };
+};
+
 const peekInit = (payload: unknown): { sessionId: string; cwd?: string } | undefined => {
   if (typeof payload !== 'object' || payload === null) return undefined;
   const message = (payload as { message?: unknown }).message;
@@ -576,6 +613,9 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
     // A session that died before it ever said anything is never going to name
     // itself; nothing should still be waiting to hear its first words.
     awaitingFirstTurn.delete(instanceId);
+    // Nor is anything it was holding ever going to run. A queued row that
+    // outlives the process holding it is the same lie in a quieter font.
+    forgetQueue(instanceId);
   };
 
   /**
@@ -662,6 +702,47 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
    * watching is invisible on every other device, and gone after a reload.
    */
   const handoffs = new Map<string, { from: string; at: number }>();
+  /**
+   * What each session is holding but has not started, oldest first — folded
+   * from the `message_queued` / `message_dequeued` frames going past.
+   *
+   * Kept here for the same reason the hand-offs above are: a queue only the
+   * sending tab knows about is invisible on every other device and gone after
+   * a reload, which is exactly how a message sent to a busy session came to be
+   * lost. Published with the instances and readable on connect, so a dashboard
+   * that opens mid-queue sees what is waiting rather than an empty transcript.
+   */
+  const queues = new Map<string, QueuedMessage[]>();
+
+  /** Files one queue entry under the session holding it; false if it was already there. */
+  const enqueue = (instanceId: string, entry: QueuedMessage): boolean => {
+    const held = queues.get(instanceId);
+    if (!held) {
+      queues.set(instanceId, [entry]);
+      return true;
+    }
+    if (held.some((queued) => queued.queueId === entry.queueId)) return false;
+    held.push(entry);
+    return true;
+  };
+
+  /** And retires it — by the dequeue frame, or by the real turn that carries its id. */
+  const dequeue = (instanceId: string, queueId: string): boolean => {
+    const held = queues.get(instanceId);
+    if (!held) return false;
+    const left = held.filter((queued) => queued.queueId !== queueId);
+    if (left.length === held.length) return false;
+    if (left.length === 0) queues.delete(instanceId);
+    else queues.set(instanceId, left);
+    return true;
+  };
+
+  /**
+   * The session is gone (stopped, discarded, failed, or relaunched under the
+   * same id). Nothing it was holding will ever run, and a queued row that
+   * outlives its process is a message the reader is still waiting for.
+   */
+  const forgetQueue = (instanceId: string): boolean => queues.delete(instanceId);
   /**
    * Each delegate session's assistant texts, accumulated while its turn runs
    * so the report delivered to its parent carries everything it said — not
@@ -782,6 +863,7 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
         instances,
         agents,
         handoffs: Object.fromEntries(handoffs),
+        queues: Object.fromEntries(queues),
       },
     });
   };
@@ -1441,6 +1523,11 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
     // after a hand-off went out would otherwise show nothing until the next
     // time anything else moved.
     .get('/api/handoffs', () => Object.fromEntries(handoffs))
+    // What each session is holding but has not started. Broadcast with the
+    // instances *and* readable here, for the reason the hand-offs are: a
+    // dashboard that opens while a queue is already waiting has missed every
+    // frame that built it.
+    .get('/api/queues', () => Object.fromEntries(queues))
     .get('/api/pending', () => pending.list())
     // What a delegate and its parent said to each other, oldest first. Broadcast
     // as it happens *and* readable here, for the same reason the hand-offs are:
@@ -2194,6 +2281,8 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
         instanceId,
         payload: { instanceId, from },
       } satisfies Envelope);
+      // Same as a stop from a dashboard: whatever it was holding dies with it.
+      if (forgetQueue(instanceId)) publishInstances(row.machineId);
       return { ok: true };
     })
     .post('/api/relay/interrupt', { body: t.Any() }, ({ body, status }) => {
@@ -2526,6 +2615,20 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
                 publishInstances(message.machineId);
               }
             }
+            // What the session is holding but has not started. Mirrored here so
+            // it is snapshot state rather than something each tab has to watch
+            // for — and retired by BOTH paths, the dequeue frame and the real
+            // turn's own id, because either can be the one that arrives.
+            if (kind === 'frame' && message.instanceId) {
+              const news = peekQueue(message.payload);
+              if (news) {
+                const moved =
+                  'queued' in news
+                    ? enqueue(message.instanceId, news.queued)
+                    : dequeue(message.instanceId, news.retired);
+                if (moved) publishInstances(message.machineId);
+              }
+            }
             // A session named by what it was first asked, whether the ask came
             // through this hub or the harness echoed one it was spawned with.
             if (kind === 'frame' && message.instanceId) {
@@ -2709,6 +2812,11 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
         for (const [requestId, syncing] of pendingFleet)
           if (syncing === machineId) pendingFleet.delete(requestId);
         db.markAgentOffline(machineId);
+        // The daemon holding these queues is gone; whatever it had not started
+        // did not survive it, so the rows go with the sessions.
+        for (const row of db.listInstances()) {
+          if (row.machineId === machineId) forgetQueue(row.id);
+        }
         db.reconcileInstances(machineId, []);
         publishInstances(machineId);
       },
@@ -2775,6 +2883,8 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
             if (forward(message, ws) && message.instanceId) {
               if (peekDiscard(message.payload)) db.discardInstance(message.instanceId);
               else db.stopInstance(message.instanceId);
+              // The stream is closing; nothing it was still holding will run.
+              forgetQueue(message.instanceId);
               escalateRoutedAsks(message.instanceId);
               publishInstances(message.machineId);
             }

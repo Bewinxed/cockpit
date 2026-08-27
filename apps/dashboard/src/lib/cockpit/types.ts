@@ -66,6 +66,16 @@ export interface MessageMetadata {
    * land in one frame.
    */
   thinkingDurationMs?: number;
+  /**
+   * A local echo of a turn sent to a session that may have been busy — a guess,
+   * drawn before any frame came back, and the flag is what makes it one the
+   * store can take back. When the daemon announces the message as queued
+   * (`message_queued`), this copy is retired and the queue's own row takes its
+   * place; when no such frame ever arrives — an older daemon, or an idle
+   * session that started the turn at once — the copy simply stays, which is
+   * every dashboard's behaviour before the queue was observable.
+   */
+  queuedLocally?: boolean;
   // Tool messages
   toolId?: string;
   toolName?: string;

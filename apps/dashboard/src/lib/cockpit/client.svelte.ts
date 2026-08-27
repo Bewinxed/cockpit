@@ -18,6 +18,7 @@ import type {
   PermissionMode,
   PermissionResult,
   PermissionUpdate,
+  QueuedMessage,
   SDKSessionInfo,
   SDKStatus,
   SendPayload,
@@ -66,6 +67,7 @@ import {
   turnBoundaries,
   turnStart,
 } from './frames';
+import { ingestQueued, retireQueued } from './queue';
 import { invalidateTasks, refreshTasks, TASK_LEDGER_TOOLS } from './tasks.svelte';
 import { workingSet } from './working-set.svelte';
 
@@ -202,6 +204,17 @@ export interface SessionState {
   /** Subagent branches, keyed by the Task `tool_use_id` that spawned them. */
   subagents: Record<string, SubagentState>;
   pending: PendingPermission[];
+  /**
+   * Messages this session has taken but not started, oldest first — the
+   * harness's own input queue, announced by `message_queued` and retired
+   * either by `message_dequeued` or by the real turn carrying the same id.
+   *
+   * This is the queue as STATE, not as a guess: it survives a reload (the hub
+   * snapshots it), it is the same on every device, and it is what the reader
+   * sees waiting under the conversation. A dashboard talking to a daemon that
+   * predates the frames simply never fills it and keeps its local echo.
+   */
+  queued: QueuedMessage[];
   /** Partial assistant text, between `stream_event`s and the final message. */
   streaming: string;
   /**
@@ -449,6 +462,7 @@ export function blankSession(instanceId: string): SessionState {
     messages: [],
     subagents: {},
     pending: [],
+    queued: [],
     streaming: '',
     openBlock: null,
     thinkingStream: '',
@@ -496,6 +510,12 @@ function session(instanceId: string): SessionState {
 
 /** Fills in what the registry knows about a session this browser did not spawn. */
 function hydrate(target: SessionState): void {
+  // What the session was already holding before this view existed. Only ever
+  // fills a blank: once frames are flowing they are fresher than any snapshot.
+  if (target.queued.length === 0) {
+    const held = queueSnapshot[target.instanceId];
+    if (held?.length) target.queued = held;
+  }
   const known = state.instances.find((row) => row.id === target.instanceId);
   if (!known) return;
   adoptSettings(target, known);
@@ -616,6 +636,35 @@ function adoptInstances(instances: InstanceRow[]): void {
   for (const target of Object.values(state.sessions)) hydrate(target);
 }
 
+/**
+ * Takes the hub's word on what each session is holding but has not started.
+ *
+ * This is the half of the queue a frame cannot deliver: a tab that opens while
+ * a message is already waiting has missed the `message_queued` that announced
+ * it, and before this the only record of that message was a local echo in
+ * whichever tab sent it — lost on the reload, invisible on every other device.
+ *
+ * A full snapshot per session named, and only for those: the hub sends the
+ * sessions with something queued, so a session absent from the map has an
+ * empty queue and a hub that predates the field says nothing about any of them
+ * (`undefined`), which must leave what frames have already established alone.
+ */
+function adoptQueues(queues: Record<string, QueuedMessage[]> | undefined): void {
+  if (!queues) return;
+  queueSnapshot = queues;
+  for (const target of Object.values(state.sessions)) {
+    target.queued = queues[target.instanceId] ?? [];
+  }
+}
+
+/**
+ * The hub's last word on every session's queue, kept beside the sessions rather
+ * than only inside them: a session this browser has not opened yet has no
+ * {@link SessionState} to hold its queue, and opening it later must not start
+ * from empty. {@link hydrate} seeds from here.
+ */
+let queueSnapshot: Record<string, QueuedMessage[]> = {};
+
 /** Replaces the whole limits map with the hub's word — a full snapshot, not a patch. */
 function adoptUsageLimits(readings: { machineId: string; limits: ClaudeLimits }[]): void {
   const next: Record<string, ClaudeLimits> = {};
@@ -632,7 +681,7 @@ function usageLimitReadings(readings: UsageLimitsReading[]): Record<string, Clau
 
 /** Registry reads: on connect and again after every reconnect. */
 async function refresh(): Promise<void> {
-  const [machines, instances, projects, pending, handoffs, usage] = await Promise.all([
+  const [machines, instances, projects, pending, handoffs, queues, usage] = await Promise.all([
     load<Machine[]>('/api/agents'),
     load<InstanceRow[]>('/api/instances'),
     load<ProjectRow[]>('/api/projects'),
@@ -640,11 +689,15 @@ async function refresh(): Promise<void> {
     // Read on connect, not only broadcast on change: a dashboard opened after
     // a hand-off went out has missed every broadcast it will ever get.
     load<Record<string, { from: string; at: number }>>('/api/handoffs'),
+    // Same reason again, and the whole point of the queue being observable: a
+    // tab opened while a message is waiting has missed the frame that said so.
+    load<Record<string, QueuedMessage[]>>('/api/queues'),
     // Same reason: a dashboard opened between reports has missed the frames.
     load<{ machines: { machineId: string; limits: ClaudeLimits }[] }>('/api/usage/limits'),
   ]);
 
   if (handoffs) state.handoffs = handoffs;
+  if (queues) adoptQueues(queues);
   if (machines) state.machines = machines;
   if (projects) state.projects = projects;
   if (instances) adoptInstances(instances);
@@ -731,6 +784,7 @@ function handleFrame(frame: FramePayload): void {
     // reload — a hand-off only this tab saw is one your phone never knows about.
     state.handoffs = (frame as { handoffs?: Record<string, { from: string; at: number }> })
       .handoffs ?? {};
+    adoptQueues((frame as { queues?: Record<string, QueuedMessage[]> }).queues);
     adoptInstances(frame.instances);
     return;
   }
@@ -800,6 +854,11 @@ function handleFrame(frame: FramePayload): void {
     case 'frame': {
       target.harness = frame.harness;
       const mapping = mapFrame(frame.instanceId, frame.message);
+      // The input queue moving. Ahead of the transcript work below because the
+      // announcement takes back the local echo the sender drew, and the turn
+      // that retires the row is pushed by that same transcript work.
+      if (mapping.queued) ingestQueued(target, mapping.queued);
+      if (mapping.dequeued) retireQueued(target, mapping.dequeued);
       if (mapping.branch) applyBranchEvent(target.subagents, frame.instanceId, mapping.branch);
       // Cost rides every result frame, cumulative across the run. It has no
       // transcript line on success, so it lives on the session instead.
@@ -895,9 +954,16 @@ function handleFrame(frame: FramePayload): void {
       // Oldest unstamped copy first — frames arrive in send order — preferring
       // an exact text match when two sends are in flight.
       if (mapping.echo && !mapping.agentId) {
-        const copies = target.messages.filter((m) => m.type === 'user' && !m.sdkUuid);
-        const copy = copies.find((m) => m.content === mapping.echo?.text) ?? copies[0];
-        if (copy) copy.sdkUuid = mapping.echo.uuid;
+        // A turn that WAITED renders itself (`mapFrame` pushed it), because the
+        // queued row it replaces is not a copy anything can stamp. Its id is
+        // the second way a row retires — the dequeue frame can be raced by the
+        // turn it announces, or missed entirely by a tab that just subscribed.
+        if (mapping.echo.queueId) retireQueued(target, mapping.echo.queueId);
+        else {
+          const copies = target.messages.filter((m) => m.type === 'user' && !m.sdkUuid);
+          const copy = copies.find((m) => m.content === mapping.echo?.text) ?? copies[0];
+          if (copy) copy.sdkUuid = mapping.echo.uuid;
+        }
       }
       for (const result of mapping.toolResults) {
         applyToolResult(sink, result);
@@ -1475,7 +1541,14 @@ export function sendText(
   send({ verb: 'send', machineId, instanceId, payload });
 
   const target = session(instanceId);
-  target.messages.push(localUserMessage(instanceId, text, extras));
+  // Optimistic, and marked as such. If the session was busy the daemon answers
+  // with `message_queued` and this copy is retired in favour of the queue's own
+  // row ({@link ingestQueued}); if it was idle, or the daemon predates the
+  // frame, no announcement ever comes and the copy stays exactly as it always
+  // has. The mark is what makes the first case possible without risking the
+  // second.
+  const echo = localUserMessage(instanceId, text, extras);
+  target.messages.push({ ...echo, metadata: { ...echo.metadata, queuedLocally: true } });
   target.busy = true;
   // Before any frame: the whole point of the clock is the wait for the first one.
   trackWorking(target);
@@ -2084,10 +2157,17 @@ export async function streamHistory({
       if (chunk.length > 0) target.initialized = true;
       target.loading = false;
       target.hydrating = true;
+      // UNCONDITIONALLY, not `if (live)`: a switched-away tab's re-read arrives
+      // through the fallback source, which is labelled `live: false` even for a
+      // running session — and a message the reader QUEUED while the agent was
+      // busy exists only as a local echo the daemon has not persisted yet. The
+      // wholesale replace above would erase it; absorption is what puts it
+      // back, and on a genuinely stored session `seenLive` is empty and this
+      // is a no-op.
+      absorbLive(target, seenLive, seeded);
       if (live) {
         target.streaming = '';
         clearTurnPhase(target);
-        absorbLive(target, seenLive, seeded);
         // What was held belongs to the end of the transcript, which is now on
         // screen: it appends while the older chunks prepend, so neither waits.
         replayHeld(viewId, seeded);

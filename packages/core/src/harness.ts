@@ -335,8 +335,51 @@ export interface NeutralUserMessage {
   message: { role: 'user'; content: string | NeutralContentBlock[] };
   origin?: NeutralOrigin;
   shouldQuery?: boolean;
+  /**
+   * The {@link QueuedMessage} this turn was: set by the harness on the real
+   * message the model finally read, so a client can retire the queued row it
+   * has been drawing for it. Absent on every message that never waited — and on
+   * every message from a daemon older than the queue frames, whose clients
+   * simply never had a queued row to retire.
+   */
+  queueId?: string;
   raw?: unknown;
 }
+
+/**
+ * A message the harness has taken but not started yet: sent while a turn was
+ * already running, held until the model next pulls its input.
+ *
+ * The queue used to be private to the adapter — nothing announced an enqueue
+ * and no snapshot carried one — so a dashboard could only *guess* that what it
+ * sent was waiting, by drawing a local echo it lost on reload. This is the
+ * queue as observable state: announced by a `message_queued` system frame,
+ * retired by `message_dequeued` (or by the real turn's {@link
+ * NeutralUserMessage.queueId}), and listed in the hub's snapshot so a client
+ * that joins mid-queue sees what is waiting.
+ *
+ * `images` is a COUNT. The payloads are megabytes of base64 and the queue is
+ * broadcast state — what a reader needs is that pictures are riding with it.
+ */
+export interface QueuedMessage {
+  queueId: string;
+  /** What was typed, before the harness folded pastes or images into the turn. */
+  text: string;
+  /** When the harness took it, ISO-8601. */
+  timestamp: string;
+  /** How many images ride with it; absent when none do. */
+  images?: number;
+}
+
+/**
+ * The `system` subtype announcing an enqueue — a message the session was too
+ * busy to start. Carries the {@link QueuedMessage} fields flat, the way every
+ * other system subtype carries its own.
+ */
+export const MESSAGE_QUEUED = 'message_queued';
+
+/** And the one announcing the moment it was consumed: `queueId` alone. */
+export const MESSAGE_DEQUEUED = 'message_dequeued';
 
 export interface NeutralStreamMessage {
   type: 'stream_event';
@@ -405,6 +448,13 @@ export interface NeutralSystemMessage {
   summary?: string;
   last_tool_name?: string;
   patch?: { description?: string; status?: string; error?: string };
+  // message_queued / message_dequeued — the harness's own input queue, made
+  // observable ({@link QueuedMessage}). `queueId` is on both; the rest only on
+  // the announcement.
+  queueId?: string;
+  text?: string;
+  timestamp?: string;
+  images?: number;
   // commands_changed
   commands?: SlashCommand[];
   // model_fallback

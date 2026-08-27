@@ -6,6 +6,7 @@
  * so nothing here re-models them.
  */
 import type {
+  QueuedMessage,
   SDKAssistantMessage,
   SDKMessage,
   SDKStatus,
@@ -14,6 +15,7 @@ import type {
   SlashCommand,
   UserQuestionResult,
 } from '@cockpit/core';
+import { MESSAGE_DEQUEUED, MESSAGE_QUEUED } from '@cockpit/core';
 import type { SubagentState } from '$lib/utils/flow-types';
 import { getToolGlance } from '$lib/utils/tool-display';
 import type { DelegateEvent, JsonValue, Message, MessageMetadata, MessageType } from './types';
@@ -75,7 +77,21 @@ export interface FrameMapping {
    * stamp it and edit/fork can anchor on a message the reader just sent
    * instead of waiting for a transcript re-read.
    */
-  echo?: { uuid: string; text: string };
+  echo?: { uuid: string; text: string; queueId?: string };
+  /**
+   * A message the session took but was too busy to start — the daemon's own
+   * word on its input queue, which used to be private to the harness. The
+   * store files it under {@link SessionState.queued}; the transcript draws it
+   * after the live tail, where it is waiting.
+   */
+  queued?: QueuedMessage;
+  /**
+   * The id of a queue entry that is no longer waiting: the session pulled it.
+   * Its real turn arrives a moment later carrying the same id on
+   * {@link FrameMapping.echo} — either retires the row, because a dequeue frame
+   * can be raced by the turn it announces, or lost with a dropped subscription.
+   */
+  dequeued?: string;
   /** The tool that just went in flight on the main loop. */
   currentTool?: ToolGlance;
   /**
@@ -160,6 +176,11 @@ const QUIET = new Set([
   'rate_limit_event',
   // MCP server auth plumbing — the MCP status panel shows failures.
   'auth_status',
+  // The input queue moving. Both are session STATE, drawn as a pending row
+  // after the live tail — a transcript line for each would narrate the reader's
+  // own send back at them, twice.
+  MESSAGE_QUEUED,
+  MESSAGE_DEQUEUED,
 ]);
 
 /**
@@ -562,8 +583,18 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
           }
         }
       }
+      // A turn the session had to QUEUE carries the id it waited under. It has
+      // no local copy left to render it — the queued row replaced that copy the
+      // moment the daemon announced it, and the row is about to be retired — so
+      // this one is pushed rather than echoed. The id rides along on `echo`
+      // too: retiring the row is what the store does with it, and it happens
+      // whether or not the `message_dequeued` frame arrived first.
+      const queueId = 'queueId' in sdk ? sdk.queueId : undefined;
       if (text && (agentId || systemNote(text))) {
         mapping.messages.push({ ...base, ...userBody(text, transcriptUserImages(sdk.message)) });
+      } else if (text && uuid && !agentId && queueId) {
+        mapping.messages.push({ ...base, ...userBody(text, transcriptUserImages(sdk.message)) });
+        mapping.echo = { uuid, text, queueId };
       } else if (text && uuid && !agentId) {
         // The human's own turn: rendered by the local copy, so nothing is
         // pushed — but the copy has no SDK uuid until now.
@@ -660,6 +691,23 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
           break;
         case 'commands_changed':
           mapping.commands = sdk.commands;
+          break;
+        // The harness's input queue, made observable. Read defensively: a
+        // daemon that predates the frame sends neither, and one that sends a
+        // half-formed announcement should move nothing rather than draw a row
+        // with no words in it.
+        case MESSAGE_QUEUED:
+          if (sdk.queueId && typeof sdk.text === 'string' && sdk.timestamp) {
+            mapping.queued = {
+              queueId: sdk.queueId,
+              text: sdk.text,
+              timestamp: sdk.timestamp,
+              ...(typeof sdk.images === 'number' ? { images: sdk.images } : {}),
+            };
+          }
+          break;
+        case MESSAGE_DEQUEUED:
+          if (sdk.queueId) mapping.dequeued = sdk.queueId;
           break;
         case 'status':
           mapping.status = sdk.status as SDKStatus | undefined;

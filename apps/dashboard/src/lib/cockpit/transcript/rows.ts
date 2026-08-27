@@ -9,6 +9,7 @@ import type { Message } from '../types';
 import type { SessionState } from '../client.svelte';
 import type { ToolGlance } from '../frames';
 import type { SubagentState } from '$lib/utils/flow-types';
+import type { QueuedMessage } from '@cockpit/core';
 import { ASK_USER_QUESTION } from '@cockpit/core';
 
 export type Row =
@@ -19,6 +20,12 @@ export type Row =
   | { kind: 'stream'; key: string; text: string }
   | { kind: 'thinking'; key: string; text: string; live: boolean }
   | { kind: 'livetool'; key: string; glance: ToolGlance }
+  /**
+   * A message the session is holding but has not started. Not a turn — it has
+   * not happened — so it sits after the live tail, in the reader's own turn
+   * anatomy at reduced presence, and carries no time at all.
+   */
+  | { kind: 'queued'; key: string; queued: QueuedMessage }
   | { kind: 'harness'; key: string; note: HarnessNote };
 
 /**
@@ -241,6 +248,17 @@ export function buildRows(session: SessionState): Row[] {
   }
   if (session.currentTool) {
     rows.push({ kind: 'livetool', key: 'stream:tool', glance: session.currentTool });
+  }
+
+  // The pending register: what the session has been handed and not started,
+  // after everything that HAS happened. Keyed by the queue id, and deliberately
+  // not the key its real turn will carry — when the message finally runs, the
+  // queued row leaves and the turn arrives, and pretending the two are one
+  // element would ask the transcript to morph a placeholder into a fact.
+  // Read defensively: a session shape built before this field existed — a
+  // server render's stand-in, a stub — must fold to a transcript, not throw.
+  for (const queued of session.queued ?? []) {
+    rows.push({ kind: 'queued', key: `qd:${queued.queueId}`, queued });
   }
 
   return rows;
