@@ -86,7 +86,20 @@
     // was first looked at, so the first build never consults `active`.
     if (!active && primed) return frozen;
     primed = true;
-    frozen = buildRows(session);
+    const next = buildRows(session);
+    // SETTLE CONTINUITY, decided before the DOM sees the rows (a post-render
+    // effect would run after the enter action already fired): a rebuild in
+    // which a live-tail row (`stream:*`) departed is the settle — its new rows
+    // are the SAME content the reader just watched stream, wearing its final
+    // keys. Pre-marking them seen is what stops a paragraph the reader has
+    // already read from fading back in over itself.
+    const prevKeys = new Set(frozen.map((row) => row.key));
+    const hadLiveTail = frozen.some((row) => row.key.startsWith('stream:'));
+    const hasLiveTail = next.some((row) => row.key.startsWith('stream:'));
+    if (hadLiveTail && !hasLiveTail) {
+      for (const row of next) if (!prevKeys.has(row.key)) seen.add(row.key);
+    }
+    frozen = next;
     return frozen;
   });
 
@@ -330,6 +343,18 @@
     anim.onfinish = () => {
       node.style.opacity = '';
       anim.cancel();
+    };
+    return {
+      destroy() {
+        // The live tail's keys are CONSTANTS (`stream:text` / `stream:tool` /
+        // `stream:thinking`), so `seen` remembering them meant only the very
+        // first reply of a session's lifetime ever animated in — every later
+        // one arrived stone still, which is the "new messages aren't animating"
+        // defect. Forgetting the key when the live row leaves lets the next
+        // turn's arrival animate again; ordinary rows keep their keys seen, so
+        // scrolling history still replays nothing.
+        if (key.startsWith('stream:')) seen.delete(key);
+      },
     };
   }
 

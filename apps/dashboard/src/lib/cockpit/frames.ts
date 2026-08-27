@@ -852,6 +852,27 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
     }
 
     default:
+      // The daemon wraps an SDK message type its normalizer predates as
+      // `type: 'raw'` with the original riding along. A line that says "raw"
+      // tells the operator nothing (the anonymous-line class again) — the
+      // INNER message's own type at least names what arrived, and any words
+      // it carries are shown behind a fold rather than lost.
+      if ((sdk.type as string) === 'raw') {
+        const inner = (sdk as unknown as { message?: { type?: unknown; content?: unknown; message?: unknown } })
+          .message;
+        const innerType = typeof inner?.type === 'string' ? inner.type : '';
+        const text = [inner?.content, inner?.message].find(
+          (value): value is string => typeof value === 'string'
+        );
+        if (!innerType && !text) break;
+        mapping.messages.push(
+          systemLine(base, 'ui.system_note', text ?? '', {
+            noteKind: 'Unrecognised frame',
+            noteTitle: (innerType || 'unrecognised frame').replace(/_/g, ' '),
+          })
+        );
+        break;
+      }
       if (!QUIET.has(sdk.type)) {
         mapping.messages.push(systemLine(base, `system.${sdk.type}`, sdk.type.replace(/_/g, ' ')));
       }
