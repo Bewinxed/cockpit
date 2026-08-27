@@ -81,10 +81,10 @@
   let frozen: Row[] = [];
   /** Whether `frozen` holds a real build yet — the first one is unconditional. */
   let primed = false;
-  const rows = $derived.by<Row[]>(() => {
+  const built = $derived.by<{ rows: Row[]; shifted: boolean }>(() => {
     // A pane born off screen would otherwise hold an empty transcript until it
     // was first looked at, so the first build never consults `active`.
-    if (!active && primed) return frozen;
+    if (!active && primed) return { rows: frozen, shifted: false };
     primed = true;
     const next = buildRows(session);
     // SETTLE CONTINUITY, decided before the DOM sees the rows (a post-render
@@ -103,21 +103,22 @@
     // arriving puts new rows ABOVE everything on screen — without `shift`,
     // virtua keeps the scroll OFFSET and the content lurches toward the top
     // (the post-SSR "jumps to the top then back" flash). A prepend is exact:
-    // the tail row is unchanged and the old first row now sits deeper. Same
-    // pre-DOM decision point as the seen-marking above, for the same reason.
+    // the tail row is unchanged and the old first row now sits deeper.
+    // Returned WITH the rows — never written to $state from in here, which
+    // Svelte forbids (state_unsafe_mutation) — so the Virtualizer reads both
+    // in the same flush.
     const oldFirst = frozen[0]?.key;
     const oldLast = frozen[frozen.length - 1]?.key;
-    shifted =
+    const shifted =
       frozen.length > 0 &&
       next.length > frozen.length &&
       next[next.length - 1]?.key === oldLast &&
       oldFirst !== undefined &&
       next.findIndex((row) => row.key === oldFirst) > 0;
     frozen = next;
-    return frozen;
+    return { rows: next, shifted };
   });
-  /** Whether the LAST rows update was a history prepend — virtua's `shift`. */
-  let shifted = $state(false);
+  const rows = $derived(built.rows);
 
   /**
    * Compaction is a genuinely live process — the model is rewriting its own
@@ -540,7 +541,7 @@
     </div>
   {/if}
 
-  <Virtualizer bind:this={list} data={rows} getKey={(r) => r.key} scrollRef={scroller} shift={shifted}>
+  <Virtualizer bind:this={list} data={built.rows} getKey={(r) => r.key} scrollRef={scroller} shift={built.shifted}>
     {#snippet children(row)}
       <div class="renter" use:enterMotion={row.key}>
         {#if row.kind === 'single'}
