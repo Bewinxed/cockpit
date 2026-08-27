@@ -104,6 +104,8 @@ export interface CommandRecord {
   /** When the stage last moved — what pruning and "how long has this been out" read. */
   changedAt: number;
   reason?: string;
+  /** The stream-dialect local half still owed an outcome; see {@link StreamEffects}. */
+  effects?: StreamEffects;
 }
 
 /** Everything the stream half of the store keeps. Plain data, so a runes module can `$state` it. */
@@ -273,9 +275,10 @@ export function noteDisconnect(state: StreamState, now: number): void {
   }
   for (const record of Object.values(state.commands)) {
     if (isSettled(record.stage)) continue;
-    record.stage = 'failed';
-    record.reason = 'The connection to the hub dropped before that finished.';
-    record.changedAt = now;
+    // Through advanceStage, not a raw write: a dying socket is a settling like
+    // any other, and an optimistic value whose command it took down must roll
+    // back here exactly as it would on a refusal.
+    advanceStage(record, 'failed', now, 'The connection to the hub dropped before that finished.');
   }
 }
 
@@ -496,7 +499,35 @@ function advanceStage(
   record.stage = stage;
   record.changedAt = now;
   if (reason !== undefined) record.reason = reason;
+  // Stream-dialect records carry the LOCAL half of their operation (see
+  // {@link CommandSubmission.streamEffects}); settling is when its outcome
+  // hooks run — including a timeout-swept failure, which must roll back an
+  // optimistic value exactly like a refused one.
+  if (record.effects && (stage === 'applied' || stage === 'failed')) {
+    const settled = record.effects.settled;
+    record.effects = undefined;
+    settled?.(stage, record.reason);
+  }
   return true;
+}
+
+/**
+ * The LOCAL half of a command, on the stream dialect only.
+ *
+ * Every legacy relay function is really two halves — the wire call, and the
+ * local bookkeeping around it (the send's transcript echo and busy flip, the
+ * interrupt's busy clear, the answered permission leaving `pending`, a
+ * setting's optimistic value with rollback-on-refusal). `wirePayload` extracts
+ * only the wire half; a stream dialect that dispatches the envelope and skips
+ * the local half renders NOTHING for a sent message — the defect this type
+ * repairs. The legacy branch never reads these: its `legacy()` thunk is the
+ * whole original function and already owns its own bookkeeping.
+ */
+export interface StreamEffects {
+  /** Runs once, when the envelope is dispatched (before any ack). */
+  submitted?: () => void;
+  /** Runs once, when the record settles — ack, refusal, or timeout sweep. */
+  settled?: (stage: 'applied' | 'failed', reason?: string) => void;
 }
 
 export interface CommandSubmission {
@@ -513,6 +544,8 @@ export interface CommandSubmission {
    * daemon answered), a throw or rejection is `failed`.
    */
   legacy: () => void | Promise<unknown>;
+  /** The command's local half, applied on the STREAM branch only. */
+  streamEffects?: StreamEffects;
 }
 
 /**
@@ -548,6 +581,12 @@ export function submitCommand(
       kind,
       payload,
     };
+    // The local half rides the record so every settling path — ack, refusal,
+    // timeout sweep — runs its outcome hook exactly once. Applied BEFORE the
+    // send, so a dispatch that fails synchronously still settles it (the
+    // rollback below the failure).
+    record.effects = submission.streamEffects;
+    submission.streamEffects?.submitted?.();
     if (!host.sendToHub(envelope)) {
       advanceStage(record, 'failed', now, 'Not connected to the hub. Check that it is running, then try again.');
     }

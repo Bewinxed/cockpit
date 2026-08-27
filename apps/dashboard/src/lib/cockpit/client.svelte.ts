@@ -69,7 +69,7 @@ import {
   turnStart,
 } from './frames';
 import { ingestQueued, retireQueued } from './queue';
-import type { CommandRecord, StreamHost } from './stream';
+import type { CommandRecord, StreamEffects, StreamHost } from './stream';
 import {
   createStreamState,
   handleStreamMessage,
@@ -1345,7 +1345,95 @@ export function submitCommand<K extends CommandKind>(
     kind,
     payload: wirePayload(kind, instanceId, commandId, intent),
     legacy: legacyCall(kind, instanceId, machineId, intent),
+    streamEffects: streamEffectsFor(instanceId, kind, intent),
   });
+}
+
+/**
+ * The LOCAL half of each command kind — everything its legacy function does
+ * around the wire call. On the legacy dialect the `legacy()` thunk IS the full
+ * original function and owns all of this; on the stream dialect only the
+ * envelope goes out, and skipping the local half is how a sent message ended
+ * up with no renderer at all (the wire's user frame defers to the local echo),
+ * an answered permission stayed on screen, and a stopped session kept reading
+ * "working". These closures are the missing half, run by the tracker at the
+ * submit and settle transitions.
+ *
+ * Honest gap, carried to protocol v2: the legacy setters `ensureAlive` a dead
+ * session before applying. The stream dialect does not revive — a command to a
+ * dead session fails with the hub's own reason instead. The revive belongs on
+ * the hub side of the command, not in every client.
+ */
+function streamEffectsFor<K extends CommandKind>(
+  instanceId: string,
+  kind: K,
+  intent: CommandIntents[K]
+): StreamEffects | undefined {
+  const target = session(instanceId);
+  switch (kind) {
+    case 'send': {
+      const { text, extras } = intent as CommandIntents['send'];
+      return { submitted: () => noteSendSubmitted(instanceId, text, extras) };
+    }
+    case 'interrupt':
+      return {
+        submitted: () => {
+          target.busy = false;
+          clearTurnPhase(target);
+          trackWorking(target);
+        },
+      };
+    case 'permission.answer': {
+      const { requestId } = intent as CommandIntents['permission.answer'];
+      return {
+        submitted: () => {
+          target.pending = target.pending.filter((p) => p.requestId !== requestId);
+          trackWorking(target);
+        },
+      };
+    }
+    case 'set-model': {
+      const { model } = intent as CommandIntents['set-model'];
+      const previous = target.model;
+      return {
+        submitted: () => {
+          target.model = model;
+        },
+        settled: (stage) => {
+          if (stage === 'failed') target.model = previous;
+          else void persistSettings(instanceId, { model });
+        },
+      };
+    }
+    case 'set-permission-mode': {
+      const { mode } = intent as CommandIntents['set-permission-mode'];
+      const previous = target.permissionMode;
+      return {
+        submitted: () => {
+          target.permissionMode = mode;
+        },
+        settled: (stage) => {
+          if (stage === 'failed') target.permissionMode = previous;
+          else void persistSettings(instanceId, { permissionMode: mode });
+        },
+      };
+    }
+    case 'set-effort': {
+      const { effort } = intent as CommandIntents['set-effort'];
+      const previous = target.effort;
+      return {
+        submitted: () => {
+          target.effort = effort;
+        },
+        settled: (stage) => {
+          if (stage === 'failed') target.effort = previous;
+          else void persistSettings(instanceId, { effort });
+        },
+      };
+    }
+    default:
+      return undefined;
+  }
 }
 
 /** The session the board is peeking — subscribed for frames, like an open tab. */
@@ -1799,14 +1887,25 @@ export function sendText(
 ): void {
   const payload: SendPayload = { instanceId, message: userMessage(text), ...extras };
   send({ verb: 'send', machineId, instanceId, payload });
-
-  const target = session(instanceId);
   // Optimistic, and marked as such. If the session was busy the daemon answers
   // with `message_queued` and this copy is retired in favour of the queue's own
   // row ({@link ingestQueued}); if it was idle, or the daemon predates the
   // frame, no announcement ever comes and the copy stays exactly as it always
   // has. The mark is what makes the first case possible without risking the
   // second.
+  noteSendSubmitted(instanceId, text, extras);
+}
+
+/**
+ * What a send does to the LOCAL store, on either dialect: the marked echo the
+ * transcript renders, the busy flip, the working clock. ONE function, shared
+ * by `sendText` (legacy) and the stream dialect's effects — the two drifting
+ * apart was the sent-message-with-no-renderer defect: the wire's own user
+ * frame defers to the local copy, so a dialect that skips the copy shows
+ * nothing at all.
+ */
+function noteSendSubmitted(instanceId: string, text: string, extras: SendExtras = {}): void {
+  const target = session(instanceId);
   const echo = localUserMessage(instanceId, text, extras);
   target.messages.push({ ...echo, metadata: { ...echo.metadata, queuedLocally: true } });
   target.busy = true;

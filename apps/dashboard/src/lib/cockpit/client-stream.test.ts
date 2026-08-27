@@ -600,3 +600,97 @@ test('the tracker is capped: settled commands age out, the newest stay readable'
     `cmd-${SETTLED_COMMAND_LIMIT + 19}`
   );
 });
+
+/* ------------------------------------------------------------------ *
+ * Stream effects — the command's LOCAL half
+ *
+ * Regression for the sent-message-with-no-renderer defect: the stream
+ * dialect dispatched the envelope and skipped everything the legacy
+ * function did locally (the transcript echo, the busy flip, an answered
+ * permission leaving `pending`, a setting's optimistic value). The
+ * tracker now runs the submission's `streamEffects` — submitted at
+ * dispatch, settled exactly once on ack, refusal, timeout or disconnect
+ * — and never on the legacy dialect, whose thunk owns its own half.
+ * ------------------------------------------------------------------ */
+
+test('the stream dialect runs a command\'s local effects: submitted at dispatch, settled once on the applied ack', () => {
+  const h = harness({ capable: true });
+  const calls: string[] = [];
+  const commandId = submitCommand(h.state, h.host, {
+    commandId: 'fx-1',
+    sessionId: SESSION,
+    machineId: 'mac-1',
+    kind: 'send',
+    payload: { instanceId: SESSION },
+    legacy: () => {
+      calls.push('legacy');
+    },
+    streamEffects: {
+      submitted: () => calls.push('submitted'),
+      settled: (stage) => calls.push(`settled:${stage}`),
+    },
+  });
+  expect(calls).toEqual(['submitted']);
+  h.receive(ack(commandId, 'accepted'));
+  expect(calls).toEqual(['submitted']);
+  h.receive(ack(commandId, 'applied'));
+  expect(calls).toEqual(['submitted', 'settled:applied']);
+  // A late duplicate settles nothing twice.
+  h.receive(ack(commandId, 'failed', 'too late'));
+  expect(calls).toEqual(['submitted', 'settled:applied']);
+});
+
+test('a refused command settles its effects with failed and the reason the row will show', () => {
+  const h = harness({ capable: true });
+  const settled: Array<[string, string | undefined]> = [];
+  const commandId = submitCommand(h.state, h.host, {
+    commandId: 'fx-2',
+    sessionId: SESSION,
+    machineId: 'mac-1',
+    kind: 'set-model',
+    payload: { instanceId: SESSION },
+    legacy: () => {},
+    streamEffects: { settled: (stage, reason) => settled.push([stage, reason]) },
+  });
+  h.receive(ack(commandId, 'failed', 'the machine refused it'));
+  expect(settled).toEqual([['failed', 'the machine refused it']]);
+});
+
+test('a dying socket settles outstanding effects with failed — the optimistic value rolls back on disconnect too', () => {
+  const h = harness({ capable: true });
+  const calls: string[] = [];
+  submitCommand(h.state, h.host, {
+    commandId: 'fx-3',
+    sessionId: SESSION,
+    machineId: 'mac-1',
+    kind: 'set-effort',
+    payload: { instanceId: SESSION },
+    legacy: () => {},
+    streamEffects: {
+      submitted: () => calls.push('submitted'),
+      settled: (stage) => calls.push(`settled:${stage}`),
+    },
+  });
+  noteDisconnect(h.state, 1_000_000);
+  expect(calls).toEqual(['submitted', 'settled:failed']);
+});
+
+test('the legacy dialect never reads stream effects — its thunk owns the local half', () => {
+  const h = harness({ capable: false });
+  const calls: string[] = [];
+  submitCommand(h.state, h.host, {
+    commandId: 'fx-4',
+    sessionId: SESSION,
+    machineId: 'mac-1',
+    kind: 'send',
+    payload: { instanceId: SESSION },
+    legacy: () => {
+      calls.push('legacy');
+    },
+    streamEffects: {
+      submitted: () => calls.push('submitted'),
+      settled: (stage) => calls.push(`settled:${stage}`),
+    },
+  });
+  expect(calls).toEqual(['legacy']);
+});
