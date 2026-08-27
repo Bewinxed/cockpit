@@ -145,7 +145,7 @@
            "a person is holding this up" (DESIGN.md Never #3 reserves red). -->
       <Badge
         variant="secondary"
-        class="min-w-5 bg-[var(--status-attn-bg)] px-1.5 text-[color:var(--status-attn-ink)] tabular-nums"
+        class="min-w-5 bg-[var(--status-attn-bg)] px-1.5 !text-[color:var(--status-attn-ink)] tabular-nums"
         aria-label="{total} {total === 1 ? 'session needs' : 'sessions need'} you"
       >
         {total}

@@ -95,14 +95,14 @@
     'h-full gap-0 overflow-visible rounded-[var(--radius-panel)] bg-[var(--surface-raised)] p-[var(--c-card-pad)] shadow-[var(--shadow-lifted)] ring-0';
   // The never-flat primary action: graphite brand fill + top-light gradient + inset edge.
   const btnPrimary =
-    'h-[var(--c-btn-h)] gap-[var(--c-btn-gap)] rounded-[var(--radius-control)] border-transparent bg-[var(--brand-solid)] bg-[image:var(--gradient-action)] px-[var(--c-btn-pad)] text-[length:var(--c-btn-fs)] font-medium text-[color:var(--on-brand)] shadow-[var(--shadow-action)] hover:brightness-110';
+    'h-[var(--c-btn-h)] gap-[var(--c-btn-gap)] rounded-[var(--radius-control)] border-transparent bg-[var(--brand-solid)] bg-[image:var(--gradient-action)] px-[var(--c-btn-pad)] text-[length:var(--c-btn-fs)] font-medium !text-[color:var(--on-brand)] shadow-[var(--shadow-action)] hover:brightness-110';
   // The quiet secondary action: raised surface + control border.
   const btnQuiet =
-    'h-[var(--c-btn-h)] gap-[var(--c-btn-gap)] rounded-[var(--radius-control)] border border-[var(--border-control)] bg-[var(--surface-raised)] px-[var(--c-btn-pad)] text-[length:var(--c-btn-fs)] font-medium text-[color:var(--ink-strong)] shadow-none hover:bg-[var(--surface-hover)]';
+    'h-[var(--c-btn-h)] gap-[var(--c-btn-gap)] rounded-[var(--radius-control)] border border-[var(--border-control)] bg-[var(--surface-raised)] px-[var(--c-btn-pad)] text-[length:var(--c-btn-fs)] font-medium !text-[color:var(--ink-strong)] shadow-none hover:bg-[var(--surface-hover)]';
   const alertWarn =
-    'rounded-[var(--radius-control)] border-[var(--warning-9)] bg-[var(--warning-3)] text-[color:var(--warning-11)]';
+    'rounded-[var(--radius-control)] border-[var(--warning-9)] bg-[var(--warning-3)] !text-[color:var(--warning-11)]';
   const alertDanger =
-    'rounded-[var(--radius-control)] border-[var(--error-9)] bg-[var(--error-3)] text-[color:var(--error-11)]';
+    'rounded-[var(--radius-control)] border-[var(--error-9)] bg-[var(--error-3)] !text-[color:var(--error-11)]';
 
   async function useTemplate(template: (typeof RULE_TEMPLATES)[number]) {
     seeding = template.title;

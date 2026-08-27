@@ -23,7 +23,7 @@
   const chipClass =
     'h-auto rounded-[var(--radius-mark)] border-transparent bg-[var(--surface-sunken)] ' +
     'px-[var(--space-2)] py-px text-[length:var(--text-xs)] font-[var(--weight-body)] ' +
-    'text-[color:var(--ink-muted)]';
+    '!text-[color:var(--ink-muted)]';
 
   const asString = (value: unknown): string | undefined =>
     typeof value === 'string' ? value : undefined;
