@@ -266,7 +266,14 @@ export const createMediaIntake = ({ call, filesBase }: MediaServices): MediaInta
         })
       : (() => {
           const form = new FormData();
-          form.append('file', new Blob([bytes]), filename);
+          // `BlobPart` wants a Uint8Array over a plain ArrayBuffer; `bytes` is
+          // typed over ArrayBufferLike, so re-view it — a view copy of the
+          // header only, never of the audio payload.
+          form.append(
+            'file',
+            new Blob([new Uint8Array(bytes.buffer as ArrayBuffer, bytes.byteOffset, bytes.byteLength)]),
+            filename
+          );
           form.append('model', name);
           return fetch(`${url}/v1/audio/transcriptions`, {
             method: 'POST',

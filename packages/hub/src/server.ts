@@ -19,6 +19,7 @@ import type {
   QueuedMessage,
   Rule,
   RuleDraft,
+  SendPayload,
   SkillFile,
   SpawnPayload,
   ToolState,
@@ -61,6 +62,7 @@ import { usageBucketFromRow } from './db';
 import type { PendingShape } from './pending';
 import type { HubSocket, RegistryShape } from './registry';
 import { hashFiles, resolveSkill } from './skills';
+import { createStreamHub, HUB_CAPABILITIES } from './stream';
 import type { TelegramBridge } from './telegram';
 
 /** The frame a forwarded `control` comes back as, whoever asked for it. */
@@ -849,23 +851,35 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
     });
   };
 
+  /**
+   * The whole board as one message: every row, every machine, and what each
+   * session is holding. Built in one place so the snapshot a dashboard is
+   * handed on connect and the snapshot it is pushed on every move are the same
+   * object by construction.
+   *
+   * `capabilities` is the hub's handshake (PLAN.md, Ledger Protocol): an
+   * additive optional field a legacy dashboard ignores, and the only thing that
+   * tells a new one it may follow the sequenced stream instead of watching
+   * frames go past.
+   */
+  const instancesFrame = (machineId: string): Envelope => ({
+    verb: 'frames',
+    machineId,
+    payload: {
+      kind: 'instances',
+      instances: db.listInstances(),
+      agents: db.listAgents(),
+      handoffs: Object.fromEntries(handoffs),
+      queues: Object.fromEntries(queues),
+      capabilities: [...HUB_CAPABILITIES],
+    },
+  });
+
   const publishInstances = (machineId: string): void => {
     // A session's model, project or harness can move under a live rule; every
     // move republishes, so this is the one place that has to drop the cache.
     ruleEngine.forgetFacts();
-    const instances: InstanceRow[] = db.listInstances();
-    const agents: AgentRow[] = db.listAgents();
-    registry.broadcast({
-      verb: 'frames',
-      machineId,
-      payload: {
-        kind: 'instances',
-        instances,
-        agents,
-        handoffs: Object.fromEntries(handoffs),
-        queues: Object.fromEntries(queues),
-      },
-    });
+    registry.broadcast(instancesFrame(machineId));
   };
 
   /**
@@ -1288,6 +1302,92 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
       publishInstances(machineId);
     }
   };
+
+  /**
+   * A dashboard's `send`, whole: relay it, name the session after its first
+   * words, and keep the hub's record of what the target is carrying.
+   *
+   * Extracted rather than inlined in the route so the Ledger Protocol's `send`
+   * command runs THIS, not a second implementation of it — a command that did
+   * anything less than the legacy call would be a quieter way of doing the same
+   * thing wrong.
+   */
+  const relaySend = (message: Envelope<SendPayload>, dashboard: HubSocket): boolean => {
+    const from = peekPeer(message.payload);
+    if (!forward(message, dashboard) || !message.instanceId) return false;
+    // The first thing a session is asked is what it is called, until
+    // something names it properly.
+    if (!hasAttachments(message.payload))
+      nameFromLiveTurn(
+        message.machineId,
+        message.instanceId,
+        (message.payload as { message?: unknown } | null)?.message
+      );
+    if (from && !isQuerySend(message.payload)) {
+      // A queued hand-off: the target now carries unread work.
+      handoffs.set(message.instanceId, { from, at: Date.now() });
+      publishInstances(message.machineId);
+    } else if (isQuerySend(message.payload) && handoffs.has(message.instanceId)) {
+      // A querying send folds everything queued into the turn it
+      // starts — the hand-off has been read.
+      handoffs.delete(message.instanceId);
+      publishInstances(message.machineId);
+    }
+    return true;
+  };
+
+  /**
+   * A dashboard's `control`, whole: relay it, route its reply back, settle
+   * whatever the call answers (a parked permission, a delegate's ask, a tool
+   * cell, a fleet sync). Extracted for the same reason as {@link relaySend}.
+   *
+   * `remember` is false for a command envelope: the reply to a command is that
+   * command's `applied` ack, and routing it as a legacy `control_result` too
+   * would report the same outcome twice in two dialects.
+   */
+  const relayControl = (
+    message: Envelope<ControlPayload>,
+    dashboard: HubSocket,
+    remember = true
+  ): boolean => {
+    if (!forward(message, dashboard) || !message.requestId) return false;
+    if (remember) registry.rememberRequester(message.requestId, dashboard);
+    telegram?.onSettled(message.requestId);
+    pending.resolve(message.requestId);
+    // A reader answering an ask that escalated to them: the parent died
+    // holding it, but it is still that delegate's ask and its record.
+    const answered = peekAnswer(message.payload);
+    if (answered && message.instanceId) {
+      recordDelegateAnswer(message.machineId, message.instanceId, answered.requestId, answered.result);
+    }
+    // A per-cell install or retry, clicked rather than swept: the chip
+    // turns on every dashboard, not only the one that clicked it.
+    const toolId = peekInstall(message.payload);
+    if (toolId) {
+      pendingInstalls.set(message.requestId, { machineId: message.machineId, toolId });
+      db.setAgentToolCell(message.machineId, { id: toolId, state: 'installing', at: Date.now() });
+      publishInstances(message.machineId);
+    }
+    // A sync or a status a dashboard asked for answers with the same
+    // report a register's does, and the row is the hub's either way.
+    const method = peek(message.payload, 'method');
+    if (method === FLEET_SYNC || method === FLEET_STATUS) {
+      pendingFleet.set(message.requestId, message.machineId);
+    }
+    return true;
+  };
+
+  /**
+   * The Ledger Protocol's hub half: per-session sequence, replay ring, and
+   * command acknowledgement. It borrows the relays above rather than reaching
+   * past them, so a command and a legacy click are the same operation.
+   */
+  const streams = createStreamHub({
+    setLegacySubscriptions: (socket, instanceIds) => registry.setSubscriptions(socket, instanceIds),
+    isMachineConnected: (machineId) => registry.agent(machineId) !== undefined,
+    relaySend,
+    relayControl: (envelope, dashboard) => relayControl(envelope, dashboard, false),
+  });
 
   return new Elysia()
     .use(websocket())
@@ -2762,13 +2862,31 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
                 break;
               }
             }
+            // A control's reply that settles a Ledger command turns into that
+            // command's `applied`/`failed` ack. Read BEFORE the routing below
+            // but allowed to preempt nothing: if a dashboard is also waiting on
+            // this request id the old way, it still gets its reply.
+            const settled =
+              kind === 'control_result' &&
+              message.requestId !== undefined &&
+              streams.settleCommand(message.requestId, message.payload as ControlResult);
             // A control's reply belongs to the dashboard that asked; the rest is fan-out.
             const requester =
               message.requestId && kind === 'control_result'
                 ? registry.takeRequester(message.requestId)
                 : undefined;
             if (requester) requester.send(message);
+            // An acknowledged command's reply is that command's news and nobody
+            // else's — the same rule as the line above, in the newer dialect.
+            // Without it the reply would fall through to the fleet-wide
+            // broadcast that an unrouted `control_result` gets today, and every
+            // dashboard would draw an error for a command it never sent.
+            else if (settled) break;
             else if (kind === 'frame' && message.instanceId) {
+              // The session's canonical order is assigned here, for every frame
+              // and whether or not anyone follows it: the ring has to be able to
+              // answer a resume from a socket that connects a minute from now.
+              streams.sequence(message.instanceId, message.payload);
               // Instance-scoped frames go only to dashboards subscribed to that
               // session. Everything else — permission_request, instances,
               // delegate_event, usage, pulse, error, and any kind a future build
@@ -2824,8 +2942,18 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
     .ws('/ws/dashboard', {
       open(ws) {
         registry.addDashboard(ws);
+        // The board, before it is asked for. This is the FIRST message every
+        // dashboard receives, which is what makes it the handshake: it carries
+        // `capabilities`, so a client knows on connect whether this hub speaks
+        // the Ledger Protocol rather than inferring it from silence. Legacy
+        // clients have always handled an `instances` frame; one arriving early
+        // is a rail that fills before the REST snapshot lands.
+        ws.send(instancesFrame(''));
       },
       message(ws, message) {
+        // The Ledger Protocol's own shapes are not envelopes and must be read
+        // before the envelope check, which would otherwise log them as junk.
+        if (streams.handleClientMessage(ws, message)) return;
         if (!isEnvelope(message)) {
           console.warn('[hub] dropped malformed dashboard frame', message);
           return;
@@ -2856,29 +2984,9 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
               publishInstances(message.machineId);
             }
             break;
-          case 'send': {
-            const from = peekPeer(message.payload);
-            if (!forward(message, ws) || !message.instanceId) break;
-            // The first thing a session is asked is what it is called, until
-            // something names it properly.
-            if (!hasAttachments(message.payload))
-              nameFromLiveTurn(
-                message.machineId,
-                message.instanceId,
-                (message.payload as { message?: unknown } | null)?.message
-              );
-            if (from && !isQuerySend(message.payload)) {
-              // A queued hand-off: the target now carries unread work.
-              handoffs.set(message.instanceId, { from, at: Date.now() });
-              publishInstances(message.machineId);
-            } else if (isQuerySend(message.payload) && handoffs.has(message.instanceId)) {
-              // A querying send folds everything queued into the turn it
-              // starts — the hand-off has been read.
-              handoffs.delete(message.instanceId);
-              publishInstances(message.machineId);
-            }
+          case 'send':
+            relaySend(message as Envelope<SendPayload>, ws);
             break;
-          }
           case 'stop':
             if (forward(message, ws) && message.instanceId) {
               if (peekDiscard(message.payload)) db.discardInstance(message.instanceId);
@@ -2889,42 +2997,9 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
               publishInstances(message.machineId);
             }
             break;
-          case 'control': {
-            if (!forward(message, ws) || !message.requestId) break;
-            registry.rememberRequester(message.requestId, ws);
-            telegram?.onSettled(message.requestId);
-            pending.resolve(message.requestId);
-            // A reader answering an ask that escalated to them: the parent died
-            // holding it, but it is still that delegate's ask and its record.
-            const answered = peekAnswer(message.payload);
-            if (answered && message.instanceId) {
-              recordDelegateAnswer(
-                message.machineId,
-                message.instanceId,
-                answered.requestId,
-                answered.result
-              );
-            }
-            // A per-cell install or retry, clicked rather than swept: the chip
-            // turns on every dashboard, not only the one that clicked it.
-            const toolId = peekInstall(message.payload);
-            if (toolId) {
-              pendingInstalls.set(message.requestId, { machineId: message.machineId, toolId });
-              db.setAgentToolCell(message.machineId, {
-                id: toolId,
-                state: 'installing',
-                at: Date.now(),
-              });
-              publishInstances(message.machineId);
-            }
-            // A sync or a status a dashboard asked for answers with the same
-            // report a register's does, and the row is the hub's either way.
-            const method = peek(message.payload, 'method');
-            if (method === FLEET_SYNC || method === FLEET_STATUS) {
-              pendingFleet.set(message.requestId, message.machineId);
-            }
+          case 'control':
+            relayControl(message as Envelope<ControlPayload>, ws);
             break;
-          }
           case 'fs':
             // Answered on `control_result` too, so the same requester map routes it.
             if (forward(message, ws) && message.requestId)
@@ -2934,9 +3009,14 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
             // Replace-whole-set: the dashboard's open tabs *are* the subscription,
             // so every change re-sends the lot and the hub takes it verbatim.
             const ids = (message.payload as { instanceIds?: unknown } | null)?.instanceIds;
+            // Minus whatever this socket already follows through the stream: a
+            // session delivered in both dialects would land in the client twice.
             registry.setSubscriptions(
               ws,
-              Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string') : []
+              streams.noteLegacySubscriptions(
+                ws,
+                Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string') : []
+              )
             );
             break;
           }
@@ -2946,6 +3026,9 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
       },
       close(ws) {
         registry.dropDashboard(ws);
+        // Follows nothing, awaits nothing: a stream subscription and a command
+        // ack both die with the socket that asked for them.
+        streams.dropSocket(ws.id);
       },
     });
 };
