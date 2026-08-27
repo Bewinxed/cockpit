@@ -47,7 +47,9 @@ import {
   MARKETPLACE_CATALOG,
   READ_MEMORY_FILE,
   READ_SKILL_FILES,
-  isInjected,} from '@cockpit/core';
+  isInjected,
+  settledQuestionResult,
+} from '@cockpit/core';
 import {
   fleetStatus,
   inspectConfig,
@@ -403,8 +405,16 @@ class ClaudeSession implements HarnessSession {
    * sidecar — indistinguishable, from the block alone, from an answer that went
    * missing. Remembering the ask is what lets {@link #pumpMessages} say which
    * of the two it is.
+   *
+   * The tool call's own `input` is kept beside them for the opposite case: an
+   * answer that arrives from off this machine carries the reader's choices and
+   * nothing else, and the SDK validates the whole `AskUserQuestion` schema on
+   * the way back in. This is the only copy of the input there is to answer with.
    */
-  readonly #openQuestions = new Map<string, { toolUseID: string; questions: UserQuestion[] }>();
+  readonly #openQuestions = new Map<
+    string,
+    { toolUseID: string; questions: UserQuestion[]; input: Record<string, unknown> }
+  >();
   /** Denied questions, keyed by tool call, until their `tool_result` goes past. */
   readonly #dismissedQuestions = new Map<string, UserQuestionResult>();
 
@@ -503,7 +513,12 @@ class ClaudeSession implements HarnessSession {
             this.#permissions.set(requestId, resolve);
             if (toolName === ASK_USER_QUESTION) {
               const questions = normalizeQuestions((toolInput as { questions?: unknown }).questions);
-              if (questions) this.#openQuestions.set(requestId, { toolUseID, questions });
+              if (questions)
+                this.#openQuestions.set(requestId, {
+                  toolUseID,
+                  questions,
+                  input: toolInput as Record<string, unknown>,
+                });
             }
             ctx.permission({ requestId, toolName, input: toolInput, suggestions });
           }),
@@ -665,19 +680,24 @@ class ClaudeSession implements HarnessSession {
     if (!resolve) throw new Error(`no permission request ${requestId}`);
     this.#permissions.delete(requestId);
     const question = this.#openQuestions.get(requestId);
-    if (question) {
-      this.#openQuestions.delete(requestId);
-      // Answering runs the tool, and the CLI writes the answers itself; walking
-      // away leaves nothing behind, so the dismissal is recorded here for the
-      // `tool_result` that is about to carry the CLI's denial prose.
-      if (result.behavior === 'deny') {
-        this.#dismissedQuestions.set(question.toolUseID, {
-          outcome: 'dismissed',
-          questions: question.questions,
-        });
-      }
+    if (!question) return resolve(result);
+
+    this.#openQuestions.delete(requestId);
+    // Answering runs the tool, and the CLI writes the answers itself; walking
+    // away leaves nothing behind, so the dismissal is recorded here for the
+    // `tool_result` that is about to carry the CLI's denial prose.
+    if (result.behavior === 'deny') {
+      this.#dismissedQuestions.set(question.toolUseID, {
+        outcome: 'dismissed',
+        questions: question.questions,
+      });
     }
-    resolve(result);
+    // A question can be answered by someone who never held the tool call: a
+    // parent session's `answer_delegate` sends the chosen labels alone, and the
+    // SDK rejects that input for the `questions` it no longer has. The parked
+    // call is put back underneath, which is what the dashboard sends when it
+    // answers one of these itself.
+    resolve(settledQuestionResult(question, result));
   }
 
   async interrupt(): Promise<void> {
@@ -729,16 +749,27 @@ const toInfo = (info: import('@anthropic-ai/claude-agent-sdk').SDKSessionInfo): 
   ...(info.createdAt !== undefined ? { createdAt: info.createdAt } : {}),
 });
 
-const toEntry = (entry: import('@anthropic-ai/claude-agent-sdk').SessionMessage): SessionMessage => ({
-  type: entry.type,
-  uuid: entry.uuid,
-  session_id: entry.session_id,
-  // The SDK stores the *inner* message (its content blocks / text), which is
-  // exactly what the dashboard's folding layer reads off `message.content`.
-  message: entry.message,
-  parent_tool_use_id: entry.parent_tool_use_id,
-  parent_agent_id: entry.parent_agent_id,
-});
+const toEntry = (
+  entry: import('@anthropic-ai/claude-agent-sdk').SessionMessage
+): SessionMessage => {
+  // Every stored line carries the ISO time the turn was written, and the SDK
+  // passes it through — but its `SessionMessage` type does not declare it, so
+  // reading it needs the widening. Without this the dashboard has no honest
+  // time for a replayed session and shows none. Read defensively rather than
+  // asserted: a field absent from the type may go absent from the payload.
+  const written = (entry as { timestamp?: unknown }).timestamp;
+  return {
+    type: entry.type,
+    uuid: entry.uuid,
+    session_id: entry.session_id,
+    // The SDK stores the *inner* message (its content blocks / text), which is
+    // exactly what the dashboard's folding layer reads off `message.content`.
+    message: entry.message,
+    parent_tool_use_id: entry.parent_tool_use_id,
+    parent_agent_id: entry.parent_agent_id,
+    ...(typeof written === 'string' ? { timestamp: written } : {}),
+  };
+};
 
 export class ClaudeHarness implements Harness {
   readonly kind = 'claude' as const;

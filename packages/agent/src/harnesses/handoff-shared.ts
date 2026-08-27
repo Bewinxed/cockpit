@@ -9,8 +9,14 @@
  * these in its own tool mechanism (claude's in-process MCP server, pi's
  * `customTools`), and this file is the body they share.
  */
-import type { Envelope, InstanceRow, SendPayload, SpawnPayload } from '@cockpit/core';
-import { COCKPIT_ENV, COCKPIT_HUB_PORT } from '@cockpit/core';
+import type {
+  Envelope,
+  InstanceRow,
+  PermissionResult,
+  SendPayload,
+  SpawnPayload,
+} from '@cockpit/core';
+import { COCKPIT_ENV, COCKPIT_HUB_PORT, QUESTION_DISMISSED } from '@cockpit/core';
 import { briefTitle } from '../brief-title';
 
 /** Where the hub answers REST, derived from the websocket url the daemon uses. */
@@ -352,11 +358,18 @@ export const handoffActions = ({ instanceId, cwd, emit }: HandoffDeps): HandoffA
   ): Promise<string> {
     const { peers } = await roster(instanceId);
     const peer = resolveDelegate(peers, target, instanceId);
-    const result = deny
-      ? { behavior: 'deny' as const }
+    // The answers alone are all this side has: the delegate's tool call never
+    // came here, only the question text and its options did. A question's
+    // `updatedInput` has to carry the whole call back or the harness refuses it
+    // for the `questions` it is missing, so the harness that parked the ask
+    // folds these into the input it kept (settledQuestionResult in
+    // @cockpit/core, mirroring the dashboard's questionAnswer). A denial says so
+    // in words for the same reason: the model is told why, not merely that.
+    const result: PermissionResult = deny
+      ? { behavior: 'deny', message: QUESTION_DISMISSED }
       : answers
-        ? { behavior: 'allow' as const, updatedInput: { answers } }
-        : { behavior: 'allow' as const };
+        ? { behavior: 'allow', updatedInput: { answers } }
+        : { behavior: 'allow' };
     emit({
       verb: 'control',
       machineId: peer.row.machineId,

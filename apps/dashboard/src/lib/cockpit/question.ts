@@ -1,5 +1,5 @@
 import type { PermissionResult, UserAnswers, UserQuestion } from '@cockpit/core';
-import { ASK_USER_QUESTION } from '@cockpit/core';
+import { ASK_USER_QUESTION, QUESTION_DISMISSED, answeredQuestionInput } from '@cockpit/core';
 
 const looksLikeQuestion = (value: unknown): value is UserQuestion =>
   typeof value === 'object' &&
@@ -30,11 +30,11 @@ export function questionAnswer(
   input: Record<string, unknown>,
   answers: UserAnswers
 ): PermissionResult {
-  return { behavior: 'allow', updatedInput: { ...input, answers } };
+  return { behavior: 'allow', updatedInput: answeredQuestionInput(input, answers) };
 }
 
 /** Walking away from a question, which is a denial — the CLI answers its own the same way. */
 export const questionDismissal: PermissionResult = {
   behavior: 'deny',
-  message: 'The user dismissed the question without answering it.',
+  message: QUESTION_DISMISSED,
 };

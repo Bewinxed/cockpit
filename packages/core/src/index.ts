@@ -25,6 +25,12 @@ export * from './usage';
 // editor's test box decide identically.
 export * from './rules';
 
+// How an `AskUserQuestion` answer is shaped, wherever it is answered from —
+// the dashboard, a parent session's `answer_delegate`, the Telegram bridge.
+// Shared because the tool's schema is unforgiving: the answers go back inside
+// the tool's own input or the call fails validation.
+export * from './question';
+
 // How a session with no given title names itself: its first user message,
 // cleaned. Shared so the hub's derived title and the dashboard's transcript
 // title are the same string, character for character.

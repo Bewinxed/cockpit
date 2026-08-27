@@ -415,7 +415,13 @@ export const CockpitHandoff = async () => {
             if (outside) throw new Error(\`"\${target}" is not your delegate — you can only answer your own delegates.\`);
             throw error;
           }
-          const result = deny ? { behavior: "deny" } : { behavior: "allow", ...(answers ? { updatedInput: { answers } } : {}) };
+          // Answers alone: this side never held the delegate's tool call, so the
+          // harness that parked the ask folds them back into it (QUESTION_DISMISSED
+          // and settledQuestionResult in @cockpit/core — this plugin ships as source
+          // and cannot import them). A denial carries words for the same reason.
+          const result = deny
+            ? { behavior: "deny", message: "The user dismissed the question without answering it." }
+            : { behavior: "allow", ...(answers ? { updatedInput: { answers } } : {}) };
           await relay("answer", { instanceId: peer.row.id, requestId, result, from: myId });
           return deny ? \`Denied your delegate \${peer.label}'s ask.\` : \`Answered your delegate \${peer.label}'s ask.\`;
         },

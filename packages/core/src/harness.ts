@@ -242,6 +242,16 @@ export interface SessionMessage {
   message: unknown;
   parent_tool_use_id: string | null;
   parent_agent_id: string | null;
+  /**
+   * When the turn was actually written, ISO-8601, as the harness recorded it.
+   * Optional in both directions: a daemon older than this field sends nothing,
+   * and only the Claude harness has a source for it today (pi and opencode
+   * build their entries from records that carry no time). A reader that gets
+   * nothing must render no time at all rather than substitute its own clock —
+   * stamping the read time dates every turn of an old session to the moment it
+   * was opened.
+   */
+  timestamp?: string;
 }
 
 /**
