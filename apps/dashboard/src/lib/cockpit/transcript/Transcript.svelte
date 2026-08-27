@@ -126,11 +126,73 @@
    * the composer column. A tall permission card therefore never sits on top of
    * the message that raised it.
    */
+  /** The doctrine's entry curve, solved numerically — Svelte/rAF tweens take a
+   *  function, not a CSS keyword, and an approximation would be a second,
+   *  slightly wrong vocabulary. cubic-bezier(0.16, 1, 0.3, 1) = --e-in. */
+  function easeEntry(t: number): number {
+    if (t <= 0) return 0;
+    if (t >= 1) return 1;
+    // Newton–Raphson on the bezier's x(t) to find the parameter for this time.
+    const cx = (u: number) => 3 * u * (1 - u) * (1 - u) * 0.16 + 3 * u * u * (1 - u) * 0.3 + u ** 3;
+    const cy = (u: number) => 3 * u * (1 - u) * (1 - u) * 1 + 3 * u * u * (1 - u) * 1 + u ** 3;
+    let u = t;
+    for (let i = 0; i < 6; i++) {
+      const x = cx(u) - t;
+      const dx = 3 * (1 - u) * (1 - u) * 0.16 + 6 * u * (1 - u) * (0.3 - 0.16) + 3 * u * u * (1 - 0.3);
+      if (Math.abs(dx) < 1e-6) break;
+      u -= x / dx;
+    }
+    return cy(Math.min(1, Math.max(0, u)));
+  }
+
+  /** The one scroll tween in flight; a wheel, a new target or reduced motion kills it. */
+  let glide: number | null = null;
+  function cancelGlide(): void {
+    if (glide !== null) cancelAnimationFrame(glide);
+    glide = null;
+  }
+
+  /**
+   * A NEW MESSAGE slides the transcript up rather than teleporting it: a
+   * 300ms scroll tween on the entry curve, but only for a message-sized hop
+   * (≤ two viewports). Landings, backlogs and anything farther stay instant —
+   * animating a five-thousand-pixel jump is disorientation, not continuity —
+   * and the reader's own wheel always wins (`onscroll` recomputes `atBottom`,
+   * and a glide whose target stopped being the bottom is cancelled below).
+   */
+  function glideToBottom(): void {
+    if (!scroller) return;
+    const target = () => (scroller ? scroller.scrollHeight - scroller.clientHeight : 0);
+    const from = scroller.scrollTop;
+    const delta = target() - from;
+    const short = delta > 0 && delta <= scroller.clientHeight * 2;
+    if (!short || reduceMotionQuery?.matches) {
+      scroller.scrollTop = scroller.scrollHeight;
+      return;
+    }
+    cancelGlide();
+    const started = performance.now();
+    const DURATION = 300; // var(--c-300), the layout-change tier
+    const step = (now: number): void => {
+      if (!scroller) return;
+      const t = Math.min(1, (now - started) / DURATION);
+      // Retarget live: streamed rows keep growing the height mid-glide.
+      scroller.scrollTop = from + (target() - from) * easeEntry(t);
+      if (t < 1 && atBottom) glide = requestAnimationFrame(step);
+      else glide = null;
+    };
+    glide = requestAnimationFrame(step);
+  }
+
   function land(): void {
     if (list) list.scrollToIndex(rows.length - 1, { align: 'end' });
     else if (scroller) scroller.scrollTop = scroller.scrollHeight;
     requestAnimationFrame(() => {
-      if (scroller) scroller.scrollTop = scroller.scrollHeight;
+      if (!scroller) return;
+      // The first landing teleports (the reader has no continuity to keep);
+      // every follow after it glides.
+      if (landed) glideToBottom();
+      else scroller.scrollTop = scroller.scrollHeight;
       watchForPaint();
     });
     atBottom = true;
