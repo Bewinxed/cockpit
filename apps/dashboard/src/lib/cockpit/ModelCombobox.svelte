@@ -111,7 +111,9 @@
         class="justify-between gap-2 {className}"
       >
         <span class="truncate">{unreported ? '—' : modelLabel(value)}</span>
-        <IconUnfold class="size-4 shrink-0 opacity-50" />
+        <!-- 14px: the inline-with-text icon size the session bar settled on,
+             so this unfold mark matches the one on the disclosure trigger. -->
+        <IconUnfold class="size-3.5 shrink-0 opacity-50" />
       </Button>
     {/snippet}
   </Popover.Trigger>

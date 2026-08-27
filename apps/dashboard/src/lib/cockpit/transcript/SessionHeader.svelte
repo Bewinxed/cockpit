@@ -21,7 +21,7 @@
   import type { Activity } from '../activity';
   import { modelLabel } from '../models.svelte';
   import { permissionModeLabel, type PermissionModeOption } from '../permission-modes';
-  import type { EffortStop } from '../effort-levels';
+  import { effortLabel, type EffortStop } from '../effort-levels';
   import ModelCombobox from '../ModelCombobox.svelte';
   import EffortSlider from '../EffortSlider.svelte';
   import { IconChat, IconFlow, IconSettings, IconUnfold } from '$lib/icons';
@@ -60,8 +60,6 @@
     title: string;
     /** What the identity HUE is keyed to — the project, so a repo reads as one. */
     seed: string;
-    /** What the SPRITE is keyed to — the session, so two runs in a repo differ. */
-    spriteSeed: string;
     harness: string;
     machineName: string;
     cwd: string;
@@ -91,6 +89,50 @@
 
   const k = (n: number): string => `${Math.round(n / 1000)}k`;
 
+  /**
+   * Changing a setting is a request to a machine at the other end of a tailnet,
+   * not a local toggle: it takes time and it can be refused. Each of the three
+   * controls carries its own flight, so a slow model change never greys the
+   * permission row beside it, and a second submission while one is still out is
+   * dropped rather than raced. Nothing here is optimistic — the displayed value
+   * still follows the prop, and only the *attempt* is drawn.
+   */
+  type Slot = 'model' | 'permission' | 'effort';
+  const SLOTS: Slot[] = ['model', 'permission', 'effort'];
+  const per = <T,>(value: T): Record<Slot, T> =>
+    Object.fromEntries(SLOTS.map((slot) => [slot, value])) as Record<Slot, T>;
+
+  /** The round trip that beat the eye is no round trip at all — say nothing under it. */
+  const SETTLE = 150;
+  const REFUSED = "Didn't land — try again.";
+
+  let inflight = $state(per(false));
+  let slow = $state(per(false));
+  let failed = $state(per<string | null>(null));
+
+  async function apply<T>(
+    slot: Slot,
+    send: (value: T) => void | Promise<void>,
+    value: T
+  ): Promise<void> {
+    if (inflight[slot]) return;
+    inflight[slot] = true;
+    failed[slot] = null;
+    const settle = setTimeout(() => {
+      if (inflight[slot]) slow[slot] = true;
+    }, SETTLE);
+    try {
+      await send(value);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : typeof error === 'string' ? error : '';
+      failed[slot] = detail ? `${REFUSED} ${detail}` : REFUSED;
+    } finally {
+      clearTimeout(settle);
+      inflight[slot] = false;
+      slow[slot] = false;
+    }
+  }
+
 
   const pill = $derived(
     activity === 'blocked'
@@ -109,6 +151,20 @@
 
   const modelText = $derived(model ? modelLabel(model) : 'Model');
   const permissionText = $derived(permissionMode ? permissionModeLabel(permissionMode) : 'Permissions');
+  const effortText = $derived(effort ? effortLabel(effort) : null);
+  // Everything the closed disclosure stands in for, in the order the panel
+  // stacks it. Effort joins the line only once the session has reported one —
+  // a trailing separator with nothing after it is worse than a shorter summary.
+  const summary = $derived(
+    effortText
+      ? `${modelText} · ${permissionText} · ${effortText}`
+      : `${modelText} · ${permissionText}`
+  );
+  const summaryLabel = $derived(
+    `Session settings — model ${modelText}, permission ${permissionText}${
+      effortText ? `, effort ${effortText}` : ''
+    }`
+  );
 
   // The disclosure is one panel with two containers. A phone gets the sheet,
   // because a popover anchored to a 34px trigger on a 390px bar is a popover
@@ -117,24 +173,43 @@
   let open = $state(false);
 </script>
 
+<!-- What a row says about its own attempt. Pending is held back until the
+     round trip has visibly failed to be instant, so a fast machine never
+     flashes; a refusal replaces it, and the next attempt clears it. -->
+{#snippet flight(slot: Slot)}
+  {#if failed[slot]}
+    <p class="ctl-fail" role="alert">{failed[slot]}</p>
+  {:else if slow[slot]}
+    <p class="ctl-note" role="status">Applying…</p>
+  {/if}
+{/snippet}
+
 {#snippet settings()}
-  <div class="ctl">
+  <div class="ctl" class:is-pending={slow.model} aria-busy={inflight.model}>
     <span class="ctl-label" id="sh-model-label">Model</span>
-    <ModelCombobox value={model ?? ''} onchoose={onmodel} size="sm" class="w-full text-foreground" />
+    <ModelCombobox
+      value={model ?? ''}
+      onchoose={(next) => apply('model', onmodel, next)}
+      size="sm"
+      class="w-full text-foreground"
+    />
+    {@render flight('model')}
   </div>
 
   {#if offeredModes.length > 0}
-    <div class="ctl">
+    <div class="ctl" class:is-pending={slow.permission} aria-busy={inflight.permission}>
       <span class="ctl-label" id="sh-perm-label">Permissions</span>
       <Select.Root
         type="single"
         value={permissionMode ?? undefined}
-        onValueChange={(v) => onpermission(v as PermissionMode)}
+        onValueChange={(v) => void apply('permission', onpermission, v as PermissionMode)}
       >
         <Select.Trigger
           aria-labelledby="sh-perm-label"
           size="sm"
-          class="w-full {permissionMode === 'bypassPermissions' ? 'text-warning' : 'text-foreground'}"
+          class="w-full {permissionMode === 'bypassPermissions'
+            ? 'text-[color:var(--status-attn-ink)]'
+            : 'text-foreground'}"
         >
           {permissionText}
         </Select.Trigger>
@@ -142,7 +217,14 @@
           {#each offeredModes as mode (mode.value)}
             <Select.Item value={mode.value} label={mode.label}>
               <span class="flex flex-col">
-                <span class={mode.value === 'bypassPermissions' ? 'text-warning' : ''}>
+                <!-- "Bypass is on" is one colour wherever it is said: the same
+                     token the closed trigger wears, and the same the attention
+                     pill wears — not shadcn's separate warning ramp. -->
+                <span
+                  class={mode.value === 'bypassPermissions'
+                    ? 'text-[color:var(--status-attn-ink)]'
+                    : ''}
+                >
                   {mode.label}
                 </span>
                 <span class="text-micro text-muted-foreground">{mode.description}</span>
@@ -151,17 +233,20 @@
           {/each}
         </Select.Content>
       </Select.Root>
+      {@render flight('permission')}
     </div>
   {/if}
 
   {#if showEffort}
-    <div class="ctl">
+    <div class="ctl" class:is-pending={slow.effort} aria-busy={inflight.effort}>
+      <span class="ctl-label">Reasoning effort</span>
       <EffortSlider
         stops={effortStops}
         value={effort}
         modelName={model ? modelLabel(model) : undefined}
-        onchange={oneffort}
+        onchange={(level) => apply('effort', oneffort, level)}
       />
+      {@render flight('effort')}
     </div>
   {:else if harnessEffort}
     <!-- The scale belongs to the model, not to us. Naming the control and
@@ -175,8 +260,13 @@
     </div>
   {/if}
 
+  <!-- A count with somewhere to go: which servers, and what they expose, is the
+       tools board's whole job, so the footnote is the way there rather than a
+       fact that ends the panel. -->
   {#if mcpCount}
-    <p class="ctl-note ctl-foot">{mcpCount} MCP {mcpCount === 1 ? 'server' : 'servers'} connected</p>
+    <a class="ctl-note ctl-foot ctl-link" href="/tools">
+      {mcpCount} MCP {mcpCount === 1 ? 'server' : 'servers'} connected
+    </a>
   {/if}
 {/snippet}
 
@@ -243,10 +333,10 @@
               variant="ghost"
               size="sm"
               class="settings-trigger {permissionMode === 'bypassPermissions' ? 'is-bypass' : ''}"
-              aria-label="Session settings — model {modelText}, permission {permissionText}"
+              aria-label={summaryLabel}
             >
               <IconSettings class="settings-gear" />
-              <span class="settings-label">{modelText} · {permissionText}</span>
+              <span class="settings-label">{summary}</span>
               <IconUnfold class="settings-chev" />
             </Button>
           {/snippet}
@@ -270,10 +360,10 @@
               variant="ghost"
               size="sm"
               class="settings-trigger {permissionMode === 'bypassPermissions' ? 'is-bypass' : ''}"
-              aria-label="Session settings — model {modelText}, permission {permissionText}"
+              aria-label={summaryLabel}
             >
               <IconSettings class="settings-gear" />
-              <span class="settings-label">{modelText} · {permissionText}</span>
+              <span class="settings-label">{summary}</span>
               <IconUnfold class="settings-chev" />
             </Button>
           {/snippet}
@@ -477,12 +567,17 @@
   .mid :global(.settings-trigger.is-bypass) {
     color: var(--status-attn-ink);
   }
-  /* Optical, not geometric: the chevron's arrowheads leave visual air on the
+  /* Two icon sizes in this bar, not five: 14px for anything set inline with
+     text (this chevron, the view switch's marks) and 17px for an icon standing
+     alone (the gear, once the label folds away). The identity mark is a MARK,
+     not an icon — its tile and duotone glyph are exempt.
+
+     Optical, not geometric: the chevron's arrowheads leave visual air on the
      right that the box does not, so it is nudged back a hair to sit the same
      distance from the label as the gear does on the other side. */
   .mid :global(.settings-chev) {
-    width: 13px;
-    height: 13px;
+    width: 14px;
+    height: 14px;
     flex-shrink: 0;
     opacity: 0.6;
     margin-right: -1px;
@@ -526,13 +621,22 @@
     font-variant-numeric: tabular-nums;
   }
 
+  /* One anatomy for all three rows: the row's own label, the control, and
+     whatever the row has to say about its last attempt. */
   .ctl {
     display: flex;
     flex-direction: column;
     gap: var(--space-1);
+    transition: opacity var(--c-100) var(--e-in);
   }
   .ctl + .ctl {
     margin-top: var(--space-3);
+  }
+  /* A change that is still out: the row recedes rather than locking, because
+     the value on screen is still the value in force until the machine says
+     otherwise. */
+  .ctl.is-pending {
+    opacity: 0.55;
   }
   .ctl-label {
     font-size: var(--text-xs);
@@ -542,8 +646,22 @@
     font-size: var(--text-xs);
     color: var(--ink-muted);
   }
+  .ctl-fail {
+    font-size: var(--text-xs);
+    color: var(--status-fail-ink);
+  }
   .ctl-foot {
     margin-top: var(--space-3);
+  }
+  .ctl-link {
+    display: block;
+    text-decoration: none;
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .ctl-link:hover {
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
   }
 
   .meta {
