@@ -198,8 +198,13 @@
   const peer =
     `${btnBase} flex-1 min-w-0 border border-[var(--border-control)] ` +
     'bg-[var(--surface-raised)] hover:bg-[var(--surface-hover)]';
-  const grant = `${peer} text-[color:var(--ink-strong)]`;
-  const refuse = `${peer} text-[color:var(--ink-body)]`;
+  /* `!` on the text colours, deliberately: the Button's default variant ships
+     `text-primary-foreground`, and tailwind-merge does not reliably recognise
+     `text-[color:var(…)]` as the same text-colour group — both classes reach
+     the DOM and the cascade picked the variant's, which in dark is dark text
+     on this dark fill. Important settles it regardless of merge behaviour. */
+  const grant = `${peer} !text-[color:var(--ink-strong)]`;
+  const refuse = `${peer} !text-[color:var(--ink-body)]`;
 
   /* Answer IS a primary, non-destructive action, so it takes the never-flat
      brand treatment (gradient + inset action shadow). */
@@ -209,7 +214,7 @@
     '[box-shadow:var(--shadow-action)]';
   const dismiss =
     `${btnBase} border border-[var(--border-control)] bg-[var(--surface-raised)] ` +
-    'text-[color:var(--ink-body)] hover:bg-[var(--surface-hover)]';
+    '!text-[color:var(--ink-body)] hover:bg-[var(--surface-hover)]';
 
   /* A standing grant must read as consequential — warning tint, warning ink,
      a real edge (DESIGN.md §"A standing grant must read as consequential"). */
