@@ -6,6 +6,7 @@ import type {
   AgentRow,
   AvailableCommand,
   ClaudeLimits,
+  CommandKind,
   ControlPayload,
   EffortLevel,
   Envelope,
@@ -68,6 +69,19 @@ import {
   turnStart,
 } from './frames';
 import { ingestQueued, retireQueued } from './queue';
+import type { CommandRecord, StreamHost } from './stream';
+import {
+  createStreamState,
+  handleStreamMessage,
+  latestCommand,
+  noteCapabilities,
+  noteDisconnect,
+  sessionCommands,
+  streamCarries,
+  submitCommand as submitTrackedCommand,
+  sweepCommands,
+  syncStreamSubscriptions,
+} from './stream';
 import { invalidateTasks, refreshTasks, TASK_LEDGER_TOOLS } from './tasks.svelte';
 import { workingSet } from './working-set.svelte';
 
@@ -1114,6 +1128,226 @@ function handleFrame(frame: FramePayload): void {
   target.lastActivityAt = new Date();
 }
 
+/* ------------------------------------------------------------------ *
+ * The Ledger Protocol binding
+ *
+ * `stream.ts` holds the decisions — sequence tracking, gaps, backlog
+ * validation, command stages — because a `.svelte.ts` module cannot be
+ * imported by this repo's tests. What is left here is the thin binding: the
+ * runes state it mutates, the socket it speaks through, and the two existing
+ * paths it reaches back into (frame apply, history re-read).
+ * ------------------------------------------------------------------ */
+
+/**
+ * The stream half of the store. A plain object under `$state`, so a cursor
+ * moving or a command changing stage is something the UI can read reactively.
+ */
+const streamState = $state(createStreamState());
+
+/**
+ * THE CHOKEPOINT. Every inbound relay frame reaches the store through here —
+ * the legacy per-frame envelope and the sequenced stream event alike — so
+ * there is exactly one place where a frame becomes state.
+ *
+ * The only thing the two paths do not share is the duplicate guard: a hub that
+ * keeps sending a stream subscriber the legacy copy as well would otherwise
+ * double every turn. See {@link SessionCursor.streamed} for why that guard is
+ * learnt from what the stream has actually carried rather than assumed.
+ */
+function ingestFrame(
+  sessionId: string | undefined,
+  frame: FramePayload,
+  source: 'legacy' | 'stream'
+): void {
+  if (source === 'legacy' && sessionId && streamCarries(streamState, sessionId, frame.kind)) return;
+  handleFrame(frame);
+}
+
+/** Which session a frame is about; broadcast frames (instances, usage) name none. */
+const sessionOf = (frame: FramePayload): string | undefined =>
+  (frame as { instanceId?: string }).instanceId;
+
+const streamHost: StreamHost = {
+  applyFrame: (sessionId, frame) => ingestFrame(sessionId, frame as FramePayload, 'stream'),
+  /**
+   * The existing re-read, unchanged — a reset is exactly the late-join problem
+   * `backfillSession` already solves, including holding the deltas that land
+   * while it reads. The latch it keeps is released first: a session may be
+   * reset more than once in a tab's life, and the second one must not be a
+   * silent no-op.
+   */
+  rereadHistory: (sessionId) => {
+    backfilled.delete(sessionId);
+    void backfillSession(sessionId);
+  },
+  sendToHub: (message) => {
+    const socket = globalThis.__cockpitSocket;
+    if (!socket || socket.readyState !== WebSocket.OPEN) return false;
+    socket.send(JSON.stringify(message));
+    return true;
+  },
+  now: () => Date.now(),
+  warn: (message, detail) => console.warn(`[cockpit] ${message}`, detail),
+};
+
+/** The last command sweep, so a busy socket does not re-scan the tracker per frame. */
+let lastSweep = 0;
+
+/**
+ * Ages the command tracker on inbound traffic rather than on a timer: a
+ * connected dashboard receives a pulse about once a second, and a dashboard
+ * receiving nothing at all is one whose disconnect has already called its
+ * commands off.
+ */
+function sweepOnTraffic(): void {
+  const now = Date.now();
+  if (now - lastSweep < 1000) return;
+  lastSweep = now;
+  sweepCommands(streamState, now);
+}
+
+/** Re-exported so a component reads one import for a command and its stages. */
+export type { CommandRecord, CommandStage } from './stream';
+
+/** Whether this dashboard is following hub-sequenced streams. Read by the UI. */
+export function streamCapable(): boolean {
+  return streamState.capable;
+}
+
+/** One command's record, by the id {@link submitCommand} returned. */
+export function commandRecord(commandId: string): CommandRecord | null {
+  return streamState.commands[commandId] ?? null;
+}
+
+/** Every command this tab has submitted for a session, oldest first. */
+export function commandsFor(instanceId: string): CommandRecord[] {
+  return sessionCommands(streamState, instanceId);
+}
+
+/**
+ * The newest command of one kind on one session — what a control reads to say
+ * whether what was just asked for has been taken, applied, or refused.
+ */
+export function latestCommandFor(instanceId: string, kind: CommandKind): CommandRecord | null {
+  return latestCommand(streamState, instanceId, kind);
+}
+
+/** What each command kind carries, in the shape the caller already has to hand. */
+export interface CommandIntents {
+  send: { text: string; extras?: SendExtras };
+  'permission.answer': { requestId: string; result: PermissionResult };
+  interrupt: Record<string, never>;
+  'set-model': { model: string };
+  'set-permission-mode': { mode: PermissionMode };
+  'set-effort': { effort: EffortLevel };
+}
+
+/**
+ * The wire payload for a kind: exactly what today's relay operation takes, so
+ * the hub can dispatch a command through the same code path as the legacy call.
+ * `requestId` is the command id — the correlation the control path already has,
+ * reused rather than a second one invented alongside it.
+ */
+function wirePayload<K extends CommandKind>(
+  kind: K,
+  instanceId: string,
+  commandId: string,
+  intent: CommandIntents[K]
+): SendPayload | ControlPayload {
+  const control = (method: string, args: unknown[]): ControlPayload => ({
+    instanceId,
+    requestId: commandId,
+    method,
+    args,
+  });
+  switch (kind) {
+    case 'send': {
+      const { text, extras } = intent as CommandIntents['send'];
+      return { instanceId, message: userMessage(text), ...(extras ?? {}) };
+    }
+    case 'permission.answer': {
+      const { requestId, result } = intent as CommandIntents['permission.answer'];
+      return { instanceId, requestId, method: RESOLVE_PERMISSION, args: [requestId, result] };
+    }
+    case 'interrupt':
+      return control('interrupt', []);
+    case 'set-model':
+      return control('setModel', [(intent as CommandIntents['set-model']).model]);
+    case 'set-permission-mode':
+      return control('setPermissionMode', [
+        (intent as CommandIntents['set-permission-mode']).mode,
+      ]);
+    case 'set-effort':
+      return control('setEffort', [(intent as CommandIntents['set-effort']).effort]);
+    default:
+      // A kind the contract grew and this map did not. Loud rather than
+      // silently dispatched as whatever the last branch happened to be.
+      throw new Error(`No wire payload for command kind ${String(kind)}.`);
+  }
+}
+
+/** Today's call for a kind, run unchanged when the hub does not speak the protocol. */
+function legacyCall<K extends CommandKind>(
+  kind: K,
+  instanceId: string,
+  machineId: string,
+  intent: CommandIntents[K]
+): () => void | Promise<unknown> {
+  switch (kind) {
+    case 'send': {
+      const { text, extras } = intent as CommandIntents['send'];
+      return () => sendText(instanceId, machineId, text, extras);
+    }
+    case 'permission.answer': {
+      const { requestId, result } = intent as CommandIntents['permission.answer'];
+      return () => resolvePermission(instanceId, machineId, requestId, result);
+    }
+    case 'interrupt':
+      return () => interrupt(instanceId, machineId);
+    case 'set-model':
+      return () => setModel(instanceId, machineId, (intent as CommandIntents['set-model']).model);
+    case 'set-permission-mode':
+      return () =>
+        setPermissionMode(
+          instanceId,
+          machineId,
+          (intent as CommandIntents['set-permission-mode']).mode
+        );
+    case 'set-effort':
+      return () =>
+        setEffort(instanceId, machineId, (intent as CommandIntents['set-effort']).effort);
+    default:
+      throw new Error(`No legacy call for command kind ${String(kind)}.`);
+  }
+}
+
+/**
+ * Submits an operator action as an acknowledged transaction and returns the id
+ * its stages are readable under ({@link commandRecord},
+ * {@link latestCommandFor}).
+ *
+ * Additive: every existing caller still calls its own function, and against a
+ * legacy hub this IS that function — the stages come from the call's own
+ * promise. Against a stream hub the envelope goes to the hub and the hub's acks
+ * move the stages, so nothing local is fabricated on the way.
+ */
+export function submitCommand<K extends CommandKind>(
+  instanceId: string,
+  machineId: string,
+  kind: K,
+  intent: CommandIntents[K]
+): string {
+  const commandId = newId();
+  return submitTrackedCommand(streamState, streamHost, {
+    commandId,
+    sessionId: instanceId,
+    machineId,
+    kind,
+    payload: wirePayload(kind, instanceId, commandId, intent),
+    legacy: legacyCall(kind, instanceId, machineId, intent),
+  });
+}
+
 /** The session the board is peeking — subscribed for frames, like an open tab. */
 let peekedId = $state<string | null>(null);
 
@@ -1157,6 +1391,9 @@ export function syncSubscriptions(): void {
   socket.send(
     JSON.stringify({ verb: 'subscribe', machineId: '', payload: { instanceIds: ids } })
   );
+  // The stream is subscribed per session, so the set the dashboard watches is
+  // the set it follows. A no-op against a legacy hub.
+  syncStreamSubscriptions(streamState, streamHost, ids);
 }
 
 /** The board peeking a session subscribes it for frames; `null` closes the peek. */
@@ -1283,9 +1520,29 @@ function connect(): void {
  */
 function bind(socket: WebSocket): void {
   socket.onmessage = (event) => {
-    const envelope = JSON.parse(String(event.data)) as Envelope<FramePayload>;
+    const message = JSON.parse(String(event.data)) as unknown;
+    // Feature-detection first, and off ANY message: the hub attaches its
+    // capabilities to whichever existing message a subscriber sees first, and
+    // that choice is not something this end should have to know. A flip
+    // subscribes what is already open, so a capability that arrives after
+    // frames have been flowing legacy still switches cleanly.
+    const wasCapable = streamState.capable;
+    noteCapabilities(streamState, message);
+    // Sequenced traffic is the stream's; everything else is the legacy spine's,
+    // untouched. Receiving sequenced traffic at all is itself a capability
+    // announcement, so both routes into the flag lead to the same subscribe.
+    const consumed = handleStreamMessage(streamState, streamHost, message);
+    if (!wasCapable && streamState.capable) {
+      syncStreamSubscriptions(streamState, streamHost, subscriptionIds());
+    }
+    if (consumed) {
+      sweepOnTraffic();
+      return;
+    }
+    const envelope = message as Envelope<FramePayload>;
     if (envelope.verb !== 'frames') return;
-    handleFrame(envelope.payload);
+    ingestFrame(sessionOf(envelope.payload), envelope.payload, 'legacy');
+    sweepOnTraffic();
   };
 
   socket.onclose = () => {
@@ -1293,6 +1550,9 @@ function bind(socket: WebSocket): void {
     // A socket that closed is an attempt that is over, one way or the other.
     state.failed = true;
     abandonInflight('The connection to the hub dropped before that finished.');
+    // Subscriptions, resumes and unanswered commands all died with the socket;
+    // the cursors do not — resuming from them is what the hub's ring is for.
+    noteDisconnect(streamState, Date.now());
     if (!globalThis.__cockpitDisposing) scheduleReconnect();
   };
 
