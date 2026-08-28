@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { newId } from '$lib/cockpit/id';
   import { untrack } from 'svelte';
   import { goto } from '$app/navigation';
   import { toast } from 'svelte-sonner';
@@ -14,6 +13,7 @@
   import { Toggle } from '$lib/components/ui/toggle';
   import * as Tooltip from '$lib/components/ui/tooltip';
   import {
+    createRule,
     draftOf,
     message,
     removeRule,
@@ -108,10 +108,9 @@
   async function useTemplate(template: (typeof RULE_TEMPLATES)[number]) {
     seeding = template.title;
     try {
-      const id = newId();
-      const saved = await saveRule(id, template.draft);
+      const saved = await createRule(template.draft);
       rules = [
-        { ...saved, stats: { ruleId: id, pending: 0, totalFires: 0, lastFiredAt: null } },
+        { ...saved, stats: { ruleId: saved.id, pending: 0, totalFires: 0, lastFiredAt: null } },
         ...rules,
       ];
       toast.success(`${template.title} is live on every session.`);

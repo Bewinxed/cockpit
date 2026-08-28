@@ -77,6 +77,11 @@ const json = (body: unknown): RequestInit => ({
 export const loadRules = (): Promise<RulesPayload> =>
   send<RulesPayload>('/api/rules', {}, 'load the rules');
 
+/** Create: the hub mints the id and answers with the whole rule. */
+export const createRule = (draft: RuleDraft): Promise<Rule> =>
+  send<Rule>('/api/rules', { method: 'POST', ...json(draft) }, `save ${draft.name || 'the rule'}`);
+
+/** Edit: strictly an existing id — the hub 404s anything it never minted. */
 export const saveRule = (id: string, draft: RuleDraft): Promise<Rule> =>
   send<Rule>(
     `/api/rules/${encodeURIComponent(id)}`,

@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { newId } from '$lib/cockpit/id';
   import { untrack } from 'svelte';
   import { page } from '$app/state';
   import { goto } from '$app/navigation';
@@ -17,7 +16,7 @@
   import { cockpit } from '$lib/cockpit/client.svelte';
   import RuleActivity from '$lib/cockpit/RuleActivity.svelte';
   import RuleTester from '$lib/cockpit/RuleTester.svelte';
-  import { blankRule, draftOf, message, removeRule, saveRule } from '$lib/cockpit/rules';
+  import { blankRule, createRule, draftOf, message, removeRule, saveRule } from '$lib/cockpit/rules';
   import { confirm } from '$lib/cockpit/confirm.svelte';
   import type { PageData } from './$types';
 
@@ -113,7 +112,8 @@
     busy = true;
     failed = undefined;
     try {
-      await saveRule(id ?? newId(), { ...draft, name: draft.name.trim() });
+      const trimmed = { ...draft, name: draft.name.trim() };
+      await (id ? saveRule(id, trimmed) : createRule(trimmed));
       toast.success(`${draft.name.trim()} is live on every session it applies to.`);
       await goto('/rules', { invalidateAll: true });
     } catch (error) {

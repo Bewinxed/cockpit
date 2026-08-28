@@ -88,6 +88,32 @@ const TITLE_ASK_LIMIT = 64;
 const TRANSCRIPT_FLUSH = 25;
 
 /**
+ * A rule draft as the wire carries it — shared by create (POST, the hub mints
+ * the id) and edit (PUT to an id that already exists). Validated loosely here
+ * and strictly by `ruleProblem`, so the form and the hub refuse in the same
+ * sentences.
+ */
+const ruleBody = t.Object({
+  name: t.String(),
+  enabled: t.Boolean(),
+  pattern: t.String(),
+  matchKind: t.Union([t.Literal('phrase'), t.Literal('regex')]),
+  caseSensitive: t.Boolean(),
+  wholeWord: t.Boolean(),
+  watch: t.Union([t.Literal('text'), t.Literal('thinking'), t.Literal('both')]),
+  reply: t.String(),
+  timing: t.Union([t.Literal('turn'), t.Literal('message'), t.Literal('immediate')]),
+  interrupt: t.Boolean(),
+  requireAck: t.Boolean(),
+  scope: t.Object({
+    machineId: t.Optional(t.String()),
+    projectId: t.Optional(t.String()),
+    harness: t.Optional(t.String()),
+    model: t.Optional(t.String()),
+  }),
+});
+
+/**
  * A transcript on its way to a browser, newest entry first, one JSON object per
  * line. Newest first because that is what the reader is looking at: the tail
  * lands in the first flush and the rest fills in behind it, so a long session
@@ -1741,45 +1767,31 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
         templates: RULE_TEMPLATES,
       };
     })
-    .put(
-      '/api/rules/:id',
-      {
-        body: t.Object({
-          name: t.String(),
-          enabled: t.Boolean(),
-          pattern: t.String(),
-          matchKind: t.Union([t.Literal('phrase'), t.Literal('regex')]),
-          caseSensitive: t.Boolean(),
-          wholeWord: t.Boolean(),
-          watch: t.Union([t.Literal('text'), t.Literal('thinking'), t.Literal('both')]),
-          reply: t.String(),
-          timing: t.Union([t.Literal('turn'), t.Literal('message'), t.Literal('immediate')]),
-          interrupt: t.Boolean(),
-          requireAck: t.Boolean(),
-          scope: t.Object({
-            machineId: t.Optional(t.String()),
-            projectId: t.Optional(t.String()),
-            harness: t.Optional(t.String()),
-            model: t.Optional(t.String()),
-          }),
-        }),
-      },
-      ({ params, body, status }) => {
-        const draft = body as unknown as RuleDraft;
-        const wrong = ruleProblem(draft);
-        const first = Object.values(wrong)[0];
-        if (first) return status(400, first);
-        const existing = db.getRule(params.id);
-        const rule: Rule = {
-          ...draft,
-          id: params.id,
-          createdAt: existing?.createdAt ?? Date.now(),
-        };
-        db.putRule(rule);
-        ruleEngine.reload();
-        return rule;
-      }
-    )
+    .post('/api/rules', { body: ruleBody }, ({ body, status }) => {
+      const draft = body as unknown as RuleDraft;
+      const wrong = ruleProblem(draft);
+      const first = Object.values(wrong)[0];
+      if (first) return status(400, first);
+      // The hub mints the id: the client never invents identity, it asks for it.
+      const rule: Rule = { ...draft, id: crypto.randomUUID(), createdAt: Date.now() };
+      db.putRule(rule);
+      ruleEngine.reload();
+      return rule;
+    })
+    .put('/api/rules/:id', { body: ruleBody }, ({ params, body, status }) => {
+      const draft = body as unknown as RuleDraft;
+      const wrong = ruleProblem(draft);
+      const first = Object.values(wrong)[0];
+      if (first) return status(400, first);
+      // Strictly an edit: an id this hub never minted is a caller's mistake,
+      // not an invitation to upsert.
+      const existing = db.getRule(params.id);
+      if (!existing) return status(404, `there is no rule ${params.id} to edit`);
+      const rule: Rule = { ...draft, id: params.id, createdAt: existing.createdAt };
+      db.putRule(rule);
+      ruleEngine.reload();
+      return rule;
+    })
     .delete('/api/rules/:id', ({ params }) => {
       db.deleteRule(params.id);
       ruleEngine.reload();
