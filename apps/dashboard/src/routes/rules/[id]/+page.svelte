@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { newId } from '$lib/cockpit/id';
   import { untrack } from 'svelte';
   import { page } from '$app/state';
   import { goto } from '$app/navigation';
@@ -112,7 +113,7 @@
     busy = true;
     failed = undefined;
     try {
-      await saveRule(id ?? crypto.randomUUID(), { ...draft, name: draft.name.trim() });
+      await saveRule(id ?? newId(), { ...draft, name: draft.name.trim() });
       toast.success(`${draft.name.trim()} is live on every session it applies to.`);
       await goto('/rules', { invalidateAll: true });
     } catch (error) {
