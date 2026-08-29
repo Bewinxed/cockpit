@@ -1,18 +1,21 @@
 import type { AgentRow } from '@cockpit/core';
 import { COCKPIT_ENV, COCKPIT_HUB_PORT } from '@cockpit/core';
+import { sessiondEndpoint } from '@cockpit/core/sessiond';
 import { existsSync, readFileSync } from 'node:fs';
 import { chmod } from 'node:fs/promises';
 import { homedir, platform } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 
 /**
- * The whole stack, as three services this machine can run for you, in the order
- * they should come up. A machine runs whichever of them it is for: a worker only
- * wants `agent`, and the box you point a browser at wants all three.
+ * The whole stack, as four services this machine can run for you, in the order
+ * they should come up. A machine runs whichever of them it is for: a worker
+ * wants `sessiond` and `agent`, and the box you point a browser at wants all
+ * four. `sessiond` sits before `agent` on purpose — it owns the harness
+ * children, so the daemon that talks to it comes up second (design §11).
  */
-export type ServiceId = 'hub' | 'dashboard' | 'agent';
+export type ServiceId = 'hub' | 'dashboard' | 'sessiond' | 'agent';
 
-export const SERVICE_IDS: readonly ServiceId[] = ['hub', 'dashboard', 'agent'];
+export const SERVICE_IDS: readonly ServiceId[] = ['hub', 'dashboard', 'sessiond', 'agent'];
 
 export const isServiceId = (value: string): value is ServiceId =>
   SERVICE_IDS.includes(value as ServiceId);
@@ -85,6 +88,7 @@ const repoRoot = (): string => {
 
 const ROOT = repoRoot();
 const HUB_ENTRY = join(ROOT, 'packages', 'hub', 'src', 'index.ts');
+const SESSIOND_ENTRY = join(ROOT, 'packages', 'sessiond', 'src', 'main.ts');
 const DASHBOARD_DIR = join(ROOT, 'apps', 'dashboard');
 const DASHBOARD_ENTRY = join(DASHBOARD_DIR, 'build', 'index.js');
 /**
@@ -182,6 +186,31 @@ const probeAgent = async (): Promise<string | undefined> => {
     : `not registered with ${hubOrigin()}`;
 };
 
+/**
+ * Where sessiond listens, as this machine derives it (`@cockpit/core/sessiond`,
+ * design §12), with the same override the daemon's entry point honours.
+ */
+const sessiondSocket = (): string =>
+  process.env.COCKPIT_SESSIOND_ENDPOINT ?? sessiondEndpoint();
+
+/**
+ * A unix socket that is merely *there* proves nothing — a sessiond killed with
+ * SIGKILL leaves the node behind — so the probe actually connects and hangs up.
+ * Windows named pipes are not reachable this way and this whole file refuses
+ * win32 anyway, so the question is simply not asked there.
+ */
+const probeSessiond = async (): Promise<string | undefined> => {
+  const endpoint = sessiondSocket();
+  if (platform() === 'win32') return undefined;
+  if (!existsSync(endpoint)) return `no socket at ${endpoint}`;
+  const socket = await Bun.connect({ unix: endpoint, socket: { data: () => {} } }).catch(
+    () => undefined
+  );
+  if (!socket) return `stale socket at ${endpoint} — nothing is listening`;
+  socket.end();
+  return `${endpoint} accepts connections`;
+};
+
 interface ServiceSpec {
   readonly id: ServiceId;
   readonly mode: ServiceMode;
@@ -266,6 +295,50 @@ const SERVICES: Record<ServiceId, ServiceSpec> = {
     probe: probeDashboard,
   },
 
+  /**
+   * The per-machine process keeper. It is listed before the daemon because the
+   * daemon dials it; under service management the daemon must never spawn one
+   * itself (design §11 — a self-spawned sessiond lands in the *agent's* cgroup
+   * and dies with the next agent restart).
+   *
+   * `KillMode` is deliberately left at systemd's default of `control-group`:
+   * this is the one unit whose children must die with it. sessiond holds their
+   * pipe ends, so a dead sessiond leaves claude processes that nobody can read,
+   * write to, or reattach — orphans still burning tokens against a full, unread
+   * stdout pipe, which is strictly worse than dead children. The cgroup kill is
+   * also what makes recovery simple: systemd tears down the remainder, the
+   * fresh sessiond starts on a new epoch with an empty register, and `restore()`
+   * runs. `cockpit-agent.service` needs no KillMode tuning at all once the
+   * children live over here — its restart is free by construction. So
+   * {@link unit} emits no `KillMode=` for anybody, and that absence is the
+   * decision, not an oversight.
+   */
+  sessiond: {
+    id: 'sessiond',
+    mode: 'prod',
+    description: 'Cockpit sessiond',
+    command: [process.execPath, SESSIOND_ENTRY],
+    environment: {},
+    // Not the checkout: sessiond spawns children with a cwd the agent hands it
+    // per child, and nothing it does resolves against its own.
+    workingDirectory: homedir(),
+    // No hub, no network: sessiond talks to one unix socket on this machine and
+    // to the processes it owns. It is the one service that can come up alone.
+    after: [],
+    wants: [],
+    // Draining on SIGTERM and exiting 0 is sessiond doing as it was told; only a
+    // crash is worth restarting for (design §11: `Restart=on-failure`).
+    restartOnSuccess: false,
+    restartSec: 2,
+    check: () => {
+      if (!existsSync(SESSIOND_ENTRY)) {
+        throw new ServiceError(`no sessiond at ${SESSIOND_ENTRY} — is ${ROOT} a cockpit checkout?`);
+      }
+      return undefined;
+    },
+    probe: probeSessiond,
+  },
+
   agent: {
     id: 'agent',
     mode: 'prod',
@@ -278,8 +351,12 @@ const SERVICES: Record<ServiceId, ServiceSpec> = {
     command: [process.execPath, Bun.main, 'up'],
     environment: {},
     workingDirectory: homedir(),
-    after: [unitName('hub')],
-    wants: [unitName('hub')],
+    // sessiond joins the hub in both lists: the daemon dials its socket for
+    // every harness child, so it wants sessiond pulled in and started first.
+    // `Wants=` rather than `Requires=` for the same reason the hub gets it —
+    // the daemon already tolerates the far end being absent and retries.
+    after: [unitName('hub'), unitName('sessiond')],
+    wants: [unitName('hub'), unitName('sessiond')],
     restartOnSuccess: false,
     restartSec: 5,
     launchAgentNote: [
@@ -299,6 +376,8 @@ const SERVICES: Record<ServiceId, ServiceSpec> = {
  * here only because the built bundle cannot reload itself; vite's dev server
  * picks up an edited source file without any restart at all.
  */
+// sessiond is absent for the same reason and more sharply: restarting it kills
+// every harness child in its cgroup, so a source edit must never bounce it.
 const DEV: Partial<Record<ServiceId, Partial<ServiceSpec>>> = {
   hub: {
     command: [process.execPath, '--watch', HUB_ENTRY],
@@ -351,11 +430,28 @@ const xml = (value: string): string =>
  * nothing, because every service already tolerates the others being absent —
  * the daemon reconnects with backoff, the dashboard proxies on demand — which
  * is also why systemd gets `Wants=` rather than `Requires=`.
+ *
+ * launchd having no ordering primitive does not make the ordering untrue, so a
+ * spec that has one records it as an XML comment: launchd ignores it, and the
+ * person reading `~/Library/LaunchAgents` to work out why the daemon started
+ * before sessiond finds the answer written down where they are already looking.
+ * It is documentation in the artefact, never enforcement.
  */
+const orderingComment = (spec: ServiceSpec): string => {
+  // Only sibling cockpit services mean anything under launchd; systemd targets
+  // like `network-online.target` have no launchd counterpart to name.
+  const siblings = spec.after
+    .map((target) => /^cockpit-(.+)\.service$/.exec(target)?.[1])
+    .filter((id): id is string => id !== undefined && isServiceId(id))
+    .map((id) => label(id as ServiceId));
+  if (siblings.length === 0) return '';
+  return `\n  <!-- ordering: starts after ${siblings.join(', ')} — launchd has no ordering, so this is recorded, not enforced -->`;
+};
+
 const plist = (spec: ServiceSpec): string => `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
-<dict>
+<dict>${orderingComment(spec)}
   <key>Label</key>
   <string>${xml(label(spec.id))}</string>
   <key>ProgramArguments</key>
@@ -397,8 +493,12 @@ ${environment(spec)
  */
 const unit = (spec: ServiceSpec): string => `[Unit]
 Description=${spec.description}
-${[...spec.wants.map((target) => `Wants=${target}`), ...spec.after.map((target) => `After=${target}`)].join('\n')}
-StartLimitIntervalSec=0
+${[
+  // A service with neither — sessiond — would otherwise contribute a blank line.
+  ...spec.wants.map((target) => `Wants=${target}`),
+  ...spec.after.map((target) => `After=${target}`),
+  'StartLimitIntervalSec=0',
+].join('\n')}
 
 [Service]
 ExecStart=${spec.command.join(' ')}
@@ -580,6 +680,12 @@ export interface RestartRequest {
   readonly busy: number | 'unknown';
   readonly whenIdle: boolean;
   readonly force: boolean;
+  /**
+   * Which session-hosting service is being restarted. Only the wording of a
+   * refusal depends on it — the gate itself is the same one, which is the
+   * point: sessiond earns the daemon's protection by going through here.
+   */
+  readonly id?: 'agent' | 'sessiond';
 }
 
 export type RestartDecision =
@@ -590,25 +696,40 @@ export type RestartDecision =
 const sessions = (count: number): string => `${count} session${count === 1 ? '' : 's'}`;
 
 /**
+ * What restarting each session-hosting service actually costs, said in the
+ * refusal. They are not the same sentence: the daemon loses the turn it is
+ * relaying, while sessiond takes the harness children down with it — the
+ * `KillMode=control-group` on its own unit, doing exactly what it is for.
+ */
+const RESTART_COST: Record<'agent' | 'sessiond', string> = {
+  agent: 'a restart ends that work',
+  sessiond: 'a restart kills the harness children in its cgroup and ends that work',
+};
+
+/**
  * Whether restarting the daemon now is allowed to interrupt what it is doing.
  * The daemon is the one service that hosts the user's work, so the only way to
  * restart it while it is busy — or while nobody can say whether it is — is to
  * ask for that outright.
  */
-export const restartDecision = ({ busy, whenIdle, force }: RestartRequest): RestartDecision => {
+export const restartDecision = ({
+  busy,
+  whenIdle,
+  force,
+  id = 'agent',
+}: RestartRequest): RestartDecision => {
   if (force) return { kind: 'go' };
   if (busy === 'unknown') {
     return {
       kind: 'refuse',
-      reason:
-        'could not ask the hub whether this machine is busy, and restarting the agent blind ends whatever turn is in flight. Restart anyway with --force.',
+      reason: `could not ask the hub whether this machine is busy, and restarting the ${id} blind ends whatever turn is in flight. Restart anyway with --force.`,
     };
   }
   if (busy === 0) return { kind: 'go' };
   if (whenIdle) return { kind: 'wait', busy };
   return {
     kind: 'refuse',
-    reason: `the agent on this machine is mid-turn in ${sessions(busy)}, and a restart ends that work. Wait for it to finish with --when-idle, or restart anyway with --force.`,
+    reason: `the ${id} on this machine is mid-turn in ${sessions(busy)}, and ${RESTART_COST[id]}. Wait for it to finish with --when-idle, or restart anyway with --force.`,
   };
 };
 
@@ -656,17 +777,31 @@ const waitForIdle = async (busy: number, note: (line: string) => void): Promise<
 };
 
 /**
- * Asked before the daemon is restarted, and only the daemon: the hub and the
- * dashboard hold nothing that a restart can interrupt.
+ * The services that hold the user's work, and so the ones whose restart has to
+ * be asked for. The hub and the dashboard hold nothing a restart can interrupt;
+ * the daemon is relaying live turns, and sessiond owns the processes producing
+ * them.
+ */
+const HOSTS_SESSIONS: readonly ServiceId[] = ['sessiond', 'agent'];
+
+/**
+ * Asked before a session-hosting service is restarted. One machine's busy count
+ * answers for both of them: they are the two ends of the same sessions, so
+ * `--when-idle` and `--force` mean the same thing on either.
  */
 const clearToRestart = async (
   spec: ServiceSpec,
   { whenIdle, force }: Pick<RestartRequest, 'whenIdle' | 'force'>,
   note: (line: string) => void
 ): Promise<void> => {
-  if (spec.id !== 'agent') return;
+  if (!HOSTS_SESSIONS.includes(spec.id)) return;
   const busy = await agentBusy();
-  const decision = restartDecision({ busy, whenIdle, force });
+  const decision = restartDecision({
+    busy,
+    whenIdle,
+    force,
+    id: spec.id as 'agent' | 'sessiond',
+  });
   switch (decision.kind) {
     case 'go':
       return;
@@ -831,4 +966,166 @@ export const service = async (
       return mac ? launchAgentLogs(spec, follow) : systemdLogs(spec, follow);
     }
   }
+};
+
+/**
+ * Which init system a spec is rendered for. `service` picks it from
+ * {@link platform}; the renderer below takes it as an argument so both
+ * artefacts can be read — and tested — from either kind of machine.
+ */
+export type ServiceInit = 'systemd' | 'launchd';
+
+/**
+ * The exact text `install` would write for a service, without writing it. The
+ * unit and the plist are the contract with the init system, so they are worth
+ * being able to read (and diff, and assert on) without touching one.
+ *
+ * Paths inside it are always *this* machine's — a darwin render on linux still
+ * names linux's data dir — because the renderer answers "what would I install
+ * here", not "what would a Mac install".
+ */
+export const serviceDefinition = (id: ServiceId, mode: ServiceMode, init: ServiceInit): string => {
+  const spec = specFor(id, mode);
+  return init === 'systemd' ? unit(spec) : plist(spec);
+};
+
+/**
+ * One child sessiond spawned, as the ad-hoc ledger records it. `startTicks` is
+ * the process's start time as its own OS reports it — field 22 of
+ * `/proc/<pid>/stat` on linux (`proc_pid_stat(5)`), the `ps -o lstart=` string
+ * on darwin. It is carried opaquely: nothing compares two of them for order,
+ * only for equality against the same source.
+ */
+export interface LedgerEntry {
+  readonly pid: number;
+  readonly startTicks: string;
+}
+
+/**
+ * The ad-hoc ledger, next to the socket it belongs to (design §11). Only
+ * `cockpit up` in a terminal ever writes it: under service management the
+ * cgroup gives the same guarantee for free, and this file is not consulted.
+ */
+export const sessiondLedgerPath = (): string =>
+  join(dirname(sessiondSocket()), 'sessiond-children.json');
+
+export const readSessiondLedger = async (path = sessiondLedgerPath()): Promise<LedgerEntry[]> => {
+  const parsed = await Bun.file(path)
+    .json()
+    .catch(() => undefined);
+  if (!Array.isArray(parsed)) return [];
+  return parsed.filter(
+    (entry): entry is LedgerEntry =>
+      typeof entry === 'object' &&
+      entry !== null &&
+      typeof (entry as LedgerEntry).pid === 'number' &&
+      typeof (entry as LedgerEntry).startTicks === 'string'
+  );
+};
+
+export const writeSessiondLedger = async (
+  entries: readonly LedgerEntry[],
+  path = sessiondLedgerPath()
+): Promise<void> => {
+  await Bun.write(path, `${JSON.stringify(entries)}\n`);
+  await chmod(path, 0o600);
+};
+
+/**
+ * Field 22 of `/proc/<pid>/stat`, which cannot be had by splitting the line on
+ * spaces: field 2 is the executable name in parentheses and may contain both
+ * spaces and `)`. Everything up to the *last* `)` is therefore dropped first,
+ * after which field 3 is token 0 and field 22 is token 19.
+ */
+export const parseProcStartTicks = (stat: string): string | undefined => {
+  const close = stat.lastIndexOf(')');
+  if (close < 0) return undefined;
+  const fields = stat.slice(close + 1).trim().split(/\s+/);
+  return fields[19];
+};
+
+/**
+ * The start-time marker for a live pid, or `undefined` if nothing is running
+ * under it. Reading it is the whole point of the ledger: a pid alone is a
+ * number the kernel hands out again, and killing a recycled one is killing a
+ * stranger's process.
+ */
+export const processStartMarker = async (pid: number): Promise<string | undefined> => {
+  if (platform() === 'darwin') {
+    const shown = await run(['ps', '-o', 'lstart=', '-p', `${pid}`]);
+    if (shown.exitCode !== 0) return undefined;
+    return shown.stdout.toString().trim() || undefined;
+  }
+  const stat = await Bun.file(`/proc/${pid}/stat`)
+    .text()
+    .catch(() => undefined);
+  return stat === undefined ? undefined : parseProcStartTicks(stat);
+};
+
+/**
+ * Which ledger entries are still the process they were written for. An entry
+ * whose pid is gone is nothing; an entry whose pid is back with a different
+ * start time is somebody else's process and is left strictly alone. Taking the
+ * marker source as an argument is what makes this decision testable without a
+ * process to kill.
+ */
+export const liveOrphans = async (
+  entries: readonly LedgerEntry[],
+  marker: (pid: number) => Promise<string | undefined> = processStartMarker
+): Promise<LedgerEntry[]> => {
+  const alive: LedgerEntry[] = [];
+  for (const entry of entries) {
+    if ((await marker(entry.pid)) === entry.startTicks) alive.push(entry);
+  }
+  return alive;
+};
+
+/**
+ * How long an orphan gets between SIGTERM and SIGKILL. Our choice, matched to
+ * the 2 s `RestartSec` the services already use: these are children of a
+ * sessiond that is already gone, so there is nobody left to hand their output
+ * to and nothing to wait politely for.
+ */
+const ORPHAN_GRACE_MS = 2000;
+
+const signalOrphan = (entry: LedgerEntry, signal: NodeJS.Signals): boolean => {
+  try {
+    process.kill(entry.pid, signal);
+    return true;
+  } catch {
+    // Already gone, or not ours to signal. Either way there is nothing to do.
+    return false;
+  }
+};
+
+/**
+ * The ad-hoc crash sweep: children a dead sessiond left reparented to PID 1,
+ * killed on the next start. Only ever right for the ad-hoc path — a service
+ * install gets this from `KillMode=control-group` and must not run it, because
+ * under systemd the ledger's contents are already dead and the pids reusable.
+ *
+ * Returns what it actually killed, and empties the ledger either way: whatever
+ * it said is now answered.
+ */
+export const sweepSessiondOrphans = async (
+  note: (line: string) => void,
+  path = sessiondLedgerPath()
+): Promise<LedgerEntry[]> => {
+  const entries = await readSessiondLedger(path);
+  if (entries.length === 0) return [];
+  const orphans = await liveOrphans(entries);
+  for (const orphan of orphans) {
+    signalOrphan(orphan, 'SIGTERM');
+    note(`sweeping orphaned child pid ${orphan.pid} left by a previous sessiond`);
+  }
+  if (orphans.length > 0) {
+    await Bun.sleep(ORPHAN_GRACE_MS);
+    // Re-checked rather than assumed: the pid may have exited on the SIGTERM
+    // and been handed straight back out, and the start time is what says so.
+    for (const stubborn of await liveOrphans(orphans)) signalOrphan(stubborn, 'SIGKILL');
+  }
+  await Bun.file(path)
+    .delete()
+    .catch(() => {});
+  return orphans;
 };
