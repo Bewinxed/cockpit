@@ -340,3 +340,44 @@ describe('sessiond socket and drain', () => {
     expect(server.procs().every((proc) => !proc.alive)).toBe(true);
   });
 });
+
+describe('attaching before the spawn', () => {
+  /**
+   * The claude wrapper subscribes and only then asks for the child, so every
+   * spawn on that path subscribes to a proc this daemon has never heard of.
+   * Answering that with a reset — and, worse, returning before the cursor was
+   * registered — failed every claude spawn through sessiond: `#emit` fans out
+   * only to conns carrying a cursor, so the child's output reached nobody.
+   */
+  test('a pre-spawn subscriber gets an empty backlog and then every line', async () => {
+    const { endpoint } = await startServer();
+    const client = await connect(endpoint);
+
+    client.send({ type: 'subscribe', procId: 'early', afterSeq: 0 });
+    const opening = await client.waitFor<{ type: string }>(
+      (m) => m.type === 'proc.backlog' || m.type === 'proc.reset',
+      'opening answer',
+    );
+    // Nothing was consumed, so nothing was lost: a reset here is a lie.
+    expect(opening.type).toBe('proc.backlog');
+
+    client.send({ type: 'spawn', commandId: 's1', procId: 'early', spec: emitSpec(3) });
+    await client.waitFor((m) => m.type === 'ack' && m.commandId === 's1', 'spawn ack');
+    await client.waitFor((m) => m.type === 'proc.exit' && m.procId === 'early', 'exit');
+
+    expect(client.lines('early').map((line) => line.data)).toEqual(['line 1', 'line 2', 'line 3']);
+  });
+
+  /** A cursor this daemon never minted IS a lost window, and still refuses. */
+  test('a resume from a real cursor against an unknown proc still resets', async () => {
+    const { endpoint } = await startServer();
+    const client = await connect(endpoint);
+
+    client.send({ type: 'subscribe', procId: 'ghost', afterSeq: 7 });
+    const answer = await client.waitFor<{ nextSeq: number }>(
+      (m) => m.type === 'proc.reset' && m.procId === 'ghost',
+      'reset',
+    );
+    expect(answer.nextSeq).toBe(1);
+  });
+});

@@ -382,7 +382,23 @@ export class SessiondServer {
   #subscribe(conn: Conn, procId: string, afterSeq: number | undefined): void {
     const proc = this.#procs.get(procId);
     if (!proc) {
-      this.#send(conn, { type: 'proc.reset', procId, nextSeq: 1 });
+      // Attaching before the spawn lands is the spawn choreography, not a lost
+      // window: the wrapper subscribes, then asks for the child. Two things
+      // matter here. The cursor is registered even though there is no ring
+      // yet, because `#emit` fans out only to conns that carry one — without
+      // this line the subscriber is silently absent from that loop and the
+      // child's every line goes nowhere. And a caller that has consumed
+      // nothing (`0`/absent) has lost nothing, so it gets the same empty
+      // backlog as "follow from now" rather than a reset claiming a gap that
+      // did not happen. A caller resuming from a real cursor against a proc
+      // this daemon does not have HAS lost its window, and still gets §6's
+      // honest refusal.
+      conn.cursors.set(procId, 0);
+      if (afterSeq === undefined || afterSeq === 0) {
+        this.#send(conn, { type: 'proc.backlog', procId, events: [] });
+      } else {
+        this.#send(conn, { type: 'proc.reset', procId, nextSeq: 1 });
+      }
       return;
     }
     conn.cursors.set(procId, proc.ring.head);

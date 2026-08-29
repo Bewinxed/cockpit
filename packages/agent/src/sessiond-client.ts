@@ -407,6 +407,10 @@ export const sessiondBridge = (
   let signalCode: NodeJS.Signals | null = null;
 
   const stdout = new Readable({ read() {} });
+  // The highest sequence this wrapper has handed to the SDK. It subscribes at
+  // 0 before the child exists, so the first line it expects is seq 1, and this
+  // is what separates a benign reset from a lost window.
+  let consumed = 0;
   const stdin = new Writable({
     write(chunk: Buffer | string, _encoding, callback) {
       client
@@ -429,7 +433,10 @@ export const sessiondBridge = (
     {
       // Lines lost their terminator on the way into the ring; the SDK's own
       // reader frames on newlines, so it goes back on.
-      line: (event) => stdout.push(`${event.data}\n`),
+      line: (event) => {
+        consumed = event.seq;
+        stdout.push(`${event.data}\n`);
+      },
       exit: (code, sig) => {
         exitCode = code;
         signalCode = sig;
@@ -438,11 +445,21 @@ export const sessiondBridge = (
       },
       // An overflowed ring is an honest refusal, not a silent splice: the SDK
       // is told the stream broke rather than handed a transcript with a hole.
-      reset: (nextSeq) =>
+      //
+      // A reset that resumes exactly where this wrapper stands skipped no
+      // line, so it is not that. It is what attaching before the spawn lands
+      // announces, and turning it into an SDK error failed every spawn on
+      // this path. Only an announcement that jumps past the next sequence
+      // this wrapper expects is a real hole, and that one still throws.
+      reset: (nextSeq) => {
+        if (nextSeq <= consumed + 1) return;
         events.emit(
           'error',
-          new Error(`[sessiond] ${procId}: replay window lost, stream resumes at ${nextSeq}`)
-        ),
+          new Error(
+            `[sessiond] ${procId}: replay window lost, stream resumes at ${nextSeq} (consumed ${consumed})`
+          )
+        );
+      },
     },
     0
   );

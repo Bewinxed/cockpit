@@ -145,8 +145,8 @@ const HERE = layoutFor(ROOT, Bun.main);
  * Where the dashboard listens. Read from the installing shell so a second
  * machine can differ, with the defaults this one's browser expects.
  */
-const DASHBOARD_PORT = process.env.PORT ?? '4030';
-const DASHBOARD_HOST = process.env.HOST ?? '127.0.0.1';
+const DASHBOARD_PORT = process.env.PORT ?? '3000';
+const DASHBOARD_HOST = process.env.HOST ?? '0.0.0.0';
 
 /**
  * The PATH the installing shell had. A launchd job otherwise inherits a nearly
