@@ -73,13 +73,27 @@ describe('the agent orders after sessiond', () => {
     const text = serviceDefinition('agent', 'prod', 'systemd');
     const ordering = text
       .split('\n')
-      .filter((line) => line.startsWith('Wants=') || line.startsWith('After='));
+      .filter(
+        (line) =>
+          line.startsWith('Requires=') || line.startsWith('Wants=') || line.startsWith('After=')
+      );
+    // The two dependencies are deliberately different strengths. The hub is
+    // soft — the daemon reconnects with backoff and works through an outage.
+    // sessiond is hard: it is the only spawn path, so an agent without it is up
+    // and unable to start a single session. `Requires=` makes that fail once,
+    // loudly, rather than once per spawn.
     expect(ordering).toEqual([
+      'Requires=cockpit-sessiond.service',
       'Wants=cockpit-hub.service',
-      'Wants=cockpit-sessiond.service',
       'After=cockpit-hub.service',
       'After=cockpit-sessiond.service',
     ]);
+  });
+
+  test('the hub stays soft — losing it must not take the agent down', () => {
+    const text = serviceDefinition('agent', 'prod', 'systemd');
+    expect(text).toContain('Wants=cockpit-hub.service');
+    expect(text).not.toContain('Requires=cockpit-hub.service');
   });
 
   test('launchd: recorded in the plist, since launchd has no ordering to enforce', () => {

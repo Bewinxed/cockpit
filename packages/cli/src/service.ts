@@ -264,6 +264,13 @@ export interface ServiceSpec {
   readonly workingDirectory: string;
   /** systemd ordering only — launchd has none, see {@link plist}. */
   readonly after: readonly string[];
+  /**
+   * Hard dependencies: systemd `Requires=`. A unit here is one the service
+   * genuinely cannot work without, so its failure must take this one down
+   * rather than leave it up and broken. Distinct from {@link wants}, which is
+   * "start it too, but carry on without it".
+   */
+  readonly requires?: readonly string[];
   readonly wants: readonly string[];
   /**
    * Whether a clean exit is still a fault. It is for a server, which has no
@@ -400,12 +407,16 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
     command: [process.execPath, layout.cliEntry, 'up'],
     environment: {},
     workingDirectory: homedir(),
-    // sessiond joins the hub in both lists: the daemon dials its socket for
-    // every harness child, so it wants sessiond pulled in and started first.
-    // `Wants=` rather than `Requires=` for the same reason the hub gets it —
-    // the daemon already tolerates the far end being absent and retries.
+    // The hub is soft: the daemon reconnects with backoff and works through an
+    // outage. sessiond is NOT — since the claude bridge became the only spawn
+    // path (C7: no flag, no in-process fallback), a daemon without it is up and
+    // unable to start a single session, failing one spawn at a time. That is
+    // the quiet failure this build exists to remove, so sessiond is
+    // `Requires=`: if it cannot start, the agent does not either, and systemd
+    // says why in one place instead of the operator finding out per session.
     after: [unitName('hub'), unitName('sessiond')],
-    wants: [unitName('hub'), unitName('sessiond')],
+    wants: [unitName('hub')],
+    requires: [unitName('sessiond')],
     restartOnSuccess: false,
     restartSec: 5,
     launchAgentNote: [
@@ -555,6 +566,7 @@ const unit = (spec: ServiceSpec): string => `[Unit]
 Description=${spec.description}
 ${[
   // A service with neither — sessiond — would otherwise contribute a blank line.
+  ...(spec.requires ?? []).map((target) => `Requires=${target}`),
   ...spec.wants.map((target) => `Wants=${target}`),
   ...spec.after.map((target) => `After=${target}`),
   'StartLimitIntervalSec=0',
