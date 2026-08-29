@@ -1,0 +1,496 @@
+/**
+ * The agent's half of the sessiond protocol, and the SDK seam it exists for.
+ *
+ * Three things live here, in the order the spawn path meets them:
+ *
+ *  1. {@link serviceManaged} / {@link ensureSessiond} — the auto-spawn guard
+ *     (design §11). An agent under a service manager must NEVER ad-hoc spawn
+ *     sessiond: the child would land in the *agent's* cgroup and die with the
+ *     next agent restart, which is precisely the `KillMode` trap this whole
+ *     build exists to escape. Under a service, a missing sessiond is a loud
+ *     install-time error; only a hand-run `cockpit up` spawns one.
+ *  2. {@link SessiondClient} — NDJSON over the unix socket: `spawn`/`write`/
+ *     `signal`/`stdin_end`/`subscribe`/`list`, `commandId` minted once per
+ *     mutation so a re-delivery after a socket drop is re-acked rather than
+ *     re-executed (design §8).
+ *  3. {@link sessiondBridge} — the SDK's `spawnClaudeCodeProcess` hook
+ *     (`sdk.d.ts:2053`, "Custom spawn logic for VM execution"). It hands us the
+ *     command line it built; we forward it to sessiond and return a
+ *     {@link SpawnedProcess} whose `stdin`/`stdout` are shims over the socket.
+ *     The SDK cannot tell the difference — that is the contract the option
+ *     exists to provide — but the child now lives under sessiond and outlives
+ *     this process.
+ *
+ * Nothing here parses a child's bytes. Lines go in and out opaque; the meaning
+ * is the claude adapter's business (`harnesses/claude.ts`).
+ */
+
+import { spawn as spawnProcess } from 'node:child_process';
+import { EventEmitter } from 'node:events';
+import { Socket } from 'node:net';
+import { dirname, join } from 'node:path';
+import { Readable, Writable } from 'node:stream';
+import { fileURLToPath } from 'node:url';
+// The protocol lives behind its own subpath on purpose: `sessiond.ts` reaches
+// for `node:os`, and the core barrel is imported by the browser bundle.
+import {
+  SESSIOND_V1,
+  sessiondEndpoint,
+  type ProcSpec,
+  type SessiondAck,
+  type SessiondClientMessage,
+  type SessiondLine,
+  type SessiondProcInfo,
+  type SessiondServerMessage,
+} from '@cockpit/core/sessiond';
+
+/**
+ * How long a dial or a `welcome` may take before the agent calls the endpoint
+ * dead. Our choice: a unix socket on the same machine answers in microseconds,
+ * so anything past a couple of seconds is a wedged daemon, not a slow one, and
+ * the ad-hoc path needs a bound before it decides to spawn a replacement.
+ */
+export const DIAL_TIMEOUT_MS = 2_000;
+
+/**
+ * How long the ad-hoc path waits for a freshly spawned sessiond to bind before
+ * giving up. Our choice: a `bun` cold start plus a `listen()` is well under a
+ * second on this fleet; 10 s is generous enough that a loaded machine still
+ * wins, short enough that a broken install fails inside one spawn.
+ */
+export const ADHOC_START_TIMEOUT_MS = 10_000;
+
+/**
+ * Is this process owned by a service manager?
+ *
+ * - systemd sets `INVOCATION_ID` in the environment of every unit-started
+ *   process (systemd.exec(5), "$INVOCATION_ID"). It is the cheapest true
+ *   signal that a cgroup owns us.
+ * - launchd's equivalent is `XPC_SERVICE_NAME`, which carries the job label
+ *   for a launchd-started process. A login shell inherits the literal `0`
+ *   placeholder instead, which is why the value — not merely its presence —
+ *   is what decides.
+ * - `COCKPIT_SERVICE_MODE` is cockpit's own unit-set marker
+ *   (`cli/src/service.ts:45`, `MODE_ENV`); honoured here so a dev-mode unit is
+ *   still recognised as service-managed.
+ */
+export const serviceManaged = (env: NodeJS.ProcessEnv = process.env): boolean => {
+  if (env.INVOCATION_ID) return true;
+  if (env.COCKPIT_SERVICE_MODE) return true;
+  const xpc = env.XPC_SERVICE_NAME;
+  return xpc !== undefined && xpc !== '' && xpc !== '0';
+};
+
+/**
+ * A missing sessiond under service management. Deliberately its own type: the
+ * caller must not paper over it with an ad-hoc spawn, and the message is the
+ * whole fix.
+ */
+export class SessiondUnavailableError extends Error {
+  constructor(readonly endpoint: string) {
+    super(
+      `[sessiond] nothing is listening on ${endpoint}, and this agent is service-managed — ` +
+        'refusing to ad-hoc spawn one (its children would land in the agent cgroup and die ' +
+        'with the next agent restart). Install and start the unit: `cockpit service install` ' +
+        'then `systemctl --user start cockpit-sessiond`.'
+    );
+    this.name = 'SessiondUnavailableError';
+  }
+}
+
+/** Does something answer on this endpoint? The dial half of the §9 probe. */
+export const probeEndpoint = (endpoint: string, timeoutMs = DIAL_TIMEOUT_MS): Promise<boolean> =>
+  new Promise((resolve) => {
+    // Constructed unconnected, listeners first, THEN dialled: an `ENOENT` on a
+    // socket with no `error` listener yet is an uncaught exception, and the
+    // absent-endpoint case is the one this function exists to answer.
+    const socket = new Socket();
+    const settle = (answer: boolean): void => {
+      socket.destroy();
+      clearTimeout(timer);
+      resolve(answer);
+    };
+    const timer = setTimeout(() => settle(false), timeoutMs);
+    socket.once('connect', () => settle(true));
+    socket.once('error', () => settle(false));
+    socket.connect(endpoint);
+  });
+
+/** The ad-hoc sessiond command: this repo's own entry point, run under bun. */
+const adhocCommand = (): { command: string; args: string[] } => ({
+  command: process.execPath,
+  args: [join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'sessiond', 'src', 'main.ts')],
+});
+
+/**
+ * Guarantee a sessiond is listening, or explain why there will not be one.
+ *
+ * The guard, restated because it is the reason this function is not a plain
+ * "spawn if absent": under systemd/launchd a child spawned from here inherits
+ * the agent's cgroup, so the next `systemctl restart cockpit-agent` kills every
+ * session — the exact failure sessiond was built to remove. Service mode gets a
+ * loud error; ad-hoc mode gets a detached daemon.
+ */
+export const ensureSessiond = async (
+  endpoint: string = sessiondEndpoint(),
+  env: NodeJS.ProcessEnv = process.env
+): Promise<void> => {
+  if (await probeEndpoint(endpoint)) return;
+  if (serviceManaged(env)) throw new SessiondUnavailableError(endpoint);
+
+  const { command, args } = adhocCommand();
+  const child = spawnProcess(command, args, {
+    detached: true,
+    stdio: 'ignore',
+    env: { ...env, COCKPIT_SESSIOND_ENDPOINT: endpoint },
+  });
+  child.unref();
+
+  const deadline = Date.now() + ADHOC_START_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    if (await probeEndpoint(endpoint, 250)) return;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error(`[sessiond] spawned ${command} ${args.join(' ')} but it never bound ${endpoint}`);
+};
+
+/** What the agent learns the moment it attaches (design §7's epoch and heads). */
+export interface SessiondWelcomeInfo {
+  epoch: string;
+  capabilities: readonly string[];
+  procs: SessiondProcInfo[];
+}
+
+type ProcListener = {
+  line?: (event: SessiondLine) => void;
+  exit?: (exitCode: number | null, signal: NodeJS.Signals | null) => void;
+  reset?: (nextSeq: number) => void;
+};
+
+/**
+ * One attached agent connection.
+ *
+ * Single-socket, single-threaded message handling — the same property the hub's
+ * subscribe choreography relies on — so a backlog followed by live deltas is
+ * gapless without any reordering buffer here.
+ */
+export class SessiondClient {
+  #socket: Socket;
+  #buffer = '';
+  #welcome: SessiondWelcomeInfo | undefined;
+  readonly #acks = new Map<string, (ack: SessiondAck) => void>();
+  /** Sent but not yet settled — re-sent once at reconnect under the same id (§8). */
+  readonly #unacked = new Map<string, SessiondClientMessage>();
+  readonly #listeners = new Map<string, ProcListener>();
+  #closed = false;
+  readonly onClose = new EventEmitter();
+
+  private constructor(socket: Socket) {
+    this.#socket = socket;
+    socket.setEncoding('utf8');
+    socket.on('data', (chunk: string) => this.#onData(chunk));
+    socket.on('close', () => {
+      this.#closed = true;
+      this.onClose.emit('close');
+    });
+    socket.on('error', () => {
+      /* a dropped sessiond is handled by the close path, never thrown here */
+    });
+  }
+
+  static connect(
+    endpoint: string = sessiondEndpoint(),
+    timeoutMs = DIAL_TIMEOUT_MS
+  ): Promise<SessiondClient> {
+    return new Promise((resolve, reject) => {
+      // Same ordering rule as {@link probeEndpoint}: listeners before dial.
+      const socket = new Socket();
+      const timer = setTimeout(() => {
+        socket.destroy();
+        reject(new Error(`[sessiond] no welcome from ${endpoint} within ${timeoutMs}ms`));
+      }, timeoutMs);
+      socket.once('error', (error) => {
+        clearTimeout(timer);
+        reject(error);
+      });
+      const client = new SessiondClient(socket);
+      socket.connect(endpoint);
+      client.#onWelcome = (welcome) => {
+        clearTimeout(timer);
+        // §5: no compatible capability is a loud refusal, never a plausible lie.
+        if (!welcome.capabilities.includes(SESSIOND_V1)) {
+          socket.destroy();
+          reject(
+            new Error(
+              `[sessiond] speaks ${welcome.capabilities.join(', ') || '(nothing)'}; this agent needs ${SESSIOND_V1}`
+            )
+          );
+          return;
+        }
+        resolve(client);
+      };
+    });
+  }
+
+  #onWelcome: (welcome: SessiondWelcomeInfo) => void = () => {};
+
+  get epoch(): string | undefined {
+    return this.#welcome?.epoch;
+  }
+
+  get procs(): SessiondProcInfo[] {
+    return this.#welcome?.procs ?? [];
+  }
+
+  get closed(): boolean {
+    return this.#closed;
+  }
+
+  // ------------------------------------------------------------------ framing
+
+  #onData(chunk: string): void {
+    this.#buffer += chunk;
+    let nl = this.#buffer.indexOf('\n');
+    while (nl >= 0) {
+      const line = this.#buffer.slice(0, nl);
+      this.#buffer = this.#buffer.slice(nl + 1);
+      if (line.trim()) this.#onMessage(line);
+      nl = this.#buffer.indexOf('\n');
+    }
+  }
+
+  #onMessage(line: string): void {
+    let message: SessiondServerMessage;
+    try {
+      message = JSON.parse(line) as SessiondServerMessage;
+    } catch {
+      return; // sessiond does not emit malformed frames; a partial one is not fatal
+    }
+    switch (message.type) {
+      case 'welcome': {
+        this.#welcome = {
+          epoch: message.epoch,
+          capabilities: message.capabilities,
+          procs: message.procs,
+        };
+        this.#onWelcome(this.#welcome);
+        return;
+      }
+      case 'ack': {
+        this.#unacked.delete(message.commandId);
+        this.#acks.get(message.commandId)?.(message);
+        this.#acks.delete(message.commandId);
+        return;
+      }
+      case 'proc.line':
+        this.#listeners.get(message.event.procId)?.line?.(message.event);
+        return;
+      case 'proc.backlog':
+        for (const event of message.events) this.#listeners.get(message.procId)?.line?.(event);
+        return;
+      case 'proc.reset':
+        this.#listeners.get(message.procId)?.reset?.(message.nextSeq);
+        return;
+      case 'proc.exit':
+        this.#listeners.get(message.procId)?.exit?.(message.exitCode, message.signal);
+        return;
+    }
+  }
+
+  #send(message: SessiondClientMessage): void {
+    if (this.#closed) throw new Error('[sessiond] connection is closed');
+    this.#socket.write(`${JSON.stringify(message)}\n`);
+  }
+
+  /**
+   * Send a mutation and wait for its settlement. The `commandId` is minted
+   * once, before the first send attempt, so the retry after a socket drop is
+   * the *same* command — sessiond re-acks it instead of, in `spawn`'s case,
+   * killing and replacing a perfectly healthy child (§8).
+   */
+  #command(message: SessiondClientMessage & { commandId: string }): Promise<SessiondAck> {
+    return new Promise((resolve, reject) => {
+      this.#acks.set(message.commandId, resolve);
+      this.#unacked.set(message.commandId, message);
+      try {
+        this.#send(message);
+      } catch (error) {
+        this.#acks.delete(message.commandId);
+        this.#unacked.delete(message.commandId);
+        reject(error as Error);
+      }
+    });
+  }
+
+  /** Re-send everything unsettled, unchanged, after a reconnect (§8). */
+  resendUnacked(): void {
+    for (const message of this.#unacked.values()) this.#send(message);
+  }
+
+  // -------------------------------------------------------------------- verbs
+
+  async spawnProc(procId: string, spec: ProcSpec, commandId = crypto.randomUUID()): Promise<void> {
+    assertApplied(await this.#command({ type: 'spawn', commandId, procId, spec }), 'spawn');
+  }
+
+  async write(procId: string, data: string, commandId = crypto.randomUUID()): Promise<void> {
+    assertApplied(await this.#command({ type: 'write', commandId, procId, data }), 'write');
+  }
+
+  async signal(
+    procId: string,
+    sig: NodeJS.Signals,
+    commandId = crypto.randomUUID()
+  ): Promise<void> {
+    assertApplied(await this.#command({ type: 'signal', commandId, procId, sig }), 'signal');
+  }
+
+  async stdinEnd(procId: string, commandId = crypto.randomUUID()): Promise<void> {
+    assertApplied(await this.#command({ type: 'stdin_end', commandId, procId }), 'stdin_end');
+  }
+
+  /**
+   * Follow a child's stdout. `afterSeq` present is a resume from the ring;
+   * absent follows from now. The listener sees backlog lines and live deltas
+   * through the same callback, in seq order.
+   */
+  subscribe(procId: string, listener: ProcListener, afterSeq?: number): void {
+    this.#listeners.set(procId, listener);
+    this.#send({ type: 'subscribe', procId, ...(afterSeq === undefined ? {} : { afterSeq }) });
+  }
+
+  unsubscribe(procId: string): void {
+    this.#listeners.delete(procId);
+  }
+
+  /** Ask again what is alive. Answered with a fresh `welcome`. */
+  list(): Promise<SessiondWelcomeInfo> {
+    return new Promise((resolve) => {
+      this.#onWelcome = (welcome) => resolve(welcome);
+      this.#send({ type: 'list' });
+    });
+  }
+
+  close(): void {
+    this.#closed = true;
+    this.#socket.destroy();
+  }
+}
+
+const assertApplied = (ack: SessiondAck, verb: string): void => {
+  if (ack.stage === 'failed') throw new Error(`[sessiond] ${verb} failed: ${ack.reason ?? 'no reason given'}`);
+};
+
+/**
+ * The SDK seam. `options` is the command line the SDK built for the CLI; it
+ * goes to sessiond verbatim (`ProcSpec` is opaque there), and what comes back
+ * is a `SpawnedProcess` the SDK drives exactly as it drives a `ChildProcess`.
+ *
+ * `options.signal` is the SDK's own *forwarded* abort — it fires only after the
+ * SDK's stdin-EOF + ~2 s grace window (`sdk.d.ts:6725-6741`), so honouring it
+ * with a SIGTERM is the graceful path completing, never a child killed early.
+ */
+export const sessiondBridge = (
+  client: SessiondClient,
+  procId: string,
+  options: {
+    command: string;
+    args: string[];
+    cwd?: string;
+    env: Record<string, string | undefined>;
+    signal?: AbortSignal;
+  }
+): import('@anthropic-ai/claude-agent-sdk').SpawnedProcess => {
+  const events = new EventEmitter();
+  let killed = false;
+  let exitCode: number | null = null;
+  let signalCode: NodeJS.Signals | null = null;
+
+  const stdout = new Readable({ read() {} });
+  const stdin = new Writable({
+    write(chunk: Buffer | string, _encoding, callback) {
+      client
+        .write(procId, typeof chunk === 'string' ? chunk : chunk.toString('utf8'))
+        .then(() => callback())
+        // A write to a child that already died is the child's death, not a
+        // stream error the SDK should throw on: the exit event is the truth.
+        .catch(() => callback());
+    },
+    final(callback) {
+      client
+        .stdinEnd(procId)
+        .then(() => callback())
+        .catch(() => callback());
+    },
+  });
+
+  client.subscribe(
+    procId,
+    {
+      // Lines lost their terminator on the way into the ring; the SDK's own
+      // reader frames on newlines, so it goes back on.
+      line: (event) => stdout.push(`${event.data}\n`),
+      exit: (code, sig) => {
+        exitCode = code;
+        signalCode = sig;
+        stdout.push(null);
+        events.emit('exit', code, sig);
+      },
+      // An overflowed ring is an honest refusal, not a silent splice: the SDK
+      // is told the stream broke rather than handed a transcript with a hole.
+      reset: (nextSeq) =>
+        events.emit(
+          'error',
+          new Error(`[sessiond] ${procId}: replay window lost, stream resumes at ${nextSeq}`)
+        ),
+    },
+    0
+  );
+
+  // Env entries the SDK left undefined are absent, not empty: `ProcSpec.env`
+  // is a string map, and sessiond merges it over its own `process.env`.
+  const env: Record<string, string> = {};
+  for (const [key, value] of Object.entries(options.env)) if (value !== undefined) env[key] = value;
+
+  const started = client
+    .spawnProc(procId, {
+      command: options.command,
+      args: options.args,
+      ...(options.cwd ? { cwd: options.cwd } : {}),
+      env,
+    })
+    .catch((error: unknown) => {
+      events.emit('error', error instanceof Error ? error : new Error(String(error)));
+    });
+
+  const kill = (sig: NodeJS.Signals): boolean => {
+    killed = true;
+    void started.then(() => client.signal(procId, sig).catch(() => {}));
+    return true;
+  };
+  options.signal?.addEventListener('abort', () => kill('SIGTERM'), { once: true });
+
+  return {
+    stdin,
+    stdout,
+    get killed() {
+      return killed;
+    },
+    get exitCode() {
+      return exitCode;
+    },
+    get signalCode() {
+      return signalCode;
+    },
+    kill,
+    on: (event: 'exit' | 'error', listener: (...args: never[]) => void) => {
+      events.on(event, listener as (...args: unknown[]) => void);
+    },
+    once: (event: 'exit' | 'error', listener: (...args: never[]) => void) => {
+      events.once(event, listener as (...args: unknown[]) => void);
+    },
+    off: (event: 'exit' | 'error', listener: (...args: never[]) => void) => {
+      events.off(event, listener as (...args: unknown[]) => void);
+    },
+  } as import('@anthropic-ai/claude-agent-sdk').SpawnedProcess;
+};

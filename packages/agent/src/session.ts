@@ -16,6 +16,7 @@ import type {
   HarnessKind,
   NeutralMessage,
   NeutralSessionInfo,
+  NeutralUserMessage,
   PermissionResult,
   RepoInfo,
   ReposResult,
@@ -40,6 +41,29 @@ import { expandHome, runFs } from './fs';
 import { updateCheckout, type UpdateOptions } from './update';
 import { Effect } from 'effect';
 import { stat } from 'node:fs/promises';
+
+/**
+ * What {@link SessionSupervisor.reattach} needs of the claude adapter, named
+ * structurally rather than imported as a class: the supervisor stays
+ * harness-agnostic, and an adapter that cannot keep processes simply does not
+ * satisfy this shape (design §4.2, §4.3 — opencode and pi deliberately do not).
+ */
+interface ClaudeAdoption {
+  custodyCandidates(): Promise<{ procs: { procId: string; alive: boolean }[] }>;
+  adopt(
+    instanceId: string,
+    ctx: HarnessContext,
+    options: {
+      afterSeq?: number;
+      sessionId?: string | null;
+      onHandoff: (handoff: {
+        instanceId: string;
+        sessionId: string | null;
+        held: { message: NeutralUserMessage; extras: Pick<SendPayload, 'attachments' | 'images' | 'urgent'> }[];
+      }) => void;
+    }
+  ): Promise<HarnessSession>;
+}
 
 /** The frames an agent has to send. The hub's own registry news is not one. */
 export type FrameSink = (frame: Exclude<FramePayload, { kind: 'instances' }>) => void;
@@ -423,39 +447,11 @@ export class SessionSupervisor {
         await running.stop();
       }
 
-      let spawned: HarnessSession | null = null;
-      const ctx: HarnessContext = {
-        instanceId,
-        cwd: workdir,
-        frame: (message) => {
-          if (message.type === 'result') this.#tagQuest(instanceId, adapter);
-          this.#foldPulse(instanceId, message);
-          this.sink({ kind: 'frame', instanceId, harness: adapter.kind, message });
-        },
-        permission: (request) => {
-          this.#pulseBlocked.set(instanceId, (this.#pulseBlocked.get(instanceId) ?? 0) + 1);
-          this.#emitPulse(instanceId, true);
-          this.sink({ kind: 'permission_request', instanceId, harness: adapter.kind, ...request });
-        },
-        busy: (active) => {
-          if (active) this.#busy.add(instanceId);
-          else this.#busy.delete(instanceId);
-          this.#emitPulse(instanceId, true);
-        },
-        session: (sessionId) => this.#noteQuestSession(instanceId, sessionId, adapter.kind),
-        failed: (error) => this.#fail(instanceId, error),
-        emit: (envelope) => this.emit(envelope),
-        closed: () => {
-          if (spawned && this.#sessions.get(instanceId) === spawned) {
-            this.#sessions.delete(instanceId);
-            this.#busy.delete(instanceId);
-            this.#forgetPulse(instanceId);
-          }
-        },
-      };
+      const holder: { session: HarnessSession | null } = { session: null };
+      const ctx = this.#context(instanceId, workdir, adapter, holder);
 
       const session = await adapter.spawn(payload, ctx);
-      spawned = session;
+      holder.session = session;
       this.#sessions.set(instanceId, session);
       // The session is in place. Worth saying out loud for a relaunch, whose
       // caller has nothing else to wait on.
@@ -465,6 +461,116 @@ export class SessionSupervisor {
       if (ack) this.sink({ kind: 'control_result', instanceId, requestId: ack, ok: false, error: message });
       this.#fail(instanceId, error);
     }
+  }
+
+  /**
+   * The supervisor's side of one session, built once and shared by both ways a
+   * session can arrive: a fresh {@link #spawn}, and a {@link reattach} that
+   * takes custody of a child which outlived the agent. Shared deliberately —
+   * two copies of this wiring is two places for the pulse, the busy set and
+   * the frame routing to drift apart.
+   */
+  #context(
+    instanceId: string,
+    workdir: string,
+    adapter: Harness,
+    holder: { session: HarnessSession | null }
+  ): HarnessContext {
+    return {
+      instanceId,
+      cwd: workdir,
+      frame: (message) => {
+        if (message.type === 'result') this.#tagQuest(instanceId, adapter);
+        this.#foldPulse(instanceId, message);
+        this.sink({ kind: 'frame', instanceId, harness: adapter.kind, message });
+      },
+      permission: (request) => {
+        this.#pulseBlocked.set(instanceId, (this.#pulseBlocked.get(instanceId) ?? 0) + 1);
+        this.#emitPulse(instanceId, true);
+        this.sink({ kind: 'permission_request', instanceId, harness: adapter.kind, ...request });
+      },
+      busy: (active) => {
+        if (active) this.#busy.add(instanceId);
+        else this.#busy.delete(instanceId);
+        this.#emitPulse(instanceId, true);
+      },
+      session: (sessionId) => this.#noteQuestSession(instanceId, sessionId, adapter.kind),
+      failed: (error) => this.#fail(instanceId, error),
+      emit: (envelope) => this.emit(envelope),
+      closed: () => {
+        if (holder.session && this.#sessions.get(instanceId) === holder.session) {
+          this.#sessions.delete(instanceId);
+          this.#busy.delete(instanceId);
+          this.#forgetPulse(instanceId);
+        }
+      },
+    };
+  }
+
+  /**
+   * REATTACH (design §4.1, §7). The agent has restarted; sessiond is still
+   * holding the children. For each row the caller knows about, take custody of
+   * the surviving child, replay its ring from the cursor the caller supplies,
+   * and arm the boundary hand-off: at the turn's next `result` the child's
+   * stdin is EOF'd and this method's own {@link #spawn} runs with
+   * `resume: sessionId`, putting a full SDK `Query` back in charge.
+   *
+   * `afterSeq` is the hub's own ingest mark when it has one (§7's ledger, leaf
+   * D3); `undefined` follows from now, which is the honest-loss rule — replay
+   * nothing rather than double what a history read already shows.
+   *
+   * Returns the instance ids actually taken into custody. A row sessiond is
+   * not holding is simply not one of them: no process, nothing to adopt, and
+   * the hub's own `sleeping`/`restore` path owns it from there.
+   */
+  async reattach(
+    rows: { instanceId: string; cwd: string; sessionId?: string | null; afterSeq?: number }[]
+  ): Promise<string[]> {
+    const adapter = this.#adapter('claude');
+    // `adopt` is claude's alone: opencode reattaches through its own server
+    // (design §4.2) and pi has no subprocess to keep (§4.3).
+    const claude = adapter as Harness & Partial<ClaudeAdoption>;
+    if (typeof claude.adopt !== 'function' || typeof claude.custodyCandidates !== 'function') {
+      return [];
+    }
+    const held = new Set((await claude.custodyCandidates()).procs.filter((proc) => proc.alive).map((proc) => proc.procId));
+
+    const adopted: string[] = [];
+    for (const row of rows) {
+      if (!held.has(row.instanceId)) continue;
+      const holder: { session: HarnessSession | null } = { session: null };
+      const ctx = this.#context(row.instanceId, row.cwd, adapter, holder);
+      const custody = await claude.adopt(row.instanceId, ctx, {
+        ...(row.afterSeq === undefined ? {} : { afterSeq: row.afterSeq }),
+        sessionId: row.sessionId ?? null,
+        onHandoff: ({ instanceId, sessionId, held: heldTurns }) => {
+          // Queued through `dispatch` so the hand-off serialises behind
+          // whatever else is in flight for this instance, exactly as an
+          // operator-issued relaunch would.
+          this.dispatch({
+            verb: 'spawn',
+            instanceId,
+            payload: {
+              instanceId,
+              cwd: row.cwd,
+              harness: 'claude',
+              ...(sessionId ? { resume: { sessionKey: sessionId } } : {}),
+            } satisfies SpawnPayload,
+          } as Envelope);
+          for (const turn of heldTurns) {
+            this.dispatch({
+              verb: 'send',
+              instanceId,
+              payload: { instanceId, message: turn.message, ...turn.extras } satisfies SendPayload,
+            } as Envelope);
+          }
+        },
+      });
+      holder.session = custody;
+      this.#sessions.set(row.instanceId, custody);
+      adopted.push(row.instanceId);
+    }
+    return adopted;
   }
 
   /** The harness session a side quest turned out to be writing, from its init frame. */

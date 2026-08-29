@@ -1,4 +1,9 @@
-import { expect, mock, test } from 'bun:test';
+import { afterAll, expect, mock, test } from 'bun:test';
+import { mkdtempSync } from 'node:fs';
+import { createServer } from 'node:net';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { SESSIOND_V1 } from '@cockpit/core/sessiond';
 import type { Envelope, NeutralMessage, SpawnPayload } from '@cockpit/core';
 import { CONTROL_SET_EFFORT } from '@cockpit/core';
 import type { HarnessContext } from '../harness';
@@ -44,6 +49,33 @@ mock.module('@anthropic-ai/claude-agent-sdk', () => ({
   createSdkMcpServer: (config: unknown) => config,
   tool: (name: string) => ({ name }),
 }));
+
+/**
+ * Every claude session's CLI child now lives under sessiond
+ * (`spawnClaudeCodeProcess`, design §4.1) — so the adapter dials it before it
+ * builds a `query()`. The `query()` above is a stand-in and never spawns
+ * anything, so all this needs to be is something that speaks a `welcome` on a
+ * scratch socket; the real endpoint is never bound, and no child is ever
+ * created here.
+ */
+const endpoint = join(mkdtempSync(join(tmpdir(), 'claude-effort-')), 'sessiond.sock');
+const fakeSessiond = createServer((socket) => {
+  socket.write(
+    `${JSON.stringify({
+      type: 'welcome',
+      epoch: 'test-epoch',
+      capabilities: [SESSIOND_V1],
+      build: { version: 'test', startedAt: 0 },
+      procs: [],
+    })}\n`
+  );
+});
+await new Promise<void>((resolve) => fakeSessiond.listen(endpoint, resolve));
+process.env.COCKPIT_SESSIOND_ENDPOINT = endpoint;
+afterAll(() => {
+  fakeSessiond.close();
+  delete process.env.COCKPIT_SESSIOND_ENDPOINT;
+});
 
 const { ClaudeHarness } = await import('./claude');
 

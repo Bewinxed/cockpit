@@ -69,6 +69,13 @@ import { beginLogin, clearCredentials, completeLogin, exportCredentials, importC
 import { resolveBin } from '../tools';
 import { claudeConfigDirs } from '../usage/scan-claude';
 import type { Harness, HarnessContext, HarnessSession } from '../harness';
+import {
+  ensureSessiond,
+  sessiondBridge,
+  SessiondClient,
+  type SessiondWelcomeInfo,
+} from '../sessiond-client';
+import { sessiondEndpoint } from '@cockpit/core/sessiond';
 
 /** The neutral frame is the SDK frame re-tagged: same fields, plus the original. */
 export const toNeutral = (sdk: SDKMessage): NeutralMessage => {
@@ -524,7 +531,13 @@ class ClaudeSession implements HarnessSession {
     skills?: string[],
     denyTools?: string[],
     /** Fetched once by `spawn()` before this session existed; frozen from here on. */
-    delegateTypes?: import('@cockpit/core').DelegateType[]
+    delegateTypes?: import('@cockpit/core').DelegateType[],
+    /**
+     * The sessiond connection this session's CLI child lives under. Not
+     * optional in practice — `spawn()` always supplies it, and there is no
+     * in-process fallback (PLAN.md C7: full cutover, rollback is a revert).
+     */
+    sessiond?: { client: SessiondClient; procId: string }
   ) {
     this.#ctx = ctx;
     // The model just pulled a held turn: retire the queue entry, and remember
@@ -611,6 +624,23 @@ class ClaudeSession implements HarnessSession {
         }),
         cwd: workdir,
         includePartialMessages: true,
+        // THE SEAM (design §4.1). The SDK builds the CLI's command line and
+        // hands it here instead of spawning it; we forward it to sessiond and
+        // hand back a `SpawnedProcess` over the socket. Nothing downstream —
+        // `canUseTool` parking, `InputStream`, the queue frames, the outpost
+        // MCP server on the control channel — can tell the difference, which
+        // is exactly the contract this option exists to provide. What changes
+        // is custody: the child is sessiond's, and it outlives this agent.
+        //
+        // Placed AFTER the caller's `options` spread on purpose: a spawn
+        // payload may not opt out of it. There is no flag and no in-process
+        // fallback (PLAN.md C7).
+        ...(sessiond
+          ? {
+              spawnClaudeCodeProcess: (spawnOptions: import('@anthropic-ai/claude-agent-sdk').SpawnOptions) =>
+                sessiondBridge(sessiond.client, sessiond.procId, spawnOptions),
+            }
+          : {}),
         canUseTool: (toolName, toolInput, { requestId, suggestions, toolUseID }) =>
           new Promise<PermissionResult>((resolve) => {
             this.#permissions.set(requestId, resolve);
@@ -959,6 +989,239 @@ const toEntry = (
   };
 };
 
+
+/**
+ * A line off a child's stdout, as the CLI writes it. Only two shapes matter
+ * during custody — an SDK message (which becomes a neutral frame) and a
+ * `control_request` (which is either a permission to re-park or a control the
+ * absent agent cannot serve). Everything else passes as `raw`.
+ */
+type CustodyLine =
+  | (SDKMessage & { type: string })
+  | { type: 'control_request'; request_id: string; request: { subtype: string } & Record<string, unknown> }
+  | { type: string; [key: string]: unknown };
+
+/** The raw `control_response` the CLI reads off its stdin, both polarities. */
+export const controlSuccess = (requestId: string, response: unknown): string =>
+  `${JSON.stringify({
+    type: 'control_response',
+    response: { subtype: 'success', request_id: requestId, response },
+  })}\n`;
+
+export const controlError = (requestId: string, error: string): string =>
+  `${JSON.stringify({
+    type: 'control_response',
+    response: { subtype: 'error', request_id: requestId, error },
+  })}\n`;
+
+/** The in-band notice a custody refusal writes into the transcript. */
+export const CUSTODY_DEGRADED = 'custody_degraded';
+
+/**
+ * CUSTODY (design §4.1) — the session while the agent that owned it is gone.
+ *
+ * A restarted agent cannot reconstruct a live `Query` around a mid-stream
+ * child: the SDK offers spawn substitution, not adoption of a half-initialized
+ * protocol state (§4.1, and the spike recorded in this leaf's report did not
+ * overturn it). So the returning agent takes CUSTODY instead — cursor
+ * arithmetic and raw control answers, nothing more:
+ *
+ *  - ring lines are re-derived into neutral frames through {@link toNeutral},
+ *    which is already a pure function over parsed JSON and needs no `Query`;
+ *  - an unanswered `control_request`/`can_use_tool` is re-parked under the
+ *    SDK's own `requestId`, so the hub's parked ask stays answerable — and the
+ *    answer goes back as a raw `control_response` line, because that is what
+ *    the `Query` would have written anyway;
+ *  - any OTHER control the CLI asks of the absent agent (an `mcp_message` for
+ *    the outpost server, a hook callback) is answered with an explicit in-band
+ *    error, so the tool call FAILS VISIBLY instead of hanging forever on a
+ *    handler that no longer exists;
+ *  - at the turn's next `result` line the child's stdin is EOF'd and the
+ *    hand-off fires: the owner respawns through the full SDK with
+ *    `resume: sessionId`. The in-flight turn completed and was captured; the
+ *    cost is one respawn at a turn boundary.
+ *
+ * Custody is a degraded mode measured in seconds, not a second implementation
+ * of the SDK. Everything it refuses, it refuses out loud.
+ */
+export class ClaudeCustody implements HarnessSession {
+  readonly harness = 'claude' as const;
+  sessionId: string | null = null;
+  /** requestId → the parked ask, until an answer or the hand-off clears it. */
+  readonly #parked = new Set<string>();
+  /** Turns pushed during custody; delivered by the respawned session. */
+  readonly #held: { message: NeutralUserMessage; extras: Pick<SendPayload, 'attachments' | 'images' | 'urgent'> }[] = [];
+  #handedOff = false;
+
+  constructor(
+    readonly instanceId: string,
+    private readonly ctx: HarnessContext,
+    private readonly write: (data: string) => void,
+    /** Ends the child's stdin — the graceful half of the boundary hand-off. */
+    private readonly stdinEnd: () => void,
+    /** Fired at the turn boundary; the owner respawns with `resume: sessionId`. */
+    private readonly onHandoff: (handoff: {
+      instanceId: string;
+      sessionId: string | null;
+      held: { message: NeutralUserMessage; extras: Pick<SendPayload, 'attachments' | 'images' | 'urgent'> }[];
+    }) => void,
+    sessionId: string | null = null
+  ) {
+    this.sessionId = sessionId;
+  }
+
+  /** The asks still waiting for an answer — what a reattach re-announces. */
+  get parked(): string[] {
+    return [...this.#parked];
+  }
+
+  get handedOff(): boolean {
+    return this.#handedOff;
+  }
+
+  /**
+   * One raw stdout line, from the ring's backlog or live. Replay and live use
+   * the same path on purpose: the daemon's single-threaded delivery is what
+   * makes backlog-then-live gapless, and a second code path would be a second
+   * place for a hole to open.
+   */
+  ingest(line: string): void {
+    let parsed: CustodyLine;
+    try {
+      parsed = JSON.parse(line) as CustodyLine;
+    } catch {
+      // A line the CLI wrote that is not JSON is not a frame; sessiond never
+      // promised us one, and inventing a frame from it would be a lie.
+      return;
+    }
+
+    if (parsed.type === 'control_request') {
+      this.#onControlRequest(parsed as Extract<CustodyLine, { type: 'control_request' }>);
+      return;
+    }
+    // A control_response is the CLI answering something the dead agent asked;
+    // nobody is waiting for it any more.
+    if (parsed.type === 'control_response' || parsed.type === 'control_cancel_request') return;
+
+    const sdk = parsed as SDKMessage;
+    if (sdk.type === 'system' && (sdk as { subtype?: string }).subtype === 'init') {
+      this.sessionId = sdk.session_id;
+      this.ctx.session(sdk.session_id);
+    }
+    this.ctx.frame(toNeutral(sdk));
+    if (sdk.type === 'result') {
+      this.ctx.busy(false);
+      // THE BOUNDARY. The turn that was in flight when the agent died has now
+      // completed and been captured; this is the one moment at which handing
+      // the session back to a full `Query` costs nothing but a respawn.
+      this.handOff();
+    }
+  }
+
+  #onControlRequest(request: Extract<CustodyLine, { type: 'control_request' }>): void {
+    const requestId = request.request_id;
+    if (request.request?.subtype === 'can_use_tool') {
+      // Re-parked under the SDK's own requestId — the same id the hub's parked
+      // ask has carried end-to-end since this adapter first wrote it.
+      this.#parked.add(requestId);
+      const inner = request.request as { tool_name?: string; input?: Record<string, unknown>; permission_suggestions?: unknown };
+      this.ctx.permission({
+        requestId,
+        toolName: inner.tool_name ?? 'unknown',
+        input: inner.input ?? {},
+        ...(Array.isArray(inner.permission_suggestions)
+          ? { suggestions: inner.permission_suggestions as import('@cockpit/core').PermissionUpdate[] }
+          : {}),
+        ...(inner.tool_name === ASK_USER_QUESTION ? { requestKind: 'question' as const } : {}),
+      });
+      return;
+    }
+    // Everything else: the handler it is addressed to died with the agent.
+    // Refused in-band and said out loud, so the tool call fails where the
+    // reader can see it rather than hanging on a promise nobody holds.
+    const subtype = request.request?.subtype ?? 'unknown';
+    const reason = `cockpit: agent restarted; \`${subtype}\` cannot be served during custody`;
+    this.write(controlError(requestId, reason));
+    this.ctx.frame({
+      type: 'system',
+      subtype: CUSTODY_DEGRADED,
+      ...(this.sessionId ? { session_id: this.sessionId } : {}),
+      control: subtype,
+      requestId,
+      text: reason,
+    } as unknown as NeutralMessage);
+  }
+
+  /**
+   * Answer a parked permission. The `control_response` is written raw: there is
+   * no `Query` to route it through, and the CLI reads exactly this shape off
+   * its stdin either way (verified against the SDK's own writer, `sdk.mjs`
+   * `handleControlRequest`).
+   */
+  resolvePermission(requestId: string, result: PermissionResult): void {
+    if (!this.#parked.delete(requestId)) throw new Error(`no permission request ${requestId}`);
+    this.write(controlSuccess(requestId, result));
+  }
+
+  /**
+   * A turn sent during custody. Held rather than written: a raw user message on
+   * the child's stdin would bypass the queue machinery, the echo tagging and
+   * the busy accounting that the `Query` owns, and there is no way to know from
+   * here whether the model is ready for it. The hand-off is seconds away and
+   * delivers it through the real path.
+   */
+  send(message: NeutralUserMessage, extras: Pick<SendPayload, 'attachments' | 'images' | 'urgent'>): void {
+    this.#held.push({ message, extras });
+  }
+
+  /** Every non-permission control fails visibly, for the reason above. */
+  control(method: string): Promise<unknown> {
+    const reason = `cockpit: agent restarted; control \`${method}\` is unavailable until this session hands back (custody)`;
+    this.ctx.frame({
+      type: 'system',
+      subtype: CUSTODY_DEGRADED,
+      ...(this.sessionId ? { session_id: this.sessionId } : {}),
+      control: method,
+      text: reason,
+    } as unknown as NeutralMessage);
+    return Promise.reject(new Error(reason));
+  }
+
+  /**
+   * An interrupt cannot wait for a turn boundary — that is the whole point of
+   * one — so it is written as the raw control_request the `Query` would have
+   * sent, and the hand-off follows on the `result` the interrupt produces.
+   */
+  async interrupt(): Promise<void> {
+    const requestId = crypto.randomUUID();
+    this.write(`${JSON.stringify({ type: 'control_request', request_id: requestId, request: { subtype: 'interrupt' } })}\n`);
+  }
+
+  /** stdin EOF + the hand-off, once. */
+  handOff(): void {
+    if (this.#handedOff) return;
+    this.#handedOff = true;
+    this.stdinEnd();
+    this.onHandoff({ instanceId: this.instanceId, sessionId: this.sessionId, held: [...this.#held] });
+    this.#held.length = 0;
+  }
+
+  async stop(): Promise<void> {
+    // A stop during custody is the operator ending the session, not a
+    // hand-off: nothing is parked afterwards and nothing is respawned.
+    for (const requestId of this.#parked) this.write(controlError(requestId, 'cockpit: session stopped'));
+    this.#parked.clear();
+    this.#held.length = 0;
+    this.#handedOff = true;
+    this.stdinEnd();
+  }
+
+  async dispose(): Promise<void> {
+    this.#parked.clear();
+    this.#held.length = 0;
+  }
+}
+
 export class ClaudeHarness implements Harness {
   readonly kind = 'claude' as const;
   readonly capabilities = CLAUDE_CAPABILITIES;
@@ -976,11 +1239,41 @@ export class ClaudeHarness implements Harness {
     };
   }
 
+  /**
+   * The machine's one sessiond connection, dialled lazily and shared by every
+   * claude session. Lazy rather than eager so a machine with no sessions never
+   * needs a daemon, and so the install-time error lands on the spawn that
+   * needed it (with an instance to report against) rather than at import time.
+   */
+  #sessiond: Promise<SessiondClient> | undefined;
+
+  async sessiond(
+    // `COCKPIT_SESSIOND_ENDPOINT` is sessiond's own override
+    // (`sessiond/src/main.ts`), honoured on this side too so a dev run — or a
+    // test — can point both halves at a scratch socket instead of the real one.
+    endpoint: string = process.env.COCKPIT_SESSIOND_ENDPOINT ?? sessiondEndpoint()
+  ): Promise<SessiondClient> {
+    const existing = await this.#sessiond?.catch(() => undefined);
+    if (existing && !existing.closed) return existing;
+    // A dead connection is re-dialled; the CHILDREN are unaffected, which is
+    // the whole property sessiond exists to provide.
+    this.#sessiond = (async () => {
+      await ensureSessiond(endpoint);
+      return SessiondClient.connect(endpoint);
+    })();
+    return this.#sessiond;
+  }
+
   async spawn(spec: SpawnPayload, ctx: HarnessContext): Promise<HarnessSession> {
     // Fetched once, before the session (and its `delegate` tool description)
     // exists — see `fetchDelegateTypes`'s own comment for why this is a plain
     // per-spawn HTTP read rather than a fleet-sync field.
     const delegateTypes = await fetchDelegateTypes();
+    // The child is spawned under sessiond, unconditionally — no flag, no
+    // in-process fallback (PLAN.md C7). `procId` is the instance id: stable
+    // across agent restarts, which is what lets the returning agent match a
+    // surviving child to the row it belongs to.
+    const client = await this.sessiond();
     return new ClaudeSession(
       ctx.instanceId,
       ctx,
@@ -993,8 +1286,63 @@ export class ClaudeHarness implements Harness {
       spec.persistSession,
       spec.skills,
       spec.denyTools,
-      delegateTypes
+      delegateTypes,
+      { client, procId: ctx.instanceId }
     );
+  }
+
+  /**
+   * Take custody of a child that outlived the agent (design §4.1). The caller
+   * supplies the cursor it wants resumed from — the hub's own ingest mark when
+   * it has one, `undefined` to follow from now — and the hand-off it wants at
+   * the turn boundary.
+   */
+  async adopt(
+    instanceId: string,
+    ctx: HarnessContext,
+    options: {
+      afterSeq?: number;
+      sessionId?: string | null;
+      onHandoff: (handoff: {
+        instanceId: string;
+        sessionId: string | null;
+        held: { message: NeutralUserMessage; extras: Pick<SendPayload, 'attachments' | 'images' | 'urgent'> }[];
+      }) => void;
+    }
+  ): Promise<ClaudeCustody> {
+    const client = await this.sessiond();
+    const custody = new ClaudeCustody(
+      instanceId,
+      ctx,
+      (data) => void client.write(instanceId, data).catch(() => {}),
+      () => void client.stdinEnd(instanceId).catch(() => {}),
+      options.onHandoff,
+      options.sessionId ?? null
+    );
+    client.subscribe(
+      instanceId,
+      {
+        line: (event) => custody.ingest(event.data),
+        // An exited child during custody is the session ending on its own; the
+        // supervisor's `closed` hook retires the row.
+        exit: () => ctx.closed?.(),
+        // §6's honest refusal, surfaced rather than smoothed over.
+        reset: (nextSeq) =>
+          ctx.frame({
+            type: 'system',
+            subtype: 'sessiond_stream_gap',
+            text: `cockpit: sessiond's replay window overflowed; this transcript resumes at line ${nextSeq}`,
+          } as unknown as NeutralMessage),
+      },
+      options.afterSeq
+    );
+    return custody;
+  }
+
+  /** What sessiond is still holding for this machine — the reattach's first read. */
+  async custodyCandidates(): Promise<SessiondWelcomeInfo> {
+    const client = await this.sessiond();
+    return client.list();
   }
 
   listSessions(dir?: string): Promise<NeutralSessionInfo[]> {
