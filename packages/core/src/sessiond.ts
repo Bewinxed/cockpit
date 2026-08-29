@@ -1,0 +1,211 @@
+/**
+ * sessiond protocol types — the P0 (mechanical extraction) slice of the
+ * sessiond design. Status: design only, matching the design document's own
+ * header. **Types and endpoint derivation live here; nothing else.** No
+ * runtime, no binary, no spawning — leaf P1 builds the daemon against this.
+ *
+ * Deviation from the design doc, by operator order (PLAN.md contract C7):
+ * there is no `COCKPIT_SESSIOND` feature flag. Do not add one here.
+ *
+ * See the design document §3.4 (the verbs sessiond owns), §5 (capability
+ * strings and version tolerance), §6 (ring bounds), §9 (socket mode) and §12
+ * (endpoint derivation) for the reasoning behind every shape below.
+ */
+
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+import type { BuildInfo } from './index';
+
+/**
+ * Capability string a sessiond speaks, exchanged in `attach`/`welcome`
+ * exactly as {@link import('./stream').STREAM_V1} is today (design §5). A
+ * breaking revision is a new string, never a change to this one's meaning.
+ */
+export const SESSIOND_V1 = 'sessiond.v1';
+
+/** What sessiond spawns: built entirely agent-side and handed over opaque (design §3.2). */
+export interface ProcSpec {
+  command: string;
+  args: string[];
+  cwd?: string;
+  env?: Record<string, string>;
+}
+
+/**
+ * agent → sessiond: start a child under sessiond's custody. `procId` is
+ * minted by the agent so `spawn` can carry a `commandId` for the idempotency
+ * map (design §8) without sessiond ever seeing the harness it belongs to.
+ */
+export interface SessiondSpawn {
+  type: 'spawn';
+  commandId: string;
+  procId: string;
+  spec: ProcSpec;
+}
+
+/** agent → sessiond: bytes on the child's stdin. Opaque — sessiond never parses them. */
+export interface SessiondWrite {
+  type: 'write';
+  commandId: string;
+  procId: string;
+  data: string;
+}
+
+/** agent → sessiond: a signal for the child, by name (design §3.4 — "Signal names are the whole vocabulary"). */
+export interface SessiondSignal {
+  type: 'signal';
+  commandId: string;
+  procId: string;
+  sig: NodeJS.Signals;
+}
+
+/** agent → sessiond: close the child's stdin (the SDK's own EOF + grace path). */
+export interface SessiondStdinEnd {
+  type: 'stdin_end';
+  commandId: string;
+  procId: string;
+}
+
+/**
+ * agent → sessiond: follow a child's stdout ring. `afterSeq` present is a
+ * resume; absent follows from now — the same subscribe choreography as the
+ * Ledger Protocol's {@link import('./stream').StreamSubscribe}.
+ */
+export interface SessiondSubscribe {
+  type: 'subscribe';
+  procId: string;
+  afterSeq?: number;
+}
+
+/** agent → sessiond: what is alive, right now. */
+export interface SessiondList {
+  type: 'list';
+}
+
+/** One child as sessiond currently knows it. */
+export interface SessiondProcInfo {
+  procId: string;
+  pid: number;
+  alive: boolean;
+  exitCode?: number;
+  /** The ring's current head seq for this child. */
+  head: number;
+}
+
+/**
+ * sessiond → agent: the reply to `attach`/`list`. `epoch` is a per-boot UUID
+ * (design §7's srcEpoch) — a cursor from a previous epoch is a dead cursor,
+ * never replayed against.
+ */
+export interface SessiondWelcome {
+  type: 'welcome';
+  epoch: string;
+  capabilities: readonly string[];
+  build: BuildInfo;
+  procs: SessiondProcInfo[];
+}
+
+/** sessiond → agent: one line of a child's stdout, sequenced within its epoch. */
+export interface SessiondLine {
+  seq: number;
+  procId: string;
+  data: string;
+}
+
+/** sessiond → agent, live fan-out of one sequenced line. */
+export interface SessiondDelta {
+  type: 'proc.line';
+  event: SessiondLine;
+}
+
+/** sessiond → agent when the requested gap is inside the ring: contiguous, ascending. */
+export interface SessiondBacklog {
+  type: 'proc.backlog';
+  procId: string;
+  events: SessiondLine[];
+}
+
+/**
+ * sessiond → agent when the gap is unrecoverable — the ring overflowed, or
+ * `afterSeq` names a dead epoch. An honest refusal, never a partial replay
+ * (design §6); the agent forwards a `sessiond_stream_gap` system frame.
+ */
+export interface SessiondReset {
+  type: 'proc.reset';
+  procId: string;
+  nextSeq: number;
+}
+
+/** sessiond → agent: a child exited. Delivered once per procId per epoch. */
+export interface SessiondExit {
+  type: 'proc.exit';
+  procId: string;
+  exitCode: number | null;
+  signal: NodeJS.Signals | null;
+}
+
+/**
+ * sessiond → agent, the lifecycle of a mutating command. Unknown message
+ * types are answered, never fatal (design §5): sessiond replies `failed`
+ * with `reason: 'unsupported: <type>'` and keeps the connection; the agent
+ * treats that as a capability probe result, not an error.
+ */
+export interface SessiondAck {
+  type: 'ack';
+  commandId: string;
+  stage: 'accepted' | 'applied' | 'failed';
+  reason?: string;
+}
+
+export type SessiondClientMessage =
+  | SessiondSpawn
+  | SessiondWrite
+  | SessiondSignal
+  | SessiondStdinEnd
+  | SessiondSubscribe
+  | SessiondList;
+
+export type SessiondServerMessage =
+  | SessiondWelcome
+  | SessiondDelta
+  | SessiondBacklog
+  | SessiondReset
+  | SessiondExit
+  | SessiondAck;
+
+/**
+ * The socket dial string a caller connects/listens on — filesystem unix
+ * socket on linux/darwin, a reserved named-pipe name on win32 (design §12).
+ * `node:net` accepts all three shapes in `listen()`/`connect()`; only the
+ * derivation branches.
+ *
+ * - linux : `$XDG_RUNTIME_DIR/cockpit/sessiond.sock`, else `~/.cockpit/sessiond.sock`.
+ *   `XDG_RUNTIME_DIR` is safe here because the install path already requires
+ *   lingering, which keeps the runtime dir alive across logout; `~/.cockpit`
+ *   covers ad-hoc runs.
+ * - darwin: `~/.cockpit/sessiond.sock` always — `sun_path` is 104 bytes on
+ *   darwin, so a long `XDG_RUNTIME_DIR`-style path is a real risk; a fixed,
+ *   short home-relative path avoids it.
+ * - win32 : `\\.\pipe\cockpit-sessiond-<user>` — a name reservation. Windows
+ *   *implementation* is out of scope for this leaf; only the string is fixed
+ *   so nothing downstream has to change when it lands.
+ */
+export const sessiondEndpoint = (): string => {
+  switch (process.platform) {
+    case 'win32': {
+      const user = process.env.USERNAME ?? process.env.USER ?? 'default';
+      return `\\\\.\\pipe\\cockpit-sessiond-${user}`;
+    }
+    case 'darwin':
+      return join(homedir(), '.cockpit', 'sessiond.sock');
+    default: {
+      // linux, and every other platform Node reports: same derivation as
+      // linux's documented case, since XDG_RUNTIME_DIR is the same signal
+      // wherever it is set.
+      const runtimeDir = process.env.XDG_RUNTIME_DIR;
+      return runtimeDir
+        ? join(runtimeDir, 'cockpit', 'sessiond.sock')
+        : join(homedir(), '.cockpit', 'sessiond.sock');
+    }
+  }
+};

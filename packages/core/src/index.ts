@@ -44,6 +44,16 @@ export * from './question';
 // The Ledger Protocol: canonical session streams + acknowledged commands.
 export * from './stream';
 
+// The bounded replay ring behind the Ledger Protocol — SessionRing, lifted
+// from packages/hub/src/stream.ts so sessiond's per-child ring (see
+// sessiond.ts) can reuse the identical class.
+export * from './ring';
+
+// sessiond protocol types (design only as of this export — see
+// packages/core/src/sessiond.ts's own header): the capability string,
+// message shapes, and the cross-platform endpoint derivation. No runtime.
+export * from './sessiond';
+
 // How a session with no given title names itself: its first user message,
 // cleaned. Shared so the hub's derived title and the dashboard's transcript
 // title are the same string, character for character.
