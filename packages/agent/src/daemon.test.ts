@@ -3,6 +3,37 @@ import { Duration, Effect, Fiber, Schedule } from 'effect';
 import { HEALTHY_CONNECTION, reconnect, reconnecting } from './daemon';
 
 /**
+ * A stand-in for `attach` that, unlike {@link fakeHub}, cares which URL each
+ * attempt was made against — that's the one fact `reconnecting`'s
+ * `rediscover` hook is allowed to change between attempts. `now()` advances
+ * by `stepMs` on every attempt (not just on a stood connection, as
+ * {@link fakeHub}'s does), because the whole point here is proving the
+ * "spans at least 2 minutes" half of the trigger, independent of whether any
+ * connection ever went live.
+ */
+const fakeAttempts = (options: { readonly failures: number; readonly stepMs: number; readonly url: () => string }) => {
+  let clock = 0;
+  let calls = 0;
+  const urls: string[] = [];
+  let resolve: () => void = () => {};
+  const drained = new Promise<void>((r) => {
+    resolve = r;
+  });
+  const session = (_markLive: () => void): Effect.Effect<never, { readonly reason: string }> =>
+    Effect.suspend(() => {
+      const attempt = ++calls;
+      urls.push(options.url());
+      if (attempt > options.failures) {
+        resolve();
+        return Effect.never;
+      }
+      clock += options.stepMs;
+      return Effect.fail({ reason: `drop ${attempt}` });
+    });
+  return { session, now: () => clock, drained, urls, calls: () => calls };
+};
+
+/**
  * The daemon's reconnect loop cannot be proved against a live hub: the daemon
  * on this machine owns the operator's running sessions, and a real reconnect
  * costs a restart. So the loop is proved here instead, against a stand-in
@@ -211,5 +242,92 @@ describe('the reconnect schedule', () => {
     for (const delay of delays.slice(7, 12)) {
       expect(within(delay, 30_000)).toBe(true);
     }
+  });
+});
+
+describe('reconnecting: re-discovery on a sustained failure', () => {
+  test('the URL moved: 5 failures spanning >= 2 minutes trigger a fake prober, and later attempts use its answer', async () => {
+    let pinnedUrl = 'ws://old-host:3456/ws';
+    let triggers = 0;
+    // Two failures before the trigger fires (attempts 1-5, spanning exactly
+    // 2 minutes at 30s apart) and two after, so a change in `urls` is
+    // observable rather than inferred from a single sample.
+    const hub = fakeAttempts({ failures: 7, stepMs: 30_000, url: () => pinnedUrl });
+
+    await runUntil(
+      reconnecting(hub.session, {
+        schedule: Schedule.exponential(Duration.seconds(1)).pipe(
+          Schedule.modifyDelay(() => Effect.succeed(Duration.zero))
+        ),
+        now: hub.now,
+        rediscover: {
+          onTrigger: () =>
+            Effect.sync(() => {
+              triggers += 1;
+              pinnedUrl = 'ws://new-host:3456/ws';
+            }),
+        },
+      }),
+      hub.drained
+    );
+
+    expect(triggers).toBe(1);
+    expect(hub.urls.slice(0, 5)).toEqual(Array(5).fill('ws://old-host:3456/ws'));
+    expect(hub.urls.slice(5, 7)).toEqual(Array(2).fill('ws://new-host:3456/ws'));
+  });
+
+  test('the URL never answers: the trigger still fires, but with no winner the series just continues against the old URL', async () => {
+    const pinnedUrl = 'ws://old-host:3456/ws';
+    let triggers = 0;
+    const hub = fakeAttempts({ failures: 8, stepMs: 30_000, url: () => pinnedUrl });
+
+    await runUntil(
+      reconnecting(hub.session, {
+        schedule: Schedule.exponential(Duration.seconds(1)).pipe(
+          Schedule.modifyDelay(() => Effect.succeed(Duration.zero))
+        ),
+        now: hub.now,
+        rediscover: {
+          onTrigger: () =>
+            Effect.sync(() => {
+              // The fake prober found nothing — `rediscoverHub` would resolve
+              // `undefined` here and never call `repin`, so `pinnedUrl` is
+              // deliberately left untouched.
+              triggers += 1;
+            }),
+        },
+      }),
+      hub.drained
+    );
+
+    // A second window closes at attempt 10, but the script only runs 8 —
+    // one trigger, and every attempt (before and after it) on the same URL.
+    expect(triggers).toBe(1);
+    expect(hub.urls.every((url) => url === 'ws://old-host:3456/ws')).toBe(true);
+    expect(hub.calls()).toBe(9);
+  });
+
+  test('5 failures inside 2 minutes but not spanning it: no trigger yet', async () => {
+    let triggers = 0;
+    // 30s apart, only 4 steps by the 5th failure (attempts 1-5 span 4 * 30s =
+    // 120s exactly at the 5th... use a shorter step so the span undershoots).
+    const hub = fakeAttempts({ failures: 5, stepMs: 20_000, url: () => 'ws://host:3456/ws' });
+
+    await runUntil(
+      reconnecting(hub.session, {
+        schedule: Schedule.exponential(Duration.seconds(1)).pipe(
+          Schedule.modifyDelay(() => Effect.succeed(Duration.zero))
+        ),
+        now: hub.now,
+        rediscover: {
+          onTrigger: () => Effect.sync(() => { triggers += 1; }),
+        },
+      }),
+      hub.drained
+    );
+
+    // 5 failures at 20s apart span 80s (< the 2-minute window), so the count
+    // threshold alone never fires the trigger.
+    expect(triggers).toBe(0);
   });
 });

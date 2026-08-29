@@ -5,6 +5,7 @@ import { Data, Duration, Effect, Fiber, Schedule } from 'effect';
 import { arch, hostname, platform } from 'node:os';
 import { buildInfo } from './build';
 import { convergeDeniedTools, DENIED_WEB_TOOLS } from './denied-tools';
+import { rediscoverHub, toWsUrl } from './discovery';
 import { machineId } from './machine-id';
 import { resumableSessions, SessionSupervisor } from './session';
 import { probeTools } from './tools';
@@ -109,6 +110,25 @@ export const reconnect = Schedule.min([
 export const HEALTHY_CONNECTION = Duration.seconds(60);
 
 /**
+ * How many consecutive failures against the pinned URL, and how much wall
+ * time they must span, before the daemon stops trusting that URL and re-runs
+ * discovery instead of just retrying it.
+ *
+ * Both ours, chosen together: 5 failures is inside one retry series (past the
+ * point where a flap is still plausibly transient) but comfortably short of
+ * the count a genuine multi-minute network blip would rack up on its own — and
+ * {@link HEALTHY_CONNECTION} is what keeps a hub restart from ever reaching
+ * either number, since a restart's reconnect ends the series (and resets the
+ * failure count with it) the moment it goes healthy. 2 minutes is there so a
+ * burst of near-instant failures (a hub that is up but refusing connections,
+ * failing in milliseconds) still has to *last*, not just *count*, before the
+ * daemon concludes the URL itself is gone rather than the hub being briefly
+ * unwell at it.
+ */
+export const REDISCOVERY_FAILURE_COUNT = 5;
+export const REDISCOVERY_FAILURE_WINDOW = Duration.minutes(2);
+
+/**
  * Connect, and keep connecting — forever, and with a backoff that means it.
  *
  * `session` is handed a `markLive` it calls at the moment the connection is
@@ -125,6 +145,18 @@ export const HEALTHY_CONNECTION = Duration.seconds(60);
  * The loop deliberately contains nothing but the connection: the supervisor and
  * the scanner are built by the caller, outside it, and stay built across every
  * reconnect.
+ *
+ * `rediscover`, when given, adds a side channel that composes with the above
+ * rather than replacing any of it: a failure counter and its first-failure
+ * timestamp live for the life of one series (the same lifetime `Schedule`'s
+ * own backoff state has), incrementing on every failure regardless of how the
+ * backoff or the healthy-check settle it. Once the counter and the span both
+ * cross the configured threshold, `onTrigger` is awaited — inline, before the
+ * schedule's next attempt — and then the counter resets so the next window
+ * starts clean. A series that ends by going healthy gets a fresh counter the
+ * same way it gets a fresh schedule, because {@link reconnecting} builds a new
+ * `series` value (and therefore a new closure) every time {@link
+ * Effect.forever} re-enters it.
  */
 export const reconnecting = <E extends { readonly reason: string }, R>(
   session: (markLive: () => void) => Effect.Effect<never, E, R>,
@@ -132,26 +164,54 @@ export const reconnecting = <E extends { readonly reason: string }, R>(
     readonly healthyAfter?: Duration.Duration;
     readonly schedule?: typeof reconnect;
     readonly now?: () => number;
+    readonly rediscover?: {
+      readonly failureCount?: number;
+      readonly window?: Duration.Duration;
+      readonly onTrigger: () => Effect.Effect<void>;
+    };
   }
 ) => {
   const healthyAfter = Duration.toMillis(options?.healthyAfter ?? HEALTHY_CONNECTION);
   const now = options?.now ?? (() => Date.now());
-  const series = Effect.suspend(() => {
-    // Per-pass, and read only after the failure that ends the pass — nothing
-    // else can observe it, so a plain binding is the whole of the state.
-    let liveAt: number | undefined;
-    return session(() => {
-      liveAt = now();
-    }).pipe(
-      Effect.tapError((error) => Effect.logWarning(`${error.reason} — reconnecting`)),
-      Effect.catch((error: E) =>
-        liveAt !== undefined && now() - liveAt >= healthyAfter
-          ? Effect.void
-          : Effect.fail(error)
-      )
-    );
-  }).pipe(Effect.retry(options?.schedule ?? reconnect));
-  return Effect.forever(series);
+  const rediscover = options?.rediscover;
+  const failureThreshold = rediscover?.failureCount ?? REDISCOVERY_FAILURE_COUNT;
+  const failureWindow = Duration.toMillis(rediscover?.window ?? REDISCOVERY_FAILURE_WINDOW);
+
+  const buildSeries = () => {
+    // Series-scoped, not attempt-scoped: unlike `liveAt` below, this must
+    // survive across the retries `Effect.retry` runs within one series, so it
+    // lives in this closure rather than inside the `Effect.suspend` thunk that
+    // `Effect.retry` re-invokes on every attempt.
+    let failures = 0;
+    let firstFailureAt: number | undefined;
+
+    return Effect.suspend(() => {
+      // Per-pass, and read only after the failure that ends the pass — nothing
+      // else can observe it, so a plain binding is the whole of the state.
+      let liveAt: number | undefined;
+      return session(() => {
+        liveAt = now();
+      }).pipe(
+        Effect.tapError((error) => Effect.logWarning(`${error.reason} — reconnecting`)),
+        Effect.tapError(() => {
+          if (!rediscover) return Effect.void;
+          const at = now();
+          failures += 1;
+          firstFailureAt ??= at;
+          if (failures < failureThreshold || at - firstFailureAt < failureWindow) return Effect.void;
+          failures = 0;
+          firstFailureAt = undefined;
+          return rediscover.onTrigger();
+        }),
+        Effect.catch((error: E) =>
+          liveAt !== undefined && now() - liveAt >= healthyAfter
+            ? Effect.void
+            : Effect.fail(error)
+        )
+      );
+    }).pipe(Effect.retry(options?.schedule ?? reconnect));
+  };
+  return Effect.forever(Effect.suspend(buildSeries));
 };
 
 const closeReason = (event: CloseEvent): string => event.reason || `close code ${event.code}`;
@@ -338,6 +398,11 @@ const attach = (
 export const startDaemon = (auth?: AuthState) =>
   Effect.gen(function* () {
     const url = process.env[COCKPIT_ENV.hubUrl] ?? DEFAULT_HUB_URL;
+    // Re-pinned by `onSustainedFailure` below, read fresh by every attempt
+    // `reconnecting` makes — see its own doc for why a plain closure variable
+    // is enough: each attempt calls `session` anew, in the same tick that
+    // reads this.
+    let hubUrl = url;
     // The claude harness's auth is the machine's headline word — the original
     // rail still reads it — while `register` carries every harness's own.
     const claude = harnesses().find((adapter) => adapter.kind === 'claude');
@@ -382,8 +447,27 @@ export const startDaemon = (auth?: AuthState) =>
     // The supervisor above it keeps its sessions and the scanner keeps its
     // dedup set across every reconnect; an interrupt still unwinds through this
     // to the supervisor's release, so a signalled daemon drains between turns.
-    yield* reconnecting((markLive) =>
-      Effect.scoped(attach(scanner, supervisor, identity, url, markLive))
+    yield* reconnecting(
+      (markLive) => Effect.scoped(attach(scanner, supervisor, identity, hubUrl, markLive)),
+      {
+        rediscover: {
+          onTrigger: () =>
+            Effect.promise(async () => {
+              const winner = await rediscoverHub({
+                log: (line) => Effect.runSync(Effect.logInfo(line)),
+              });
+              if (winner) hubUrl = toWsUrl(winner);
+            }).pipe(
+              // A rediscovery attempt that throws (a probe rejecting oddly, a
+              // malformed tailscale JSON) must never take the reconnect loop
+              // down with it — worst case is the pinned URL simply stays put
+              // and the backoff series it was already running continues.
+              Effect.catchDefect((defect) =>
+                Effect.logWarning(`rediscovery failed: ${String(defect)}`)
+              )
+            ),
+        },
+      }
     );
   }).pipe(Effect.scoped);
 

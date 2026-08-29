@@ -1,6 +1,13 @@
-import { existsSync } from 'node:fs';
+import {
+  browseMdns,
+  firstToAnswer,
+  MDNS_BROWSE_MS,
+  probeHub,
+  tailscaleCandidates,
+  toHttpBase,
+  toWsUrl,
+} from '@cockpit/agent';
 import { COCKPIT_ENV, COCKPIT_HUB_PORT, COCKPIT_MDNS_TYPE } from '@cockpit/core';
-import { Bonjour, type Service } from 'bonjour-service';
 import { CONFIG_PATH, readConfig, writeConfig } from './config';
 
 /** Which rung of the ladder answered. */
@@ -21,127 +28,16 @@ export interface DiscoverOptions {
   log?: (line: string) => void;
 }
 
-/** Long enough for a responder on the link to answer, short enough to not feel stuck. */
-const MDNS_BROWSE_MS = 2000;
-const PROBE_TIMEOUT_MS = 1500;
-
-const IPV4 = /^\d{1,3}(\.\d{1,3}){3}$/;
-
-/**
- * Accepts either end of the pair — the daemon's `ws://host:port/ws`, a plain
- * http base, or a bare `host:port` — and answers with the http base.
- */
-const toHttpBase = (raw: string): string | undefined => {
-  const text = raw.trim();
-  const url = URL.parse(/^[a-z][a-z0-9+.-]*:\/\//i.test(text) ? text : `http://${text}`);
-  if (!url) return undefined;
-  const scheme = { 'ws:': 'http:', 'wss:': 'https:' }[url.protocol] ?? url.protocol;
-  return scheme === 'http:' || scheme === 'https:' ? `${scheme}//${url.host}` : undefined;
-};
-
-const toWsUrl = (httpBase: string): string => `${httpBase.replace(/^http/, 'ws')}/ws`;
-
-/**
- * What tells a cockpit hub apart from whatever else is listening on the port:
- * `/api/agents` is the fleet, so a 200 carrying an array is the whole test.
- */
-const probe = async (httpUrl: string): Promise<boolean> => {
-  try {
-    const response = await fetch(`${httpUrl}/api/agents`, {
-      signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
-    });
-    return response.ok && Array.isArray(await response.json());
-  } catch {
-    return false;
-  }
-};
-
-/** Probes every candidate at once and takes whichever answers first. */
-const firstToAnswer = async (candidates: string[]): Promise<string | undefined> => {
-  if (candidates.length === 0) return undefined;
-  return Promise.any(
-    candidates.map(async (url) => {
-      if (!(await probe(url))) throw new Error(url);
-      return url;
-    })
-  ).catch(() => undefined);
-};
-
-/**
- * Browses `_cockpit._tcp.local` for as long as it takes the first hub to answer.
- *
- * This is link-local multicast. It does not cross a router and it does not cross
- * a tailnet — a hub reachable only over Tailscale is invisible here no matter
- * how long the browse runs. That case belongs to {@link tailscaleCandidates};
- * do not come back and try to widen this one.
- */
-const browseMdns = (): Promise<string[]> =>
-  new Promise((resolve) => {
-    const bonjour = new Bonjour();
-    const settle = (candidates: string[]): void => {
-      clearTimeout(timer);
-      browser.stop();
-      bonjour.destroy();
-      resolve(candidates);
-    };
-    const browser = bonjour.find({ type: COCKPIT_MDNS_TYPE, protocol: 'tcp' }, (service: Service) => {
-      const addresses = (service.addresses ?? []).filter((address) => IPV4.test(address));
-      if (addresses.length > 0) settle(addresses.map((address) => `http://${address}:${service.port}`));
-    });
-    const timer = setTimeout(() => settle([]), MDNS_BROWSE_MS);
-  });
-
-/** The shape of `tailscale status --json` this reads, and nothing more. */
-interface TailscaleNode {
-  Online?: boolean;
-  HostName?: string;
-  TailscaleIPs?: string[];
-}
-
-/**
- * Every online node on the tailnet, at the hub port.
- *
- * This is the rung that actually crosses machines: mDNS is link-local, so a hub
- * in another building or another country is only ever found here. `Self` is in
- * the list alongside the peers because a hub can be bound to its tailnet address
- * alone, which no localhost probe would reach.
- */
-/**
- * The macOS app ships its CLI inside the bundle and only symlinks it into the
- * PATH if the user asks, so a Mac on the tailnet reads as "no tailscale" unless
- * these are tried — found the hard way, from a Mac that was plainly on the net.
- */
-const TAILSCALE_BINARIES = [
-  '/Applications/Tailscale.app/Contents/MacOS/Tailscale',
-  '/usr/local/bin/tailscale',
-  '/opt/homebrew/bin/tailscale',
-];
-
-const tailscaleBinary = (): string | undefined =>
-  Bun.which('tailscale') ?? TAILSCALE_BINARIES.find((path) => existsSync(path));
-
-const tailscaleCandidates = async (port: number): Promise<{ ip: string; host: string }[]> => {
-  const binary = tailscaleBinary();
-  if (!binary) return [];
-  const status = await Bun.$`${binary} status --json`
-    .quiet()
-    .json()
-    .catch(() => undefined);
-  if (!status) return [];
-
-  const nodes: TailscaleNode[] = [
-    ...Object.values((status.Peer ?? {}) as Record<string, TailscaleNode>),
-    ...((status.Self ? [status.Self] : []) as TailscaleNode[]),
-  ];
-  return nodes
-    .filter((node) => node.Online && node.TailscaleIPs?.[0])
-    .map((node) => ({ ip: `http://${node.TailscaleIPs?.[0]}:${port}`, host: node.HostName ?? '?' }));
-};
-
 /**
  * Finds the hub, trying the rungs in order and stopping at the first that
  * answers. Every rung narrates itself through `log`, because the answer to "why
  * did it pick that one" has to be readable without a debugger.
+ *
+ * The mDNS browse, the tailscale walk, and the probe itself live in
+ * `@cockpit/agent`'s `discovery` module — they are shared with the daemon's
+ * own re-discovery on a sustained reconnect failure. This file keeps only the
+ * rungs that are specific to a `cockpit up`: being told outright, the CLI's
+ * cached config, and localhost.
  */
 export const discoverHub = async ({ hub, log }: DiscoverOptions = {}): Promise<Hub | undefined> => {
   const note = log ?? ((): void => {});
@@ -172,7 +68,7 @@ export const discoverHub = async ({ hub, log }: DiscoverOptions = {}): Promise<H
   const cached = await readConfig();
   if (cached?.hubUrl) {
     note(`[2/5] cached ${cached.hubUrl} (${CONFIG_PATH}): probing`);
-    if (await probe(cached.hubUrl)) {
+    if (await probeHub(cached.hubUrl)) {
       note(`[2/5] cached hub answered`);
       return settle(cached.hubUrl, 'config');
     }
@@ -213,7 +109,7 @@ export const discoverHub = async ({ hub, log }: DiscoverOptions = {}): Promise<H
   // 5. The hub is on this machine, which is how most people start.
   const local = `http://localhost:${port}`;
   note(`[5/5] ${local}: probing`);
-  if (await probe(local)) {
+  if (await probeHub(local)) {
     note(`[5/5] localhost answered`);
     return settle(local, 'localhost');
   }

@@ -79,6 +79,7 @@
         "@earendil-works/pi-ai": "0.84.1",
         "@earendil-works/pi-coding-agent": "0.84.1",
         "@opencode-ai/sdk": "1.18.18",
+        "bonjour-service": "^1.4.4",
         "effect": "beta",
         "typebox": "1.3.7",
         "zod": "3.25.76",
