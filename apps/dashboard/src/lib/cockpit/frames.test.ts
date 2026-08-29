@@ -201,7 +201,6 @@ test('a successful result still reports its cost, without pushing a line', () =>
   expect(mapping.cost).toBe(1.2345);
   // The success path pushed nothing before, and still pushes nothing now.
   expect(mapping.messages).toEqual([]);
-  console.log(`DIAG cost-on-success: cost=${mapping.cost} lines=${mapping.messages.length}`);
 });
 
 test('an errored result carries its cost and the error line still has it', () => {
@@ -218,9 +217,6 @@ test('an errored result carries its cost and the error line still has it', () =>
   expect(mapping.messages).toHaveLength(1);
   expect(mapping.messages[0].type).toBe('result.error');
   expect(mapping.messages[0].metadata?.totalCost).toBe(0.4567);
-  console.log(
-    `DIAG cost-on-error: cost=${mapping.cost} line=${mapping.messages[0].type} lineCost=${mapping.messages[0].metadata?.totalCost}`
-  );
 });
 
 const peer = (session: string | undefined, type: Message['type'] = 'user.peer'): Message => ({
@@ -239,7 +235,6 @@ test('a peer from this transcript\'s own delegate is its report', () => {
   const notReport = isDelegateReport(peer('other'), 'parent', instances);
   expect(report).toBe(true);
   expect(notReport).toBe(false);
-  console.log(`DIAG delegate-report: fromDelegate=${report} fromOther=${notReport}`);
 });
 
 test('a delegate report belongs to its parent transcript only', () => {
@@ -248,7 +243,6 @@ test('a delegate report belongs to its parent transcript only', () => {
   const elsewhere = isDelegateReport(peer('deleg1'), 'somewhere-else', instances);
   expect(here).toBe(true);
   expect(elsewhere).toBe(false);
-  console.log(`DIAG report-parent-scoped: inParent=${here} inOther=${elsewhere}`);
 });
 
 test('a peer is no delegate report when its row has no parent, or it is no peer', () => {
@@ -259,7 +253,6 @@ test('a peer is no delegate report when its row has no parent, or it is no peer'
   expect(orphan).toBe(false);
   expect(notPeer).toBe(false);
   expect(noSession).toBe(false);
-  console.log(`DIAG report-guards: unparented=${orphan} nonPeer=${notPeer} noSession=${noSession}`);
 });
 
 // A delegate's permission ask arrives as a peer-origin user message whose text
@@ -562,7 +555,6 @@ test('an ask lands once, however many times it is filed', () => {
   foldDelegateEvent(list, askRow(1, 'per_1', { command: 'bun test' }));
   expect(list).toHaveLength(1);
   expect(list[0].status).toBe('pending');
-  console.log(`DIAG fold-dedup: rows=${list.length} status=${list[0].status}`);
 });
 
 test('an answer settles the ask it names — allowed answers it, denied denies it', () => {

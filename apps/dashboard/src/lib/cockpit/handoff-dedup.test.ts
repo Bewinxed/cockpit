@@ -49,9 +49,6 @@ test('case 1 — live echo then re-read dedups to one peer bubble', () => {
   expect(peers(merged)).toBe(1);
   expect(users(merged)).toBe(0);
   expect(merged[0].sdkUuid).toBe('u-1');
-  console.log(
-    `DIAG case1 live-then-reread: total=${merged.length} peer=${peers(merged)} user=${users(merged)} uuid=${merged[0].sdkUuid}`
-  );
 });
 
 test('case 2 — re-read only upgrades the stored copy via the marker', () => {
@@ -61,9 +58,6 @@ test('case 2 — re-read only upgrades the stored copy via the marker', () => {
   expect(peers(stored)).toBe(1);
   expect(users(stored)).toBe(0);
   expect(stored[0].metadata?.peerName).toBe('sender');
-  console.log(
-    `DIAG case2 reread-only: total=${stored.length} peer=${peers(stored)} user=${users(stored)} name=${stored[0].metadata?.peerName}`
-  );
 });
 
 test('case 3 — live only still shows its one peer bubble', () => {
@@ -73,7 +67,6 @@ test('case 3 — live only still shows its one peer bubble', () => {
   expect(peers(live)).toBe(1);
   expect(users(live)).toBe(0);
   expect(live[0].sdkUuid).toBeUndefined();
-  console.log(`DIAG case3 live-only: total=${live.length} peer=${peers(live)} user=${users(live)} uuid=none`);
 });
 
 test('case 4 — an ordinary stored user turn stays a plain user turn', () => {
@@ -82,7 +75,4 @@ test('case 4 — an ordinary stored user turn stays a plain user turn', () => {
   expect(stored).toHaveLength(1);
   expect(peers(stored)).toBe(0);
   expect(users(stored)).toBe(1);
-  console.log(
-    `DIAG case4 control: total=${stored.length} peer=${peers(stored)} user=${users(stored)}`
-  );
 });

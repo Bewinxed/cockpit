@@ -124,10 +124,10 @@
     <MessageBody source={message.content} />
     {#if message.metadata?.attachments?.length || message.metadata?.images?.length}
       <div class="chips">
-        {#each message.metadata.attachments ?? [] as att}
+        {#each message.metadata.attachments ?? [] as att (att.name)}
           <Badge variant="secondary" class={chipClass}>{att.name} · {att.chars} chars</Badge>
         {/each}
-        {#each message.metadata.images ?? [] as img, i}
+        {#each message.metadata.images ?? [] as img, i (img.dataUri ?? `${img.mediaType}-${i}`)}
           {#if img.dataUri}
             <img class="shot" src={img.dataUri} alt="Image {i + 1} sent with this message" />
           {:else}

@@ -38,7 +38,6 @@ test('a plain task_started mints no branch', () => {
   );
   expect(mapping.branch).toBeUndefined();
   expect(mapping.messages).toEqual([]);
-  console.log(`DIAG plain-task_started: branch=${mapping.branch === undefined ? 'none' : 'set'} messages=${mapping.messages.length}`);
 });
 
 test('a plain task_notification yields one system.task line, and creates no branch', () => {
@@ -59,11 +58,6 @@ test('a plain task_notification yields one system.task line, and creates no bran
   const branches: Record<string, SubagentState> = {};
   applyBranchEvent(branches, 'i1', mapping.branch!);
   expect(branches).toEqual({});
-  console.log(
-    `DIAG plain-task_notification: type=${mapping.messages[0].type} content=${JSON.stringify(
-      mapping.messages[0].content
-    )} summary=${mapping.messages[0].metadata?.result?.length}ch branches=${Object.keys(branches).length}`
-  );
 });
 
 test('a failed plain task reads "task failed"', () => {
@@ -103,9 +97,6 @@ test('a subagentSpawn tool_use then task frames leave exactly one branch that up
   expect(Object.keys(branches)).toHaveLength(1);
   expect(branches.toolu_agent.status).toBe('complete');
   expect(branches.toolu_agent.result).toBe('SUBAGENT-MARKER');
-  console.log(
-    `DIAG subagent-spawn: branches=${Object.keys(branches).length} status=${branches.toolu_agent.status} type=${branches.toolu_agent.subagentType}`
-  );
 });
 
 test('task frames carrying a real subagent_type create a branch without a prior tool_use', () => {
@@ -118,7 +109,6 @@ test('task frames carrying a real subagent_type create a branch without a prior 
   expect(branches.toolu_agent).toBeDefined();
   expect(branches.toolu_agent.subagentType).toBe('general-purpose');
   expect(branches.toolu_agent.status).toBe('running');
-  console.log(`DIAG subagent-type-only: created=${branches.toolu_agent.subagentType} status=${branches.toolu_agent.status}`);
 });
 
 test('a task_progress without subagent_type mints no branch', () => {
@@ -132,7 +122,6 @@ test('a task_progress without subagent_type mints no branch', () => {
     })
   );
   expect(mapping.branch).toBeUndefined();
-  console.log(`DIAG plain-task_progress: branch=${mapping.branch === undefined ? 'none' : 'set'}`);
 });
 
 test('a real subagent task_notification is suppressed: one branch, zero system.task lines', () => {
@@ -174,9 +163,6 @@ test('a real subagent task_notification is suppressed: one branch, zero system.t
   );
   expect(notified.messages).toHaveLength(1);
   expect(surviving).toHaveLength(0);
-  console.log(
-    `DIAG real-subagent task_notification: branches=${Object.keys(branches).length} emitted=${notified.messages.length} surviving=${surviving.length}`
-  );
 });
 
 test('a plain task_notification survives suppression: exactly one system.task line', () => {
@@ -198,7 +184,4 @@ test('a plain task_notification survives suppression: exactly one system.task li
   );
   expect(surviving).toHaveLength(1);
   expect(surviving[0].type).toBe('system.task');
-  console.log(
-    `DIAG plain-task suppression: branches=${Object.keys(branches).length} surviving=${surviving.length} type=${surviving[0].type}`
-  );
 });

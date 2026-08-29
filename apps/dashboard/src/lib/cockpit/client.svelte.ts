@@ -158,9 +158,6 @@ export const isResumable = (row: InstanceRow): boolean =>
 export const isFailed = (row: InstanceRow): boolean => row.status === 'error';
 
 /** A side quest's worktree sits under the project's checkout, so it counts as in it. */
-/** The last path segment — how the rail names a session, and how a hand-off does. */
-const leafOf = (path: string): string => path.split('/').filter(Boolean).pop() ?? path;
-
 const under = (root: string, path: string): boolean =>
   path === root || path.startsWith(`${root}/`);
 
