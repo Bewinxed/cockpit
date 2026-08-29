@@ -89,6 +89,14 @@ const repoRoot = (): string => {
 const ROOT = repoRoot();
 
 /**
+ * The checkout this CLI is *running from* — which is not necessarily the
+ * deployment clone. The deploy poller needs it: defaulting to
+ * {@link deployRoot} means a dev-tree agent polls, fetches and restarts
+ * services for a clone it is not part of.
+ */
+export const CHECKOUT_ROOT = ROOT;
+
+/**
  * Every path a set of units names, derived from one checkout root. It is a
  * function of the root rather than a set of module constants because
  * {@link deployInit} installs units for a checkout that is *not* the one this

@@ -5,6 +5,7 @@ import { CONFIG_PATH, readConfig } from './config';
 import { discoverHub, type Hub } from './discover';
 import { clearToken, login, LoginError, saveToken } from './login';
 import {
+  CHECKOUT_ROOT,
   DEPLOY_BRANCH,
   DEPLOY_MARKER,
   deployInit,
@@ -331,7 +332,13 @@ const up = async (args: Args): Promise<number> => {
   // never fetched, compared or pulled. On a dev machine this is a no-op that
   // costs one `stat` a minute; on a deployed machine it is what makes a push to
   // main reach it (C8).
-  watchDeployment();
+  //
+  // Pointed at THIS agent's own checkout, not at `deployRoot()`. The default
+  // would aim every agent at `~/.cockpit/app` regardless of where it runs from,
+  // so a dev-tree agent would poll the clone, pull into it, and restart the
+  // service stack it is not part of — the safety the comment above claims is
+  // only true when the root is the poller's own tree.
+  watchDeployment({ root: CHECKOUT_ROOT });
   return 0;
 };
 
