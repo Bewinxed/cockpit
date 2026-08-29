@@ -22,6 +22,7 @@ import type {
   Rule,
   RuleDraft,
   SendPayload,
+  SessionPulse,
   SkillFile,
   SpawnPayload,
   ToolState,
@@ -52,6 +53,7 @@ import {
   READ_MEMORY_FILE,
   READ_SKILL_FILES,
   RESOLVE_PERMISSION,
+  RESTART_RESUMABLE,
   TOOL_CATALOG,
   toolSpec,
   UPDATE_COCKPIT,
@@ -75,6 +77,47 @@ type ControlResult = Extract<FramePayload, { kind: 'control_result' }>;
 
 /** A busy probe is polled in a loop before a restart, so it answers fast or not at all. */
 const BUSY_TIMEOUT_MS = 5_000;
+
+/**
+ * How far back a register will reach to restart a session it finds orphaned.
+ *
+ * Ours, because nothing in the protocol declares a session worth reviving. A
+ * daemon restart — a crash, an update, a `systemctl restart` — puts the machine
+ * back inside seconds to a couple of minutes, and the sessions that were alive
+ * across that gap are the ones the operator was in the middle of. Half an hour
+ * covers that with room to spare while excluding the case that produced the
+ * defect this bound exists for: a machine that had been down for a day and a
+ * half came back and the hub cheerfully re-spawned every session it had ever
+ * held, because an orphan from 36 hours ago and an orphan from 30 seconds ago
+ * were treated identically. Older rows are not lost — they settle as `sleeping`
+ * and the operator wakes the ones they want.
+ */
+const RESTORE_HORIZON_MS = 30 * 60_000;
+
+/**
+ * And how many, newest first.
+ *
+ * Ours, because a register is one message and the respawns it triggers all land
+ * on one machine at once. Twenty simultaneous harness launches is already a
+ * heavy but survivable burst; the 178 rows that motivated this work would have
+ * been a fork bomb wearing a recovery hat. Everything past the cap settles as
+ * `sleeping`, which is a wake button away.
+ */
+const RESTORE_MAX = 20;
+
+/**
+ * How long a `starting` row is given before a heartbeat that does not list it
+ * counts as evidence that the spawn never landed.
+ *
+ * Ours: three beats at the daemon's 15s `HEARTBEAT_INTERVAL` (`packages/agent/
+ * src/daemon.ts`). The race it covers is real and one-sided — the hub writes
+ * `starting` the instant it forwards a spawn, and the beat already in flight
+ * from that machine cannot possibly know about it — so the grace only has to
+ * outlast the round trip plus a harness launch. It applies to `starting` alone:
+ * a row that was confirmed `running` and then went unlisted is not racing
+ * anything.
+ */
+const HEARTBEAT_SETTLE_GRACE_MS = 45_000;
 
 /** An update is a pull, an install and a dashboard build — minutes, not seconds. */
 const UPDATE_TIMEOUT_MS = 10 * 60_000;
@@ -632,6 +675,44 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
   // worth one write at startup.
   db.markAllAgentsOffline();
 
+  // And the same honesty for the sessions those machines were carrying. A hub
+  // that just started holds no daemon sockets, so it has no basis for any row
+  // claiming `running` or `starting`; and rows the previous taxonomy had to file
+  // under `error` for the crime of having been restarted are re-read as what
+  // they always were — `sleeping`. Idempotent, so this is a boot step and not a
+  // migration script somebody has to remember to run.
+  const swept = db.sweepBootStatuses(RESTART_RESUMABLE);
+  if (swept.toUnknown || swept.toSleeping)
+    console.log(
+      `[hub] boot sweep: ${swept.toUnknown} session(s) → unknown, ${swept.toSleeping} legacy restart error(s) → sleeping`
+    );
+
+  /**
+   * What each session is doing right now, as its own daemon last said: memory
+   * only, and never a column.
+   *
+   * A pulse is the daemon's first-hand reading of a live process — working,
+   * blocked, idle — and it is worth exactly as long as the process it describes.
+   * Persisting it would recreate the defect this whole build exists to close in
+   * a second column, so it lives here, keyed by instance, and is dropped the
+   * moment the row it belongs to settles or is discarded. A dashboard opening
+   * cold gets the map in its first `instances` frame, which is the difference
+   * between a rail that knows what is working on connect and one that has to
+   * wait for the next pulse to arrive.
+   */
+  const pulses = new Map<string, SessionPulse>();
+
+  /**
+   * What this hub was built from, for the frame. `buildInfo()` is async and
+   * `instancesFrame` is not, so it is read once at boot and cached; a running
+   * hub is whatever it started as, which is the same assumption `buildInfo`
+   * itself makes.
+   */
+  let hubBuild: BuildInfo | undefined;
+  void buildInfo().then((info) => {
+    hubBuild = info;
+  });
+
   /**
    * Standing instructions, enforced on the frame stream this server already
    * carries. Constructed here so it shares the request's `db` and reaches
@@ -652,6 +733,9 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
       if (parked.instanceId === instanceId && parked.requestId)
         telegram?.onSettled(parked.requestId);
     pending.forget(instanceId);
+    // Nor is it doing anything any more: a pulse outliving its process is the
+    // same stale-liveness lie in memory instead of in a column.
+    pulses.delete(instanceId);
     // A session that died before it ever said anything is never going to name
     // itself; nothing should still be waiting to hear its first words.
     awaitingFirstTurn.delete(instanceId);
@@ -863,7 +947,15 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
    *
    * Deliberately not a revive-on-demand: a session the user left running was
    * left running on purpose, and a restart they did not ask for should not be
-   * something they have to repair one row at a time.
+   * something they have to repair one row at a time. Bounded at the call site
+   * (see {@link RESTORE_HORIZON_MS} / {@link RESTORE_MAX}) — this function does
+   * one session and asks no questions about how many came before it.
+   *
+   * The row it writes is `starting`, never `running`: this sends a spawn and
+   * returns, and a spawn in flight is not a process. The daemon's next word —
+   * the session's `init` frame, or the heartbeat listing the id — is what
+   * promotes it. That single distinction is most of the difference between a
+   * board that reports 178 live sessions and one that reports 42.
    */
   const restore = (agent: HubSocket, row: InstanceRow): void => {
     const payload: SpawnPayload = {
@@ -927,6 +1019,47 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
     }));
 
   /**
+   * The same law, applied to sessions — the instance of it the codebase was
+   * violating.
+   *
+   * `instances.status` is written on lifecycle events and read back by every
+   * rail as if it were a statement about now. It is not: the hub cannot see a
+   * process, only the daemon can, and when the hub is not holding that daemon's
+   * socket there is no one to ask. Measured in exactly that state:
+   * `/api/instances` reported 178 sessions `running` on a machine carrying 42
+   * `claude` processes, all of them idling at ≤1.5% CPU and 36–44 hours old,
+   * with two rows touched in the last hour and a half. Every one of those
+   * `running` values was true when written and had been true of nothing since.
+   *
+   * So a row whose machine is absent from the socket registry is served
+   * `unknown`, which is precisely what the hub knows about it: not that it
+   * failed, not that it is fine — that there is currently no way to find out.
+   * The stored column is left alone; it is history, and history is allowed to
+   * say what last happened.
+   *
+   * The overlay covers the values that *claim* something about a live process —
+   * `running`, `starting`, `sleeping` (which claims a session is there to be
+   * woken, and waking it needs the machine). `stopped`, `error` and `discarded`
+   * pass through untouched: they are records of something that already
+   * finished, and an unreachable machine does not make a session that was
+   * deliberately stopped any less stopped. Serving `unknown` for those would
+   * trade a fact for a shrug.
+   *
+   * Applied at the two places a session's status reaches a reader: the
+   * `/api/instances` route and {@link instancesFrame}.
+   */
+  const withSessionPresence = <Row extends { machineId: string; status: string }>(
+    rows: Row[]
+  ): Row[] =>
+    rows.map((row) =>
+      registry.agent(row.machineId) ||
+      (row.status !== 'running' && row.status !== 'starting' && row.status !== 'sleeping')
+        ? row
+        : { ...row, status: 'unknown' }
+    );
+
+
+  /**
    * The whole board as one message: every row, every machine, and what each
    * session is holding. Built in one place so the snapshot a dashboard is
    * handed on connect and the snapshot it is pushed on every move are the same
@@ -942,10 +1075,16 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
     machineId,
     payload: {
       kind: 'instances',
-      instances: db.listInstances(),
+      instances: withSessionPresence(db.listInstances()),
       agents: withPresence(db.listAgents()),
       handoffs: Object.fromEntries(handoffs),
       queues: Object.fromEntries(queues),
+      // Additive, both of them: a dashboard that predates either reads the
+      // frame exactly as it always did. `pulses` seeds the rail's now-state on
+      // connect instead of leaving it blank until the next beat; `hubBuild`
+      // lets a client tell a hub that is behind from a machine that is.
+      pulses: Object.fromEntries(pulses),
+      ...(hubBuild ? { hubBuild } : {}),
       capabilities: [...HUB_CAPABILITIES],
     },
   });
@@ -1574,7 +1713,7 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
         return answer.result;
       }
     )
-    .get('/api/instances', () => db.listInstances())
+    .get('/api/instances', () => withSessionPresence(db.listInstances()))
     // What these conversations are called — *whether or not the board still
     // lists them*.
     //
@@ -2791,7 +2930,7 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
         }
 
         switch (message.verb) {
-          case 'register':
+          case 'register': {
             registry.registerAgent(message.machineId, ws);
             db.upsertAgent({
               machineId: message.machineId,
@@ -2806,20 +2945,44 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
             // the reply would arrive at a daemon with no such session. Drop them
             // with the sessions they belonged to, or they replay to every
             // dashboard that connects and fail on click.
-            for (const settled of db.settleInstances(
+            const settled = db.settleInstances(
               message.machineId,
               peekInstances(message.payload),
               peekResumable(message.payload)
-            )) {
-              forgetPending(settled.row.id);
-              escalateRoutedAsks(settled.row.id);
-              // The daemon went away and came back. A session whose conversation
-              // the SDK still has is not finished — it lost its process, which is
-              // this hub's problem to fix rather than the user's to notice. Put
-              // it back exactly as it was: same directory, same model, same
-              // permission mode, resumed onto the same SDK session.
-              if (settled.resumes && settled.row.sessionId) restore(ws, settled.row);
+            );
+            for (const orphan of settled) {
+              forgetPending(orphan.row.id);
+              escalateRoutedAsks(orphan.row.id);
             }
+            // The daemon went away and came back. A session whose conversation
+            // the harness still has is not finished — it lost its process, which
+            // is this hub's problem to fix rather than the user's to notice. Put
+            // it back exactly as it was: same directory, same model, same
+            // permission mode, resumed onto the same session.
+            //
+            // But *bounded*, which it was not. Every resumable orphan was
+            // respawned unconditionally on every register, which is how a
+            // machine that had been away for a day and a half came back and was
+            // handed its entire history as a work queue: 178 rows, spawned
+            // fire-and-forget and each one written `running` before a single
+            // process was confirmed. So: newest first, nothing older than
+            // {@link RESTORE_HORIZON_MS}, and never more than
+            // {@link RESTORE_MAX}. `settleInstances` has already written every
+            // one of these `sleeping`, so the ones this skips are not lost —
+            // they are asleep, listed, and one wake away.
+            const cutoff = Date.now() - RESTORE_HORIZON_MS;
+            const revivable = settled
+              .filter((orphan) => orphan.resumes && orphan.row.sessionId)
+              // `row` is the pre-settle snapshot, so this reads when the session
+              // last moved, not when the settle just now touched it.
+              .sort((a, b) => b.row.updatedAt.getTime() - a.row.updatedAt.getTime())
+              .filter((orphan) => orphan.row.updatedAt.getTime() >= cutoff)
+              .slice(0, RESTORE_MAX);
+            for (const orphan of revivable) restore(ws, orphan.row);
+            if (settled.length > revivable.length)
+              console.log(
+                `[hub] ${message.machineId}: restoring ${revivable.length} of ${settled.length} orphaned session(s); the rest are sleeping`
+              );
             publishInstances(message.machineId);
             autoInstall(message.machineId, ws);
             sendFleetSync(message.machineId, ws);
@@ -2831,10 +2994,39 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
             void nameStoredSessions(message.machineId);
             ws.send(ack(message));
             break;
-          case 'heartbeat':
+          }
+          case 'heartbeat': {
             db.touchAgent(message.machineId);
+            // The beat is the truth (contract C4). Every 15s the machine says
+            // what it is carrying, and the hub's column is made to agree with
+            // it: listed ids become `running`, and rows claiming a process the
+            // machine does not list settle — `sleeping` when there is a
+            // conversation to resume, `error` when there is not.
+            //
+            // Deliberately no respawn from this path. A heartbeat is a report,
+            // and answering a report by starting processes turns the fleet's
+            // slowest-moving surface into its most destructive one: the daemon
+            // would be told to relaunch a session every 15 seconds for as long
+            // as it disagreed with the hub. Recovery is register's job, where
+            // it happens once, bounded, on an event that means "the machine
+            // just came back".
+            const beat = db.reconcileHeartbeat(
+              message.machineId,
+              peekInstances(message.payload),
+              HEARTBEAT_SETTLE_GRACE_MS
+            );
+            for (const row of beat.settled) {
+              // Its parked questions cannot be answered by a process that is
+              // gone, and the same goes for anything it was holding.
+              forgetPending(row.id);
+              escalateRoutedAsks(row.id);
+              forgetQueue(row.id);
+            }
+            if (beat.promoted.length > 0 || beat.settled.length > 0)
+              publishInstances(message.machineId);
             ws.send(ack(message));
             break;
+          }
           // The per-machine scanner's usage report (USAGE-SPEC.md §6.4): store
           // the buckets and the limit reading, then push only the small limits
           // frame — the dashboard pulls the heavy aggregates over REST.
@@ -2974,8 +3166,24 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
                   init.cwd,
                   peek(message.payload, 'harness')
                 );
+                // The session naming its own conversation is the daemon's word
+                // that a process exists — first-hand, and the earliest such word
+                // there is. Promoting on it means a fresh spawn reads `running`
+                // in a second rather than waiting up to a beat for the heartbeat
+                // to say the same thing. The row is left alone if it is already
+                // there; `markInstanceLive` only touches the states a live
+                // process can be wrongly filed under.
+                db.markInstanceLive(message.instanceId);
                 publishInstances(message.machineId);
               }
+            }
+            // The daemon's live reading of one session. Kept in memory only, so
+            // a dashboard that connects mid-turn is handed the rail's now-state
+            // in its first frame instead of a blank row. Relayed unchanged below
+            // — this is a copy, not an interception.
+            if (kind === 'pulse' && message.instanceId) {
+              const pulse = (message.payload as { pulse?: SessionPulse }).pulse;
+              if (pulse) pulses.set(message.instanceId, pulse);
             }
             // What the session is holding but has not started. Mirrored here so
             // it is snapshot state rather than something each tab has to watch
@@ -3259,8 +3467,10 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
             if (forward(message, ws) && message.instanceId) {
               if (peekDiscard(message.payload)) db.discardInstance(message.instanceId);
               else db.stopInstance(message.instanceId);
-              // The stream is closing; nothing it was still holding will run.
+              // The stream is closing; nothing it was still holding will run,
+              // and whatever it was last seen doing, it is not doing now.
               forgetQueue(message.instanceId);
+              pulses.delete(message.instanceId);
               escalateRoutedAsks(message.instanceId);
               publishInstances(message.machineId);
             }

@@ -112,9 +112,26 @@ export const instances = sqliteTable('instances', {
    * hand the session back at the level it was working at.
    */
   effort: text('effort'),
-  /** `unknown`: the agent socket dropped, so the hub can no longer see the session. */
+  /**
+   * What was last *written down* about the session — history, not liveness.
+   *
+   * Read this column raw and you are reading a fact that was true at the moment
+   * of a write and has been re-checked by nobody since; that is exactly how the
+   * hub came to report 178 sessions `running` on a machine carrying 42
+   * processes. Every read that reaches a person or an API client goes through
+   * `withSessionPresence` in `server.ts`, which answers `unknown` for any row
+   * whose machine the hub is not currently holding a socket for. The column
+   * itself is deliberately left alone by that overlay: it is the record of what
+   * last happened, and the last thing that happened does not stop having
+   * happened because the machine went quiet.
+   *
+   * The union is core's {@link import('@cockpit/core').InstanceStatus} (see its
+   * doc comment for what each value means). Plain text, no SQL migration:
+   * `sleeping` arrived by a one-time boot sweep over rows the old taxonomy had
+   * to file under `error`.
+   */
   status: text('status')
-    .$type<'starting' | 'running' | 'stopped' | 'discarded' | 'unknown' | 'error'>()
+    .$type<'starting' | 'running' | 'sleeping' | 'stopped' | 'discarded' | 'unknown' | 'error'>()
     .notNull()
     .default('starting'),
   /** Why the session died, for a dashboard that was not watching when it did. */

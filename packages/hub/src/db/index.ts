@@ -22,7 +22,7 @@ import type {
   ToolStatus,
   UsageBucket,
 } from '@cockpit/core';
-import { RESTART_LOST, RESTART_RESUMABLE, resolveRates } from '@cockpit/core';
+import { RESTART_LOST, resolveRates } from '@cockpit/core';
 import { Context, Effect, Layer } from 'effect';
 import { and, desc, eq, gt, gte, inArray, isNotNull, isNull, lte, ne, notInArray, or, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
@@ -236,6 +236,67 @@ export interface DbShape {
    */
   readonly reconcileInstances: (machineId: string, liveIds: string[]) => void;
   /**
+   * The daemon's own word, arriving every 15s: `liveIds` is exactly what its
+   * supervisor is carrying right now (`HeartbeatPayload.instances`).
+   *
+   * This is the write that makes `running` mean something. Before it, `running`
+   * was written optimistically at spawn and never re-checked, so the column
+   * accumulated one row per session the hub had *ever* started on that machine
+   * — 178 of them against 42 live processes. Now the beat is the only thing
+   * that can put a row into `running`, and the same beat's silence is what
+   * takes it out again:
+   *
+   * - listed → `running` (from `starting`, `unknown`, `sleeping` or `error`;
+   *   a `stopped` or `discarded` row is a decision, not a guess, and stays).
+   * - not listed, currently `running` → the process is gone: `sleeping` when a
+   *   `sessionId` survives to resume from, `error` + {@link RESTART_LOST} when
+   *   nothing does.
+   * - not listed, currently `starting` → the same, but only after `graceMs`,
+   *   because a spawn the hub issued moments ago has not necessarily reached
+   *   the supervisor before the beat that was already in flight.
+   *
+   * Nothing here respawns anything: reconciliation records what the machine
+   * says, and recovery is register's job (see {@link settleInstances}).
+   * Returns what actually moved, so the caller only republishes on news.
+   */
+  readonly reconcileHeartbeat: (
+    machineId: string,
+    liveIds: string[],
+    graceMs: number
+  ) => { promoted: string[]; settled: (typeof instances.$inferSelect)[] };
+  /**
+   * The daemon has spoken about one session — its `init` frame naming the SDK
+   * conversation. That is first-hand word that a process exists, so a row still
+   * at `starting` (or demoted while the machine was unreachable) is promoted
+   * without waiting up to a beat for the heartbeat to say the same thing.
+   * Returns whether the row moved.
+   */
+  readonly markInstanceLive: (id: string) => boolean;
+  /**
+   * The one-time reclassification a taxonomy change needs when the column is
+   * plain text and there is no SQL migration to hang it on. Idempotent by
+   * construction — both halves select on states they then leave — so running it
+   * on every boot costs one no-op statement pair.
+   *
+   * - `running`/`starting` → `unknown`: this process holds no sockets on its
+   *   first line, so it cannot vouch for any of it. Same argument as
+   *   {@link markAllAgentsOffline}, and for the same reason: the read overlay
+   *   would already answer `unknown`, but a column nobody has to remember to
+   *   distrust is worth one write at startup.
+   * - `error` whose `lastError` is the legacy resumable marker → `sleeping`,
+   *   `lastError` cleared. Those rows never described a failure; they were a
+   *   restart, filed under `error` because the taxonomy had nowhere else to put
+   *   "no process, but resumable". `sleeping` is that place.
+   *
+   * The marker string is a parameter rather than an import so this file holds
+   * no opinion about what a legacy error *said* — the caller passes core's
+   * constant.
+   */
+  readonly sweepBootStatuses: (legacyResumableError: string) => {
+    toUnknown: number;
+    toSleeping: number;
+  };
+  /**
    * The returning daemon's word on its machine: `liveIds` are the sessions it
    * still carries, `resumable` the SDK sessions it could pick back up. A daemon
    * that could not read its catalog names none, and every row it left behind
@@ -243,7 +304,12 @@ export interface DbShape {
    */
   /**
    * Returns what it settled, so the caller can drop their parked questions —
-   * and, for the ones whose conversation survived, put them back.
+   * and, for the ones whose conversation survived and are recent enough to be
+   * worth reviving, put them back (the horizon and cap live in `server.ts`;
+   * this writes every orphan to its resting state and lets the caller choose
+   * which of them to restart). The rows come back as they were *before* the
+   * settle, so `updatedAt` on them still says when the session last moved
+   * rather than when this bookkeeping ran.
    */
   readonly settleInstances: (
     machineId: string,
@@ -721,7 +787,15 @@ const make = (path: string): DbShape => {
           permissionMode,
           model,
           effort,
-          status: 'running',
+          // `starting`, not `running` — this row is written when a spawn is
+          // *issued*, and issuing a spawn is not evidence that a process exists.
+          // Writing `running` here is the original sin behind the 178-vs-42
+          // gap: every spawn the hub ever sent, including the fire-and-forget
+          // restores at register, minted a row asserting a live process that
+          // nothing had confirmed and nothing would ever re-check. Promotion to
+          // `running` comes from the daemon's own word — its heartbeat listing
+          // the id, or the session's `init` frame — and from nowhere else.
+          status: 'starting',
           createdAt: now,
           updatedAt: now,
         })
@@ -733,7 +807,9 @@ const make = (path: string): DbShape => {
             ...(permissionMode ? { permissionMode } : {}),
             ...(model ? { model } : {}),
             ...(effort ? { effort } : {}),
-            status: 'running',
+            // Same reasoning as the insert above: a relaunch or a restore is a
+            // spawn going out, not a process coming up.
+            status: 'starting',
             lastError: null,
             updatedAt: now,
             ...(sessionId ? { sessionId } : {}),
@@ -827,7 +903,13 @@ const make = (path: string): DbShape => {
           .where(
             and(
               eq(instances.machineId, machineId),
-              eq(instances.status, 'unknown'),
+              // Every state a live process can be wrongly filed under — a
+              // demotion while the machine was unreachable, a spawn never
+              // confirmed, a nap the daemon has since woken from. Not
+              // `stopped`/`discarded`: those are decisions, and a daemon still
+              // holding a process the operator asked to end is a bug to fix on
+              // the daemon, not a status to overwrite here.
+              inArray(instances.status, ['starting', 'unknown', 'sleeping', 'error']),
               inArray(instances.id, liveIds)
             )
           )
@@ -850,12 +932,18 @@ const make = (path: string): DbShape => {
       const updatedAt = new Date();
       for (const row of orphans) {
         const resumes = !catalog || (row.sessionId !== null && catalog.has(row.sessionId));
+        // A session that lost its process but kept its conversation is not
+        // broken — it is asleep. It used to land in `error` carrying a marker
+        // string that said so in prose, which made every rail draw a red row
+        // for a restart nobody needed to hear about, and made a real failure
+        // indistinguishable from a nap. `sleeping` is the honest value, and it
+        // carries no `lastError` because nothing went wrong.
         db.update(instances)
-          .set({
-            status: 'error',
-            lastError: resumes ? RESTART_RESUMABLE : RESTART_LOST,
-            updatedAt,
-          })
+          .set(
+            resumes
+              ? { status: 'sleeping', lastError: null, updatedAt }
+              : { status: 'error', lastError: RESTART_LOST, updatedAt }
+          )
           .where(eq(instances.id, row.id))
           .run();
       }
@@ -863,6 +951,96 @@ const make = (path: string): DbShape => {
         row,
         resumes: !catalog || (row.sessionId !== null && catalog.has(row.sessionId)),
       }));
+    },
+    // Every 15 seconds, the machine says what it is actually carrying. This is
+    // the only place `running` is minted from evidence rather than intent.
+    reconcileHeartbeat: (machineId, liveIds, graceMs) => {
+      const now = new Date();
+      const promoted =
+        liveIds.length === 0
+          ? []
+          : db
+              .update(instances)
+              .set({ status: 'running', lastError: null, updatedAt: now })
+              .where(
+                and(
+                  eq(instances.machineId, machineId),
+                  inArray(instances.id, liveIds),
+                  // Note the omission of `running`: a row already at `running`
+                  // that the beat lists has not moved, and writing it anyway
+                  // would touch `updatedAt` on every session every 15s, which
+                  // would erase the one column that says when a session last
+                  // did something.
+                  inArray(instances.status, ['starting', 'unknown', 'sleeping', 'error'])
+                )
+              )
+              .returning({ id: instances.id })
+              .all()
+              .map((row) => row.id);
+
+      // The beat's silence, which is the half that was missing. A row claiming a
+      // process the machine does not list has no process; the only question left
+      // is whether the conversation outlived it.
+      const gone = db
+        .select()
+        .from(instances)
+        .where(
+          and(
+            eq(instances.machineId, machineId),
+            inArray(instances.status, ['running', 'starting']),
+            liveIds.length > 0 ? notInArray(instances.id, liveIds) : undefined
+          )
+        )
+        .all()
+        // A spawn issued seconds ago may not have reached the supervisor before
+        // the beat that was already in flight left it. Only `starting` gets that
+        // benefit of the doubt — a row that was confirmed `running` and is now
+        // absent is news, immediately.
+        .filter((row) => row.status === 'running' || now.getTime() - row.updatedAt.getTime() >= graceMs);
+
+      for (const row of gone) {
+        db.update(instances)
+          .set(
+            row.sessionId
+              ? { status: 'sleeping', lastError: null, updatedAt: now }
+              : { status: 'error', lastError: RESTART_LOST, updatedAt: now }
+          )
+          .where(eq(instances.id, row.id))
+          .run();
+      }
+      return { promoted, settled: gone };
+    },
+    markInstanceLive: (id) =>
+      db
+        .update(instances)
+        .set({ status: 'running', lastError: null, updatedAt: new Date() })
+        .where(
+          and(
+            eq(instances.id, id),
+            inArray(instances.status, ['starting', 'unknown', 'sleeping', 'error'])
+          )
+        )
+        .returning({ id: instances.id })
+        .all().length > 0,
+    // `updatedAt` is deliberately untouched by both halves: reclassifying a row
+    // is the hub admitting what it does not know, not the session doing
+    // anything, and `updatedAt` is what the restore horizon reads to tell a
+    // session that stopped a minute ago from one that stopped last Tuesday.
+    // Stamping it here would make every row on the machine look freshly alive.
+    sweepBootStatuses: (legacyResumableError) => {
+      const toUnknown = db
+        .update(instances)
+        .set({ status: 'unknown' })
+        .where(inArray(instances.status, ['running', 'starting']))
+        .returning({ id: instances.id })
+        .all().length;
+      const toSleeping = db
+        .update(instances)
+        .set({ status: 'sleeping', lastError: null })
+        .where(and(eq(instances.status, 'error'), eq(instances.lastError, legacyResumableError)))
+        .returning({ id: instances.id })
+        .all().length;
+      return { toUnknown, toSleeping };
     },
     listToolPolicies: () =>
       db
