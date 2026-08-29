@@ -25,15 +25,16 @@
     IconSubagent,
     IconTools,
     IconUsage,
+    IconWarningTriangle,
   } from '$lib/icons';
   import {
     ACTIVITY_LABEL,
+    MACHINE_UNREACHABLE_HINT,
     SLEEPING_HINT,
-    SLEEPING_LABEL,
     UNKNOWN_HINT,
-    UNKNOWN_LABEL,
     type Activity,
   } from './activity';
+  import ActivityDot from './ActivityDot.svelte';
   import {
     cockpit,
     isResumable,
@@ -116,8 +117,6 @@
     cockpit.listedInstances.filter((row) => isResumable(row) || isStale(row))
   );
 
-  const notRunningLabel = (row: InstanceRow): string =>
-    isResumable(row) ? SLEEPING_LABEL : UNKNOWN_LABEL;
   const notRunningHint = (row: InstanceRow): string =>
     isResumable(row) ? SLEEPING_HINT : UNKNOWN_HINT;
 
@@ -146,16 +145,11 @@
     done: 'bg-[var(--status-done-bg)] text-[var(--status-done-ink)]',
     fail: 'bg-[var(--status-fail-bg)] text-[var(--status-fail-ink)]',
   };
-  function pillClass(status: 'live' | 'attn' | 'done' | 'fail' | 'idle' | 'stale'): string {
+  function pillClass(status: 'live' | 'attn' | 'done' | 'fail' | 'idle'): string {
     const base =
       'h-[var(--c-pill-h)] rounded-[var(--radius-pill)] text-[length:var(--c-pill-fs)] leading-none whitespace-nowrap';
     if (status === 'idle')
       return `${base} border-0 gap-0 bg-transparent p-0 font-[450] text-[var(--status-idle-ink)]`;
-    // Stale (`unknown`) carries an outline instead of a tint, same recipe as
-    // LiveSessionRow: the hub has no fact to tint here, only the admission
-    // that it lacks one.
-    if (status === 'stale')
-      return `${base} border border-[var(--border)] gap-[var(--c-pill-gap)] px-2.5 py-0 font-medium text-[var(--ink-muted)]`;
     return `${base} border-0 gap-[var(--c-pill-gap)] px-2.5 py-0 font-medium ${PILL_FILL[status]}`;
   }
 
@@ -231,10 +225,18 @@
             <div class="row machine" role="listitem">
               <OsMark os={machine.os} class="os" />
               <span class="nm">{machineLabel(machine.hostname)}</span>
-              <span
-                class="dot {online.has(machine.machineId) ? 'up' : ''}"
-                title={online.has(machine.machineId) ? 'Online' : 'Offline'}
-              ></span>
+              {#if online.has(machine.machineId)}
+                <span class="dot up" title="Online"></span>
+              {:else}
+                <!-- The fact every "unknown" session on this box used to
+                     repeat on its own row, said once here instead (leaf Y1):
+                     a shape (triangle, not a dot) so it reads without colour
+                     too. -->
+                <span class="unreachable" title={MACHINE_UNREACHABLE_HINT}>
+                  <IconWarningTriangle class="size-3" aria-hidden="true" />
+                  <span class="sr-only">Unreachable</span>
+                </span>
+              {/if}
             </div>
           </MachineMenu>
         {/each}
@@ -341,6 +343,7 @@
       <div class="rows">
         {#each notRunning as row (row.id)}
           {@const Sprite = sessionSprite(row.id)}
+          {@const rowStale = isStale(row)}
           <a
             class="row"
             class:on={path === `/session/${row.id}`}
@@ -351,7 +354,7 @@
               <Sprite aria-hidden="true" />
             </span>
             <span class="nm">{sessionName(row)}</span>
-            <Badge class={pillClass('stale')}>{notRunningLabel(row)}</Badge>
+            <ActivityDot activity="idle" sleeping={!rowStale} stale={rowStale} />
           </a>
         {/each}
       </div>
@@ -735,6 +738,11 @@
   }
   .dot.up {
     background: var(--status-done-ink);
+  }
+  .unreachable {
+    display: inline-flex;
+    flex: 0 0 auto;
+    color: var(--warning-11);
   }
 
   .foot {

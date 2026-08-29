@@ -317,14 +317,8 @@
           <div class="flex items-center gap-2 px-4 pb-3 text-micro">
             {#if failed}
               <span class="size-2 shrink-0 rounded-full bg-error"></span>
-            {:else if sleeping}
-              <span class="size-2 shrink-0 rounded-full bg-muted-foreground/40"></span>
-            {:else if stale}
-              <!-- Hollow, not filled: the hub has no fact to color, only the
-                   admission that it lacks one. -->
-              <span class="size-2 shrink-0 rounded-full border border-muted-foreground/60"></span>
             {:else}
-              <ActivityDot {activity} />
+              <ActivityDot {activity} {sleeping} {stale} />
             {/if}
             <span
               class="shrink-0 {failed || activity === 'blocked'

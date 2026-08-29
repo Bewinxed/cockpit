@@ -44,7 +44,9 @@ export const ACTIVITY_LABEL: Record<Activity, string> = {
 /**
  * The fourth word the rails use, and deliberately not an {@link Activity}: a
  * session that has lost its process reports no activity at all, so a resumable
- * row (`isResumable`) says this instead of claiming to be idle.
+ * row (`isResumable`) means this instead of claiming to be idle. `ActivityDot`
+ * renders it as its own glyph now (leaf Y1) rather than this word in a pill —
+ * the word survives only as that glyph's accessible name and tooltip.
  */
 export const SLEEPING_LABEL = 'Sleeping';
 
@@ -56,9 +58,19 @@ export const SLEEPING_HINT = 'Sleeping — it resumes when you open or message i
  * whose owning machine the hub cannot currently reach (`isStale`). It is not
  * idle — nothing said the session stopped working — and not asleep — nothing
  * said the process is gone. Rendering it as either would be exactly the stale
- * confidence ARCHITECTURE.md's derived-liveness law exists to rule out.
+ * confidence ARCHITECTURE.md's derived-liveness law exists to rule out. Same
+ * fate as {@link SLEEPING_LABEL}: `ActivityDot`'s hollow glyph carries this
+ * now, and the word survives as its accessible name and tooltip only.
  */
 export const UNKNOWN_LABEL = 'Unknown';
 
 /** Why an unknown row is not the same as idle or asleep, for its tooltip. */
 export const UNKNOWN_HINT = "Unknown — the hub can't currently reach this session's machine.";
+
+/**
+ * The same fact as {@link UNKNOWN_HINT}, said once at the level it is actually
+ * true — a machine, not each of its sessions (leaf Y1). Before this, every
+ * session on an unreachable box repeated `UNKNOWN_HINT` on its own row; the
+ * measured count on one board was 176 identical copies of one fact.
+ */
+export const MACHINE_UNREACHABLE_HINT = "The hub can't currently reach this machine.";

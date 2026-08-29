@@ -12,6 +12,7 @@
   import { IconCheck, IconWarningTriangle } from '$lib/icons';
   import { Badge } from '$lib/components/ui/badge';
   import * as Tooltip from '$lib/components/ui/tooltip';
+  import { MACHINE_UNREACHABLE_HINT } from './activity';
   import {
     buildConvergence,
     deployInfoOf,
@@ -66,6 +67,23 @@
   </span>
 
   <span class="badges">
+    {#if !online}
+      <!-- The fact every "unknown" session on this box used to repeat on its
+           own row, said once here instead (leaf Y1 — 176 identical copies of
+           this on one board, measured). -->
+      <Tooltip.Root>
+        <Tooltip.Trigger>
+          {#snippet child({ props })}
+            <Badge {...props} class={warnPill}>
+              <IconWarningTriangle class="size-3" />
+              Unreachable
+            </Badge>
+          {/snippet}
+        </Tooltip.Trigger>
+        <Tooltip.Content>{MACHINE_UNREACHABLE_HINT}</Tooltip.Content>
+      </Tooltip.Root>
+    {/if}
+
     {#if build === 'unknown'}
       <Tooltip.Root>
         <Tooltip.Trigger>

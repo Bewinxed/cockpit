@@ -73,6 +73,7 @@ export { default as IconColumns } from '~icons/solar/widget-2-linear';
 export { default as IconSidebar } from '~icons/solar/sidebar-minimalistic-linear';
 export { default as IconSun } from '~icons/solar/sun-linear';
 export { default as IconMoon } from '~icons/solar/moon-linear';
+export { default as IconMoonSleepBold } from '~icons/solar/moon-sleep-bold';
 export { default as IconCommand } from '~icons/solar/command-linear';
 export { default as IconAlignLeft } from '~icons/solar/align-left-linear';
 export { default as IconDot } from '~icons/solar/record-circle-linear';

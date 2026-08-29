@@ -23,7 +23,8 @@
   import { Badge } from '$lib/components/ui/badge';
   import { markHue, sessionSprite } from './mark';
   import { formatDuration } from '$lib/utils/time';
-  import { ACTIVITY_LABEL, SLEEPING_HINT, SLEEPING_LABEL, UNKNOWN_HINT, UNKNOWN_LABEL } from './activity';
+  import { ACTIVITY_LABEL, SLEEPING_HINT, UNKNOWN_HINT } from './activity';
+  import ActivityDot from './ActivityDot.svelte';
   import { cockpit, isFailed, isResumable, isStale, type InstanceRow } from './client.svelte';
   import { identityVar } from './folder-prefs.svelte';
   import { sessionTitle } from './links';
@@ -54,42 +55,37 @@
   /** The hub can't reach this row's machine — distinct from idle and asleep. */
   const stale = $derived(isStale(instance));
   const quest = $derived(instance.kind === 'scratch');
-  const label = $derived(
-    failed ? 'Failed' : sleeping ? SLEEPING_LABEL : stale ? UNKNOWN_LABEL : ACTIVITY_LABEL[activity]
-  );
+  /** Sleeping and stale no longer get a word here — `ActivityDot` carries
+   *  both as its own glyph now (leaf Y1), so this label is only ever seen as
+   *  a `Badge`'s text, for the states that still get one. */
+  const label = $derived(failed ? 'Failed' : ACTIVITY_LABEL[activity]);
 
   /** The Quiet Ledger status the row's state pill wears: fail red, needs-you
-   *  amber, working blue-live, unknown a hollow outline, everything else at
-   *  rest bare-idle. */
+   *  amber, working blue-live, everything else at rest bare-idle. */
   const pillStatus = $derived(
     failed
       ? 'fail'
-      : stale
-        ? 'stale'
-        : activity === 'blocked'
-          ? 'attn'
-          : activity === 'working'
-            ? 'live'
-            : 'idle'
+      : activity === 'blocked'
+        ? 'attn'
+        : activity === 'working'
+          ? 'live'
+          : 'idle'
   );
 
   /** StatusPill ported to ui/badge, token-dressed to the Quiet Ledger pill
    *  recipe: a tint carries live/attn/done/fail, idle carries NO fill (bare
-   *  muted label), and stale (`unknown`) carries an outline instead of a tint
-   *  — the hub has no fact to tint, only the admission that it lacks one. */
+   *  muted label). */
   const PILL_FILL: Record<string, string> = {
     live: 'bg-[var(--status-live-bg)] text-[var(--status-live-ink)]',
     attn: 'bg-[var(--status-attn-bg)] text-[var(--status-attn-ink)]',
     done: 'bg-[var(--status-done-bg)] text-[var(--status-done-ink)]',
     fail: 'bg-[var(--status-fail-bg)] text-[var(--status-fail-ink)]',
   };
-  function pillClass(status: 'live' | 'attn' | 'done' | 'fail' | 'idle' | 'stale'): string {
+  function pillClass(status: 'live' | 'attn' | 'done' | 'fail' | 'idle'): string {
     const base =
       'h-[var(--c-pill-h)] rounded-[var(--radius-pill)] border-0 text-[length:var(--c-pill-fs)] leading-none whitespace-nowrap';
     if (status === 'idle')
       return `${base} gap-0 bg-transparent p-0 font-[450] text-[var(--status-idle-ink)]`;
-    if (status === 'stale')
-      return `${base} gap-[var(--c-pill-gap)] border border-[var(--border)] px-2.5 py-0 font-medium text-[var(--ink-muted)]`;
     return `${base} gap-[var(--c-pill-gap)] px-2.5 py-0 font-medium ${PILL_FILL[status]}`;
   }
 
@@ -212,20 +208,27 @@
           {#if onStepFor}{onStepFor}{/if}
         </span>
       {/if}
-      <!-- The state, as the Quiet Ledger status pill: a tint carries working /
-           needs-you / failed, and idle carries no fill (bare muted label). -->
+      <!-- The state: sleeping and stale get `ActivityDot`'s own glyph, not a
+           second word beside it (leaf Y1 — that word was "Sleeping" or
+           "Unknown" on 176 identical rows). Every other state keeps the
+           Quiet Ledger status pill: a tint carries working / needs-you /
+           failed, and idle carries no fill (bare muted label). -->
       <span
         class="inline-grid shrink-0 justify-items-end {progress || unmeasured ? 'ml-2' : 'ml-auto'}"
       >
-        {#key label}
-          <span
-            class="col-start-1 row-start-1"
-            in:fly={{ y: 5, duration: painted ? 180 : 0, easing: quintOut }}
-            out:fly={{ y: -5, duration: painted ? 140 : 0, easing: quintOut }}
-          >
-            <Badge class={pillClass(pillStatus)}>{label}</Badge>
-          </span>
-        {/key}
+        {#if sleeping || stale}
+          <ActivityDot {activity} {sleeping} {stale} />
+        {:else}
+          {#key label}
+            <span
+              class="col-start-1 row-start-1"
+              in:fly={{ y: 5, duration: painted ? 180 : 0, easing: quintOut }}
+              out:fly={{ y: -5, duration: painted ? 140 : 0, easing: quintOut }}
+            >
+              <Badge class={pillClass(pillStatus)}>{label}</Badge>
+            </span>
+          {/key}
+        {/if}
       </span>
     </span>
     {#if activity === 'working' && tool}
