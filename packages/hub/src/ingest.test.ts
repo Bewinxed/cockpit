@@ -30,7 +30,7 @@ import {
 import { makeDb } from './db';
 import type { PendingShape } from './pending';
 import type { HubSocket, RegistryShape } from './registry';
-import { createServer } from './server';
+import { createServer, reattachable } from './server';
 import { createStreamHub, type StreamPorts } from './stream';
 
 const INSTANCE = 'inst-ledger';
@@ -553,3 +553,119 @@ test('the announced seam is relayed to a following dashboard like any other fram
   agent.close();
   dashboard.close();
 }, 20_000);
+
+// ---------------------------------------------------------------------------
+// X3: THE REPLAY HALF. The wired test above registers with `instances: [id]` —
+// a daemon that already holds the session. That is not the case replay is for.
+//
+// A daemon that just RESTARTED holds nothing, so its register names no
+// instances at all, and the ack used to be computed off that empty list: `{}`,
+// every reattach from head, every line sessiond buffered during the absence
+// dropped. The hub's own restore is what tells that daemon the session exists,
+// so the ledger has to cover the restores it just sent — that is
+// {@link reattachable}, and this is the end-to-end proof of it.
+// ---------------------------------------------------------------------------
+
+test('a returning daemon that names nothing is still handed the ledger for the sessions it is restored', async () => {
+  const agent = await openSocket('/ws');
+  const dashboard = await openSocket('/ws/dashboard');
+  const instanceId = `returning-${crypto.randomUUID()}`;
+  const epoch = crypto.randomUUID();
+
+  // A session this hub knows is running on that machine, with a conversation to
+  // resume — i.e. one the restore path will try to bring back.
+  db.openInstance({
+    id: instanceId,
+    machineId: MACHINE,
+    cwd: '/tmp/x3-returning',
+    sessionId: `sess-${crypto.randomUUID()}`,
+    harness: 'claude',
+    kind: 'mainline',
+  });
+
+  agent.send({
+    verb: 'register',
+    machineId: MACHINE,
+    payload: { hostname: 'box', os: 'linux', auth: 'authenticated', instances: [instanceId] },
+  });
+  await agent.next((m) => m.verb === 'register', 'the first register ack');
+
+  dashboard.send({ type: 'stream.subscribe', sessionId: instanceId });
+  await Bun.sleep(30);
+
+  // The absence begins after line 2: this hub has ingested 1 and 2 and nothing
+  // more, and sessiond goes on buffering 3, 4, 5 with nobody attached.
+  for (const srcSeq of [1, 2]) {
+    agent.send(frameEnvelope(instanceId, { srcEpoch: epoch, srcSeq }, `before ${srcSeq}`));
+  }
+  await dashboard.next(
+    (m) => m.type === 'stream.event' && (m.event as { seq: number }).seq === 2,
+    'the two frames before the absence'
+  );
+
+  // THE RESTART. A daemon whose supervisor is empty: `instances: []`, exactly
+  // what `supervisor.instanceIds` returns one tick after boot.
+  agent.send({
+    verb: 'register',
+    machineId: MACHINE,
+    payload: { hostname: 'box', os: 'linux', auth: 'authenticated', instances: [] },
+  });
+
+  // The hub answers with BOTH halves of the circle, and the daemon needs both:
+  // the restore spawn is the only place it learns the session's `cwd`, and the
+  // ack is the only place it learns how far this hub got.
+  const spawn = (await agent.next(
+    (m) => m.verb === 'spawn' && m.instanceId === instanceId,
+    'the restore spawn'
+  )) as { payload: { instanceId: string; cwd: string } };
+  expect(spawn.payload.cwd).toBe('/tmp/x3-returning');
+
+  const ack = await agent.next(
+    (m) =>
+      m.verb === 'register' &&
+      Object.keys((m.payload as { ingested?: object }).ingested ?? {}).includes(instanceId),
+    'the ack carrying the ledger for a session the daemon never named'
+  );
+  const mark = (ack.payload as { ingested: Record<string, IngestMark> }).ingested[instanceId];
+  expect(mark).toEqual({ epoch, srcSeq: 2 });
+
+  // AND IT IS ACTED ON. This is the agent's real code path: `readIngested` off
+  // the ack, `resumeCursor` against sessiond's live epoch, and the replay that
+  // cursor names — the gap the hub named, exactly.
+  const cursor = resumeCursor(epoch, readIngested(ack.payload)?.[instanceId]);
+  expect(cursor).toBe(2);
+  // sessiond hands back 3, 4, 5 (`since(2)`), which the reattached agent
+  // forwards; only they are news, and the ones already ingested stay refused.
+  for (const srcSeq of [1, 2, 3, 4, 5]) {
+    if (alreadyIngested({ epoch, srcSeq: cursor! }, { srcEpoch: epoch, srcSeq })) continue;
+    agent.send(frameEnvelope(instanceId, { srcEpoch: epoch, srcSeq }, `replayed ${srcSeq}`));
+  }
+
+  const fifth = await dashboard.next(
+    (m) => m.type === 'stream.event' && (m.event as { seq: number }).seq === 5,
+    'the three recovered lines'
+  );
+  expect((fifth.event as { frame: { message: { text: string } } }).frame.message.text).toBe('replayed 5');
+  // Exactly the gap: hub seq 3, 4, 5 carry src 3, 4, 5. No duplicate of 1-2 got
+  // in front of them, and nothing was spliced over.
+  const third = await dashboard.next(
+    (m) => m.type === 'stream.event' && (m.event as { seq: number }).seq === 3,
+    'the first recovered line'
+  );
+  expect((third.event as { frame: { message: { text: string } } }).frame.message.text).toBe('replayed 3');
+  await Bun.sleep(30);
+  await expect(
+    dashboard.next((m) => m.type === 'stream.event' && (m.event as { seq: number }).seq === 6, 'a sixth frame')
+  ).rejects.toThrow();
+
+  agent.close();
+  dashboard.close();
+}, 20_000);
+
+test('the union is the reported sessions and the restored ones, de-duplicated', () => {
+  expect(reattachable(['a', 'b'], ['b', 'c'])).toEqual(['a', 'b', 'c']);
+  // The returning daemon: nothing reported, everything restored.
+  expect(reattachable([], ['c'])).toEqual(['c']);
+  // A machine with nothing to restore is exactly what it always was.
+  expect(reattachable(['a'], [])).toEqual(['a']);
+});

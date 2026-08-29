@@ -393,6 +393,31 @@ const peekInstances = (payload: unknown): string[] => {
 };
 
 /**
+ * THE SESSIONS A REGISTER ACK'S LEDGER MUST COVER (sessiond design §7, step 3).
+ *
+ * The ledger used to be computed off `instances` alone — the daemon's own live
+ * list — which is EMPTY exactly when replay matters: a daemon that just
+ * restarted holds nothing, so the ack carried `{}`, every reattach followed
+ * from head, and the lines sessiond buffered during the absence were dropped
+ * instead of recovered. The at-most-once half of §7 fired; the replay half
+ * never did.
+ *
+ * It cannot be fixed from the daemon's side, because naming those ids in
+ * `instances` is what makes `settleInstances` call them live — and then the hub
+ * stops sending the `restore` spawns that are the daemon's ONLY source of a
+ * surviving child's `cwd`. So the hub answers it instead, from the one place
+ * that already knows both halves: the sessions it just told this daemon to
+ * restore are precisely the rows the daemon will hand to `reattachFrom`, and a
+ * mark for anything else is a mark it could never act on.
+ *
+ * Union, de-duplicated, order preserved: `reported` covers a live daemon's
+ * `reannounce`, `restored` covers the returning one.
+ */
+export const reattachable = (reported: readonly string[], restored: readonly string[]): string[] => [
+  ...new Set([...reported, ...restored]),
+];
+
+/**
  * And of the SDK sessions it could resume. Absent from a daemon that could not
  * read its catalog, which is not the same as a machine with nothing to resume.
  */
@@ -3011,10 +3036,18 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
             // has ever named — off the catalog the daemon just read anyway.
             void nameStoredSessions(message.machineId);
             // The ledger the returning agent reattaches against: what this hub
-            // has already ingested of each session the daemon still holds. It
-            // is computed AFTER `settleInstances`, off the daemon's own live
-            // list, so it names exactly the sessions a reattach can act on.
-            ws.send(registerAck(message, streams.ingestedFor(peekInstances(message.payload))));
+            // has already ingested of each session the daemon is about to hold.
+            // Computed AFTER `settleInstances` and after the restores above, so
+            // it names exactly the sessions a reattach can act on — see
+            // {@link reattachable} for why the restores have to be in it.
+            ws.send(
+              registerAck(
+                message,
+                streams.ingestedFor(
+                  reattachable(peekInstances(message.payload), revivable.map((orphan) => orphan.row.id))
+                )
+              )
+            );
             break;
           }
           case 'heartbeat': {
