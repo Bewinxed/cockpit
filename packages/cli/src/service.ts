@@ -1,6 +1,7 @@
 import type { AgentRow } from '@cockpit/core';
 import { COCKPIT_ENV, COCKPIT_HUB_PORT } from '@cockpit/core';
 import { sessiondEndpoint } from '@cockpit/core/sessiond';
+import { migrateLegacyDb } from '@cockpit/hub/src/migrate-db';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { chmod } from 'node:fs/promises';
 import { homedir, platform } from 'node:os';
@@ -1295,6 +1296,13 @@ export interface DeployInitOptions {
   readonly run?: StepRunner;
   /** Injected for the same reason: nothing in a test may reach `systemctl`. */
   readonly install?: (specs: readonly ServiceSpec[], note: (line: string) => void) => Promise<void>;
+  /**
+   * Where the fleet's database should end up, and where this checkout's legacy
+   * one still sits. Both default to the real paths; named so a test can prove
+   * the move without going near the operator's own database.
+   */
+  readonly dbPath?: string;
+  readonly legacyDb?: string;
 }
 
 const step = async (
@@ -1354,6 +1362,8 @@ export const deployInit = async ({
   note,
   run: runner = runStep,
   install,
+  dbPath = DEFAULT_DB_PATH,
+  legacyDb = join(ROOT, 'packages', 'hub', 'cockpit.db'),
 }: DeployInitOptions): Promise<DeployInitResult> => {
   const host = platform();
   if (host !== 'darwin' && host !== 'linux') {
@@ -1404,6 +1414,19 @@ export const deployInit = async ({
   }
 
   await excludeMarker(root);
+
+  // The database, before anything is installed that could open one.
+  //
+  // The hub finds its legacy file relative to ITSELF, and from the clone that
+  // points inside the clone — where such a file has never been. The checkout
+  // that has actually been writing the database is THIS one, and this is the
+  // only moment both ends are known. Without it the hub comes up on a new
+  // empty database beside the full one, which is precisely what a cutover must
+  // not do. An existing target makes it a no-op, so re-running init is safe.
+  if (!existsSync(dbPath) && existsSync(legacyDb)) {
+    migrateLegacyDb(dbPath, legacyDb);
+    note(`moved the database out of the checkout: ${legacyDb} -> ${dbPath}`);
+  }
 
   const marker: DeployMarker = {
     root,

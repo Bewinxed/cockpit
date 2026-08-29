@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { homedir, platform, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -95,6 +95,10 @@ beforeAll(async () => {
     note: (line) => notes.push(line),
     run: runner.run,
     install: capture.install,
+    // Never the operator's own database, not even to read: both ends are
+    // scratch paths that do not exist, so the move is a no-op here.
+    dbPath: join(scratch, 'data', 'cockpit.db'),
+    legacyDb: join(scratch, 'nonexistent', 'cockpit.db'),
   });
   steps = runner.steps;
   installed = capture.installed;
@@ -195,9 +199,11 @@ describe('what it refuses', () => {
       deployInit({
         root: occupied,
         origin,
-        note: () => {},
+          note: () => {},
         run: recorder().run,
         install: capture.install,
+        dbPath: join(scratch, 'data', 'cockpit.db'),
+        legacyDb: join(scratch, 'nonexistent', 'cockpit.db'),
       })
     ).rejects.toThrow(ServiceError);
     expect(await Bun.file(join(occupied, 'README.md')).text()).toBe('mine\n');
@@ -235,4 +241,70 @@ test('the deploy root is per-user, outside any checkout, and overridable', () =>
   process.env.COCKPIT_DEPLOY_ROOT = '/tmp/elsewhere';
   expect(deployRoot()).toBe('/tmp/elsewhere');
   delete process.env.COCKPIT_DEPLOY_ROOT;
+});
+
+/**
+ * The database moves out of the checkout AT INIT, from the checkout that has
+ * been writing it.
+ *
+ * This is the one the real cutover got wrong. The hub finds its legacy file
+ * relative to itself, so once it runs from the deployment clone it looks for
+ * one inside the clone — where a file has never been. The migration silently
+ * did nothing and the hub came up on a brand-new empty database sitting beside
+ * a full one. `deploy init` is the only moment both ends are known.
+ */
+describe('the database it rescues', () => {
+  test('moves the legacy file, with its -wal and -shm, out of the checkout', async () => {
+    const checkout = join(scratch, 'devtree', 'packages', 'hub');
+    mkdirSync(checkout, { recursive: true });
+    const legacy = join(checkout, 'cockpit.db');
+    for (const suffix of ['', '-wal', '-shm']) {
+      await Bun.write(`${legacy}${suffix}`, `the fleet's memory${suffix}`);
+    }
+    const target = join(scratch, 'rescued', 'cockpit.db');
+
+    const notes: string[] = [];
+    const capture = captor();
+    await deployInit({
+      root: join(scratch, 'home2', '.cockpit', 'app'),
+      origin,
+      ids: ['hub'],
+      note: (line) => notes.push(line),
+      run: recorder().run,
+      install: capture.install,
+      dbPath: target,
+      legacyDb: legacy,
+    });
+
+    expect(await Bun.file(target).text()).toBe("the fleet's memory");
+    expect(existsSync(`${target}-wal`)).toBe(true);
+    expect(existsSync(`${target}-shm`)).toBe(true);
+    // Gone from the tree, so a `git clean -fdx` can never take it.
+    expect(existsSync(legacy)).toBe(false);
+    expect(notes.some((line) => line.includes('moved the database out of the checkout'))).toBe(true);
+  });
+
+  test('a database already at the target is never clobbered', async () => {
+    const checkout = join(scratch, 'devtree2', 'packages', 'hub');
+    mkdirSync(checkout, { recursive: true });
+    const legacy = join(checkout, 'cockpit.db');
+    await Bun.write(legacy, 'the stale one');
+    const target = join(scratch, 'rescued2', 'cockpit.db');
+    await Bun.write(target, 'the live one');
+
+    const capture = captor();
+    await deployInit({
+      root: join(scratch, 'home3', '.cockpit', 'app'),
+      origin,
+      ids: ['hub'],
+      note: () => {},
+      run: recorder().run,
+      install: capture.install,
+      dbPath: target,
+      legacyDb: legacy,
+    });
+
+    expect(await Bun.file(target).text()).toBe('the live one');
+    expect(existsSync(legacy)).toBe(true);
+  });
 });
