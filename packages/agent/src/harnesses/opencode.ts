@@ -22,7 +22,7 @@
  * `error_during_execution`), so a busy session is never left hung.
  */
 import {
-  createOpencode,
+  createOpencodeClient,
   type OpencodeClient,
   type AssistantMessage,
   type Command,
@@ -74,6 +74,10 @@ import {
 import { resolveBin } from '../tools';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+// The protocol subpath, never the `@cockpit/core` barrel: `sessiond.ts` reaches
+// for `node:os` and the barrel is imported by the browser bundle (see f2e1c4c).
+import { sessiondEndpoint, type ProcSpec } from '@cockpit/core/sessiond';
+import { ensureSessiond, SessiondClient } from '../sessiond-client';
 import { readJson, readSidecar, syncMemory, syncSkillFiles, writeJson } from './fleet-common';
 import { fetchDelegateTypes } from './handoff-shared';
 import type { Harness, HarnessContext, HarnessSession } from '../harness';
@@ -87,6 +91,124 @@ const OPENCODE_SIDECAR = join(OPENCODE_DIR, 'cockpit-fleet.json');
 const OPENCODE_PLUGINS = join(OPENCODE_DIR, 'plugins');
 const OPENCODE_PACKAGE = join(OPENCODE_DIR, 'package.json');
 const OPENCODE_HANDOFF_PLUGIN = join(OPENCODE_PLUGINS, 'cockpit-handoff.js');
+
+/**
+ * The server's identity under sessiond. One headless server per machine owns
+ * every session, so one procId per machine — stable across agent restarts,
+ * which is exactly what lets a returning agent find the server it left running
+ * instead of starting a second one.
+ */
+export const OPENCODE_SERVER_PROC_ID = 'opencode-server';
+
+/**
+ * How long the announce line may take to reach the ring. Our choice: the SDK's
+ * own `createOpencodeServer` default is 5 s
+ * (`@opencode-ai/sdk/dist/server.js`, `timeout: 5000`); we allow more because
+ * the child now boots through a daemon on a cold machine rather than as a
+ * direct child, and a false timeout here starts a *second* server.
+ */
+export const SERVER_ANNOUNCE_TIMEOUT_MS = 30_000;
+
+/**
+ * The port announcement, parsed agent-side. sessiond parses nothing — it hands
+ * back the child's stdout lines opaque, and the meaning is decided here.
+ *
+ * The format is the server's own, and the rule below is byte-for-byte the
+ * SDK's (`@opencode-ai/sdk/dist/server.js`: `line.startsWith("opencode server
+ * listening")` then `/on\s+(https?:\/\/[^\s]+)/`). Verified against the
+ * installed binary (opencode 1.18.19), which prints:
+ *
+ *   Warning: OPENCODE_SERVER_PASSWORD is not set; server is unsecured.
+ *   opencode server listening on http://127.0.0.1:43663
+ *
+ * — hence a per-line scan rather than a read of the first line.
+ */
+export const parseServerAnnouncement = (line: string): string | undefined => {
+  if (!line.startsWith('opencode server listening')) return undefined;
+  return line.match(/on\s+(https?:\/\/[^\s]+)/)?.[1];
+};
+
+/**
+ * Put `opencode serve` under sessiond — or find the one already there — and
+ * return the URL it announced.
+ *
+ * This is the whole of opencode's sessiond story (design §4.2). opencode is
+ * server-first: sessions live in the server's own DB, events are re-subscribable
+ * per directory, and the adapter is a plain HTTP + SSE client. The only reason
+ * an agent restart used to kill live opencode work was that `createOpencode`
+ * spawned the server as the *agent's* child. So opencode gets process keeping
+ * and nothing else — no neutral-frame ring, because the server is its own event
+ * authority and duplicating its storage would be pure cost.
+ *
+ * If a live server is already held, its spec is NOT re-applied: keeping the
+ * running process is the point, and a config change lands on the next machine
+ * boot (or a deliberate `sessiond` stop), never by killing sessions.
+ */
+export const attachOpencodeServer = async (options: {
+  sessiond: SessiondClient;
+  spec: ProcSpec;
+  procId?: string;
+  timeoutMs?: number;
+}): Promise<string> => {
+  const procId = options.procId ?? OPENCODE_SERVER_PROC_ID;
+  const timeoutMs = options.timeoutMs ?? SERVER_ANNOUNCE_TIMEOUT_MS;
+  const client = options.sessiond;
+
+  // Fresh, not the connect-time welcome: this client is long-lived and the
+  // server may have exited since.
+  const held = (await client.list()).procs.find((proc) => proc.procId === procId);
+  if (!held?.alive) await client.spawnProc(procId, options.spec);
+
+  return await new Promise<string>((resolve, reject) => {
+    let settled = false;
+    const settle = (finish: () => void): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      client.unsubscribe(procId);
+      finish();
+    };
+    const timer = setTimeout(
+      () =>
+        settle(() =>
+          reject(
+            new Error(
+              `[opencode] no "opencode server listening" line from ${procId} within ${timeoutMs}ms`
+            )
+          )
+        ),
+      timeoutMs
+    );
+    // From seq 0: the announce line is printed once, at boot, and a returning
+    // agent reads it out of the replay ring long after it was written. That
+    // replay IS the port discovery — there is nowhere else the port is written.
+    client.subscribe(
+      procId,
+      {
+        line: (event) => {
+          const url = parseServerAnnouncement(event.data);
+          if (url) settle(() => resolve(url));
+        },
+        exit: (exitCode) =>
+          settle(() =>
+            reject(new Error(`[opencode] serve exited (code ${exitCode}) before announcing a port`))
+          ),
+        // The ring outran the announce line. Honest refusal rather than a guess:
+        // the URL is unrecoverable from here, and inventing one would attach the
+        // fleet to nothing.
+        reset: (nextSeq) =>
+          settle(() =>
+            reject(
+              new Error(
+                `[opencode] ${procId}'s replay window lost the port announcement (resumes at ${nextSeq})`
+              )
+            )
+          ),
+      },
+      0
+    );
+  });
+};
 
 /**
  * The hand-off plugin, in opencode's own plugin format. Reaches the fleet over HTTP.
@@ -1732,7 +1854,9 @@ export class OpencodeHarness implements Harness {
   auth: import('@cockpit/core').AuthState = 'authenticated';
 
   #client: OpencodeClient | null = null;
-  #server: { url: string; close(): void } | null = null;
+  /** The URL the sessiond-held server announced; the sessions' `fetch` base. */
+  #serverUrl: string | null = null;
+  #sessiond: Promise<SessiondClient> | undefined;
   #ready: Promise<OpencodeClient> | null = null;
   // Keyed by instanceId, not opencode's own session id: a resume reuses the
   // same sessionKey (opencode.ts:spawn), so multiple live instances can share
@@ -1762,9 +1886,34 @@ export class OpencodeHarness implements Harness {
     };
   }
 
+  /**
+   * The machine's one sessiond connection for this harness, dialled lazily.
+   * A dropped socket is re-dialled and the SERVER is untouched by that — the
+   * property the whole leaf exists for.
+   */
+  async sessiond(
+    // `COCKPIT_SESSIOND_ENDPOINT` is sessiond's own override
+    // (`sessiond/src/main.ts`), honoured here too so a dev run — or a test —
+    // points both halves at a scratch socket instead of the real one.
+    endpoint: string = process.env.COCKPIT_SESSIOND_ENDPOINT ?? sessiondEndpoint()
+  ): Promise<SessiondClient> {
+    const existing = await this.#sessiond?.catch(() => undefined);
+    if (existing && !existing.closed) return existing;
+    this.#sessiond = (async () => {
+      await ensureSessiond(endpoint);
+      return SessiondClient.connect(endpoint);
+    })();
+    return this.#sessiond;
+  }
+
   #ensure(): Promise<OpencodeClient> {
     if (this.#client) return Promise.resolve(this.#client);
     if (!this.#ready) {
+      // A spawn after a dispose is a revival, not a leak: the adapter is a
+      // module singleton, the server it attaches to outlived the teardown, and
+      // the pumps must be allowed to re-subscribe. Cleared here rather than in
+      // `dispose` so an in-flight teardown still stops its own pumps.
+      this.#disposed = false;
       this.#ready = (async () => {
         await this.#writePlugin();
         // Ask on everything the dashboard can surface. Questions default to
@@ -1772,17 +1921,31 @@ export class OpencodeHarness implements Harness {
         // trip, so no permission key is set for them here. `webfetch` is the
         // exception: fleet policy is the firecrawl MCP, and a `deny` publishes
         // no permission event at all, so it never reaches {@link autoAllows}.
-        const { client, server } = await createOpencode({
-          port: 0,
-          config: {
-            permission: { edit: 'ask', bash: 'ask', webfetch: 'deny' },
-            // Fleet policy: search is the Exa MCP. `webfetch: 'deny'` above
-            // removes the fetch built-in; `websearch` has no permission key,
-            // so the tool itself is switched off.
-            tools: { websearch: false },
+        const config = {
+          permission: { edit: 'ask', bash: 'ask', webfetch: 'deny' },
+          // Fleet policy: search is the Exa MCP. `webfetch: 'deny'` above
+          // removes the fetch built-in; `websearch` has no permission key,
+          // so the tool itself is switched off.
+          tools: { websearch: false },
+        };
+        // Not `createOpencode`: that spawns the server as THIS process's child,
+        // so every agent restart took the machine's opencode sessions with it.
+        // The server goes under sessiond instead and we attach as a client —
+        // the same client the bundled pair would have handed us.
+        const sessiond = await this.sessiond();
+        const url = await attachOpencodeServer({
+          sessiond,
+          spec: {
+            // The SDK builds this exact command line
+            // (`@opencode-ai/sdk/dist/server.js`); we build it here because the
+            // spawn is sessiond's now, not `cross-spawn`'s.
+            command: resolveBin('opencode') ?? 'opencode',
+            args: ['serve', '--hostname=127.0.0.1', '--port=0'],
+            env: { OPENCODE_CONFIG_CONTENT: JSON.stringify(config) },
           },
         });
-        this.#server = server;
+        this.#serverUrl = url;
+        const client = createOpencodeClient({ baseUrl: url });
         this.#client = client;
         return client;
       })().catch((error) => {
@@ -1934,7 +2097,7 @@ export class OpencodeHarness implements Harness {
       ctx.cwd,
       spec.model,
       spec.permissionMode,
-      this.#server!.url,
+      this.#serverUrl!,
       (childId, callID) => this.#children.set(childId, { parent: session, callID }),
       () => {
         this.#sessions.delete(ctx.instanceId);
@@ -2108,12 +2271,23 @@ export class OpencodeHarness implements Harness {
     }
   }
 
+  /**
+   * Tear down the AGENT SIDE. The server is deliberately left running: it is
+   * sessiond's child now, it owns the machine's live sessions, and killing it
+   * here would re-create exactly the death this leaf removes. A rebuilt
+   * supervisor calls {@link OpencodeHarness.spawn} again, {@link #ensure}
+   * re-reads the announced port from the ring, and the per-directory SSE pumps
+   * re-subscribe against the same still-running server.
+   */
   async dispose(): Promise<void> {
     this.#disposed = true;
     this.#pumpDirs.clear();
-    this.#server?.close();
+    // The socket, not the child: a closed sessiond connection is re-dialled by
+    // `sessiond()` and the held server never notices.
+    void this.#sessiond?.then((client) => client.close()).catch(() => {});
+    this.#sessiond = undefined;
     this.#client = null;
-    this.#server = null;
+    this.#serverUrl = null;
     this.#ready = null;
   }
 
