@@ -125,6 +125,20 @@ const servicePath = (): string => {
   return [...new Set([...inherited, ...usual])].join(':');
 };
 
+/**
+ * Where the hub's sqlite file lives by default now (C9, our choice): per-user,
+ * created with no sudo, and outside any git checkout — so `git clean -fdx` in a
+ * dev tree or a deploy clone can never again reach the fleet's whole memory.
+ * `XDG_DATA_HOME` is honoured the same way `SYSTEMD_DIR` honours
+ * `XDG_CONFIG_HOME` above.
+ */
+const dataDir = (): string =>
+  platform() === 'darwin'
+    ? join(homedir(), 'Library', 'Application Support', 'cockpit')
+    : join(process.env.XDG_DATA_HOME ?? join(homedir(), '.local', 'share'), 'cockpit');
+
+const DEFAULT_DB_PATH = join(dataDir(), 'cockpit.db');
+
 /** How long a liveness probe is worth waiting for before it has said enough. */
 const PROBE_TIMEOUT_MS = 2000;
 
@@ -211,9 +225,12 @@ const SERVICES: Record<ServiceId, ServiceSpec> = {
       // The hub's DB_PATH defaults to `./cockpit.db` — relative to wherever it
       // was started. A unit that leaves this unset opens a second, empty
       // database in whatever directory the init system chose, and the fleet
-      // comes up blank with nothing to say why. The live database is the one
-      // `bun run hub` has always written from its own package directory.
-      COCKPIT_DB_PATH: join(ROOT, 'packages', 'hub', 'cockpit.db'),
+      // comes up blank with nothing to say why. Point it at the platform data
+      // dir (C9: ~/.local/share/cockpit on linux, ~/Library/Application
+      // Support/cockpit on darwin) rather than the checkout: the hub's own
+      // boot migration (see packages/hub/src/index.ts) carries an existing
+      // in-tree database there the first time it finds one.
+      COCKPIT_DB_PATH: DEFAULT_DB_PATH, // ~/.local/share/cockpit or ~/Library/Application Support/cockpit
     },
     workingDirectory: ROOT,
     after: ['network-online.target'],
