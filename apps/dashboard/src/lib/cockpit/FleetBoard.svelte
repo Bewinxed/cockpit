@@ -25,10 +25,12 @@
   import * as Pagination from '$lib/components/ui/pagination';
   import SpawnPanel from '$lib/cockpit/SpawnPanel.svelte';
   import AttentionQueue from '$lib/cockpit/AttentionQueue.svelte';
+  import LiveSessionRow from '$lib/cockpit/LiveSessionRow.svelte';
   import {
     cockpit,
     isFailed,
     isResumable,
+    isStale,
     reconnectNow,
     resumeSession,
     setPeeked,
@@ -161,6 +163,13 @@
 
   const spend = $derived(
     cockpit.runningInstances.reduce((sum, row) => sum + (cockpit.statsOf(row.id).cost ?? 0), 0)
+  );
+
+  /** Listed rows with no live process — asleep or unreachable. Shown apart from
+   *  the roster above (staleInstances' own doc comment): "never as live work",
+   *  so it stays out of the Sessions stat and out of the live/idle/attn filters. */
+  const notRunning = $derived(
+    cockpit.listedInstances.filter((row) => isResumable(row) || isStale(row))
   );
 
   /* ---- filters ------------------------------------------------------- */
@@ -370,6 +379,21 @@
     <div class="queue">
       <AttentionQueue />
     </div>
+
+    <!-- Asleep and unreachable rows never reach the roster below (it is
+         `runningInstances` only, by design — see the Sessions stat), so a
+         sleeping or unknown session would otherwise be absent from the whole
+         board. Shown apart, never folded into live work or its counts. -->
+    {#if notRunning.length > 0}
+      <div class="not-running">
+        <div class="sec">Not running ({notRunning.length})</div>
+        <div class="not-running-rows">
+          {#each notRunning as row (row.id)}
+            <LiveSessionRow instance={row} />
+          {/each}
+        </div>
+      </div>
+    {/if}
 
     <div class="panel">
       {#if cockpit.hub === 'unreachable'}
@@ -701,6 +725,33 @@
     margin-top: var(--space-6);
     padding: var(--space-3);
     box-shadow: var(--shadow-lifted);
+  }
+
+  /* Asleep/unreachable rows, kept in their own well rather than the roster's
+     table — that roster is `runningInstances` by design (the Sessions stat
+     above it counts the same set), so this is a second, clearly separate
+     surface rather than a state this board's live table can also carry. */
+  .not-running {
+    background: var(--surface-raised);
+    border-radius: var(--radius-panel);
+    margin-top: var(--space-6);
+    padding: var(--space-3);
+    box-shadow: var(--shadow-lifted);
+  }
+  .not-running .sec {
+    font-size: var(--text-xs);
+    color: var(--ink-muted);
+    font-weight: var(--weight-strong);
+    text-transform: uppercase;
+    letter-spacing: var(--track-caps);
+    /* 1rem, not --space-4 (14px): LiveSessionRow's own inset is Tailwind's
+       plain px-4 (16px), so the heading matches that, not the --space scale. */
+    padding: 0 1rem;
+    margin: var(--space-1) 0 var(--space-2);
+  }
+  .not-running-rows {
+    display: flex;
+    flex-direction: column;
   }
 
   .bar {

@@ -26,8 +26,21 @@
     IconTools,
     IconUsage,
   } from '$lib/icons';
-  import { ACTIVITY_LABEL, type Activity } from './activity';
-  import { cockpit, type InstanceRow, type ProjectRow } from './client.svelte';
+  import {
+    ACTIVITY_LABEL,
+    SLEEPING_HINT,
+    SLEEPING_LABEL,
+    UNKNOWN_HINT,
+    UNKNOWN_LABEL,
+    type Activity,
+  } from './activity';
+  import {
+    cockpit,
+    isResumable,
+    isStale,
+    type InstanceRow,
+    type ProjectRow,
+  } from './client.svelte';
   import { machineLabel } from './machine';
   import { markHue, sessionSprite } from './mark';
   import { rail } from './rail.svelte';
@@ -96,6 +109,18 @@
     running.filter((row) => !cockpit.projects.some((project) => inProject(row, project)))
   );
 
+  /** Listed rows with no live process — asleep or unreachable. `running` above
+   *  (and the Fleet pill's count) never includes these, so they get their own
+   *  flat section rather than hiding inside a project's live-work count. */
+  const notRunning = $derived(
+    cockpit.listedInstances.filter((row) => isResumable(row) || isStale(row))
+  );
+
+  const notRunningLabel = (row: InstanceRow): string =>
+    isResumable(row) ? SLEEPING_LABEL : UNKNOWN_LABEL;
+  const notRunningHint = (row: InstanceRow): string =>
+    isResumable(row) ? SLEEPING_HINT : UNKNOWN_HINT;
+
   /* ---- helpers -------------------------------------------------------- */
 
   /** The rail's own wording for a session that never carried a title. */
@@ -121,12 +146,17 @@
     done: 'bg-[var(--status-done-bg)] text-[var(--status-done-ink)]',
     fail: 'bg-[var(--status-fail-bg)] text-[var(--status-fail-ink)]',
   };
-  function pillClass(status: 'live' | 'attn' | 'done' | 'fail' | 'idle'): string {
+  function pillClass(status: 'live' | 'attn' | 'done' | 'fail' | 'idle' | 'stale'): string {
     const base =
-      'h-[var(--c-pill-h)] rounded-[var(--radius-pill)] border-0 text-[length:var(--c-pill-fs)] leading-none whitespace-nowrap';
-    return status === 'idle'
-      ? `${base} gap-0 bg-transparent p-0 font-[450] text-[var(--status-idle-ink)]`
-      : `${base} gap-[var(--c-pill-gap)] px-2.5 py-0 font-medium ${PILL_FILL[status]}`;
+      'h-[var(--c-pill-h)] rounded-[var(--radius-pill)] text-[length:var(--c-pill-fs)] leading-none whitespace-nowrap';
+    if (status === 'idle')
+      return `${base} border-0 gap-0 bg-transparent p-0 font-[450] text-[var(--status-idle-ink)]`;
+    // Stale (`unknown`) carries an outline instead of a tint, same recipe as
+    // LiveSessionRow: the hub has no fact to tint here, only the admission
+    // that it lacks one.
+    if (status === 'stale')
+      return `${base} border border-[var(--border)] gap-[var(--c-pill-gap)] px-2.5 py-0 font-medium text-[var(--ink-muted)]`;
+    return `${base} border-0 gap-[var(--c-pill-gap)] px-2.5 py-0 font-medium ${PILL_FILL[status]}`;
   }
 
   /** The NavItem count pill, as a token-dressed ui/badge: the fleet count on the
@@ -297,6 +327,31 @@
             </span>
             <span class="nm">{sessionName(row)}</span>
             <Badge class={pillClass(PILL[activity])}>{ACTIVITY_LABEL[activity]}</Badge>
+          </a>
+        {/each}
+      </div>
+    {/if}
+
+    <!-- Asleep and unreachable rows never join `running` above, so without
+         this the rail — the first place the operator looks — would show
+         nothing for them at all. Kept in its own section, never folded into
+         the Fleet pill or the "Running now" live tail. -->
+    {#if notRunning.length > 0}
+      <div class="sec">Not running</div>
+      <div class="rows">
+        {#each notRunning as row (row.id)}
+          {@const Sprite = sessionSprite(row.id)}
+          <a
+            class="row"
+            class:on={path === `/session/${row.id}`}
+            href="/session/{row.id}"
+            title={notRunningHint(row)}
+          >
+            <span class="mark m{markHue(row.cwd || row.machineId)}" style="opacity:0.6">
+              <Sprite aria-hidden="true" />
+            </span>
+            <span class="nm">{sessionName(row)}</span>
+            <Badge class={pillClass('stale')}>{notRunningLabel(row)}</Badge>
           </a>
         {/each}
       </div>
