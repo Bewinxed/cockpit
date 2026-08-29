@@ -14,7 +14,7 @@ import { mkdtempSync, statSync } from 'node:fs';
 import { createConnection, createServer, type Socket } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { SessiondServerMessage } from '@cockpit/core';
+import type { SessiondServerMessage } from '@cockpit/core/sessiond';
 import { SessiondServer } from './server';
 
 /** Every socket in this file lives in a scratch dir; never the real endpoint. */

@@ -1,26 +1,30 @@
 {
-  "name": "@cockpit/core",
-  "version": "0.1.0",
-  "private": true,
-  "type": "module",
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
-  "exports": {
-    ".": {
-      "types": "./src/index.ts",
-      "default": "./src/index.ts"
-    },
-    "./usage/limits": {
-      "types": "./src/usage/limits.ts",
-      "default": "./src/usage/limits.ts"
-    }
-  },
-  "scripts": {
-    "typecheck": "tsc --noEmit"
-  },
-  "dependencies": {},
-  "devDependencies": {
-    "@types/bun": "latest",
-    "typescript": "^5.9.3"
-  }
+	"name": "@cockpit/core",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"main": "./src/index.ts",
+	"types": "./src/index.ts",
+	"exports": {
+		".": {
+			"types": "./src/index.ts",
+			"default": "./src/index.ts"
+		},
+		"./usage/limits": {
+			"types": "./src/usage/limits.ts",
+			"default": "./src/usage/limits.ts"
+		},
+		"./sessiond": {
+			"types": "./src/sessiond.ts",
+			"default": "./src/sessiond.ts"
+		}
+	},
+	"scripts": {
+		"typecheck": "tsc --noEmit"
+	},
+	"dependencies": {},
+	"devDependencies": {
+		"@types/bun": "latest",
+		"typescript": "^5.9.3"
+	}
 }

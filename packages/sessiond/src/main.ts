@@ -4,7 +4,7 @@
  * future Windows port has to touch (design §11, §12).
  */
 
-import { sessiondEndpoint } from '@cockpit/core';
+import { sessiondEndpoint } from '@cockpit/core/sessiond';
 import { SessiondServer } from './server';
 
 const main = async (): Promise<void> => {

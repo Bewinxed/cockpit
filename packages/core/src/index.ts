@@ -49,10 +49,12 @@ export * from './stream';
 // sessiond.ts) can reuse the identical class.
 export * from './ring';
 
-// sessiond protocol types (design only as of this export — see
-// packages/core/src/sessiond.ts's own header): the capability string,
-// message shapes, and the cross-platform endpoint derivation. No runtime.
-export * from './sessiond';
+// sessiond's protocol types are deliberately NOT re-exported here. That module
+// reaches for `node:os` and `node:path` to derive its endpoint, and this barrel
+// is imported by the dashboard — a browser bundle, where Vite externalises
+// `node:*` and the first property access throws, taking the whole client module
+// down with it. Import them from `@cockpit/core/sessiond` instead; the subpath
+// export exists for exactly that, as `./usage/limits` already does.
 
 // How a session with no given title names itself: its first user message,
 // cleaned. Shared so the hub's derived title and the dashboard's transcript
