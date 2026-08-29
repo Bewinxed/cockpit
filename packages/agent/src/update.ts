@@ -9,6 +9,16 @@ import type { UpdateReport } from '@cockpit/core';
 import { homedir, platform } from 'node:os';
 import { join } from 'node:path';
 import { REPO_ROOT } from './build';
+import {
+  checkDeploy,
+  DEPLOY_BRANCH,
+  deployRoot,
+  describeDeploy,
+  startDeployPoller,
+  type DeployPoller,
+  type DeployState,
+  type DeployWatcherOptions,
+} from './deploy';
 import { toolEnv } from './tools';
 
 export interface UpdateOptions {
@@ -21,6 +31,20 @@ export interface UpdateOptions {
    * is the only thing that knows — never read off the wire.
    */
   busy?: number;
+  /**
+   * Which checkout to update. Defaults to the one this daemon is running out of
+   * — which is the whole of what the manual `updateCockpit` control ever meant.
+   * The deployment poller passes the marked clone explicitly (C8), because
+   * "wherever this file happens to sit" is not a thing to pull into.
+   */
+  root?: string;
+  /**
+   * Pull from `origin/<branch>` by name rather than from whatever upstream the
+   * checkout has configured. Set by the deployment poller (C8/G3): the deploy
+   * target is pinned to `origin/main`, and a fast-forward onto a branch nobody
+   * named is how a clone quietly starts following something else.
+   */
+  branch?: string;
 }
 
 /** The end of a command's output: enough to name what happened, not a wall of it. */
@@ -46,9 +70,9 @@ interface Ran {
  * running if it hangs: a pull against an unreachable remote would otherwise hold
  * the control open forever, and the hub would never hear how the update went.
  */
-const run = async (argv: string[], timeoutMs: number): Promise<Ran> => {
+const run = async (argv: string[], timeoutMs: number, cwd: string = REPO_ROOT): Promise<Ran> => {
   const child = Bun.spawn(argv, {
-    cwd: REPO_ROOT,
+    cwd,
     env: toolEnv(),
     stdout: 'pipe',
     stderr: 'pipe',
@@ -66,7 +90,7 @@ const run = async (argv: string[], timeoutMs: number): Promise<Ran> => {
   return { ok, code, said: ok ? tail(stdout) || tail(stderr) : tail(stderr) || tail(stdout) };
 };
 
-const git = (args: string[]): Promise<Ran> => run(['git', ...args], GIT_TIMEOUT_MS);
+const git = (args: string[], cwd?: string): Promise<Ran> => run(['git', ...args], GIT_TIMEOUT_MS, cwd);
 
 const failed = (step: string, ran: Ran): Error =>
   new Error(`${step} failed: ${ran.said || `exited ${ran.code}`}`);
@@ -111,15 +135,33 @@ const scheduleRestart = (id: 'agent' | 'hub'): void => {
 };
 
 /** What the dashboard service serves, and the sign that this machine builds it. */
-const DASHBOARD_BUILD = join(REPO_ROOT, 'apps', 'dashboard', 'build', 'index.js');
+const dashboardBuild = (root: string): string => join(root, 'apps', 'dashboard', 'build', 'index.js');
 
 /**
  * Whether a dashboard build is this machine's business. A worker running only
  * the daemon has no reason to spend minutes on a bundle nobody will serve, and
  * a machine that has one already is one that serves it.
  */
-const buildsDashboard = async (): Promise<boolean> =>
-  (await Bun.file(DASHBOARD_BUILD).exists()) || (await isInstalled('dashboard'));
+const buildsDashboard = async (root: string): Promise<boolean> =>
+  (await Bun.file(dashboardBuild(root)).exists()) || (await isInstalled('dashboard'));
+
+/**
+ * How the checkout is moved forward, and the one line of this file that the
+ * deployment channel's safety rests on (C8/G3).
+ *
+ * `--ff-only` always: a pull that cannot fast-forward fails loudly and leaves
+ * the checkout exactly as it was. There is no merge, no rebase and no reset
+ * anywhere in this module — a diverged deployment clone is a thing for a person
+ * to look at, because the commits it has that origin does not may be the only
+ * copy in existence.
+ *
+ * When the caller names a branch — the poller always does — the remote and ref
+ * are given explicitly, so the fast-forward can only ever be onto
+ * `origin/<branch>` rather than onto whatever upstream the checkout has picked
+ * up since.
+ */
+export const pullArgs = (branch?: string): string[] =>
+  branch ? ['pull', '--ff-only', 'origin', branch] : ['pull', '--ff-only'];
 
 /**
  * Everything the `updateCockpit` control does, in the order it has to happen.
@@ -130,19 +172,22 @@ export const updateCheckout = async ({
   restartAgent,
   force,
   busy = 0,
+  root = REPO_ROOT,
+  branch,
 }: UpdateOptions = {}): Promise<UpdateReport> => {
-  const head = await git(['rev-parse', '--short', 'HEAD']);
-  if (!head.ok) throw new Error(`${REPO_ROOT} is not a git checkout, so there is nothing to pull`);
+  const head = await git(['rev-parse', '--short', 'HEAD'], root);
+  if (!head.ok) throw new Error(`${root} is not a git checkout, so there is nothing to pull`);
 
-  const dirty = await git(['status', '--porcelain']);
+  const dirty = await git(['status', '--porcelain'], root);
   if (!dirty.ok) throw failed('git status', dirty);
   if (dirty.said && !force) {
     throw new Error('the checkout has uncommitted changes; refusing to pull');
   }
 
-  const pulled = await git(['pull', '--ff-only']);
-  if (!pulled.ok) throw failed('git pull --ff-only', pulled);
-  const moved = await git(['rev-parse', '--short', 'HEAD']);
+  const args = pullArgs(branch);
+  const pulled = await git(args, root);
+  if (!pulled.ok) throw failed(`git ${args.join(' ')}`, pulled);
+  const moved = await git(['rev-parse', '--short', 'HEAD'], root);
   if (!moved.ok) throw failed('git rev-parse', moved);
 
   const report: UpdateReport = {
@@ -159,14 +204,15 @@ export const updateCheckout = async ({
   // services are still restarted, because being asked to update a machine that
   // is already current is how a wedged one gets picked up off the floor.
   if (report.to !== report.from) {
-    const installed = await run([process.execPath, 'install'], INSTALL_TIMEOUT_MS);
+    const installed = await run([process.execPath, 'install'], INSTALL_TIMEOUT_MS, root);
     if (!installed.ok) throw failed('bun install', installed);
     report.installed = true;
 
-    if (await buildsDashboard()) {
+    if (await buildsDashboard(root)) {
       const built = await run(
         [process.execPath, 'run', '--filter', '@cockpit/dashboard', 'build'],
-        BUILD_TIMEOUT_MS
+        BUILD_TIMEOUT_MS,
+        root
       );
       if (!built.ok) throw failed('the dashboard build', built);
       report.built = true;
@@ -207,3 +253,41 @@ export const updateCheckout = async ({
   if (skipped.length > 0) report.skipped = skipped.join('; ');
   return report;
 };
+
+/**
+ * The deployment trigger (C8): the poller decides *whether*, this decides
+ * *what*. Kept here rather than in `deploy.ts` so that module stays a pure
+ * observer — it can be read, and tested, without the ability to pull anything.
+ *
+ * `restartAgent: true` is the point of the whole channel. A daemon that pulled
+ * a new commit and kept running the old one has not deployed; and post-cutover
+ * the daemon's restart is free by construction, because the harness children
+ * live in sessiond's cgroup and not in the agent's (PLAN.md C7/D4).
+ */
+export const deployUpdate = (state: DeployState): Promise<UpdateReport> => {
+  if (state.kind !== 'behind') {
+    throw new Error(`refusing to update a checkout that is ${state.kind}: ${describeDeploy(state)}`);
+  }
+  return updateCheckout({ root: state.root, branch: DEPLOY_BRANCH, restartAgent: true });
+};
+
+export type DeployWatchOptions = Partial<Omit<DeployWatcherOptions, 'update'>> & {
+  readonly intervalMs?: number;
+};
+
+/**
+ * What the daemon's entry point starts: poll the deployment clone, and run the
+ * update flow when — and only when — a marked clone is strictly behind
+ * `origin/main`. Started unconditionally: on a machine that was never deployed
+ * to, the very first thing every tick does is fail the marker check, so the
+ * poller is a no-op in a dev tree by construction rather than by configuration.
+ */
+export const watchDeployment = (options: DeployWatchOptions = {}): DeployPoller =>
+  startDeployPoller({ ...options, update: deployUpdate });
+
+/**
+ * Where this machine stands against the deployment branch, asked once. What
+ * `cockpit deploy status` prints, and what the daemon can answer with.
+ */
+export const deploymentState = (root: string = deployRoot()): Promise<DeployState> =>
+  checkDeploy({ root });

@@ -1,7 +1,7 @@
 import type { AgentRow } from '@cockpit/core';
 import { COCKPIT_ENV, COCKPIT_HUB_PORT } from '@cockpit/core';
 import { sessiondEndpoint } from '@cockpit/core/sessiond';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { chmod } from 'node:fs/promises';
 import { homedir, platform } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -87,17 +87,51 @@ const repoRoot = (): string => {
 };
 
 const ROOT = repoRoot();
-const HUB_ENTRY = join(ROOT, 'packages', 'hub', 'src', 'index.ts');
-const SESSIOND_ENTRY = join(ROOT, 'packages', 'sessiond', 'src', 'main.ts');
-const DASHBOARD_DIR = join(ROOT, 'apps', 'dashboard');
-const DASHBOARD_ENTRY = join(DASHBOARD_DIR, 'build', 'index.js');
+
 /**
- * The dashboard's `dev` script is `vite dev`, and this is that vite. Named
- * outright because `ExecStart=` is not a shell: it cannot resolve a `.bin` entry
- * off PATH, and going through `bun run --filter` would put the port back under
- * vite.config.ts, where `status` cannot follow it.
+ * Every path a set of units names, derived from one checkout root. It is a
+ * function of the root rather than a set of module constants because
+ * {@link deployInit} installs units for a checkout that is *not* the one this
+ * CLI is running from: the deployment clone at {@link DEPLOY_ROOT} (C8). The
+ * default layout — {@link HERE} — resolves to exactly what these constants were,
+ * so `cockpit service install` is unchanged.
  */
-const DASHBOARD_VITE = join(DASHBOARD_DIR, 'node_modules', 'vite', 'bin', 'vite.js');
+interface Layout {
+  readonly root: string;
+  readonly hubEntry: string;
+  readonly sessiondEntry: string;
+  readonly dashboardDir: string;
+  readonly dashboardEntry: string;
+  /**
+   * The dashboard's `dev` script is `vite dev`, and this is that vite. Named
+   * outright because `ExecStart=` is not a shell: it cannot resolve a `.bin`
+   * entry off PATH, and going through `bun run --filter` would put the port
+   * back under vite.config.ts, where `status` cannot follow it.
+   */
+  readonly dashboardVite: string;
+  /** The `cockpit` entry point the agent unit runs `up` with. */
+  readonly cliEntry: string;
+}
+
+const layoutFor = (
+  root: string,
+  cliEntry: string = join(root, 'packages', 'cli', 'src', 'cli.ts')
+): Layout => ({
+  root,
+  hubEntry: join(root, 'packages', 'hub', 'src', 'index.ts'),
+  sessiondEntry: join(root, 'packages', 'sessiond', 'src', 'main.ts'),
+  dashboardDir: join(root, 'apps', 'dashboard'),
+  dashboardEntry: join(root, 'apps', 'dashboard', 'build', 'index.js'),
+  dashboardVite: join(root, 'apps', 'dashboard', 'node_modules', 'vite', 'bin', 'vite.js'),
+  cliEntry,
+});
+
+/**
+ * This checkout. `Bun.main` rather than the derived cli.ts so that installing
+ * from a branch still installs *this* process's entry point, which is what
+ * someone testing a branch means by it.
+ */
+const HERE = layoutFor(ROOT, Bun.main);
 
 /**
  * Where the dashboard listens. Read from the installing shell so a second
@@ -211,7 +245,7 @@ const probeSessiond = async (): Promise<string | undefined> => {
   return `${endpoint} accepts connections`;
 };
 
-interface ServiceSpec {
+export interface ServiceSpec {
   readonly id: ServiceId;
   readonly mode: ServiceMode;
   /** systemd `Description=`. */
@@ -241,7 +275,14 @@ interface ServiceSpec {
   readonly probe: () => Promise<string | undefined>;
 }
 
-const SERVICES: Record<ServiceId, ServiceSpec> = {
+const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
+  const {
+    root: ROOT,
+    hubEntry: HUB_ENTRY,
+    sessiondEntry: SESSIOND_ENTRY,
+    dashboardEntry: DASHBOARD_ENTRY,
+  } = layout;
+  return {
   hub: {
     id: 'hub',
     mode: 'prod',
@@ -348,7 +389,7 @@ const SERVICES: Record<ServiceId, ServiceSpec> = {
      * Installing from a checkout therefore installs that checkout, which is
      * what someone testing a branch means by it.
      */
-    command: [process.execPath, Bun.main, 'up'],
+    command: [process.execPath, layout.cliEntry, 'up'],
     environment: {},
     workingDirectory: homedir(),
     // sessiond joins the hub in both lists: the daemon dials its socket for
@@ -365,7 +406,10 @@ const SERVICES: Record<ServiceId, ServiceSpec> = {
     ],
     probe: probeAgent,
   },
+  };
 };
+
+const SERVICES = servicesFor(HERE);
 
 /**
  * What `--dev` changes, per service. Only what is here is watched, and the
@@ -378,7 +422,10 @@ const SERVICES: Record<ServiceId, ServiceSpec> = {
  */
 // sessiond is absent for the same reason and more sharply: restarting it kills
 // every harness child in its cgroup, so a source edit must never bounce it.
-const DEV: Partial<Record<ServiceId, Partial<ServiceSpec>>> = {
+const devFor = (layout: Layout): Partial<Record<ServiceId, Partial<ServiceSpec>>> => {
+  const { hubEntry: HUB_ENTRY, dashboardDir: DASHBOARD_DIR, dashboardVite: DASHBOARD_VITE } =
+    layout;
+  return {
   hub: {
     command: [process.execPath, '--watch', HUB_ENTRY],
   },
@@ -401,17 +448,22 @@ const DEV: Partial<Record<ServiceId, Partial<ServiceSpec>>> = {
       return undefined;
     },
   },
+  };
 };
+
+const DEV = devFor(HERE);
 
 /** Whether `--dev` makes this service watch its own source. */
 const watches = (id: ServiceId): boolean => id in DEV;
 
-const specFor = (id: ServiceId, mode: ServiceMode): ServiceSpec => {
-  const base = SERVICES[id];
+const specFor = (id: ServiceId, mode: ServiceMode, layout: Layout = HERE): ServiceSpec => {
+  const services = layout === HERE ? SERVICES : servicesFor(layout);
+  const base = services[id];
   if (mode === 'prod') return base;
   // The daemon has no dev flavour to merge, and still carries the mode: it was
   // installed by the same command, and `status` should say so.
-  return { ...base, ...DEV[id], mode, description: `${base.description} (dev)` };
+  const dev = layout === HERE ? DEV : devFor(layout);
+  return { ...base, ...dev[id], mode, description: `${base.description} (dev)` };
 };
 
 const environment = (spec: ServiceSpec): [string, string][] =>
@@ -984,8 +1036,13 @@ export type ServiceInit = 'systemd' | 'launchd';
  * names linux's data dir — because the renderer answers "what would I install
  * here", not "what would a Mac install".
  */
-export const serviceDefinition = (id: ServiceId, mode: ServiceMode, init: ServiceInit): string => {
-  const spec = specFor(id, mode);
+export const serviceDefinition = (
+  id: ServiceId,
+  mode: ServiceMode,
+  init: ServiceInit,
+  root?: string
+): string => {
+  const spec = specFor(id, mode, root === undefined ? HERE : layoutFor(root));
   return init === 'systemd' ? unit(spec) : plist(spec);
 };
 
@@ -1128,4 +1185,240 @@ export const sweepSessiondOrphans = async (
     .delete()
     .catch(() => {});
   return orphans;
+};
+
+// ---------------------------------------------------------------------------
+// The deployment clone (PLAN.md contract C8)
+// ---------------------------------------------------------------------------
+
+/**
+ * Why any of this exists: until now the services on this fleet ran straight out
+ * of a dev working tree that several agent sessions edit at once. A restart
+ * therefore deployed whatever was half-written at that second, and the update
+ * flow rightly refuses a dirty checkout — so the machine could never catch
+ * itself up. `deploy init` gives the services a checkout that is nobody's
+ * working copy, and after that a push to `main` is the fleet deploy.
+ */
+
+/**
+ * Where the deployment clone lives. Our choice: per-user so it needs no sudo,
+ * under a dotdir so it is nobody's working copy, and deliberately outside every
+ * dev checkout. `COCKPIT_DEPLOY_ROOT` overrides it — how the tests point at a
+ * scratch directory.
+ *
+ * Named here rather than imported from `@cockpit/agent`, exactly as
+ * `update.ts` names the unit paths this file writes: the two ends of the deploy
+ * channel agree on a constant, and neither package may depend on the other.
+ */
+export const deployRoot = (): string =>
+  process.env.COCKPIT_DEPLOY_ROOT ?? join(homedir(), '.cockpit', 'app');
+
+/** The marker that licenses an automatic pull. Its absence is the safety property. */
+export const DEPLOY_MARKER = '.cockpit-deploy';
+
+/** The branch a deployment clone tracks. */
+export const DEPLOY_BRANCH = 'main';
+
+/** Written to `<root>/.cockpit-deploy`, read by the daemon's poller. */
+export interface DeployMarker {
+  readonly root: string;
+  readonly origin: string;
+  readonly branch: string;
+  readonly createdAt: string;
+  readonly createdBy: string;
+}
+
+/** One shelled-out step of the init, so a test can watch the sequence. */
+export interface DeployStep {
+  readonly argv: readonly string[];
+  readonly cwd: string;
+}
+
+export type StepRunner = (step: DeployStep) => Promise<{ ok: boolean; said: string }>;
+
+const runStep: StepRunner = async ({ argv, cwd }) => {
+  const ran = await Bun.$`${argv}`.cwd(cwd).quiet().nothrow();
+  const said = (ran.stderr.toString().trim() || ran.stdout.toString().trim()).split('\n').slice(-4).join('\n');
+  return { ok: ran.exitCode === 0, said };
+};
+
+/** What the units the init would install look like, without having installed them. */
+export interface RenderedUnit {
+  readonly id: ServiceId;
+  readonly path: string;
+  readonly text: string;
+}
+
+export interface DeployInitResult {
+  readonly root: string;
+  readonly origin: string;
+  readonly branch: string;
+  /** The clone's HEAD after init, short. */
+  readonly head: string;
+  readonly marker: DeployMarker;
+  readonly units: readonly RenderedUnit[];
+}
+
+export interface DeployInitOptions {
+  readonly root?: string;
+  /** The remote to clone. Defaults to this checkout's `origin`. */
+  readonly origin?: string;
+  readonly branch?: string;
+  /** Which services this machine runs from the clone. Defaults to all of them. */
+  readonly ids?: readonly ServiceId[];
+  readonly note: (line: string) => void;
+  /**
+   * Injected by the tests. This verb clones, installs, builds and then hands
+   * units to systemd; a test has to be able to prove the *layout* it produces
+   * without spending ten minutes on a build or touching an init system.
+   */
+  readonly run?: StepRunner;
+  /** Injected for the same reason: nothing in a test may reach `systemctl`. */
+  readonly install?: (specs: readonly ServiceSpec[], note: (line: string) => void) => Promise<void>;
+}
+
+const step = async (
+  runner: StepRunner,
+  what: string,
+  argv: readonly string[],
+  cwd: string,
+  note: (line: string) => void
+): Promise<string> => {
+  note(`${what}…`);
+  const ran = await runner({ argv, cwd });
+  if (!ran.ok) throw new ServiceError(`${what} failed: ${ran.said || argv.join(' ')}`);
+  return ran.said;
+};
+
+/**
+ * `git status` in the clone must stay clean forever, or the update flow's dirty
+ * guard locks the machine out of its own deploys. The marker lives inside the
+ * clone where an operator will find it, so it is excluded locally — in
+ * `.git/info/exclude`, which is per-clone and never committed, rather than in a
+ * `.gitignore` that would have to be carried in the repository itself.
+ */
+const excludeMarker = async (root: string): Promise<void> => {
+  const path = join(root, '.git', 'info', 'exclude');
+  const existing = await Bun.file(path)
+    .text()
+    .catch(() => '');
+  if (existing.split('\n').includes(DEPLOY_MARKER)) return;
+  await Bun.write(path, `${existing.endsWith('\n') || existing === '' ? existing : `${existing}\n`}${DEPLOY_MARKER}\n`);
+};
+
+/** A directory that exists and holds something is not a place to clone into. */
+const occupied = (root: string): boolean => {
+  if (!existsSync(root)) return false;
+  try {
+    return readdirSync(root).length > 0;
+  } catch {
+    return true;
+  }
+};
+
+/**
+ * `cockpit deploy init` — the whole of C8's setup, in the order it has to
+ * happen: clone `origin/main` into {@link deployRoot}, install, build the
+ * dashboard, write the marker, and install units that point at the clone with
+ * the C9 data-dir database path.
+ *
+ * It never restarts a service and never runs a poller. What it produces is a
+ * checkout the daemon is *allowed* to update; the first actual deploy is the
+ * next push to main.
+ */
+export const deployInit = async ({
+  root = deployRoot(),
+  origin,
+  branch = DEPLOY_BRANCH,
+  ids = SERVICE_IDS,
+  note,
+  run: runner = runStep,
+  install,
+}: DeployInitOptions): Promise<DeployInitResult> => {
+  const host = platform();
+  if (host !== 'darwin' && host !== 'linux') {
+    throw new ServiceError(`cockpit deploy does not know how to install services on ${host}`);
+  }
+
+  const marked = existsSync(join(root, DEPLOY_MARKER));
+  if (occupied(root) && !marked) {
+    throw new ServiceError(
+      `${root} already exists and is not a deployment clone (no ${DEPLOY_MARKER}). ` +
+        `Refusing to touch it — move it aside, or point elsewhere with COCKPIT_DEPLOY_ROOT.`
+    );
+  }
+
+  let remote: string;
+  if (origin === undefined) {
+    const found = await runner({ argv: ['git', 'remote', 'get-url', 'origin'], cwd: ROOT });
+    if (!found.ok) {
+      throw new ServiceError(`no origin remote in ${ROOT}, so there is nothing to clone from`);
+    }
+    remote = found.said.trim();
+  } else {
+    remote = origin;
+  }
+
+  if (marked) {
+    // Re-running init on an existing clone catches it up rather than starting
+    // over: cloning again would throw away a checkout the services are running.
+    note(`${root} is already a deployment clone; bringing it up to ${branch}`);
+    await step(runner, `git fetch origin ${branch}`, ['git', 'fetch', 'origin', branch], root, note);
+    await step(
+      runner,
+      `git merge --ff-only origin/${branch}`,
+      ['git', 'merge', '--ff-only', `origin/${branch}`],
+      root,
+      note
+    );
+  } else {
+    await step(
+      runner,
+      `cloning ${remote} (${branch}) into ${root}`,
+      // `root` is absolute and git creates the leading directories itself, so
+      // the cwd only has to be somewhere that exists.
+      ['git', 'clone', '--branch', branch, '--single-branch', remote, root],
+      ROOT,
+      note
+    );
+  }
+
+  await excludeMarker(root);
+
+  const marker: DeployMarker = {
+    root,
+    origin: remote,
+    branch,
+    createdAt: new Date().toISOString(),
+    createdBy: 'cockpit deploy init',
+  };
+  await Bun.write(join(root, DEPLOY_MARKER), `${JSON.stringify(marker, null, 2)}\n`);
+  await chmod(join(root, DEPLOY_MARKER), 0o600);
+  note(`wrote ${join(root, DEPLOY_MARKER)}`);
+
+  await step(runner, 'bun install', [process.execPath, 'install'], root, note);
+  if (ids.includes('dashboard')) {
+    await step(
+      runner,
+      'building the dashboard',
+      [process.execPath, 'run', '--filter', '@cockpit/dashboard', 'build'],
+      root,
+      note
+    );
+  }
+
+  const layout = layoutFor(root);
+  const specs = ids.map((id) => specFor(id, 'prod', layout));
+  const mac = host === 'darwin';
+  const units: RenderedUnit[] = specs.map((spec) => ({
+    id: spec.id,
+    path: mac ? launchAgentPath(spec.id) : systemdPath(spec.id),
+    text: mac ? plist(spec) : unit(spec),
+  }));
+
+  await (install ?? (mac ? installLaunchAgents : installSystemdUnits))([...specs], note);
+
+  const head = await runner({ argv: ['git', 'rev-parse', '--short', 'HEAD'], cwd: root });
+
+  return { root, origin: remote, branch, head: head.said.trim(), marker, units };
 };

@@ -5,6 +5,10 @@ import { CONFIG_PATH, readConfig } from './config';
 import { discoverHub, type Hub } from './discover';
 import { clearToken, login, LoginError, saveToken } from './login';
 import {
+  DEPLOY_BRANCH,
+  DEPLOY_MARKER,
+  deployInit,
+  deployRoot,
   isServiceAction,
   isServiceId,
   service,
@@ -24,6 +28,7 @@ Usage
   cockpit status [--hub <url>] [--verbose]  print the hub it found, and the fleet
   cockpit service <${SERVICE_ACTIONS.join('|')}> [service...]
                                             run cockpit as per-user services
+  cockpit deploy init [--origin <url>]      run the services from a clean clone
   cockpit login [--token <token>]           give this machine a Claude Code token
   cockpit logout                            forget it
 
@@ -46,10 +51,25 @@ Services
   restarts regardless, and is also the only way through when the hub cannot be
   reached to answer the question at all.
 
+Deploying
+  \`cockpit deploy init\` clones ${DEPLOY_BRANCH} into ${deployRoot()} — a checkout
+  that is nobody's working copy — installs it, builds the dashboard, writes a
+  ${DEPLOY_MARKER} marker and installs the services pointing at that clone
+  instead of at your editor's checkout. From then on the daemon fetches
+  ${DEPLOY_BRANCH} every minute and, when the clone is strictly behind, pulls
+  \`--ff-only\`, reinstalls, rebuilds and restarts. Pushing to ${DEPLOY_BRANCH} is
+  the fleet deploy.
+
+  The marker is the whole safety story: a checkout without one is never fetched
+  and never pulled, so a dev tree cannot auto-update no matter what is running
+  in it. A clone that has diverged from origin refuses loudly and is left
+  exactly as it is — resetting it would destroy work nobody else has a copy of.
+
 Options
   --hub <url>     hub to use, as http://host:port or ws://host:port/ws
   --token <token> a \`claude setup-token\` token, for \`login\` without a terminal
   --dev           for \`service install\`: run from the checkout, watching it
+  --origin <url>  for \`deploy init\`: the remote to clone (default this one's)
   --when-idle     for \`service restart\`: wait for this machine's sessions first
   --force         for \`service restart\`: restart the agent mid-turn anyway
   --follow, -f    keep printing, for \`service logs\`
@@ -99,6 +119,7 @@ interface Args {
   rest: string[];
   hub?: string;
   token?: string;
+  origin?: string;
   dev: boolean;
   whenIdle: boolean;
   force: boolean;
@@ -131,6 +152,10 @@ const parseArgs = (argv: string[]): Args => {
       case '--token':
         args.token = argv[++index];
         if (!args.token) throw new UsageError('--token needs a token');
+        break;
+      case '--origin':
+        args.origin = argv[++index];
+        if (!args.origin) throw new UsageError('--origin needs a git URL');
         break;
       case '--dev':
         args.dev = true;
@@ -299,8 +324,14 @@ const up = async (args: Args): Promise<number> => {
 
   // The daemon reads its hub from the environment, so this is the handoff.
   process.env[COCKPIT_ENV.hubUrl] = hub.wsUrl;
-  const { runDaemon } = await import('@cockpit/agent');
+  const { runDaemon, watchDeployment } = await import('@cockpit/agent');
   runDaemon(auth);
+  // Started unconditionally, because it is safe unconditionally: the first
+  // thing every poll does is look for the marker, and a checkout without one is
+  // never fetched, compared or pulled. On a dev machine this is a no-op that
+  // costs one `stat` a minute; on a deployed machine it is what makes a push to
+  // main reach it (C8).
+  watchDeployment();
   return 0;
 };
 
@@ -325,6 +356,28 @@ const runService = async (args: Args): Promise<number> => {
     force: args.force,
     note: (line) => console.log(line),
   });
+  return 0;
+};
+
+/**
+ * `cockpit deploy init` (PLAN.md C8). One verb, and deliberately only one: the
+ * clone is created here, and every deploy after it is a push to the deploy
+ * branch that the daemon's poller picks up.
+ */
+const runDeploy = async (args: Args): Promise<number> => {
+  if (args.action !== 'init') {
+    throw new UsageError('cockpit deploy takes one verb: init');
+  }
+  const result = await deployInit({
+    ...(args.origin === undefined ? {} : { origin: args.origin }),
+    note: (line) => console.log(line),
+  });
+  console.log('');
+  console.log(`clone    ${result.root} (${result.origin}, ${result.branch}) at ${result.head}`);
+  console.log(`marker   ${result.root}/${DEPLOY_MARKER}`);
+  for (const generated of result.units) console.log(`unit     ${generated.path}`);
+  console.log('');
+  console.log(`This machine now deploys on every push to ${result.branch}.`);
   return 0;
 };
 
@@ -354,6 +407,8 @@ const run = async (argv: string[]): Promise<number> => {
       return status(args);
     case 'service':
       return runService(args);
+    case 'deploy':
+      return runDeploy(args);
     case 'login':
       if (args.token) await saveToken(args.token);
       else await login();
