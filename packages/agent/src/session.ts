@@ -12,8 +12,10 @@ import type {
   FleetConfig,
   FleetSyncReport,
   FramePayload,
+  FrameProvenance,
   FsPayload,
   HarnessKind,
+  IngestMark,
   NeutralMessage,
   NeutralSessionInfo,
   NeutralUserMessage,
@@ -27,10 +29,13 @@ import type {
 } from '@cockpit/core';
 import {
   AGENT_BUSY,
+  alreadyIngested,
   COCKPIT_SCRATCH_TAG,
   FLEET_STATUS,
   FLEET_SYNC,
+  readIngested,
   repoPath,
+  resumeCursor,
   RESOLVE_PERMISSION,
   UPDATE_COCKPIT,
 } from '@cockpit/core';
@@ -49,7 +54,11 @@ import { stat } from 'node:fs/promises';
  * satisfy this shape (design §4.2, §4.3 — opencode and pi deliberately do not).
  */
 interface ClaudeAdoption {
-  custodyCandidates(): Promise<{ procs: { procId: string; alive: boolean }[] }>;
+  custodyCandidates(): Promise<{
+    /** sessiond's per-boot epoch — what makes a stored ingest mark readable or dead (design §7). */
+    epoch?: string;
+    procs: { procId: string; alive: boolean }[];
+  }>;
   adopt(
     instanceId: string,
     ctx: HarnessContext,
@@ -65,8 +74,46 @@ interface ClaudeAdoption {
   ): Promise<HarnessSession>;
 }
 
-/** The frames an agent has to send. The hub's own registry news is not one. */
-export type FrameSink = (frame: Exclude<FramePayload, { kind: 'instances' }>) => void;
+/**
+ * The context the supervisor hands an adapter, plus the one thing only an
+ * adapter reading a sessiond ring can supply: which line the frame it is about
+ * to emit came from (design §7).
+ *
+ * Declared here rather than on {@link HarnessContext} because it is not part of
+ * the harness contract — a ring-reading adapter reaches it as
+ * `(ctx as Partial<SessiondAwareContext>).line?.(epoch, seq)`, and every other
+ * adapter neither knows nor needs it.
+ *
+ * NOT YET CALLED. The one producer is claude's `adopt`, whose subscribe already
+ * holds the line — `line: (event) => custody.ingest(event.data)` — and which
+ * this leaf (D3) does not own; `harnesses/**` belongs to D2/D5. The stamp it
+ * owes is one statement before that ingest:
+ *
+ *     line: (event) => {
+ *       (ctx as Partial<SessiondAwareContext>).line?.(client.epoch!, event.seq);
+ *       custody.ingest(event.data);
+ *     },
+ *
+ * `ingest` emits its frame synchronously, so the stamp lands on that frame and
+ * no other. Until it is wired, frames carry no provenance: the hub admits them
+ * all and keeps no mark, which is exactly today's behaviour and exactly what
+ * the honest-loss rule already covers.
+ */
+export interface SessiondAwareContext extends HarnessContext {
+  line(srcEpoch: string, srcSeq: number): void;
+}
+
+/**
+ * The frames an agent has to send. The hub's own registry news is not one.
+ *
+ * A frame read off a sessiond ring additionally carries the line it came from
+ * ({@link FrameProvenance}, design §7) — additively, so the daemon's socket
+ * writer and an older hub both pass it through untouched. It is the hub's only
+ * way to tell a replayed line it already has from one it does not.
+ */
+export type FrameSink = (
+  frame: Exclude<FramePayload, { kind: 'instances' }> & Partial<FrameProvenance>
+) => void;
 
 const warn = (message: string): void => {
   Effect.runFork(Effect.logWarning(message));
@@ -219,6 +266,23 @@ export class SessionSupervisor {
   readonly #busy = new Set<string>();
 
   /**
+   * THE AGENT'S HALF OF THE INGEST LEDGER (design §7).
+   *
+   * `#line` is the sessiond line the frame now being emitted was derived from,
+   * stamped by whoever read it off the ring (the adapter calls `ctx.line(...)`
+   * immediately before `ctx.frame(...)`) and consumed by the very next frame.
+   * A frame nobody stamped carries no provenance and is forwarded as it always
+   * was — opencode, pi, and every path that does not read a ring.
+   *
+   * `#ingested` is the hub's OWN mark for an instance, learned from the
+   * register ack. The rule it enforces is one line long and is the whole
+   * at-most-once guarantee on this side: forward only a line strictly above
+   * the mark the hub itself named, under the epoch the hub named it in.
+   */
+  readonly #line = new Map<string, FrameProvenance>();
+  readonly #ingested = new Map<string, IngestMark>();
+
+  /**
    * Per-instance pulse, folded from the frames already passing through (Part 2
    * of per-instance subscription). Only the parts a rail needs without frames:
    * the tool in flight, the parked-permission count, and the running-subagent
@@ -314,6 +378,10 @@ export class SessionSupervisor {
 
   /** Drops every trace of an instance's pulse — the session is gone. */
   #forgetPulse(instanceId: string): void {
+    this.#line.delete(instanceId);
+    // The custody this mark gated is over — a relaunch, a hand-off or a death.
+    // Whatever produces frames next is not replaying the hub's own past.
+    this.#ingested.delete(instanceId);
     this.#pulseTool.delete(instanceId);
     this.#pulseBlocked.delete(instanceId);
     this.#pulseSubagents.delete(instanceId);
@@ -475,14 +543,38 @@ export class SessionSupervisor {
     workdir: string,
     adapter: Harness,
     holder: { session: HarnessSession | null }
-  ): HarnessContext {
+  ): SessiondAwareContext {
     return {
       instanceId,
       cwd: workdir,
+      /**
+       * The sessiond line the NEXT frame is derived from. Optional on purpose:
+       * an adapter that does not read its frames off a ring never calls it,
+       * and the supervisor's behaviour is then exactly what it always was.
+       */
+      line: (srcEpoch: string, srcSeq: number) => {
+        this.#line.set(instanceId, { srcEpoch, srcSeq });
+      },
       frame: (message) => {
+        const src = this.#line.get(instanceId);
+        this.#line.delete(instanceId);
         if (message.type === 'result') this.#tagQuest(instanceId, adapter);
+        // Folded before the forward decision: the pulse is local state being
+        // rebuilt from a replay, and a line the hub already has still tells
+        // this agent what its own session is doing.
         this.#foldPulse(instanceId, message);
-        this.sink({ kind: 'frame', instanceId, harness: adapter.kind, message });
+        // AT MOST ONCE. The hub's mark is the hub's word, so a line at or below
+        // it has already become a frame there — replaying it would double what
+        // a dashboard shows. Above it, or under a different epoch, or with no
+        // provenance at all: forwarded.
+        if (alreadyIngested(this.#ingested.get(instanceId), src)) return;
+        this.sink({
+          kind: 'frame',
+          instanceId,
+          harness: adapter.kind,
+          message,
+          ...(src ?? {}),
+        });
       },
       permission: (request) => {
         this.#pulseBlocked.set(instanceId, (this.#pulseBlocked.get(instanceId) ?? 0) + 1);
@@ -524,7 +616,13 @@ export class SessionSupervisor {
    * the hub's own `sleeping`/`restore` path owns it from there.
    */
   async reattach(
-    rows: { instanceId: string; cwd: string; sessionId?: string | null; afterSeq?: number }[]
+    rows: { instanceId: string; cwd: string; sessionId?: string | null; afterSeq?: number }[],
+    /**
+     * The hub's ingest ledger off the register ack. Absent — an old-shape ack,
+     * or a hub that has nothing of this machine — means every row follows from
+     * head, which is the honest-loss rule and not a degraded mode.
+     */
+    ingested?: Record<string, IngestMark>
   ): Promise<string[]> {
     const adapter = this.#adapter('claude');
     // `adopt` is claude's alone: opencode reattaches through its own server
@@ -533,15 +631,29 @@ export class SessionSupervisor {
     if (typeof claude.adopt !== 'function' || typeof claude.custodyCandidates !== 'function') {
       return [];
     }
-    const held = new Set((await claude.custodyCandidates()).procs.filter((proc) => proc.alive).map((proc) => proc.procId));
+    const welcome = await claude.custodyCandidates();
+    const held = new Set(welcome.procs.filter((proc) => proc.alive).map((proc) => proc.procId));
 
     const adopted: string[] = [];
     for (const row of rows) {
       if (!held.has(row.instanceId)) continue;
+      // THE HONEST-LOSS RULE (design §7). A mark under sessiond's CURRENT epoch
+      // is a cursor: replay exactly the gap the hub named. Anything else — no
+      // entry, or a mark minted under a sessiond that has since restarted — is
+      // replayed as NOTHING and followed from head. The alternatives both lie:
+      // a hub that restarted during the absence has already reset every
+      // dashboard and re-read history, so a replay would double it; a sessiond
+      // that restarted killed these children, so its old seqs name lines that
+      // no longer exist. Disk transcripts cover the middle.
+      const mark = ingested?.[row.instanceId];
+      const cursor = resumeCursor(welcome.epoch, mark);
+      if (cursor !== undefined && mark) this.#ingested.set(row.instanceId, mark);
+      else this.#ingested.delete(row.instanceId);
+      const afterSeq = cursor ?? row.afterSeq;
       const holder: { session: HarnessSession | null } = { session: null };
       const ctx = this.#context(row.instanceId, row.cwd, adapter, holder);
       const custody = await claude.adopt(row.instanceId, ctx, {
-        ...(row.afterSeq === undefined ? {} : { afterSeq: row.afterSeq }),
+        ...(afterSeq === undefined ? {} : { afterSeq }),
         sessionId: row.sessionId ?? null,
         onHandoff: ({ instanceId, sessionId, held: heldTurns }) => {
           // Queued through `dispatch` so the hand-off serialises behind
@@ -571,6 +683,22 @@ export class SessionSupervisor {
       adopted.push(row.instanceId);
     }
     return adopted;
+  }
+
+  /**
+   * The reattach as the register ack hands it over (design §7, step 4): the
+   * ack's payload in, the instance ids taken into custody out.
+   *
+   * BACKWARDS TOLERANT BY CONSTRUCTION. An ack with no `ingested` field — an
+   * older hub, or one that never saw this machine — reads as `undefined` and
+   * every row follows from head. Additive, never fatal: the agent reattaches
+   * either way, and the only difference is how much of the absence it replays.
+   */
+  reattachFrom(
+    ackPayload: unknown,
+    rows: { instanceId: string; cwd: string; sessionId?: string | null }[]
+  ): Promise<string[]> {
+    return this.reattach(rows, readIngested(ackPayload));
   }
 
   /** The harness session a side quest turned out to be writing, from its init frame. */

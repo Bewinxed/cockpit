@@ -19,6 +19,7 @@
  */
 
 import {
+  alreadyIngested,
   CONTROL_INTERRUPT,
   CONTROL_SET_EFFORT,
   CONTROL_SET_MODEL,
@@ -33,6 +34,8 @@ import {
   type ControlPayload,
   type Envelope,
   type FramePayload,
+  type FrameProvenance,
+  type IngestMark,
   type SendPayload,
   type SessionStreamEvent,
   type StreamBacklog,
@@ -133,6 +136,25 @@ export interface StreamHubShape {
   readonly settleCommand: (requestId: string, result: ControlResultFrame) => boolean;
   /** A dashboard socket is gone: it follows nothing and awaits nothing. */
   readonly dropSocket: (socketId: string) => void;
+  /**
+   * THE INGEST LEDGER (sessiond design §7). Files one frame's provenance and
+   * answers whether it may become a hub frame at all: `false` is a line this
+   * hub has already ingested under this epoch — a duplicate the caller must
+   * drop rather than sequence.
+   *
+   * A frame with no provenance is always admitted and advances nothing: an
+   * opencode session, a pi session and every agent that predates the field are
+   * unchanged, and their frames are not deduped by a mark that does not exist.
+   */
+  readonly admitFrame: (instanceId: string, provenance: FrameProvenance | undefined) => boolean;
+  /**
+   * What the register ack hands back: the hub's mark for each instance the
+   * daemon says it is holding. An instance with no entry is simply absent —
+   * "I have nothing of yours", which the agent reads as follow-from-head. Never
+   * a zero mark, which would read as "I have line 0 of your current epoch" and
+   * ask for a replay of everything.
+   */
+  readonly ingestedFor: (instanceIds: readonly string[]) => Record<string, IngestMark>;
   /** The last seq assigned to a session; 0 when it has never been relayed. */
   readonly head: (sessionId: string) => number;
   /** How many sockets follow a session — for tests and for reasoning about fan-out. */
@@ -179,6 +201,14 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
   /** socketId -> everything known about that dashboard, handle included. ONE copy. */
   const sockets = new Map<string, Follower>();
   const awaiting = new Map<string, AwaitedCommand>();
+  /**
+   * THE INGEST LEDGER: instanceId -> the last sessiond line this hub turned
+   * into a frame. Kept for the same reason and with the same lifetime as the
+   * sequence in {@link rings}: a mark that vanished would let an agent's next
+   * replay re-ingest lines this hub has already relayed, which is the one
+   * outcome §7 exists to forbid. One epoch string and one integer per instance.
+   */
+  const ledger = new Map<string, IngestMark>();
 
   /**
    * Drops what nothing is waiting for any more: commands whose reply never
@@ -498,8 +528,52 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
     return instanceIds.filter((id) => !entry.sessions.has(id));
   };
 
+  /**
+   * AT MOST ONCE, per (instanceId, epoch, srcSeq) — the invariant this whole
+   * leaf exists for.
+   *
+   * - No provenance: admitted, and any mark this instance had is RETIRED. A
+   *   session stops carrying provenance the moment it stops being read off a
+   *   ring — the boundary hand-off puts a full SDK `Query` back in charge, and
+   *   its frames derive from no line at all. Keeping the old mark would hand
+   *   the next reattach a cursor pointing into a stretch the hub has since
+   *   ingested by another route, and the replay would double it. An absent
+   *   mark is the honest answer there, and the honest-loss rule handles it.
+   * - A DIFFERENT epoch than the mark: admitted, and the mark is replaced. A
+   *   new sessiond boot is a new sequence space; the old cursor is meaningless
+   *   against it (the same reading `SessionRing.canReplay` gives a resume whose
+   *   `afterSeq` exceeds `head` — "seqs belong to a dead epoch").
+   * - The same epoch, at or below the mark: REFUSED. This hub has already
+   *   ingested that line; a replay that overshoots is a duplicate, not news.
+   * - The same epoch, above the mark: admitted, and the mark advances to it.
+   *   A jump of more than one is not a hole to hide — lines that produce no
+   *   frame (a `control_request`, a non-JSON line) advance no ledger by design,
+   *   and a ring overflow arrives as its own announced `sessiond_stream_gap`
+   *   frame rather than as a silent splice.
+   */
+  const admitFrame = (instanceId: string, provenance: FrameProvenance | undefined): boolean => {
+    if (!provenance) {
+      ledger.delete(instanceId);
+      return true;
+    }
+    if (alreadyIngested(ledger.get(instanceId), provenance)) return false;
+    ledger.set(instanceId, { epoch: provenance.srcEpoch, srcSeq: provenance.srcSeq });
+    return true;
+  };
+
+  const ingestedFor = (instanceIds: readonly string[]): Record<string, IngestMark> => {
+    const marks: Record<string, IngestMark> = {};
+    for (const instanceId of instanceIds) {
+      const mark = ledger.get(instanceId);
+      if (mark) marks[instanceId] = { ...mark };
+    }
+    return marks;
+  };
+
   return {
     sequence,
+    admitFrame,
+    ingestedFor,
     handleClientMessage,
     noteLegacySubscriptions,
     settleCommand,

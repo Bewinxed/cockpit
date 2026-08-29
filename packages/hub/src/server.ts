@@ -30,6 +30,8 @@ import type {
   UsageBlock,
   UsageBucket,
   Verb,
+  IngestMark,
+  RegisterAckPayload,
 } from '@cockpit/core';
 import {
   AGENT_BUSY,
@@ -52,6 +54,7 @@ import {
   parseAgentFrontMatter,
   READ_MEMORY_FILE,
   READ_SKILL_FILES,
+  readProvenance,
   RESOLVE_PERMISSION,
   RESTART_RESUMABLE,
   TOOL_CATALOG,
@@ -206,6 +209,21 @@ const ack = (envelope: Envelope): Envelope<{ ok: true }> => ({
   verb: envelope.verb,
   machineId: envelope.machineId,
   payload: { ok: true },
+});
+
+/**
+ * `register`'s ack, carrying the ingest ledger for the instances the daemon
+ * says it is holding (sessiond design §7, step 3). Additive on {@link ack}: an
+ * agent that predates the field reads `{ ok: true }` exactly as it always did,
+ * and this hub gains nothing to explain to it.
+ */
+const registerAck = (
+  envelope: Envelope,
+  ingested: Record<string, IngestMark>
+): Envelope<RegisterAckPayload> => ({
+  verb: envelope.verb,
+  machineId: envelope.machineId,
+  payload: { ok: true, ingested },
 });
 
 /** Sent back as a frame, the only verb a dashboard renders. */
@@ -2992,7 +3010,11 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
             // And what its stored conversations are called, for the ones nobody
             // has ever named — off the catalog the daemon just read anyway.
             void nameStoredSessions(message.machineId);
-            ws.send(ack(message));
+            // The ledger the returning agent reattaches against: what this hub
+            // has already ingested of each session the daemon still holds. It
+            // is computed AFTER `settleInstances`, off the daemon's own live
+            // list, so it names exactly the sessions a reattach can act on.
+            ws.send(registerAck(message, streams.ingestedFor(peekInstances(message.payload))));
             break;
           }
           case 'heartbeat': {
@@ -3133,6 +3155,17 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
               } as FramePayload;
             }
             const kind = peek(message.payload, 'kind');
+            // THE INGEST LEDGER (design §7): a line becomes a hub frame AT MOST
+            // ONCE per (instanceId, epoch, srcSeq). A returning agent replays
+            // the gap this hub named on its register ack, and an overshoot —
+            // a cursor the hub had already passed, a re-sent line after a
+            // socket drop — stops dead here rather than being sequenced twice.
+            // Before every side effect below on purpose: a duplicate that got
+            // this far would re-name the session, re-fire the rules and
+            // re-deliver a delegate's report.
+            if (kind === 'frame' && message.instanceId) {
+              if (!streams.admitFrame(message.instanceId, readProvenance(message))) break;
+            }
             if (message.requestId && kind === 'permission_request') {
               pending.remember(message.requestId, message);
               // A delegate's ask routes to its parent; the user is only the

@@ -115,3 +115,126 @@ export interface CommandAck {
 /** Everything the stream protocol can put on the dashboard socket. */
 export type StreamServerMessage = StreamBacklog | StreamReset | StreamDelta | CommandAck;
 export type StreamClientMessage = StreamSubscribe | CommandEnvelope;
+
+// ---------------------------------------------------------------------------
+// The ingest ledger (sessiond design §7): joining sessiond's per-child line
+// sequence to this protocol's per-session `seq`.
+// ---------------------------------------------------------------------------
+
+/**
+ * Where a frame came from: the sessiond line it was derived from, named by the
+ * daemon's per-boot `epoch` and that line's `srcSeq`.
+ *
+ * Additive on the `frames` message, exactly as this protocol requires of every
+ * shape here: an agent that has no sessiond behind it (opencode, pi, a legacy
+ * build) sends frames without it, and a hub that predates the field ignores it.
+ * The dashboard never sees `srcSeq` and sessiond never sees the hub's `seq` —
+ * this is the only place the two sequences touch.
+ */
+export interface FrameProvenance {
+  srcEpoch: string;
+  srcSeq: number;
+}
+
+/**
+ * The hub's word on how far it has ingested one instance: the last line it
+ * turned into a frame. Handed back on the register ack so a reattaching agent
+ * replays exactly the gap the hub names — the mark is the hub's own, so the
+ * agent's death loses nothing it needs.
+ */
+export interface IngestMark {
+  epoch: string;
+  srcSeq: number;
+}
+
+/** `register`'s ack, with the ledger the returning agent reattaches against. */
+export interface RegisterAckPayload {
+  ok: true;
+  /**
+   * Per instance id. ABSENT from a hub that predates this — which is not an
+   * empty ledger: the difference is what stops an agent replaying a backlog
+   * into a hub that never asked for one. Both readings land on the same safe
+   * behaviour (follow from head), and {@link readIngested} keeps them apart
+   * anyway.
+   */
+  ingested?: Record<string, IngestMark>;
+}
+
+const record = (value: unknown): Record<string, unknown> | undefined =>
+  typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : undefined;
+
+/**
+ * A frame's provenance, read from either the envelope or its payload.
+ *
+ * Both are accepted on purpose: the fields are additive, and which object
+ * carries them is the sender's business — an agent that stamps the payload it
+ * hands its socket writer and one that stamps the envelope mean the same
+ * thing. Anything malformed reads as absent, never as seq 0: an invented mark
+ * is the one outcome the ledger exists to forbid.
+ */
+export const readProvenance = (message: unknown): FrameProvenance | undefined => {
+  const outer = record(message);
+  if (!outer) return undefined;
+  for (const source of [outer, record(outer.payload)]) {
+    if (!source) continue;
+    const srcEpoch = source.srcEpoch;
+    const srcSeq = source.srcSeq;
+    if (typeof srcEpoch !== 'string' || srcEpoch.length === 0) continue;
+    if (typeof srcSeq !== 'number' || !Number.isInteger(srcSeq) || srcSeq < 1) continue;
+    return { srcEpoch, srcSeq };
+  }
+  return undefined;
+};
+
+/**
+ * The ledger off a register ack. `undefined` when the hub said nothing — an
+ * old-shape ack is tolerated, never fatal, and leaves every instance following
+ * from head (design §7's honest-loss rule).
+ */
+export const readIngested = (payload: unknown): Record<string, IngestMark> | undefined => {
+  const marks = record(record(payload)?.ingested);
+  if (!marks) return undefined;
+  const read: Record<string, IngestMark> = {};
+  for (const [instanceId, value] of Object.entries(marks)) {
+    const mark = record(value);
+    const epoch = mark?.epoch;
+    const srcSeq = mark?.srcSeq;
+    if (typeof epoch !== 'string' || epoch.length === 0) continue;
+    if (typeof srcSeq !== 'number' || !Number.isInteger(srcSeq) || srcSeq < 0) continue;
+    read[instanceId] = { epoch, srcSeq };
+  }
+  return read;
+};
+
+/**
+ * THE HONEST-LOSS RULE (design §7), as one function both ends read.
+ *
+ * The cursor a reattaching agent subscribes with: the hub's own mark when it
+ * was minted under the sessiond epoch that is running NOW, and `undefined` —
+ * follow from head, replay nothing — in every other case. No entry, or a mark
+ * from a sessiond that has since restarted, is not a small gap to paper over:
+ * a restarted hub has already reset its dashboards and had them re-read
+ * history, and a restarted sessiond's children are gone with the seqs that
+ * named their lines. Inventing history to fill either is the failure this rule
+ * exists to prevent.
+ */
+export const resumeCursor = (
+  epoch: string | undefined,
+  mark: IngestMark | undefined
+): number | undefined =>
+  mark !== undefined && epoch !== undefined && mark.epoch === epoch ? mark.srcSeq : undefined;
+
+/**
+ * AT MOST ONCE, per (instanceId, epoch, srcSeq): whether this line has already
+ * become a frame at the hub. The agent asks it before forwarding and the hub
+ * asks it before sequencing — the same predicate on both sides, so the two can
+ * only ever agree on what a duplicate is.
+ */
+export const alreadyIngested = (
+  mark: IngestMark | undefined,
+  provenance: FrameProvenance | undefined
+): boolean =>
+  provenance !== undefined &&
+  mark !== undefined &&
+  mark.epoch === provenance.srcEpoch &&
+  provenance.srcSeq <= mark.srcSeq;
