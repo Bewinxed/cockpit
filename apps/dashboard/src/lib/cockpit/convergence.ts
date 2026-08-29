@@ -6,7 +6,7 @@
  * caught up or refused to. Every reader here is pure: given the frame data a
  * machine already carries, no reach into the network.
  */
-import type { BuildInfo, FleetSyncReport } from '@cockpit/core';
+import type { BuildInfo, DeployInfo, FleetSyncReport } from '@cockpit/core';
 
 /** Whether a machine's own reported build is level with the hub's. */
 export type BuildConvergence = 'unknown' | 'current' | 'behind';
@@ -89,25 +89,18 @@ export function fleetSyncAgeMs(fleet: FleetSyncReport | undefined, now: number =
 }
 
 /**
- * Where a deployment clone stands against the branch it deploys from —
- * mirrors `DeployState['kind']` in packages/agent/src/deploy.ts (leaf C1).
- * Read structurally rather than imported: C1's `DeployTick` travels through an
- * injectable `report` callback, not the wire, so nothing on this side of the
- * hub can import that module's types without pulling in its runtime — C1's
- * own deviation 4 leaves the wiring from that callback onto the hub frame to
- * whichever leaf lands it. Until it does, an `AgentRow` simply carries no
- * `deploy` field and every reader below returns `undefined`, exactly like
- * `hubBuild` on a hub that predates C2.
+ * Where a deployment clone stands against the branch it deploys from. The type
+ * now comes from `@cockpit/core` — leaf Y2 carried C1's `DeployTick` onto the
+ * wire (flattened to `{ kind, detail?, updated?, failure? }`, which is the
+ * shape this file already read), so `AgentRow.deploy` is a real field and the
+ * structural read below is tolerance rather than a workaround. It stays
+ * tolerant: a daemon that predates the deployment channel, or one whose watcher
+ * has never ticked, sends no field at all, and every reader here must answer
+ * `undefined` for it exactly as `hubBuild` does on an older hub.
  */
-export type DeployKind = 'unmarked' | 'unreachable' | 'current' | 'behind' | 'ahead' | 'diverged';
+export type { DeployKind } from '@cockpit/core';
 
-export interface MachineDeployInfo {
-  readonly kind: DeployKind;
-  /** One sentence, the same shape `describeDeploy` in deploy.ts produces. */
-  readonly detail?: string;
-  readonly updated?: boolean;
-  readonly failure?: string;
-}
+export type MachineDeployInfo = DeployInfo;
 
 /** A `diverged` clone refuses to deploy at all — the one state that must never read as merely stale. */
 export const isDeployDiverged = (deploy: MachineDeployInfo | undefined): boolean => deploy?.kind === 'diverged';
@@ -116,14 +109,17 @@ export const isDeployDiverged = (deploy: MachineDeployInfo | undefined): boolean
 export const isDeployNoteworthy = (deploy: MachineDeployInfo | undefined): boolean =>
   deploy !== undefined && deploy.kind !== 'unmarked' && deploy.kind !== 'current';
 
+/** The kinds a machine may claim; anything else is not one, and badges nothing. */
+const DEPLOY_KINDS: readonly string[] = ['unmarked', 'unreachable', 'current', 'behind', 'ahead', 'diverged'];
+
 /**
- * Structural, not a cast onto `AgentRow` itself: the field does not exist on
- * the core type yet (see the module doc above), so a `Machine` that never
- * carries it must read as "nothing to report" rather than throw. Callers pass
- * `(machine as unknown as { deploy?: unknown }).deploy` — the one cast this
- * leaf allows, isolated to this one call site.
+ * Structural, and deliberately still so. `AgentRow.deploy` is typed now, but
+ * this is the boundary where an *older or newer* machine's word arrives, and a
+ * kind this build cannot render must read as nothing to report rather than as a
+ * badge with no meaning. Callers may pass `machine.deploy` directly.
  */
 export function deployInfoOf(deploy: unknown): MachineDeployInfo | undefined {
   if (!deploy || typeof deploy !== 'object' || !('kind' in deploy)) return undefined;
+  if (!DEPLOY_KINDS.includes((deploy as { kind: unknown }).kind as string)) return undefined;
   return deploy as MachineDeployInfo;
 }

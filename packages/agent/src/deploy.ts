@@ -17,6 +17,7 @@
  * tree must be structurally unable to auto-pull, and "we remembered to check"
  * is not a structure.
  */
+import type { DeployInfo } from '@cockpit/core';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
@@ -268,6 +269,38 @@ export interface DeployTick {
   readonly failure?: string;
 }
 
+/**
+ * A tick, flattened onto the shape the wire and the board share
+ * ({@link DeployInfo} in `@cockpit/core`). Everything the fuller
+ * {@link DeployState} carries — heads, targets, the two counts — is already in
+ * the sentence {@link describeDeploy} writes, so the wire carries one kind and
+ * one sentence rather than six shapes the reader would have to re-narrate.
+ */
+export const deployInfo = (tick: DeployTick): DeployInfo => ({
+  kind: tick.state.kind,
+  detail: describeDeploy(tick.state),
+  ...(tick.updated ? { updated: true } : {}),
+  ...(tick.failure ? { failure: tick.failure } : {}),
+});
+
+/**
+ * The most recent tick any watcher in this process produced, and `undefined`
+ * until one has. Module-scoped on purpose: the register and the 15s heartbeat
+ * are written in `daemon.ts`, which must not own — or start — a poller to be
+ * able to say what the last one saw. Nothing here ever polls: a process that
+ * never starts a watcher reports no deploy state at all, and the board renders
+ * nothing, which is exactly what a machine outside the deployment channel
+ * should show.
+ */
+let latest: DeployInfo | undefined;
+
+export const latestDeploy = (): DeployInfo | undefined => latest;
+
+/** Test seam, and the reset every test that touches {@link latestDeploy} owes the next one. */
+export const forgetLatestDeploy = (): void => {
+  latest = undefined;
+};
+
 export interface DeployWatcherOptions {
   readonly root?: string;
   readonly git?: GitRunner;
@@ -338,6 +371,10 @@ export class DeployWatcher {
     const state = await checkDeploy({ root: this.#options.root, git: this.#options.git });
     const tick = await this.#act(state);
     this.#last = tick;
+    // Recorded before the report runs, and regardless of which report it is: a
+    // caller that injects its own `report` (the tests do) must not thereby
+    // silence the wire, and a report that throws must not lose the state.
+    latest = deployInfo(tick);
     (this.#options.report ?? defaultReport)(tick);
     return tick;
   }

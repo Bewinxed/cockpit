@@ -239,6 +239,14 @@ export interface SubscribePayload {
 export interface HeartbeatPayload {
   at: number;
   instances: string[];
+  /**
+   * Where the machine's deployment clone stands (contract C8), on every beat
+   * for the same reason `instances` is: it is a live fact that changes without
+   * anybody reconnecting. A clone that diverges at 14:02 must reach the board
+   * by 14:02, not at the daemon's next register — which, on a healthy machine,
+   * may be days away. Absent from a daemon whose watcher has never ticked.
+   */
+  deploy?: DeployInfo;
 }
 
 /** `stop`: interrupt and close a live session. */
@@ -332,6 +340,38 @@ export interface AgentRow {
    * The cockpit build this machine's daemon is running (NEW.md §12).
    */
   build?: BuildInfo;
+  /**
+   * Where this machine's deployment clone stands against the branch it deploys
+   * from, as its daemon last said (PLAN.md contract C8). Absent from a daemon
+   * that predates the deployment channel and from one whose watcher has never
+   * ticked, which a reader must render as *nothing to report* — never as
+   * "current". Live, not history: the hub holds it only for as long as it holds
+   * the socket that asserted it.
+   */
+  deploy?: DeployInfo;
+}
+
+/**
+ * Where a deployment clone stands, flattened for the wire. The kinds are
+ * `DeployState['kind']` in packages/agent/src/deploy.ts; the rest of that
+ * union's fields are already spoken in {@link DeployInfo.detail}, which is what
+ * `describeDeploy` produced for this very state.
+ */
+export type DeployKind = 'unmarked' | 'unreachable' | 'current' | 'behind' | 'ahead' | 'diverged';
+
+export interface DeployInfo {
+  /**
+   * `diverged` is the one that must survive the trip intact: it means the clone
+   * refused to update because a reset would destroy commits nobody else has,
+   * and a refusal nobody is shown is the same as no refusal at all.
+   */
+  kind: DeployKind;
+  /** One sentence, exactly what `describeDeploy(state)` said about it. */
+  detail?: string;
+  /** Whether the last poll actually ran the update flow. */
+  updated?: boolean;
+  /** What the update flow threw, if it threw. */
+  failure?: string;
 }
 
 /** What a daemon reports about the checkout it was started from. */

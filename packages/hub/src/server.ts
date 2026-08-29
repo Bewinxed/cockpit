@@ -3,6 +3,8 @@ import type {
   BuildInfo,
   ClaudeLimits,
   ControlPayload,
+  DeployInfo,
+  DeployKind,
   EffortLevel,
   Envelope,
   FleetConfig,
@@ -440,6 +442,46 @@ const peekBuild = (payload: unknown): BuildInfo | undefined => {
   return typeof (build as BuildInfo).version === 'string' ? (build as BuildInfo) : undefined;
 };
 
+/** The kinds a daemon may claim for its deployment clone; anything else is not one. */
+const DEPLOY_KINDS: readonly DeployKind[] = [
+  'unmarked',
+  'unreachable',
+  'current',
+  'behind',
+  'ahead',
+  'diverged',
+];
+
+/**
+ * A machine's word on its deployment clone (contract C8), off a `register` or
+ * off any heartbeat. Absent from a daemon that predates the deployment channel
+ * and from one whose watcher has never ticked; a kind this hub does not know is
+ * dropped rather than passed through, so a future state cannot arrive at an old
+ * board as an unrenderable badge.
+ */
+const peekDeploy = (payload: unknown): DeployInfo | undefined => {
+  if (typeof payload !== 'object' || payload === null) return undefined;
+  const deploy = (payload as { deploy?: unknown }).deploy;
+  if (typeof deploy !== 'object' || deploy === null) return undefined;
+  const { kind, detail, updated, failure } = deploy as Partial<DeployInfo>;
+  if (typeof kind !== 'string' || !DEPLOY_KINDS.includes(kind as DeployKind)) return undefined;
+  return {
+    kind: kind as DeployKind,
+    ...(typeof detail === 'string' ? { detail } : {}),
+    ...(updated === true ? { updated: true } : {}),
+    ...(typeof failure === 'string' ? { failure } : {}),
+  };
+};
+
+/**
+ * Whether two deploy verdicts say the same thing. Compared field by field
+ * rather than by identity: every beat arrives as a fresh object, and
+ * republishing the whole board four times a minute per machine because the
+ * bytes are new would cost every connected dashboard a full frame for no news.
+ */
+const sameDeploy = (a: DeployInfo | undefined, b: DeployInfo | undefined): boolean =>
+  a?.kind === b?.kind && a?.detail === b?.detail && a?.updated === b?.updated && a?.failure === b?.failure;
+
 /** The states a daemon may claim for a tool; anything else is not a status. */
 const TOOL_STATES: readonly ToolState[] = [
   'installed',
@@ -744,6 +786,20 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
    * wait for the next pulse to arrive.
    */
   const pulses = new Map<string, SessionPulse>();
+
+  /**
+   * Where each machine's deployment clone stands, as that machine last said:
+   * memory only, and never a column, for the same reason {@link pulses} is.
+   *
+   * A deploy verdict is a first-hand reading of a checkout at a moment, and it
+   * is worth exactly as long as the socket that asserted it. Stored, it would
+   * outlive the daemon and put a stale `current` — or a stale `diverged` an
+   * operator has since resolved — on the board of a machine nobody can reach,
+   * which is the very failure this build exists to close. So it is dropped when
+   * the socket closes, and a machine with no entry carries no `deploy` field at
+   * all, exactly as a daemon that predates the channel does.
+   */
+  const deploys = new Map<string, DeployInfo>();
 
   /**
    * What this hub was built from, for the frame. `buildInfo()` is async and
@@ -1059,6 +1115,9 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
     rows.map((row) => ({
       ...row,
       status: registry.agent(row.machineId) ? 'online' : 'offline',
+      // Additive and live, like `status` above: present only for a machine that
+      // has actually reported one on this connection.
+      ...(deploys.get(row.machineId) ? { deploy: deploys.get(row.machineId) } : {}),
     }));
 
   /**
@@ -2984,6 +3043,11 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
               harnesses: peekHarnesses(message.payload),
             });
             db.mergeAgentTools(message.machineId, peekTools(message.payload));
+            // The re-announce (`supervisor.reannounce`) carries no deploy state,
+            // so a register without one leaves standing what the beats said —
+            // the same tolerance `build` gets on the row itself.
+            const registered = peekDeploy(message.payload);
+            if (registered) deploys.set(message.machineId, registered);
             // A question parked by a process that is gone cannot be answered:
             // the reply would arrive at a daemon with no such session. Drop them
             // with the sessions they belonged to, or they replay to every
@@ -3077,7 +3141,14 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
               escalateRoutedAsks(row.id);
               forgetQueue(row.id);
             }
-            if (beat.promoted.length > 0 || beat.settled.length > 0)
+            // The deployment clone's state rides the beat (contract C8). A
+            // change in it is board news on its own — `diverged` appearing
+            // between two registers is precisely the thing that must not wait —
+            // so it joins the session reconciliation in deciding to republish.
+            const beaten = peekDeploy(message.payload);
+            const moved = beaten !== undefined && !sameDeploy(deploys.get(message.machineId), beaten);
+            if (beaten) deploys.set(message.machineId, beaten);
+            if (moved || beat.promoted.length > 0 || beat.settled.length > 0)
               publishInstances(message.machineId);
             ws.send(ack(message));
             break;
@@ -3472,6 +3543,9 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
         for (const [requestId, syncing] of pendingFleet)
           if (syncing === machineId) pendingFleet.delete(requestId);
         db.markAgentOffline(machineId);
+        // Its deploy verdict was true of a checkout this hub can no longer ask
+        // about; keeping it would be the stale-column defect in a Map.
+        deploys.delete(machineId);
         // The daemon holding these queues is gone; whatever it had not started
         // did not survive it, so the rows go with the sessions.
         for (const row of db.listInstances()) {

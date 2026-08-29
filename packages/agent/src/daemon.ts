@@ -1,6 +1,7 @@
 import type {
   AuthState,
   BuildInfo,
+  DeployInfo,
   Envelope,
   HarnessReport,
   HeartbeatPayload,
@@ -12,6 +13,7 @@ import { fetchClaudeLimits } from '@cockpit/core/usage/limits';
 import { Data, Duration, Effect, Fiber, Schedule } from 'effect';
 import { arch, hostname, platform } from 'node:os';
 import { buildInfo } from './build';
+import { latestDeploy } from './deploy';
 import { convergeDeniedTools, DENIED_WEB_TOOLS } from './denied-tools';
 import { rediscoverHub, toWsUrl } from './discovery';
 import { machineId } from './machine-id';
@@ -68,6 +70,13 @@ export interface RegisterPayload extends MachineIdentity {
    * The cockpit this daemon is running (NEW.md §12), as it reported at register.
    */
   build?: BuildInfo;
+  /**
+   * Where this machine's deployment clone stood at register (contract C8), so a
+   * board that has just been handed a machine knows without waiting a beat.
+   * Whatever the poller last saw — this never asks git anything itself, so a
+   * daemon with no deployment watcher running simply omits it.
+   */
+  deploy?: DeployInfo;
 }
 
 export class ConnectionLost extends Data.TaggedError('ConnectionLost')<{
@@ -322,6 +331,7 @@ const attach = (
       ),
       tools: yield* Effect.promise(() => probeTools()),
       build: yield* Effect.promise(() => buildInfo()),
+      ...(latestDeploy() ? { deploy: latestDeploy() } : {}),
     };
     send(socket, { verb: 'register', machineId: identity.machineId, payload });
     yield* Effect.logInfo(`registered with ${url}`);
@@ -436,7 +446,14 @@ const attach = (
             machineId: identity.machineId,
             // `instances` rides every beat (not just register) so the hub can
             // reconcile session truth continuously — see HeartbeatPayload.
-            payload: { at: Date.now(), instances: supervisor.instanceIds } satisfies HeartbeatPayload,
+            // `deploy` rides it for the same reason: it is a live fact, and
+            // `diverged` appearing between two registers must not wait for the
+            // next one. Omitted entirely until a watcher has ticked.
+            payload: {
+              at: Date.now(),
+              instances: supervisor.instanceIds,
+              ...(latestDeploy() ? { deploy: latestDeploy() } : {}),
+            } satisfies HeartbeatPayload,
           })
         ),
         Schedule.spaced(HEARTBEAT_INTERVAL)

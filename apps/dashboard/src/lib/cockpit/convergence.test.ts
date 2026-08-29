@@ -108,3 +108,11 @@ test('unmarked and current are not noteworthy; every other kind is', () => {
   expect(isDeployNoteworthy(deployInfoOf({ kind: 'diverged' }))).toBe(true);
   expect(isDeployNoteworthy(undefined)).toBe(false);
 });
+
+// Leaf Y2: the field is real now (`AgentRow.deploy`), and this is the boundary
+// where a machine older or newer than this build is read. A kind this build
+// cannot render must badge nothing rather than badge something meaningless.
+test('a kind this build does not know reads as nothing to report', () => {
+  expect(deployInfoOf({ kind: 'liquefied' })).toBeUndefined();
+  expect(isDeployNoteworthy(deployInfoOf({ kind: 'liquefied' }))).toBe(false);
+});
