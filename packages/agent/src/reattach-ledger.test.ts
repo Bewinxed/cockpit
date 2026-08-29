@@ -224,3 +224,42 @@ test('a ring that overflowed during the absence lands a sessiond_stream_gap fram
   // And no line from before the seam was replayed as if it were current.
   expect(sunk.filter((frame) => noteOf(frame) !== undefined)).toEqual([]);
 }, 60_000);
+
+/**
+ * THE RESTART, end to end: the property sessiond exists to provide.
+ *
+ * The daemon's shutdown used to stop every session it held. `stop()` ends the
+ * child's stdin and a claude that loses stdin exits, so every deploy — and the
+ * deploy path restarts this daemon on every push to main — killed the sessions
+ * sessiond was keeping alive one process away. Detaching drops the bookkeeping
+ * and leaves the child; the next daemon reattaches to it.
+ */
+test('detach leaves the child running, and the next daemon adopts it', async () => {
+  const procId = `detach-${crypto.randomUUID()}`;
+  await startChild(procId, 2);
+  await Bun.sleep(150);
+
+  const before: Sunk[] = [];
+  const outgoing = supervisorWatching(before);
+  expect(
+    await outgoing.reattachFrom({ ok: true }, [{ instanceId: procId, cwd: dir, sessionId: null }])
+  ).toEqual([procId]);
+  expect(outgoing.instanceIds).toEqual([procId]);
+
+  // The restart.
+  outgoing.detach();
+  expect(outgoing.instanceIds).toEqual([]);
+  await Bun.sleep(200);
+
+  // The child is still there. This is the whole assertion.
+  expect((await client.list()).procs.find((proc) => proc.procId === procId)?.alive).toBe(true);
+
+  // And it is still usable: the next daemon adopts it and hears what it says.
+  const after: Sunk[] = [];
+  const incoming = supervisorWatching(after);
+  expect(
+    await incoming.reattachFrom({ ok: true }, [{ instanceId: procId, cwd: dir, sessionId: null }])
+  ).toEqual([procId]);
+  await askFor(procId, 1);
+  await waitFor(() => after.some((frame) => noteOf(frame) !== undefined), 'a line after the restart');
+}, 30_000);

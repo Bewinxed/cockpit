@@ -124,9 +124,6 @@ const isDirectory = async (path: string): Promise<boolean> => {
   return info?.isDirectory() ?? false;
 };
 
-/** How long a stop waits for the turn it interrupted to end before cutting it off. */
-const DRAIN_TIMEOUT_MS = 8_000;
-
 /** The checkout a side quest ran in, kept until the quest is discarded. */
 interface Worktree {
   path: string;
@@ -453,9 +450,27 @@ export class SessionSupervisor {
     }
   }
 
-  async shutdown(): Promise<void> {
-    const stops = [...this.#sessions.keys()].map((instanceId) => this.#stop({ instanceId }));
-    await Promise.race([Promise.allSettled(stops), Bun.sleep(DRAIN_TIMEOUT_MS)]);
+  /**
+   * Let go of every session without ending one.
+   *
+   * This used to stop them, and stopping is not what a restart wants: `stop()`
+   * ends the child's stdin, and a claude that loses stdin exits. The children
+   * live in sessiond's cgroup rather than this daemon's precisely so a restart
+   * can be free, and a daemon that killed them on the way out spent that for
+   * nothing — the deploy path restarts this process on every push to main.
+   *
+   * So only this daemon's bookkeeping is dropped. The procs stay where they
+   * are, and the next daemon adopts them through {@link reattachFrom}, which
+   * is the hand-back this detach exists to leave possible.
+   *
+   * An operator ending a session still goes through `stop`, and sessiond going
+   * down still takes its children with it. Neither is a restart.
+   */
+  detach(): void {
+    for (const instanceId of [...this.#sessions.keys()]) {
+      this.#sessions.delete(instanceId);
+      this.#forgetPulse(instanceId);
+    }
   }
 
   #route(envelope: Envelope): Promise<void> {

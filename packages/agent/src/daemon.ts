@@ -549,8 +549,10 @@ export const startDaemon = (auth?: AuthState) =>
     const supervisor = yield* Effect.acquireRelease(
       Effect.sync(() => new SessionSupervisor()),
       (running) =>
-        Effect.logInfo(`draining ${running.instanceIds.length} session(s)`).pipe(
-          Effect.andThen(Effect.promise(() => running.shutdown()))
+        // Detached, not drained: the sessions outlive this daemon in sessiond,
+        // and the next one reattaches to them. See `SessionSupervisor.detach`.
+        Effect.logInfo(`detaching ${running.instanceIds.length} session(s)`).pipe(
+          Effect.andThen(Effect.sync(() => running.detach()))
         )
     );
 
