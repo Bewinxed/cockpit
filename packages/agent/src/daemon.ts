@@ -1,4 +1,12 @@
-import type { AuthState, BuildInfo, Envelope, HarnessReport, HeartbeatPayload, ToolStatus } from '@cockpit/core';
+import type {
+  AuthState,
+  BuildInfo,
+  Envelope,
+  HarnessReport,
+  HeartbeatPayload,
+  SpawnPayload,
+  ToolStatus,
+} from '@cockpit/core';
 import { COCKPIT_ENV, COCKPIT_HUB_PORT } from '@cockpit/core';
 import { fetchClaudeLimits } from '@cockpit/core/usage/limits';
 import { Data, Duration, Effect, Fiber, Schedule } from 'effect';
@@ -263,6 +271,32 @@ const closed = (socket: WebSocket, url: string) =>
     return Effect.sync(() => socket.removeEventListener('close', onClose));
   });
 
+/**
+ * A hub restore this daemon could take custody of instead of re-spawning.
+ *
+ * `adopt` is claude's alone (see `session.ts`'s `reattach`), and a spawn that
+ * has to clone a repository or cut a worktree first is not a session that
+ * already exists to be adopted — both go straight to the supervisor.
+ */
+export const adoptable = (payload: SpawnPayload | undefined): payload is SpawnPayload =>
+  payload !== undefined &&
+  typeof payload.instanceId === 'string' &&
+  payload.instanceId.length > 0 &&
+  typeof payload.cwd === 'string' &&
+  payload.cwd.length > 0 &&
+  (payload.harness === undefined || payload.harness === 'claude') &&
+  payload.bootstrap === undefined &&
+  payload.scratch === undefined;
+
+/** That restore as `reattachFrom` wants it: where it runs, and what to resume. */
+export const custodyRow = (
+  payload: SpawnPayload
+): { instanceId: string; cwd: string; sessionId: string | null } => ({
+  instanceId: payload.instanceId,
+  cwd: payload.cwd,
+  sessionId: payload.resume?.sessionKey ?? null,
+});
+
 const attach = (
   scanner: UsageScanner,
   supervisor: SessionSupervisor,
@@ -325,8 +359,73 @@ const attach = (
         payload: frame,
       });
     };
+    /**
+     * CUSTODY OFF THE REGISTER ACK (design §7, step 4).
+     *
+     * A daemon that just restarted holds no sessions, so the hub's answer to
+     * its register is: the ledger it has ingested of them (the ack), preceded
+     * by a `spawn` for each session it thinks should be running again. Those
+     * spawns are the ONLY place this process learns a surviving child's
+     * directory and conversation — sessiond hands back procIds and ring heads,
+     * never a cwd — so they are held here until the ack arrives rather than
+     * dispatched straight into a fresh process.
+     *
+     * On the ack the supervisor is asked to take custody of them instead:
+     * whatever sessiond is still holding is adopted onto its existing pipe and
+     * ring, and every spawn it did NOT adopt is dispatched exactly as it would
+     * have been. So a machine with no sessiond children behaves precisely as it
+     * did before this wiring, and one that has them keeps their processes.
+     *
+     * The window is this connection's first register ack and nothing else: an
+     * operator's spawn, a delegate's, and every later `reannounce` ack go
+     * straight through.
+     */
+    const heldSpawns: Envelope[] = [];
+    let awaitingRegisterAck = true;
+
+    const takeCustody = (ackPayload: unknown, spawns: Envelope[]): void => {
+      // Nothing to adopt is not a reason to go looking: `reattach` reads
+      // sessiond's list first, and dialling it (which may start one) on every
+      // register ack would be a new cost paid by every machine, for nothing.
+      if (spawns.length === 0) return;
+      const rows = spawns.map((envelope) => custodyRow(envelope.payload as SpawnPayload));
+      void supervisor
+        .reattachFrom(ackPayload, rows)
+        .catch((error: unknown) => {
+          // A sessiond that cannot be reached is not a reason to lose the
+          // hub's restores: adopt nothing, spawn everything, exactly as before.
+          Effect.runFork(Effect.logWarning(`reattach failed: ${String(error)}`));
+          return [] as string[];
+        })
+        .then((adopted) => {
+          if (adopted.length > 0) {
+            Effect.runFork(
+              Effect.logInfo(`took custody of ${adopted.length} surviving session(s): ${adopted.join(', ')}`)
+            );
+          }
+          for (const envelope of spawns) {
+            if (!adopted.includes((envelope.payload as SpawnPayload).instanceId)) {
+              supervisor.dispatch(envelope);
+            }
+          }
+        });
+    };
+
     socket.addEventListener('message', (event) => {
-      supervisor.dispatch(JSON.parse(String(event.data)) as Envelope);
+      const envelope = JSON.parse(String(event.data)) as Envelope;
+      if (awaitingRegisterAck) {
+        if (envelope.verb === 'register') {
+          awaitingRegisterAck = false;
+          const spawns = heldSpawns.splice(0);
+          takeCustody(envelope.payload, spawns);
+          return;
+        }
+        if (envelope.verb === 'spawn' && adoptable(envelope.payload as SpawnPayload | undefined)) {
+          heldSpawns.push(envelope);
+          return;
+        }
+      }
+      supervisor.dispatch(envelope);
     });
 
     yield* Effect.forkScoped(

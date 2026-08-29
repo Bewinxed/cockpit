@@ -76,6 +76,9 @@ import {
   type SessiondWelcomeInfo,
 } from '../sessiond-client';
 import { sessiondEndpoint } from '@cockpit/core/sessiond';
+// Type-only, and deliberately so: `session.ts` imports the harness registry
+// this file is part of, so a value import here would close a module cycle.
+import type { SessiondAwareContext } from '../session';
 
 /** The neutral frame is the SDK frame re-tagged: same fields, plus the original. */
 export const toNeutral = (sdk: SDKMessage): NeutralMessage => {
@@ -1322,7 +1325,27 @@ export class ClaudeHarness implements Harness {
     client.subscribe(
       instanceId,
       {
-        line: (event) => custody.ingest(event.data),
+        line: (event) => {
+          // PROVENANCE (design §7). This frame came from exactly one sessiond
+          // line, and this is the only place that knows which: the stamp goes
+          // one statement before the ingest that emits it, because `ingest`
+          // emits synchronously and so the stamp lands on that frame and no
+          // other. Without it the hub has nothing to dedupe a replayed or
+          // re-sent line by.
+          //
+          // `client.epoch` is read here rather than asserted once at adopt
+          // time: it is only defined after sessiond's welcome, and reading it
+          // per line keeps the stamp truthful if a client ever re-welcomes
+          // under a new epoch. Undefined means no stamp at all — an unstamped
+          // frame is the pre-ledger behaviour the honest-loss rule already
+          // covers, which is strictly better than a frame stamped with an
+          // epoch nobody minted.
+          const srcEpoch = client.epoch;
+          if (srcEpoch !== undefined) {
+            (ctx as Partial<SessiondAwareContext>).line?.(srcEpoch, event.seq);
+          }
+          custody.ingest(event.data);
+        },
         // An exited child during custody is the session ending on its own; the
         // supervisor's `closed` hook retires the row.
         exit: () => ctx.closed?.(),

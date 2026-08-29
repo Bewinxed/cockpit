@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { Duration, Effect, Fiber, Schedule } from 'effect';
-import { HEALTHY_CONNECTION, reconnect, reconnecting } from './daemon';
+import type { SpawnPayload } from '@cockpit/core';
+import { adoptable, custodyRow, HEALTHY_CONNECTION, reconnect, reconnecting } from './daemon';
 
 /**
  * A stand-in for `attach` that, unlike {@link fakeHub}, cares which URL each
@@ -329,5 +330,48 @@ describe('reconnecting: re-discovery on a sustained failure', () => {
     // 5 failures at 20s apart span 80s (< the 2-minute window), so the count
     // threshold alone never fires the trigger.
     expect(triggers).toBe(0);
+  });
+});
+
+/**
+ * The register-ack custody window (design §7, step 4). A daemon that just
+ * restarted is answered with a `spawn` per session the hub thinks should be
+ * running, then the ack carrying the ingest ledger. Those spawns are the only
+ * place this process learns a surviving child's directory and conversation, so
+ * what counts as one — and what it becomes for `reattachFrom` — is a decision
+ * worth stating on its own.
+ */
+describe('custody off the register ack', () => {
+  const restore = (over: Partial<SpawnPayload> = {}): SpawnPayload => ({
+    instanceId: 'inst-1',
+    cwd: '/home/op/project',
+    resume: { sessionKey: 'sess-9' },
+    ...over,
+  });
+
+  test('a claude restore is adoptable, and becomes the row reattachFrom wants', () => {
+    expect(adoptable(restore())).toBe(true);
+    expect(custodyRow(restore())).toEqual({
+      instanceId: 'inst-1',
+      cwd: '/home/op/project',
+      sessionId: 'sess-9',
+    });
+    // A restore with no stored conversation still adopts; it just has nothing
+    // to hand back to at the turn boundary.
+    expect(custodyRow(restore({ resume: undefined })).sessionId).toBe(null);
+  });
+
+  test('only what `adopt` can actually take: claude, already on disk, already running', () => {
+    // `adopt` is claude's alone — opencode reattaches through its own server.
+    expect(adoptable(restore({ harness: 'opencode' }))).toBe(false);
+    // A spawn that has to clone or cut a worktree first is not a session that
+    // exists to be adopted.
+    expect(adoptable(restore({ bootstrap: { repo: 'o/n', baseDir: '/tmp' } }))).toBe(false);
+    expect(adoptable(restore({ scratch: { worktree: true } }))).toBe(false);
+    // And nothing malformed: a row with no directory could not be respawned at
+    // the hand-off boundary, so it is left to the ordinary spawn path.
+    expect(adoptable(restore({ cwd: '' }))).toBe(false);
+    expect(adoptable(restore({ instanceId: '' }))).toBe(false);
+    expect(adoptable(undefined)).toBe(false);
   });
 });
