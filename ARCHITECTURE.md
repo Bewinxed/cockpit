@@ -164,6 +164,38 @@ The pattern repeats: whoever can observe a fact first-hand is its sole authority
 other component is a renderer of that authority's most recent report — never a second opinion
 formed from its own stale copy.
 
+## The trust boundary: the tailnet is the perimeter
+
+Cockpit is a single-operator fleet reachable only over a tailnet (or a trusted LAN), and
+that network boundary *is* the authentication. It is stated here because several things in
+the system only make sense once it is: the hub's `/ws` accepts a `register` for any
+`machineId` and relays any `control` verb without a token
+(`packages/hub/src/registry.ts`, `packages/hub/src/server.ts` `case 'register'`); sessiond's
+unix socket authorizes by filesystem permission alone — `0600` inside a `0700` directory,
+which is the whole of design §9 (`packages/sessiond/src/server.ts:151-166`); and the deploy
+poller executes whatever is on `origin/main` (`packages/agent/src/deploy.ts`,
+`packages/agent/src/update.ts`). Anyone who can open a socket to the hub can already spawn a
+session with an arbitrary `cwd`, which is arbitrary code execution as the operator. No
+in-band control adds capability beyond that, so adding tokens *inside* the perimeter would
+be ceremony; keeping the perimeter closed is the actual control.
+
+What follows from that, concretely, and what must stay true:
+
+- **The hub must not be bound to a public interface or port-forwarded.** Everything else in
+  this section assumes it is not.
+- **`origin` is pinned.** The poller reads its remote and branch from the `.cockpit-deploy`
+  marker (`0600`, written by `cockpit deploy init`) and never from the wire; the fast-forward
+  is `git pull --ff-only origin <branch>` with both named explicitly
+  (`packages/agent/src/update.ts` `pullArgs`), and a diverged clone is refused rather than
+  reset (`deploy.ts` `DeployState.diverged`, `update.ts` `deployUpdate`). Push access to
+  `origin/main` is therefore equivalent to root on every machine in the fleet — that is the
+  operator's deliberate choice ("push to main IS the fleet deploy"), and it is the reason
+  the marker is the only thing that licenses a pull: an unmarked checkout does not even
+  fetch (`deploy.ts` `checkDeploy`, which returns `unmarked` before any git command runs).
+- **Generated unit files carry no secrets.** The only `Environment=` lines
+  `packages/cli/src/service.ts` writes are `PATH`, `COCKPIT_DB_PATH`, `PORT` and `HOST`, and
+  the units are written `0600` outside the clone.
+
 ## The sessiond boundary
 
 The one split this document owes beyond restating what already exists: process custody is

@@ -204,5 +204,7 @@ test('the verdict does not outlive the socket that asserted it', async () => {
 
 afterAll(() => {
   app.stop();
-  db.close?.();
+  // `makeDb` exposes no close: DbShape has no such member, so `db.close?.()`
+  // was a no-op that only cost the hub its typecheck (TS2339). The scratch DB
+  // file goes with the temp dir the suite already removes.
 });
