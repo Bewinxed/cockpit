@@ -19,6 +19,13 @@ let dir: string;
 let now: number;
 let fetchCalls: number;
 
+// `mockFetch` overwrites the global fetch bun's own test runner shares across
+// every file in the process; left unrestored, whatever canned Response this
+// file installed last (i.e. its final test's 500) answers every `fetch()` call
+// made by hub tests running in the same `bun test` invocation, including the
+// ones hitting their own ephemeral `.listen(0)` servers.
+const realFetch = globalThis.fetch;
+
 const setNow = (t: number): void => {
   now = t;
   setSystemTime(new Date(t));
@@ -63,6 +70,7 @@ beforeEach(() => {
 afterEach(() => {
   rmSync(dir, { recursive: true, force: true });
   setSystemTime();
+  globalThis.fetch = realFetch;
 });
 
 test('first failure with no prior reading returns empty windows, not stale', async () => {
