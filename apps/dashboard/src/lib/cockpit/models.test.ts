@@ -15,9 +15,6 @@ const cases: ReadonlyArray<readonly [model: string, provider: string | null]> = 
 
 for (const [model, expected] of cases) {
   const actual = providerOf(model);
-  console.log(
-    `DIAG providerOf(${JSON.stringify(model)}) -> ${JSON.stringify(actual)} (expected ${JSON.stringify(expected)})`
-  );
   test(`providerOf('${model}') is '${expected}'`, () => {
     expect(actual).toBe(expected);
   });
