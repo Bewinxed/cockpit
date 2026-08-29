@@ -88,6 +88,8 @@ interface Proc {
   alive: boolean;
   exitCode: number | null;
   signal: NodeJS.Signals | null;
+  /** The spec's `cwd`, kept so a reattaching agent learns where this child runs. */
+  cwd?: string;
 }
 
 /** One attached agent. Cursors are per-proc, because subscriptions are. */
@@ -186,6 +188,7 @@ export class SessiondServer {
       alive: proc.alive,
       ...(proc.exitCode === null ? {} : { exitCode: proc.exitCode }),
       head: proc.ring.head,
+      ...(proc.cwd === undefined ? {} : { cwd: proc.cwd }),
     }));
   }
 
@@ -339,6 +342,7 @@ export class SessiondServer {
       alive: true,
       exitCode: null,
       signal: null,
+      ...(spec.cwd === undefined ? {} : { cwd: spec.cwd }),
     };
     this.#procs.set(procId, proc);
 

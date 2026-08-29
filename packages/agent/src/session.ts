@@ -57,7 +57,8 @@ interface ClaudeAdoption {
   custodyCandidates(): Promise<{
     /** sessiond's per-boot epoch — what makes a stored ingest mark readable or dead (design §7). */
     epoch?: string;
-    procs: { procId: string; alive: boolean }[];
+    /** `cwd` is what lets a survivor the hub never named be adopted at all. */
+    procs: { procId: string; alive: boolean; cwd?: string }[];
   }>;
   adopt(
     instanceId: string,
@@ -630,6 +631,29 @@ export class SessionSupervisor {
    * not holding is simply not one of them: no process, nothing to adopt, and
    * the hub's own `sleeping`/`restore` path owns it from there.
    */
+  /**
+   * What sessiond is still holding that this daemon is not carrying.
+   *
+   * The hub names the sessions it wants restored, and for a while that was the
+   * only list a reattach consulted — so a child sessiond had faithfully kept
+   * alive, but whose row the hub had already written off, stayed running with
+   * nobody pumping its output and no way back onto the board. The machine's
+   * own truth is what sessiond holds, so it is read directly and merged with
+   * whatever the hub asked for.
+   *
+   * `cwd` comes back from the child's own spec. A proc reported without one
+   * cannot be adopted — a reattach needs a directory — and is left alone
+   * rather than adopted into the wrong place.
+   */
+  async survivors(): Promise<{ instanceId: string; cwd: string; sessionId: null }[]> {
+    const adapter = this.#adapter('claude') as Harness & Partial<ClaudeAdoption>;
+    if (typeof adapter.custodyCandidates !== 'function') return [];
+    const welcome = await adapter.custodyCandidates();
+    return welcome.procs
+      .filter((proc) => proc.alive && proc.cwd !== undefined && !this.#sessions.has(proc.procId))
+      .map((proc) => ({ instanceId: proc.procId, cwd: proc.cwd ?? '', sessionId: null }));
+  }
+
   async reattach(
     rows: { instanceId: string; cwd: string; sessionId?: string | null; afterSeq?: number }[],
     /**

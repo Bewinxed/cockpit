@@ -394,13 +394,22 @@ const attach = (
     let awaitingRegisterAck = true;
 
     const takeCustody = (ackPayload: unknown, spawns: Envelope[]): void => {
-      // Nothing to adopt is not a reason to go looking: `reattach` reads
-      // sessiond's list first, and dialling it (which may start one) on every
-      // register ack would be a new cost paid by every machine, for nothing.
-      if (spawns.length === 0) return;
-      const rows = spawns.map((envelope) => custodyRow(envelope.payload as SpawnPayload));
+      const named = spawns.map((envelope) => custodyRow(envelope.payload as SpawnPayload));
       void supervisor
-        .reattachFrom(ackPayload, rows)
+        // Whatever sessiond is still holding that the hub did NOT name is still
+        // this machine's to carry. The hub decides what to restore from its own
+        // rows, and a session it has written off - nothing to resume, so not
+        // restorable - is exactly the one whose child is nonetheless alive and
+        // pumping into a ring nobody reads. Asking the machine first is the rule
+        // the board already follows: never serve stored liveness.
+        .survivors()
+        .catch(() => [] as Awaited<ReturnType<typeof supervisor.survivors>>)
+        .then((surviving) => {
+          const claimed = new Set(named.map((row) => row.instanceId));
+          const rows = [...named, ...surviving.filter((row) => !claimed.has(row.instanceId))];
+          if (rows.length === 0) return [] as string[];
+          return supervisor.reattachFrom(ackPayload, rows);
+        })
         .catch((error: unknown) => {
           // A sessiond that cannot be reached is not a reason to lose the
           // hub's restores: adopt nothing, spawn everything, exactly as before.

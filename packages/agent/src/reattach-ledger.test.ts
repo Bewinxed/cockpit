@@ -93,7 +93,14 @@ afterAll(async () => {
 
 const startChild = async (procId: string, burst: number): Promise<void> => {
   spawned.push(procId);
-  await client.spawnProc(procId, { command: process.execPath, args: [emitterPath, String(burst)] });
+  // `cwd` is part of the spec sessiond echoes back, and what a reattach needs
+  // to adopt a survivor the hub never named. The scratch dir is where these
+  // children belong anyway.
+  await client.spawnProc(procId, {
+    command: process.execPath,
+    args: [emitterPath, String(burst)],
+    cwd: dir,
+  });
 };
 
 /** Ask the child for more lines, through sessiond, exactly as the agent would. */
@@ -262,4 +269,29 @@ test('detach leaves the child running, and the next daemon adopts it', async () 
   ).toEqual([procId]);
   await askFor(procId, 1);
   await waitFor(() => after.some((frame) => noteOf(frame) !== undefined), 'a line after the restart');
+}, 30_000);
+
+/**
+ * A survivor the hub never named is still this machine's to carry.
+ *
+ * The hub restores from its own rows, so a session it has written off — no
+ * `sessionId` to resume, therefore not restorable — was never handed to the
+ * reattach, and its child went on running with nobody pumping it. `survivors`
+ * is the machine's own answer, read straight off sessiond.
+ */
+test('survivors reports what sessiond holds, with the cwd needed to adopt it', async () => {
+  const procId = `survivor-${crypto.randomUUID()}`;
+  await startChild(procId, 1);
+  await Bun.sleep(150);
+
+  const supervisor = supervisorWatching([]);
+  const found = (await supervisor.survivors()).find((row) => row.instanceId === procId);
+  expect(found).toBeDefined();
+  // The cwd is what makes it adoptable at all — sessiond echoes back the spec's.
+  expect(found?.cwd).toBe(dir);
+
+  // Adoptable on exactly that row, with no help from the hub.
+  expect(await supervisor.reattachFrom({ ok: true }, [found!])).toEqual([procId]);
+  // And once carried, it is no longer an unclaimed survivor.
+  expect((await supervisor.survivors()).some((row) => row.instanceId === procId)).toBe(false);
 }, 30_000);

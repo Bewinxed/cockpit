@@ -90,6 +90,15 @@ export interface SessiondProcInfo {
   exitCode?: number;
   /** The ring's current head seq for this child. */
   head: number;
+  /**
+   * Where the child was spawned, echoed back from its {@link ProcSpec}.
+   *
+   * An agent that restarted knows sessiond is holding a child but not what
+   * directory it belongs to, and a reattach needs one. Without this the only
+   * survivors it could adopt were the ones the hub happened to name — so a
+   * session the hub had written off was left running with nobody pumping it.
+   */
+  cwd?: string;
 }
 
 /**
