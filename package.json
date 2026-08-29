@@ -19,7 +19,9 @@
     "hub": "bun run --filter '@cockpit/hub' dev",
     "agent": "bun run --filter '@cockpit/agent' start",
     "cockpit": "bun packages/cli/src/cli.ts",
-    "db:push": "bun run --filter '@cockpit/hub' db:push"
+    "db:push": "bun run --filter '@cockpit/hub' db:push",
+    "smoke:insecure": "node scripts/insecure-origin-smoke.mjs",
+    "lint:changed": "git diff --name-only --diff-filter=ACMR HEAD -- 'apps/dashboard/src/**/*.ts' 'apps/dashboard/src/**/*.svelte' | xargs -r eslint"
   },
   "overrides": {
     "vite": "npm:rolldown-vite@latest",
@@ -37,6 +39,7 @@
     "typescript-eslint": "^8.53.0"
   },
   "patchedDependencies": {
-    "svelte-streamdown@3.1.2": "patches/svelte-streamdown@3.1.2.patch"
+    "svelte-streamdown@3.1.2": "patches/svelte-streamdown@3.1.2.patch",
+    "virtua@0.50.0": "patches/virtua@0.50.0.patch"
   }
 }

@@ -66,11 +66,93 @@ export class ConnectionLost extends Data.TaggedError('ConnectionLost')<{
   readonly reason: string;
 }> {}
 
-/** 1s, 2s, 4s … capped at 30s, jittered so a fleet never retries in lockstep. */
-const reconnect = Schedule.min([
+/**
+ * One retry series: 1s, 2s, 4s … capped at 30s, jittered so a fleet never
+ * retries in lockstep.
+ *
+ * A schedule carries its exponent in its own state, and that state lives for
+ * exactly as long as the `Effect.retry` that stepped it. Because `attach` never
+ * succeeds on its own — see {@link closed} — a single `retry` around it would be
+ * ONE series for the whole life of the process: the exponent accumulates across
+ * every outage the daemon ever survived, saturates past the cap within the
+ * first few, and `Schedule.min` then hands back 30s forever. Measured in
+ * production: the first reconnect after hours of healthy uptime cost 26–32s,
+ * and every send and spawn aimed at this machine was refused with `machine <id>
+ * is not connected` for the whole of it.
+ *
+ * {@link reconnecting} is what keeps this honest — it ends the series once a
+ * connection has actually been healthy, so the next outage steps a schedule
+ * that starts again at 1s.
+ */
+export const reconnect = Schedule.min([
   Schedule.exponential(Duration.seconds(1)),
   Schedule.spaced(Duration.seconds(30)),
 ]).pipe(Schedule.jittered);
+
+/**
+ * How long a connection must stand before losing it counts as a fresh outage
+ * rather than another failure in a failing series.
+ *
+ * Ours, because: nothing in the protocol declares a connection healthy — there
+ * is no register ack — so the only evidence available is that the socket stayed
+ * open. 60s is two heartbeats (HEARTBEAT_INTERVAL is 15s) plus room for the
+ * register's harness and tool probes, which spawn processes and take real time;
+ * a hub that was going to reject or drop this daemon has done it well inside
+ * that. Below it we are looking at a genuine flap — a hub that is crash-looping
+ * or a network that will not hold — and backing off is the right answer. Above
+ * it the previous series has nothing left to say about the next outage.
+ *
+ * Effect 4's `Schedule` has no `resetAfter`/`resetWhen` (they are 3.x only, and
+ * the 3.x copies in node_modules belong to other packages), so the reset is the
+ * loop in {@link reconnecting} rather than a schedule combinator.
+ */
+export const HEALTHY_CONNECTION = Duration.seconds(60);
+
+/**
+ * Connect, and keep connecting — forever, and with a backoff that means it.
+ *
+ * `session` is handed a `markLive` it calls at the moment the connection is
+ * genuinely up (for the daemon: socket open and the register sent). It never
+ * succeeds; it fails when the connection goes away.
+ *
+ * Each pass through the outer loop builds its own `Effect.retry`, and therefore
+ * its own schedule state. A failure that arrives before the connection was ever
+ * live, or less than `healthyAfter` after it went live, stays inside that retry
+ * and pays the growing backoff. A failure after a healthy stretch ENDS the
+ * series by succeeding, and the loop re-enters with a schedule that starts over
+ * at 1s.
+ *
+ * The loop deliberately contains nothing but the connection: the supervisor and
+ * the scanner are built by the caller, outside it, and stay built across every
+ * reconnect.
+ */
+export const reconnecting = <E extends { readonly reason: string }, R>(
+  session: (markLive: () => void) => Effect.Effect<never, E, R>,
+  options?: {
+    readonly healthyAfter?: Duration.Duration;
+    readonly schedule?: typeof reconnect;
+    readonly now?: () => number;
+  }
+) => {
+  const healthyAfter = Duration.toMillis(options?.healthyAfter ?? HEALTHY_CONNECTION);
+  const now = options?.now ?? (() => Date.now());
+  const series = Effect.suspend(() => {
+    // Per-pass, and read only after the failure that ends the pass — nothing
+    // else can observe it, so a plain binding is the whole of the state.
+    let liveAt: number | undefined;
+    return session(() => {
+      liveAt = now();
+    }).pipe(
+      Effect.tapError((error) => Effect.logWarning(`${error.reason} — reconnecting`)),
+      Effect.catch((error: E) =>
+        liveAt !== undefined && now() - liveAt >= healthyAfter
+          ? Effect.void
+          : Effect.fail(error)
+      )
+    );
+  }).pipe(Effect.retry(options?.schedule ?? reconnect));
+  return Effect.forever(series);
+};
 
 const closeReason = (event: CloseEvent): string => event.reason || `close code ${event.code}`;
 
@@ -125,7 +207,15 @@ const attach = (
   scanner: UsageScanner,
   supervisor: SessionSupervisor,
   identity: MachineIdentity,
-  url: string
+  url: string,
+  /**
+   * Called once the socket is open and the register has gone out — the moment
+   * this connection counts as up. {@link reconnecting} reads it to tell a
+   * healthy connection that later died from one that never stood at all; a hub
+   * that vanishes during the register's probes never marks it, and so is
+   * correctly treated as a flap.
+   */
+  markLive: () => void = () => {}
 ) =>
   Effect.gen(function* () {
     const socket = yield* connection(url);
@@ -141,6 +231,7 @@ const attach = (
     };
     send(socket, { verb: 'register', machineId: identity.machineId, payload });
     yield* Effect.logInfo(`registered with ${url}`);
+    markLive();
 
     supervisor.reannounce = () => {
       if (socket.readyState !== WebSocket.OPEN) return;
@@ -285,9 +376,12 @@ export const startDaemon = (auth?: AuthState) =>
     const scanner = yield* Effect.promise(() => UsageScanner.load());
 
     yield* Effect.logInfo(`cockpit agent ${identity.machineId} connecting to ${url}`);
-    yield* Effect.scoped(attach(scanner, supervisor, identity, url)).pipe(
-      Effect.tapError((error) => Effect.logWarning(`${error.reason} — reconnecting`)),
-      Effect.retry(reconnect)
+    // The connection — and only the connection — is what the loop re-enters.
+    // The supervisor above it keeps its sessions and the scanner keeps its
+    // dedup set across every reconnect; an interrupt still unwinds through this
+    // to the supervisor's release, so a signalled daemon drains between turns.
+    yield* reconnecting((markLive) =>
+      Effect.scoped(attach(scanner, supervisor, identity, url, markLive))
     );
   }).pipe(Effect.scoped);
 

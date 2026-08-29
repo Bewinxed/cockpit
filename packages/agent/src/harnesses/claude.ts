@@ -61,8 +61,9 @@ import {
   readSkillFiles,
   syncFleetConfig,
 } from '../fleet';
-import { DENIED_WEB_TOOLS } from '../denied-tools';
+import { DENIED_NATIVE_SUBAGENT_TOOLS, DENIED_WEB_TOOLS } from '../denied-tools';
 import { handoffServer } from '../handoff';
+import { fetchDelegateTypes } from './handoff-shared';
 import { probeAuth, unlockKeychain } from '../auth';
 import { beginLogin, clearCredentials, completeLogin, exportCredentials, importCredentials } from '../login';
 import { resolveBin } from '../tools';
@@ -71,11 +72,25 @@ import type { Harness, HarnessContext, HarnessSession } from '../harness';
 
 /** The neutral frame is the SDK frame re-tagged: same fields, plus the original. */
 export const toNeutral = (sdk: SDKMessage): NeutralMessage => {
+  if (sdk.type === 'result') {
+    // The SDK's own usage carries cache_creation/cache_read counts; re-tag them
+    // under the harness-neutral `cache` shape the opencode adapter's result
+    // frame also populates.
+    const usage = (
+      sdk as { usage?: { cache_creation_input_tokens?: number; cache_read_input_tokens?: number } }
+    ).usage;
+    return {
+      ...sdk,
+      raw: sdk,
+      ...(usage
+        ? { cache: { read: usage.cache_read_input_tokens ?? 0, write: usage.cache_creation_input_tokens ?? 0 } }
+        : {}),
+    } as unknown as NeutralMessage;
+  }
   if (
     sdk.type === 'assistant' ||
     sdk.type === 'user' ||
     sdk.type === 'stream_event' ||
-    sdk.type === 'result' ||
     sdk.type === 'system'
   ) {
     return { ...sdk, raw: sdk } as unknown as NeutralMessage;
@@ -506,7 +521,10 @@ class ClaudeSession implements HarnessSession {
     effort: EffortLevel | undefined,
     resume: SpawnPayload['resume'],
     persistSession: boolean | undefined,
-    skills?: string[]
+    skills?: string[],
+    denyTools?: string[],
+    /** Fetched once by `spawn()` before this session existed; frozen from here on. */
+    delegateTypes?: import('@cockpit/core').DelegateType[]
   ) {
     this.#ctx = ctx;
     // The model just pulled a held turn: retire the queue entry, and remember
@@ -544,7 +562,7 @@ class ClaudeSession implements HarnessSession {
         mcpServers: {
           ...((options as { mcpServers?: Record<string, unknown> } | undefined)?.mcpServers ?? {}),
           outpost: handoffServer(
-            { instanceId, cwd: workdir, emit: (envelope) => ctx.emit(envelope) },
+            { instanceId, cwd: workdir, emit: (envelope) => ctx.emit(envelope), delegateTypes },
             // Keyed under BOTH the handler's text and the serialized payload:
             // CLIs before ~2.1.x forward the handler's text block, current ones
             // (verified on 2.1.233) replace it with JSON.stringify(structuredContent).
@@ -556,10 +574,15 @@ class ClaudeSession implements HarnessSession {
         },
         // Fleet policy: search is the Exa MCP and fetch is the firecrawl MCP,
         // both fleet-synced onto every machine. The spec's own denials stand.
+        // `DENIED_NATIVE_SUBAGENT_TOOLS` keeps delegation on one visible door
+        // (see denied-tools.ts); `denyTools` is a resolved delegate type's own
+        // ask, threaded through from the spawn.
         disallowedTools: [
           ...new Set([
             ...((options as { disallowedTools?: string[] } | undefined)?.disallowedTools ?? []),
             ...DENIED_WEB_TOOLS,
+            ...DENIED_NATIVE_SUBAGENT_TOOLS,
+            ...(denyTools ?? []),
           ]),
         ],
         ...(resume
@@ -733,6 +756,14 @@ class ClaudeSession implements HarnessSession {
           this.sessionId = message.session_id;
           ctx.session(message.session_id);
         }
+        // TODO(servedModel wiring): a spawn's own `model` can be an alias
+        // ('sonnet') the SDK resolves to a dated id; `neutral.message.model`
+        // on this first assistant frame is what really served the turn, and
+        // the hub — which already reads the first user message here for
+        // `deriveTitleFromFirstMessage` — should read this the same way into
+        // an `instances.served_model` column. Left undone: `db/schema.ts`,
+        // `db/index.ts` and `server.ts` are mid-edit in another session's
+        // working tree and a migration on top of that is unsafe right now.
         if (message.type === 'result') {
           turn.end();
           ctx.busy(false);
@@ -946,6 +977,10 @@ export class ClaudeHarness implements Harness {
   }
 
   async spawn(spec: SpawnPayload, ctx: HarnessContext): Promise<HarnessSession> {
+    // Fetched once, before the session (and its `delegate` tool description)
+    // exists — see `fetchDelegateTypes`'s own comment for why this is a plain
+    // per-spawn HTTP read rather than a fleet-sync field.
+    const delegateTypes = await fetchDelegateTypes();
     return new ClaudeSession(
       ctx.instanceId,
       ctx,
@@ -956,7 +991,9 @@ export class ClaudeHarness implements Harness {
       spec.effort,
       spec.resume,
       spec.persistSession,
-      spec.skills
+      spec.skills,
+      spec.denyTools,
+      delegateTypes
     );
   }
 

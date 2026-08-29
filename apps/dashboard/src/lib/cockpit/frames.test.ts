@@ -13,6 +13,7 @@ import {
   delegateOf,
   foldDelegateEvent,
   isDelegateReport,
+  localUserMessage,
   mapFrame,
   mapTranscript,
   matchesSession,
@@ -21,6 +22,7 @@ import {
   thinkingDurationMs,
   unwrapMidTurn,
 } from './frames';
+import { ingestQueued } from './queue';
 import type { DelegateEvent, JsonValue, Message } from './types';
 
 const base = { type: 'system' as const, uuid: 'u1' as never, session_id: 's1' };
@@ -569,7 +571,6 @@ test('an answer settles the ask it names — allowed answers it, denied denies i
   foldDelegateEvent(list, answerRow(3, 'per_1', 'allow'));
   foldDelegateEvent(list, answerRow(4, 'per_2', 'deny'));
   expect(list.map((row) => row.status)).toEqual(['answered', 'denied', null, null]);
-  console.log(`DIAG fold-settle: statuses=${list.map((row) => row.status).join(',')}`);
 });
 
 test('an answer to an ask nobody has is still recorded, and so is a report', () => {
@@ -878,4 +879,68 @@ test('a rule with no name still says what it is', () => {
   } as unknown as SDKMessage;
   const messages = mapFrame('i1', nameless).messages ?? [];
   expect(messages[0].metadata?.ruleName).toBe('a rule');
+});
+
+/* ------------------------------------------------------------------ *
+ * The echo a send is rendered as, and the stamp that ties it to its command
+ * ------------------------------------------------------------------ */
+
+/**
+ * `noteSendSubmitted`'s stamp, replicated — the runes module cannot be imported
+ * by `bun test` (the same reason `stream-e2e` replicates the socket binding),
+ * so the shape it writes is asserted here against the builder it writes it on.
+ */
+const stamp = (message: Message, commandId: string): Message => ({
+  ...message,
+  metadata: { ...message.metadata, queuedLocally: true, sentAs: commandId },
+});
+
+test('a plain echo carries the stamp and nothing else', () => {
+  const echo = stamp(localUserMessage('i1', 'hello'), 'cmd-1');
+  expect(echo.type).toBe('user');
+  expect(echo.content).toBe('hello');
+  expect(echo.metadata?.sentAs).toBe('cmd-1');
+  expect(echo.metadata?.queuedLocally).toBe(true);
+  // Absence of evidence is a solid message: nothing here claims a failure.
+  expect(echo.metadata?.sendFailed).toBeUndefined();
+});
+
+test('the stamp does not cost the echo its thumbnails', () => {
+  // The metadata merge is a spread over whatever `localUserMessage` built. If
+  // the stamp ever replaced that object instead of extending it, an attached
+  // image would vanish from the transcript the moment sends became trackable.
+  const echo = stamp(
+    localUserMessage('i1', 'look at this', {
+      attachments: [{ kind: 'text', name: 'notes.md', content: 'abcd' }],
+      images: [{ mediaType: 'image/png', data: 'AAAA' }],
+    }),
+    'cmd-2'
+  );
+  expect(echo.metadata?.sentAs).toBe('cmd-2');
+  expect(echo.metadata?.attachments).toEqual([{ name: 'notes.md', chars: 4 }]);
+  expect(echo.metadata?.images).toEqual([
+    { mediaType: 'image/png', dataUri: 'data:image/png;base64,AAAA' },
+  ]);
+});
+
+test('a stamped echo is still the copy the daemon queue takes back', () => {
+  // Exactly one row represents the message at all times. `ingestQueued` matches
+  // the local echo by content and its `queuedLocally` mark; the stamp must not
+  // be a third condition that quietly stops matching and leaves two rows.
+  const target = {
+    messages: [stamp(localUserMessage('i1', 'do the thing'), 'cmd-3')],
+    queued: [],
+  };
+  ingestQueued(target, { queueId: 'q1', text: 'do the thing', at: Date.now() } as never);
+  expect(target.messages.length).toBe(0);
+  expect(target.queued.length).toBe(1);
+});
+
+test('a failed echo is stamped with its reason, which outlives the record', () => {
+  // `sendFailed` is what the row reads once the ledger has swept the record —
+  // a message that never sent must not fade back to looking sent.
+  const echo = stamp(localUserMessage('i1', 'unsent'), 'cmd-4');
+  echo.metadata = { ...echo.metadata, sendFailed: 'Not connected to the hub.' };
+  expect(echo.metadata.sentAs).toBe('cmd-4');
+  expect(echo.metadata.sendFailed).toBe('Not connected to the hub.');
 });

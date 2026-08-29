@@ -10,14 +10,18 @@
  *
  * `crypto.getRandomValues` has no such restriction, so the fallback is a real
  * version 4 UUID from the same entropy source, not a weaker stand-in.
+ *
+ * `source` defaults to the real global so every existing call site is
+ * unchanged; it exists so a test can hand in a stub `Crypto` with no
+ * `randomUUID` and exercise the fallback branch without a browser.
  */
-export function newId(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
+export function newId(source: Crypto = globalThis.crypto): string {
+  if (typeof source !== 'undefined' && typeof source.randomUUID === 'function') {
+    return source.randomUUID();
   }
 
   const bytes = new Uint8Array(16);
-  crypto.getRandomValues(bytes);
+  source.getRandomValues(bytes);
   // Version 4, variant 1 — the two fields a v4 UUID pins rather than randomises.
   bytes[6] = (bytes[6] & 0x0f) | 0x40;
   bytes[8] = (bytes[8] & 0x3f) | 0x80;

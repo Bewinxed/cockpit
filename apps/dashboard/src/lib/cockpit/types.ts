@@ -76,6 +76,25 @@ export interface MessageMetadata {
    * every dashboard's behaviour before the queue was observable.
    */
   queuedLocally?: boolean;
+  /**
+   * The command this turn went out as, while its record is still readable —
+   * what lets the transcript render the send's own stage on the send's own row.
+   * A message with no record behind it (swept, historical, another device's)
+   * renders as a plain turn: absence of evidence is a solid message, never a
+   * ghost.
+   */
+  sentAs?: string;
+  /**
+   * Why this message was never delivered, stamped on the echo when its command
+   * settles at `failed`.
+   *
+   * It duplicates the record's own `reason` on purpose: command records are
+   * swept by count and age (`SETTLED_COMMAND_TTL_MS`, five minutes), and a
+   * message that failed must not quietly fade back to looking sent when its
+   * record is forgotten. The stamp outlives the ledger; the failure is the one
+   * thing about a message that must never expire on its own.
+   */
+  sendFailed?: string;
   // Tool messages
   toolId?: string;
   toolName?: string;

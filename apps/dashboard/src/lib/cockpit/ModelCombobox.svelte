@@ -92,6 +92,12 @@
   // The picker says for itself why a refresh failed; it is about the list, not
   // about the session, so it never reaches the page's error slot — and the
   // popover stays open, because the point was to look at what came back.
+  //
+  // This catch is deliberately bare, and is the log-only side of the boundary:
+  // a background refresh that fails leaves the combobox showing the last-known
+  // list and reopening it retries. Nothing the operator asked for is lost, so
+  // there is nothing to report. It is NOT the class of swallowed rejection that
+  // ate every send from a plain-http origin — that one sat on a user action.
   const refresh = () => void refreshModels().catch(() => {});
 </script>
 

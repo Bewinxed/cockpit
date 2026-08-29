@@ -308,6 +308,34 @@
     via(text, extras);
   }
 
+  /**
+   * Puts a message that never left back into the composer, attachments and all.
+   *
+   * The optimistic clear above stays exactly as it is — clearing on Enter is
+   * the right feel, and the promise "a refused send must never eat what was
+   * typed" is kept downstream instead: the store holds the full payload in its
+   * outbox and hands it back through here. The text itself arrives by the
+   * `value` binding the pane already owns; this is for everything the binding
+   * cannot carry.
+   *
+   * Image filenames do not survive the wire — `SendPayload.images` carries
+   * `mediaType` and `data` only — so restored images are numbered rather than
+   * given a name they never had.
+   */
+  export function restore(extras: SendExtras = {}): void {
+    texts = (extras.attachments ?? []).map((attachment) => ({
+      kind: 'text',
+      name: attachment.name,
+      content: attachment.content,
+    }));
+    images = (extras.images ?? []).map((image, at) => ({
+      mediaType: image.mediaType,
+      data: image.data,
+      name: `Image ${at + 1}`,
+    }));
+    field?.focus();
+  }
+
   function onkeydown(event: KeyboardEvent): void {
     // BEFORE the menu: mod+Enter is "interrupt and send" (the shortcut sheet's
     // long-standing promise), and a half-picked menu must not swallow it — the

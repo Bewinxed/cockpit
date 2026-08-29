@@ -74,3 +74,43 @@ test('a queued row never shares a key with the turn that replaces it', () => {
 test('an empty queue adds nothing at all', () => {
   expect(buildRows(stateWith({ messages: [said('done')] }))).toHaveLength(1);
 });
+
+/**
+ * ── The `ssrCount` latch ─────────────────────────────────────────────────────
+ *
+ * Not a `buildRows` test, but the guard that keeps `buildRows`' output visible,
+ * and this is the transcript's test file. The rows folded above are handed to
+ * virtua's `Virtualizer`, and for a while the transcript handed it `ssrCount`
+ * unconditionally — including on the client. That looks like a hint. It is a
+ * LATCH: the store reads `ssrCount` once, at construction, and pins its render
+ * range at `[0, ssrCount - 1]` until a real scroll event clears the flag. A
+ * transcript shorter than its viewport can never produce one, so every row
+ * built after hydration — the message just sent, every streamed frame — was
+ * folded correctly and then dropped by a range that had stopped moving. The
+ * fix is that `ssrCount` is a SERVER-render count, gated on `browser`.
+ *
+ * The two tests below pin both halves: the upstream behaviour that makes the
+ * gate necessary, and the gate itself. If a virtua upgrade ever drops the
+ * latch, the first fails and the gate can be reconsidered on purpose rather
+ * than by accident.
+ */
+test('virtua freezes its render range at ssrCount until a scroll clears it', async () => {
+  const { createVirtualStore } = (await import('virtua/unstable_core')) as {
+    createVirtualStore: (len: number, itemSize?: number, ssrCount?: number) => {
+      $getRange: () => [number, number];
+    };
+  };
+  // Three items rendered on the server, ten in hand by the time the client is
+  // live. The range does not follow the data — that is the whole defect.
+  const store = createVirtualStore(10, 40, 3);
+  expect(store.$getRange()).toEqual([0, 2]);
+});
+
+test('the transcript hands ssrCount to the server render only', async () => {
+  const source = await Bun.file(new URL('./Transcript.svelte', import.meta.url)).text();
+  // The prop reaches the Virtualizer by shorthand, so the gate IS the binding:
+  // the literal `ssrCount={built.rows.length}` must never come back.
+  expect(source).toContain('const ssrCount = $derived(browser ? undefined : built.rows.length);');
+  expect(source).toContain('{ssrCount}>');
+  expect(source).not.toContain('ssrCount={built.rows.length}>');
+});

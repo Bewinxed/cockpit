@@ -36,6 +36,8 @@ import {
   RESOLVE_PERMISSION,
   RESTART_RESUMABLE,
 } from '@cockpit/core';
+import { toast } from 'svelte-sonner';
+
 import type { SubagentState } from '$lib/utils/flow-types';
 import type { Activity } from './activity';
 import { activityOf, runningSubagents } from './activity';
@@ -69,15 +71,19 @@ import {
   turnStart,
 } from './frames';
 import { ingestQueued, retireQueued } from './queue';
-import type { CommandRecord, StreamEffects, StreamHost } from './stream';
+import type { CommandRecord, SettleStage, StreamEffects, StreamHost } from './stream';
 import {
   createStreamState,
+  disarmCommandSweep,
+  failLocally,
   handleStreamMessage,
   interruptedRecently,
   latestCommand,
   noteCapabilities,
   noteDisconnect,
   sessionCommands,
+  SETTLED_COMMAND_LIMIT,
+  SETTLED_COMMAND_TTL_MS,
   streamCarries,
   submitCommand as submitTrackedCommand,
   sweepCommands,
@@ -437,6 +443,10 @@ function abandonInflight(reason: string): void {
 }
 
 function teardown(): void {
+  // The ledger's ack timer is the one thing here that outlives the socket by
+  // design, so it is the one thing a teardown has to cancel by hand — an HMR
+  // reload that left it armed would fire a sweep into a module nobody renders.
+  disarmCommandSweep(streamState, streamHost);
   if (globalThis.__cockpitReconnectTimeout) {
     clearTimeout(globalThis.__cockpitReconnectTimeout);
     globalThis.__cockpitReconnectTimeout = null;
@@ -1200,7 +1210,134 @@ const streamHost: StreamHost = {
   },
   now: () => Date.now(),
   warn: (message, detail) => console.warn(`[cockpit] ${message}`, detail),
+  /**
+   * The ledger's own clock. The ack timeout used to be enforced only by the
+   * traffic sweep below, which meant a message whose frame was swallowed was
+   * called off when some unrelated frame happened to arrive — and on a quiet
+   * tab, or one whose socket had gone silent, never. That is the exact shape
+   * of a permanent ghost: the operator's words on screen, at "sending…",
+   * indefinitely. A real timer settles them whether or not anything arrives.
+   */
+  setTimer: (delayMs, run) => setTimeout(run, delayMs) as unknown as number,
+  clearTimer: (handle) => clearTimeout(handle as unknown as ReturnType<typeof setTimeout>),
+  /**
+   * The client half of the ledger's failure port: every command that ever
+   * reaches `failed`, on either dialect, is heard exactly once here.
+   *
+   * The rule is not "toast everything" — it is "nothing goes unsaid TWICE".
+   * A kind whose own surface renders the failure inline claims it; everything
+   * else, and every claim whose surface has since vanished, is spoken by a
+   * toast. That way a command kind added next year is loud by default rather
+   * than silent by default, which is the failure mode this whole port exists
+   * to close.
+   */
+  noteFailure: (record) => {
+    if (record.kind === 'send') {
+      // The echo carries the failure from here on — stamped rather than kept
+      // only on the record, because records are swept after five minutes and a
+      // message that never sent must not fade back to looking sent. The stamp
+      // is also the claim: if no echo carries this id (superseded by a queued
+      // row, or the session was closed), nothing on screen says anything, and
+      // the toast below is all the operator gets.
+      announceSendFailure(record);
+      if (stampSendFailure(record)) return;
+    }
+    // A parked permission card renders its own refusal (`Couldn't send that
+    // answer.`) against the very command id it holds. It only does so while it
+    // is still on screen: answering removes the request from `pending`, so an
+    // answer that fails after the card has gone has no inline surface at all
+    // and falls through to the toast.
+    if (record.kind === 'permission.answer' && answerCardStillParked(record)) return;
+    toast.error(failureNotice(record));
+  },
 };
+
+/** What to say about a failed command, in the operator's terms, never the wire's. */
+const FAILURE_LEAD: Record<CommandKind, string> = {
+  send: "Couldn't send that message.",
+  'permission.answer': "Couldn't send that answer.",
+  interrupt: "Couldn't stop the turn.",
+  'set-model': "Couldn't change the model.",
+  'set-permission-mode': "Couldn't change the permission mode.",
+  'set-effort': "Couldn't change the effort.",
+};
+
+const failureNotice = (record: CommandRecord): string => {
+  const lead = FAILURE_LEAD[record.kind] ?? "That didn't go through.";
+  return record.reason ? `${lead} ${record.reason}` : lead;
+};
+
+/**
+ * Stamps a failed send's reason onto the echo that represents it, and says
+ * whether it found one. `metadata.sendFailed` is what keeps the message
+ * rendered as "not sent" after the ledger has swept its record.
+ */
+function stampSendFailure(record: CommandRecord): boolean {
+  const target = state.sessions[record.sessionId];
+  if (!target) return false;
+  const echo = target.messages.find((message) => message.metadata?.sentAs === record.commandId);
+  if (!echo) return false;
+  echo.metadata = {
+    ...echo.metadata,
+    sendFailed: record.reason ?? 'The hub never took it.',
+  };
+  return true;
+}
+
+/**
+ * Whether the card that asked is still on screen to render its own refusal.
+ * The link is kept here because the wire payload correlates on the PERMISSION's
+ * request id while the ledger correlates on the COMMAND's — nothing else joins
+ * the two.
+ */
+const answerSurfaces = new Map<string, { instanceId: string; requestId: string }>();
+
+/**
+ * Kept only as long as the ledger keeps the record it belongs to: an answer
+ * that succeeded is never asked about again, so its link would otherwise be a
+ * slow leak on the busiest control path there is.
+ */
+function rememberAnswerSurface(commandId: string, instanceId: string, requestId: string): void {
+  for (const known of [...answerSurfaces.keys()]) {
+    if (!streamState.commands[known]) answerSurfaces.delete(known);
+  }
+  answerSurfaces.set(commandId, { instanceId, requestId });
+}
+
+/**
+ * Whether a card holding this command is STILL RENDERED, re-derived from the
+ * same predicate the pane renders by rather than from anything this file
+ * wishes were true — `session.pending`, minus the delegate asks a parent's
+ * queue filters out (`parked` in SessionPane; `routedToParent` in frames.ts).
+ *
+ * Checked against both dialects, because they answer it differently and both
+ * answers are right:
+ *
+ * - LEGACY. `resolvePermission` puts the control on the wire and clears
+ *   `pending` only afterwards, so a socket that throws leaves the card exactly
+ *   where it was. The card renders "Couldn't send that answer." off the very
+ *   record that failed — so this returns true and the toast stands down. That
+ *   is the double report this rule exists to prevent, and it only works
+ *   because the surface is now registered BEFORE the submit that can fail
+ *   inside it; registered afterwards there was nothing here to find.
+ * - STREAM. The dispatch's own `submitted` effect clears `pending` first, so
+ *   by the time anything can fail the card is already leaving. This returns
+ *   false and the toast IS the report — correctly, since there is no longer a
+ *   card to read it on.
+ *
+ * So the rule is not inert on either dialect; it says "no surface" on the
+ * stream dialect because on the stream dialect there is no surface.
+ */
+function answerCardStillParked(record: CommandRecord): boolean {
+  const surface = answerSurfaces.get(record.commandId);
+  answerSurfaces.delete(record.commandId);
+  if (!surface) return false;
+  return (
+    state.sessions[surface.instanceId]?.pending.some(
+      (parked) => parked.requestId === surface.requestId && !routedToParent(parked)
+    ) ?? false
+  );
+}
 
 /** The last command sweep, so a busy socket does not re-scan the tracker per frame. */
 let lastSweep = 0;
@@ -1215,7 +1352,13 @@ function sweepOnTraffic(): void {
   const now = Date.now();
   if (now - lastSweep < 1000) return;
   lastSweep = now;
-  sweepCommands(streamState, now);
+  // With the host: a sweep without it fails records that
+  // {@link StreamHost.noteFailure} never hears about — silence, by omission.
+  sweepCommands(streamState, now, streamHost);
+  // The outbox ages on the same beat as the ledger it shadows. Pruning only
+  // when a NEW send arrives — which is what it did — meant a Try again could
+  // outlive the payload behind it by however long the operator stayed quiet.
+  pruneOutbox();
 }
 
 /** Re-exported so a component reads one import for a command and its stages. */
@@ -1303,12 +1446,15 @@ function legacyCall<K extends CommandKind>(
   kind: K,
   instanceId: string,
   machineId: string,
-  intent: CommandIntents[K]
+  intent: CommandIntents[K],
+  commandId: string
 ): () => void | Promise<unknown> {
   switch (kind) {
     case 'send': {
       const { text, extras } = intent as CommandIntents['send'];
-      return () => sendText(instanceId, machineId, text, extras);
+      // The id travels into the echo on this dialect too, so a legacy-hub
+      // failure lands on the same row a stream-hub failure would.
+      return () => sendText(instanceId, machineId, text, extras, commandId);
     }
     case 'permission.answer': {
       const { requestId, result } = intent as CommandIntents['permission.answer'];
@@ -1334,6 +1480,19 @@ function legacyCall<K extends CommandKind>(
 }
 
 /**
+ * One id per browser tab: minted once, kept only in memory (never in
+ * `localStorage`, which a duplicated tab would inherit and so blur two
+ * senders into one), and attached to every command as {@link submitCommand}'s
+ * provenance. Without this an incident like "a send landed on the wrong
+ * session" is unprovable — every socket writes with the same voice.
+ */
+let tabClientId: string | undefined;
+function currentClientId(): string {
+  tabClientId ??= newId();
+  return tabClientId;
+}
+
+/**
  * Submits an operator action as an acknowledged transaction and returns the id
  * its stages are readable under ({@link commandRecord},
  * {@link latestCommandFor}).
@@ -1349,16 +1508,315 @@ export function submitCommand<K extends CommandKind>(
   kind: K,
   intent: CommandIntents[K]
 ): string {
+  // Minted FIRST, before anything that can throw, so there is an id to fail
+  // under. Everything below either reaches the ledger or becomes a record in
+  // it; nothing reaches the caller as an exception.
   const commandId = newId();
-  return submitTrackedCommand(streamState, streamHost, {
+  const settlesAt = SETTLES_AT[kind];
+
+  // REGISTERED BEFORE ANYTHING THAT CAN FAIL, and that ordering is the whole
+  // point of these two lines being here rather than after the submit.
+  //
+  // `noteFailure` fires SYNCHRONOUSLY from inside the ledger — a refused
+  // dispatch, a legacy thunk that throws, a payload that could not be built —
+  // so anything the failure reporter needs in order to know who owns the
+  // failure has to already exist when the submit is called. Registered
+  // afterwards, as these were, the reporter saw an empty registry on every
+  // synchronous failure and announced a toast for a failure a card was
+  // already rendering: one failure, two reports. And the outbox, written
+  // afterwards, held nothing at all when the throw happened before the wire —
+  // the operator got a toast and their typed words were gone, which is the
+  // original defect wearing a different hat.
+  if (kind === 'send') {
+    const { text, extras } = intent as CommandIntents['send'];
+    rememberSend(commandId, instanceId, machineId, text, extras ?? {});
+  }
+  if (kind === 'permission.answer') {
+    const { requestId } = intent as CommandIntents['permission.answer'];
+    rememberAnswerSurface(commandId, instanceId, requestId);
+  }
+
+  let payload: object;
+  let legacy: () => void | Promise<unknown>;
+  let effects: StreamEffects | undefined;
+  try {
+    // `provenance` rides inside the payload rather than as a new envelope field —
+    // CommandEnvelope.payload is already `unknown` on the wire, so this needs no
+    // protocol change, and the hub's `command()` spreads it straight through to
+    // `relaySend` untouched. No `viewId` here — it would just repeat the
+    // envelope's own `instanceId`; `clientId` is the only fact provenance adds.
+    const provenance = { clientId: currentClientId() };
+    payload = { ...(wirePayload(kind, instanceId, commandId, intent) as object), provenance };
+    legacy = legacyCall(kind, instanceId, machineId, intent, commandId);
+    effects = streamEffectsFor(instanceId, kind, intent, commandId);
+  } catch (error) {
+    // THE CONTRACT THIS FUNCTION SHARES WITH THE LEDGER: it never throws.
+    //
+    // `submitCommand` in stream.ts documents "never throws: the stage IS the
+    // report" — but the assembly above runs BEFORE that function is reached,
+    // and a throw here escapes the ledger entirely. That is not hypothetical:
+    // `currentClientId()` reached `crypto.randomUUID`, which does not exist on
+    // a plain-http origin, so every operator action on a tailnet address threw
+    // out of this line and vanished. Converting the throw into a failed record
+    // makes the whole CLASS impossible — a bug in payload assembly is now a
+    // failed command wearing its own exception, for all six kinds and both
+    // dialects, instead of a dead composer.
+    //
+    // The echo goes in FIRST, and only here: on every other path one of the
+    // two dialects pushes it (the stream effects' `submitted`, or `sendText`),
+    // and neither ran. Without it a payload-assembly bug leaves the reason
+    // stranded in a toast with no row to stamp, no Try again, and no Edit —
+    // recoverable text nobody can reach. It is wrapped because it is the one
+    // thing left that could throw, and a throw from a catch block is the
+    // silence this whole function exists to abolish.
+    if (kind === 'send') {
+      const { text, extras } = intent as CommandIntents['send'];
+      try {
+        noteSendSubmitted(instanceId, text, extras ?? {}, commandId);
+      } catch {
+        // The toast below is then the whole report, which is a worse outcome
+        // than a failed ghost but an infinitely better one than nothing.
+      }
+    }
+    return failLocally(
+      streamState,
+      streamHost,
+      { commandId, sessionId: instanceId, kind, settlesAt },
+      messageOf(error)
+    );
+  }
+
+  const id = submitTrackedCommand(streamState, streamHost, {
     commandId,
+    // NOTE: carries instanceId, not a harness session id.
     sessionId: instanceId,
     machineId,
     kind,
-    payload: wirePayload(kind, instanceId, commandId, intent),
-    legacy: legacyCall(kind, instanceId, machineId, intent),
-    streamEffects: streamEffectsFor(instanceId, kind, intent),
+    settlesAt,
+    payload,
+    legacy,
+    streamEffects: effects,
   });
+  return id;
+}
+
+/**
+ * Where each kind's protocol stops talking. Declared once, here, because the
+ * question "what is this kind's last word?" has exactly one right answer per
+ * kind and re-deriving it at each call site is how a delivered message gets
+ * retro-declared a failure. See {@link SettleStage}: the hub answers a `send`
+ * with `accepted` and never with `applied`; the control kinds get a second
+ * word when their `control_result` comes back.
+ */
+const SETTLES_AT: Record<CommandKind, SettleStage> = {
+  send: 'accepted',
+  'permission.answer': 'applied',
+  interrupt: 'applied',
+  'set-model': 'applied',
+  'set-permission-mode': 'applied',
+  'set-effort': 'applied',
+};
+
+const messageOf = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
+
+/* ---- the outbox: what makes a refused send recoverable ----------------- */
+
+/** One unsent message, whole — the payload a retry needs and the echo cannot hold. */
+interface OutboxEntry {
+  instanceId: string;
+  machineId: string;
+  text: string;
+  extras: SendExtras;
+  at: number;
+}
+
+/**
+ * Every send this tab has dispatched and not yet seen taken, with its FULL
+ * payload.
+ *
+ * The transcript echo is not enough to resend from: `localUserMessage` keeps
+ * attachments as name+length and images as display data URIs — a deliberate
+ * thumbnail economy — so a retry built from the echo would quietly drop what
+ * was attached. The bytes live here instead, and only here.
+ *
+ * Bounds are OUR CHOICE, deliberately aligned to the ledger's own
+ * ({@link SETTLED_COMMAND_LIMIT} = 50, {@link SETTLED_COMMAND_TTL_MS} = 5min):
+ * an entry whose record the sweep has already forgotten can no longer be
+ * offered a Try again, so retaining it past that point is dead weight holding
+ * base64 image data alive.
+ */
+const sendOutbox = new Map<string, OutboxEntry>();
+
+/**
+ * Bumped on every mutation of the Map above, and read by {@link canResend}.
+ *
+ * A plain Map is not reactive, and the affordance it backs has to DISAPPEAR
+ * the moment the payload behind it is pruned. Rendered off the Map alone,
+ * "Try again" and "Edit" were painted once — when the failure landed — and
+ * then kept standing after the outbox had aged the payload out five minutes
+ * later, so pressing either did nothing at all and said nothing about it.
+ * A dead button is a silent failure with a cursor on it. This is the cheapest
+ * honest fix: one number, rather than deep-proxying every base64 image in the
+ * outbox through `$state` just to be told when a key was deleted.
+ */
+let outboxVersion = $state(0);
+
+/**
+ * Whether a failed send can still actually be re-sent or edited — i.e. whether
+ * the full payload (attachments and image bytes included, which the transcript
+ * echo does not keep) is still in hand. The row asks before offering the
+ * affordance, so the answer is "no button" rather than "a button that lies".
+ */
+export function canResend(commandId: string): boolean {
+  // Reading the version is what subscribes the caller's `$derived` to the Map.
+  return outboxVersion >= 0 && sendOutbox.has(commandId);
+}
+
+function rememberSend(
+  commandId: string,
+  instanceId: string,
+  machineId: string,
+  text: string,
+  extras: SendExtras
+): void {
+  sendOutbox.set(commandId, { instanceId, machineId, text, extras, at: Date.now() });
+  outboxVersion += 1;
+  pruneOutbox();
+}
+
+/**
+ * Drops what can no longer be retried: anything the hub has taken custody of
+ * (the daemon holds the real payload from `accepted` on), anything whose record
+ * the ledger has already forgotten, and anything older or more numerous than
+ * the ledger's own bounds. A `failed` entry is the one thing kept — that is the
+ * entry Try again and Edit exist for.
+ */
+function pruneOutbox(): void {
+  const before = sendOutbox.size;
+  const now = Date.now();
+  for (const [commandId, entry] of sendOutbox) {
+    const record = streamState.commands[commandId];
+    const stale = now - entry.at >= SETTLED_COMMAND_TTL_MS;
+    // A MISSING record is not evidence of anything and must not be read as
+    // custody. The entry is now written before the submit that creates the
+    // record — it has to be, or a throw during payload assembly leaves nothing
+    // to recover — so for one instant every fresh entry has no record, and
+    // treating that as "the hub has it" deleted the payload the moment it was
+    // stored. The absent-record case is covered by `stale` anyway: a record the
+    // ledger has already forgotten is at least as old as the TTL below.
+    const taken = record ? record.stage !== 'submitted' && record.stage !== 'failed' : false;
+    if (stale || taken) sendOutbox.delete(commandId);
+  }
+  if (sendOutbox.size > SETTLED_COMMAND_LIMIT) {
+    const oldest = [...sendOutbox.entries()].sort((a, b) => a[1].at - b[1].at);
+    for (const [commandId] of oldest.slice(0, sendOutbox.size - SETTLED_COMMAND_LIMIT)) {
+      sendOutbox.delete(commandId);
+    }
+  }
+  // Only when something actually went, so the common no-op sweep does not
+  // invalidate every row's derivation once a second.
+  if (sendOutbox.size !== before) outboxVersion += 1;
+}
+
+/** Removes the echo a failed command left behind, if it is still there. */
+function dropSendEcho(instanceId: string, commandId: string): void {
+  const target = state.sessions[instanceId];
+  if (!target) return;
+  target.messages = target.messages.filter(
+    (message) => message.metadata?.sentAs !== commandId
+  );
+}
+
+/**
+ * Re-send a failed message from the outbox as a NEW command with a NEW id.
+ * Drops the failed echo (matched by `metadata.sentAs === commandId`) and
+ * funnels the payload back through the normal submit path. No-op if the
+ * outbox entry has aged out. Never throws.
+ */
+export function retrySend(commandId: string): void {
+  const entry = sendOutbox.get(commandId);
+  if (!entry) return;
+  sendOutbox.delete(commandId);
+  outboxVersion += 1;
+  dropSendEcho(entry.instanceId, commandId);
+  // Through `submitCommand`, not around it: a retry is a new command with its
+  // own record and its own ghost, never a resurrected one.
+  submitCommand(entry.instanceId, entry.machineId, 'send', {
+    text: entry.text,
+    extras: entry.extras,
+  });
+}
+
+/**
+ * Hand a failed message's payload back to the composer for editing: drops the
+ * failed echo, writes { text, extras } into the session's restore slot. The
+ * pane consumes the slot in an $effect (binding `draft` and calling
+ * Composer.restore(extras)) and clears it. No-op if the outbox entry is gone.
+ * Never throws.
+ */
+export function restoreDraft(commandId: string): void {
+  const entry = sendOutbox.get(commandId);
+  if (!entry) return;
+  sendOutbox.delete(commandId);
+  outboxVersion += 1;
+  dropSendEcho(entry.instanceId, commandId);
+  // Exactly one slot is ever waiting. A slot holds the whole payload — base64
+  // image data included — and it is only ever emptied by the pane that mounts
+  // to consume it, so an "Edit" pressed on a session the reader then closes
+  // would otherwise pin those bytes for the life of the tab. Keeping only the
+  // newest bounds it at one without needing anyone to come back and collect.
+  for (const held of Object.keys(restoreSlots)) {
+    if (held !== entry.instanceId) delete restoreSlots[held];
+  }
+  restoreSlots[entry.instanceId] = { text: entry.text, extras: entry.extras };
+}
+
+/**
+ * What a pane owes its composer, per session. A slot rather than a call
+ * because the row that offers "Edit" is two components away from the state
+ * that holds the draft — the store is the only channel they share, and
+ * threading a prop through the transcript for this would make the transcript a
+ * conduit for something it has no part in.
+ */
+const restoreSlots = $state<Record<string, { text: string; extras: SendExtras } | null>>({});
+
+/** The payload waiting to go back into this session's composer, if any. */
+export function pendingRestore(instanceId: string): { text: string; extras: SendExtras } | null {
+  return restoreSlots[instanceId] ?? null;
+}
+
+/** Consumed exactly once by the pane that took it. */
+export function clearRestore(instanceId: string): void {
+  restoreSlots[instanceId] = null;
+}
+
+/* ---- the spoken half: what a screen reader is told -------------------- */
+
+/**
+ * The last send failure per session, as a sentence.
+ *
+ * The transcript is virtualized, so a state flip inside a row is not reliably
+ * announced; the pane owns one live region instead and this is what it reads.
+ * Only failures are announced — acceptance is the norm, and narrating the norm
+ * is how a live region becomes noise nobody hears the exception through.
+ */
+const sendFailureNotices = $state<Record<string, string>>({});
+
+export function sendFailureNotice(instanceId: string): string {
+  return sendFailureNotices[instanceId] ?? '';
+}
+
+function announceSendFailure(record: CommandRecord): void {
+  // A notice is a sentence about a session, so it dies with the session. These
+  // are small, but "small and unbounded" is still unbounded on a board a
+  // reader leaves open for a week.
+  for (const held of Object.keys(sendFailureNotices)) {
+    if (held !== record.sessionId && !state.sessions[held]) delete sendFailureNotices[held];
+  }
+  sendFailureNotices[record.sessionId] = record.reason
+    ? `Message not sent: ${record.reason}`
+    : 'Message not sent.';
 }
 
 /**
@@ -1379,13 +1837,16 @@ export function submitCommand<K extends CommandKind>(
 function streamEffectsFor<K extends CommandKind>(
   instanceId: string,
   kind: K,
-  intent: CommandIntents[K]
+  intent: CommandIntents[K],
+  commandId: string
 ): StreamEffects | undefined {
   const target = session(instanceId);
   switch (kind) {
     case 'send': {
       const { text, extras } = intent as CommandIntents['send'];
-      return { submitted: () => noteSendSubmitted(instanceId, text, extras) };
+      // The echo is stamped with the id of the command it IS, which is the
+      // whole join between a rendered message and the ledger's word on it.
+      return { submitted: () => noteSendSubmitted(instanceId, text, extras, commandId) };
     }
     case 'interrupt':
       return {
@@ -1652,7 +2113,9 @@ function bind(socket: WebSocket): void {
     abandonInflight('The connection to the hub dropped before that finished.');
     // Subscriptions, resumes and unanswered commands all died with the socket;
     // the cursors do not — resuming from them is what the hub's ring is for.
-    noteDisconnect(streamState, Date.now());
+    // With the host, for the same reason the traffic sweep passes it: a socket
+    // that dies mid-command must SAY so, not merely record it.
+    noteDisconnect(streamState, Date.now(), streamHost);
     if (!globalThis.__cockpitDisposing) scheduleReconnect();
   };
 
@@ -1836,8 +2299,26 @@ export function resumeSession({
   harness?: HarnessKind;
   history?: Message[];
 }): string {
-  // Already running? Then this is not a resume, it is a way back to it.
-  const live = state.instances.find((row) => row.sessionId === sessionId && isLive(row));
+  // Already running? Then this is not a resume, it is a way back to it. sessionId is
+  // not unique across rows (empty strings and true duplicates both occur), so an empty
+  // match is never trusted and an ambiguous one is refused rather than adopted at random.
+  const candidates = state.instances.filter(
+    (row) => row.sessionId && row.sessionId === sessionId && isLive(row)
+  );
+  let live: InstanceRow | undefined = candidates[0];
+  if (candidates.length > 1) {
+    const narrowed = candidates.filter((row) => row.machineId === machineId && row.cwd === cwd);
+    // A true duplicate — same machine, same cwd, same session — is settled by
+    // picking whichever row moved most recently, not by minting a third one.
+    live =
+      narrowed.length === 1
+        ? narrowed[0]
+        : narrowed.length > 1
+          ? narrowed.reduce((newest, row) =>
+              new Date(row.updatedAt ?? 0).getTime() > new Date(newest.updatedAt ?? 0).getTime() ? row : newest
+            )
+          : undefined;
+  }
   if (live) {
     const existing = session(live.id);
     existing.machineId ||= live.machineId;
@@ -1895,17 +2376,29 @@ export function sendText(
   instanceId: string,
   machineId: string,
   text: string,
-  extras: SendExtras = {}
+  extras: SendExtras = {},
+  /** The tracked command this send IS, when it has one. See {@link submitCommand}. */
+  commandId?: string
 ): void {
   const payload: SendPayload = { instanceId, message: userMessage(text), ...extras };
-  send({ verb: 'send', machineId, instanceId, payload });
   // Optimistic, and marked as such. If the session was busy the daemon answers
   // with `message_queued` and this copy is retired in favour of the queue's own
   // row ({@link ingestQueued}); if it was idle, or the daemon predates the
   // frame, no announcement ever comes and the copy stays exactly as it always
   // has. The mark is what makes the first case possible without risking the
   // second.
-  noteSendSubmitted(instanceId, text, extras);
+  //
+  // BEFORE the dispatch, not after: `send` throws when the socket is not open,
+  // and echoing afterwards meant the one case that most needs a visible
+  // outcome — the message that could not leave the tab — left nothing on
+  // screen for the failure to be rendered on. The stream dialect already
+  // ordered it this way (stream.ts applies `streamEffects.submitted` before
+  // `sendToHub`, "so a dispatch that fails synchronously still settles it");
+  // this makes the legacy dialect agree. Nothing renders twice: the echo is
+  // one object, and the only path that replaces it — `ingestQueued` — removes
+  // the copy it supersedes.
+  noteSendSubmitted(instanceId, text, extras, commandId);
+  send({ verb: 'send', machineId, instanceId, payload });
 }
 
 /**
@@ -1916,10 +2409,21 @@ export function sendText(
  * frame defers to the local copy, so a dialect that skips the copy shows
  * nothing at all.
  */
-function noteSendSubmitted(instanceId: string, text: string, extras: SendExtras = {}): void {
+function noteSendSubmitted(
+  instanceId: string,
+  text: string,
+  extras: SendExtras = {},
+  commandId?: string
+): void {
   const target = session(instanceId);
   const echo = localUserMessage(instanceId, text, extras);
-  target.messages.push({ ...echo, metadata: { ...echo.metadata, queuedLocally: true } });
+  target.messages.push({
+    ...echo,
+    metadata: { ...echo.metadata, queuedLocally: true, ...(commandId && { sentAs: commandId }) },
+  });
+  // A new attempt replaces the last one's announcement rather than stacking on
+  // it: the live region says what is true now, not what was true before.
+  sendFailureNotices[instanceId] = '';
   target.busy = true;
   // Before any frame: the whole point of the clock is the wait for the first one.
   trackWorking(target);

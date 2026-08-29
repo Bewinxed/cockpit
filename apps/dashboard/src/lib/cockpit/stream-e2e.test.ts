@@ -43,6 +43,7 @@ import {
   handleStreamMessage,
   noteCapabilities,
   noteDisconnect,
+  sweepCommands,
   streamCarries,
   submitCommand,
   syncStreamSubscriptions,
@@ -277,6 +278,8 @@ interface Client {
   readonly inbox: Record<string, unknown>[];
   /** Every message the STORE put on the wire — how "one resume per gap" is counted. */
   readonly outbox: Record<string, unknown>[];
+  /** Every command the ledger announced as failed, through `StreamHost.noteFailure`. */
+  readonly failures: CommandRecord[];
   /** The sessions this dashboard is watching; drives both dialects, as the real one does. */
   watched: string[];
   connect(): Promise<void>;
@@ -296,6 +299,7 @@ const makeClient = (): Client => {
   const warnings: { message: string; detail: unknown }[] = [];
   const inbox: Record<string, unknown>[] = [];
   const outbox: Record<string, unknown>[] = [];
+  const failures: CommandRecord[] = [];
   let socket: WebSocket | undefined;
 
   /**
@@ -321,6 +325,7 @@ const makeClient = (): Client => {
     warnings,
     inbox,
     outbox,
+    failures,
     watched: [],
     host: {
       applyFrame: (sessionId, frame) => ingest(sessionId, frame as FramePayload, 'stream'),
@@ -333,6 +338,10 @@ const makeClient = (): Client => {
       },
       now: () => Date.now(),
       warn: (message, detail) => warnings.push({ message, detail }),
+      // The client's failure port, replicated: `client.svelte.ts` builds one on
+      // its `streamHost`, so a harness without it would be testing a quieter
+      // dashboard than the one that ships.
+      noteFailure: (record) => failures.push(record),
     },
     isOpen: () => socket?.readyState === WebSocket.OPEN,
     send: (message) => socket?.send(JSON.stringify(message)),
@@ -380,7 +389,7 @@ const makeClient = (): Client => {
       // everything else dies with the connection. (This call was the target of
       // mutation check 2 — removing it correctly failed 5 tests, which is the
       // suite proving it bites.)
-      noteDisconnect(state, Date.now());
+      noteDisconnect(state, Date.now(), client.host);
       await Bun.sleep(20);
     },
     transcript: (sessionId) =>
@@ -700,6 +709,8 @@ test('G3 a send command is accepted by the hub and its reflecting frame arrives 
     sessionId: id,
     machineId: MACHINE,
     kind: 'send',
+
+    settlesAt: 'accepted',
     payload: { instanceId: id, message },
     legacy: () => {
       throw new Error('the legacy path must not run against a capable hub');
@@ -728,6 +739,105 @@ test('G3 a send command is accepted by the hub and its reflecting frame arrives 
   daemon.close();
 });
 
+test('G3 a delivered send is finished at accepted, and the timeout sweep leaves it alone', async () => {
+  const daemon = await openDaemon(MACHINE);
+  const id = session('g3-settled');
+  const client = makeClient();
+  await client.connect();
+  await until(() => client.state.capable, 'capability');
+
+  const commandId = `cmd-${crypto.randomUUID()}`;
+  submitCommand(client.state, client.host, {
+    commandId,
+    sessionId: id,
+    machineId: MACHINE,
+    kind: 'send',
+    settlesAt: 'accepted',
+    payload: { instanceId: id, message: { type: 'user', message: { role: 'user', content: 'hi' } } },
+    legacy: () => {
+      throw new Error('the legacy path must not run against a capable hub');
+    },
+  });
+  await until(() => record(client, commandId).stage === 'accepted', 'the accepted ack');
+
+  // Long past the ack timeout. `accepted` is the hub's last word on a send —
+  // nothing further is owed — so a sweep run here must not retro-declare a
+  // message that landed a failure, and must not announce one either.
+  sweepCommands(client.state, Date.now() + 60_000, client.host);
+  expect(record(client, commandId).stage).toBe('accepted');
+  expect(client.failures).toEqual([]);
+
+  await client.disconnect();
+  daemon.close();
+});
+
+test('G3 a control command with no answer IS called off by the sweep, and announced once', async () => {
+  const daemon = await openDaemon(MACHINE);
+  const id = session('g3-unanswered');
+  const client = makeClient();
+  await client.connect();
+  await until(() => client.state.capable, 'capability');
+
+  const commandId = `cmd-${crypto.randomUUID()}`;
+  submitCommand(client.state, client.host, {
+    commandId,
+    sessionId: id,
+    machineId: MACHINE,
+    kind: 'set-model',
+    settlesAt: 'applied',
+    payload: { args: ['opus'] },
+    legacy: () => {
+      throw new Error('the legacy path must not run against a capable hub');
+    },
+  });
+  await until(() => record(client, commandId).stage === 'accepted', 'accepted');
+
+  // The daemon never answers. A control command's last word is `applied`, so
+  // this one really is unanswered and the sweep is right to end it.
+  sweepCommands(client.state, Date.now() + 60_000, client.host);
+  expect(record(client, commandId).stage).toBe('failed');
+  expect(record(client, commandId).reason).toBe('The hub never acknowledged that.');
+  expect(client.failures.map((r) => r.commandId)).toEqual([commandId]);
+
+  await client.disconnect();
+  daemon.close();
+});
+
+test('G3 a send with no socket fails saying so, and says it exactly once', async () => {
+  const id = session('g3-nosocket');
+  const client = makeClient();
+  await client.connect();
+  await until(() => client.state.capable, 'capability');
+  // The hub is gone as far as this tab is concerned: the dispatch cannot leave.
+  // The capability flag is put back deliberately — that is the real window this
+  // covers: a tab that has already learnt the hub speaks the protocol, sending
+  // between a dropped socket and the reconnect. Without it the submission would
+  // take the legacy road and test a different failure.
+  await client.disconnect();
+  client.state.capable = true;
+
+  const commandId = `cmd-${crypto.randomUUID()}`;
+  submitCommand(client.state, client.host, {
+    commandId,
+    sessionId: id,
+    machineId: MACHINE,
+    kind: 'send',
+    settlesAt: 'accepted',
+    payload: { instanceId: id, message: { type: 'user', message: { role: 'user', content: 'hi' } } },
+    legacy: () => {
+      throw new Error('the legacy path must not run against a capable hub');
+    },
+  });
+
+  expect(record(client, commandId).stage).toBe('failed');
+  expect(record(client, commandId).reason).toContain('Not connected');
+  expect(client.failures.map((r) => r.commandId)).toEqual([commandId]);
+
+  // Terminal is terminal, and announced once: a later sweep must not re-report it.
+  sweepCommands(client.state, Date.now() + 60_000, client.host);
+  expect(client.failures.length).toBe(1);
+});
+
 test('G3 a control command reaches applied only when the daemon answers it', async () => {
   const daemon = await openDaemon(MACHINE);
   const id = session('g3-ctl');
@@ -743,6 +853,8 @@ test('G3 a control command reaches applied only when the daemon answers it', asy
     sessionId: id,
     machineId: MACHINE,
     kind: 'interrupt',
+
+    settlesAt: 'applied',
     payload: { args: [] },
     legacy: () => {
       throw new Error('the legacy path must not run against a capable hub');
@@ -782,6 +894,8 @@ test('G3 a command the machine refuses ends failed with the reason, and stays fa
     sessionId: id,
     machineId: MACHINE,
     kind: 'set-model',
+
+    settlesAt: 'applied',
     payload: { args: ['opus'] },
     legacy: () => {
       throw new Error('the legacy path must not run against a capable hub');
@@ -811,6 +925,8 @@ test('G3 a command for a machine that is not connected fails with the hub reason
     sessionId: id,
     machineId: 'no-such-machine',
     kind: 'interrupt',
+
+    settlesAt: 'applied',
     payload: { args: [] },
     legacy: () => {
       throw new Error('the legacy path must not run against a capable hub');
@@ -834,6 +950,8 @@ test('G3 a command outstanding when the socket dies is failed rather than left s
     sessionId: id,
     machineId: MACHINE,
     kind: 'interrupt',
+
+    settlesAt: 'applied',
     payload: { args: [] },
     legacy: () => {
       throw new Error('the legacy path must not run against a capable hub');

@@ -13,6 +13,7 @@ import type {
   DiscoveredMcp,
   DiscoveredSkill,
   FleetConfig,
+  FleetHook,
   FleetItemState,
   FleetMcpConfig,
   FleetMcpServer,
@@ -21,12 +22,14 @@ import type {
   FleetScope,
   FleetSkillPayload,
   FleetSyncReport,
+  HookEvent,
+  HookHandler,
   MachineMemoryDoc,
   MachineMemorySet,
   MarketplacePluginInfo,
   SkillFile,
 } from '@cockpit/core';
-import { memoryDocProblem } from '@cockpit/core';
+import { hookProblem, memoryDocProblem } from '@cockpit/core';
 import { chmod, readdir, rename, rm, rmdir, stat } from 'node:fs/promises';
 import { platform } from 'node:os';
 import { isAbsolute, join } from 'node:path';
@@ -66,6 +69,14 @@ const MEMORY_HOOK_PATH = expandHome('~/.claude/cockpit-model-memory.sh');
 
 /** Where Claude Code reads a user's hooks; the same file the user's own are in. */
 const SETTINGS_PATH = expandHome('~/.claude/settings.json');
+
+/**
+ * Where a fleet hook's own script lands, one file per hook id. Named by id
+ * rather than by name or hash, so renaming a hook in the editor moves its
+ * registration but never orphans a script under an old name, and a hand edit
+ * survives a hash bump to the same file it was made in.
+ */
+const HOOKS_DIR = expandHome('~/.claude/cockpit-hooks');
 
 const PLUGINS_DIR = expandHome('~/.claude/plugins');
 /** The CLI's own account of what is linked and what is installed. */
@@ -117,6 +128,24 @@ interface Sidecar {
   memoryDocs: Record<string, string>;
   /** The SessionStart command cockpit registered; only this one is ever removed. */
   memoryHook?: string;
+  /**
+   * Hook id → what cockpit last registered for it. `command` is the identity
+   * {@link withoutHooks} removes by — a command handler's `command` verbatim,
+   * or the exact entry cockpit wrote otherwise — so a hook renamed or moved to
+   * a different event or settings file is still collectable by what it used to
+   * be, not by whatever this version of cockpit would write today.
+   */
+  hooks: Record<string, ManagedHook>;
+}
+
+/** What cockpit registered for one hook, enough to find and remove it later. */
+interface ManagedHook {
+  /** sha256 of the script cockpit wrote, or of the hub's row when there is no script. */
+  hash: string;
+  command: string;
+  event: HookEvent;
+  scope: FleetScope;
+  cwd?: string;
 }
 
 const readJson = async <T>(path: string): Promise<T | undefined> => {
@@ -130,15 +159,22 @@ const readJson = async <T>(path: string): Promise<T | undefined> => {
 };
 
 /**
- * Written whole and moved into place. `~/.claude.json` is read by every Claude
- * Code on this machine, and a half-written one is a machine with no MCP servers
- * and no history.
+ * Written whole and moved into place, whatever the content is. A crash between
+ * the write and the rename leaves only the temp file behind — never a
+ * half-written `path` that something else reads mid-write. A hook's script is
+ * spawned with its execute bit, so a half-written one is worse than a
+ * half-written JSON blob: it is a shell prefix somebody's session is about to run.
  */
-const writeJson = async (path: string, value: unknown): Promise<void> => {
+const writeAtomic = async (path: string, content: string | Buffer): Promise<void> => {
   const temp = `${path}.cockpit-${process.pid}`;
-  await Bun.write(temp, JSON.stringify(value, null, 2));
+  await Bun.write(temp, content);
   await rename(temp, path);
 };
+
+/** `~/.claude.json` is read by every Claude Code on this machine, and a
+ * half-written one is a machine with no MCP servers and no history. */
+const writeJson = (path: string, value: unknown): Promise<void> =>
+  writeAtomic(path, JSON.stringify(value, null, 2));
 
 /**
  * A sidecar written before a marketplace carried both its names has one bare
@@ -175,6 +211,8 @@ const readSidecar = async (): Promise<Sidecar> => {
     // this machine is cockpit's, so none of them is cockpit's to take away.
     memoryDocs: stored?.memoryDocs ?? {},
     ...(stored?.memoryHook ? { memoryHook: stored.memoryHook } : {}),
+    // A sidecar written before hooks existed manages none, which is the truth.
+    hooks: stored?.hooks ?? {},
   };
 };
 
@@ -831,7 +869,9 @@ cat "$dir/$best.md"
 exit 0
 `;
 
-/** One command entry of a hook, as `~/.claude/settings.json` writes them. */
+/** One entry of a hook, as `~/.claude/settings.json` writes them — a command
+ * handler carries `command`; the other four handler types do not, so an entry
+ * without one is matched on its own JSON instead (see {@link withoutHooks}). */
 interface HookCommand {
   type?: string;
   command?: string;
@@ -844,14 +884,21 @@ interface HookMatcher {
 }
 
 /**
- * The same list without cockpit's own command. A matcher entry that held
+ * The same list without cockpit's own entries. A matcher entry that held
  * anything else comes back holding it, and one that is left with nothing goes —
- * but only when it was ours that emptied it.
+ * but only when it was ours that emptied it. `commands` names what cockpit
+ * registered last time, not what it would register today, so a hook that was
+ * renamed, moved to a different script path, or changed handler type entirely
+ * is still found and taken out — a set keyed off today's constants would leave
+ * the old one behind forever.
  */
-export function withoutHook(entries: HookMatcher[], command: string): HookMatcher[] {
+export function withoutHooks(entries: HookMatcher[], commands: string[]): HookMatcher[] {
+  const gone = new Set(commands);
+  const isOurs = (hook: HookCommand): boolean =>
+    gone.has(hook.command !== undefined ? hook.command : JSON.stringify(hook));
   return entries.flatMap((entry) => {
     const hooks = entry.hooks ?? [];
-    const kept = hooks.filter((hook) => hook.command !== command);
+    const kept = hooks.filter((hook) => !isOurs(hook));
     if (kept.length === hooks.length) return [entry];
     return kept.length > 0 ? [{ ...entry, hooks: kept }] : [];
   });
@@ -886,8 +933,8 @@ const syncMemoryHook = async (
   const starts = (hooks.SessionStart as HookMatcher[] | undefined) ?? [];
   const command = MEMORY_HOOK_PATH;
   const next = wanted
-    ? [...withoutHook(starts, command), { hooks: [{ type: 'command', command }] }]
-    : withoutHook(starts, managed ?? command);
+    ? [...withoutHooks(starts, [command]), { hooks: [{ type: 'command', command }] }]
+    : withoutHooks(starts, [managed ?? command]);
 
   if (next.length > 0) hooks.SessionStart = next;
   else delete hooks.SessionStart;
@@ -897,7 +944,7 @@ const syncMemoryHook = async (
 
   try {
     if (wanted && (await Bun.file(MEMORY_HOOK_PATH).text().catch(() => '')) !== MEMORY_HOOK) {
-      await Bun.write(MEMORY_HOOK_PATH, MEMORY_HOOK);
+      await writeAtomic(MEMORY_HOOK_PATH, MEMORY_HOOK);
       // Claude Code spawns the command itself, so it has to be executable.
       await chmod(MEMORY_HOOK_PATH, 0o755);
     }
@@ -912,16 +959,215 @@ const syncMemoryHook = async (
   return wanted ? command : undefined;
 };
 
+/** Where a hook's own script lands: `~/.claude/cockpit-hooks/<id>.sh`. */
+const hookScriptPath = (id: string): string => join(HOOKS_DIR, `${id}.sh`);
+
+/** `~/.claude/settings.json` for a fleet-wide hook, `<cwd>/.claude/settings.json`
+ * for one bound to a project — the same file a project MCP server's counterpart
+ * would use if MCP had one, and the only settings file a session in that
+ * checkout actually reads for its hooks. */
+const settingsPathFor = (hook: Pick<FleetHook, 'scope' | 'cwd'>): string =>
+  hook.scope && hook.scope !== 'user' && hook.cwd
+    ? join(hook.cwd, '.claude', 'settings.json')
+    : SETTINGS_PATH;
+
+/**
+ * The handler as it goes into `settings.json`. A command handler carrying a
+ * script is pointed at the path cockpit wrote it to on *this* machine — the
+ * fleet row itself never names a path, because a path is machine-local and the
+ * row has to mean the same thing on every box it reaches. Every other handler,
+ * and a command handler with no script, is written exactly as the hub sent it.
+ */
+const handlerFor = (hook: FleetHook, scriptPath: string | undefined): HookHandler =>
+  hook.handler.type === 'command' && scriptPath ? { ...hook.handler, command: scriptPath } : hook.handler;
+
+/** What {@link withoutHooks} removes this handler by, and what the sidecar
+ * remembers registering it as. */
+const identityOf = (handler: HookHandler): string =>
+  handler.type === 'command' && handler.command ? handler.command : JSON.stringify(handler);
+
+/**
+ * Writes every enabled hook's script and registers it in the settings.json its
+ * scope points at, and takes back out whatever a disabled or deleted hook, or
+ * one that no longer passes validation, used to have registered. The one row
+ * here that is executable: a hook that reaches this function runs on a shell,
+ * unprompted, on every machine that gets it, which is why it is checked again
+ * below rather than trusted on the wire — the hub already refused an invalid
+ * one at the door, but that is the hub's process, not this one's guarantee.
+ */
+const syncHooks = async (
+  desired: FleetHook[],
+  managed: Record<string, ManagedHook>,
+  report: Record<string, FleetItemState>
+): Promise<Record<string, ManagedHook>> => {
+  const written: Record<string, ManagedHook> = {};
+  const keep = (id: string): void => {
+    if (managed[id]) written[id] = managed[id];
+  };
+
+  // A disabled hook is simply not written — that is the whole of per-hook
+  // disable, since Claude Code has no way to turn off one hook and keep the
+  // rest of its matcher entry. It falls straight through to the removal pass
+  // at the bottom, same as a hook the fleet has stopped carrying at all.
+  const wanted: FleetHook[] = [];
+  for (const hook of desired) {
+    if (!hook.enabled) continue;
+    const problems = Object.values(hookProblem(hook));
+    if (problems.length > 0) {
+      keep(hook.id);
+      report[hook.id] = { state: 'failed', detail: problems[0] };
+      continue;
+    }
+    if (hook.scope && hook.scope !== 'user' && !hook.cwd) {
+      keep(hook.id);
+      report[hook.id] = { state: 'failed', detail: 'bound to a project this machine has no checkout for' };
+      continue;
+    }
+    wanted.push(hook);
+  }
+
+  // One script write per hook that carries one, drift left alone unless
+  // `force` — a hand-edited script stays registered exactly where it is, just
+  // never overwritten out from under whoever edited it.
+  const scriptPaths = new Map<string, string>();
+  const hashes = new Map<string, string>();
+  const settled: FleetHook[] = [];
+  for (const hook of wanted) {
+    if (hook.handler.type !== 'command' || !hook.script) {
+      settled.push(hook);
+      continue;
+    }
+    const path = hookScriptPath(hook.id);
+    const plan = memoryPlan({ hash: hook.hash, force: hook.force }, await fileHashAt(path), managed[hook.id]?.hash);
+    if (plan === 'drift') {
+      report[hook.id] = { state: 'failed', detail: DRIFTED };
+      hashes.set(hook.id, managed[hook.id]?.hash ?? hook.hash);
+      scriptPaths.set(hook.id, path);
+      settled.push(hook);
+      continue;
+    }
+    if (plan === 'write') {
+      try {
+        await writeAtomic(path, hook.script);
+        // Claude Code spawns it directly, so it has to carry its own execute bit.
+        await chmod(path, 0o755);
+      } catch (error) {
+        keep(hook.id);
+        report[hook.id] = { state: 'failed', detail: tail(said(error)) };
+        continue;
+      }
+    }
+    scriptPaths.set(hook.id, path);
+    settled.push(hook);
+  }
+
+  // Registration, one settings.json per place a hook is bound to — including a
+  // file nothing here still wants, so a hook whose row was disabled or deleted
+  // still gets its old entry taken out of the file it used to be in.
+  const bySettings = new Map<string, FleetHook[]>();
+  for (const hook of settled) {
+    const path = settingsPathFor(hook);
+    bySettings.set(path, [...(bySettings.get(path) ?? []), hook]);
+  }
+  for (const record of Object.values(managed)) {
+    const path = settingsPathFor(record);
+    if (!bySettings.has(path)) bySettings.set(path, []);
+  }
+
+  for (const [path, hooks] of bySettings) {
+    const stored = await readJson<Record<string, unknown>>(path);
+    // Nothing is written over a file that cannot be read: the rest of it is the
+    // user's own permissions and plugins, and a rewrite from an empty root
+    // would take them with it.
+    if (stored === undefined && (await Bun.file(path).exists())) {
+      const detail = `could not parse ${path}`;
+      for (const hook of hooks) {
+        keep(hook.id);
+        report[hook.id] = { state: 'failed', detail };
+      }
+      continue;
+    }
+
+    const root = stored ?? {};
+    const settingsHooks = { ...((root.hooks as Record<string, unknown> | undefined) ?? {}) };
+
+    // Everything cockpit registered out of this file last time, whatever event
+    // it ran on — a hook that moved to a different event still needs its old
+    // row gone, not just left orphaned under the event it used to fire on.
+    const registeredHere = Object.values(managed)
+      .filter((record) => settingsPathFor(record) === path)
+      .map((record) => record.command);
+
+    const byEvent = new Map<HookEvent, FleetHook[]>();
+    for (const hook of hooks) byEvent.set(hook.event, [...(byEvent.get(hook.event) ?? []), hook]);
+
+    const events = new Set<HookEvent>([...byEvent.keys(), ...(Object.keys(settingsHooks) as HookEvent[])]);
+    for (const event of events) {
+      const current = (settingsHooks[event] as HookMatcher[] | undefined) ?? [];
+      const additions = (byEvent.get(event) ?? []).map((hook): HookMatcher => {
+        const handler = handlerFor(hook, scriptPaths.get(hook.id));
+        written[hook.id] = {
+          hash: hashes.get(hook.id) ?? hook.hash,
+          command: identityOf(handler),
+          event: hook.event,
+          scope: hook.scope ?? 'user',
+          ...(hook.cwd ? { cwd: hook.cwd } : {}),
+        };
+        return hook.matcher ? { matcher: hook.matcher, hooks: [handler] } : { hooks: [handler] };
+      });
+      const next = [...withoutHooks(current, registeredHere), ...additions];
+      if (next.length > 0) settingsHooks[event] = next;
+      else delete settingsHooks[event];
+    }
+
+    const settings = { ...root };
+    if (Object.keys(settingsHooks).length > 0) settings.hooks = settingsHooks;
+    else delete settings.hooks;
+
+    if (JSON.stringify(settings) !== JSON.stringify(root)) {
+      try {
+        await writeJson(path, settings);
+      } catch (error) {
+        const detail = tail(said(error));
+        for (const hook of hooks) {
+          keep(hook.id);
+          report[hook.id] = { state: 'failed', detail };
+        }
+        continue;
+      }
+    }
+
+    for (const hook of hooks) {
+      if (report[hook.id]) continue; // already reported failed/drift above
+      report[hook.id] = { state: 'applied' };
+    }
+  }
+
+  // A hook that is disabled, deleted, or failed validation this round and had
+  // nothing kept alive for it above is one whose registration and script (if
+  // cockpit wrote one) are cockpit's to take away.
+  const stillHere = new Set(settled.map((hook) => hook.id));
+  for (const [id, record] of Object.entries(managed)) {
+    if (stillHere.has(id) || written[id]) continue;
+    if (record.command.startsWith(HOOKS_DIR)) await rm(record.command, { force: true });
+    report[id] = { state: 'removed' };
+  }
+
+  return written;
+};
+
 const converge = async (config: FleetConfig): Promise<FleetSyncReport> => {
   const managed = await readSidecar();
   const skillStates: Record<string, FleetItemState> = {};
   const docStates: Record<string, FleetItemState> = {};
+  const hookStates: Record<string, FleetItemState> = {};
   const report: FleetSyncReport = {
     mcp: {},
     marketplaces: {},
     plugins: {},
     skills: skillStates,
     memoryDocs: docStates,
+    hooks: hookStates,
     at: Date.now(),
   };
 
@@ -934,6 +1180,10 @@ const converge = async (config: FleetConfig): Promise<FleetSyncReport> => {
   const docs = config.memory?.docs ?? [];
   const memoryDocs = await syncMemoryDocs(docs, managed.memoryDocs, docStates);
   const memoryHook = await syncMemoryHook(docs, managed.memoryHook, report);
+  // A hub that predates hooks sends no `hooks`, which reads the same way: a
+  // fleet that keeps none, and the machine gives back whatever cockpit
+  // registered before this daemon knew what that field meant.
+  const hooks = await syncHooks(config.hooks ?? [], managed.hooks, hookStates);
   await writeJson(SIDECAR, {
     mcp,
     ...installed,
@@ -941,6 +1191,7 @@ const converge = async (config: FleetConfig): Promise<FleetSyncReport> => {
     ...(memory ? { memory } : {}),
     memoryDocs,
     ...(memoryHook ? { memoryHook } : {}),
+    hooks,
   } satisfies Sidecar);
 
   return { ...report, at: Date.now() };
@@ -977,12 +1228,14 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
   const managed = await readSidecar();
   const skills: Record<string, FleetItemState> = {};
   const memoryDocs: Record<string, FleetItemState> = {};
+  const hooks: Record<string, FleetItemState> = {};
   const report: FleetSyncReport = {
     mcp: {},
     marketplaces: {},
     plugins: {},
     skills,
     memoryDocs,
+    hooks,
     at: Date.now(),
   };
 
@@ -1026,6 +1279,27 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
     report.memoryHook = (await Bun.file(managed.memoryHook).exists())
       ? { state: 'applied' }
       : { state: 'failed', detail: 'not on disk' };
+  }
+  for (const [id, record] of Object.entries(managed.hooks)) {
+    if (record.command.startsWith(HOOKS_DIR)) {
+      const fileHash = await fileHashAt(record.command);
+      hooks[id] =
+        fileHash === record.hash
+          ? { state: 'applied' }
+          : { state: 'failed', detail: fileHash === null ? 'not on disk' : DRIFTED };
+      continue;
+    }
+    // No script of cockpit's to check: the only question is whether the
+    // entry it registered is still in the settings.json it registered it in.
+    const settingsPath = settingsPathFor(record);
+    const stored = await readJson<Record<string, unknown>>(settingsPath);
+    const entries = ((stored?.hooks as Record<string, HookMatcher[]> | undefined)?.[record.event]) ?? [];
+    const present = entries.some((entry) =>
+      (entry.hooks ?? []).some((one) =>
+        one.command !== undefined ? one.command === record.command : JSON.stringify(one) === record.command
+      )
+    );
+    hooks[id] = present ? { state: 'applied' } : { state: 'failed', detail: `not in ${settingsPath}` };
   }
   return report;
 };

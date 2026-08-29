@@ -7,6 +7,7 @@
    * beside the log, never through the virtualized container itself.
    */
   import { tick } from 'svelte';
+  import { browser } from '$app/environment';
   import { Virtualizer } from 'virtua/svelte';
   import type { SessionState } from '../client.svelte';
   import { buildRows, type Row } from './rows';
@@ -27,7 +28,6 @@
     active,
     machineName = '',
     cwd = '',
-    clearance = 0,
     onlanded,
   }: {
     session: SessionState;
@@ -37,20 +37,7 @@
     machineName?: string;
     /** The folder it runs in — named in the empty state, nowhere else. */
     cwd?: string;
-    /**
-     * The measured height of the floating composer stack, in px. The bottom
-     * padding is driven from `--composer-clearance` (set by the pane) — this is
-     * the same measurement, taken as a prop only so the tail-follow can re-land
-     * when a permission card grows the stack under the last row.
-     */
-    clearance?: number;
-    /**
-     * Fired once, the first time this transcript is actually settled on its
-     * latest row — mounted, measured by virtua, and scrolled home. The pane
-     * holds the server's static tail on screen until then, because virtua
-     * needs several frames to measure its way down and a swap before that
-     * shows a blank column for those frames.
-     */
+    /** Optional callback when the transcript first renders content. */
     onlanded?: () => void;
   } = $props();
 
@@ -85,28 +72,13 @@
     // A pane born off screen would otherwise hold an empty transcript until it
     // was first looked at, so the first build never consults `active`.
     if (!active && primed) return { rows: frozen, shifted: false };
-    primed = true;
     const next = buildRows(session);
-    // SETTLE CONTINUITY, decided before the DOM sees the rows (a post-render
-    // effect would run after the enter action already fired): a rebuild in
-    // which a live-tail row (`stream:*`) departed is the settle — its new rows
-    // are the SAME content the reader just watched stream, wearing its final
-    // keys. Pre-marking them seen is what stops a paragraph the reader has
-    // already read from fading back in over itself.
-    const prevKeys = new Set(frozen.map((row) => row.key));
-    const hadLiveTail = frozen.some((row) => row.key.startsWith('stream:'));
-    const hasLiveTail = next.some((row) => row.key.startsWith('stream:'));
-    if (hadLiveTail && !hasLiveTail) {
-      for (const row of next) if (!prevKeys.has(row.key)) seen.add(row.key);
-    }
     // PREPEND DETECTION for virtua's `shift` mode: an older history chunk
     // arriving puts new rows ABOVE everything on screen — without `shift`,
     // virtua keeps the scroll OFFSET and the content lurches toward the top
     // (the post-SSR "jumps to the top then back" flash). A prepend is exact:
     // the tail row is unchanged and the old first row now sits deeper.
-    // Returned WITH the rows — never written to $state from in here, which
-    // Svelte forbids (state_unsafe_mutation) — so the Virtualizer reads both
-    // in the same flush.
+    // Returned WITH the rows so the Virtualizer reads both in the same flush.
     const oldFirst = frozen[0]?.key;
     const oldLast = frozen[frozen.length - 1]?.key;
     const shifted =
@@ -115,10 +87,75 @@
       next[next.length - 1]?.key === oldLast &&
       oldFirst !== undefined &&
       next.findIndex((row) => row.key === oldFirst) > 0;
-    frozen = next;
     return { rows: next, shifted };
   });
+  // Side effects that the derived CANNOT carry (Svelte forbids writes inside
+  // $derived). An $effect runs after the derived is read but before the DOM
+  // renders, so the bookkeeping stays in sync with what the Virtualizer sees.
+  $effect(() => {
+    const { rows: next } = built;
+    // SETTLE CONTINUITY: a rebuild where the live tail (`stream:*`) departs
+    // means those new rows are the SAME content wearing their final keys.
+    // Pre-marking them seen stops a paragraph the reader already watched
+    // streaming from fading in over itself.
+    const prevKeys = new Set(frozen.map((row) => row.key));
+    const hadLiveTail = frozen.some((row) => row.key.startsWith('stream:'));
+    const hasLiveTail = next.some((row) => row.key.startsWith('stream:'));
+    if (hadLiveTail && !hasLiveTail) {
+      for (const row of next) if (!prevKeys.has(row.key)) seen.add(row.key);
+      // SETTLE RE-SNAP: virtua swaps the live-tail rows for their final
+      // keyed versions, which may measure differently for a frame. That
+      // reflow fires a native scroll event that `onscroll` reads as the
+      // user scrolling up — `atBottom` flips false and the follow loop
+      // disengages, stranding the viewport hundreds of pixels from the
+      // bottom. The settle is NOT a user gesture; the reader was following
+      // and should keep following. Re-assert `atBottom` so the tail-follow
+      // effect re-engages on the next tick.
+      if (atBottom || (scroller && scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 400)) {
+        atBottom = true;
+      }
+    }
+    frozen = next;
+    primed = true;
+  });
   const rows = $derived(built.rows);
+
+  /**
+   * How many rows the SERVER paints — and nothing the browser ever hears about.
+   *
+   * `ssrCount` is virtua's server-render escape hatch: without it the store has
+   * no viewport and no scroll offset to reason from, so it renders the empty
+   * range `[0, -1]` and the server's HTML carries a transcript with no rows in
+   * it. Handing it the row count makes the server emit exactly that many, which
+   * (with the `ListItem` patch that keeps them in normal flow until mount) is
+   * what puts the conversation in the first response.
+   *
+   * The catch is that it is not a render hint — it is a LATCH. The store reads
+   * it ONCE, at construction (`createVirtualStore(data.length, itemSize,
+   * ssrCount, …)`), sets `isSSR = !!ssrCount`, and pins its range at
+   * `[0, ssrCount - 1]`; `$getRange` then short-circuits to that frozen pair for
+   * as long as `isSSR` holds. The only thing in the whole store that clears the
+   * flag is `ACTION_SCROLL_OFFSET_CHANGE` — a genuine scroll event whose offset
+   * actually differs from the one on file.
+   *
+   * So a hydrating client that is handed `ssrCount` inherits that latch, and a
+   * transcript shorter than its viewport can never shed it: there is nothing to
+   * scroll, so no scroll event, so the range stays pinned at the row count the
+   * page happened to hydrate with. Rows built after that — the message the
+   * operator just sent, every frame the agent streams back — were folded, keyed
+   * and handed to the Virtualizer correctly and then dropped on the floor by a
+   * range that had stopped moving. Only a reload (a new store, a new count)
+   * showed them. That is the whole "transcript does not update live" defect.
+   *
+   * Gating on `browser` is therefore not a micro-optimisation but the contract:
+   * the count belongs to the server render, and the client builds a store that
+   * measures its viewport like any other. The hydrating render draws no rows for
+   * the microtask before `onMount` wires virtua's ResizeObserver to the
+   * scroller; ResizeObserver notifications are delivered in the rendering step
+   * BEFORE paint, so the measured range lands in the same frame and the gap is
+   * never seen.
+   */
+  const ssrCount = $derived(browser ? undefined : built.rows.length);
 
   /**
    * Compaction is a genuinely live process — the model is rewriting its own
@@ -193,7 +230,7 @@
     const target = () => (scroller ? scroller.scrollHeight - scroller.clientHeight : 0);
     const gap = target() - scroller.scrollTop;
     if (gap <= 0) return;
-    if (reduceMotionQuery?.matches || gap > scroller.clientHeight * 2) {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches || gap > scroller.clientHeight * 2) {
       scroller.scrollTop = scroller.scrollHeight;
       return;
     }
@@ -246,80 +283,18 @@
       // keep; only the live follow rides the loop.
       if (followable) followBottom();
       else scroller.scrollTop = scroller.scrollHeight;
-      watchForPaint();
+      settle();
     });
     atBottom = true;
     landed = true;
   }
 
-  /**
-   * Say, exactly once, that this transcript is settled on its latest row.
-   *
-   * `streamHistory` clears `loading` on the FIRST chunk — the tail, cut where
-   * the server's static tail is cut — so that is the moment this transcript
-   * shows the same picture the static tail does. Older chunks prepend above it
-   * afterwards and re-land it, which the reader never sees.
-   */
+  /** Fire `onlanded` once, the first time the transcript has content. */
   let settled = false;
   function settle(): void {
-    if (settled || session.loading) return;
+    if (settled) return;
     settled = true;
     onlanded?.();
-  }
-
-  /** Whether a row is actually drawn where the reader is about to look. */
-  function paintedInView(): boolean {
-    if (!scroller) return false;
-    const top = scroller.getBoundingClientRect().top;
-    const bottom = top + scroller.clientHeight;
-    for (const row of scroller.querySelectorAll('.renter')) {
-      const box = row.getBoundingClientRect();
-      if (box.height > 0 && box.bottom > top && box.top < bottom) return true;
-    }
-    return false;
-  }
-
-  /**
-   * Wait for the landing to be VISIBLE, not merely done, then say so.
-   *
-   * Setting `scrollTop` does not re-render a virtualizer synchronously: virtua
-   * learns where it is from the scroll event, recomputes its window, and Svelte
-   * patches the rows a frame or two later. For those frames the scroller is at
-   * the bottom of a 5,600px column with nothing rendered anywhere near it — an
-   * empty box. Announcing the landing on the scroll alone therefore handed the
-   * pane a transcript that was correct and blank, which is the white flash this
-   * whole handshake exists to remove. So the honest signal is a row with height
-   * inside the viewport; a dozen frames is the ceiling, after which the tail has
-   * outstayed its usefulness whatever the virtualizer is doing.
-   */
-  let watching = false;
-  function watchForPaint(): void {
-    if (settled || watching) return;
-    watching = true;
-    let frames = 0;
-    const check = (): void => {
-      if (settled) {
-        watching = false;
-        return;
-      }
-      frames += 1;
-      if (paintedInView()) {
-        watching = false;
-        settle();
-        return;
-      }
-      // The cap bounds THIS watch, never the outcome: settling on a give-up
-      // was revealing an unseated transcript — a timeout burying the failure
-      // instead of fixing it. Every land() re-arms the watch, so a slow
-      // measure retries on the next rows change and the reveal happens only
-      // when a row is genuinely painted in view.
-      if (frames > 12) {
-        watching = false;
-        return;
-      }
-      requestAnimationFrame(check);
-    };
-    requestAnimationFrame(check);
   }
 
   // A conversation with nothing in it never lands — `land` needs a row to
@@ -359,11 +334,15 @@
     if (!nowActive) return;
     void rows.length;
     void session.streaming;
-    void clearance;
     if (rows.length === 0) return;
     if (!landed || atBottom) void tick().then(land);
     else reactivating = false;
   });
+  // Composer height changes are handled entirely by CSS: `--composer-clearance`
+  // on the parent adjusts `.tr`'s `padding-bottom`, the browser updates
+  // `scrollHeight`, and the existing follow loop (which watches `rows.length`
+  // and `session.streaming`) catches any overshoot on the next frame. No JS
+  // needed — a padding change is layout, not a scroll event.
 
   // ── Enter motion ────────────────────────────────────────────────────────
   // A new tail turn fades in and rises 8px over ~150ms on MOUNT only — the one
@@ -376,45 +355,35 @@
   // The motion is opacity + `transform`, neither of which changes the measured
   // box, so virtua's ResizeObserver and scroll math are untouched.
   const seen = new Set<string>();
-  const reduceMotionQuery =
-    typeof window !== 'undefined'
-      ? window.matchMedia('(prefers-reduced-motion: reduce)')
-      : null;
 
   /**
-   * Per-row enter action. A row animates only the first time its key is seen,
-   * and only once the transcript has landed and the reader is at the tail — so
-   * the initial history batch, a row virtua re-mounts on scroll, and older
-   * chunks prepended above all stay still. `prefers-reduced-motion` → no motion.
+   * Per-row enter action. The guard decides WHETHER to animate; CSS does the
+   * actual motion. Adding `.entering` starts two CSS animations on the wrapper:
+   *
+   * 1. `row-open` — the wrapper grows from `max-height: 0` to a generous
+   *    ceiling, clipped by `overflow: hidden`. This is the container scaling
+   *    vertically — the content below does not jump.
+   * 2. `row-slide` — the first child slides up from `translateY(20px)` with
+   *    `opacity: 0`, arriving into the space the wrapper just opened. Because
+   *    the wrapper clips, nothing overlaps above.
+   *
+   * The class is removed on `animationend` so the row returns to its normal
+   * `display: block` flow and virtua's measurements are unaffected.
    */
   function enterMotion(node: HTMLElement, key: string) {
     const fresh = landed && atBottom && !seen.has(key);
     seen.add(key);
-    if (!fresh || reduceMotionQuery?.matches) return;
-    const easing =
-      getComputedStyle(node).getPropertyValue('--e-in').trim() ||
-      'cubic-bezier(0.16, 1, 0.3, 1)';
-    node.style.opacity = '0';
-    const anim = node.animate(
-      [
-        { opacity: 0, transform: 'translateY(8px)' },
-        { opacity: 1, transform: 'translateY(0)' },
-      ],
-      { duration: 150, easing, fill: 'both' }
-    );
-    anim.onfinish = () => {
-      node.style.opacity = '';
-      anim.cancel();
+    if (!fresh) return;
+    node.classList.add('entering');
+    const done = () => {
+      node.classList.remove('entering');
+      node.removeEventListener('animationend', done);
     };
+    node.addEventListener('animationend', done);
     return {
       destroy() {
-        // The live tail's keys are CONSTANTS (`stream:text` / `stream:tool` /
-        // `stream:thinking`), so `seen` remembering them meant only the very
-        // first reply of a session's lifetime ever animated in — every later
-        // one arrived stone still, which is the "new messages aren't animating"
-        // defect. Forgetting the key when the live row leaves lets the next
-        // turn's arrival animate again; ordinary rows keep their keys seen, so
-        // scrolling history still replays nothing.
+        node.classList.remove('entering');
+        node.removeEventListener('animationend', done);
         if (key.startsWith('stream:')) seen.delete(key);
       },
     };
@@ -571,7 +540,7 @@
     </div>
   {/if}
 
-  <Virtualizer bind:this={list} data={built.rows} getKey={(r) => r.key} scrollRef={scroller} shift={built.shifted}>
+  <Virtualizer bind:this={list} data={built.rows} getKey={(r) => r.key} scrollRef={scroller} shift={built.shifted} {ssrCount}>
     {#snippet children(row)}
       <div class="renter" use:enterMotion={row.key}>
         {#if row.kind === 'single'}
@@ -709,11 +678,15 @@
     white-space: nowrap;
   }
 
-  @media (prefers-reduced-motion: reduce) {
-    /* Compaction's only motion is the pill's dot; still it, and the state is
-       carried by the pill's presence alone. */
+  /* Motion is opt-in: the dot only beats when the reader hasn't asked for
+     reduced motion. Without the query the pill's presence alone carries
+     the state — the dot is still. */
+  .compacting-note .beat {
+    animation: none;
+  }
+  @media (prefers-reduced-motion: no-preference) {
     .compacting-note .beat {
-      animation: none;
+      animation: beat var(--breath) var(--e-toggle) infinite;
     }
   }
   @media (max-width: 900px) {
@@ -767,9 +740,6 @@
   /* The in-flight tool's glyph breathes — the one live channel — so the running
      row reads as in-progress against the still, completed rows in ToolGroup.
      This IS the progress indicator on tool usage; done rows hold their glyph. */
-  .livetool .ic.breathe :global(svg) {
-    animation: breathe var(--breath) var(--e-toggle) infinite;
-  }
   @keyframes breathe {
     0%,
     100% {
@@ -779,18 +749,36 @@
       opacity: 1;
     }
   }
-  @media (prefers-reduced-motion: reduce) {
+  @media (prefers-reduced-motion: no-preference) {
     .livetool .ic.breathe :global(svg) {
-      animation: none;
-      opacity: 1;
+      animation: breathe var(--breath) var(--e-toggle) infinite;
     }
   }
 
-  /* Per-row enter wrapper: carries the mount-only fade+rise driven imperatively
-     in `enterMotion`. No box of its own — the child's margin collapses through,
-     so virtua measures the row's height exactly as before. */
+  /* Per-row enter wrapper. Virtua measures the row at its natural height
+     BEFORE the animation starts, so `max-height` tricks fight the virtualizer.
+     The animation plays on the wrapper itself: content slides up and fades in
+     within the space virtua already allocated. The scroll follow moves the
+     viewport down as the row appears, which is what "space opens then content
+     arrives" looks like to the reader — the viewport shift IS the space
+     opening; the slide IS the content arriving into it. */
   .renter {
     display: block;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .renter.entering {
+      animation: row-enter var(--c-300, 220ms) var(--e-in, cubic-bezier(0.16, 1, 0.3, 1)) both;
+    }
+  }
+  @keyframes row-enter {
+    from {
+      opacity: 0;
+      transform: translateY(16px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
 
 </style>

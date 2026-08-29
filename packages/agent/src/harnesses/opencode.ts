@@ -75,6 +75,7 @@ import { resolveBin } from '../tools';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { readJson, readSidecar, syncMemory, syncSkillFiles, writeJson } from './fleet-common';
+import { fetchDelegateTypes } from './handoff-shared';
 import type { Harness, HarnessContext, HarnessSession } from '../harness';
 
 /** opencode's own config files — the machine profile the fleet sync converges. */
@@ -94,8 +95,17 @@ const OPENCODE_HANDOFF_PLUGIN = join(OPENCODE_PLUGINS, 'cockpit-handoff.js');
  * permission system that runs (`packages/core/src/permission.ts`) publishes
  * events and never triggers plugin hooks, so the hook loaded and was never
  * called. The daemon grants those permissions itself; see {@link autoAllows}.
+ *
+ * `typeLine` is the same "Available types: 'name' (description); …" sentence
+ * claude's and pi's own `delegateTypeLine` build (see handoff.ts), interpolated
+ * here at write time rather than read live: this source is written to disk once,
+ * at fleet-sync time, and opencode reloads a plugin file from disk rather than
+ * calling into this process per session — there is no later hook to refresh
+ * it from. A type added or renamed after the last write is not in this string
+ * until the next sync; `type`'s own hub-side resolution (`/api/relay/spawn`)
+ * still refuses an unknown name with the current list regardless.
  */
-const HANDOFF_PLUGIN_SOURCE = `import { tool } from "@opencode-ai/plugin";
+const buildHandoffPluginSource = (typeLine: string): string => `import { tool } from "@opencode-ai/plugin";
 
 const ws = process.env.COCKPIT_HUB_URL ?? "ws://localhost:3456/ws";
 const HUB = ws.replace(/^ws/, "http").replace(/\\/ws$/, "");
@@ -114,7 +124,7 @@ const age = (at) => {
   return h < 24 ? \`active \${h}h ago\` : \`active \${Math.round(h / 24)}d ago\`;
 };
 
-async function roster() {
+async function allInstances() {
   const res = await fetch(\`\${HUB}/api/instances\`, { signal: AbortSignal.timeout(5000) });
   if (!res.ok) throw new Error(\`the hub answered \${res.status}\`);
   const rows = await res.json();
@@ -122,14 +132,56 @@ async function roster() {
     .then((r) => (r.ok ? r.json() : []))
     .catch(() => []);
   const hosts = new Map((agents ?? []).map((a) => [a.machineId, a.hostname]));
-  return rows
-    .filter((r) => r.status === "running" || r.status === "starting")
-    .map((r) => ({
-      row: r,
-      name: leaf(r.cwd),
-      label: \`\${leaf(r.cwd)}#\${short(r.id)}\`,
-      host: hosts.get(r.machineId) ?? r.machineId,
-    }));
+  return { rows, hosts };
+}
+
+function toPeer(row, hosts) {
+  return {
+    row,
+    name: leaf(row.cwd),
+    label: \`\${leaf(row.cwd)}#\${short(row.id)}\`,
+    host: hosts.get(row.machineId) ?? row.machineId,
+  };
+}
+
+async function roster() {
+  const { rows, hosts } = await allInstances();
+  return rows.filter((r) => r.status === "running" || r.status === "starting").map((r) => toPeer(r, hosts));
+}
+
+// fork_of resolves against every row the caller owns, regardless of status —
+// stop_delegate's own text promises "delegate again to resume from it", so a
+// stopped delegate has to still be forkable. Unlike roster(), not filtered to
+// running/starting.
+async function resolveForkSource(parentId, target) {
+  const { rows, hosts } = await allInstances();
+  const mine = rows.filter((r) => r.parentInstanceId === parentId).map((r) => toPeer(r, hosts));
+  try {
+    return resolve(mine, target);
+  } catch (error) {
+    let outside = false;
+    try {
+      resolve(rows.map((r) => toPeer(r, hosts)), target);
+      outside = true;
+    } catch {
+      outside = false;
+    }
+    if (outside) throw new Error(\`"\${target}" is not your delegate — you can only fork your own delegates.\`);
+    throw error;
+  }
+}
+
+// opencode's own session_id is NOT unique across our rows: a resume reuses
+// the same session key (opencode.ts:spawn), so more than one live instance
+// can carry it. context carries no id of ours to prefer instead — the
+// plugin protocol has no such field — so an ambiguous match resolves to the
+// most recently updated live row, the best guess available.
+function meOf(peers, context) {
+  const matches = peers.filter((p) => p.row.sessionId === context.sessionID);
+  if (matches.length <= 1) return matches[0];
+  return matches.reduce((newest, p) =>
+    new Date(p.row.updatedAt).getTime() > new Date(newest.row.updatedAt).getTime() ? p : newest
+  );
 }
 
 function resolve(peers, target) {
@@ -159,7 +211,13 @@ async function relay(verb, body) {
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(\`the hub answered \${res.status}\`);
+  if (!res.ok) {
+    // The hub's own refusal text (e.g. an unknown delegate type's "Available:"
+    // list) is the useful part — a bare status code drops exactly what the
+    // model needs to retry correctly, so it has to reach the model verbatim.
+    const detail = await res.text().catch(() => "");
+    throw new Error(\`the hub answered \${res.status}\${detail ? \`: \${detail}\` : ""}\`);
+  }
 }
 
 export const CockpitHandoff = async () => {
@@ -175,7 +233,7 @@ export const CockpitHandoff = async () => {
         async execute(_args, context) {
           const peers = await roster();
           if (peers.length === 0) return "No other sessions are running.";
-          const me = peers.find((p) => p.row.sessionId === context.sessionID);
+          const me = meOf(peers, context);
           const myId = me ? me.row.id : null;
           return peers
             .map((p) => {
@@ -206,11 +264,11 @@ export const CockpitHandoff = async () => {
         async execute({ target, message, urgent }, context) {
           const peers = await roster();
           const from = leaf(context.directory);
+          const me = meOf(peers, context);
+          if (!me) throw new Error("this session is not registered on the fleet yet");
+          const myId = me.row.id;
           const body = \`[Hand-off from the \${from} session — another agent, not the user]\\n\\n\${message}\`;
           if (urgent) {
-            const me = peers.find((p) => p.row.sessionId === context.sessionID);
-            if (!me) throw new Error("this session is not registered on the fleet yet");
-            const myId = me.row.id;
             const mine = peers.filter((p) => p.row.parentInstanceId === myId);
             let peer;
             try {
@@ -244,7 +302,7 @@ export const CockpitHandoff = async () => {
               type: "user",
               message: { role: "user", content: body },
               parent_tool_use_id: null,
-              origin: { kind: "peer", from: context.sessionID, name: from, fromSession: context.sessionID },
+              origin: { kind: "peer", from: myId, name: from, fromSession: myId },
               shouldQuery: false,
             },
           });
@@ -295,27 +353,59 @@ export const CockpitHandoff = async () => {
           "autonomously in its own transcript the user can watch, and reports back to this session " +
           "automatically when each of its turns completes. Guide it or send follow-ups with handoff. " +
           "Prefer this over start_session when the work is a delegation that must report back, and " +
-          "over handoff for new standalone work, even in another repository (set cwd there).",
+          "over handoff for new standalone work, even in another repository (set cwd there). To " +
+          "continue a prior delegate's conversation instead of starting fresh, set fork_of. Prefer " +
+          "'type' over raw harness/model where a fleet delegate type fits — it routes by what the " +
+          "work needs.",
         args: {
           prompt: tool.schema.string().describe("The full brief. The delegate cannot see this conversation."),
-          harness: tool.schema.string().optional().describe("Which runtime runs the delegate: one of 'claude', 'opencode', 'pi'. 'opencode' with model 'opencode-go/deepseek-v4-pro' delegates to DeepSeek. Default claude."),
-          model: tool.schema.string().optional().describe("Model id for the harness, e.g. opencode-go/deepseek-v4-flash. Omit for the harness default."),
+          type: tool.schema.string().optional().describe("A named fleet delegate type. Resolved hub-side; sets harness/model/effort/skills for you. An explicit harness/model/skills below still overrides it. Type definitions are snapshotted when the fleet last synced this plugin — edits made in the dashboard since then are not reflected here, but still resolve hub-side." + ${JSON.stringify(typeLine)}),
+          harness: tool.schema.string().optional().describe("Which runtime runs the delegate: one of 'claude', 'opencode', 'pi'. 'opencode' with model 'opencode-go/deepseek-v4-pro' delegates to DeepSeek. Default claude. Overrides the type's harness."),
+          model: tool.schema.string().optional().describe("Model id for the harness, e.g. opencode-go/deepseek-v4-flash. Omit for the harness default, or for the type's own model. Overrides the type's model."),
           cwd: tool.schema.string().optional().describe("Absolute directory the delegate works in. Defaults to this session's directory."),
-          skills: tool.schema.array(tool.schema.string()).optional().describe("Skill names to load natively into the delegate session. Each skill is invoked via the harness's own slash-command mechanism before the prompt — the same as if the user typed /skill-name in that session. Works cross-harness."),
+          skills: tool.schema.array(tool.schema.string()).optional().describe("Skill names to load natively into the delegate session. Each skill is invoked via the harness's own slash-command mechanism before the prompt — the same as if the user typed /skill-name in that session. Works cross-harness. Overrides the type's skills."),
+          fork_of: tool.schema.string().optional().describe("Fork an earlier delegate: pass the instanceId this tool returned for it. The new delegate starts with the full conversation of that prior delegate — the source is untouched. Works best on the SAME model, where it also reuses the prompt cache; a different model still works but re-ingests the transcript at full cost."),
         },
-        async execute({ prompt, harness, model, cwd, skills }, context) {
-          const me = (await roster()).find((p) => p.row.sessionId === context.sessionID);
+        async execute({ prompt, type, harness, model, cwd, skills, fork_of }, context) {
+          const peers = await roster();
+          const me = meOf(peers, context);
           if (!me) throw new Error("this session is not registered on the fleet yet");
           const parentId = me.row.id;
           const id = crypto.randomUUID();
           const workdir = cwd ?? context.directory;
+
+          let resume;
+          let modelNote = "";
+          if (fork_of) {
+            const source = await resolveForkSource(parentId, fork_of);
+            if (!source.row.sessionId) {
+              throw new Error(\`Your delegate \${source.label} has no session yet to fork — it never started, or hasn't emitted one. Delegate fresh instead of forking it.\`);
+            }
+            // A fork resumes the source's own stored transcript; that
+            // transcript belongs to one harness, so the spawn has to land on
+            // the same one.
+            const sourceHarness = source.row.harness ?? undefined;
+            if (harness && sourceHarness && harness !== sourceHarness) {
+              throw new Error(\`cannot fork a \${sourceHarness} delegate into \${harness} — transcripts don't transfer across harnesses.\`);
+            }
+            harness = harness ?? sourceHarness;
+            resume = { sessionKey: source.row.sessionId, fork: true };
+            if (source.row.model && model && source.row.model !== model) {
+              modelNote = \` Forked from a \${source.row.model} delegate onto \${model} — the conversation carries over, but the prompt cache does not; the transcript re-ingests at full cost.\`;
+            }
+          }
+
           await relay("spawn", {
             machineId: MACHINE,
             instanceId: id,
             cwd: workdir,
+            // Resolution stays hub-side (see /api/relay/spawn): this plugin
+            // only passes the name through.
+            ...(type ? { type } : {}),
             ...(harness ? { harness } : {}),
             ...(model ? { model } : {}),
             ...(skills?.length ? { skills } : {}),
+            ...(resume ? { resume } : {}),
             scratch: { baseCwd: workdir },
             parent: { instanceId: parentId },
           });
@@ -330,7 +420,7 @@ export const CockpitHandoff = async () => {
             },
           });
           return {
-            output: \`Delegated to \${harness ?? "claude"} session \${leaf(workdir)}#\${short(id)}. It runs as a temporary session nested under this one; its report arrives here automatically when each of its turns completes. Guide it or send follow-ups with handoff("\${id}", ...).\`,
+            output: \`Delegated to \${harness ?? "claude"} session \${leaf(workdir)}#\${short(id)}.\${resume ? " It starts with the full conversation of the forked delegate." : ""}\${modelNote} It runs as a temporary session nested under this one; its report arrives here automatically when each of its turns completes. Guide it or send follow-ups with handoff("\${id}", ...).\`,
             title: \`\${leaf(workdir)}#\${short(id)}\`,
             metadata: { delegateInstanceId: id },
           };
@@ -345,7 +435,7 @@ export const CockpitHandoff = async () => {
         },
         async execute({ target }, context) {
           const peers = await roster();
-          const me = peers.find((p) => p.row.sessionId === context.sessionID);
+          const me = meOf(peers, context);
           if (!me) throw new Error("this session is not registered on the fleet yet");
           const myId = me.row.id;
           const mine = peers.filter((p) => p.row.parentInstanceId === myId);
@@ -371,7 +461,7 @@ export const CockpitHandoff = async () => {
         },
         async execute({ target }, context) {
           const peers = await roster();
-          const me = peers.find((p) => p.row.sessionId === context.sessionID);
+          const me = meOf(peers, context);
           if (!me) throw new Error("this session is not registered on the fleet yet");
           const myId = me.row.id;
           const mine = peers.filter((p) => p.row.parentInstanceId === myId);
@@ -402,7 +492,7 @@ export const CockpitHandoff = async () => {
         },
         async execute({ target, requestId, answers, deny }, context) {
           const peers = await roster();
-          const me = peers.find((p) => p.row.sessionId === context.sessionID);
+          const me = meOf(peers, context);
           if (!me) throw new Error("this session is not registered on the fleet yet");
           const myId = me.row.id;
           const mine = peers.filter((p) => p.row.parentInstanceId === myId);
@@ -435,7 +525,7 @@ export const CockpitHandoff = async () => {
           message: tool.schema.string().describe("The text to show the user, exactly as it should read."),
         },
         async execute({ message }, context) {
-          const me = (await roster()).find((p) => p.row.sessionId === context.sessionID);
+          const me = meOf(await roster(), context);
           if (!me) throw new Error("this session is not registered on the fleet yet");
           await relay("message", { machineId: me.row.machineId, instanceId: me.row.id, text: message });
           return "Sent to the user — it lands in their Telegram when the hub has a bridge, and is dropped otherwise.";
@@ -451,7 +541,7 @@ export const CockpitHandoff = async () => {
           note: tool.schema.string().describe("What you actually did about it, in a sentence or two. Ten characters minimum."),
         },
         async execute({ note }, context) {
-          const me = (await roster()).find((p) => p.row.sessionId === context.sessionID);
+          const me = meOf(await roster(), context);
           if (!me) throw new Error("this session is not registered on the fleet yet");
           // Session-scoped, with no id: the caller is never told which rule fired, so the hub
           // settles everything outstanding for this session from the note alone.
@@ -1307,6 +1397,7 @@ export class OpencodeSession implements HarnessSession {
       is_error: result?.is_error ?? false,
       ...(result?.errors ? { errors: result.errors } : {}),
       total_cost_usd: this.#costBase + turnCost,
+      cache: { read: this.#lastTokens.cache.read, write: this.#lastTokens.cache.write },
     });
     this.#costBase += turnCost;
     this.#costs.clear();
@@ -1643,6 +1734,12 @@ export class OpencodeHarness implements Harness {
   #client: OpencodeClient | null = null;
   #server: { url: string; close(): void } | null = null;
   #ready: Promise<OpencodeClient> | null = null;
+  // Keyed by instanceId, not opencode's own session id: a resume reuses the
+  // same sessionKey (opencode.ts:spawn), so multiple live instances can share
+  // one opencode session id, and a map keyed by THAT would silently overwrite
+  // an earlier instance's entry with a later one's on every such resume.
+  // Event routing, which only has opencode's own id off the wire, falls back
+  // to {@link OpencodeHarness.#sessionForSid}.
   #sessions = new Map<string, OpencodeSession>();
   #children = new Map<string, { parent: OpencodeSession; callID: string }>();
   #disposed = false;
@@ -1706,10 +1803,18 @@ export class OpencodeHarness implements Harness {
         dependencies: { ...(pkg.dependencies ?? {}), '@opencode-ai/plugin': '1.18.18' },
       });
     }
+    // Same "Available types" sentence claude's and pi's own `delegateTypeLine`
+    // build — see `buildHandoffPluginSource`'s own comment for why this is
+    // read once here rather than kept live.
+    const types = await fetchDelegateTypes();
+    const typeLine = types.length
+      ? ` Available types: ${types.map((type) => `'${type.name}' (${type.description})`).join('; ')}.`
+      : '';
+    const source = buildHandoffPluginSource(typeLine);
     const existing = Bun.file(OPENCODE_HANDOFF_PLUGIN);
     const current = (await existing.exists()) ? await existing.text() : '';
-    if (current !== HANDOFF_PLUGIN_SOURCE) {
-      await Bun.write(OPENCODE_HANDOFF_PLUGIN, HANDOFF_PLUGIN_SOURCE);
+    if (current !== source) {
+      await Bun.write(OPENCODE_HANDOFF_PLUGIN, source);
     }
   }
 
@@ -1732,7 +1837,7 @@ export class OpencodeHarness implements Harness {
             continue;
           }
           const sid = this.#eventSession(event);
-          const session = sid ? this.#sessions.get(sid) : undefined;
+          const session = sid ? this.#sessionForSid(sid) : undefined;
           if (session) {
             session.handle(event);
           } else if (sid) {
@@ -1758,7 +1863,7 @@ export class OpencodeHarness implements Harness {
     const childId = props.info?.id ?? props.sessionID;
     const parentId = props.info?.parentID;
     if (!childId || !parentId) return;
-    const parent = this.#sessions.get(parentId);
+    const parent = this.#sessionForSid(parentId);
     if (parent) parent.handleChildCreated(childId, props.info?.agent, props.info?.title);
   }
 
@@ -1769,6 +1874,23 @@ export class OpencodeHarness implements Harness {
       part?: { sessionID?: string };
     };
     return p.sessionID ?? p.info?.sessionID ?? p.part?.sessionID;
+  }
+
+  /**
+   * Resolves opencode's own session id, off an event, back to one of ours.
+   * `#sessions` is keyed by instanceId now, so this is the lookup that used to
+   * be free with a `sessionId`-keyed map. When more than one of our sessions
+   * shares that opencode id (the resume collision the rekey exists for), the
+   * most recently spawned one wins — Map iteration is insertion order, so the
+   * last match is the newest — on the theory that a live event is more likely
+   * meant for whichever instance most recently took that session over.
+   */
+  #sessionForSid(sid: string): OpencodeSession | undefined {
+    let found: OpencodeSession | undefined;
+    for (const session of this.#sessions.values()) {
+      if (session.sessionId === sid) found = session;
+    }
+    return found;
   }
 
   async spawn(spec: SpawnPayload, ctx: HarnessContext): Promise<HarnessSession> {
@@ -1815,13 +1937,13 @@ export class OpencodeHarness implements Harness {
       this.#server!.url,
       (childId, callID) => this.#children.set(childId, { parent: session, callID }),
       () => {
-        this.#sessions.delete(sessionId);
+        this.#sessions.delete(ctx.instanceId);
         for (const [childId, entry] of this.#children) {
           if (entry.parent === session) this.#children.delete(childId);
         }
       }
     );
-    this.#sessions.set(sessionId, session);
+    this.#sessions.set(ctx.instanceId, session);
     ctx.session(sessionId);
     // The init frame the dashboard reads the model / cwd / commands off.
     ctx.frame({

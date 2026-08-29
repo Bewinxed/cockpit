@@ -6,6 +6,7 @@
  * the machine really has. Unlike the tool catalog (tools.ts), none of this is
  * a code catalog — the entries are the user's own rows.
  */
+import type { FleetHook } from './hooks';
 import type {
   McpHttpServerConfig,
   McpSSEServerConfig,
@@ -338,6 +339,15 @@ export interface FleetConfig {
    * which is what has a machine give back the copy cockpit wrote it.
    */
   memory?: FleetMemory | null;
+  /**
+   * Hooks the fleet keeps. Absent from a hub that predates them, and a daemon
+   * that predates them ignores the field — which for hooks matters more than
+   * it does for the rest: an old daemon that half-understood this would be an
+   * old daemon executing something. Absent means "converge nothing", never
+   * "remove everything", so the two directions of version skew both end in a
+   * machine that runs only what it already ran.
+   */
+  hooks?: FleetHook[];
 }
 
 /**
@@ -379,6 +389,14 @@ export interface FleetSyncReport {
    * gave nothing to register.
    */
   memoryHook?: FleetItemState;
+  /**
+   * The fleet's hooks, by the same id the hub keeps them under. Absent from a
+   * daemon that predates them. `failed` covers three different machine-local
+   * facts — a hand-edited script, a validation the hub already passed but this
+   * row failed again, or a project hook with no checkout here — and `detail`
+   * is what tells them apart.
+   */
+  hooks?: Record<string, FleetItemState>;
   /** When the sync ran, ms epoch. */
   at: number;
 }

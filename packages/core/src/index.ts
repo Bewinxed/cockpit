@@ -25,6 +25,17 @@ export * from './usage';
 // editor's test box decide identically.
 export * from './rules';
 
+// Hooks the fleet keeps: the lifecycle event, the matcher, and the script the
+// machines run. The matcher's three-way reading lives here so the editor's test
+// box previews exactly what Claude Code will do with it, and `hookProblem` is
+// shared so the hub and the form refuse the same drafts for the same reasons —
+// this is the one row whose convergence executes code, so it is gated twice.
+export * from './hooks';
+
+// Delegate types: named presets the `delegate` tool's `type` param resolves,
+// so routing is by description instead of a raw model string.
+export * from './delegate-types';
+
 // How an `AskUserQuestion` answer is shaped, wherever it is answered from —
 // the dashboard, a parent session's `answer_delegate`, the Telegram bridge.
 // Shared because the tool's schema is unforgiving: the answers go back inside
@@ -140,6 +151,12 @@ export interface SpawnPayload {
    * way it would if the user had typed the slash command.
    */
   skills?: string[];
+  /**
+   * Tools this session may never call, beyond whatever the harness already
+   * denies. Set by a resolved {@link DelegateType}'s own `denyTools`; the
+   * claude adapter merges it into the `disallowedTools` it already assembles.
+   */
+  denyTools?: string[];
   /**
    * Correlates the `control_result` frame the agent answers the spawn with, once
    * the session is in place.

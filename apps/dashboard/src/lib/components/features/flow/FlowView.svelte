@@ -15,6 +15,7 @@
   import { onMount } from 'svelte';
   import { theme } from '$lib/theme.svelte';
   import type { Message } from '$lib/cockpit/types';
+  import { copyToClipboard } from '$lib/cockpit/copy';
   import type { SubagentState } from '$lib/utils/flow-types';
   import FlowContextMenu from './FlowContextMenu.svelte';
   import FlowAutoFit from './FlowAutoFit.svelte';
@@ -126,7 +127,7 @@
       case 'copy': {
         const node = nodes.find(n => n.id === nodeId);
         if (node?.data?.content) {
-          navigator.clipboard.writeText(String(node.data.content));
+          void copyToClipboard('Message', String(node.data.content));
         }
         break;
       }

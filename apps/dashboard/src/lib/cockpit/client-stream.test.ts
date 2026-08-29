@@ -12,6 +12,7 @@ import { expect, test } from 'bun:test';
 import { STREAM_V1 } from '@cockpit/core';
 import type {
   CommandAck,
+  CommandKind,
   SessionStreamEvent,
   StreamClientMessage,
   StreamSubscribe,
@@ -26,10 +27,15 @@ import {
   noteCapabilities,
   noteDisconnect,
   SETTLED_COMMAND_LIMIT,
+  SETTLED_COMMAND_TTL_MS,
   streamCarries,
   submitCommand,
   sweepCommands,
   syncStreamSubscriptions,
+  disarmCommandSweep,
+  failLocally,
+  sessionCommands,
+  type SettleStage,
   type StreamHost,
   type StreamState,
 } from './stream';
@@ -83,21 +89,39 @@ interface Harness {
   /** Sessions whose history the store asked to re-read. */
   rereads: string[];
   warnings: string[];
+  /** Every record the host was told had failed, in order, as `id:reason`. */
+  failures: string[];
   /** The scripted clock, so a timeout is a fact rather than a wait. */
   clock: { now: number };
   /** Feeds one message in as if it had come off the socket. */
   receive(message: unknown): boolean;
   subscribes(): StreamSubscribe[];
+  /**
+   * Moves the scripted clock forward and runs whatever the ledger armed for
+   * that window — and NOTHING else. No frame is fed in, no ack, no socket
+   * event: the whole point of the tests that use it is that a tab which
+   * receives nothing at all still settles what it sent.
+   */
+  advance(ms: number): void;
+  /** How many timers are armed right now — one, or none, and never more. */
+  armed(): number;
 }
 
-function harness(options: { capable?: boolean; offline?: boolean } = {}): Harness {
+function harness(
+  options: { capable?: boolean; offline?: boolean; timers?: boolean; throws?: string } = {}
+): Harness {
   const state = createStreamState();
   if (options.capable) state.capable = true;
   const applied: { sessionId: string; seq: number }[] = [];
   const sent: StreamClientMessage[] = [];
   const rereads: string[] = [];
   const warnings: string[] = [];
+  const failures: string[] = [];
   const clock = { now: 1_000 };
+
+  /** The fake clock's alarm book: at most one entry, if the ledger keeps its word. */
+  const timers = new Map<number, { at: number; run: () => void }>();
+  let nextHandle = 1;
 
   const host: StreamHost = {
     applyFrame: (sessionId, frame) => {
@@ -106,21 +130,59 @@ function harness(options: { capable?: boolean; offline?: boolean } = {}): Harnes
     },
     rereadHistory: (sessionId) => rereads.push(sessionId),
     sendToHub: (message) => {
+      // A socket that shuts between the readiness check and the write throws
+      // rather than answering false — the case the boolean cannot express.
+      if (options.throws) throw new DOMException(options.throws, 'InvalidStateError');
       if (options.offline) return false;
       sent.push(message);
       return true;
     },
     now: () => clock.now,
     warn: (message) => warnings.push(message),
+    noteFailure: (record) => failures.push(`${record.commandId}:${record.reason ?? ''}`),
+    ...(options.timers
+      ? {
+          setTimer: (delayMs: number, run: () => void) => {
+            const handle = nextHandle++;
+            timers.set(handle, { at: clock.now + delayMs, run });
+            return handle;
+          },
+          clearTimer: (handle: number) => {
+            timers.delete(handle);
+          },
+        }
+      : {}),
   };
 
+  function advance(ms: number): void {
+    const target = clock.now + ms;
+    // Re-armed timers land inside the same window, so this drains rather than
+    // sweeps once: a burst of commands submitted seconds apart has several
+    // deadlines and the ledger walks them one alarm at a time.
+    for (;;) {
+      let due: [number, { at: number; run: () => void }] | null = null;
+      for (const entry of timers) {
+        if (entry[1].at > target) continue;
+        if (!due || entry[1].at < due[1].at) due = entry;
+      }
+      if (!due) break;
+      timers.delete(due[0]);
+      clock.now = Math.max(clock.now, due[1].at);
+      due[1].run();
+    }
+    clock.now = target;
+  }
+
   return {
+    advance,
+    armed: () => timers.size,
     state,
     host,
     applied,
     sent,
     rereads,
     warnings,
+    failures,
     clock,
     receive: (message) => handleStreamMessage(state, host, message),
     subscribes: () =>
@@ -421,12 +483,21 @@ test('a subscribe that could not leave is retried, not assumed to have been sent
  * Commands
  * ------------------------------------------------------------------ */
 
+/**
+ * Every submission has to declare where its kind stops being spoken about —
+ * `send` at `accepted`, the control kinds at `applied`. The helper mirrors
+ * what the client does at the call site rather than hiding it, because that
+ * choice is the subject of half the tests below.
+ */
+const settleStageOf = (kind: CommandKind): SettleStage => (kind === 'send' ? 'accepted' : 'applied');
+
 const submit = (h: Harness, kind: 'send' | 'set-model' = 'send', legacy = () => {}): string =>
   submitCommand(h.state, h.host, {
     commandId: `cmd-${Object.keys(h.state.commands).length + 1}`,
     sessionId: SESSION,
     machineId: 'mac-1',
     kind,
+    settlesAt: settleStageOf(kind),
     payload: { instanceId: SESSION },
     legacy,
   });
@@ -505,6 +576,7 @@ test('against a legacy hub the command runs today call, and its promise is the s
     sessionId: SESSION,
     machineId: 'mac-1',
     kind: 'set-model',
+    settlesAt: settleStageOf('set-model'),
     payload: {},
     legacy: () => Promise.resolve('ok'),
   });
@@ -528,6 +600,7 @@ test('a legacy command that throws fails with the reason, and never throws at th
     sessionId: SESSION,
     machineId: 'mac-1',
     kind: 'set-model',
+    settlesAt: settleStageOf('set-model'),
     payload: {},
     legacy: () => Promise.reject(new Error('the machine refused')),
   });
@@ -588,6 +661,7 @@ test('the tracker is capped: settled commands age out, the newest stay readable'
       sessionId: SESSION,
       machineId: 'mac-1',
       kind: 'send',
+      settlesAt: settleStageOf('send'),
       payload: {},
       legacy: () => {},
     });
@@ -614,6 +688,10 @@ test('the tracker is capped: settled commands age out, the newest stay readable'
  * — and never on the legacy dialect, whose thunk owns its own half.
  * ------------------------------------------------------------------ */
 
+// A CONTROL command, deliberately: its protocol has a second word (`applied`),
+// so it is the kind whose effects wait past `accepted`. A send's own version of
+// this story — settling at `accepted`, because nothing else is coming — is the
+// test named for it further down.
 test('the stream dialect runs a command\'s local effects: submitted at dispatch, settled once on the applied ack', () => {
   const h = harness({ capable: true });
   const calls: string[] = [];
@@ -621,7 +699,8 @@ test('the stream dialect runs a command\'s local effects: submitted at dispatch,
     commandId: 'fx-1',
     sessionId: SESSION,
     machineId: 'mac-1',
-    kind: 'send',
+    kind: 'set-model',
+    settlesAt: settleStageOf('set-model'),
     payload: { instanceId: SESSION },
     legacy: () => {
       calls.push('legacy');
@@ -649,6 +728,7 @@ test('a refused command settles its effects with failed and the reason the row w
     sessionId: SESSION,
     machineId: 'mac-1',
     kind: 'set-model',
+    settlesAt: settleStageOf('set-model'),
     payload: { instanceId: SESSION },
     legacy: () => {},
     streamEffects: { settled: (stage, reason) => settled.push([stage, reason]) },
@@ -665,6 +745,7 @@ test('a dying socket settles outstanding effects with failed — the optimistic 
     sessionId: SESSION,
     machineId: 'mac-1',
     kind: 'set-effort',
+    settlesAt: settleStageOf('set-effort'),
     payload: { instanceId: SESSION },
     legacy: () => {},
     streamEffects: {
@@ -684,6 +765,7 @@ test('the legacy dialect never reads stream effects — its thunk owns the local
     sessionId: SESSION,
     machineId: 'mac-1',
     kind: 'send',
+    settlesAt: settleStageOf('send'),
     payload: { instanceId: SESSION },
     legacy: () => {
       calls.push('legacy');
@@ -703,6 +785,7 @@ test('a result.error inside the shadow of this client\'s own interrupt command i
     sessionId: SESSION,
     machineId: 'mac-1',
     kind: 'interrupt',
+    settlesAt: settleStageOf('interrupt'),
     payload: { instanceId: SESSION },
     legacy: () => {},
   });
@@ -712,4 +795,523 @@ test('a result.error inside the shadow of this client\'s own interrupt command i
   expect(interruptedRecently(h.state, SESSION, submittedAt + 60_000)).toBe(false);
   h.receive(ack('int-1', 'failed', 'no such session'));
   expect(interruptedRecently(h.state, SESSION, submittedAt + 5_000)).toBe(false);
+});
+
+/* ------------------------------------------------------------------ *
+ * Settle stages — what "finished" means, per kind
+ *
+ * The hub answers a `send` with `accepted` and NOTHING ELSE: its own
+ * comment calls that "the last honest word the hub has", because the
+ * proof of application is the turn itself arriving. The control kinds
+ * do get a second word, `applied`, out of their `control_result`.
+ *
+ * A ledger that measured both against `applied` therefore had one kind
+ * it could never finish, and swept it into `failed` fifteen seconds
+ * after it had in fact been delivered. These tests are the fence around
+ * that: the sweep may only call off a command that is genuinely short
+ * of its own last word.
+ * ------------------------------------------------------------------ */
+
+test('a delivered message is finished at accepted: the sweep leaves it alone instead of retro-failing it', () => {
+  const h = harness({ capable: true });
+  const commandId = submit(h, 'send');
+
+  h.receive(ack(commandId, 'accepted'));
+  expect(h.state.commands[commandId].stage).toBe('accepted');
+
+  // Long past the point where an unanswered command is called off.
+  h.clock.now += COMMAND_ACK_TIMEOUT_MS * 3;
+  sweepCommands(h.state, h.clock.now, h.host);
+
+  expect(h.state.commands[commandId].stage).toBe('accepted');
+  expect(h.state.commands[commandId].reason).toBeUndefined();
+  expect(h.failures).toEqual([]);
+});
+
+test('a control command left at accepted with no result is still called off', () => {
+  const h = harness({ capable: true });
+  const commandId = submit(h, 'set-model');
+
+  h.receive(ack(commandId, 'accepted'));
+  h.clock.now += COMMAND_ACK_TIMEOUT_MS + 1;
+  sweepCommands(h.state, h.clock.now, h.host);
+
+  expect(h.state.commands[commandId]).toMatchObject({
+    stage: 'failed',
+    reason: 'The hub never acknowledged that.',
+  });
+  expect(h.failures).toEqual([`${commandId}:The hub never acknowledged that.`]);
+});
+
+test('a send accepted before the socket died is not taken back by the disconnect', () => {
+  const h = harness({ capable: true });
+  const delivered = submit(h, 'send');
+  const pending = submit(h, 'set-model');
+  h.receive(ack(delivered, 'accepted'));
+  h.receive(ack(pending, 'accepted'));
+
+  h.clock.now += 10;
+  noteDisconnect(h.state, h.clock.now, h.host);
+
+  expect(h.state.commands[delivered].stage).toBe('accepted');
+  expect(h.state.commands[pending].stage).toBe('failed');
+  expect(h.failures).toHaveLength(1);
+});
+
+test("a send's local half settles exactly once, at accepted, and a later ack cannot re-run it", () => {
+  const h = harness({ capable: true });
+  const calls: string[] = [];
+  const commandId = submitCommand(h.state, h.host, {
+    commandId: 'settle-1',
+    sessionId: SESSION,
+    machineId: 'mac-1',
+    kind: 'send',
+    settlesAt: settleStageOf('send'),
+    payload: { instanceId: SESSION },
+    legacy: () => {},
+    streamEffects: {
+      submitted: () => calls.push('submitted'),
+      settled: (stage) => calls.push(`settled:${stage}`),
+    },
+  });
+
+  h.receive(ack(commandId, 'accepted'));
+  expect(calls).toEqual(['submitted', 'settled:accepted']);
+
+  // Anything arriving afterwards — a stray applied, a late failure — finds the
+  // hook already spent. The ghost goes solid once and stays that way.
+  h.receive(ack(commandId, 'applied'));
+  h.receive(ack(commandId, 'failed', 'too late'));
+  expect(calls).toEqual(['submitted', 'settled:accepted']);
+});
+
+test('a legacy fire-and-forget command is finished when it returns, not retro-failed 15s later', () => {
+  const h = harness();
+  const commandId = submitCommand(h.state, h.host, {
+    commandId: 'legacy-interrupt',
+    sessionId: SESSION,
+    machineId: 'mac-1',
+    kind: 'interrupt',
+    // Declared like every other control kind — the fire-and-forget return is
+    // what lowers its last word to `accepted`, not the call site guessing.
+    settlesAt: settleStageOf('interrupt'),
+    payload: {},
+    legacy: () => {},
+  });
+  expect(h.state.commands[commandId].stage).toBe('accepted');
+
+  h.clock.now += COMMAND_ACK_TIMEOUT_MS * 2;
+  sweepCommands(h.state, h.clock.now, h.host);
+
+  expect(h.state.commands[commandId].stage).toBe('accepted');
+  expect(h.failures).toEqual([]);
+});
+
+/* ------------------------------------------------------------------ *
+ * The failure port — every failed record is said out loud, once
+ * ------------------------------------------------------------------ */
+
+test('every path to failed announces itself exactly once, and no successful path does', () => {
+  const refused = harness({ capable: true });
+  const refusedId = submit(refused, 'set-model');
+  refused.receive(ack(refusedId, 'failed', 'the machine refused it'));
+  // A late duplicate ack cannot announce the same failure twice.
+  refused.receive(ack(refusedId, 'failed', 'again'));
+  expect(refused.failures).toEqual([`${refusedId}:the machine refused it`]);
+
+  const undeliverable = harness({ capable: true, offline: true });
+  const undeliverableId = submit(undeliverable, 'send');
+  expect(undeliverable.failures).toHaveLength(1);
+  expect(undeliverable.failures[0]).toContain('Not connected');
+  expect(undeliverable.state.commands[undeliverableId].stage).toBe('failed');
+
+  const swept = harness({ capable: true });
+  submit(swept, 'set-model');
+  swept.clock.now += COMMAND_ACK_TIMEOUT_MS;
+  sweepCommands(swept.state, swept.clock.now, swept.host);
+  sweepCommands(swept.state, swept.clock.now, swept.host);
+  expect(swept.failures).toHaveLength(1);
+
+  const dropped = harness({ capable: true });
+  submit(dropped, 'set-model');
+  noteDisconnect(dropped.state, dropped.clock.now, dropped.host);
+  noteDisconnect(dropped.state, dropped.clock.now, dropped.host);
+  expect(dropped.failures).toHaveLength(1);
+
+  const landed = harness({ capable: true });
+  const control = submit(landed, 'set-model');
+  landed.receive(ack(control, 'accepted'));
+  landed.receive(ack(control, 'applied'));
+  const message = submit(landed, 'send');
+  landed.receive(ack(message, 'accepted'));
+  expect(landed.failures).toEqual([]);
+});
+
+test('a legacy rejection is announced through the same port as a refusal on the wire', async () => {
+  const h = harness();
+  submitCommand(h.state, h.host, {
+    commandId: 'legacy-reject',
+    sessionId: SESSION,
+    machineId: 'mac-1',
+    kind: 'set-model',
+    settlesAt: settleStageOf('set-model'),
+    payload: {},
+    legacy: () => Promise.reject(new Error('the machine refused')),
+  });
+  await Promise.resolve();
+  await Promise.resolve();
+  expect(h.failures).toEqual(['legacy-reject:the machine refused']);
+});
+
+/* ------------------------------------------------------------------ *
+ * failLocally — a command that never reached the wire is still a record
+ *
+ * The caller assembles a payload before it can call submitCommand, and a
+ * throw in that assembly used to escape the ledger entirely: no record,
+ * no stage, nothing on screen, an exception in a click handler. This is
+ * the door it goes through instead.
+ * ------------------------------------------------------------------ */
+
+test('a command that died before dispatch is a failed record like any other — swept, readable, announced', () => {
+  const h = harness({ capable: true });
+
+  const commandId = failLocally(
+    h.state,
+    h.host,
+    {
+      commandId: 'stillborn-1',
+      sessionId: SESSION,
+      kind: 'send',
+      settlesAt: settleStageOf('send'),
+    },
+    'crypto.randomUUID is not a function'
+  );
+
+  expect(commandId).toBe('stillborn-1');
+  expect(h.sent).toHaveLength(0);
+  expect(h.state.commands[commandId]).toMatchObject({
+    stage: 'failed',
+    reason: 'crypto.randomUUID is not a function',
+  });
+  // Visible to the session's readers, exactly like a record that failed on the wire.
+  expect(sessionCommands(h.state, SESSION).map((record) => record.commandId)).toEqual([commandId]);
+  expect(h.failures).toEqual([`${commandId}:crypto.randomUUID is not a function`]);
+
+  // And it ages out on the ledger's own terms rather than living forever.
+  h.clock.now += SETTLED_COMMAND_TTL_MS;
+  sweepCommands(h.state, h.clock.now, h.host);
+  expect(h.state.commands[commandId]).toBeUndefined();
+});
+
+/* ------------------------------------------------------------------ *
+ * The timeout is a timeout
+ *
+ * COMMAND_ACK_TIMEOUT_MS used to be enforced only by a sweep the client ran on
+ * INBOUND SOCKET TRAFFIC. So the deadline for "nobody answered" was policed by
+ * the arrival of messages — the very thing whose absence it was written to
+ * detect. Measured before this: a send whose frame was swallowed sat at
+ * `submitted` for twenty seconds with no failure, no toast and no live-region
+ * text, and only failed once unrelated traffic was provoked. On a quiet tab it
+ * would never have failed at all: a permanent ghost.
+ * ------------------------------------------------------------------ */
+
+test('an unanswered command calls itself off with no inbound traffic at all', () => {
+  const h = harness({ capable: true, timers: true });
+
+  const commandId = submit(h, 'send');
+  expect(h.state.commands[commandId].stage).toBe('submitted');
+  // One alarm, armed by the submit itself.
+  expect(h.armed()).toBe(1);
+
+  // Nothing is fed in. No frame, no ack, no socket event — only time.
+  h.advance(COMMAND_ACK_TIMEOUT_MS);
+
+  expect(h.state.commands[commandId]).toMatchObject({
+    stage: 'failed',
+    reason: 'The hub never acknowledged that.',
+  });
+  expect(h.failures).toEqual([`${commandId}:The hub never acknowledged that.`]);
+  // And nothing is left ticking once nothing is outstanding.
+  expect(h.armed()).toBe(0);
+});
+
+test('the timer fires no earlier than the deadline: a command still inside its window is left alone', () => {
+  const h = harness({ capable: true, timers: true });
+  const commandId = submit(h, 'send');
+
+  h.advance(COMMAND_ACK_TIMEOUT_MS - 1);
+
+  expect(h.state.commands[commandId].stage).toBe('submitted');
+  expect(h.failures).toEqual([]);
+  expect(h.armed()).toBe(1);
+});
+
+test('an ack inside the window settles the command and disarms the timer rather than leaving it to fire', () => {
+  const h = harness({ capable: true, timers: true });
+  const commandId = submit(h, 'send');
+
+  h.receive(ack(commandId, 'accepted'));
+  // The ack does not sweep, so the alarm is still booked — but it finds
+  // nothing to call off and takes itself down.
+  h.advance(COMMAND_ACK_TIMEOUT_MS);
+
+  expect(h.state.commands[commandId].stage).toBe('accepted');
+  expect(h.failures).toEqual([]);
+  expect(h.armed()).toBe(0);
+});
+
+test('a burst of commands is one alarm, not one alarm each, and each is called off at its own deadline', () => {
+  const h = harness({ capable: true, timers: true });
+
+  const first = submit(h, 'set-model');
+  expect(h.armed()).toBe(1);
+  h.advance(5_000);
+  const second = submit(h, 'set-model');
+  // Still ONE: a flapping socket must not leak a timer per keystroke.
+  expect(h.armed()).toBe(1);
+  h.advance(5_000);
+  const third = submit(h, 'set-model');
+  expect(h.armed()).toBe(1);
+
+  // Walk past the first deadline only.
+  h.advance(COMMAND_ACK_TIMEOUT_MS - 10_000);
+  expect(h.state.commands[first].stage).toBe('failed');
+  expect(h.state.commands[second].stage).toBe('submitted');
+  expect(h.state.commands[third].stage).toBe('submitted');
+  expect(h.armed()).toBe(1);
+
+  // Then past the rest, one deadline at a time, off the re-armed alarm.
+  h.advance(COMMAND_ACK_TIMEOUT_MS);
+  expect(h.state.commands[second].stage).toBe('failed');
+  expect(h.state.commands[third].stage).toBe('failed');
+  expect(h.failures).toHaveLength(3);
+  expect(h.armed()).toBe(0);
+});
+
+test('the alarm outlives the socket that had nothing to do with it: a command submitted while offline still fails on its own', () => {
+  // Offline means the dispatch is refused, which fails the record immediately —
+  // so what is being proven here is the other half: a ledger whose socket never
+  // delivers anything is exactly the case where a traffic-driven sweep is dead,
+  // and the record settles anyway.
+  const h = harness({ capable: true, offline: true, timers: true });
+  const commandId = submit(h, 'set-model');
+
+  expect(h.state.commands[commandId].stage).toBe('failed');
+  expect(h.armed()).toBe(0);
+  expect(h.failures).toHaveLength(1);
+});
+
+test('a teardown cancels the alarm, so a disposed client leaves nothing ticking', () => {
+  const h = harness({ capable: true, timers: true });
+  submit(h, 'send');
+  expect(h.armed()).toBe(1);
+
+  disarmCommandSweep(h.state, h.host);
+
+  expect(h.armed()).toBe(0);
+  expect(h.state.sweepTimer).toBeNull();
+  // Idempotent: a second teardown is not an error and does not re-arm.
+  disarmCommandSweep(h.state, h.host);
+  expect(h.armed()).toBe(0);
+});
+
+test('a host with no clock is unchanged: the ledger still works, it is just only swept from outside', () => {
+  const h = harness({ capable: true });
+  const commandId = submit(h, 'send');
+
+  expect(h.state.sweepTimer).toBeNull();
+  h.clock.now += COMMAND_ACK_TIMEOUT_MS;
+  sweepCommands(h.state, h.clock.now, h.host);
+  expect(h.state.commands[commandId].stage).toBe('failed');
+});
+
+/* ------------------------------------------------------------------ *
+ * The never-throws contract, all the way down
+ *
+ * `sendToHub` answers false for a socket it can SEE is shut. It cannot answer
+ * for a socket that shuts between that check and the `send()` after it —
+ * `WebSocket.send` on a CLOSING socket throws `InvalidStateError`. Unguarded,
+ * that throw walked out of the one function that promises never to throw and
+ * reached a click handler as an unhandled rejection: the original bug class,
+ * one layer down.
+ * ------------------------------------------------------------------ */
+
+test('a dispatch that throws is a refusal wearing its own reason, not an exception at the caller', () => {
+  const h = harness({ capable: true, throws: 'The connection is closing.' });
+
+  let commandId = '';
+  expect(() => {
+    commandId = submit(h, 'send');
+  }).not.toThrow();
+
+  expect(h.state.commands[commandId]).toMatchObject({
+    stage: 'failed',
+    reason: 'The connection is closing.',
+    // Nothing left the tab, and the record says so as a fact.
+    undelivered: true,
+  });
+  expect(h.failures).toEqual([`${commandId}:The connection is closing.`]);
+});
+
+test("a throwing socket does not take the stream's own subscribes down with it", () => {
+  const h = harness({ capable: true, throws: 'The connection is closing.' });
+
+  // Adopt an origin first, so the delta after it is a genuine hole and the
+  // resume it provokes really does reach for the socket.
+  h.receive(delta(1));
+  expect(h.applied.map((entry) => entry.seq)).toEqual([1]);
+  // A resume goes out through the same door; it must refuse, not explode
+  // inside the socket's onmessage handler.
+  expect(() => h.receive(delta(5))).not.toThrow();
+  expect(h.applied.map((entry) => entry.seq)).toEqual([1]);
+  // The hole is left unclaimed, so the next delta through it tries again —
+  // exactly what a subscribe that never left is supposed to leave behind.
+  expect(h.state.cursors[SESSION].resyncAfter).toBeNull();
+});
+
+/* ------------------------------------------------------------------ *
+ * Provably undelivered vs merely unanswered
+ *
+ * A retry is a one-tap instruction to an agent that acts on the world. The
+ * ledger knows the difference between "this never left the tab" and "this may
+ * be in the daemon's hands and the ack path died", and the UI may not offer
+ * both with the same confidence — so the difference is a fact on the record
+ * rather than a guess read off the wording of a reason.
+ * ------------------------------------------------------------------ */
+
+test('only the failures this tab can prove never left are marked undelivered', () => {
+  const refused = harness({ capable: true, offline: true });
+  const refusedId = submit(refused, 'send');
+  expect(refused.state.commands[refusedId].undelivered).toBe(true);
+
+  const stillborn = harness({ capable: true });
+  const stillbornId = failLocally(
+    stillborn.state,
+    stillborn.host,
+    { commandId: 'pre-1', sessionId: SESSION, kind: 'send', settlesAt: 'accepted' },
+    'wirePayload blew up'
+  );
+  expect(stillborn.state.commands[stillbornId].undelivered).toBe(true);
+
+  // Ambiguous: the envelope went out and the hub simply never answered.
+  const swept = harness({ capable: true });
+  const sweptId = submit(swept, 'send');
+  swept.clock.now += COMMAND_ACK_TIMEOUT_MS;
+  sweepCommands(swept.state, swept.clock.now, swept.host);
+  expect(swept.state.commands[sweptId].stage).toBe('failed');
+  expect(swept.state.commands[sweptId].undelivered).toBeUndefined();
+
+  // Ambiguous too: the socket died after the envelope was already gone.
+  const dropped = harness({ capable: true });
+  const droppedId = submit(dropped, 'set-model');
+  noteDisconnect(dropped.state, dropped.clock.now, dropped.host);
+  expect(dropped.state.commands[droppedId].stage).toBe('failed');
+  expect(dropped.state.commands[droppedId].undelivered).toBeUndefined();
+});
+
+/* ------------------------------------------------------------------ *
+ * One failure, one report
+ *
+ * The client's failure reporter decides whether a kind's own surface has
+ * already claimed a failure (a permission card rendering "Couldn't send that
+ * answer." off the record) or whether a toast is the only thing that will say
+ * it. That decision runs INSIDE `noteFailure`, and the timing below is why the
+ * registry it consults has to be written before the submit, not after it: the
+ * legacy dialect's synchronous throw reaches the reporter before `submitCommand`
+ * has returned, so a registration on the line after the call is a registration
+ * that has not happened yet. Registered late, the reporter saw nothing, toasted,
+ * and the still-parked card rendered the same failure: one failure, two reports.
+ * ------------------------------------------------------------------ */
+
+test('a failure is reported before submitCommand returns, on both dialects — so a surface must be claimed before the call', () => {
+  const legacy = harness();
+  let reportedDuringLegacyCall = false;
+  const legacyId = submitCommand(legacy.state, legacy.host, {
+    commandId: 'answer-legacy',
+    sessionId: SESSION,
+    machineId: 'mac-1',
+    kind: 'permission.answer',
+    settlesAt: 'applied',
+    payload: {},
+    legacy: () => {
+      throw new Error('Not connected to the hub.');
+    },
+  });
+  reportedDuringLegacyCall = legacy.failures.length === 1;
+  expect(reportedDuringLegacyCall).toBe(true);
+  expect(legacy.state.commands[legacyId].stage).toBe('failed');
+
+  const stream = harness({ capable: true, offline: true });
+  const streamId = submitCommand(stream.state, stream.host, {
+    commandId: 'answer-stream',
+    sessionId: SESSION,
+    machineId: 'mac-1',
+    kind: 'permission.answer',
+    settlesAt: 'applied',
+    payload: {},
+    legacy: () => {},
+  });
+  expect(stream.failures).toHaveLength(1);
+  expect(stream.state.commands[streamId].stage).toBe('failed');
+});
+
+test('a permission answer that fails is announced exactly once on each dialect, given a registry written before the submit', () => {
+  /**
+   * A miniature of the client's arbitration: a card is "on screen" while its
+   * request is parked, the reporter suppresses the toast when a card owns the
+   * failure, and the card renders the failure it owns. What is counted is
+   * REPORTS — card lines plus toasts — and the answer must be one, never two
+   * and never zero.
+   */
+  function run(dialect: 'stream' | 'legacy'): { toasts: number; cards: number } {
+    let parked = true;
+    const claimed = new Map<string, boolean>();
+    let toasts = 0;
+
+    const h = harness(
+      dialect === 'stream' ? { capable: true, offline: true } : { capable: false }
+    );
+    h.host.noteFailure = (record) => {
+      // The card claims the failure only while it is genuinely still rendered.
+      if (claimed.has(record.commandId) && parked) return;
+      toasts += 1;
+    };
+
+    const commandId = 'answer-1';
+    // BEFORE the submit — the whole subject of this test.
+    claimed.set(commandId, true);
+    submitCommand(h.state, h.host, {
+      commandId,
+      sessionId: SESSION,
+      machineId: 'mac-1',
+      kind: 'permission.answer',
+      settlesAt: 'applied',
+      payload: {},
+      legacy: () => {
+        // Legacy `resolvePermission` puts the control on the wire FIRST and
+        // unparks the card only afterwards, so a throw leaves it on screen.
+        throw new Error('Not connected to the hub.');
+      },
+      streamEffects: {
+        // The stream dialect unparks at dispatch, before anything can fail.
+        submitted: () => {
+          parked = false;
+        },
+      },
+    });
+
+    const cards = h.state.commands[commandId].stage === 'failed' && parked ? 1 : 0;
+    return { toasts, cards };
+  }
+
+  const legacy = run('legacy');
+  // The card is still up and renders the refusal; the toast stands down.
+  expect(legacy).toEqual({ toasts: 0, cards: 1 });
+
+  const stream = run('stream');
+  // The card is already gone, so the toast IS the report — and is the only one.
+  expect(stream).toEqual({ toasts: 1, cards: 0 });
+
+  expect(legacy.toasts + legacy.cards).toBe(1);
+  expect(stream.toasts + stream.cards).toBe(1);
 });

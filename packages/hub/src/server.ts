@@ -6,12 +6,14 @@ import type {
   EffortLevel,
   Envelope,
   FleetConfig,
+  FleetHook,
   FleetMcpConfig,
   FleetSyncReport,
   FramePayload,
   FsPayload,
   HarnessKind,
   HarnessReport,
+  HookDraft,
   InstanceRow,
   MachineMemorySet,
   NeutralSessionInfo,
@@ -37,6 +39,8 @@ import {
   deriveTitleFromFirstMessage,
   FLEET_STATUS,
   FLEET_SYNC,
+  HOOK_TEMPLATES,
+  hookProblem,
   identifyBlocks,
   INSPECT_CONFIG,
   RULE_TEMPLATES,
@@ -56,6 +60,7 @@ import { Elysia, t } from 'elysia';
 import { websocket } from 'elysia/websocket';
 import { buildInfo } from './build';
 import { HUB_VERSION } from './config';
+import { delegateTypesRoutes, makeDelegateTypes } from './delegate-types';
 import { RuleEngine } from './rules';
 import type { AgentAuth, DbShape, DelegateEvent, InstanceKind } from './db';
 import { usageBucketFromRow } from './db';
@@ -618,6 +623,15 @@ const isQuerySend = (payload: unknown): boolean => {
 };
 
 export const createServer = ({ registry, db, pending, telegram }: HubServices) => {
+  // Honest ground, before anything is served. A fresh process holds no agent
+  // sockets, so every row still claiming `online` is a leftover from a hub that
+  // was killed before its close handlers could run. The read-time overlay
+  // (`withPresence`, below) already makes the API tell the truth regardless —
+  // this is for every *other* reader of the stored rows: a migration, a script,
+  // a `sqlite3` session at 3am. A column nobody has to remember to distrust is
+  // worth one write at startup.
+  db.markAllAgentsOffline();
+
   /**
    * Standing instructions, enforced on the frame stream this server already
    * carries. Constructed here so it shares the request's `db` and reaches
@@ -878,6 +892,41 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
   };
 
   /**
+   * Presence is the registry's; history is the database's.
+   *
+   * The `agents.status` column is a *log* of presence transitions, not a
+   * statement of the present: it is written `'online'` at register and
+   * `'offline'` only from the socket close handler. Nothing writes it when this
+   * process was not the one holding the socket — a hub restart, a crash, a
+   * daemon killed while the hub was down — so a row can sit at `'online'` for
+   * days while no socket for that machine exists anywhere. That is precisely
+   * the window in which the board showed three green machines and every send
+   * came back `machine <id> is not connected`, because routing has always asked
+   * the registry (`registry.agent(machineId)`) and only the *display* asked the
+   * column. Two sources of truth for one fact, and the operator was shown the
+   * wrong one.
+   *
+   * So the read is derived, not stored: `status` is answered from the live
+   * socket registry at the moment of the read, and everything else on the row —
+   * `lastSeenAt`, `build`, `harnesses`, `fleet`, `auth` — is passed through from
+   * the database untouched. After this, "online" means exactly one thing, and it
+   * is the same thing routing means: *the hub is holding a socket for it right
+   * now*. A machine that is merely recently-seen reads `offline` and says so, and
+   * a script polling `/api/agents` can discover an unreachable machine instead of
+   * being told a comfortable lie.
+   *
+   * Applied at the only two places a machine's status is emitted to a reader:
+   * the `/api/agents` route and {@link instancesFrame}. The other
+   * `db.listAgents()` callers are fleet/config lookups that never read `status`,
+   * and are deliberately left alone.
+   */
+  const withPresence = (rows: AgentRow[]): AgentRow[] =>
+    rows.map((row) => ({
+      ...row,
+      status: registry.agent(row.machineId) ? 'online' : 'offline',
+    }));
+
+  /**
    * The whole board as one message: every row, every machine, and what each
    * session is holding. Built in one place so the snapshot a dashboard is
    * handed on connect and the snapshot it is pushed on every move are the same
@@ -894,7 +943,7 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
     payload: {
       kind: 'instances',
       instances: db.listInstances(),
-      agents: db.listAgents(),
+      agents: withPresence(db.listAgents()),
       handoffs: Object.fromEntries(handoffs),
       queues: Object.fromEntries(queues),
       capabilities: [...HUB_CAPABILITIES],
@@ -1130,13 +1179,24 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
    * with no such verb (opencode, pi) answers with an error that reads as a
    * session failure, so only a claude session — and a legacy row whose
    * `harness` predates the rework and is therefore claude — is told.
+   *
+   * `hooksChanged` adds a third control, `reinitialize` — the SDK `Query`
+   * method that actually re-reads settings, hooks included, rather than only
+   * the two narrower things the other verbs cover. It is heavier than a
+   * reload, so it is sent only when this sync's report says the hook set on
+   * this machine is not the report's own last one; every other sync leaves a
+   * running session's hooks exactly as they were, which is correct, because
+   * they have not changed.
    */
-  const refreshSessions = (machineId: string, agent: HubSocket): void => {
+  const refreshSessions = (machineId: string, agent: HubSocket, hooksChanged: boolean): void => {
     for (const row of db.listInstances()) {
       if (row.machineId !== machineId) continue;
       if (row.status !== 'running' && row.status !== 'starting') continue;
       if (row.harness && row.harness !== 'claude') continue;
-      for (const method of ['reloadSkills', 'reloadPlugins'] as const) {
+      const methods = hooksChanged
+        ? (['reloadSkills', 'reloadPlugins', 'reinitialize'] as const)
+        : (['reloadSkills', 'reloadPlugins'] as const);
+      for (const method of methods) {
         const requestId = crypto.randomUUID();
         const payload: ControlPayload = { instanceId: row.id, requestId, method, args: [] };
         agent.send({
@@ -1216,6 +1276,28 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
       hash: doc.hash,
       source: 'fleet',
       path: doc.path,
+    });
+  };
+
+  /**
+   * The version of a hook that a save, an edit or a delete is about to
+   * replace or destroy — kept before it goes, the same moment a memory
+   * document's version is. `fleet` is the only source today: a hook is
+   * never edited from a machine, only converged onto one.
+   */
+  const keepHookVersion = (hook: FleetHook): void => {
+    db.recordFleetHook({
+      hookId: hook.id,
+      name: hook.name,
+      enabled: hook.enabled,
+      event: hook.event,
+      matcher: hook.matcher,
+      handler: hook.handler,
+      script: hook.script,
+      hash: hook.hash,
+      scope: hook.scope,
+      projectId: hook.projectId,
+      source: 'fleet',
     });
   };
 
@@ -1339,8 +1421,23 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
    * thing wrong.
    */
   const relaySend = (message: Envelope<SendPayload>, dashboard: HubSocket): boolean => {
+    // Provenance (NEW.md, cross-session delivery incident): which tab it
+    // believed it was sending from, when the dashboard's own command carried
+    // one. Never required — a legacy send or an older dashboard build logs
+    // with it absent — but it is the one thing that makes "a send landed on
+    // the wrong session" provable after the fact instead of merely suspected.
+    const provenance = (message.payload as { provenance?: { clientId?: string } })?.provenance;
     const from = peekPeer(message.payload);
-    if (!forward(message, dashboard) || !message.instanceId) return false;
+    const forwarded = forward(message, dashboard);
+    // Logged after the guard, not before: a message the guard drops (no agent
+    // connected) never reached the target, and a log line claiming otherwise
+    // would itself become evidence in the next "did this land" argument.
+    console.log(
+      `[hub] send -> ${message.instanceId ?? '?'} (${forwarded ? 'forwarded' : 'dropped'})${
+        provenance ? ` client ${provenance.clientId ?? '?'}` : ''
+      }`
+    );
+    if (!forwarded || !message.instanceId) return false;
     // The first thing a session is asked is what it is called, until
     // something names it properly.
     if (!hasAttachments(message.payload))
@@ -1415,12 +1512,18 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
     relayControl: (envelope, dashboard) => relayControl(envelope, dashboard, false),
   });
 
+  // Delegate types (fleet-wide `delegate` presets): a standalone table and
+  // route group, mounted rather than folded into the routes below — see
+  // delegate-types.ts for why it keeps its own connection.
+  const delegateTypes = makeDelegateTypes();
+
   return new Elysia()
     .use(websocket())
+    .use(delegateTypesRoutes(delegateTypes))
     // The hub's own build rides along (NEW.md §12), so a machine's can be read
     // against something rather than taken on faith.
     .get('/health', async () => ({ ok: true, version: HUB_VERSION, build: await buildInfo() }))
-    .get('/api/agents', () => db.listAgents())
+    .get('/api/agents', () => withPresence(db.listAgents()))
     // What a restart polls to find a moment that cuts nothing in half.
     .get('/api/agents/:machineId/busy', async ({ params, status }) => {
       const answer = await callAgent(params.machineId, AGENT_BUSY, [], BUSY_TIMEOUT_MS);
@@ -2277,6 +2380,123 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
       fanOutFleet();
       return memory;
     })
+    /**
+     * Hooks (NEW.md §11): the one fleet row that is executable, so the gate
+     * here is `hookProblem` — the same validator the editor refuses a save
+     * with — rather than the loose shape checks a config blob gets elsewhere.
+     * A hook that passed the editor's own test box and still fails here would
+     * be a hub disagreeing with itself about what is safe to run.
+     */
+    .get('/api/fleet/hooks', () => ({ hooks: db.listFleetHooks(), templates: HOOK_TEMPLATES }))
+    .put(
+      '/api/fleet/hooks/:id',
+      {
+        body: t.Object({
+          name: t.String(),
+          enabled: t.Boolean(),
+          event: t.String(),
+          matcher: t.Optional(t.String()),
+          // Stored and written verbatim, so the schema only asks that it be an
+          // object; `hookProblem` checks the fields that make it runnable.
+          handler: t.Record(t.String(), t.Unknown()),
+          script: t.Optional(t.String()),
+          scope: t.Optional(t.String()),
+          projectId: t.Optional(t.String()),
+          expectedHash: t.Optional(t.String()),
+        }),
+      },
+      ({ params, body, status }) => {
+        const { expectedHash, ...rest } = body;
+        const draft = rest as unknown as HookDraft;
+        const wrong = hookProblem(draft);
+        const first = Object.values(wrong)[0];
+        if (first) return status(400, first);
+
+        const current = db.getFleetHook(params.id);
+        // The same conflict a memory document's save answers with: what the
+        // writer had in front of them is stale, so the row really there comes
+        // back rather than one editor's version winning by being last.
+        if (expectedHash !== undefined && current && current.hash !== expectedHash) {
+          return status(409, current);
+        }
+        if (current) keepHookVersion(current);
+
+        const hook = db.putFleetHook({ ...draft, id: params.id });
+        fanOutFleet();
+        return hook;
+      }
+    )
+    .delete('/api/fleet/hooks/:id', ({ params, status }) => {
+      const current = db.getFleetHook(params.id);
+      if (!current) return status(404, `the fleet keeps no hook ${params.id}`);
+
+      keepHookVersion(current);
+      db.deleteFleetHook(params.id);
+      fanOutFleet();
+      return { ok: true };
+    })
+    // What one hook used to be, newest first, without the material. `?hookId=`
+    // narrows to that hook's own history; nothing named lists every hook's,
+    // for a fleet-wide undo panel.
+    .get('/api/fleet/hooks/history', ({ query }) =>
+      db.listFleetHookHistory(typeof query.hookId === 'string' ? query.hookId : undefined)
+    )
+    .get('/api/fleet/hooks/history/:id', ({ params, status }) => {
+      const version = db.fleetHookVersion(Number(params.id));
+      return version ?? status(404, `no hook version ${params.id}`);
+    })
+    // Undo, through the same door as a save: what restoring replaces is
+    // itself kept first, so a restore of the wrong version is undone the
+    // same way a bad edit is.
+    .post('/api/fleet/hooks/restore', { body: t.Object({ id: t.Number() }) }, ({ body, status }) => {
+      const version = db.fleetHookVersion(body.id);
+      if (!version) return status(404, `no hook version ${body.id}`);
+
+      const current = db.getFleetHook(version.hookId);
+      if (current) keepHookVersion(current);
+
+      const hook = db.putFleetHook({
+        id: version.hookId,
+        name: version.name,
+        enabled: version.enabled,
+        event: version.event,
+        matcher: version.matcher,
+        handler: version.handler,
+        script: version.script,
+        scope: version.scope,
+        projectId: version.projectId,
+      });
+      fanOutFleet();
+      return hook;
+    })
+    // The click for a hook that drifted on one machine, or that a reader
+    // wants there right now rather than at the next reconnect: `force: true`
+    // on the one row named, or on every enabled one when none is.
+    .post(
+      '/api/fleet/hooks/push',
+      { body: t.Object({ machineId: t.String(), id: t.Optional(t.String()) }) },
+      ({ body, status }) => {
+        const agent = registry.agent(body.machineId);
+        if (!agent) return status(404, `machine ${body.machineId} is not connected`);
+
+        const config = db.fleetConfig();
+        if (!config.hooks || config.hooks.length === 0) {
+          return status(400, 'the fleet keeps no hooks to push');
+        }
+        if (body.id !== undefined && !config.hooks.some((hook) => hook.id === body.id)) {
+          return status(404, `the fleet keeps no hook ${body.id}`);
+        }
+
+        pushFleetConfig(body.machineId, agent, {
+          ...config,
+          hooks: config.hooks.map((hook) =>
+            body.id === undefined || hook.id === body.id ? { ...hook, force: true } : hook
+          ),
+        });
+        publishInstances(body.machineId);
+        return { ok: true };
+      }
+    )
     // The click for a machine that drifted, or for the whole fleet: the same
     // sync a register sends, asked for on purpose.
     .post(
@@ -2312,6 +2532,36 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
       const machineId = peek(body, 'machineId');
       const instanceId = peek(body, 'instanceId');
       if (!machineId || !instanceId) return status(400, 'name a machine and an instance');
+
+      // A delegate type, for callers outside the WebSocket tunnel (the
+      // opencode plugin's `delegate` tool passes `type` through its relay
+      // body rather than resolving it itself — see handoff-shared.ts's own
+      // `delegate()` for the same resolution done daemon-side for claude/pi).
+      // Explicit fields already on the body win; the type only fills gaps.
+      const typeName = peek(body, 'type');
+      if (typeName) {
+        const known = delegateTypes.list();
+        const resolved = known.find((type) => type.name === typeName);
+        if (!resolved) {
+          // Same wording handoff-shared.ts's own `delegate()` refuses an
+          // unknown type with (see its `resolvedType` block) — one refusal
+          // vocabulary whichever side resolved the name.
+          const names = known.map((type) => type.name).join(', ') || 'none are configured';
+          return status(400, `No delegate type "${typeName}". Available: ${names}.`);
+        }
+        const rec = body as Record<string, unknown>;
+        if (!rec.harness) rec.harness = resolved.harness;
+        if (!rec.model) rec.model = resolved.model;
+        if (!rec.effort && resolved.effort) rec.effort = resolved.effort;
+        if (!(Array.isArray(rec.skills) && rec.skills.length) && resolved.skills) rec.skills = resolved.skills;
+        if (!(Array.isArray(rec.denyTools) && rec.denyTools.length) && resolved.denyTools) {
+          rec.denyTools = resolved.denyTools;
+        }
+      }
+      // `type` is a relay-only convenience: SpawnPayload itself has no such
+      // field, and it must not ride along into the envelope the daemon spawns
+      // from — it already did its one job resolving harness/model/etc above.
+      delete (body as Record<string, unknown>).type;
 
       // A delegate that names no permission mode inherits the ROOT of its
       // delegate tree, so a nested delegate of a bypassing session stays
@@ -2858,10 +3108,16 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
               pendingFleet.delete(message.requestId);
               const report = peekFleetReport(message.payload);
               if (report) {
+                // Read before the overwrite: this is the only place either
+                // side of the change is in hand at once, and `reinitialize`
+                // below has to know which machine actually moved.
+                const previousHooks = db.listAgents().find((row) => row.machineId === message.machineId)?.fleet
+                  ?.hooks;
+                const hooksChanged = JSON.stringify(previousHooks ?? {}) !== JSON.stringify(report.hooks ?? {});
                 db.setAgentFleet(message.machineId, report);
                 publishInstances(message.machineId);
                 // The disk just changed under this machine's live sessions.
-                refreshSessions(message.machineId, ws);
+                refreshSessions(message.machineId, ws, hooksChanged);
               }
             }
             // A control a route is waiting on: the reply is that request's

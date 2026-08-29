@@ -10,6 +10,7 @@
  * `customTools`), and this file is the body they share.
  */
 import type {
+  DelegateType,
   Envelope,
   InstanceRow,
   PermissionResult,
@@ -24,6 +25,30 @@ const hubHttpUrl = (): string => {
   const ws = process.env[COCKPIT_ENV.hubUrl] ?? `ws://localhost:${COCKPIT_HUB_PORT}/ws`;
   return ws.replace(/^ws/, 'http').replace(/\/ws$/, '');
 };
+
+/**
+ * The fleet's delegate types (`@cockpit/core`'s `DelegateType`), read once
+ * per session. There is no fleet sync path for them yet (unlike MCP servers
+ * and skills) — a daemon fetches this directly from the hub it already knows
+ * the address of, right before it builds the `delegate` tool's description,
+ * and the caller freezes what comes back for the session's whole life.
+ * A hub that is unreachable, or predates the table, answers with none —
+ * `delegate` then falls back to its pre-type behaviour (raw model/harness).
+ * The description needs this list before the first tool call can happen, so
+ * the fetch stays here, at construction; `delegate()`'s own body retries it
+ * once, lazily, if a `type` is named against a cache this call found empty —
+ * that covers the blip case without paying a second fetch on every call.
+ */
+export async function fetchDelegateTypes(): Promise<DelegateType[]> {
+  try {
+    const res = await fetch(`${hubHttpUrl()}/api/delegate-types`, { signal: AbortSignal.timeout(5000) });
+    if (!res.ok) return [];
+    const body = (await res.json()) as { types?: DelegateType[] };
+    return body.types ?? [];
+  } catch {
+    return [];
+  }
+}
 
 /** The last path segment — how the rail names a session, and how the model will. */
 const leafOf = (path: string): string => path.split('/').filter(Boolean).pop() ?? path;
@@ -50,11 +75,8 @@ const ageOf = (at: InstanceRow['updatedAt']): string => {
   return hours < 24 ? `active ${hours}h ago` : `active ${Math.round(hours / 24)}d ago`;
 };
 
-/**
- * The fleet, read from the hub rather than from this daemon's own sessions:
- * the whole point is reaching a session that is usually somewhere else.
- */
-async function roster(exceptInstanceId: string): Promise<{ peers: Peer[]; own: InstanceRow | undefined }> {
+/** The raw rows behind the roster, before the running/starting narrowing. */
+async function fetchInstances(): Promise<{ rows: InstanceRow[]; hosts: Map<string, string> }> {
   const base = hubHttpUrl();
   const [instancesRes, agentsRes] = await Promise.all([
     fetch(`${base}/api/instances`, { signal: AbortSignal.timeout(5000) }),
@@ -68,19 +90,55 @@ async function roster(exceptInstanceId: string): Promise<{ peers: Peer[]; own: I
       hosts.set(agent.machineId, agent.hostname);
     }
   }
+  return { rows, hosts };
+}
+
+const toPeer = (row: InstanceRow, hosts: Map<string, string>): Peer => {
+  const name = leafOf(row.cwd);
+  return { row, name, label: `${name}#${shortId(row.id)}`, host: hosts.get(row.machineId) ?? row.machineId };
+};
+
+/**
+ * The fleet, read from the hub rather than from this daemon's own sessions:
+ * the whole point is reaching a session that is usually somewhere else.
+ */
+async function roster(exceptInstanceId: string): Promise<{ peers: Peer[]; own: InstanceRow | undefined }> {
+  const { rows, hosts } = await fetchInstances();
   const own = rows.find((row) => row.id === exceptInstanceId);
   const peers = rows
     .filter((row) => row.id !== exceptInstanceId && (row.status === 'running' || row.status === 'starting'))
-    .map((row) => {
-      const name = leafOf(row.cwd);
-      return {
-        row,
-        name,
-        label: `${name}#${shortId(row.id)}`,
-        host: hosts.get(row.machineId) ?? row.machineId,
-      };
-    });
+    .map((row) => toPeer(row, hosts));
   return { peers, own };
+}
+
+/**
+ * Resolves `fork_of` against every row the caller owns, regardless of
+ * status — `stopDelegate`'s own text promises "delegate again to resume from
+ * it", so a stopped delegate has to still be forkable. Unlike `roster()`,
+ * this is not filtered to running/starting; only `delegate()`'s fork lookup
+ * uses it.
+ */
+async function resolveForkSource(instanceId: string, target: string): Promise<Peer> {
+  const { rows, hosts } = await fetchInstances();
+  const mine = rows.filter((row) => row.parentInstanceId === instanceId).map((row) => toPeer(row, hosts));
+  try {
+    return resolve(mine, target);
+  } catch (error) {
+    let outside = false;
+    try {
+      resolve(
+        rows.map((row) => toPeer(row, hosts)),
+        target
+      );
+      outside = true;
+    } catch {
+      outside = false;
+    }
+    if (outside) {
+      throw new Error(`"${target}" is not your delegate — you can only fork your own delegates.`);
+    }
+    throw error;
+  }
 }
 
 /** Resolves what the model typed to one session; ambiguity is reported, not guessed. */
@@ -121,6 +179,13 @@ export interface HandoffDeps {
   readonly cwd: string;
   /** Puts an envelope on the daemon's hub socket. */
   readonly emit: (envelope: Envelope) => void;
+  /**
+   * The fleet's delegate types, fetched once via {@link fetchDelegateTypes}
+   * before this session's tools were built. Empty on a hub that has none, or
+   * could not be reached — `delegate`'s `type` param then has nothing to
+   * resolve against and every call needs its own `harness`/`model`.
+   */
+  readonly delegateTypes?: DelegateType[];
 }
 
 /** The three hand-off actions, each answering with the text the tool returns. */
@@ -130,7 +195,20 @@ export interface HandoffActions {
   startSession(cwd: string, prompt: string, sideQuest?: boolean, model?: string): Promise<HandoffResult>;
   delegate(
     prompt: string,
-    opts?: { cwd?: string; harness?: 'claude' | 'opencode' | 'pi'; model?: string; skills?: string[] }
+    opts?: {
+      cwd?: string;
+      harness?: 'claude' | 'opencode' | 'pi';
+      model?: string;
+      skills?: string[];
+      /** An earlier delegate's instanceId — the new one forks its full conversation. */
+      forkOf?: string;
+      /**
+       * A named preset from `HandoffDeps.delegateTypes`. Its harness/model/
+       * effort/skills/denyTools apply first; an explicit `harness`/`model`/
+       * `skills` above still overrides what the type says.
+       */
+      type?: string;
+    }
   ): Promise<HandoffResult>;
   stopDelegate(target: string): Promise<string>;
   interruptDelegate(target: string): Promise<string>;
@@ -185,7 +263,7 @@ function resolveDelegate(peers: Peer[], target: string, instanceId: string): Pee
   }
 }
 
-export const handoffActions = ({ instanceId, cwd, emit }: HandoffDeps): HandoffActions => ({
+export const handoffActions = ({ instanceId, cwd, emit, delegateTypes = [] }: HandoffDeps): HandoffActions => ({
   async listSessions(): Promise<string> {
     const { peers, own } = await roster(instanceId);
     if (peers.length === 0) return 'No other sessions are running.';
@@ -269,7 +347,14 @@ export const handoffActions = ({ instanceId, cwd, emit }: HandoffDeps): HandoffA
 
   async delegate(
     prompt: string,
-    opts?: { cwd?: string; harness?: 'claude' | 'opencode' | 'pi'; model?: string; skills?: string[] }
+    opts?: {
+      cwd?: string;
+      harness?: 'claude' | 'opencode' | 'pi';
+      model?: string;
+      skills?: string[];
+      forkOf?: string;
+      type?: string;
+    }
   ): Promise<HandoffResult> {
     const id = crypto.randomUUID();
     const workdir = opts?.cwd ?? cwd;
@@ -277,13 +362,71 @@ export const handoffActions = ({ instanceId, cwd, emit }: HandoffDeps): HandoffA
     // The brief is the only thing that says what this session is for, and the
     // rail would otherwise have nothing to call it but its directory and its id.
     const title = briefTitle(prompt);
+
+    // A named type resolves first; an explicit harness/model/skills below
+    // still overrides what it says. Unknown name: a clear refusal listing
+    // what is actually available, never a spawn with half-applied settings.
+    let resolvedType: DelegateType | undefined;
+    if (opts?.type) {
+      // The session-start fetch (spawn()'s own fetchDelegateTypes call, before
+      // the tool description was built) froze this list for the session's whole
+      // life. An empty list there most often means the hub was mid-restart or
+      // the network blipped, not that the fleet truly has none — so an empty
+      // cache with a `type` actually named is retried once, live, before
+      // refusing. The frozen list still stands for every other call: this is a
+      // one-shot recovery from the blip, not a standing re-fetch per call.
+      const types = delegateTypes.length === 0 ? await fetchDelegateTypes() : delegateTypes;
+      resolvedType = types.find((type) => type.name === opts.type);
+      if (!resolvedType) {
+        const known = types.map((type) => type.name).join(', ') || 'none are configured';
+        throw new Error(`No delegate type "${opts.type}". Available: ${known}.`);
+      }
+    }
+
+    // A fork resumes the source delegate's own stored session, so its sessionKey
+    // has to come from the fleet — the only place this session's own daemon
+    // reports another instance's harness session id.
+    let resume: SpawnPayload['resume'];
+    let modelNote = '';
+    let harness = opts?.harness ?? resolvedType?.harness;
+    if (opts?.forkOf) {
+      const source = await resolveForkSource(instanceId, opts.forkOf);
+      if (!source.row.sessionId) {
+        throw new Error(
+          `Your delegate ${source.label} has no session yet to fork — it never started, or hasn't ` +
+            `emitted one. Delegate fresh instead of forking it.`
+        );
+      }
+      // A fork resumes the source's own stored transcript; that transcript
+      // belongs to one harness, so the spawn has to land on the same one.
+      const sourceHarness = source.row.harness ?? undefined;
+      if (opts.harness && sourceHarness && opts.harness !== sourceHarness) {
+        throw new Error(
+          `cannot fork a ${sourceHarness} delegate into ${opts.harness} — transcripts don't transfer ` +
+            `across harnesses.`
+        );
+      }
+      harness = opts.harness ?? (sourceHarness as typeof harness);
+      resume = { sessionKey: source.row.sessionId, fork: true };
+      if (source.row.model && opts.model && source.row.model !== opts.model) {
+        modelNote =
+          ` Forked from a ${source.row.model} delegate onto ${opts.model} — the conversation carries ` +
+          `over, but the prompt cache does not; the transcript re-ingests at full cost.`;
+      }
+    }
+
+    const model = opts?.model ?? resolvedType?.model;
+    const skills = opts?.skills?.length ? opts.skills : resolvedType?.skills;
     const payload: SpawnPayload = {
       instanceId: id,
       cwd: workdir,
-      ...(opts?.harness ? { harness: opts.harness } : {}),
-      ...(opts?.model ? { model: opts.model } : {}),
+      ...(harness ? { harness } : {}),
+      ...(model ? { model } : {}),
+      ...(resolvedType?.effort ? { effort: resolvedType.effort } : {}),
       ...(title ? { title } : {}),
-      ...(opts?.skills?.length ? { skills: opts.skills } : {}),
+      ...(skills?.length ? { skills } : {}),
+      ...(resolvedType?.denyTools?.length ? { denyTools: resolvedType.denyTools } : {}),
+      ...(resume ? { resume } : {}),
       scratch: { baseCwd: workdir },
       parent: { instanceId },
       // A delegate is autonomous by definition: it must never sit waiting on a
@@ -307,13 +450,14 @@ export const handoffActions = ({ instanceId, cwd, emit }: HandoffDeps): HandoffA
     };
     emit({ verb: 'send', machineId: '', instanceId: id, payload: opening });
 
-    const harness = opts?.harness ?? 'claude';
     return {
       id,
       title: title || `${leafOf(workdir)}#${shortId(id)}`,
-      text: `Delegated to ${harness} session ${leafOf(workdir)}#${shortId(id)}. It runs as a ` +
-        `temporary session nested under this one; its report arrives here automatically when each ` +
-        `of its turns completes. Guide it or send follow-ups with handoff("${id}", ...).`,
+      text: `Delegated to ${harness ?? 'claude'} session ${leafOf(workdir)}#${shortId(id)}.` +
+        (resume ? ' It starts with the full conversation of the forked delegate.' : '') +
+        modelNote +
+        ` It runs as a temporary session nested under this one; its report arrives here automatically ` +
+        `when each of its turns completes. Guide it or send follow-ups with handoff("${id}", ...).`,
     };
   },
 

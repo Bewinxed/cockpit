@@ -4,12 +4,16 @@ import type {
   ClaudeLimits,
   FleetAgent,
   FleetConfig,
+  FleetHook,
   FleetMarketplace,
   FleetMcpServer,
   FleetPlugin,
+  FleetScope,
   FleetSkillMeta,
   FleetSyncReport,
   HarnessReport,
+  HookEvent,
+  HookHandler,
   Rule,
   RuleState,
   RuleStats,
@@ -30,6 +34,8 @@ import {
   credentials,
   delegateEvents,
   fleetAgents,
+  fleetHookHistory,
+  fleetHooks,
   fleetMemory,
   fleetMemoryDocs,
   fleetMemoryHistory,
@@ -93,6 +99,28 @@ export interface MemoryDocRow {
   updatedAt: Date;
 }
 
+/** One superseded version of one hook, as a listing reads it — without the material. */
+export interface HookVersion {
+  id: number;
+  hookId: string;
+  name: string;
+  hash: string;
+  /** `fleet` for every version today — a hook has never been edited from a machine. */
+  source: string;
+  createdAt: Date;
+}
+
+/** A superseded version in full: what restoring it would actually write back. */
+export interface HookVersionMaterial {
+  enabled: boolean;
+  event: HookEvent;
+  matcher?: string;
+  handler: HookHandler;
+  script?: string;
+  scope?: FleetScope;
+  projectId?: string;
+}
+
 /** A stored usage bucket, one (machine, session, model, hour) cell (USAGE-SPEC.md §6). */
 export type UsageBucketRow = typeof usageBuckets.$inferSelect;
 
@@ -144,6 +172,20 @@ export interface DbShape {
   }) => void;
   readonly touchAgent: (machineId: string) => void;
   readonly markAgentOffline: (machineId: string) => void;
+  /**
+   * Every row back to `offline`, for the one moment it is unconditionally true:
+   * hub startup. The `status` column only ever goes to `offline` from the socket
+   * close handler, and a hub that died — crashed, was restarted, was upgraded —
+   * ran no close handlers, so every machine it was holding is left claiming
+   * `online` in a database the new process has never spoken to. This process
+   * holds no sockets until a daemon registers, so on the first line of its life
+   * the honest value for every row is `offline`; presence is re-earned by a
+   * register, not inherited from a previous life.
+   *
+   * `lastSeenAt` is deliberately NOT touched: when the machine was last heard
+   * from is history, and history survives a restart. Only reachability is reset.
+   */
+  readonly markAllAgentsOffline: () => void;
   readonly openInstance: (instance: {
     id: string;
     machineId: string;
@@ -253,6 +295,39 @@ export interface DbShape {
   /** Upsert of one definition's file; the hash and the size are read off it. */
   readonly putFleetAgent: (agent: { name: string; content: string }) => FleetAgent;
   readonly deleteFleetAgent: (name: string) => void;
+  /** Every hook the fleet keeps, by name — what the editor lists and seeds from. */
+  readonly listFleetHooks: () => FleetHook[];
+  readonly getFleetHook: (id: string) => FleetHook | undefined;
+  /**
+   * Upsert by id. The caller mints the id, like a rule's; the hash is not
+   * taken from the caller but recomputed here, over the material a machine
+   * actually compares before writing — so a hash can never be sent stale.
+   */
+  readonly putFleetHook: (hook: Omit<FleetHook, 'hash'>) => FleetHook;
+  readonly deleteFleetHook: (id: string) => void;
+  /**
+   * Keeps a version that is about to be replaced or destroyed — a save, an
+   * edit, or a delete, the same three moments a memory document is kept at.
+   */
+  readonly recordFleetHook: (version: {
+    hookId: string;
+    name: string;
+    enabled: boolean;
+    event: HookEvent;
+    matcher?: string;
+    handler: HookHandler;
+    script?: string;
+    hash: string;
+    scope?: FleetScope;
+    projectId?: string;
+    source: string;
+  }) => void;
+  /**
+   * Newest first, without the material: one hook's history, or — with no id —
+   * every hook's, for a fleet-wide undo panel.
+   */
+  readonly listFleetHookHistory: (hookId?: string) => HookVersion[];
+  readonly fleetHookVersion: (id: number) => (HookVersion & HookVersionMaterial) | undefined;
   /** The fleet's user-scope CLAUDE.md, or undefined while the fleet keeps none. */
   readonly getFleetMemory: () => { content: string; hash: string; updatedAt: Date } | undefined;
   /** Stores the document and the hash the machines compare against. */
@@ -448,6 +523,37 @@ const agentFile = (row: typeof fleetAgents.$inferSelect): FleetAgent => ({
 });
 
 /**
+ * A stored hook row back into the shape both ends of the fleet share. Takes
+ * the loose shape rather than `typeof fleetHooks.$inferSelect` so the same
+ * function reads a row just selected out of the table and the row a write is
+ * about to put into it — a hook has no server-side timestamp in its wire
+ * shape, so there is nothing else the two would disagree about.
+ */
+const hookOf = (row: {
+  id: string;
+  name: string;
+  enabled: boolean;
+  event: HookEvent;
+  matcher: string | null;
+  handler: HookHandler;
+  script: string | null;
+  hash: string;
+  scope: FleetScope | null;
+  projectId: string | null;
+}): FleetHook => ({
+  id: row.id,
+  name: row.name,
+  enabled: row.enabled,
+  event: row.event,
+  ...(row.matcher ? { matcher: row.matcher } : {}),
+  handler: row.handler,
+  ...(row.script ? { script: row.script } : {}),
+  hash: row.hash,
+  ...(row.scope ? { scope: row.scope } : {}),
+  ...(row.projectId ? { projectId: row.projectId } : {}),
+});
+
+/**
  * A stored bucket row back into the shared `UsageBucket` shape the blocks
  * algorithm consumes (USAGE-SPEC.md §4.4): the flattened token columns are
  * re-nested under `tokens`.
@@ -482,6 +588,19 @@ const HISTORY_LIMIT = 20;
 /** What a machine compares its own copy against — sha256 of the text's own bytes. */
 const hashText = (content: string): string =>
   new Bun.CryptoHasher('sha256').update(content).digest('hex');
+
+/**
+ * What a hook's own hash covers: everything a machine actually writes — not
+ * `name`, which is how the fleet talks about the hook, and not `enabled`,
+ * which decides whether it is written at all rather than what gets written.
+ */
+const hashHookMaterial = (hook: {
+  event: HookEvent;
+  matcher?: string;
+  handler: HookHandler;
+  script?: string;
+}): string =>
+  hashText(JSON.stringify([hook.event, hook.matcher ?? null, hook.handler, hook.script ?? null]));
 
 /**
  * Opens (and migrates) a database at `path`.
@@ -559,6 +678,11 @@ const make = (path: string): DbShape => {
         .set({ status: 'offline', lastSeenAt: new Date() })
         .where(eq(agents.machineId, machineId))
         .run();
+    },
+    // No `lastSeenAt` here, unlike its single-machine sibling above: that write
+    // means "I just heard from it", and starting up is not hearing from anyone.
+    markAllAgentsOffline: () => {
+      db.update(agents).set({ status: 'offline' }).run();
     },
     openInstance: ({ id, machineId, cwd, sessionId, harness, projectId, parentInstanceId, parentToolUseId, title, kind, permissionMode, model, effort }) => {
       const now = new Date();
@@ -811,6 +935,12 @@ const make = (path: string): DbShape => {
           docs: listFleetMemoryDocs().map(({ path, hash, content }) => ({ path, hash, content })),
         };
       })(),
+      // Always an array, like `skills` above, never omitted: this hub is not
+      // one that predates hooks, so there is no version-skew reason to leave
+      // the field out the way an old daemon's absence is read. A disabled row
+      // is simply not one of them — the same rule a disabled MCP server or
+      // skill already follows.
+      hooks: db.select().from(fleetHooks).where(eq(fleetHooks.enabled, true)).all().map(hookOf),
     }),
     putMcpServer: ({ name, config, enabled }) => {
       const server: FleetMcpServer = { name, config, enabled: enabled ?? true };
@@ -912,6 +1042,116 @@ const make = (path: string): DbShape => {
     },
     deleteFleetAgent: (name) => {
       db.delete(fleetAgents).where(eq(fleetAgents.name, name)).run();
+    },
+    listFleetHooks: () => db.select().from(fleetHooks).orderBy(fleetHooks.name).all().map(hookOf),
+    getFleetHook: (id) => {
+      const row = db.select().from(fleetHooks).where(eq(fleetHooks.id, id)).get();
+      return row ? hookOf(row) : undefined;
+    },
+    putFleetHook: (hook) => {
+      const values = {
+        id: hook.id,
+        name: hook.name,
+        enabled: hook.enabled,
+        event: hook.event,
+        matcher: hook.matcher ?? null,
+        handler: hook.handler,
+        script: hook.script ?? null,
+        hash: hashHookMaterial(hook),
+        scope: hook.scope ?? null,
+        projectId: hook.projectId ?? null,
+        updatedAt: new Date(),
+      };
+      db.insert(fleetHooks)
+        .values({ ...values, createdAt: values.updatedAt })
+        // `createdAt` is deliberately absent from the update set, like a
+        // rule's: editing a hook must not reorder the list under the person
+        // editing it.
+        .onConflictDoUpdate({
+          target: fleetHooks.id,
+          set: {
+            name: values.name,
+            enabled: values.enabled,
+            event: values.event,
+            matcher: values.matcher,
+            handler: values.handler,
+            script: values.script,
+            hash: values.hash,
+            scope: values.scope,
+            projectId: values.projectId,
+            updatedAt: values.updatedAt,
+          },
+        })
+        .run();
+      return hookOf(values);
+    },
+    deleteFleetHook: (id) => {
+      db.delete(fleetHooks).where(eq(fleetHooks.id, id)).run();
+    },
+    recordFleetHook: (version) => {
+      db.insert(fleetHookHistory)
+        .values({
+          hookId: version.hookId,
+          name: version.name,
+          enabled: version.enabled,
+          event: version.event,
+          matcher: version.matcher ?? null,
+          handler: version.handler,
+          script: version.script ?? null,
+          hash: version.hash,
+          scope: version.scope ?? null,
+          projectId: version.projectId ?? null,
+          source: version.source,
+        })
+        .run();
+      // Pruned within the one hook's own history, exactly as a memory
+      // document's is: a fleet of fifty hooks would otherwise have every
+      // save of any one of them evict another's past.
+      const keep = db
+        .select({ id: fleetHookHistory.id })
+        .from(fleetHookHistory)
+        .where(eq(fleetHookHistory.hookId, version.hookId))
+        .orderBy(desc(fleetHookHistory.id))
+        .limit(HISTORY_LIMIT)
+        .all()
+        .map((row) => row.id);
+      db.delete(fleetHookHistory)
+        .where(and(eq(fleetHookHistory.hookId, version.hookId), notInArray(fleetHookHistory.id, keep)))
+        .run();
+    },
+    listFleetHookHistory: (hookId) =>
+      db
+        .select()
+        .from(fleetHookHistory)
+        .where(hookId === undefined ? undefined : eq(fleetHookHistory.hookId, hookId))
+        .orderBy(desc(fleetHookHistory.id))
+        .all()
+        .map(({ id, hookId: of, name, hash, source, createdAt }) => ({
+          id,
+          hookId: of,
+          name,
+          hash,
+          source,
+          createdAt,
+        })),
+    fleetHookVersion: (id) => {
+      const row = db.select().from(fleetHookHistory).where(eq(fleetHookHistory.id, id)).get();
+      if (!row) return undefined;
+      return {
+        id: row.id,
+        hookId: row.hookId,
+        name: row.name,
+        hash: row.hash,
+        source: row.source,
+        createdAt: row.createdAt,
+        event: row.event,
+        ...(row.matcher ? { matcher: row.matcher } : {}),
+        enabled: row.enabled,
+        handler: row.handler,
+        ...(row.script ? { script: row.script } : {}),
+        ...(row.scope ? { scope: row.scope } : {}),
+        ...(row.projectId ? { projectId: row.projectId } : {}),
+      };
     },
     getFleetMemory,
     setFleetMemory: (content) => {

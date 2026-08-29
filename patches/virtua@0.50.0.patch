@@ -1,0 +1,45 @@
+--- a/lib/svelte/ListItem.svelte
++++ b/lib/svelte/ListItem.svelte
+@@ -1,5 +1,5 @@
+ <script lang="ts" generics="T">
+-  import { type Snippet, onDestroy } from "svelte";
++  import { type Snippet, onDestroy, onMount } from "svelte";
+   import { type ItemResizeObserver } from "../core/index.js";
+   import { styleToString, type ItemAttrs } from "./utils.js";
+   import type { SvelteHTMLElements } from "svelte/elements";
+@@ -30,6 +30,12 @@
+ 
+   let elementRef: HTMLDivElement;
+ 
++  // SSR awareness: during SSR (before mount), render items in normal document
++  // flow so they are visible and correctly positioned without JS. After
++  // hydration, switch to absolute positioning for virtualization.
++  let isSSR = $state(true);
++  onMount(() => { isSSR = false; });
++
+   let cleanupResizer: (() => void) | undefined;
+   // The index may be changed if elements are inserted to or removed from the start of props.children
+   let prevIndex: number | undefined;
+@@ -43,6 +49,22 @@
+   });
+ 
+   let style: string = $derived.by(() => {
++    // During SSR: static flow, visible, no absolute positioning — items render
++    // naturally in the DOM so the server HTML shows content immediately.
++    // After hydration: absolute positioning for virtualization.
++    if (isSSR && !hide) {
++      const _style: Record<string, string | undefined> = {
++        contain: "layout style",
++        [horizontal ? "height" : "width"]: "100%",
++        [horizontal ? "top" : "left"]: "0px",
++        ...itemProps?.style,
++      };
++      if (horizontal) {
++        _style["display"] = "inline-flex";
++      }
++      return styleToString(_style);
++    }
++
+     const _style: Record<string, string | undefined> = {
+       contain: "layout style",
+       position: "absolute",

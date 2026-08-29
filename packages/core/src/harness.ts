@@ -406,6 +406,8 @@ export interface NeutralResultMessage {
   num_turns?: number;
   result?: string;
   stop_reason?: string | null;
+  /** Prompt-cache tokens the turn read from / wrote to, when the harness reports them. */
+  cache?: { read: number; write: number };
   raw?: unknown;
 }
 

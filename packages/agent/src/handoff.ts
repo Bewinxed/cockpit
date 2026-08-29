@@ -21,6 +21,19 @@ export type { HandoffDeps };
  */
 export type OnStructuredResult = (resultText: string, data: Record<string, unknown>) => void;
 
+/**
+ * `delegate`'s `type` line: every fleet-configured preset, name and
+ * description, so the calling model can route by what a type is FOR rather
+ * than by a model string. Built once from `deps.delegateTypes` — the caller
+ * fetched it once for this session — and never rebuilt, because the tool
+ * description feeds the prompt cache and a description that could change
+ * mid-session would invalidate it on every delegate call.
+ */
+const delegateTypeLine = (types: HandoffDeps['delegateTypes']): string =>
+  types?.length
+    ? ` Available types: ${types.map((type) => `'${type.name}' (${type.description})`).join('; ')}.`
+    : '';
+
 /** The tools themselves, separated from the server so they can be exercised directly. */
 export function handoffTools(deps: HandoffDeps, onStructured?: OnStructuredResult) {
   const actions = handoffActions(deps);
@@ -106,23 +119,36 @@ export function handoffTools(deps: HandoffDeps, onStructured?: OnStructuredResul
         'automatically when each of its turns completes — no report protocol to follow. Guide it ' +
         'or send follow-ups with handoff. Prefer this over start_session when the work is a ' +
         'delegation that must report back, and over handoff for new standalone work, even in ' +
-        'another repository (set cwd there).',
+        'another repository (set cwd there). To continue a prior delegate\'s conversation instead ' +
+        'of starting fresh, set fork_of. Prefer `type` over raw harness/model: it routes by what ' +
+        'the work needs, not by a model string you have to already know.' +
+        delegateTypeLine(deps.delegateTypes),
       {
         prompt: z
           .string()
           .describe('The full brief. The delegate cannot see this conversation.'),
+        type: z
+          .string()
+          .optional()
+          .describe(
+            'A named delegate type — see the types listed above. Sets harness/model/effort/skills ' +
+              'for you; an explicit harness/model/skills below still overrides what the type says. ' +
+              'Type definitions are snapshotted when this session starts — edits made in the ' +
+              'dashboard apply to sessions started afterward, not to this one.'
+          ),
         harness: z
           .enum(['claude', 'opencode', 'pi'])
           .optional()
           .describe(
             "Which runtime runs the delegate. 'opencode' with model 'opencode-go/deepseek-v4-pro' " +
-              'delegates to DeepSeek. Default claude.'
+              'delegates to DeepSeek. Default claude. Overrides `type`\'s harness when both are set.'
           ),
         model: z
           .string()
           .optional()
           .describe(
-            'Model id for the harness, e.g. opencode-go/deepseek-v4-flash. Omit for the harness default.'
+            'Model id for the harness, e.g. opencode-go/deepseek-v4-flash. Omit for the harness ' +
+              'default, or for `type`\'s own model. Overrides `type`\'s model when both are set.'
           ),
         cwd: z.string().optional().describe("Defaults to this session's directory."),
         skills: z
@@ -131,11 +157,21 @@ export function handoffTools(deps: HandoffDeps, onStructured?: OnStructuredResul
           .describe(
             'Skill names to load natively into the delegate session. Each skill is invoked ' +
               'via the harness\'s own slash-command mechanism before the prompt — the same as ' +
-              'if the user typed /skill-name in that session. Works cross-harness.'
+              'if the user typed /skill-name in that session. Works cross-harness. Overrides ' +
+              '`type`\'s skills when both are set.'
+          ),
+        fork_of: z
+          .string()
+          .optional()
+          .describe(
+            'Fork an earlier delegate: pass the instanceId this tool returned for it. The new ' +
+              'delegate starts with the full conversation of that prior delegate — the source is ' +
+              'untouched. Works best on the SAME model, where it also reuses the prompt cache; a ' +
+              'different model still works but re-ingests the transcript at full cost.'
           ),
       },
-      async ({ prompt, harness, model, cwd, skills }) => {
-        const result = await actions.delegate(prompt, { cwd, harness, model, skills });
+      async ({ prompt, type, harness, model, cwd, skills, fork_of }) => {
+        const result = await actions.delegate(prompt, { cwd, harness, model, skills, forkOf: fork_of, type });
         const sc = { delegateInstanceId: result.id, title: result.title };
         onStructured?.(result.text, sc);
         return {

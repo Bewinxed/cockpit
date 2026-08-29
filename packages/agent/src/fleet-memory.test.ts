@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { memoryDocProblem } from '@cockpit/core';
-import { memoryPlan, memorySetPlan, withoutHook } from './fleet';
+import { memoryPlan, memorySetPlan, withoutHooks } from './fleet';
 
 /**
  * The user CLAUDE.md decision (NEW.md §11), row by row. Everything the daemon
@@ -139,19 +139,19 @@ const OURS = '/home/x/.claude/cockpit-model-memory.sh';
 
 test('removing the hook leaves every other hook where it is', () => {
   const theirs = { hooks: [{ type: 'command', command: '/home/x/bin/notify' }] };
-  expect(withoutHook([theirs, { hooks: [{ type: 'command', command: OURS }] }], OURS)).toEqual([theirs]);
+  expect(withoutHooks([theirs, { hooks: [{ type: 'command', command: OURS }] }], [OURS])).toEqual([theirs]);
 });
 
 test('a matcher that held ours and theirs keeps theirs', () => {
   expect(
-    withoutHook(
+    withoutHooks(
       [{ matcher: 'startup', hooks: [{ command: OURS }, { command: '/home/x/bin/notify' }] }],
-      OURS
+      [OURS]
     )
   ).toEqual([{ matcher: 'startup', hooks: [{ command: '/home/x/bin/notify' }] }]);
 });
 
 test('a machine with no hooks of ours is not rewritten', () => {
   const theirs = [{ hooks: [{ command: '/home/x/bin/notify' }] }];
-  expect(withoutHook(theirs, OURS)).toEqual(theirs);
+  expect(withoutHooks(theirs, [OURS])).toEqual(theirs);
 });

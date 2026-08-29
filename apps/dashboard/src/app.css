@@ -932,6 +932,20 @@
   display: none;
 }
 
+/* ── Mobile input zoom prevention ──────────────────────────────────────
+   iOS Safari auto-zooms any input with font-size < 16px. This is a global
+   floor, not a per-component fix — a single missed field re-introduces the
+   zoom. `max()` makes it a floor, so intentionally-large inputs keep their
+   size via `--control-font`. Unlayered so it beats Tailwind's layered
+   `text-*` utilities. */
+@media (max-width: 639px) {
+  input:not([type='checkbox']):not([type='radio']):not([type='range']),
+  textarea,
+  select {
+    font-size: max(16px, var(--control-font, 0px));
+  }
+}
+
 /* A held press summons our menu; the platform's callout would fight it. */
 [data-slot='context-menu-trigger'] {
   -webkit-touch-callout: none;

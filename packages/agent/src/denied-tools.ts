@@ -14,6 +14,18 @@ const SETTINGS = expandHome('~/.claude/settings.json');
 /** The SDK's own names for the two, as `disallowedTools` and `permissions.deny` spell them. */
 export const DENIED_WEB_TOOLS = ['WebSearch', 'WebFetch'] as const;
 
+/**
+ * Claude Code's own subagent tools, denied on every cockpit-spawned session so
+ * delegation has exactly one door: the fleet's `delegate` tool (`outpost` MCP
+ * server), routed through the delegate-types registry. The hub sees and the
+ * dashboard shows a native `Task` subagent's activity same as anything else in
+ * the transcript — the reason for the denial is routing, not visibility: only
+ * `delegate` resolves a named type to an enforced harness/model/denyTools, per
+ * operator policy, and a session that could still reach `Task`/`Agent`
+ * natively could route around that policy entirely.
+ */
+export const DENIED_NATIVE_SUBAGENT_TOOLS = ['Task', 'Agent'] as const;
+
 const said = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
 const asRecord = (value: unknown): Record<string, unknown> | undefined =>

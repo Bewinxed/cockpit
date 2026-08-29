@@ -23,7 +23,7 @@ import {
 } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
 import type { Model } from '@earendil-works/pi-ai/compat';
-import { handoffActions, type HandoffDeps } from './handoff-shared';
+import { fetchDelegateTypes, handoffActions, type HandoffDeps } from './handoff-shared';
 import type {
   AuthState,
   FleetConfig,
@@ -106,6 +106,12 @@ const modelIdOf = (model: Model<any>): string => String((model as { id?: unknown
 /** A hand-off tool, in pi's `ToolDefinition` form: TypeBox params over the shared body. */
 const answer = (text: string, details: Record<string, unknown> = {}) => ({ content: [{ type: 'text' as const, text }], details });
 
+/** Same line the claude adapter's `delegate` description carries — see handoff.ts's own comment. */
+const delegateTypeLine = (types: HandoffDeps['delegateTypes']): string =>
+  types?.length
+    ? ` Available types: ${types.map((type) => `'${type.name}' (${type.description})`).join('; ')}.`
+    : '';
+
 const piHandoffTools = (deps: HandoffDeps): ToolDefinition[] => {
   const actions = handoffActions(deps);
   return [
@@ -165,23 +171,45 @@ const piHandoffTools = (deps: HandoffDeps): ToolDefinition[] => {
         'autonomously in its own transcript, and reporting back automatically when each turn ' +
         'completes. Guide it or send follow-ups with handoff. Prefer this over start_session when ' +
         'the work is a delegation that must report back, and over handoff for new standalone work, ' +
-        'even in another repository (set cwd there).',
+        'even in another repository (set cwd there). To continue a prior delegate\'s conversation ' +
+        'instead of starting fresh, set fork_of to its instanceId — best on the same model, where ' +
+        'it also reuses the prompt cache; a different model still works but re-ingests the ' +
+        'transcript at full cost. Prefer `type` over raw harness/model where a fleet delegate ' +
+        'type fits.' +
+        delegateTypeLine(deps.delegateTypes),
       parameters: Type.Object({
         prompt: Type.String(),
+        type: Type.Optional(
+          Type.String({
+            description:
+              'A named delegate type — see the types listed above. Type definitions are ' +
+              'snapshotted when this session starts — edits made in the dashboard apply to ' +
+              'sessions started afterward, not to this one.',
+          })
+        ),
         harness: Type.Optional(
           Type.Union([Type.Literal('claude'), Type.Literal('opencode'), Type.Literal('pi')])
         ),
         model: Type.Optional(Type.String()),
         cwd: Type.Optional(Type.String()),
+        fork_of: Type.Optional(Type.String()),
       }),
       execute: async (_id, params) => {
         const p = params as {
           prompt: string;
+          type?: string;
           harness?: 'claude' | 'opencode' | 'pi';
           model?: string;
           cwd?: string;
+          fork_of?: string;
         };
-        const result = await actions.delegate(p.prompt, { cwd: p.cwd, harness: p.harness, model: p.model });
+        const result = await actions.delegate(p.prompt, {
+          cwd: p.cwd,
+          harness: p.harness,
+          model: p.model,
+          forkOf: p.fork_of,
+          type: p.type,
+        });
         return answer(result.text, { delegateInstanceId: result.id, title: result.title });
       },
     }),
@@ -490,6 +518,9 @@ export class PiHarness implements Harness {
   async spawn(spec: SpawnPayload, ctx: HarnessContext): Promise<HarnessSession> {
     const runtime = await PiHarness.runtime();
     const model = spec.model ? await this.#resolveModel(spec.model) : undefined;
+    // Fetched once, before this session's `delegate` tool description exists —
+    // see `fetchDelegateTypes`'s own comment.
+    const delegateTypes = await fetchDelegateTypes();
 
     let sessionManager: SessionManager | undefined;
     if (spec.resume?.fork) {
@@ -505,7 +536,7 @@ export class PiHarness implements Harness {
       modelRuntime: runtime,
       ...(model ? { model } : {}),
       ...(sessionManager ? { sessionManager } : { sessionManager: SessionManager.create(ctx.cwd) }),
-      customTools: piHandoffTools({ instanceId: ctx.instanceId, cwd: ctx.cwd, emit: ctx.emit }),
+      customTools: piHandoffTools({ instanceId: ctx.instanceId, cwd: ctx.cwd, emit: ctx.emit, delegateTypes }),
     });
 
     return new PiSession(ctx, session);

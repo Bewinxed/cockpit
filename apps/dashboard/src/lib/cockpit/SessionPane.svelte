@@ -18,9 +18,12 @@
   } from '@cockpit/core';
   import {
     blankSession,
+    clearRestore,
     cockpit,
     commandRecord,
     latestCommandFor,
+    pendingRestore,
+    sendFailureNotice,
     streamCapable,
     submitCommand,
     openSession,
@@ -44,7 +47,7 @@
   import { delegateHandle, resolveSessionTitle } from './links';
   import SessionHeader, { type SettingChange } from './transcript/SessionHeader.svelte';
   import Transcript from './transcript/Transcript.svelte';
-  import StaticTail from './transcript/StaticTail.svelte';
+  // StaticTail removed — virtua's ssrCount renders the tail directly.
   import Composer, { type Mention } from './transcript/Composer.svelte';
   import Prompt from './transcript/Prompt.svelte';
   import FlowView from '$lib/components/features/flow/FlowView.svelte';
@@ -251,20 +254,11 @@
    * `.tr` padding contract, so the flip moves nothing — and because it is one
    * assignment, the two are never both painted.
    */
-  let revealed = $state(false);
-  /** Whether the real transcript is mounted at all — the same test `session` uses. */
-  const showTranscript = $derived(live || !seeded);
-  /** Nothing to hand over from: with no server tail the transcript is the first paint. */
-  const veiled = $derived(!!seeded && !revealed);
-
-  // No reveal-by-timeout. The insurance timer this replaced unveiled after a
-  // second whether or not the transcript had seated — a top-flash on slow
-  // landings, a timeout burying the failure instead of fixing it. Every path
-  // now ends deterministically: a landing reveals when a row is painted in
-  // view (and re-arms on every rows change until it is), an empty transcript
-  // settles through its own path, a failed read renders the failure card
-  // outside the veil, and a pane switched away from simply lands when the
-  // reader returns — until then it is invisible anyway.
+  // No standin, no veil, no handover. The transcript renders directly from
+  // the seeded session (server tail) on SSR via virtua's `ssrCount`, then
+  // switches to live data when the WS delivers. Virtua owns the DOM from
+  // the first frame — its SSR support renders the tail items as real DOM
+  // nodes that hydrate in place.
 
   /**
    * A live session addressed by id alone that the hub has never heard of. There
@@ -276,12 +270,23 @@
     !browsing &&
       !!session &&
       !session.machineId &&
-      session.messages.length === 0 &&
       // Only once the hub has answered. Before that every id is unknown, and
       // saying so would flash an error over a session that is merely loading.
       cockpit.hub === 'connected' &&
       cockpit.instances.length > 0
   );
+
+  /**
+   * A stored transcript with no machine behind it: readable, not writable.
+   *
+   * `unaddressable` used to require an EMPTY transcript, which meant a pane
+   * that had hydrated its history but had no `machineId` rendered a live
+   * composer — one that took keystrokes, refused them at the `!machineId`
+   * guard, and said nothing. The conjunct is gone; what is left is which of
+   * the two unaddressable shapes this is, because a transcript with words in
+   * it should still be read.
+   */
+  const readOnly = $derived(unaddressable && (session?.messages.length ?? 0) > 0);
 
   // The header's MCP count wants a reading, and the composer's `/` menu wants
   // the descriptions; only a live session answers either.
@@ -430,6 +435,29 @@
 
   let view = $state<'chat' | 'flow'>('chat');
   let draft = $state('');
+  /** The composer instance, for the one thing a binding cannot hand back. */
+  let composer = $state<ReturnType<typeof Composer> | null>(null);
+
+  /** What the live region says, when a send of this session's has failed. */
+  const sendFailure = $derived(sendFailureNotice(viewId));
+
+  /**
+   * "Edit" on a message that never sent: the store parks the whole payload in
+   * this session's restore slot and the pane spends it here — text into the
+   * draft the composer is bound to, attachments into the composer itself. The
+   * row offering Edit is two components away from `draft`, so the store is the
+   * channel; this is the far end of it.
+   */
+  $effect(() => {
+    const slot = pendingRestore(viewId);
+    if (!slot) return;
+    const id = viewId;
+    untrack(() => {
+      draft = slot.text;
+      composer?.restore(slot.extras);
+      clearRestore(id);
+    });
+  });
 
   /**
    * How tall the floating composer column actually is, measured by the composer
@@ -457,16 +485,26 @@
   );
 
   function onsubmit(text: string, extras: SendExtras = {}): void {
-    if (!machineId || sending) return;
+    if (!machineId) {
+      // A tripwire, not a guard anybody should hit: a pane with no machine
+      // renders no composer at all. A render race can still land one keystroke
+      // here, so it stays — but loud in development, because the whole point of
+      // this change is that a typed sentence never disappears without a word.
+      if (import.meta.env.DEV) console.warn('composer rendered without a machine', viewId);
+      return;
+    }
+    if (sending) return;
     const mid = machineId;
     reviving = true;
-    // A message to a dead session revives it first — the same order
-    // `sendOrRevive` put them in; only the send itself is the command.
+    // A message to a dead session revives it first. A revive that FAILS no
+    // longer swallows the message: the send is submitted either way, and the
+    // hub's own refusal ("machine X is not connected") becomes the command's
+    // failed stage. The ledger is the report — which is why there is nothing
+    // to catch here, and why the `.catch(() => {})` that used to sit on this
+    // chain (and ate every send made from a plain-http origin) is gone.
+    const submit = () => submitCommand(viewId, mid, 'send', { text, extras });
     void ensureAlive(viewId, mid)
-      .then(() => {
-        submitCommand(viewId, mid, 'send', { text, extras });
-      })
-      .catch(() => {})
+      .then(submit, submit)
       .finally(() => (reviving = false));
   }
 
@@ -578,7 +616,6 @@
 
     <div
       class="body"
-      class:veiled
       style="--composer-clearance: calc({composerHeight}px + var(--space-4) + var(--space-4))"
     >
       {#if failure}
@@ -593,12 +630,13 @@
           <p>{failure.message}</p>
           <button type="button" onclick={() => (attempt += 1)}>Try again</button>
         </div>
-      {:else if unaddressable}
+      {:else if unaddressable && !readOnly}
         <div class="stateful">
-          <h2>This session isn't running here</h2>
+          <h2>This session isn't reachable from here</h2>
           <p>
-            The hub has no record of <code>{viewId}</code>. Open it from its machine's stored
-            sessions, and the link will carry the machine and folder its transcript is filed under.
+            The hub has no record of <code>{viewId}</code>, and there is no stored transcript to
+            show. Open it from its machine's stored sessions, and the link will carry the machine
+            and folder its transcript is filed under.
           </p>
           <a href="/session">Back to the fleet</a>
         </div>
@@ -611,35 +649,25 @@
           totalCostUsd={session.totalCost}
         />
       {:else}
-        <!-- Handed over, not swapped. The transcript mounts underneath and
-             measures itself while the server's tail is still the thing on
-             screen; `revealed` lifts the veil and drops the tail in one tick.
-             See `revealed` above. -->
-        {#if showTranscript}
-          <Transcript
-            {session}
-            {agentName}
-            {active}
-            {machineName}
-            cwd={session.cwd || browsingCwd}
-            clearance={composerHeight}
-            onlanded={() => (revealed = true)}
-          />
-        {/if}
-        {#if veiled}
-          <!-- The server's own render, and the client's until the transcript has
-               landed. virtua measures a live viewport, so it has nothing to say
-               on a server — this is the same rows, flat. Laid over the
-               transcript rather than beside it: both are `.body`'s full box, so
-               two in flow would split it in half. -->
-          <div class="standin">
-            <StaticTail {viewId} messages={tail?.messages ?? []} {agentName} />
-          </div>
-        {/if}
+        <Transcript
+          {session}
+          {agentName}
+          {active}
+          {machineName}
+          cwd={session.cwd || browsingCwd}
+        />
       {/if}
 
-      {#if !failure && !unaddressable}
+      {#if !failure && unaddressable}
+        <!-- Read-only, and said out loud. The transcript above is real; the
+             session behind it is not addressable from this tab, so there is no
+             composer at all rather than one that swallows what is typed. -->
+        <p class="readonly">
+          This transcript is stored; the session isn't reachable from here.
+        </p>
+      {:else if !failure}
         <Composer
+          bind:this={composer}
           bind:value={draft}
           bind:height={composerHeight}
           busy={session.busy}
@@ -662,6 +690,12 @@
           {/snippet}
         </Composer>
       {/if}
+
+      <!-- The transcript is virtualized, so a state flip inside a row is not
+           reliably announced. Failures are announced here instead, once, in the
+           pane that owns the composer — and only failures: acceptance is the
+           norm, and narrating the norm is how a live region becomes noise. -->
+      <p class="announce" aria-live="polite" role="status">{sendFailure}</p>
     </div>
   {:else}
     <div class="loading">Opening session…</div>
@@ -669,6 +703,30 @@
 </div>
 
 <style>
+  /* Announced, never drawn: the live region carries the failure to a screen
+     reader while the row itself carries it to everyone else. */
+  .announce {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  /* The composer's slot, when there is no composer. Sits where the input would,
+     in the muted voice of something stating a fact rather than refusing one. */
+  .readonly {
+    margin: 0 auto var(--space-4);
+    padding: var(--space-2) var(--space-3);
+    color: var(--ink-muted);
+    font-size: var(--text-xs);
+    text-align: center;
+  }
+
   .pane {
     display: flex;
     flex-direction: column;
@@ -699,18 +757,7 @@
    * because both want to be `.body`'s whole box and two in-flow flex children
    * would take half each.
    */
-  .body.veiled > :global(.tr) {
-    /* Not `display: none` / `content-visibility`: virtua has to lay this out
-       and observe its rows to be able to land, and both of those stop it. */
-    visibility: hidden;
-  }
-  .standin {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-  }
+  /* No standin — virtua renders the tail directly via ssrCount. */
 
   /* A named state, not an empty pane: what happened, in one line, and the one
      thing that can be done about it. */

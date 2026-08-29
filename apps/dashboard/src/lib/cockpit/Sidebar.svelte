@@ -19,8 +19,10 @@
     IconBoxDuo,
     IconChevronRight,
     IconFolderDuo,
+    IconHook,
     IconPlus,
     IconRules,
+    IconSubagent,
     IconTools,
     IconUsage,
   } from '$lib/icons';
@@ -173,6 +175,8 @@
       {#snippet boxIcon()}<IconBoxDuo />{/snippet}
       {#snippet toolsIcon()}<IconTools />{/snippet}
       {#snippet rulesIcon()}<IconRules />{/snippet}
+      {#snippet hooksIcon()}<IconHook />{/snippet}
+      {#snippet delegatesIcon()}<IconSubagent />{/snippet}
       {#snippet usageIcon()}<IconUsage />{/snippet}
       {@render navItem(
         '/session',
@@ -184,6 +188,8 @@
       )}
       {@render navItem('/tools', path.startsWith('/tools'), 'Tools', toolsIcon)}
       {@render navItem('/rules', path.startsWith('/rules'), 'Rules', rulesIcon)}
+      {@render navItem('/hooks', path.startsWith('/hooks'), 'Hooks', hooksIcon)}
+      {@render navItem('/delegates', path.startsWith('/delegates'), 'Delegates', delegatesIcon)}
       {@render navItem('/usage', path.startsWith('/usage'), 'Usage', usageIcon)}
     </nav>
 

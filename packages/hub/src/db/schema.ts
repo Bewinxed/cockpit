@@ -3,8 +3,11 @@ import type {
   BuildInfo,
   ClaudeLimits,
   FleetMcpConfig,
+  FleetScope,
   FleetSyncReport,
   HarnessReport,
+  HookEvent,
+  HookHandler,
   RuleMatchKind,
   RuleScope,
   RuleTiming,
@@ -406,3 +409,62 @@ export const ruleState = sqliteTable(
     index('rule_state_instance_idx').on(table.instanceId),
   ]
 );
+
+/**
+ * Hooks the fleet keeps (NEW.md §11): one row per hook, registered on every
+ * machine at the event it names. This is the one fleet row that is
+ * executable — converging it writes a script and wires it into Claude Code's
+ * settings, with no prompt in between — which is why `handler` and `script`
+ * are stored exactly as `hookProblem` validated them rather than re-modeled:
+ * a second shape for the same thing is a second place for it to drift from
+ * what actually runs.
+ *
+ * `scope`/`projectId` mirror an MCP server's own placement; `cwd` does not
+ * appear here for the same reason it does not on that table — the hub fills
+ * it in per machine as it sends a sync, and a stored one would be one
+ * machine's path masquerading as everybody's.
+ */
+export const fleetHooks = sqliteTable('fleet_hooks', {
+  /** Client-generated, like a rule's — the editor owns creation. */
+  id: text('id').primaryKey(),
+  /** What the reader calls it. Unique across the fleet. */
+  name: text('name').notNull(),
+  /** A disabled hook stays here and is registered nowhere. */
+  enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+  event: text('event').$type<HookEvent>().notNull(),
+  matcher: text('matcher'),
+  handler: text('handler', { mode: 'json' }).$type<HookHandler>().notNull(),
+  /** A command hook's script body, written to every machine that gets this hook. */
+  script: text('script'),
+  /** sha256 hex of the material a machine compares before writing. */
+  hash: text('hash').notNull(),
+  scope: text('scope').$type<FleetScope>(),
+  projectId: text('project_id'),
+  createdAt: timestamp('created_at').notNull().$defaultFn(() => new Date()),
+  updatedAt: timestamp('updated_at').notNull().$defaultFn(() => new Date()),
+});
+
+/**
+ * What a hook used to be. Every change records the version it replaced —
+ * including the copy an overwrite is about to destroy — so a hook that took a
+ * reader an hour to get right is never one bad edit away from being gone.
+ * Mirrors `fleetMemoryHistory`'s shape: enough of the row to restore it
+ * whole, keyed to the hook it was a version of rather than mixed into one log.
+ */
+export const fleetHookHistory = sqliteTable('fleet_hook_history', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  /** Which hook this was a version of. Deletes take a final snapshot too. */
+  hookId: text('hook_id').notNull(),
+  name: text('name').notNull(),
+  enabled: integer('enabled', { mode: 'boolean' }).notNull(),
+  event: text('event').$type<HookEvent>().notNull(),
+  matcher: text('matcher'),
+  handler: text('handler', { mode: 'json' }).$type<HookHandler>().notNull(),
+  script: text('script'),
+  hash: text('hash').notNull(),
+  scope: text('scope').$type<FleetScope>(),
+  projectId: text('project_id'),
+  /** `fleet` for every version today — a hook is never edited from a machine. */
+  source: text('source').notNull(),
+  createdAt: timestamp('created_at').notNull().$defaultFn(() => new Date()),
+});

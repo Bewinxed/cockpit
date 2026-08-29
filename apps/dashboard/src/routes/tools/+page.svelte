@@ -13,7 +13,9 @@
   import * as Card from '$lib/components/ui/card';
   import { cockpit } from '$lib/cockpit/client.svelte';
   import type { FleetMemoryDocRow, FleetMemoryRow } from '$lib/cockpit/fleet';
+  import type { FleetHook } from '$lib/cockpit/hooks';
   import FleetAgents from '$lib/cockpit/FleetAgents.svelte';
+  import FleetHooks from '$lib/cockpit/FleetHooks.svelte';
   import FleetMcp from '$lib/cockpit/FleetMcp.svelte';
   import FleetMemory from '$lib/cockpit/FleetMemory.svelte';
   import FleetSkills from '$lib/cockpit/FleetSkills.svelte';
@@ -35,6 +37,7 @@
   let agents = $state<FleetAgent[]>(untrack(() => data.agents));
   let memory = $state<FleetMemoryRow | null>(untrack(() => data.memory));
   let memoryDocs = $state<FleetMemoryDocRow[]>(untrack(() => data.memoryDocs));
+  let hooks = $state<FleetHook[]>(untrack(() => data.hooks));
 
   /** Re-seed from the load when `data` changes on navigation. The identity of
    *  `data.config` is new on every load, so it doubles as a change token.
@@ -50,6 +53,7 @@
       agents = data.agents;
       memory = data.memory;
       memoryDocs = data.memoryDocs;
+      hooks = data.hooks;
     }
   });
 
@@ -101,6 +105,7 @@
       {@render stat('MCP servers', config.mcp.length)}
       {@render stat('Skills', skills.length)}
       {@render stat('Subagents', agents.length)}
+      {@render stat('Hooks', hooks.length)}
       {@render stat('Machines online', online, `of ${machines.length}`)}
     </section>
 
@@ -163,6 +168,16 @@
           {settling}
           error={data.fleetError}
         />
+      </div>
+    </Card.Root>
+
+    <Card.Root class={panelClass}>
+      <header class="phead">
+        <h2>Hooks</h2>
+        <span class="psub">Scripts and calls run on a session's own lifecycle events</span>
+      </header>
+      <div class="pbody">
+        <FleetHooks {hooks} {machines} {settling} error={data.hooksError} />
       </div>
     </Card.Root>
   </div>

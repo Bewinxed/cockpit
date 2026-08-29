@@ -93,6 +93,25 @@ export interface SessionCursor {
 
 export type CommandStage = 'submitted' | 'accepted' | 'applied' | 'failed';
 
+/**
+ * The stage at which the PROTOCOL has said its last word about a command —
+ * after which nothing further is owed and waiting longer is waiting for a
+ * message that will never come.
+ *
+ * It is not the same for every kind, and that is the hub's doing, not a
+ * convenience: a `send` is answered `accepted` and never `applied`, because
+ * "no confirmation exists to wait for — the daemon's `send` answers with the
+ * turn itself" (`packages/hub/src/stream.ts`, the send branch of `command()`;
+ * `accepted` is called there "the last honest word the hub has"). The control
+ * kinds do get a second word: their `control_result` comes back as `applied`.
+ *
+ * So the settle stage rides the SUBMISSION, where the caller already knows
+ * which kind it is dispatching, rather than being re-derived from `kind` at
+ * every place that has to ask "is this one finished?". One field, decided
+ * once, read by the sweep, the disconnect and the effects hook alike.
+ */
+export type SettleStage = 'accepted' | 'applied';
+
 /** One operator action, from the click to the hub's last word on it. */
 export interface CommandRecord {
   commandId: string;
@@ -104,6 +123,21 @@ export interface CommandRecord {
   /** When the stage last moved — what pruning and "how long has this been out" read. */
   changedAt: number;
   reason?: string;
+  /** Copied from the submission: the stage this kind is finished at. See {@link SettleStage}. */
+  settlesAt: SettleStage;
+  /**
+   * Set only when this tab KNOWS the envelope never left it — a refused or
+   * throwing dispatch, or a failure before the wire was reached at all.
+   *
+   * The distinction is not cosmetic. A record failed by the ack timeout or by
+   * a dropped socket is *ambiguous*: the envelope may be sitting in the hub's
+   * hands, already relayed to a daemon that is acting on the world. Re-sending
+   * one of those can duplicate an instruction; re-sending an undelivered one
+   * cannot. The two therefore may not be offered with the same one-tap
+   * confidence, and the honest answer is a fact on the record rather than a
+   * guess read off the reason string.
+   */
+  undelivered?: boolean;
   /** The stream-dialect local half still owed an outcome; see {@link StreamEffects}. */
   effects?: StreamEffects;
 }
@@ -114,6 +148,15 @@ export interface StreamState {
   capable: boolean;
   cursors: Record<string, SessionCursor>;
   commands: Record<string, CommandRecord>;
+  /**
+   * The handle of the ONE armed ack timer, or null when nothing is waiting.
+   *
+   * One, and it lives on the state rather than in a module closure, because
+   * the alternatives are both worse: a timer per record leaks one per keystroke
+   * on a flapping socket, and a module-level handle cannot be torn down by a
+   * caller holding a state it built itself. See {@link armCommandSweep}.
+   */
+  sweepTimer: number | null;
 }
 
 /** The two things the logic cannot do itself, plus its clock and its voice. */
@@ -130,10 +173,41 @@ export interface StreamHost {
   sendToHub(message: StreamClientMessage): boolean;
   now(): number;
   warn(message: string, detail?: unknown): void;
+  /**
+   * Called once, the moment any command record settles at `failed`, whatever
+   * killed it — a refusing ack, a dispatch that could not leave the tab, the
+   * timeout sweep, a dropped socket, a legacy rejection.
+   *
+   * It exists because `advanceStage` is the ONE place a record can reach
+   * `failed` on either dialect, and a failure surface built anywhere else
+   * would have to be built six times (once per command kind) and would still
+   * miss the seventh kind somebody adds next year. A kind whose failure has
+   * no inline surface of its own is heard here or nowhere.
+   *
+   * Optional so the logic stays testable without a voice; the client passes
+   * one. Whoever implements it decides which failures are already spoken for
+   * by a surface that owns them (a send's ghost row, a permission card) and
+   * which need announcing — this file only guarantees the call.
+   */
+  noteFailure?: (record: CommandRecord) => void;
+  /**
+   * Run `run` after `delayMs` and hand back a handle {@link clearTimer} can
+   * cancel — `setTimeout`, in the one place this file is allowed to know that.
+   *
+   * Optional, and its absence is not a fallback to some other timing: without
+   * it the ack timeout is only enforced when {@link sweepCommands} is called
+   * from outside, which is exactly the hole this port closes. A tab whose
+   * socket has gone quiet receives nothing, so a sweep driven by inbound
+   * traffic never runs, and an undelivered message sits at `submitted`
+   * forever — a permanent ghost, no failure, nothing said. Tests leave it
+   * unset to drive the clock by hand; the client passes one.
+   */
+  setTimer?: (delayMs: number, run: () => void) => number;
+  clearTimer?: (handle: number) => void;
 }
 
 export function createStreamState(): StreamState {
-  return { capable: false, cursors: {}, commands: {} };
+  return { capable: false, cursors: {}, commands: {}, sweepTimer: null };
 }
 
 function newCursor(): SessionCursor {
@@ -215,15 +289,38 @@ export function streamCarries(state: StreamState, sessionId: string, kind: strin
  * cursor (the hub replays the middle out of its ring, or refuses honestly with
  * a reset), a fresh join when it does not.
  */
+/**
+ * Puts one message on the wire and answers with the REASON it did not go,
+ * or `null` when it did. The one door out of this file, and it never throws.
+ *
+ * `StreamHost.sendToHub` returns false for the socket it can see is shut, but
+ * a socket can also shut BETWEEN that check and the `send()` that follows it,
+ * and `WebSocket.send` on a CLOSING/CLOSED socket throws `InvalidStateError`.
+ * Unguarded, that throw walked straight out of {@link submitCommand} — the one
+ * function in the codebase that promises never to throw — through the client
+ * wrapper and into a click handler as an unhandled rejection: the original
+ * silent-failure bug, one layer down. A dispatch that cannot happen is a
+ * refusal, and a refusal is a stage, so it is converted here rather than
+ * anywhere it might be forgotten.
+ */
+function dispatch(host: StreamHost, message: StreamClientMessage): string | null {
+  try {
+    if (host.sendToHub(message)) return null;
+    return 'Not connected to the hub. Check that it is running, then try again.';
+  } catch (error) {
+    return messageOf(error);
+  }
+}
+
 export function subscribeSession(state: StreamState, host: StreamHost, sessionId: string): void {
   const cursor = cursorFor(state, sessionId);
   const afterSeq = cursor.seen ? cursor.lastSeq : undefined;
-  const sent = host.sendToHub({
+  const refusal = dispatch(host, {
     type: 'stream.subscribe',
     sessionId,
     ...(afterSeq === undefined ? {} : { afterSeq }),
   });
-  if (!sent) return;
+  if (refusal !== null) return;
   cursor.subscribed = true;
   // A resume IS an outstanding resync: a delta that lands ahead of the replay
   // must not send a second one for the same hole.
@@ -263,8 +360,12 @@ export function syncStreamSubscriptions(
  * died with the connection, and so did any acknowledgement still owed. The
  * capability is re-advertised by the new connection, so it is dropped too: until
  * it arrives the legacy path is the honest one.
+ *
+ * `host` is optional for the same reason it is on {@link sweepCommands}, and
+ * carries the same warning: without it these failures are recorded but not
+ * announced.
  */
-export function noteDisconnect(state: StreamState, now: number): void {
+export function noteDisconnect(state: StreamState, now: number, host?: StreamHost): void {
   state.capable = false;
   for (const cursor of Object.values(state.cursors)) {
     cursor.subscribed = false;
@@ -274,12 +375,23 @@ export function noteDisconnect(state: StreamState, now: number): void {
     cursor.streamed.clear();
   }
   for (const record of Object.values(state.commands)) {
-    if (isSettled(record.stage)) continue;
+    // Record-aware: a send already `accepted` was handed over before the socket
+    // died and is not the connection's to take back.
+    if (isSettled(record)) continue;
     // Through advanceStage, not a raw write: a dying socket is a settling like
     // any other, and an optimistic value whose command it took down must roll
     // back here exactly as it would on a refusal.
-    advanceStage(record, 'failed', now, 'The connection to the hub dropped before that finished.');
+    advanceStage(
+      record,
+      'failed',
+      now,
+      'The connection to the hub dropped before that finished.',
+      host
+    );
   }
+  // Nothing is outstanding any more, so nothing should be waited for. Without
+  // this the timer would survive the socket that gave it a reason to exist.
+  if (host) armCommandSweep(state, host);
 }
 
 /* ------------------------------------------------------------------ *
@@ -322,7 +434,7 @@ export function handleStreamMessage(
       applyReset(state, host, message as StreamReset);
       return true;
     case 'command.ack':
-      noteCommandAck(state, message as CommandAck, host.now());
+      noteCommandAck(state, message as CommandAck, host.now(), host);
       return true;
     default:
       return false;
@@ -381,10 +493,14 @@ function applyEvent(host: StreamHost, cursor: SessionCursor, event: SessionStrea
 /** Asks for the replay, once per hole. */
 function requestResync(host: StreamHost, sessionId: string, cursor: SessionCursor): void {
   if (cursor.resyncAfter === cursor.lastSeq) return;
-  const sent = host.sendToHub({ type: 'stream.subscribe', sessionId, afterSeq: cursor.lastSeq });
+  const refusal = dispatch(host, {
+    type: 'stream.subscribe',
+    sessionId,
+    afterSeq: cursor.lastSeq,
+  });
   // A resume that never left cannot be waited for: leaving `resyncAfter` unset
   // means the next delta through the hole tries again.
-  if (!sent) return;
+  if (refusal !== null) return;
   cursor.subscribed = true;
   cursor.resyncAfter = cursor.lastSeq;
 }
@@ -474,7 +590,20 @@ function applyReset(state: StreamState, host: StreamHost, message: StreamReset):
  * Commands
  * ------------------------------------------------------------------ */
 
-const isSettled = (stage: CommandStage): boolean => stage === 'applied' || stage === 'failed';
+/**
+ * Whether the protocol owes this record anything more.
+ *
+ * Record-aware, and it has to be: `accepted` is a waypoint for a control
+ * command and the terminus for a `send` (see {@link SettleStage}). Reading the
+ * stage alone — which is what this did until the send's record was rendered —
+ * left every delivered message parked as "unanswered" and let the sweep
+ * retro-declare it failed fifteen seconds after it had actually landed. The
+ * record knows where its own finish line is; ask it.
+ */
+const isSettled = (record: CommandRecord): boolean =>
+  record.stage === 'failed' ||
+  record.stage === 'applied' ||
+  (record.stage === 'accepted' && record.settlesAt === 'accepted');
 
 /** Which stage may follow which. Terminal is terminal: a late ack cannot undo it. */
 const NEXT_STAGES: Record<CommandStage, Set<CommandStage>> = {
@@ -493,7 +622,8 @@ function advanceStage(
   record: CommandRecord,
   stage: CommandStage,
   now: number,
-  reason?: string
+  reason?: string,
+  host?: StreamHost
 ): boolean {
   if (!NEXT_STAGES[record.stage].has(stage)) return false;
   record.stage = stage;
@@ -503,11 +633,21 @@ function advanceStage(
   // {@link CommandSubmission.streamEffects}); settling is when its outcome
   // hooks run — including a timeout-swept failure, which must roll back an
   // optimistic value exactly like a refused one.
-  if (record.effects && (stage === 'applied' || stage === 'failed')) {
+  //
+  // "Settling" is the record's own question, not a hard-coded pair of stages:
+  // a send that reaches `accepted` is finished, and its echo must go solid
+  // then, because no `applied` is ever coming for it. Clearing `effects`
+  // before the call is what keeps the hook to exactly one run — a later
+  // `applied` on a send that already settled at `accepted` finds nothing left
+  // to fire.
+  if (record.effects && isSettled(record)) {
     const settled = record.effects.settled;
     record.effects = undefined;
-    settled?.(stage, record.reason);
+    settled?.(stage as SettleStage | 'failed', record.reason);
   }
+  // Fired after the stage is written so the reporter reads a settled record,
+  // and only on the transition, so a record failed once is announced once.
+  if (stage === 'failed') host?.noteFailure?.(record);
   return true;
 }
 
@@ -526,8 +666,14 @@ function advanceStage(
 export interface StreamEffects {
   /** Runs once, when the envelope is dispatched (before any ack). */
   submitted?: () => void;
-  /** Runs once, when the record settles — ack, refusal, or timeout sweep. */
-  settled?: (stage: 'applied' | 'failed', reason?: string) => void;
+  /**
+   * Runs once, when the record settles — ack, refusal, or timeout sweep.
+   *
+   * The stage is the one it settled AT, which for a `send` is `accepted`
+   * (see {@link SettleStage}); hooks that roll an optimistic value back test
+   * for `'failed'` and are unaffected by that widening.
+   */
+  settled?: (stage: SettleStage | 'failed', reason?: string) => void;
 }
 
 export interface CommandSubmission {
@@ -535,6 +681,13 @@ export interface CommandSubmission {
   sessionId: string;
   machineId: string;
   kind: CommandKind;
+  /**
+   * Where this kind's protocol stops talking: `'accepted'` for `send`,
+   * `'applied'` for the control kinds. Required, and deliberately so — a new
+   * command kind cannot be added without answering "what is its last word?",
+   * which is the question that, unanswered, retro-fails a delivered message.
+   */
+  settlesAt: SettleStage;
   /** Exactly the payload the corresponding relay op takes today. */
   payload: unknown;
   /**
@@ -562,15 +715,7 @@ export function submitCommand(
 ): string {
   const { commandId, sessionId, machineId, kind, payload } = submission;
   const now = host.now();
-  state.commands[commandId] = {
-    commandId,
-    sessionId,
-    kind,
-    stage: 'submitted',
-    at: now,
-    changedAt: now,
-  };
-  const record = state.commands[commandId];
+  const record = openRecord(state, submission, now);
 
   if (state.capable) {
     const envelope: CommandEnvelope = {
@@ -587,10 +732,18 @@ export function submitCommand(
     // rollback below the failure).
     record.effects = submission.streamEffects;
     submission.streamEffects?.submitted?.();
-    if (!host.sendToHub(envelope)) {
-      advanceStage(record, 'failed', now, 'Not connected to the hub. Check that it is running, then try again.');
+    // Through {@link dispatch}, so a socket that shuts between the readiness
+    // check and the write is a refusal wearing its own exception rather than a
+    // throw out of the function that promised not to throw.
+    const refusal = dispatch(host, envelope);
+    if (refusal !== null) {
+      // Nothing left this tab, and that is worth recording as a FACT rather
+      // than inferring from the wording of a reason: it is what lets a retry
+      // be offered as plainly safe instead of as a possible duplicate.
+      record.undelivered = true;
+      advanceStage(record, 'failed', now, refusal, host);
     }
-    sweepCommands(state, now);
+    sweepCommands(state, now, host);
     return commandId;
   }
 
@@ -598,30 +751,96 @@ export function submitCommand(
     const result = submission.legacy();
     if (result instanceof Promise) {
       result.then(
-        () => advanceStage(record, 'applied', host.now()),
-        (error: unknown) => advanceStage(record, 'failed', host.now(), messageOf(error))
+        () => advanceStage(record, 'applied', host.now(), undefined, host),
+        (error: unknown) => advanceStage(record, 'failed', host.now(), messageOf(error), host)
       );
     } else {
       // Nothing further will be said about it: the legacy relay ops that return
       // nothing are fire-and-forget, and claiming `applied` for one would be the
       // fabrication this protocol exists to remove.
-      advanceStage(record, 'accepted', now);
+      //
+      // But "nothing further will be said" is exactly what a settle stage is,
+      // so it must be recorded as one. Left at the kind's declared `'applied'`,
+      // this record would sit unsettled forever and the sweep would call it off
+      // fifteen seconds later with "The hub never acknowledged that." — a
+      // failure invented for a call that succeeded and simply had nothing more
+      // to report. `interrupt` and `permission.answer` both return void on this
+      // dialect, so that lie was on the two most common legacy control paths.
+      record.settlesAt = 'accepted';
+      advanceStage(record, 'accepted', now, undefined, host);
     }
   } catch (error) {
-    advanceStage(record, 'failed', now, messageOf(error));
+    advanceStage(record, 'failed', now, messageOf(error), host);
   }
-  sweepCommands(state, now);
+  sweepCommands(state, now, host);
   return commandId;
 }
 
 const messageOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
+/** What a record needs to exist at all — every submission is one, and so is a stillborn one. */
+type CommandStub = Pick<
+  CommandSubmission,
+  'commandId' | 'sessionId' | 'kind' | 'settlesAt'
+>;
+
+/** Puts a fresh record in the ledger at `submitted`, and hands it back. */
+function openRecord(state: StreamState, stub: CommandStub, now: number): CommandRecord {
+  state.commands[stub.commandId] = {
+    commandId: stub.commandId,
+    sessionId: stub.sessionId,
+    kind: stub.kind,
+    settlesAt: stub.settlesAt,
+    stage: 'submitted',
+    at: now,
+    changedAt: now,
+  };
+  return state.commands[stub.commandId];
+}
+
+/**
+ * Records a command that never got as far as the wire.
+ *
+ * The ledger's promise is that {@link submitCommand} never throws — but a
+ * caller does work of its own BEFORE it can call this file (assembling a
+ * payload, minting a client id, reading provenance), and a throw there escapes
+ * the ledger entirely: no record, no stage, nothing for the UI to render, and
+ * an exception in a click handler. That is not a hypothetical; it is how a
+ * missing browser API turned every send into silence.
+ *
+ * So the caller catches its own pre-dispatch throw and registers the failure
+ * here instead of re-throwing. Doing it through this function rather than by
+ * writing into `state.commands` directly is the whole point: the record is
+ * swept, TTL'd, visible to {@link sessionCommands} and announced through
+ * {@link StreamHost.noteFailure} exactly like one that failed on the wire —
+ * one bookkeeping path, not two.
+ */
+export function failLocally(
+  state: StreamState,
+  host: StreamHost,
+  stub: CommandStub,
+  reason: string
+): string {
+  const now = host.now();
+  const record = openRecord(state, stub, now);
+  // It died before the wire: provably undelivered, like a refused dispatch.
+  record.undelivered = true;
+  advanceStage(record, 'failed', now, reason, host);
+  sweepCommands(state, now, host);
+  return record.commandId;
+}
+
 /** Folds the hub's word on a command in. Acks for commands this tab never sent are not ours. */
-export function noteCommandAck(state: StreamState, ack: CommandAck, now: number): boolean {
+export function noteCommandAck(
+  state: StreamState,
+  ack: CommandAck,
+  now: number,
+  host?: StreamHost
+): boolean {
   const record = state.commands[ack.commandId];
   if (!record) return false;
-  return advanceStage(record, ack.stage, now, ack.reason);
+  return advanceStage(record, ack.stage, now, ack.reason, host);
 }
 
 /**
@@ -632,13 +851,21 @@ export function noteCommandAck(state: StreamState, ack: CommandAck, now: number)
  * settled records age out by count and by time, and an unsettled one that has
  * been out longer than a control call is allowed to take is failed with a
  * reason a human can read.
+ *
+ * `host` is optional only so a caller with no voice — a test ticking the clock
+ * — can sweep; pass it everywhere else, because a sweep without it is a sweep
+ * whose failures {@link StreamHost.noteFailure} never hears about.
  */
-export function sweepCommands(state: StreamState, now: number): void {
+export function sweepCommands(state: StreamState, now: number, host?: StreamHost): void {
   const settled: CommandRecord[] = [];
   for (const record of Object.values(state.commands)) {
-    if (!isSettled(record.stage)) {
+    // Record-aware, and this is the line the whole `settlesAt` idea exists for:
+    // a `send` sitting at `accepted` is DONE, not unanswered, and calling it off
+    // here would retro-declare a message that landed a failure — visibly, once
+    // the transcript renders the send's own record.
+    if (!isSettled(record)) {
       if (now - record.at >= COMMAND_ACK_TIMEOUT_MS) {
-        advanceStage(record, 'failed', now, 'The hub never acknowledged that.');
+        advanceStage(record, 'failed', now, 'The hub never acknowledged that.', host);
         settled.push(record);
       }
       continue;
@@ -649,17 +876,75 @@ export function sweepCommands(state: StreamState, now: number): void {
     }
     settled.push(record);
   }
-  if (settled.length <= SETTLED_COMMAND_LIMIT) return;
-  settled.sort((a, b) => a.changedAt - b.changedAt);
-  for (const record of settled.slice(0, settled.length - SETTLED_COMMAND_LIMIT)) {
-    delete state.commands[record.commandId];
+  if (settled.length > SETTLED_COMMAND_LIMIT) {
+    settled.sort((a, b) => a.changedAt - b.changedAt);
+    for (const record of settled.slice(0, settled.length - SETTLED_COMMAND_LIMIT)) {
+      delete state.commands[record.commandId];
+    }
   }
+  // Every sweep re-aims the timer at whatever is now the nearest deadline —
+  // including "none", which disarms it. Doing it here rather than at each of
+  // the four call sites is what keeps "a command is out" and "something will
+  // come and call it off" from ever being separately true.
+  if (host) armCommandSweep(state, host);
+}
+
+/**
+ * When the earliest still-unanswered command runs out of patience, or null
+ * when nothing is waiting on the hub.
+ */
+function nextAckDeadline(state: StreamState): number | null {
+  let due: number | null = null;
+  for (const record of Object.values(state.commands)) {
+    if (isSettled(record)) continue;
+    const deadline = record.at + COMMAND_ACK_TIMEOUT_MS;
+    if (due === null || deadline < due) due = deadline;
+  }
+  return due;
+}
+
+/**
+ * Points the single ack timer at the nearest deadline there is.
+ *
+ * {@link COMMAND_ACK_TIMEOUT_MS} was, until this existed, not a timeout at all:
+ * the only sweep the client ran was driven by inbound socket traffic, so a
+ * command whose frame was swallowed was called off when some *unrelated*
+ * message happened to arrive — measured at twenty seconds and counting on a
+ * quiet tab, and never at all on a tab whose socket had gone silent, which is
+ * precisely the condition under which a send goes missing. A timeout enforced
+ * only by the traffic it is meant to detect the absence of is a comment.
+ *
+ * One timer for the whole ledger, not one per record: a flapping socket
+ * submits and fails commands in bursts, and a timer apiece would leak one per
+ * keystroke. Re-armed by {@link sweepCommands} after every settle, so the
+ * handle is replaced rather than accumulated, and cancelled outright by
+ * {@link disarmCommandSweep} when the client goes away.
+ */
+export function armCommandSweep(state: StreamState, host: StreamHost): void {
+  if (!host.setTimer) return;
+  disarmCommandSweep(state, host);
+  const due = nextAckDeadline(state);
+  if (due === null) return;
+  state.sweepTimer = host.setTimer(Math.max(0, due - host.now()), () => {
+    state.sweepTimer = null;
+    // Which re-arms, through the tail of `sweepCommands`: a burst of commands
+    // submitted seconds apart has several deadlines, and this walks them.
+    sweepCommands(state, host.now(), host);
+  });
+}
+
+/** Cancels the armed timer, if any. Idempotent; safe on a host with no clock. */
+export function disarmCommandSweep(state: StreamState, host: StreamHost): void {
+  if (state.sweepTimer === null) return;
+  host.clearTimer?.(state.sweepTimer);
+  state.sweepTimer = null;
 }
 
 /** Every command this tab has submitted for a session, oldest first. */
 export function sessionCommands(state: StreamState, sessionId: string): CommandRecord[] {
+  if (!sessionId) return [];
   return Object.values(state.commands)
-    .filter((record) => record.sessionId === sessionId)
+    .filter((record) => record.sessionId && record.sessionId === sessionId)
     .sort((a, b) => a.at - b.at);
 }
 
