@@ -20,7 +20,7 @@ export const RING_SIZE = 512;
 /**
  * One session's sequence and its replay window.
  *
- * A flat array indexed by `(seq - 1) % RING_SIZE`: because `seq` starts at 1
+ * A flat array indexed by `(seq - 1) % size`: because `seq` starts at 1
  * and only ever increments, the index is total and needs no head/tail pair to
  * chase. The two derived numbers are the whole contract — `head` is the last
  * seq assigned, `oldest` the earliest still replayable.
@@ -32,9 +32,20 @@ export class SessionRing {
    */
   #events: (SessionStreamEvent | undefined)[] = [];
   #head = 0;
+  /**
+   * How many events this ring keeps. Defaults to {@link RING_SIZE} so the hub's
+   * behaviour is exactly what it always was; sessiond passes its own, larger
+   * bound because it buffers a child's raw stdout lines rather than a hub's
+   * already-folded frames, and a chatty turn produces far more of them.
+   */
+  readonly #size: number;
   /** The lowest seq this ring may still hold — raised by {@link forget}. */
   #floor = 1;
   #at = 0;
+
+  constructor(size: number = RING_SIZE) {
+    this.#size = size;
+  }
 
   get head(): number {
     return this.#head;
@@ -48,12 +59,12 @@ export class SessionRing {
   /** The earliest seq still in the ring; 0 when nothing has been recorded. */
   get oldest(): number {
     if (this.#head === 0) return 0;
-    return Math.max(this.#floor, this.#head - RING_SIZE + 1);
+    return Math.max(this.#floor, this.#head - this.#size + 1);
   }
 
   record(sessionId: string, frame: unknown): SessionStreamEvent {
     const event: SessionStreamEvent = { seq: ++this.#head, sessionId, frame };
-    this.#events[(event.seq - 1) % RING_SIZE] = event;
+    this.#events[(event.seq - 1) % this.#size] = event;
     this.#at = Date.now();
     return event;
   }
@@ -87,7 +98,7 @@ export class SessionRing {
   since(afterSeq: number): SessionStreamEvent[] {
     const events: SessionStreamEvent[] = [];
     for (let seq = afterSeq + 1; seq <= this.#head; seq++) {
-      const event = this.#events[(seq - 1) % RING_SIZE];
+      const event = this.#events[(seq - 1) % this.#size];
       // Unreachable while `canReplay` guards the call — asserted rather than
       // skipped, because a hole silently dropped here is the one bug this
       // protocol exists to make impossible.

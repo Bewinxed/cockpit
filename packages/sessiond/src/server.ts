@@ -25,7 +25,6 @@ import { createConnection, createServer, type Server, type Socket } from 'node:n
 import { randomUUID } from 'node:crypto';
 import { dirname } from 'node:path';
 import {
-  RING_SIZE,
   SESSIOND_V1,
   SessionRing,
   type BuildInfo,
@@ -52,6 +51,15 @@ export const COMMAND_TTL_MS = 5 * 60_000;
  * model sessions. An estimate, not a measurement — and a wrong guess shows up
  * as an announced `reset`, never as a silently spliced stream.
  */
+/**
+ * Lines kept per child, from the sessiond design's §6. Larger than the hub's
+ * own 512-line default on purpose: this ring holds a child's raw stdout lines,
+ * not the hub's already-folded frames, and one busy turn emits far more of
+ * them. `SessionRing` takes the bound as a constructor argument so the two
+ * callers can disagree without either forking the class.
+ */
+export const SESSIOND_RING_LINES = 4096;
+
 export const RING_BYTES = 8 * 1024 * 1024;
 
 /**
@@ -68,7 +76,7 @@ interface Proc {
   ring: SessionRing;
   /**
    * Byte size of each resident ring entry, indexed exactly as the ring is
-   * (`(seq - 1) % RING_SIZE`), so an overwritten entry can be subtracted
+   * (`(seq - 1) % SESSIOND_RING_LINES`), so an overwritten entry can be subtracted
    * instead of guessed. `bytes` is the running total of what is still
    * replayable.
    */
@@ -323,7 +331,7 @@ export class SessiondServer {
     const proc: Proc = {
       procId,
       child,
-      ring: new SessionRing(),
+      ring: new SessionRing(SESSIOND_RING_LINES),
       sizes: [],
       bytes: 0,
       partial: '',
@@ -415,7 +423,7 @@ export class SessiondServer {
 
   #record(proc: Proc, data: string): void {
     const event = proc.ring.record(proc.procId, data);
-    const slot = (event.seq - 1) % RING_SIZE;
+    const slot = (event.seq - 1) % SESSIOND_RING_LINES;
     // Subtract whatever this slot used to hold: the ring overwrote it, so it
     // is no longer replayable and no longer counts against the byte ceiling.
     proc.bytes += data.length - (proc.sizes[slot] ?? 0);
