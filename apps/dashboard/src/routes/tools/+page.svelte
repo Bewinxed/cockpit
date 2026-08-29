@@ -125,7 +125,7 @@
       </div>
     </Card.Root>
 
-    <Card.Root class={panelClass}>
+    <Card.Root id="fleet-mcp" class="scroll-mt-6 {panelClass}">
       <header class="phead">
         <h2>MCP servers</h2>
         <span class="psub">Written to every machine, online now or when it returns</span>
@@ -135,7 +135,7 @@
       </div>
     </Card.Root>
 
-    <Card.Root class={panelClass}>
+    <Card.Root id="fleet-skills" class="scroll-mt-6 {panelClass}">
       <header class="phead">
         <h2>Skills &amp; plugins</h2>
         <span class="psub">Fetched once for the fleet, or cloned from a marketplace</span>
@@ -155,7 +155,10 @@
       </div>
     </Card.Root>
 
-    <Card.Root class={panelClass}>
+    <!-- id targeted by the fleet board's failed-sync badge (leaf C2): the
+         adopt/overwrite affordance for a machine stuck `failed` lives here,
+         never re-created at the badge itself. -->
+    <Card.Root id="fleet-memory" class="scroll-mt-6 {panelClass}">
       <header class="phead">
         <h2>Memory</h2>
         <span class="psub">The user CLAUDE.md the whole fleet reads</span>
@@ -171,7 +174,7 @@
       </div>
     </Card.Root>
 
-    <Card.Root class={panelClass}>
+    <Card.Root id="fleet-hooks" class="scroll-mt-6 {panelClass}">
       <header class="phead">
         <h2>Hooks</h2>
         <span class="psub">Scripts and calls run on a session's own lifecycle events</span>

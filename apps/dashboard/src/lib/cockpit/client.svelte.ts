@@ -5,6 +5,7 @@
 import type {
   AgentRow,
   AvailableCommand,
+  BuildInfo,
   ClaudeLimits,
   CommandKind,
   ControlPayload,
@@ -370,6 +371,12 @@ const state = $state({
   /** When the next reconnect attempt fires, so the banner can count it down. */
   retryAt: null as number | null,
   machines: [] as Machine[],
+  /**
+   * What the hub itself is running, carried on `instances` frames (C2 reads
+   * it against every machine's own {@link Machine.build} — a hub older than
+   * this field simply never sends it, and the comparison has nothing to say).
+   */
+  hubBuild: undefined as BuildInfo | undefined,
   /**
    * Sessions that have been handed work and have not yet taken a turn on it.
    * Keyed by the target: the question the rail answers is what *that* session
@@ -828,6 +835,11 @@ function handleFrame(frame: FramePayload): void {
       state.pulses,
       (frame as { pulses?: Record<string, SessionPulse> }).pulses
     );
+    // Structural read, same reason as `pulses` and `handoffs` above: a hub
+    // that predates C2 sends nothing here, and the comparisons that use it
+    // (see convergence.ts) already treat "nothing to compare against" as
+    // unknown rather than as current.
+    state.hubBuild = (frame as { hubBuild?: BuildInfo }).hubBuild ?? state.hubBuild;
     return;
   }
 
@@ -3862,6 +3874,10 @@ export const cockpit = {
     state.handoffs[instanceId] ?? null,
   get machines() {
     return state.machines;
+  },
+  /** What the hub is running, or `undefined` from a hub that predates C2. */
+  get hubBuild() {
+    return state.hubBuild;
   },
   get onlineMachines() {
     return state.machines.filter((machine) => machine.status === 'online');

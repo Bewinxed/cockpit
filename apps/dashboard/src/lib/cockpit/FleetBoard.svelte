@@ -21,11 +21,13 @@
   import { Input } from '$lib/components/ui/input';
   import * as Card from '$lib/components/ui/card';
   import * as Select from '$lib/components/ui/select';
+  import * as Tooltip from '$lib/components/ui/tooltip';
   import * as Table from '$lib/components/ui/table';
   import * as Pagination from '$lib/components/ui/pagination';
   import SpawnPanel from '$lib/cockpit/SpawnPanel.svelte';
   import AttentionQueue from '$lib/cockpit/AttentionQueue.svelte';
   import LiveSessionRow from '$lib/cockpit/LiveSessionRow.svelte';
+  import MachineCard from '$lib/cockpit/MachineCard.svelte';
   import {
     cockpit,
     isFailed,
@@ -297,6 +299,12 @@
   const tileClass =
     'h-full gap-0 overflow-visible rounded-[var(--radius-panel)] bg-[var(--surface-raised)] p-[var(--c-card-pad)] shadow-[var(--shadow-lifted)] ring-0';
 
+  // The machine-convergence list, dressed the same as every other fleet panel's
+  // raised list (FleetAgents.svelte / FleetMemory.svelte's own `panelList`):
+  // a raised card at zero padding, each row drawing its own top hairline.
+  const machinesPanelClass =
+    'gap-0 overflow-hidden rounded-[var(--radius-panel)] border-0 bg-[var(--surface-raised)] p-0 shadow-[var(--shadow-lifted)] ring-1 ring-[var(--border-hairline)] mt-[var(--space-6)]';
+
   // The status column, dressed on ui/badge: a light tint carries the meaning,
   // deepened ink carries the legibility. Idle carries no fill — absence is idle.
   const pillBase =
@@ -371,6 +379,26 @@
       {@render stat('Machines', cockpit.onlineMachines.length, `of ${cockpit.machines.length}`)}
       {@render stat('Spend today', `$${spend.toFixed(2)}`)}
     </div>
+
+    <!-- Every machine's convergence with the rest of the fleet (leaf C2 —
+         .unlazy-liveness/gates/c2.md): the data was always in this frame,
+         the Mac's 21-day silence is what happens when nothing renders it.
+         Shown above the queue for the same reason the queue sits above the
+         roster — this is a fact about the fleet, not about one session. -->
+    {#if cockpit.machines.length > 0}
+      <!-- MachineCard's badges carry tooltips (Tooltip.Root needs an ancestor
+           Provider or it throws on mount — see tools/+page.svelte's own note);
+           the board otherwise never needed one, so it is scoped to here. -->
+      <Tooltip.Provider>
+        <Card.Root class={machinesPanelClass}>
+          <ul class="machine-list">
+            {#each cockpit.machines as machine (machine.machineId)}
+              <MachineCard {machine} hubBuild={cockpit.hubBuild} />
+            {/each}
+          </ul>
+        </Card.Root>
+      </Tooltip.Provider>
+    {/if}
 
     <!-- JOURNEY §1 block 3. Everything parked on a human sits above the roster,
          longest wait first, with the answer one tap away — the roster below is
@@ -725,6 +753,11 @@
     margin-top: var(--space-6);
     padding: var(--space-3);
     box-shadow: var(--shadow-lifted);
+  }
+
+  .machine-list {
+    display: flex;
+    flex-direction: column;
   }
 
   /* Asleep/unreachable rows, kept in their own well rather than the roster's
