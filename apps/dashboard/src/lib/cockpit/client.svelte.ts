@@ -30,12 +30,7 @@ import type {
   StopPayload,
   UsageLimitsReading,
 } from '@cockpit/core';
-import {
-  classifyCommand,
-  COCKPIT_SCRATCH_TAG,
-  RESOLVE_PERMISSION,
-  RESTART_RESUMABLE,
-} from '@cockpit/core';
+import { classifyCommand, COCKPIT_SCRATCH_TAG, RESOLVE_PERMISSION } from '@cockpit/core';
 import { toast } from 'svelte-sonner';
 
 import type { SubagentState } from '$lib/utils/flow-types';
@@ -65,6 +60,7 @@ import {
   mapFrame,
   mapTranscript,
   mergePeerMessage,
+  mergePulses,
   routedToParent,
   suppressesTaskLine,
   turnBoundaries,
@@ -121,31 +117,44 @@ export interface ProjectRow {
 const isLive = (row: InstanceRow): boolean =>
   row.status === 'running' || row.status === 'starting';
 
-/** A session that died of something stays on the board until the user discards it. */
-const isListed = (row: InstanceRow): boolean => isLive(row) || row.status === 'error';
+/**
+ * A session that stays on the board until the operator discards it: live work,
+ * a real failure to look at, a nap to wake from, or a row the hub simply
+ * cannot currently ask about — `unknown` is never dropped just because its
+ * machine went quiet, the same way it is never rendered as though nothing
+ * were wrong (see {@link isStale}).
+ */
+const isListed = (row: InstanceRow): boolean =>
+  isLive(row) || row.status === 'error' || row.status === 'sleeping' || row.status === 'unknown';
 
 /**
- * A session whose daemon went away mid-flight. It may or may not still be alive
- * on its machine — the hub cannot tell — so it is kept, but never as a live row.
+ * A session whose owning machine the hub cannot currently reach — the
+ * presence overlay's value (`withSessionPresence`, ARCHITECTURE.md), not a
+ * guess of our own. It may still be running, sleeping, or gone on that
+ * machine; the hub genuinely does not know, which is a different claim from
+ * every other status and must never be flattened into "idle".
  */
-const isStale = (row: InstanceRow): boolean => row.status === 'unknown';
+export const isStale = (row: InstanceRow): boolean => row.status === 'unknown';
 
 /**
  * A session whose process is gone but whose conversation is not: sleeping, not
  * failed. Exactly the rows {@link ensureAlive} can bring back — dead, with an
- * SDK session to resume from — narrowed to the ones that did not die of
- * something: a daemon restart, or nothing said at all. A bad cwd, a pump that
- * crashed, a clone that failed all leave a reason of their own, and a reason of
- * its own is what a real failure has.
+ * SDK session to resume from. `sleeping` is the taxonomy's own word for this
+ * now (ARCHITECTURE.md's status table) — the hub never reports it any other
+ * way, so this reads the status directly rather than inferring it from
+ * `lastError`. A `stopped` row with a session id is the other resumable case:
+ * deliberately ended, but nothing stops it being picked back up.
  */
 export const isResumable = (row: InstanceRow): boolean =>
-  (row.status === 'error' || row.status === 'stopped') &&
-  Boolean(row.sessionId) &&
-  (!row.lastError || row.lastError === RESTART_RESUMABLE);
+  row.status === 'sleeping' || (row.status === 'stopped' && Boolean(row.sessionId));
 
-/** A session that died of something, and is not coming back by being opened. */
-export const isFailed = (row: InstanceRow): boolean =>
-  row.status === 'error' && !isResumable(row);
+/**
+ * A session that died of something, and is not coming back by being opened.
+ * `error` now means exactly that — the taxonomy requires `lastError` to be set
+ * whenever the hub asserts it — so there is no longer a resumable marker to
+ * carve back out of it.
+ */
+export const isFailed = (row: InstanceRow): boolean => row.status === 'error';
 
 /** A side quest's worktree sits under the project's checkout, so it counts as in it. */
 /** The last path segment — how the rail names a session, and how a hand-off does. */
@@ -811,6 +820,14 @@ function handleFrame(frame: FramePayload): void {
       .handoffs ?? {};
     adoptQueues((frame as { queues?: Record<string, QueuedMessage[]> }).queues);
     adoptInstances(frame.instances);
+    // The hub's now-state for every session it lists (C3), so a freshly-opened
+    // dashboard knows working/blocked/idle at once instead of waiting for the
+    // next per-instance `pulse` frame. Structural read, same as `handoffs` and
+    // `queues` above: a hub that predates the field sends nothing here.
+    state.pulses = mergePulses(
+      state.pulses,
+      (frame as { pulses?: Record<string, SessionPulse> }).pulses
+    );
     return;
   }
 
@@ -2443,7 +2460,8 @@ function noteSendSubmitted(
 export async function ensureAlive(instanceId: string, machineId: string): Promise<void> {
   const target = session(instanceId);
   const row = state.instances.find((candidate) => candidate.id === instanceId);
-  const dead = row && (row.status === 'error' || row.status === 'stopped');
+  const dead =
+    row && (row.status === 'error' || row.status === 'stopped' || row.status === 'sleeping');
   if (dead && target.sessionId) {
     const requestId = newId();
     const payload: SpawnPayload = {

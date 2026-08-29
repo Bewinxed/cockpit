@@ -12,6 +12,7 @@ import type {
   SDKStatus,
   SendPayload,
   SessionMessage,
+  SessionPulse,
   SlashCommand,
   UserQuestionResult,
 } from '@cockpit/core';
@@ -1871,4 +1872,30 @@ export function applyToolResult(
     ...(delegateInstanceId ? { delegateInstanceId } : {}),
     ...(delegateTitle ? { delegateTitle } : {}),
   };
+}
+
+/**
+ * Folds the hub's pulse snapshot — `instancesFrame.pulses` (ARCHITECTURE.md's
+ * C3, a `Record<instanceId, SessionPulse>` riding the same frame every
+ * `instances` push carries) — into the client's own pulse map.
+ *
+ * Pulled out of the runes module for the same reason as everything else here:
+ * `client.svelte.ts` cannot be imported by this repo's bun tests. The rule
+ * itself is a merge, not a replace, because a per-instance `pulse` frame
+ * (thrown the moment a daemon reports one) is not ordered against a snapshot
+ * the hub took moments before the `instances` frame carrying it left — either
+ * can reach the browser first, so whichever pulse actually happened later, by
+ * its own `at`, is the one kept.
+ */
+export function mergePulses(
+  current: Record<string, SessionPulse>,
+  incoming: Record<string, SessionPulse> | undefined
+): Record<string, SessionPulse> {
+  if (!incoming) return current;
+  const next = { ...current };
+  for (const [instanceId, pulse] of Object.entries(incoming)) {
+    const existing = next[instanceId];
+    if (!existing || pulse.at >= existing.at) next[instanceId] = pulse;
+  }
+  return next;
 }

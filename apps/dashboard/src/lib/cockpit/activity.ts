@@ -50,3 +50,15 @@ export const SLEEPING_LABEL = 'Sleeping';
 
 /** Why that is not a failure, wherever a sleeping row can carry a tooltip. */
 export const SLEEPING_HINT = 'Sleeping — it resumes when you open or message it.';
+
+/**
+ * The fifth word, for the status the old system could not admit at all: a row
+ * whose owning machine the hub cannot currently reach (`isStale`). It is not
+ * idle — nothing said the session stopped working — and not asleep — nothing
+ * said the process is gone. Rendering it as either would be exactly the stale
+ * confidence ARCHITECTURE.md's derived-liveness law exists to rule out.
+ */
+export const UNKNOWN_LABEL = 'Unknown';
+
+/** Why an unknown row is not the same as idle or asleep, for its tooltip. */
+export const UNKNOWN_HINT = "Unknown — the hub can't currently reach this session's machine.";

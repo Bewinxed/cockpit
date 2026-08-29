@@ -30,7 +30,7 @@
   import { IconClose, IconExternal, IconFolderDuo, IconFork, IconStop } from '$lib/icons';
   import { smoothText } from '$lib/utils/smooth-text.svelte';
   import { getToolGlance } from '$lib/utils/tool-display';
-  import { ACTIVITY_LABEL, SLEEPING_LABEL } from './activity';
+  import { ACTIVITY_LABEL, SLEEPING_LABEL, UNKNOWN_HINT, UNKNOWN_LABEL } from './activity';
   import ActivityDot from './ActivityDot.svelte';
   import ContextMeter from './ContextMeter.svelte';
   import OsMark from './OsMark.svelte';
@@ -40,6 +40,7 @@
     forkSession,
     isFailed,
     isResumable,
+    isStale,
     openSession,
     openTranscript,
     permissionAnswer,
@@ -114,10 +115,12 @@
 
   const failed = $derived(row ? isFailed(row) : false);
   const sleeping = $derived(row ? isResumable(row) : false);
+  /** The hub can't reach this row's machine — distinct from idle and asleep. */
+  const stale = $derived(row ? isStale(row) : false);
   const running = $derived(row?.status === 'running' || row?.status === 'starting');
   const activity = $derived(target ? cockpit.activityOf(target.viewId) : 'idle');
   const stateLabel = $derived(
-    failed ? 'Failed' : sleeping ? SLEEPING_LABEL : ACTIVITY_LABEL[activity]
+    failed ? 'Failed' : sleeping ? SLEEPING_LABEL : stale ? UNKNOWN_LABEL : ACTIVITY_LABEL[activity]
   );
   const tool = $derived(target ? cockpit.currentToolOf(target.viewId) : null);
 
@@ -316,6 +319,10 @@
               <span class="size-2 shrink-0 rounded-full bg-error"></span>
             {:else if sleeping}
               <span class="size-2 shrink-0 rounded-full bg-muted-foreground/40"></span>
+            {:else if stale}
+              <!-- Hollow, not filled: the hub has no fact to color, only the
+                   admission that it lacks one. -->
+              <span class="size-2 shrink-0 rounded-full border border-muted-foreground/60"></span>
             {:else}
               <ActivityDot {activity} />
             {/if}
@@ -370,6 +377,10 @@
           {#if failed}
             <p class="border-t border-border/50 bg-error/10 px-4 py-3 text-caption text-error">
               {row?.lastError || 'Failed without saying why.'}
+            </p>
+          {:else if stale}
+            <p class="border-t border-border/50 px-4 py-3 text-caption text-muted-foreground">
+              {UNKNOWN_HINT}
             </p>
           {/if}
 

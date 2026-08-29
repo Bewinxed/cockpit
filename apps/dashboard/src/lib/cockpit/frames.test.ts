@@ -2,7 +2,7 @@
 // compacting; the mapper used to drop them on the floor.
 import { expect, test } from 'bun:test';
 import { classifyCommand } from '@cockpit/core';
-import type { SDKMessage, SessionMessage } from '@cockpit/core';
+import type { SDKMessage, SessionMessage, SessionPulse } from '@cockpit/core';
 import {
   answerVerdict,
   applyToolResult,
@@ -18,6 +18,7 @@ import {
   mapTranscript,
   matchesSession,
   mergePeerMessage,
+  mergePulses,
   streamPhase,
   thinkingDurationMs,
   unwrapMidTurn,
@@ -943,4 +944,41 @@ test('a failed echo is stamped with its reason, which outlives the record', () =
   echo.metadata = { ...echo.metadata, sendFailed: 'Not connected to the hub.' };
   expect(echo.metadata.sentAs).toBe('cmd-4');
   expect(echo.metadata.sendFailed).toBe('Not connected to the hub.');
+});
+
+/* ---- pulse seeding (C3) --------------------------------------------- */
+
+const pulse = (at: number, activity: SessionPulse['activity'] = 'working'): SessionPulse => ({
+  instanceId: 'i1',
+  busy: activity === 'working',
+  activity,
+  currentTool: null,
+  runningSubagents: 0,
+  at,
+});
+
+test('an instances frame with no pulses leaves the map untouched', () => {
+  const current = { i1: pulse(10) };
+  expect(mergePulses(current, undefined)).toBe(current);
+});
+
+test('a fresh instance seeds straight in', () => {
+  const next = mergePulses({}, { i1: pulse(10) });
+  expect(next.i1.at).toBe(10);
+});
+
+test('the newer pulse wins, whichever side it arrived on', () => {
+  // The snapshot on an `instances` frame is not ordered against a per-instance
+  // `pulse` frame — either can reach the browser first — so `at` decides, not
+  // arrival order.
+  const olderAlreadyLocal = mergePulses({ i1: pulse(20, 'idle') }, { i1: pulse(10, 'working') });
+  expect(olderAlreadyLocal.i1.activity).toBe('idle');
+
+  const newerIncoming = mergePulses({ i1: pulse(10, 'idle') }, { i1: pulse(20, 'working') });
+  expect(newerIncoming.i1.activity).toBe('working');
+});
+
+test('an equal `at` takes the incoming snapshot rather than discarding it', () => {
+  const next = mergePulses({ i1: pulse(10, 'idle') }, { i1: pulse(10, 'blocked') });
+  expect(next.i1.activity).toBe('blocked');
 });

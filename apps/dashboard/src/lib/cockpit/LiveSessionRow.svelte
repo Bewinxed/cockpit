@@ -23,8 +23,8 @@
   import { Badge } from '$lib/components/ui/badge';
   import { markHue, sessionSprite } from './mark';
   import { formatDuration } from '$lib/utils/time';
-  import { ACTIVITY_LABEL, SLEEPING_HINT, SLEEPING_LABEL } from './activity';
-  import { cockpit, isFailed, isResumable, type InstanceRow } from './client.svelte';
+  import { ACTIVITY_LABEL, SLEEPING_HINT, SLEEPING_LABEL, UNKNOWN_HINT, UNKNOWN_LABEL } from './activity';
+  import { cockpit, isFailed, isResumable, isStale, type InstanceRow } from './client.svelte';
   import { identityVar } from './folder-prefs.svelte';
   import { sessionTitle } from './links';
   import LiveSessionMenu from './LiveSessionMenu.svelte';
@@ -51,32 +51,46 @@
   const tool = $derived(cockpit.currentToolOf(instance.id));
   const sleeping = $derived(isResumable(instance));
   const failed = $derived(isFailed(instance));
+  /** The hub can't reach this row's machine — distinct from idle and asleep. */
+  const stale = $derived(isStale(instance));
   const quest = $derived(instance.kind === 'scratch');
   const label = $derived(
-    failed ? 'Failed' : sleeping ? SLEEPING_LABEL : ACTIVITY_LABEL[activity]
+    failed ? 'Failed' : sleeping ? SLEEPING_LABEL : stale ? UNKNOWN_LABEL : ACTIVITY_LABEL[activity]
   );
 
   /** The Quiet Ledger status the row's state pill wears: fail red, needs-you
-   *  amber, working blue-live, everything at rest bare-idle. */
+   *  amber, working blue-live, unknown a hollow outline, everything else at
+   *  rest bare-idle. */
   const pillStatus = $derived(
-    failed ? 'fail' : activity === 'blocked' ? 'attn' : activity === 'working' ? 'live' : 'idle'
+    failed
+      ? 'fail'
+      : stale
+        ? 'stale'
+        : activity === 'blocked'
+          ? 'attn'
+          : activity === 'working'
+            ? 'live'
+            : 'idle'
   );
 
   /** StatusPill ported to ui/badge, token-dressed to the Quiet Ledger pill
-   *  recipe: a tint carries live/attn/done/fail, and idle carries NO fill
-   *  (bare muted label) per DESIGN.md. */
+   *  recipe: a tint carries live/attn/done/fail, idle carries NO fill (bare
+   *  muted label), and stale (`unknown`) carries an outline instead of a tint
+   *  — the hub has no fact to tint, only the admission that it lacks one. */
   const PILL_FILL: Record<string, string> = {
     live: 'bg-[var(--status-live-bg)] text-[var(--status-live-ink)]',
     attn: 'bg-[var(--status-attn-bg)] text-[var(--status-attn-ink)]',
     done: 'bg-[var(--status-done-bg)] text-[var(--status-done-ink)]',
     fail: 'bg-[var(--status-fail-bg)] text-[var(--status-fail-ink)]',
   };
-  function pillClass(status: 'live' | 'attn' | 'done' | 'fail' | 'idle'): string {
+  function pillClass(status: 'live' | 'attn' | 'done' | 'fail' | 'idle' | 'stale'): string {
     const base =
       'h-[var(--c-pill-h)] rounded-[var(--radius-pill)] border-0 text-[length:var(--c-pill-fs)] leading-none whitespace-nowrap';
-    return status === 'idle'
-      ? `${base} gap-0 bg-transparent p-0 font-[450] text-[var(--status-idle-ink)]`
-      : `${base} gap-[var(--c-pill-gap)] px-2.5 py-0 font-medium ${PILL_FILL[status]}`;
+    if (status === 'idle')
+      return `${base} gap-0 bg-transparent p-0 font-[450] text-[var(--status-idle-ink)]`;
+    if (status === 'stale')
+      return `${base} gap-[var(--c-pill-gap)] border border-[var(--border)] px-2.5 py-0 font-medium text-[var(--ink-muted)]`;
+    return `${base} gap-[var(--c-pill-gap)] px-2.5 py-0 font-medium ${PILL_FILL[status]}`;
   }
 
   // What the session is about, not where it runs: the SDK's own title for the
@@ -95,7 +109,7 @@
    * turns to say the session is alive, and how long it has been on the step it
    * is on. No fraction is invented — there is nothing to take a fraction of.
    */
-  const unmeasured = $derived(!progress && !failed && !sleeping && activity === 'working');
+  const unmeasured = $derived(!progress && !failed && !sleeping && !stale && activity === 'working');
 
   $effect(() => {
     if (!unmeasured) return;
@@ -128,7 +142,7 @@
 <LiveSessionMenu {instance}>
   <a
     href="/session/{instance.id}"
-    title={sleeping ? SLEEPING_HINT : undefined}
+    title={sleeping ? SLEEPING_HINT : stale ? UNKNOWN_HINT : undefined}
     class="group flex min-h-9 flex-col justify-center gap-0.5 rounded-[var(--radius-control)] px-4 py-1.5
       transition-colors duration-150 ease-out hover:bg-accent hover:text-accent-foreground
       {failed || activity === 'blocked' ? 'bg-error/10' : ''}"
@@ -141,7 +155,7 @@
            so a card has a single title column rather than a header set in from
            the rows it heads. -->
       <span
-        class="flex shrink-0 items-center justify-center {sleeping ? 'opacity-60' : ''}"
+        class="flex shrink-0 items-center justify-center {sleeping || stale ? 'opacity-60' : ''}"
         style="--c-mark:20px;--c-mark-glyph:11px"
       >
         <span class="mark m{markHue(instance.cwd || instance.machineId)}">
