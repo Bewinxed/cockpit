@@ -1,4 +1,4 @@
-import type { AuthState, BuildInfo, Envelope, HarnessReport, ToolStatus } from '@cockpit/core';
+import type { AuthState, BuildInfo, Envelope, HarnessReport, HeartbeatPayload, ToolStatus } from '@cockpit/core';
 import { COCKPIT_ENV, COCKPIT_HUB_PORT } from '@cockpit/core';
 import { fetchClaudeLimits } from '@cockpit/core/usage/limits';
 import { Data, Duration, Effect, Fiber, Schedule } from 'effect';
@@ -275,7 +275,9 @@ const attach = (
           send(socket, {
             verb: 'heartbeat',
             machineId: identity.machineId,
-            payload: { at: Date.now() },
+            // `instances` rides every beat (not just register) so the hub can
+            // reconcile session truth continuously — see HeartbeatPayload.
+            payload: { at: Date.now(), instances: supervisor.instanceIds } satisfies HeartbeatPayload,
           })
         ),
         Schedule.spaced(HEARTBEAT_INTERVAL)
@@ -395,7 +397,14 @@ export const startDaemon = (auth?: AuthState) =>
 export const runDaemon = (auth?: AuthState): void => {
   const daemon = Effect.runFork(startDaemon(auth));
   const drain = (signal: NodeJS.Signals): void => {
-    process.off(signal, drain);
+    // bun-types' `NodeJS.Process` merge redeclares `off` for its own
+    // `"memoryPressure"` event only, which shadows @types/node's generic
+    // `EventEmitter.off(event: string | symbol, listener)` instead of
+    // overloading it — so `process.off(signal, drain)` type-checks against
+    // that one unrelated overload and never against a signal. Going through
+    // `EventEmitter` directly reaches the generic signature `process.off`
+    // itself no longer offers.
+    (process as NodeJS.EventEmitter).off(signal, drain);
     void Effect.runPromise(Fiber.interrupt(daemon)).then(() => process.exit(0));
   };
   process.on('SIGINT', drain).on('SIGTERM', drain);

@@ -216,6 +216,19 @@ export interface SubscribePayload {
   instanceIds: string[];
 }
 
+/**
+ * `heartbeat`: the daemon's 15s pulse. `instances` is the supervisor's live
+ * instance-id list (`SessionSupervisor.instanceIds`), sent on every beat so the
+ * hub can reconcile session truth continuously rather than only at `register` —
+ * a session the daemon has quietly dropped (crash, OOM kill, a restart that
+ * never came back) stops appearing here well before any human notices, and one
+ * a register missed because it raced a spawn shows up on the very next beat.
+ */
+export interface HeartbeatPayload {
+  at: number;
+  instances: string[];
+}
+
 /** `stop`: interrupt and close a live session. */
 export interface StopPayload {
   instanceId: string;
@@ -352,13 +365,40 @@ export const UPDATE_COCKPIT = 'updateCockpit';
 export const AGENT_BUSY = 'agentBusy';
 
 /**
+ * What a session row is doing, right now, as the hub last heard it.
+ *
+ * - `starting` — a spawn went out and hasn't been confirmed live yet.
+ * - `running` — the owning daemon currently lists the instance.
+ * - `sleeping` — no live process, but resumable: the harness has a session id
+ *   to pick back up from. This is what a daemon restart or a quiet drop used
+ *   to report as `error` with {@link RESTART_RESUMABLE} in `lastError`; that
+ *   encoding conflated "gone but fine" with a real failure, so `sleeping` rows
+ *   carry `lastError: null` — nothing went wrong, there's just nothing running.
+ * - `stopped` — deliberate: the operator (or a `stop` call) ended it.
+ * - `error` — an actual failure. `lastError` is required here, and this is
+ *   where {@link RESTART_LOST} still lands: a restart with nothing to resume
+ *   from is a real loss, not a nap.
+ * - `unknown` — the machine that owns this row can't currently be reached, so
+ *   the hub can't say which of the above is true.
+ * - `discarded` — a side quest torn down on purpose; gone for good.
+ */
+export type InstanceStatus =
+  | 'starting'
+  | 'running'
+  | 'sleeping'
+  | 'stopped'
+  | 'discarded'
+  | 'unknown'
+  | 'error';
+
+/**
  * A session the hub knows about — one row of its `instances` table.
  */
 export interface InstanceRow {
   id: string;
   machineId: string;
   cwd: string;
-  status: string;
+  status: InstanceStatus;
   /** The harness's own session id, once the session has named itself. */
   sessionId: string | null;
   /** Which harness owns {@link sessionId} — what a resume and a catalog read route on. */
