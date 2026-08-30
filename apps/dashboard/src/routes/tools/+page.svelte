@@ -1,16 +1,16 @@
 <script lang="ts">
   /**
-   * What the fleet's machines carry: the workflow CLIs (NEW.md §10), the MCP
-   * servers, the skill plugins, the subagents and the shared memory (NEW.md
-   * §11). Five panels over one hub read, stacked down the page, because they
-   * are five answers to the same question — what can a session started on that
-   * machine reach? Tabs hid four of those answers behind a click; the stat row
-   * up top is the index that replaces them.
+   * What the fleet's machines carry: MCP servers, skills, subagents, memory,
+   * and hooks — one panel visible at a time behind a labelled tab selector,
+   * held in the URL (?tab=), with a fleet status line and "needs attention"
+   * strip above the tabs so fleet-wide failures are visible without hunting
+   * through panels. (JOURNEY.md §4)
    */
   import { onMount, untrack } from 'svelte';
   import type { FleetAgent, FleetConfig, FleetSkillMeta } from '@cockpit/core';
   import * as Tooltip from '$lib/components/ui/tooltip';
   import * as Card from '$lib/components/ui/card';
+  import * as Tabs from '$lib/components/ui/tabs';
   import { cockpit } from '$lib/cockpit/client.svelte';
   import type { FleetMemoryDocRow, FleetMemoryRow } from '$lib/cockpit/fleet';
   import type { FleetHook } from '$lib/cockpit/hooks';
@@ -22,6 +22,8 @@
   import FleetTrouble from '$lib/cockpit/FleetTrouble.svelte';
   import ToolMatrix from '$lib/cockpit/ToolMatrix.svelte';
   import { orderMachines } from '$lib/cockpit/rail.svelte';
+  import { page } from '$app/state';
+  import { goto } from '$app/navigation';
   import type { PageData } from './$types';
 
   let { data }: { data: PageData } = $props();
@@ -64,13 +66,19 @@
     return () => clearTimeout(timer);
   });
 
+  const activeTab = $derived(page.url.searchParams.get('tab') ?? 'tools');
+
+  function switchTab(value: string) {
+    const url = new URL(page.url);
+    url.searchParams.set('tab', value);
+    goto(url.toString(), { noScroll: true, replaceState: true });
+  }
+
   /* Dress shadcn Card as the Quiet Ledger raised panel (--surface-raised,
      --radius-panel, --shadow-lifted) — never the stock bg-card/ring
      shadcn ships. tailwind-merge drops the defaults these override. */
   const panelClass =
     'gap-0 overflow-visible rounded-[var(--radius-panel)] bg-[var(--surface-raised)] p-[var(--space-5)] shadow-[var(--shadow-lifted)] ring-0';
-  const tileClass =
-    'h-full gap-0 overflow-visible rounded-[var(--radius-panel)] bg-[var(--surface-raised)] p-[var(--c-card-pad)] shadow-[var(--shadow-lifted)] ring-0';
 </script>
 
 <svelte:head>
@@ -81,39 +89,14 @@
      throw on the server, which is what used to leave /tools a 500 on a cold load. -->
 <Tooltip.Provider>
 <div class="page">
-  <!-- The stat tile IS the signature move: a shadcn Card (raised) whose body is a
-       sunken hairline well — a number sits *in* something, never on it. -->
-  {#snippet stat(label: string, value: string | number, unit?: string)}
-    <Card.Root class={tileClass}>
-      <div class="well">
-        <span class="k">{label}</span>
-        <span class="v">{value}</span>
-        {#if unit}<span class="u">{unit}</span>{/if}
-      </div>
-    </Card.Root>
-  {/snippet}
   <div class="col">
     <header class="head">
       <h1>Tools</h1>
       <p class="sub">
-        Everything a session can reach the moment it starts on one of these machines — the CLIs,
-        the servers, the skills, the subagents and the memory they all share.
+        {online} of {machines.length} machines reported
       </p>
     </header>
 
-    <section class="stats" aria-label="Fleet inventory">
-      {@render stat('Tools tracked', data.catalog.length)}
-      {@render stat('MCP servers', config.mcp.length)}
-      {@render stat('Skills', skills.length)}
-      {@render stat('Subagents', agents.length)}
-      {@render stat('Hooks', hooks.length)}
-      {@render stat('Machines online', online, `of ${machines.length}`)}
-    </section>
-
-    <!-- The index of what is wrong, above every panel that lists what the fleet
-         carries: the operator's first question on this page is not "what do we
-         have" but "did it land". It is also where the fleet board's failed-sync
-         badge lands, because the explanation and the retry are both here. -->
     <Card.Root id="fleet-trouble" class="scroll-mt-6 {panelClass}">
       <header class="phead">
         <h2>Needs attention</h2>
@@ -124,80 +107,112 @@
       </div>
     </Card.Root>
 
-    <Card.Root class={panelClass}>
-      <header class="phead">
-        <h2>Tool matrix</h2>
-        <span class="psub">Workflow CLIs, machine by machine</span>
-      </header>
-      <div class="pbody">
-        <ToolMatrix
-          {machines}
-          {settling}
-          catalog={data.catalog}
-          policies={data.policies}
-          error={data.toolsError}
-        />
-      </div>
-    </Card.Root>
+    <Tabs.Root value={activeTab} onValueChange={switchTab}>
+      <Tabs.List class="tab-strip" variant="line">
+        <Tabs.Trigger value="tools">
+          Tools <span class="badge">{data.catalog.length}</span>
+        </Tabs.Trigger>
+        <Tabs.Trigger value="mcp">
+          MCP servers <span class="badge">{config.mcp.length}</span>
+        </Tabs.Trigger>
+        <Tabs.Trigger value="skills">
+          Skills <span class="badge">{skills.length}</span>
+        </Tabs.Trigger>
+        <Tabs.Trigger value="agents">
+          Agents <span class="badge">{agents.length}</span>
+        </Tabs.Trigger>
+        <Tabs.Trigger value="memory">
+          Memory
+        </Tabs.Trigger>
+        <Tabs.Trigger value="hooks">
+          Hooks <span class="badge">{hooks.length}</span>
+        </Tabs.Trigger>
+      </Tabs.List>
 
-    <Card.Root id="fleet-mcp" class="scroll-mt-6 {panelClass}">
-      <header class="phead">
-        <h2>MCP servers</h2>
-        <span class="psub">Written to every machine, online now or when it returns</span>
-      </header>
-      <div class="pbody">
-        <FleetMcp servers={config.mcp} {machines} {settling} error={data.fleetError} />
-      </div>
-    </Card.Root>
+      <Tabs.Content value="tools">
+        <Card.Root class={panelClass}>
+          <header class="phead">
+            <h2>Tool matrix</h2>
+            <span class="psub">Workflow CLIs, machine by machine</span>
+          </header>
+          <div class="pbody">
+            <ToolMatrix
+              {machines}
+              {settling}
+              catalog={data.catalog}
+              policies={data.policies}
+              error={data.toolsError}
+            />
+          </div>
+        </Card.Root>
+      </Tabs.Content>
 
-    <Card.Root id="fleet-skills" class="scroll-mt-6 {panelClass}">
-      <header class="phead">
-        <h2>Skills &amp; plugins</h2>
-        <span class="psub">Fetched once for the fleet, or cloned from a marketplace</span>
-      </header>
-      <div class="pbody">
-        <FleetSkills {config} {skills} {machines} {settling} error={data.fleetError} />
-      </div>
-    </Card.Root>
+      <Tabs.Content value="mcp">
+        <Card.Root id="fleet-mcp" class="scroll-mt-6 {panelClass}">
+          <header class="phead">
+            <h2>MCP servers</h2>
+            <span class="psub">Written to every machine, online now or when it returns</span>
+          </header>
+          <div class="pbody">
+            <FleetMcp servers={config.mcp} {machines} {settling} error={data.fleetError} />
+          </div>
+        </Card.Root>
+      </Tabs.Content>
 
-    <Card.Root class={panelClass}>
-      <header class="phead">
-        <h2>Subagents</h2>
-        <span class="psub">Markdown files that land in ~/.claude/agents everywhere</span>
-      </header>
-      <div class="pbody">
-        <FleetAgents {agents} {machines} {settling} error={data.fleetError} />
-      </div>
-    </Card.Root>
+      <Tabs.Content value="skills">
+        <Card.Root id="fleet-skills" class="scroll-mt-6 {panelClass}">
+          <header class="phead">
+            <h2>Skills &amp; plugins</h2>
+            <span class="psub">Fetched once for the fleet, or cloned from a marketplace</span>
+          </header>
+          <div class="pbody">
+            <FleetSkills {config} {skills} {machines} {settling} error={data.fleetError} />
+          </div>
+        </Card.Root>
+      </Tabs.Content>
 
-    <!-- id targeted by the fleet board's failed-sync badge (leaf C2): the
-         adopt/overwrite affordance for a machine stuck `failed` lives here,
-         never re-created at the badge itself. -->
-    <Card.Root id="fleet-memory" class="scroll-mt-6 {panelClass}">
-      <header class="phead">
-        <h2>Memory</h2>
-        <span class="psub">The user CLAUDE.md the whole fleet reads</span>
-      </header>
-      <div class="pbody">
-        <FleetMemory
-          bind:memory
-          bind:docs={memoryDocs}
-          {machines}
-          {settling}
-          error={data.fleetError}
-        />
-      </div>
-    </Card.Root>
+      <Tabs.Content value="agents">
+        <Card.Root class={panelClass}>
+          <header class="phead">
+            <h2>Subagents</h2>
+            <span class="psub">Markdown files that land in ~/.claude/agents everywhere</span>
+          </header>
+          <div class="pbody">
+            <FleetAgents {agents} {machines} {settling} error={data.fleetError} />
+          </div>
+        </Card.Root>
+      </Tabs.Content>
 
-    <Card.Root id="fleet-hooks" class="scroll-mt-6 {panelClass}">
-      <header class="phead">
-        <h2>Hooks</h2>
-        <span class="psub">Scripts and calls run on a session's own lifecycle events</span>
-      </header>
-      <div class="pbody">
-        <FleetHooks {hooks} {machines} {settling} error={data.hooksError} />
-      </div>
-    </Card.Root>
+      <Tabs.Content value="memory">
+        <Card.Root id="fleet-memory" class="scroll-mt-6 {panelClass}">
+          <header class="phead">
+            <h2>Memory</h2>
+            <span class="psub">The user CLAUDE.md the whole fleet reads</span>
+          </header>
+          <div class="pbody">
+            <FleetMemory
+              bind:memory
+              bind:docs={memoryDocs}
+              {machines}
+              {settling}
+              error={data.fleetError}
+            />
+          </div>
+        </Card.Root>
+      </Tabs.Content>
+
+      <Tabs.Content value="hooks">
+        <Card.Root id="fleet-hooks" class="scroll-mt-6 {panelClass}">
+          <header class="phead">
+            <h2>Hooks</h2>
+            <span class="psub">Scripts and calls run on a session's own lifecycle events</span>
+          </header>
+          <div class="pbody">
+            <FleetHooks {hooks} {machines} {settling} error={data.hooksError} />
+          </div>
+        </Card.Root>
+      </Tabs.Content>
+    </Tabs.Root>
   </div>
 </div>
 </Tooltip.Provider>
@@ -233,39 +248,23 @@
     font-size: var(--text-base);
     color: var(--ink-muted);
   }
-  .stats {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-    gap: var(--space-4);
+  /* Tab strip: horizontally scrollable on narrow viewports with next tab
+     peeking past the edge (JOURNEY.md §4 mobile reflow). */
+  :global(.tab-strip) {
+    width: 100% !important;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    border-bottom: 1px solid var(--border-hairline);
+    background: transparent;
   }
-  /* The sunken well inside each raised stat Card — the recessed-field signature.
-     flex:1 keeps a tile with a unit line the same height as one without. */
-  .well {
-    flex: 1 1 auto;
-    display: flex;
-    flex-direction: column;
-    gap: var(--c-card-gap);
-    justify-content: center;
-    background: var(--surface-field);
-    border: 1px solid var(--border-hairline);
-    border-radius: var(--radius-well);
-    padding: var(--c-card-pad);
+  :global(.tab-strip::-webkit-scrollbar) {
+    display: none;
   }
-  .well .k {
+  .badge {
     color: var(--ink-label);
-    font-size: var(--text-sm);
-    font-weight: var(--weight-medium);
-  }
-  .well .v {
-    font-size: var(--text-3xl);
-    font-weight: var(--weight-strong);
-    line-height: var(--leading-numeric);
-    color: var(--ink-strong);
+    font-size: var(--text-xs);
     font-variant-numeric: tabular-nums;
-  }
-  .well .u {
-    color: var(--ink-muted);
-    font-size: var(--text-sm);
   }
   .phead {
     display: flex;

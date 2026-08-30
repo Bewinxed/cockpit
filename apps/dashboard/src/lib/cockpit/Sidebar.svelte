@@ -105,6 +105,11 @@
   const sessionsOf = (project: ProjectRow): InstanceRow[] =>
     running.filter((row) => inProject(row, project));
 
+  /** Count of stopped/sleeping sessions that belong to a project — so the
+   *  empty state says "12 recent — start one" instead of implying zero history. */
+  const recentCountOf = (project: ProjectRow): number =>
+    notRunning.filter((row) => inProject(row, project)).length;
+
   /** Live sessions no listed project claims — the flat "Running now" tail. */
   const ungrouped = $derived(
     running.filter((row) => !cockpit.projects.some((project) => inProject(row, project)))
@@ -298,6 +303,7 @@
                   <Badge class={pillClass(PILL[activity])}>{ACTIVITY_LABEL[activity]}</Badge>
                 </a>
               {:else}
+                {@const recent = recentCountOf(project)}
                 <button
                   type="button"
                   class="row sub-i empty"
@@ -308,7 +314,7 @@
                       cwd: project.cwd,
                     })}
                 >
-                  <span class="nm dim">No sessions — start one</span>
+                  <span class="nm dim">{recent > 0 ? `${recent} recent — none running` : 'No sessions — start one'}</span>
                 </button>
               {/each}
             </div>
