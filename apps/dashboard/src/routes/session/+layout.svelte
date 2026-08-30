@@ -122,13 +122,14 @@
   <!-- Fleet is the strip's first tab, so the board is one more thing to switch
        between rather than somewhere the tabs stop: it is kept and hidden exactly
        as the conversations are, down to where it was scrolled and what it was
-       peeking at. -->
-  <div class="absolute inset-0 flex" class:invisible={!onBoard} inert={!onBoard}>
+       peeking at. Panes crossfade on switch: opacity transitions while visibility
+       gates layout participation. -->
+  <div class="pane absolute inset-0 flex" class:pane-hidden={!onBoard} inert={!onBoard}>
     <FleetBoard active={onBoard} />
   </div>
   {#each panes as pane (pane.id)}
     {@const active = pane.id === viewId}
-    <div class="absolute inset-0 flex" class:invisible={!active} inert={!active}>
+    <div class="pane absolute inset-0 flex" class:pane-hidden={!active} inert={!active}>
       <SessionPane viewId={pane.id} browsing={pane.browsing} browsingCwd={pane.cwd} browsingHarness={pane.harness} {active} />
     </div>
   {/each}
@@ -137,3 +138,37 @@
        hosts it. -->
   {@render children()}
 </div>
+
+<style>
+  /* Session pane crossfade — surgical: only the transcript/board content
+     transitions, the tab strip and sidebar stay perfectly still.
+
+     Showing: visibility flips to visible instantly (0s), then opacity
+     fades in over 120ms. The pane is interactive immediately.
+
+     Hiding: opacity fades out over 100ms (exit faster than entrance),
+     then visibility flips to hidden (100ms delay), preserving the
+     virtualizer geometry the entire time. */
+  .pane {
+    opacity: 1;
+    visibility: visible;
+    transition:
+      opacity 120ms cubic-bezier(0.32, 0.72, 0, 1),
+      visibility 0s;
+  }
+
+  .pane-hidden {
+    opacity: 0;
+    visibility: hidden;
+    transition:
+      opacity 100ms cubic-bezier(0.32, 0.72, 0, 1),
+      visibility 0s 100ms;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .pane,
+    .pane-hidden {
+      transition: none;
+    }
+  }
+</style>
