@@ -73,6 +73,7 @@ import type { AgentAuth, DbShape, DelegateEvent, InstanceKind } from './db';
 import { usageBucketFromRow } from './db';
 import type { PendingShape } from './pending';
 import type { HubSocket, RegistryShape } from './registry';
+import { resolveMarketplacePlugins } from './plugins';
 import { hashFiles, resolveSkill } from './skills';
 import { createStreamHub, HUB_CAPABILITIES } from './stream';
 import type { TelegramBridge } from './telegram';
@@ -1643,6 +1644,57 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
   };
 
   /** The fleet changed: every machine that is online converges now, not on its next reconnect. */
+  /**
+   * Fetches the plugins the fleet wants, once, here.
+   *
+   * A plugin used to be a name each machine resolved for itself by running
+   * `claude plugin install`, which goes to the network — so an install depended
+   * on that machine's credentials, on the upstream repository still being there
+   * and still being public, and on the moment it happened to run. None of those
+   * are properties of the fleet, and two machines could satisfy the same row
+   * with different code and both report `applied`.
+   *
+   * So the bytes are resolved here and stored, and sync carries them. What
+   * cannot be resolved keeps its sentence on the row and is left to the old
+   * path, which is the only one that still needs a machine to reach github.
+   */
+  const resolvePlugins = async (ids: readonly string[]): Promise<void> => {
+    if (ids.length === 0) return;
+    const sources = new Map(db.fleetConfig().marketplaces.map(({ name, source }) => [name, source]));
+
+    const byMarketplace = new Map<string, string[]>();
+    for (const id of ids) {
+      const marketplace = id.split('@')[1] ?? '';
+      byMarketplace.set(marketplace, [...(byMarketplace.get(marketplace) ?? []), id]);
+    }
+
+    for (const [marketplace, wanted] of byMarketplace) {
+      const source = sources.get(marketplace);
+      if (!source) {
+        for (const id of wanted) {
+          db.putPluginPayload({ id, error: `no marketplace called ${marketplace} in this fleet` });
+        }
+        continue;
+      }
+      const resolved = await resolveMarketplacePlugins(
+        marketplace,
+        source,
+        wanted.map((id) => id.split('@')[0] ?? id)
+      );
+      for (const plugin of resolved) {
+        const id = `${plugin.name}@${marketplace}`;
+        if ('error' in plugin) db.putPluginPayload({ id, error: plugin.error });
+        else db.putPluginPayload({ id, hash: plugin.hash, bytes: plugin.bytes, files: plugin.files });
+      }
+    }
+  };
+
+  // Plugins added before this hub could fetch them, and any whose fetch has not
+  // been attempted yet. Done once at boot rather than on every sync: a resolved
+  // plugin is bytes the fleet already agrees on, and re-fetching it would be a
+  // download per restart for a file nobody asked to change.
+  void resolvePlugins(db.unresolvedPlugins());
+
   const fanOutFleet = (): void => {
     for (const machineId of registry.machineIds()) {
       const agent = registry.agent(machineId);
@@ -2248,10 +2300,25 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
       { body: t.Object({ enabled: t.Optional(t.Boolean()) }) },
       ({ params, body }) => {
         const plugin = db.putPlugin({ id: params.id, enabled: body.enabled });
-        fanOutFleet();
+        // Fetched before the machines are told about it, so the first sync that
+        // reaches them already carries the files rather than a name to go and
+        // resolve. A fetch that fails leaves its sentence on the row and the
+        // fan-out still happens — the fleet is not held up by one plugin.
+        void resolvePlugins([params.id]).finally(() => fanOutFleet());
         return plugin;
       }
     )
+    // Re-fetch one plugin's bytes. The same verb a skill has, and the way a
+    // fleet takes a new version of something upstream moved: nothing else
+    // re-resolves on its own, because a plugin that resolved once is a plugin
+    // every machine already agrees on.
+    .post('/api/fleet/plugins/:id/refresh', async ({ params, status }) => {
+      const known = db.fleetConfig().plugins.some(({ id }) => id === params.id);
+      if (!known) return status(404, `no plugin ${params.id} in this fleet`);
+      await resolvePlugins([params.id]);
+      fanOutFleet();
+      return { ok: true };
+    })
     .delete('/api/fleet/plugins/:id', ({ params }) => {
       db.deletePlugin(params.id);
       fanOutFleet();

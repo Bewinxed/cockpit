@@ -127,6 +127,27 @@ export interface FleetSkillPayload extends FleetPlacement {
 }
 
 /**
+ * What sync carries per wanted plugin: the resolved content, by hash.
+ *
+ * The mirror of {@link FleetSkillPayload}, and for the same reason. A plugin
+ * used to be a name a machine went and fetched for itself, which made every
+ * install depend on that machine's credentials, on the upstream repository
+ * still existing and still being public, and on the moment it happened to run.
+ * The bytes are resolved once at the hub instead, so a machine installs what
+ * every other machine installed, from a directory sync wrote.
+ */
+export interface FleetPluginPayload {
+  /** The plugin's own name, as its marketplace's manifest lists it. */
+  name: string;
+  /** Which fleet marketplace it came from — the key `FleetPlugin.id` names. */
+  marketplace: string;
+  hash: string;
+  /** Decoded size of the resolved files, for the dashboard to show. */
+  bytes: number;
+  files: SkillFile[];
+}
+
+/**
  * One subagent the fleet keeps (NEW.md §11), without the file it is. A subagent
  * *is* its markdown — YAML front matter over a body that becomes the system
  * prompt — and its identity is the front matter's `name`, not the filename. So
@@ -334,6 +355,14 @@ export interface FleetConfig {
    * from what its sidecar recorded. Absent from a hub that predates them.
    */
   skills?: FleetSkillPayload[];
+  /**
+   * Vendored plugins, files inline. Present when the hub could resolve them;
+   * a daemon that gets them writes its own marketplace and installs from that
+   * directory, and reaches the network for nothing. Absent from a hub that
+   * predates this, which is what has a daemon fall back to asking the CLI to
+   * fetch — the old behaviour, kept only for that skew.
+   */
+  pluginPayloads?: FleetPluginPayload[];
   /**
    * The fleet's user-scope CLAUDE.md, or null when the fleet keeps none —
    * which is what has a machine give back the copy cockpit wrote it.

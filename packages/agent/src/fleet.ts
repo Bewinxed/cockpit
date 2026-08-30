@@ -20,6 +20,7 @@ import type {
   FleetMemory,
   FleetMemoryDoc,
   FleetScope,
+  FleetPluginPayload,
   FleetSkillPayload,
   FleetSyncReport,
   HookEvent,
@@ -48,6 +49,16 @@ const SIDECAR = expandHome('~/.claude/cockpit-fleet.json');
 
 /** Where a plain skill's files land — one directory per skill, all of it cockpit's. */
 const SKILLS_DIR = expandHome('~/.claude/skills');
+
+/**
+ * The fleet's OWN marketplace, written from the bytes the hub resolved. All of
+ * it cockpit's, like a skill's directory — rewritten whole whenever the set
+ * changes, and never edited by anything else.
+ */
+export const VENDOR_DIR = expandHome('~/.claude/cockpit-marketplace');
+
+/** What that marketplace is called once linked, and the half after every `@`. */
+const VENDOR_NAME = 'cockpit';
 
 /** The user-scope memory every session on this machine reads (NEW.md §11). */
 const MEMORY_PATH = expandHome('~/.claude/CLAUDE.md');
@@ -118,6 +129,12 @@ interface Sidecar {
   plugins: string[];
   /** Skill name → the hash of the files written, which is what makes a sync a no-op. */
   skills: Record<string, string>;
+  /**
+   * Plugin name → the hash of the vendored files written under
+   * {@link VENDOR_DIR}. Same purpose as `skills`, and the reason a sync that
+   * changes nothing rewrites nothing.
+   */
+  vendoredPlugins?: Record<string, string>;
   /** The hash cockpit last wrote to `~/.claude/CLAUDE.md`; absent = unmanaged. */
   memory?: string;
   /**
@@ -324,9 +341,13 @@ interface Ran {
  * install into. Killed rather than left running if it hangs: a marketplace
  * behind a dead network would otherwise hold the whole sync open forever.
  */
-const runClaude = async (bin: string, args: string[]): Promise<Ran> => {
+const runClaude = async (
+  bin: string,
+  args: string[],
+  extraEnv?: Record<string, string>
+): Promise<Ran> => {
   const child = Bun.spawn([bin, ...args], {
-    env: toolEnv(),
+    env: { ...toolEnv(), ...extraEnv },
     stdout: 'pipe',
     stderr: 'pipe',
     timeout: CLI_TIMEOUT_MS,
@@ -338,6 +359,50 @@ const runClaude = async (bin: string, args: string[]): Promise<Ran> => {
   const code = await child.exited;
   if (child.signalCode) return { output: `timed out after ${CLI_TIMEOUT_MS / 1000}s` };
   return { output: tail(stderr) || tail(stdout) || `exited ${code}` };
+};
+
+/**
+ * A clone that fell back to ssh and had nothing to authenticate with.
+ *
+ * The marketplaces and plugins a fleet carries are public repositories, and a
+ * public repository needs no account to clone. But a plugin manifest names its
+ * source as `{ "source": "github", "repo": "owner/name" }`, and the CLI turns
+ * that into an ssh remote on a machine whose `gh` is not logged in — so a
+ * machine with an expired token cannot install a plugin that anyone on the
+ * internet can `git clone`. That is the whole failure, and it is not the
+ * operator's to fix with a login.
+ */
+const SSH_REFUSED =
+  /Permission denied \(publickey\)|Could not read from remote repository|Host key verification failed/i;
+
+/**
+ * Git config, passed to the child alone, that sends github over anonymous
+ * https. `GIT_CONFIG_COUNT` is git's own environment form (git ≥ 2.31), so it
+ * reaches every git the CLI shells out to and NOTHING else: not the machine's
+ * `~/.gitconfig`, not this daemon, not the operator's own clones.
+ */
+const HTTPS_GITHUB: Record<string, string> = {
+  GIT_CONFIG_COUNT: '2',
+  GIT_CONFIG_KEY_0: 'url.https://github.com/.insteadOf',
+  GIT_CONFIG_VALUE_0: 'git@github.com:',
+  GIT_CONFIG_KEY_1: 'url.https://github.com/.insteadOf',
+  GIT_CONFIG_VALUE_1: 'ssh://git@github.com/',
+};
+
+/**
+ * A `claude plugin …` that clones, retried over https if ssh refused it.
+ *
+ * The retry is second, not first, on purpose: a fleet MAY legitimately carry a
+ * private marketplace, and on a machine that reaches it with an ssh key the
+ * first attempt is the one that works. Rewriting up front would break exactly
+ * that machine. So the normal path is unchanged, and the rewrite is reached
+ * only by the failure it answers — a public repo refused for want of an
+ * account.
+ */
+const runClaudeCloning = async (bin: string, args: string[]): Promise<Ran> => {
+  const first = await runClaude(bin, args);
+  if (!SSH_REFUSED.test(first.output)) return first;
+  return await runClaude(bin, args, HTTPS_GITHUB);
 };
 
 const isLinked = async (name: string): Promise<boolean> =>
@@ -408,6 +473,9 @@ const isInstalled = async (id: string): Promise<boolean> => {
 /** `plugin@marketplace` is the CLI's own form, and the half after the `@` is the link. */
 const marketplaceOf = (id: string): string => id.split('@').pop() ?? '';
 
+/** And the half before it, which is what a vendored plugin is called. */
+const pluginNameOf = (id: string): string => id.split('@')[0] ?? id;
+
 /**
  * Which of the marketplaces cockpit linked last time are cockpit's to unlink
  * now. What goes is a link, so what is compared is the link: renaming a
@@ -436,7 +504,7 @@ const syncPlugins = async (
   config: FleetConfig,
   managed: Sidecar,
   report: FleetSyncReport
-): Promise<Pick<Sidecar, 'marketplaces' | 'plugins'>> => {
+): Promise<Pick<Sidecar, 'marketplaces' | 'plugins' | 'vendoredPlugins'>> => {
   const wantedPlugins = config.plugins.filter((plugin) => plugin.enabled);
   const bin = await claudeBin();
   if (!bin) {
@@ -462,7 +530,7 @@ const syncPlugins = async (
       report.marketplaces[name] = { state: 'applied' };
       continue;
     }
-    const ran = await runClaude(bin, ['plugin', 'marketplace', 'add', source]);
+    const ran = await runClaudeCloning(bin, ['plugin', 'marketplace', 'add', source]);
     const linkedAs = await linkedNameFor(name, source);
     if (!linkedAs) {
       // Nothing was linked, so there is nothing for a later sync to take away.
@@ -480,8 +548,22 @@ const syncPlugins = async (
       : { state: 'removed' };
   }
 
+  // Whatever the hub resolved for itself is installed from the bytes it sent;
+  // only what it could NOT resolve is left for the CLI to go and fetch, which
+  // is the path that needs this machine to reach github on its own account.
+  const payloads = config.pluginPayloads ?? [];
+  const vendored = await syncVendoredPlugins(
+    bin,
+    payloads,
+    wantedPlugins,
+    managed.vendoredPlugins ?? {},
+    report.plugins
+  );
+  const carried = new Set(payloads.map(({ name }) => name));
+
   const linked = await linkedMarketplaces();
   for (const { id } of wantedPlugins) {
+    if (carried.has(pluginNameOf(id))) continue;
     const marketplace = marketplaceOf(id);
     // The CLI's own account, not this run's report: a plugin id names the
     // marketplace the CLI's way, which is not the key the report is under.
@@ -493,7 +575,7 @@ const syncPlugins = async (
       report.plugins[id] = { state: 'applied' };
       continue;
     }
-    const ran = await runClaude(bin, ['plugin', 'install', id, '--scope', 'user']);
+    const ran = await runClaudeCloning(bin, ['plugin', 'install', id, '--scope', 'user']);
     report.plugins[id] = (await isInstalled(id))
       ? { state: 'applied' }
       : { state: 'failed', detail: ran.output };
@@ -502,11 +584,15 @@ const syncPlugins = async (
   const plugins = wantedPlugins.map(({ id }) => id);
   for (const id of managed.plugins) {
     if (plugins.includes(id)) continue;
-    await runClaude(bin, ['plugin', 'uninstall', id, '--scope', 'user', '-y']);
+    // A vendored plugin is uninstalled under the name it was installed with;
+    // `syncVendoredPlugins` has already done that one.
+    if (!carried.has(pluginNameOf(id))) {
+      await runClaude(bin, ['plugin', 'uninstall', id, '--scope', 'user', '-y']);
+    }
     report.plugins[id] = { state: 'removed' };
   }
 
-  return { marketplaces, plugins };
+  return { marketplaces, plugins, vendoredPlugins: vendored };
 };
 
 /**
@@ -536,6 +622,109 @@ const writeSkill = async (skill: FleetSkillPayload): Promise<void> => {
   for (const file of skill.files) {
     await Bun.write(join(dir, file.path), Buffer.from(file.contentBase64, 'base64'));
   }
+};
+
+/**
+ * Writes the fleet's own marketplace from the bytes the hub resolved.
+ *
+ * The whole directory is rewritten rather than patched, because it has exactly
+ * one author and the manifest has to agree with what is beside it. Every plugin
+ * is vendored as a relative `source`, which is a form the CLI already installs
+ * from — the official marketplace vendors its own the same way — so the install
+ * that follows reaches the network for nothing.
+ */
+export const writeVendoredMarketplace = async (
+  plugins: FleetPluginPayload[],
+  // Named rather than assumed so a test can write somewhere that is not the
+  // operator's own `~/.claude`, which this machine is running sessions out of.
+  into: string = VENDOR_DIR
+): Promise<void> => {
+  await rm(into, { recursive: true, force: true });
+  for (const plugin of plugins) {
+    const dir = join(into, 'plugins', plugin.name);
+    for (const file of plugin.files) {
+      // The same refusal a skill's files get: a path out of the directory is a
+      // file the fleet would write somewhere nobody asked it to.
+      if (!isSafeSkillPath(file.path)) throw new Error(`unsafe path ${file.path}`);
+      await Bun.write(join(dir, file.path), Buffer.from(file.contentBase64, 'base64'));
+    }
+  }
+  await Bun.write(
+    join(into, '.claude-plugin', 'marketplace.json'),
+    `${JSON.stringify(
+      {
+        name: VENDOR_NAME,
+        owner: { name: 'cockpit' },
+        plugins: plugins.map((plugin) => ({
+          name: plugin.name,
+          source: `./plugins/${plugin.name}`,
+          description: `Carried by the cockpit fleet (${plugin.marketplace}).`,
+        })),
+      },
+      null,
+      2
+    )}\n`
+  );
+};
+
+/**
+ * Installs the vendored plugins, and answers with what each one came to.
+ *
+ * Keyed by the FLEET's id — `name@marketplace`, the id the hub's config used —
+ * while the CLI installs `name@cockpit`, because the marketplace it comes from
+ * on this machine is the one written above. The dashboard's rows are the
+ * fleet's, not this machine's private arrangement for satisfying them.
+ */
+const syncVendoredPlugins = async (
+  bin: string,
+  payloads: FleetPluginPayload[],
+  wanted: readonly { id: string }[],
+  managed: Record<string, string>,
+  report: Record<string, FleetItemState>
+): Promise<Record<string, string>> => {
+  const written: Record<string, string> = {};
+  const byName = new Map(payloads.map((plugin) => [plugin.name, plugin]));
+
+  const changed =
+    payloads.some((plugin) => managed[plugin.name] !== plugin.hash) ||
+    Object.keys(managed).some((name) => !byName.has(name)) ||
+    !(await dirExists(VENDOR_DIR));
+
+  if (changed) {
+    await writeVendoredMarketplace(payloads);
+  }
+
+  // Linked once, then refreshed in place: `add` on an already-linked path is an
+  // error, and `update` is what re-reads a directory whose contents moved.
+  const linked = await linkedMarketplaces();
+  if (!linked[VENDOR_NAME]) await runClaude(bin, ['plugin', 'marketplace', 'add', VENDOR_DIR]);
+  else if (changed) await runClaude(bin, ['plugin', 'marketplace', 'update', VENDOR_NAME]);
+
+  for (const { id } of wanted) {
+    const name = pluginNameOf(id);
+    const plugin = byName.get(name);
+    if (!plugin) continue;
+    const vendoredId = `${name}@${VENDOR_NAME}`;
+    if (managed[name] === plugin.hash && (await isInstalled(vendoredId))) {
+      written[name] = plugin.hash;
+      report[id] = { state: 'applied' };
+      continue;
+    }
+    const ran = await runClaude(bin, ['plugin', 'install', vendoredId, '--scope', 'user']);
+    if (await isInstalled(vendoredId)) {
+      written[name] = plugin.hash;
+      report[id] = { state: 'applied' };
+    } else {
+      // Left unmanaged so the next sync writes and installs it again.
+      report[id] = { state: 'failed', detail: ran.output };
+    }
+  }
+
+  for (const name of Object.keys(managed)) {
+    if (byName.has(name)) continue;
+    await runClaude(bin, ['plugin', 'uninstall', `${name}@${VENDOR_NAME}`, '--scope', 'user', '-y']);
+  }
+  return written;
 };
 
 /**

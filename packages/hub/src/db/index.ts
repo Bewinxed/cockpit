@@ -340,6 +340,21 @@ export interface DbShape {
   readonly deleteMarketplace: (name: string) => void;
   readonly putPlugin: (plugin: { id: string; enabled?: boolean }) => FleetPlugin;
   readonly deletePlugin: (id: string) => void;
+  /**
+   * What one plugin's resolve came to: the files the hub fetched, or the
+   * sentence it failed with. The mirror of {@link putSkill}, and the write that
+   * turns a plugin from a name every machine must fetch for itself into bytes
+   * the fleet carries.
+   */
+  readonly putPluginPayload: (payload: {
+    id: string;
+    hash?: string;
+    bytes?: number;
+    error?: string;
+    files?: SkillFile[];
+  }) => void;
+  /** Enabled plugins with no resolved files and no recorded failure — what a resolve is for. */
+  readonly unresolvedPlugins: () => string[];
   /** Every skill row without its files — a catalog read should not weigh megabytes. */
   readonly listSkills: () => FleetSkillMeta[];
   /** Upsert of a resolve's outcome: the files it read, or the sentence it failed with. */
@@ -1101,6 +1116,32 @@ const make = (path: string): DbShape => {
         .where(eq(skills.enabled, true))
         .all()
         .flatMap(({ name, hash, files }) => (hash && files ? [{ name, hash, files }] : [])),
+      // Only the rows a resolve filled in. A plugin the hub could not fetch is
+      // simply absent here, and the daemon installs it the old way — which is
+      // the one path left that needs the machine to reach the source itself.
+      pluginPayloads: db
+        .select({
+          id: plugins.id,
+          hash: plugins.hash,
+          bytes: plugins.bytes,
+          files: plugins.files,
+        })
+        .from(plugins)
+        .where(eq(plugins.enabled, true))
+        .all()
+        .flatMap(({ id, hash, bytes, files }) =>
+          hash && files
+            ? [
+                {
+                  name: id.split('@')[0] ?? id,
+                  marketplace: id.split('@')[1] ?? '',
+                  hash,
+                  bytes: bytes ?? 0,
+                  files,
+                },
+              ]
+            : []
+        ),
       // Null rather than absent: a fleet that keeps no memory is what has a
       // machine give back the copy cockpit wrote it — the linked documents
       // included, since a set with no main file is not a set.
@@ -1141,6 +1182,24 @@ const make = (path: string): DbShape => {
     deleteMarketplace: (name) => {
       db.delete(marketplaces).where(eq(marketplaces.name, name)).run();
     },
+    putPluginPayload: ({ id, hash, bytes, error, files }) => {
+      db.update(plugins)
+        .set({
+          hash: hash ?? null,
+          bytes: bytes ?? null,
+          error: error ?? null,
+          files: files ?? null,
+        })
+        .where(eq(plugins.id, id))
+        .run();
+    },
+    unresolvedPlugins: () =>
+      db
+        .select({ id: plugins.id, hash: plugins.hash, error: plugins.error })
+        .from(plugins)
+        .where(eq(plugins.enabled, true))
+        .all()
+        .flatMap(({ id, hash, error }) => (hash || error ? [] : [id])),
     putPlugin: ({ id, enabled }) => {
       const plugin: FleetPlugin = { id, enabled: enabled ?? true };
       db.insert(plugins)

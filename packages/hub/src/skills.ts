@@ -134,14 +134,14 @@ const describe = (source: SkillSource): string => {
   return `${source.owner}/${source.repo}`;
 };
 
-const get = (url: string): Promise<Response> =>
+export const get = (url: string): Promise<Response> =>
   fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
 
 /**
  * The downloaded archive, extracted, with the one directory both tarball kinds
  * wrap everything in stripped — GitHub's is named for the ref, npm's `package`.
  */
-const unpack = async (response: Response, work: string, name: string): Promise<string> => {
+export const unpack = async (response: Response, work: string, name: string): Promise<string> => {
   const archive = join(work, 'archive');
   await Bun.write(archive, response);
   const into = join(work, 'src');
@@ -167,6 +167,55 @@ const repoRoot = async (source: SkillSource & { kind: 'repo' }, work: string): P
     await response.body?.cancel();
   }
   throw new Error(`github.com/${describe(source)} has no ${refs.join(' or ')} to download`);
+};
+
+/**
+ * Any GitHub repo's tarball, extracted — the same anonymous `codeload` fetch
+ * {@link repoRoot} makes, without a {@link SkillSource} to describe it.
+ *
+ * Anonymous is the point. A public repository needs no account to read, so the
+ * hub reads it with none: no `gh`, no ssh key, no credential that can expire on
+ * one machine and not another. It is also why this happens HERE — resolving
+ * once at the hub means a machine never needs reachability to github at all.
+ */
+export const downloadRepo = async (
+  owner: string,
+  repo: string,
+  ref: string | undefined,
+  work: string
+): Promise<string> => {
+  for (const candidate of ref ? [ref] : REFS) {
+    const url = `https://codeload.github.com/${owner}/${repo}/tar.gz/${candidate}`;
+    const response = await get(url);
+    if (response.ok) return await unpack(response, work, 'archive.tar.gz');
+    await response.body?.cancel();
+  }
+  throw new Error(`github.com/${owner}/${repo} has no ${ref ?? REFS.join(' or ')} to download`);
+};
+
+/**
+ * A directory read as files, hashed. The identity of a tree is its contents, so
+ * two machines given the same hash hold the same bytes — which is the property
+ * that makes a fleet converge rather than merely all-succeed.
+ */
+export const readTree = async (
+  dir: string,
+  what = 'the directory'
+): Promise<{ files: SkillFile[]; hash: string; bytes: number }> => {
+  const found = await walk(dir);
+  if (found.length > MAX_FILES) {
+    throw new Error(`${what} has ${found.length} files; cockpit carries at most ${MAX_FILES}`);
+  }
+  const bytes = found.reduce((total, file) => total + file.size, 0);
+  if (bytes > MAX_BYTES) {
+    throw new Error(`${what} is ${bytes} bytes; cockpit carries at most ${MAX_BYTES}`);
+  }
+  const files: SkillFile[] = [];
+  for (const file of found) {
+    const content = await Bun.file(file.path).bytes();
+    files.push({ path: file.rel, contentBase64: Buffer.from(content).toString('base64') });
+  }
+  return { files, hash: hashFiles(files), bytes };
 };
 
 /** What the registry says about a package: enough of it to find one tarball. */
@@ -293,21 +342,8 @@ export const hashFiles = (files: SkillFile[]): string => {
 };
 
 const readSkill = async (dir: string): Promise<ResolvedSkill> => {
-  const found = await walk(dir);
-  if (found.length > MAX_FILES) {
-    throw new Error(`the skill has ${found.length} files; cockpit carries at most ${MAX_FILES}`);
-  }
-  const bytes = found.reduce((total, file) => total + file.size, 0);
-  if (bytes > MAX_BYTES) {
-    throw new Error(`the skill is ${bytes} bytes; cockpit carries at most ${MAX_BYTES}`);
-  }
-
-  const files: SkillFile[] = [];
-  for (const file of found) {
-    const content = await Bun.file(file.path).bytes();
-    files.push({ path: file.rel, contentBase64: Buffer.from(content).toString('base64') });
-  }
-  return { name: basename(dir), hash: hashFiles(files), bytes, files };
+  const { files, hash, bytes } = await readTree(dir, 'the skill');
+  return { name: basename(dir), hash, bytes, files };
 };
 
 /** A URL is either the skill's own file or an archive holding it. */

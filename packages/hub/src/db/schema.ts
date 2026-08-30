@@ -216,6 +216,17 @@ export const plugins = sqliteTable('plugins', {
   id: text('id').primaryKey(),
   /** A disabled row is uninstalled from the machines, not merely switched off. */
   enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+  /**
+   * The resolved content, the same way {@link skills} keeps it, and for the
+   * same reason: the hub fetches a plugin once and every machine is sent the
+   * bytes. Null until a resolve succeeds — a row with no files is one the
+   * machines still install the old way, by asking the CLI to go and get it.
+   */
+  hash: text('hash'),
+  bytes: integer('bytes'),
+  /** Why the last resolve failed. Kept, so the dashboard can say so. */
+  error: text('error'),
+  files: text('files', { mode: 'json' }).$type<SkillFile[]>(),
   createdAt: timestamp('created_at').notNull().$defaultFn(() => new Date()),
 });
 
