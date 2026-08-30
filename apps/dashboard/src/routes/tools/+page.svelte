@@ -139,6 +139,11 @@
         </Tabs.Trigger>
       </Tabs.List>
 
+      <!-- Only render the active panel. The old code rendered all 6 panels
+           (242KB of hidden HTML including 106KB for Skills alone), blocking the
+           main thread for 243ms on mount. {#if} defers rendering until the
+           tab is selected. -->
+      {#if activeTab === 'tools'}
       <Tabs.Content value="tools">
         <Card.Root class={panelClass}>
           <header class="phead">
@@ -156,7 +161,9 @@
           </div>
         </Card.Root>
       </Tabs.Content>
+      {/if}
 
+      {#if activeTab === 'mcp'}
       <Tabs.Content value="mcp">
         <Card.Root id="fleet-mcp" class="scroll-mt-6 {panelClass}">
           <header class="phead">
@@ -168,7 +175,9 @@
           </div>
         </Card.Root>
       </Tabs.Content>
+      {/if}
 
+      {#if activeTab === 'skills'}
       <Tabs.Content value="skills">
         <Card.Root id="fleet-skills" class="scroll-mt-6 {panelClass}">
           <header class="phead">
@@ -180,7 +189,9 @@
           </div>
         </Card.Root>
       </Tabs.Content>
+      {/if}
 
+      {#if activeTab === 'agents'}
       <Tabs.Content value="agents">
         <Card.Root class={panelClass}>
           <header class="phead">
@@ -192,7 +203,9 @@
           </div>
         </Card.Root>
       </Tabs.Content>
+      {/if}
 
+      {#if activeTab === 'memory'}
       <Tabs.Content value="memory">
         <Card.Root id="fleet-memory" class="scroll-mt-6 {panelClass}">
           <header class="phead">
@@ -210,7 +223,9 @@
           </div>
         </Card.Root>
       </Tabs.Content>
+      {/if}
 
+      {#if activeTab === 'hooks'}
       <Tabs.Content value="hooks">
         <Card.Root id="fleet-hooks" class="scroll-mt-6 {panelClass}">
           <header class="phead">
@@ -222,6 +237,7 @@
           </div>
         </Card.Root>
       </Tabs.Content>
+      {/if}
     </Tabs.Root>
   </div>
 </div>
