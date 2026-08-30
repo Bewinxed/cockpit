@@ -800,24 +800,24 @@
 
 /* Vertical: sidebar nav (data-nav='down' or 'up') */
 html[data-nav='down'] ::view-transition-old(root) {
-  animation-name: vt-slide-up-out;
+  animation: 150ms cubic-bezier(0.32, 0.72, 0, 1) both vt-slide-up-out;
 }
 html[data-nav='down'] ::view-transition-new(root) {
-  animation-name: vt-slide-up-in;
+  animation: 150ms cubic-bezier(0.32, 0.72, 0, 1) both vt-slide-up-in;
 }
 html[data-nav='up'] ::view-transition-old(root) {
-  animation-name: vt-slide-down-out;
+  animation: 150ms cubic-bezier(0.32, 0.72, 0, 1) both vt-slide-down-out;
 }
 html[data-nav='up'] ::view-transition-new(root) {
-  animation-name: vt-slide-down-in;
+  animation: 150ms cubic-bezier(0.32, 0.72, 0, 1) both vt-slide-down-in;
 }
 
 /* Back: drill-out (data-nav='prev') */
 html[data-nav='prev'] ::view-transition-old(root) {
-  animation-name: vt-push-out-back;
+  animation: 150ms cubic-bezier(0.32, 0.72, 0, 1) both vt-push-out-back;
 }
 html[data-nav='prev'] ::view-transition-new(root) {
-  animation-name: vt-push-in-back;
+  animation: 150ms cubic-bezier(0.32, 0.72, 0, 1) both vt-push-in-back;
 }
 
 /* Vertical keyframes — content slides up/down */
