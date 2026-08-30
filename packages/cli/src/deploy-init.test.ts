@@ -160,7 +160,9 @@ describe('the units it generates point at the clone (G1)', () => {
     ]);
     const expected: Record<string, string> = {
       hub: join(root, 'packages', 'hub', 'src', 'index.ts'),
-      dashboard: join(root, 'apps', 'dashboard', 'build', 'index.js'),
+      // Its own server, not adapter-node's: the dashboard has to carry the
+      // browser's /ws upgrade through to the hub, which build/index.js does not.
+      dashboard: join(root, 'apps', 'dashboard', 'serve.js'),
       sessiond: join(root, 'packages', 'sessiond', 'src', 'main.ts'),
       agent: join(root, 'packages', 'cli', 'src', 'cli.ts'),
     };

@@ -111,6 +111,8 @@ interface Layout {
   readonly sessiondEntry: string;
   readonly dashboardDir: string;
   readonly dashboardEntry: string;
+  /** What {@link dashboardEntry} imports — the adapter-node output, and the part that can be missing. */
+  readonly dashboardBuild: string;
   /**
    * The dashboard's `dev` script is `vite dev`, and this is that vite. Named
    * outright because `ExecStart=` is not a shell: it cannot resolve a `.bin`
@@ -130,7 +132,8 @@ const layoutFor = (
   hubEntry: join(root, 'packages', 'hub', 'src', 'index.ts'),
   sessiondEntry: join(root, 'packages', 'sessiond', 'src', 'main.ts'),
   dashboardDir: join(root, 'apps', 'dashboard'),
-  dashboardEntry: join(root, 'apps', 'dashboard', 'build', 'index.js'),
+  dashboardEntry: join(root, 'apps', 'dashboard', 'serve.js'),
+  dashboardBuild: join(root, 'apps', 'dashboard', 'build', 'handler.js'),
   dashboardVite: join(root, 'apps', 'dashboard', 'node_modules', 'vite', 'bin', 'vite.js'),
   cliEntry,
 });
@@ -146,6 +149,22 @@ const HERE = layoutFor(ROOT, Bun.main);
  * Where the dashboard listens. Read from the installing shell so a second
  * machine can differ, with the defaults this one's browser expects.
  */
+/**
+ * The dashboard runs under NODE, and it is the only service that does.
+ *
+ * Its server has to carry the browser's `/ws` upgrade through to the hub, and
+ * Bun cannot: an upgraded socket there does not relay raw bytes faithfully, so
+ * the hub's own 101 is written to it and the browser closes on what it reads.
+ * The same file under node connects every time. Nothing else here needs node,
+ * and nothing else here is given it.
+ *
+ * Resolved to an absolute path at install time because `ExecStart=` is not a
+ * shell and will not search PATH — and left as the bare name if there is no
+ * node to find, so the unit is written, fails loudly, and says what is missing
+ * rather than being silently skipped.
+ */
+const NODE_BIN = Bun.which('node') ?? 'node';
+
 const DASHBOARD_PORT = process.env.PORT ?? '3000';
 const DASHBOARD_HOST = process.env.HOST ?? '0.0.0.0';
 
@@ -297,6 +316,7 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
     hubEntry: HUB_ENTRY,
     sessiondEntry: SESSIOND_ENTRY,
     dashboardEntry: DASHBOARD_ENTRY,
+    dashboardBuild: DASHBOARD_BUILD,
   } = layout;
   return {
   hub: {
@@ -336,7 +356,7 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
     id: 'dashboard',
     mode: 'prod',
     description: 'Cockpit dashboard',
-    command: [process.execPath, DASHBOARD_ENTRY],
+    command: [NODE_BIN, DASHBOARD_ENTRY],
     environment: { PORT: DASHBOARD_PORT, HOST: DASHBOARD_HOST },
     workingDirectory: ROOT,
     after: [unitName('hub')],
@@ -345,10 +365,14 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
     restartSec: 2,
     // A missing build is a build away, so the unit goes in either way and says
     // what is left to do — refusing here would only mean installing twice.
+    //
+    // What is checked is the BUILD, not the entry: the entry is `serve.js`, a
+    // checked-in file that is always present, and the thing that can actually
+    // be absent is the `build/handler.js` it imports.
     check: () =>
-      existsSync(DASHBOARD_ENTRY)
+      existsSync(DASHBOARD_BUILD)
         ? undefined
-        : `no dashboard build at ${DASHBOARD_ENTRY}, so its service will restart until there is one.\nMake it with \`bun run --filter '@cockpit/dashboard' build\`.`,
+        : `no dashboard build at ${DASHBOARD_BUILD}, so its service will restart until there is one.\nMake it with \`bun run --filter '@cockpit/dashboard' build\`.`,
     probe: probeDashboard,
   },
 
