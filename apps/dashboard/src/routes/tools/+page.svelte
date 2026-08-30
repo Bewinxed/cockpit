@@ -23,12 +23,12 @@
   import ToolMatrix from '$lib/cockpit/ToolMatrix.svelte';
   import { orderMachines } from '$lib/cockpit/rail.svelte';
   import {
-    IconTools,
-    IconPlug,
-    IconSkill,
-    IconSubagent,
-    IconBook,
-    IconHook,
+    IconToolGeneric,
+    IconToolMcp,
+    IconBoltDuo,
+    IconSubagentDuo,
+    IconBookDuo,
+    IconHookDuo,
   } from '$lib/icons';
   import { page } from '$app/state';
   import { goto } from '$app/navigation';
@@ -118,22 +118,22 @@
     <Tabs.Root value={activeTab} onValueChange={switchTab}>
       <Tabs.List class="tab-strip" variant="line">
         <Tabs.Trigger value="tools">
-          <IconTools class="tab-icon" /><span>Tools</span> <span class="badge">{data.catalog.length}</span>
+          <IconToolGeneric class="tab-icon" /><span class="tab-label">Tools</span> <span class="badge">{data.catalog.length}</span>
         </Tabs.Trigger>
         <Tabs.Trigger value="mcp">
-          <IconPlug class="tab-icon" /><span>MCP servers</span> <span class="badge">{config.mcp.length}</span>
+          <IconToolMcp class="tab-icon" /><span class="tab-label">MCP</span> <span class="badge">{config.mcp.length}</span>
         </Tabs.Trigger>
         <Tabs.Trigger value="skills">
-          <IconSkill class="tab-icon" /><span>Skills</span> <span class="badge">{skills.length}</span>
+          <IconBoltDuo class="tab-icon" /><span class="tab-label">Skills</span> <span class="badge">{skills.length}</span>
         </Tabs.Trigger>
         <Tabs.Trigger value="agents">
-          <IconSubagent class="tab-icon" /><span>Agents</span> <span class="badge">{agents.length}</span>
+          <IconSubagentDuo class="tab-icon" /><span class="tab-label">Agents</span> <span class="badge">{agents.length}</span>
         </Tabs.Trigger>
         <Tabs.Trigger value="memory">
-          <IconBook class="tab-icon" /><span>Memory</span>
+          <IconBookDuo class="tab-icon" /><span class="tab-label">Memory</span>
         </Tabs.Trigger>
         <Tabs.Trigger value="hooks">
-          <IconHook class="tab-icon" /><span>Hooks</span> <span class="badge">{hooks.length}</span>
+          <IconHookDuo class="tab-icon" /><span class="tab-label">Hooks</span> <span class="badge">{hooks.length}</span>
         </Tabs.Trigger>
       </Tabs.List>
 
@@ -282,6 +282,25 @@
     color: var(--ink-label);
     font-size: var(--text-xs);
     font-variant-numeric: tabular-nums;
+  }
+  /* On narrow viewports, hide tab labels — icon + badge is enough.
+     The tab strip scrolls horizontally with the next tab peeking
+     past the edge (JOURNEY.md §4 mobile reflow). */
+  @media (max-width: 639px) {
+    .tab-label {
+      display: none;
+    }
+    :global(.tab-icon) {
+      width: 18px;
+      height: 18px;
+    }
+  }
+  /* Tables inside panels must not overflow the viewport. */
+  .pbody {
+    overflow-x: auto;
+  }
+  .pbody :global(table) {
+    min-width: 500px;
   }
   .phead {
     display: flex;

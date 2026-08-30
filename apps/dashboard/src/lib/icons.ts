@@ -156,3 +156,5 @@ export { default as IconToolNotebook } from '~icons/solar/notebook-bold-duotone'
 export { default as IconToolSkill } from '~icons/solar/bolt-bold-duotone';
 export { default as IconToolQuestion } from '~icons/solar/question-circle-bold-duotone';
 export { default as IconToolGeneric } from '~icons/solar/sledgehammer-bold-duotone';
+export { default as IconHookDuo } from '~icons/solar/routing-2-bold-duotone';
+export { default as IconSubagentDuo } from '~icons/solar/branching-paths-down-bold-duotone';
