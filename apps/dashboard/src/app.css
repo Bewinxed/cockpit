@@ -782,6 +782,16 @@
    View Transitions
    ======================================== */
 
+/* The sidebar owns its own view-transition-name so it stays still while the
+   content area cross-fades. Without this, the whole shell (including the
+   sidebar and top bar) shifts by the translateY(6px) in vt-in. */
+::view-transition-old(sidebar),
+::view-transition-new(sidebar),
+::view-transition-old(topbar),
+::view-transition-new(topbar) {
+  animation: none;
+}
+
 ::view-transition-old(root) {
   animation: 120ms var(--e-in) both vt-out;
 }

@@ -364,6 +364,9 @@
     flex: 0 0 var(--sidebar-width);
     min-width: 0;
     border-right: 1px solid var(--border-hairline);
+    /* Exclude from view transitions so the sidebar stays rock-still
+       while the content area cross-fades on spoke navigation. */
+    view-transition-name: sidebar;
   }
   .grip {
     position: absolute;
@@ -398,6 +401,7 @@
     padding: 0 var(--space-6) 0 var(--space-7);
     background: var(--surface-raised);
     border-bottom: 1px solid var(--border-hairline);
+    view-transition-name: topbar;
   }
   .burger {
     width: 44px;
