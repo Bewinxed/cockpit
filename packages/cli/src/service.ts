@@ -153,10 +153,12 @@ const HERE = layoutFor(ROOT, Bun.main);
  * The dashboard runs under NODE, and it is the only service that does.
  *
  * Its server has to carry the browser's `/ws` upgrade through to the hub, and
- * Bun cannot: an upgraded socket there does not relay raw bytes faithfully, so
- * the hub's own 101 is written to it and the browser closes on what it reads.
- * The same file under node connects every time. Nothing else here needs node,
- * and nothing else here is given it.
+ * bun 1.3.14 cannot: an upgraded socket there drops `socket.write()` and its
+ * `http.request` never emits `'upgrade'` for a 101 (oven-sh/bun#9882, #9911,
+ * #28396). Both are fixed on bun's main, so this is a version workaround with
+ * an expiry: when the fleet's bun carries the fixes, put `process.execPath`
+ * back. See apps/dashboard/serve.js for the detail. Nothing else here needs
+ * node, and nothing else here is given it.
  *
  * Resolved to an absolute path at install time because `ExecStart=` is not a
  * shell and will not search PATH — and left as the bare name if there is no
