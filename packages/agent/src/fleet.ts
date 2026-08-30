@@ -1467,6 +1467,10 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
     skills,
     memoryDocs,
     hooks,
+    // The same claim the sync makes, and it has to be made here too: a status
+    // overwrites the stored report, so a status without it would retract what
+    // the machine holds and have the hub resend every byte on the next change.
+    have: { skills: managed.skills, plugins: managed.vendoredPlugins ?? {} },
     at: Date.now(),
   };
 

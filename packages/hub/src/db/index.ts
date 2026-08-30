@@ -1497,7 +1497,26 @@ const make = (path: string): DbShape => {
         : undefined;
     },
     setAgentFleet: (machineId, report) => {
-      db.update(agents).set({ fleet: report }).where(eq(agents.machineId, machineId)).run();
+      // A report that says nothing about what the machine holds does not
+      // RETRACT what it last claimed. Several paths write this column — a sync
+      // and a status among them — and only some of them are in a position to
+      // know; a silent one dropping the claim would have the hub resend every
+      // byte of every skill and plugin on the next fleet change. Only a report
+      // that carries `have` replaces it, because that one has counted.
+      const kept = report.have
+        ? report
+        : {
+            ...report,
+            ...(() => {
+              const previous = db
+                .select({ fleet: agents.fleet })
+                .from(agents)
+                .where(eq(agents.machineId, machineId))
+                .get()?.fleet?.have;
+              return previous ? { have: previous } : {};
+            })(),
+          };
+      db.update(agents).set({ fleet: kept }).where(eq(agents.machineId, machineId)).run();
     },
     listAgents: () =>
       db
