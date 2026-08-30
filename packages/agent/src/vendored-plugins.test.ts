@@ -68,3 +68,25 @@ test('a path that climbs out of the directory is refused', async () => {
     writeVendoredMarketplace([payload('escape', { '../../evil.sh': 'rm -rf /' })], VENDOR_DIR)
   ).rejects.toThrow(/unsafe path/);
 });
+
+test('a payload with no files leaves the plugin it already wrote alone', async () => {
+  await writeVendoredMarketplace(
+    [payload('kept', { 'a.md': 'original' }), payload('changed', { 'b.md': 'before' })],
+    VENDOR_DIR
+  );
+
+  // What the hub sends once a machine has reported holding these hashes: the
+  // hash, and no bytes. Only the one that actually moved carries content.
+  const held = { ...payload('kept', {}), files: undefined };
+  await writeVendoredMarketplace(
+    [held, payload('changed', { 'b.md': 'after' })],
+    VENDOR_DIR
+  );
+
+  // Untouched, not erased — this is the whole hazard of leaving bytes out.
+  expect(await Bun.file(join(VENDOR_DIR, 'plugins/kept/a.md')).text()).toBe('original');
+  expect(await Bun.file(join(VENDOR_DIR, 'plugins/changed/b.md')).text()).toBe('after');
+  // And it is still offered, so the CLI can still install it.
+  const manifest = await Bun.file(join(VENDOR_DIR, '.claude-plugin', 'marketplace.json')).json();
+  expect(manifest.plugins.map((p: { name: string }) => p.name).sort()).toEqual(['changed', 'kept']);
+});

@@ -119,11 +119,19 @@ export interface FleetSkillMeta extends FleetPlacement {
   error?: string;
 }
 
-/** What sync carries per enabled skill: the resolved content, by hash. */
+/**
+ * What sync carries per enabled skill: the resolved content, by hash.
+ *
+ * `files` is ABSENT when the machine's last report said it already holds this
+ * exact hash — the config is pushed on every fleet change, to every machine, so
+ * sending megabytes a machine already has is the same bytes over and over for
+ * a write it will not make. Absent means "you have it", never "it is gone": a
+ * payload the fleet stopped carrying is not in the list at all.
+ */
 export interface FleetSkillPayload extends FleetPlacement {
   name: string;
   hash: string;
-  files: SkillFile[];
+  files?: SkillFile[];
 }
 
 /**
@@ -144,7 +152,8 @@ export interface FleetPluginPayload {
   hash: string;
   /** Decoded size of the resolved files, for the dashboard to show. */
   bytes: number;
-  files: SkillFile[];
+  /** Absent when the machine already holds this hash — see {@link FleetSkillPayload}. */
+  files?: SkillFile[];
 }
 
 /**
@@ -426,6 +435,17 @@ export interface FleetSyncReport {
    * is what tells them apart.
    */
   hooks?: Record<string, FleetItemState>;
+  /**
+   * What this machine now holds, by hash — the content-carrying rows only.
+   *
+   * It is what lets the next config leave those bytes out. A machine that
+   * cannot answer (an older daemon) simply claims nothing, and is sent
+   * everything, which is exactly the behaviour it had before.
+   */
+  have?: {
+    skills?: Record<string, string>;
+    plugins?: Record<string, string>;
+  };
   /** When the sync ran, ms epoch. */
   at: number;
 }

@@ -619,7 +619,7 @@ const dirExists = async (path: string): Promise<boolean> => {
 const writeSkill = async (skill: FleetSkillPayload): Promise<void> => {
   const dir = join(SKILLS_DIR, skill.name);
   await rm(dir, { recursive: true, force: true });
-  for (const file of skill.files) {
+  for (const file of skill.files ?? []) {
     await Bun.write(join(dir, file.path), Buffer.from(file.contentBase64, 'base64'));
   }
 };
@@ -639,9 +639,14 @@ export const writeVendoredMarketplace = async (
   // operator's own `~/.claude`, which this machine is running sessions out of.
   into: string = VENDOR_DIR
 ): Promise<void> => {
-  await rm(into, { recursive: true, force: true });
+  // Per plugin, not the whole directory at once. The hub leaves out the bytes
+  // of anything this machine already holds, so a rewrite of everything would
+  // erase the plugins whose content it deliberately did not resend — and it
+  // would rewrite megabytes to change one of them in any case.
   for (const plugin of plugins) {
+    if (!plugin.files) continue;
     const dir = join(into, 'plugins', plugin.name);
+    await rm(dir, { recursive: true, force: true });
     for (const file of plugin.files) {
       // The same refusal a skill's files get: a path out of the directory is a
       // file the fleet would write somewhere nobody asked it to.
@@ -649,6 +654,14 @@ export const writeVendoredMarketplace = async (
       await Bun.write(join(dir, file.path), Buffer.from(file.contentBase64, 'base64'));
     }
   }
+
+  // What the fleet no longer carries goes, whether or not its bytes arrived.
+  const wanted = new Set(plugins.map(({ name }) => name));
+  const present = await readdir(join(into, 'plugins')).catch(() => [] as string[]);
+  for (const name of present) {
+    if (!wanted.has(name)) await rm(join(into, 'plugins', name), { recursive: true, force: true });
+  }
+
   await Bun.write(
     join(into, '.claude-plugin', 'marketplace.json'),
     `${JSON.stringify(
@@ -753,6 +766,17 @@ const syncSkillFiles = async (
     if (managed[skill.name] === skill.hash) {
       written[skill.name] = skill.hash;
       report[skill.name] = { state: 'applied' };
+      continue;
+    }
+
+    // The hub leaves out the bytes of anything this machine's last report said
+    // it already held. Reaching here means it did not hold this hash after all —
+    // a sidecar that was cleared, or a report that never landed. Nothing is
+    // written, and the next sync carries the content, because the claim that
+    // suppressed it is exactly what this failure retracts.
+    if (!skill.files) {
+      if (managed[skill.name] !== undefined) written[skill.name] = managed[skill.name];
+      report[skill.name] = { state: 'failed', detail: 'the hub sent no files for this hash' };
       continue;
     }
 
@@ -1393,7 +1417,15 @@ const converge = async (config: FleetConfig): Promise<FleetSyncReport> => {
     hooks,
   } satisfies Sidecar);
 
-  return { ...report, at: Date.now() };
+  // What this machine now holds, so the next config can leave those bytes out.
+  // Read from what was just written rather than from the desired set: a row
+  // that failed is a row this machine does NOT have, and claiming it would
+  // suppress the very content the next sync needs to send.
+  return {
+    ...report,
+    have: { skills, plugins: installed.vendoredPlugins ?? {} },
+    at: Date.now(),
+  };
 };
 
 /**

@@ -329,7 +329,13 @@ export interface DbShape {
   readonly mergeAgentTools: (machineId: string, statuses: ToolStatus[]) => void;
   readonly setAgentToolCell: (machineId: string, status: ToolStatus) => void;
   /** The whole desired fleet state (NEW.md §11) — what a machine is sent to converge on. */
-  readonly fleetConfig: () => FleetConfig;
+  /**
+   * The fleet's desired state. Given a machine, the content-carrying rows it
+   * already reported holding are sent WITHOUT their files: the config goes to
+   * every machine on every fleet change, and those bytes are megabytes the
+   * machine would compare to what it has and then not write.
+   */
+  readonly fleetConfig: (machineId?: string) => FleetConfig;
   readonly putMcpServer: (server: {
     name: string;
     config: FleetMcpServer['config'];
@@ -1092,7 +1098,20 @@ const make = (path: string): DbShape => {
     setAgentToolCell: (machineId, status) => {
       writeAgentTools(machineId, { ...agentTools(machineId), [status.id]: status });
     },
-    fleetConfig: () => ({
+    fleetConfig: (machineId?: string) => {
+      // What that machine's last sync said it holds. Absent for an older daemon
+      // that does not report it, and absent for a machine nobody named — both
+      // of which are then sent everything, exactly as before.
+      const have = machineId
+        ? db
+            .select({ fleet: agents.fleet })
+            .from(agents)
+            .where(eq(agents.machineId, machineId))
+            .get()?.fleet?.have
+        : undefined;
+      const held = (kind: 'skills' | 'plugins', name: string, hash: string): boolean =>
+        have?.[kind]?.[name] === hash;
+      return {
       mcp: db
         .select()
         .from(mcpServers)
@@ -1115,7 +1134,9 @@ const make = (path: string): DbShape => {
         .from(skills)
         .where(eq(skills.enabled, true))
         .all()
-        .flatMap(({ name, hash, files }) => (hash && files ? [{ name, hash, files }] : [])),
+        .flatMap(({ name, hash, files }) =>
+          hash && files ? [{ name, hash, ...(held('skills', name, hash) ? {} : { files }) }] : []
+        ),
       // Only the rows a resolve filled in. A plugin the hub could not fetch is
       // simply absent here, and the daemon installs it the old way — which is
       // the one path left that needs the machine to reach the source itself.
@@ -1129,19 +1150,19 @@ const make = (path: string): DbShape => {
         .from(plugins)
         .where(eq(plugins.enabled, true))
         .all()
-        .flatMap(({ id, hash, bytes, files }) =>
-          hash && files
-            ? [
-                {
-                  name: id.split('@')[0] ?? id,
-                  marketplace: id.split('@')[1] ?? '',
-                  hash,
-                  bytes: bytes ?? 0,
-                  files,
-                },
-              ]
-            : []
-        ),
+        .flatMap(({ id, hash, bytes, files }) => {
+          if (!hash || !files) return [];
+          const name = id.split('@')[0] ?? id;
+          return [
+            {
+              name,
+              marketplace: id.split('@')[1] ?? '',
+              hash,
+              bytes: bytes ?? 0,
+              ...(held('plugins', name, hash) ? {} : { files }),
+            },
+          ];
+        }),
       // Null rather than absent: a fleet that keeps no memory is what has a
       // machine give back the copy cockpit wrote it — the linked documents
       // included, since a set with no main file is not a set.
@@ -1160,7 +1181,8 @@ const make = (path: string): DbShape => {
       // is simply not one of them — the same rule a disabled MCP server or
       // skill already follows.
       hooks: db.select().from(fleetHooks).where(eq(fleetHooks.enabled, true)).all().map(hookOf),
-    }),
+      };
+    },
     putMcpServer: ({ name, config, enabled }) => {
       const server: FleetMcpServer = { name, config, enabled: enabled ?? true };
       db.insert(mcpServers)

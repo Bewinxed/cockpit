@@ -1462,7 +1462,8 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
       ?.harnesses;
     if (reports && reports.length > 0 && !reports.some((report) => report.capabilities.fleet)) return;
 
-    const config = db.fleetConfig();
+    // Per machine: what this one already holds is sent as a hash and no bytes.
+    const config = db.fleetConfig(machineId);
     const empty =
       !config.mcp.length &&
       !config.marketplaces.length &&

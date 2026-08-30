@@ -71,7 +71,7 @@ const isSafeSkillPath = (path: string): boolean =>
 export const writeSkill = async (dir: string, skill: FleetSkillPayload): Promise<void> => {
   const target = join(dir, skill.name);
   await rm(target, { recursive: true, force: true });
-  for (const file of skill.files) {
+  for (const file of skill.files ?? []) {
     await Bun.write(join(target, file.path), Buffer.from(file.contentBase64, 'base64'));
   }
 };
@@ -92,6 +92,17 @@ export const syncSkillFiles = async (
     if (managed[skill.name] === skill.hash) {
       written[skill.name] = skill.hash;
       report[skill.name] = { state: 'applied' };
+      continue;
+    }
+
+    // The hub leaves out the bytes of anything this machine's last report said
+    // it already held. Reaching here means it did not hold this hash after all —
+    // a sidecar that was cleared, or a report that never landed. Nothing is
+    // written, and the next sync carries the content, because the claim that
+    // suppressed it is exactly what this failure retracts.
+    if (!skill.files) {
+      if (managed[skill.name] !== undefined) written[skill.name] = managed[skill.name];
+      report[skill.name] = { state: 'failed', detail: 'the hub sent no files for this hash' };
       continue;
     }
 
