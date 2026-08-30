@@ -705,19 +705,29 @@ const syncVendoredPlugins = async (
     const plugin = byName.get(name);
     if (!plugin) continue;
     const vendoredId = `${name}@${VENDOR_NAME}`;
-    if (managed[name] === plugin.hash && (await isInstalled(vendoredId))) {
-      written[name] = plugin.hash;
-      report[id] = { state: 'applied' };
+
+    const already = managed[name] === plugin.hash && (await isInstalled(vendoredId));
+    const ran = already
+      ? undefined
+      : await runClaude(bin, ['plugin', 'install', vendoredId, '--scope', 'user']);
+
+    if (!already && !(await isInstalled(vendoredId))) {
+      // Left unmanaged so the next sync writes and installs it again.
+      report[id] = { state: 'failed', detail: ran?.output ?? 'install did not land' };
       continue;
     }
-    const ran = await runClaude(bin, ['plugin', 'install', vendoredId, '--scope', 'user']);
-    if (await isInstalled(vendoredId)) {
-      written[name] = plugin.hash;
-      report[id] = { state: 'applied' };
-    } else {
-      // Left unmanaged so the next sync writes and installs it again.
-      report[id] = { state: 'failed', detail: ran.output };
+
+    // The copy this one replaces. A machine that installed the plugin the old
+    // way — from its upstream marketplace — is still carrying it, and leaving
+    // both would load the same skills and subagents twice. Checked on every
+    // sync rather than only on the install, because the machine that most needs
+    // it is the one already holding both: it takes the fast path from here on,
+    // and a hand-over that only ran once would never reach it.
+    if (id !== vendoredId && (await isInstalled(id))) {
+      await runClaude(bin, ['plugin', 'uninstall', id, '--scope', 'user', '-y']);
     }
+    written[name] = plugin.hash;
+    report[id] = { state: 'applied' };
   }
 
   for (const name of Object.keys(managed)) {
