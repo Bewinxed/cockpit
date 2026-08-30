@@ -22,6 +22,14 @@
   import FleetTrouble from '$lib/cockpit/FleetTrouble.svelte';
   import ToolMatrix from '$lib/cockpit/ToolMatrix.svelte';
   import { orderMachines } from '$lib/cockpit/rail.svelte';
+  import {
+    IconTools,
+    IconPlug,
+    IconSkill,
+    IconSubagent,
+    IconBook,
+    IconHook,
+  } from '$lib/icons';
   import { page } from '$app/state';
   import { goto } from '$app/navigation';
   import type { PageData } from './$types';
@@ -110,22 +118,22 @@
     <Tabs.Root value={activeTab} onValueChange={switchTab}>
       <Tabs.List class="tab-strip" variant="line">
         <Tabs.Trigger value="tools">
-          Tools <span class="badge">{data.catalog.length}</span>
+          <IconTools class="tab-icon" /><span>Tools</span> <span class="badge">{data.catalog.length}</span>
         </Tabs.Trigger>
         <Tabs.Trigger value="mcp">
-          MCP servers <span class="badge">{config.mcp.length}</span>
+          <IconPlug class="tab-icon" /><span>MCP servers</span> <span class="badge">{config.mcp.length}</span>
         </Tabs.Trigger>
         <Tabs.Trigger value="skills">
-          Skills <span class="badge">{skills.length}</span>
+          <IconSkill class="tab-icon" /><span>Skills</span> <span class="badge">{skills.length}</span>
         </Tabs.Trigger>
         <Tabs.Trigger value="agents">
-          Agents <span class="badge">{agents.length}</span>
+          <IconSubagent class="tab-icon" /><span>Agents</span> <span class="badge">{agents.length}</span>
         </Tabs.Trigger>
         <Tabs.Trigger value="memory">
-          Memory
+          <IconBook class="tab-icon" /><span>Memory</span>
         </Tabs.Trigger>
         <Tabs.Trigger value="hooks">
-          Hooks <span class="badge">{hooks.length}</span>
+          <IconHook class="tab-icon" /><span>Hooks</span> <span class="badge">{hooks.length}</span>
         </Tabs.Trigger>
       </Tabs.List>
 
@@ -260,6 +268,15 @@
   }
   :global(.tab-strip::-webkit-scrollbar) {
     display: none;
+  }
+  :global(.tab-icon) {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    opacity: 0.6;
+  }
+  :global([data-state="active"] .tab-icon) {
+    opacity: 1;
   }
   .badge {
     color: var(--ink-label);
