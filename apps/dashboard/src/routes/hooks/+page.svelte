@@ -140,14 +140,11 @@
 <div class="page">
   <div class="col">
     <header class="head">
-      <div class="headtext">
-        <h1>Hooks</h1>
-        <p class="sub">
-          Scripts and calls the fleet runs on a session's own lifecycle — before a tool call, after
-          a turn ends, when a session starts. Cockpit writes each one to every machine and keeps it
-          converged; a session is never told cockpit is the one running it.
-        </p>
-      </div>
+      <p class="sub">
+        Scripts and calls the fleet runs on a session's own lifecycle — before a tool call, after
+        a turn ends, when a session starts. Cockpit writes each one to every machine and keeps it
+        converged; a session is never told cockpit is the one running it.
+      </p>
       <Button class={btnPrimary} onclick={() => goto('/hooks/new')}>
         <IconPlus class="shrink-0" />
         New hook
@@ -290,18 +287,6 @@
     align-items: flex-start;
     justify-content: space-between;
     gap: var(--space-3);
-  }
-  .headtext {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-  }
-  .head h1 {
-    font-size: var(--text-2xl);
-    font-weight: var(--weight-strong);
-    line-height: var(--leading-tight);
-    letter-spacing: var(--track-display);
-    color: var(--ink-strong);
   }
   .head .sub {
     max-width: 68ch;

@@ -782,9 +782,7 @@
    View Transitions
    ======================================== */
 
-/* The sidebar owns its own view-transition-name so it stays still while the
-   content area cross-fades. Without this, the whole shell (including the
-   sidebar and top bar) shifts by the translateY(6px) in vt-in. */
+/* Sidebar and topbar stay rock-still during every transition. */
 ::view-transition-old(sidebar),
 ::view-transition-new(sidebar),
 ::view-transition-old(topbar),
@@ -792,44 +790,49 @@
   animation: none;
 }
 
-/* View transitions — only for drill-in/out and mobile gestures.
-   Sidebar nav and tab switches are instant (skipped in onNavigate).
-   When a transition does run, it's a fast opacity crossfade — no slide. */
+/* Default: drill-in/out — horizontal push */
 ::view-transition-old(root) {
-  animation: 100ms cubic-bezier(0.32, 0.72, 0, 1) both vt-fade-out;
+  animation: 150ms cubic-bezier(0.32, 0.72, 0, 1) both vt-push-out;
 }
 ::view-transition-new(root) {
-  animation: 100ms cubic-bezier(0.32, 0.72, 0, 1) both vt-fade-in;
+  animation: 150ms cubic-bezier(0.32, 0.72, 0, 1) both vt-push-in;
 }
 
-@keyframes vt-fade-out {
-  to   { opacity: 0; }
+/* Vertical: sidebar nav (data-nav='down' or 'up') */
+html[data-nav='down'] ::view-transition-old(root) {
+  animation-name: vt-slide-up-out;
 }
-@keyframes vt-fade-in {
-  from { opacity: 0; }
+html[data-nav='down'] ::view-transition-new(root) {
+  animation-name: vt-slide-up-in;
+}
+html[data-nav='up'] ::view-transition-old(root) {
+  animation-name: vt-slide-down-out;
+}
+html[data-nav='up'] ::view-transition-new(root) {
+  animation-name: vt-slide-down-in;
 }
 
-/* Mobile gesture swipes keep the directional push. */
-@media (max-width: 767px) {
-  html[data-nav] ::view-transition-old(root) {
-    animation: 200ms cubic-bezier(0.32, 0.72, 0, 1) both vt-push-out;
-  }
-  html[data-nav] ::view-transition-new(root) {
-    animation: 200ms cubic-bezier(0.32, 0.72, 0, 1) both vt-push-in;
-  }
-  html[data-nav='prev'] ::view-transition-old(root) {
-    animation-name: vt-push-out-back;
-  }
-  html[data-nav='prev'] ::view-transition-new(root) {
-    animation-name: vt-push-in-back;
-  }
+/* Back: drill-out (data-nav='prev') */
+html[data-nav='prev'] ::view-transition-old(root) {
+  animation-name: vt-push-out-back;
 }
-@keyframes vt-push-out      { to   { transform: translateX(-18%); opacity: 0; } }
-@keyframes vt-push-in       { from { transform: translateX(18%);  opacity: 0; } }
-@keyframes vt-push-out-back { to   { transform: translateX(18%);  opacity: 0; } }
-@keyframes vt-push-in-back  { from { transform: translateX(-18%); opacity: 0; } }
+html[data-nav='prev'] ::view-transition-new(root) {
+  animation-name: vt-push-in-back;
+}
 
-/* Card → header morphs share one soft curve. */
+/* Vertical keyframes — content slides up/down */
+@keyframes vt-slide-up-out   { to   { transform: translateY(-6%); opacity: 0; } }
+@keyframes vt-slide-up-in    { from { transform: translateY(6%);  opacity: 0; } }
+@keyframes vt-slide-down-out { to   { transform: translateY(6%);  opacity: 0; } }
+@keyframes vt-slide-down-in  { from { transform: translateY(-6%); opacity: 0; } }
+
+/* Horizontal keyframes — drill in/out */
+@keyframes vt-push-out      { to   { transform: translateX(-6%); opacity: 0; } }
+@keyframes vt-push-in       { from { transform: translateX(6%);  opacity: 0; } }
+@keyframes vt-push-out-back { to   { transform: translateX(6%);  opacity: 0; } }
+@keyframes vt-push-in-back  { from { transform: translateX(-6%); opacity: 0; } }
+
+/* Card -> header morphs share one soft curve. */
 ::view-transition-old(instance-*),
 ::view-transition-new(instance-*) {
   animation-duration: 240ms;
@@ -913,10 +916,10 @@
     transform: none;
   }
   ::view-transition-old(root) {
-    animation-name: vt-out !important;
+    animation-name: vt-rm-out !important;
   }
   ::view-transition-new(root) {
-    animation-name: vt-fade-in !important;
+    animation-name: vt-rm-in !important;
   }
   ::view-transition-group(*),
   ::view-transition-old(*),
@@ -925,10 +928,11 @@
   }
 }
 
-@keyframes vt-fade-in {
-  from {
-    opacity: 0;
-  }
+@keyframes vt-rm-out {
+  to { opacity: 0; }
+}
+@keyframes vt-rm-in {
+  from { opacity: 0; }
 }
 
 /* Scrollbars belong to the palette. */

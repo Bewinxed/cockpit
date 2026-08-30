@@ -41,5 +41,8 @@
   "patchedDependencies": {
     "svelte-streamdown@3.1.2": "patches/svelte-streamdown@3.1.2.patch",
     "virtua@0.50.0": "patches/virtua@0.50.0.patch"
+  },
+  "dependencies": {
+    "torph": "^0.1.0"
   }
 }

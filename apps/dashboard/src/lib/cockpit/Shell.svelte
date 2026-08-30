@@ -16,6 +16,7 @@
   import { Button } from '$lib/components/ui/button';
   import { IconSearch, IconShield, IconSidebar } from '$lib/icons';
   import { isTyping } from '$lib/utils/typing';
+  import { TextMorph } from 'torph/svelte';
   import { cockpit, hubSocketUrl, reconnectNow } from './client.svelte';
   import JumpPalette from './JumpPalette.svelte';
   import ConfirmDialog from './ConfirmDialog.svelte';
@@ -245,7 +246,7 @@
       <!-- The one "where am I" label, now visible at every width — the brand
            lives in the rail, and the crumb is what the top bar owes a reader
            who arrived by URL. -->
-      <span class="crumb">{crumb}</span>
+      <TextMorph text={crumb} class="crumb" as="span" duration={150} />
 
       <div class="right">
         <!-- Desktop budget and fleet status — phone shows UsageMeter instead. -->

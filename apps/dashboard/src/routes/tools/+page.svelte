@@ -73,9 +73,15 @@
     return () => clearTimeout(timer);
   });
 
+  const TAB_ORDER = ['tools', 'mcp', 'skills', 'agents', 'memory', 'hooks'];
   const activeTab = $derived(page.url.searchParams.get('tab') ?? 'tools');
+  let tabDir = $state<'left' | 'right'>('right');
 
   function switchTab(value: string) {
+    const fromIdx = TAB_ORDER.indexOf(activeTab);
+    const toIdx = TAB_ORDER.indexOf(value);
+    tabDir = toIdx > fromIdx ? 'right' : 'left';
+
     const url = new URL(location.href);
     url.searchParams.set('tab', value);
     history.replaceState(history.state, '', url);
@@ -97,12 +103,9 @@
 <Tooltip.Provider>
 <div class="page">
   <div class="col">
-    <header class="head">
-      <h1>Tools</h1>
-      <p class="sub">
-        {online} of {machines.length} machines reported
-      </p>
-    </header>
+    <p class="sub">
+      {online} of {machines.length} machines reported
+    </p>
 
     <Card.Root id="fleet-trouble" class="scroll-mt-6 {panelClass}">
       <header class="phead">
@@ -114,7 +117,7 @@
       </div>
     </Card.Root>
 
-    <Tabs.Root value={activeTab} onValueChange={switchTab}>
+    <Tabs.Root value={activeTab} onValueChange={switchTab} data-tab-dir={tabDir}>
       <Tabs.List class="tab-strip" variant="line">
         <Tabs.Trigger value="tools">
           <IconToolGeneric class="tab-icon" /><span class="tab-label">Tools</span> <span class="badge">{data.catalog.length}</span>
@@ -238,19 +241,7 @@
     flex-direction: column;
     gap: var(--space-6);
   }
-  .head {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-  }
-  .head h1 {
-    font-size: var(--text-2xl);
-    font-weight: var(--weight-strong);
-    line-height: var(--leading-tight);
-    letter-spacing: var(--track-display);
-    color: var(--ink-strong);
-  }
-  .head .sub {
+  .sub {
     max-width: 68ch;
     font-size: var(--text-base);
     color: var(--ink-muted);
@@ -321,5 +312,20 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-4);
+  }
+
+  /* Tab content slides horizontally on switch, keyed to tab order. */
+  :global([data-tab-dir='right'] [data-state='active'][role='tabpanel']) {
+    animation: tab-slide-from-right 150ms cubic-bezier(0.32, 0.72, 0, 1) both;
+  }
+  :global([data-tab-dir='left'] [data-state='active'][role='tabpanel']) {
+    animation: tab-slide-from-left 150ms cubic-bezier(0.32, 0.72, 0, 1) both;
+  }
+
+  @keyframes tab-slide-from-right {
+    from { transform: translateX(4%); opacity: 0; }
+  }
+  @keyframes tab-slide-from-left {
+    from { transform: translateX(-4%); opacity: 0; }
   }
 </style>

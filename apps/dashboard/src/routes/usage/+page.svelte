@@ -190,13 +190,10 @@
 
 <div class="page">
   <div class="col">
-    <header class="head">
-      <h1>Usage</h1>
-      <p class="sub">
-        Am I about to blow the budget? Claude is a subscription whose constraint is a
-        percentage; opencode is real money. The two are never added together.
-      </p>
-    </header>
+    <p class="sub">
+      Am I about to blow the budget? Claude is a subscription whose constraint is a
+      percentage; opencode is real money. The two are never added together.
+    </p>
 
     {#if data.error}
       <p class="note" role="alert">{data.error}</p>
@@ -551,19 +548,7 @@
     flex-direction: column;
     gap: var(--space-6);
   }
-  .head {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-  }
-  .head h1 {
-    font-size: var(--text-2xl);
-    font-weight: var(--weight-strong);
-    line-height: var(--leading-tight);
-    letter-spacing: var(--track-display);
-    color: var(--ink-strong);
-  }
-  .head .sub {
+  .sub {
     max-width: 68ch;
     font-size: var(--text-base);
     color: var(--ink-muted);

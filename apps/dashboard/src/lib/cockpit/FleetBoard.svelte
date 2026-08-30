@@ -315,10 +315,7 @@
 <div class="board">
   <div class="inner">
     <div class="head">
-      <div>
-        <h1>Fleet</h1>
-        <p>Every agent across your machines, and what needs you.</p>
-      </div>
+      <p>Every agent across your machines, and what needs you.</p>
       <Button onclick={startSession}>
         <IconPlus />
         Start session
@@ -624,21 +621,11 @@
     gap: var(--space-4);
     padding: var(--space-6) 0 var(--space-5);
   }
-  .head > div:first-child {
+  .head p {
     margin-right: auto;
     min-width: 0;
-  }
-  h1 {
-    font-size: var(--text-xl);
-    font-weight: var(--weight-strong);
-    letter-spacing: var(--track-display);
-    line-height: var(--leading-ui);
-    color: var(--ink-strong);
-  }
-  .head p {
     font-size: var(--text-md);
     color: var(--ink-muted);
-    margin-top: var(--space-1);
   }
 
   .stats {

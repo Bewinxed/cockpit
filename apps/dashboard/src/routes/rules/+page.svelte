@@ -138,14 +138,11 @@
 <div class="page">
   <div class="col">
     <header class="head">
-      <div class="headtext">
-        <h1>Rules</h1>
-        <p class="sub">
-          Standing instructions the hub enforces on every session it watches. When a session says
-          something a rule is looking for, cockpit answers it — and keeps answering until the
-          session acknowledges what it was told.
-        </p>
-      </div>
+      <p class="sub">
+        Standing instructions the hub enforces on every session it watches. When a session says
+        something a rule is looking for, cockpit answers it — and keeps answering until the
+        session acknowledges what it was told.
+      </p>
       <Button class={btnPrimary} onclick={() => goto('/rules/new')}>
         <IconPlus class="shrink-0" />
         New rule
@@ -308,18 +305,6 @@
     align-items: flex-start;
     justify-content: space-between;
     gap: var(--space-3);
-  }
-  .headtext {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-  }
-  .head h1 {
-    font-size: var(--text-2xl);
-    font-weight: var(--weight-strong);
-    line-height: var(--leading-tight);
-    letter-spacing: var(--track-display);
-    color: var(--ink-strong);
   }
   .head .sub {
     max-width: 68ch;

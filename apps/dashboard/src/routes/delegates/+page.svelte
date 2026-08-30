@@ -92,14 +92,11 @@
 <div class="page">
   <div class="col">
     <header class="head">
-      <div class="headtext">
-        <h1>Delegates</h1>
-        <p class="sub">
-          The routing table a session's own <code>delegate</code> call reads: each row is a named
-          preset — a description, a harness, a model, an effort — and a calling agent picks one by
-          matching what it needs done against the description, never by knowing a model string.
-        </p>
-      </div>
+      <p class="sub">
+        The routing table a session's own <code>delegate</code> call reads: each row is a named
+        preset — a description, a harness, a model, an effort — and a calling agent picks one by
+        matching what it needs done against the description, never by knowing a model string.
+      </p>
       <Button class={btnPrimary} onclick={() => goto('/delegates/new')}>
         <IconPlus class="shrink-0" />
         New delegate type
@@ -221,18 +218,6 @@
     align-items: flex-start;
     justify-content: space-between;
     gap: var(--space-3);
-  }
-  .headtext {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-  }
-  .head h1 {
-    font-size: var(--text-2xl);
-    font-weight: var(--weight-strong);
-    line-height: var(--leading-tight);
-    letter-spacing: var(--track-display);
-    color: var(--ink-strong);
   }
   .head .sub {
     max-width: 68ch;

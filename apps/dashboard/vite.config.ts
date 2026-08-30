@@ -93,6 +93,6 @@ export default defineConfig({
     // These publish raw .svelte sources, which dev SSR must compile rather
     // than hand to Node — externalizing any of them ends in
     // ERR_UNKNOWN_FILE_EXTENSION on the first server-rendered request.
-    noExternal: ['@xyflow/svelte', 'virtua', '@hugeicons/svelte'],
+    noExternal: ['@xyflow/svelte', 'virtua', '@hugeicons/svelte', 'torph'],
   },
 });
