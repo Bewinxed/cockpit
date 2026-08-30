@@ -149,24 +149,6 @@ const HERE = layoutFor(ROOT, Bun.main);
  * Where the dashboard listens. Read from the installing shell so a second
  * machine can differ, with the defaults this one's browser expects.
  */
-/**
- * The dashboard runs under NODE, and it is the only service that does.
- *
- * Its server has to carry the browser's `/ws` upgrade through to the hub, and
- * bun 1.3.14 cannot: an upgraded socket there drops `socket.write()` and its
- * `http.request` never emits `'upgrade'` for a 101 (oven-sh/bun#9882, #9911,
- * #28396). Both are fixed on bun's main, so this is a version workaround with
- * an expiry: when the fleet's bun carries the fixes, put `process.execPath`
- * back. See apps/dashboard/serve.js for the detail. Nothing else here needs
- * node, and nothing else here is given it.
- *
- * Resolved to an absolute path at install time because `ExecStart=` is not a
- * shell and will not search PATH — and left as the bare name if there is no
- * node to find, so the unit is written, fails loudly, and says what is missing
- * rather than being silently skipped.
- */
-const NODE_BIN = Bun.which('node') ?? 'node';
-
 const DASHBOARD_PORT = process.env.PORT ?? '3000';
 const DASHBOARD_HOST = process.env.HOST ?? '0.0.0.0';
 
@@ -358,7 +340,7 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
     id: 'dashboard',
     mode: 'prod',
     description: 'Cockpit dashboard',
-    command: [NODE_BIN, DASHBOARD_ENTRY],
+    command: [process.execPath, DASHBOARD_ENTRY],
     environment: { PORT: DASHBOARD_PORT, HOST: DASHBOARD_HOST },
     workingDirectory: ROOT,
     after: [unitName('hub')],

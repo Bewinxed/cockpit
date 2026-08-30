@@ -10,27 +10,14 @@
  * `routes/api/[...path]`), so the board still loaded while never once
  * connecting: "no hub connected", against a hub that was up the whole time.
  *
- * The relay is done on the RAW SOCKET rather than through `http.request`, and
+ * The relay is done on the RAW SOCKET rather than through `http.request`. It
+ * was written that way for bun 1.3.14, which could neither emit `'upgrade'` on
+ * an outgoing request nor relay bytes back through an upgraded server socket
+ * (oven-sh/bun#9911, #9882, #28396) — 1.4.0 fixes both, and this stayed because
  * after the handshake a websocket proxy is only bytes in both directions
  * anyway: the request line and headers are re-issued verbatim over a plain TCP
  * connection and the hub's own 101 passes straight back. Nothing here has to
  * agree with a runtime about what an upgrade is.
- *
- * WHY THIS RUNS UNDER NODE, and when it can stop. Bun 1.3.14 — the version this
- * fleet runs — cannot proxy a websocket through `node:http`, in two separate
- * places, both upstream bugs rather than anything about this code:
- *
- *   - the client half never emits `'upgrade'` for a 101, handing it back as an
- *     ordinary `'response'` (oven-sh/bun#9911, fixed by #32204);
- *   - the server half's upgraded socket silently drops `socket.write()` and
- *     lets uWS keep parsing inbound bytes as HTTP (oven-sh/bun#9882, #28157,
- *     fixed by #30664 / #31587).
- *
- * oven-sh/bun#28396 is the meta-issue, and it names the same casualties —
- * http-proxy, ws, vite — with the same workaround this file takes. Both fixes
- * are on bun's main, so once this fleet's bun carries them the dashboard can go
- * back to `process.execPath` in service.ts and this comment can go with it.
- * Until then the check is empirical, not doctrinal: proxy a socket and see.
  */
 import http from 'node:http';
 import net from 'node:net';
