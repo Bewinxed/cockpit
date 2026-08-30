@@ -583,6 +583,10 @@
     display: flex;
     flex-direction: column;
     overflow: auto;
+    /* Only the content slot transitions — everything above it (sidebar,
+       top bar, session tabs) stays still because they have their own
+       view-transition-name or are outside this element. */
+    view-transition-name: content;
   }
   /* Own the home-indicator inset where no composer is present to own it. */
   @media (pointer: coarse) {
