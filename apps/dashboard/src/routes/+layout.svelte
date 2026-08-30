@@ -69,12 +69,15 @@
     if (!document.documentElement.dataset.nav) {
       const fromIdx = spokeIndex(from);
       const toIdx = spokeIndex(to);
+      console.debug('[nav]', from, '→', to, 'idx:', fromIdx, '→', toIdx);
       if (fromIdx >= 0 && toIdx >= 0 && fromIdx !== toIdx) {
         document.documentElement.dataset.nav = toIdx > fromIdx ? 'down' : 'up';
+        console.debug('[nav] direction:', document.documentElement.dataset.nav);
+      } else {
+        console.debug('[nav] spoke check failed, fromIdx:', fromIdx, 'toIdx:', toIdx);
       }
     }
 
-    // Everything with a data-nav direction (spoke nav, drill-in/out, mobile gesture): animate.
     return new Promise((resolve) => {
       const transition = document.startViewTransition(async () => {
         resolve();

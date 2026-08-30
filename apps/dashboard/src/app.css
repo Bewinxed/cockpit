@@ -782,6 +782,15 @@
    View Transitions
    ======================================== */
 
+/* Suppress the root group — it captures every unnamed element and runs the
+   browser's DEFAULT crossfade, which clashes with our named content group.
+   Without this, the tab strip and other unnamed elements do their own
+   animation overlapping the content slide. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+}
+
 /* Sidebar and topbar stay rock-still during every transition. */
 ::view-transition-old(sidebar),
 ::view-transition-new(sidebar),
