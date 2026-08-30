@@ -1,17 +1,20 @@
 <script lang="ts">
   /**
-   * The usage surface: how much room is left, and where it went.
+   * The usage surface: "am I about to blow the budget?" as a glance against a
+   * threshold, not as a calculation.
+   *
+   * JOURNEY.md content blocks (in order):
+   *   1. Connection band — handled by Shell.svelte (skip)
+   *   2. Spend against threshold — the lead visual
+   *   3. Limit windows — per-window reading with age
+   *   4. Spend by session — ordered by cost, top-spend drills in
+   *   5. Unpriced models — what the total cannot account for
    *
    * Structure locked by the user (2026-08-16): split by harness. The two
    * harnesses never merge into one total, because they are not the same kind of
    * number — Claude is a subscription whose real constraint is a percentage, and
    * opencode is real money. Making that the layout means the page cannot lie by
    * addition.
-   *
-   * Presentation ported (2026-08-22) from the outpost house components to
-   * shadcn-svelte primitives (Card / Table / Badge) dressed in the Quiet Ledger
-   * tokens — the raised-panel + sunken-well signature, the hairline table, the
-   * uppercase micro-label header — so the primitives never read as stock shadcn.
    */
   import type { PageData } from './$types';
   import type { LimitWindow } from '@cockpit/core';
@@ -19,6 +22,9 @@
   import * as Table from '$lib/components/ui/table';
   import { Badge } from '$lib/components/ui/badge';
   import { compactNumber, usd, type UsageSummaryRow } from '$lib/cockpit/usage';
+  import { cockpit } from '$lib/cockpit/client.svelte';
+  import StatTile from '$lib/cockpit/StatTile.svelte';
+  import HarnessGlyph from '$lib/cockpit/HarnessGlyph.svelte';
   import DailyChart from '$lib/cockpit/usage/DailyChart.svelte';
   import BreakdownTable from '$lib/cockpit/usage/BreakdownTable.svelte';
 
@@ -80,6 +86,27 @@
       : null
   );
 
+  /** Spend against threshold — the lead visual per JOURNEY.md block 2. */
+  const spendUsed = $derived(reading?.spendUsed ?? null);
+  const spendLimit = $derived(reading?.spendLimit ?? null);
+  const spendPct = $derived(
+    spendUsed !== null && spendLimit !== null && spendLimit > 0
+      ? Math.min((spendUsed / spendLimit) * 100, 100)
+      : null
+  );
+  const spendBand = $derived(spendPct !== null ? band(spendPct) : 'ok');
+
+  /** How long ago the reading was fetched. */
+  const readingAge = $derived.by(() => {
+    if (!reading?.fetchedAt) return null;
+    const diff = now - reading.fetchedAt;
+    if (diff < 60_000) return 'just now';
+    const mins = Math.floor(diff / 60_000);
+    if (mins < 60) return `${mins}m ago`;
+    const h = Math.floor(mins / 60);
+    return `${h}h ${mins % 60}m ago`;
+  });
+
   /** Top models by spend; the tail is noise on a glance surface. */
   const topRows = (rows: UsageSummaryRow[] | undefined, n: number): UsageSummaryRow[] =>
     [...(rows ?? [])].sort((a, b) => b.costUsd - a.costUsd).slice(0, n);
@@ -92,6 +119,36 @@
   const missing = $derived([
     ...new Set([...(data.claude?.missingPricing ?? []), ...(data.opencode?.missingPricing ?? [])]),
   ]);
+
+  /**
+   * Sessions by spend — JOURNEY.md block 4. Derived from live instances whose
+   * stats this browser has, ordered by cost descending, capped at 10 rows.
+   */
+  const sessionsBySpend = $derived.by(() => {
+    const rows: {
+      id: string;
+      label: string;
+      machine: string;
+      harness: string | null | undefined;
+      cost: number;
+      contextPct: number | null;
+    }[] = [];
+    for (const instance of cockpit.runningInstances) {
+      const stats = cockpit.statsOf(instance.id);
+      if (stats.cost === null) continue;
+      const machine = cockpit.machines.find((m) => m.machineId === instance.machineId);
+      rows.push({
+        id: instance.id,
+        label: instance.title ?? instance.derivedTitle ?? instance.cwd.split('/').pop() ?? instance.id,
+        machine: machine?.hostname ?? instance.machineId,
+        harness: instance.harness,
+        cost: stats.cost,
+        contextPct: stats.contextPct,
+      });
+    }
+    rows.sort((a, b) => b.cost - a.cost);
+    return rows.slice(0, 10);
+  });
 
   /** Blocks, newest first, grouped under the day they started. */
   const allBlocks = $derived(
@@ -131,31 +188,12 @@
   <title>Usage &middot; Outpost</title>
 </svelte:head>
 
-<!--
-  THESIS: how much room is left, and where it went — refusing the dashboard
-  default that sums every provider into one meaningless total.
-  STORY: the operator glances, sees which window binds first and when it resets,
-  and can name what spent it.
--->
-
-<!-- The recessed-well stat tile: a raised shadcn Card with a sunken hairline
-     field inside it — the DESIGN.md signature move, not a flat shadcn card. -->
-{#snippet stat(label: string, value: string, unit?: string)}
-  <Card.Root class="q-stat">
-    <div class="q-well">
-      <span class="k">{label}</span>
-      <span class="v">{value}</span>
-      {#if unit}<span class="u">{unit}</span>{/if}
-    </div>
-  </Card.Root>
-{/snippet}
-
 <div class="page">
   <div class="col">
     <header class="head">
       <h1>Usage</h1>
       <p class="sub">
-        How much room is left, and where it went. Claude is a subscription whose constraint is a
+        Am I about to blow the budget? Claude is a subscription whose constraint is a
         percentage; opencode is real money. The two are never added together.
       </p>
     </header>
@@ -164,26 +202,99 @@
       <p class="note" role="alert">{data.error}</p>
     {/if}
 
-    <section class="stats" aria-label="Usage at a glance">
-      {#if binding}
-        {@render stat(`${windowLabel(binding)} used`, `${Math.round(binding.percent)}%`)}
-        {@render stat('Resets in', resetsIn(binding.resetsAt, now) || '—')}
-      {/if}
-      {@render stat(
-        'opencode spend',
-        openCodeTotals ? usd(openCodeTotals.costUsd) : '—',
-        'real money'
-      )}
-      {@render stat(
-        'Claude at API prices',
-        claudeTotals ? `~${usd(claudeTotals.costUsd)}` : '—',
-        'covered by the plan'
-      )}
-      {#if planLabel}
-        {@render stat('Plan', planLabel)}
-      {/if}
-    </section>
+    <!-- JOURNEY.md block 2: Spend against threshold — the lead visual. -->
+    {#if readingError}
+      <Card.Root class="q-card">
+        <Card.Content class="q-body">
+          <p class="note" role="alert">
+            {readingError === 'not signed in'
+              ? 'This machine is not signed in to Claude, so there is no limit to read. Sign in on the machine to restore this reading.'
+              : readingError === 'token expired'
+                ? 'The Claude login on this machine has expired. Claude Code owns that file — signing in there restores this reading.'
+                : readingError}
+          </p>
+        </Card.Content>
+      </Card.Root>
+    {:else if !reading && !data.limits}
+      <Card.Root class="q-card">
+        <Card.Content class="q-body">
+          <p class="note">No limit reading yet. Connect a machine to see spend here.</p>
+        </Card.Content>
+      </Card.Root>
+    {:else}
+      <section class="hero" aria-label="Spend against threshold">
+        <div class="hero-main">
+          {#if spendPct !== null && spendUsed !== null && spendLimit !== null}
+            <div class="hero-spend">
+              <span class="hero-amount {spendBand}">{usd(spendUsed)}</span>
+              <span class="hero-limit">/ {usd(spendLimit)}</span>
+            </div>
+            <span
+              class="hero-track"
+              role="progressbar"
+              aria-valuenow={spendPct}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-label="Spend against threshold"
+            >
+              <span class="hero-fill {spendBand}" style="width: {Math.max(spendPct, 1)}%"></span>
+            </span>
+          {:else if binding}
+            <div class="hero-spend">
+              <span class="hero-amount {band(binding.percent)}">{Math.round(binding.percent)}%</span>
+              <span class="hero-limit">{windowLabel(binding)} used</span>
+            </div>
+            <span
+              class="hero-track"
+              role="progressbar"
+              aria-valuenow={binding.percent}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-label="{windowLabel(binding)} limit"
+            >
+              <span class="hero-fill {band(binding.percent)}" style="width: {Math.max(binding.percent, 1)}%"></span>
+            </span>
+          {/if}
+          <div class="hero-meta">
+            {#if planLabel}
+              <Badge class="q-tag">{planLabel}</Badge>
+            {/if}
+            {#if binding}
+              <span class="hero-reset">Resets in {resetsIn(binding.resetsAt, now) || '—'}</span>
+            {/if}
+            {#if readingAge}
+              <span class="hero-age">Checked {readingAge}</span>
+            {/if}
+          </div>
+        </div>
+      </section>
 
+      <section class="stats" aria-label="Usage at a glance">
+        {#if binding}
+          <StatTile
+            label="{windowLabel(binding)} used"
+            value="{Math.round(binding.percent)}%"
+            tone={binding.percent >= 90 ? 'warn' : 'default'}
+          />
+          <StatTile
+            label="Resets in"
+            value={resetsIn(binding.resetsAt, now) || '—'}
+          />
+        {/if}
+        <StatTile
+          label="opencode spend"
+          value={openCodeTotals ? usd(openCodeTotals.costUsd) : '—'}
+          unit="real money"
+        />
+        <StatTile
+          label="Claude at API prices"
+          value={claudeTotals ? `~${usd(claudeTotals.costUsd)}` : '—'}
+          unit="covered by the plan"
+        />
+      </section>
+    {/if}
+
+    <!-- JOURNEY.md block 3: Limit windows — per-window reading with age. -->
     <Card.Root class="q-card">
       <Card.Header class="q-head">
         <Card.Title class="q-title">Claude limits</Card.Title>
@@ -194,17 +305,9 @@
       </Card.Header>
 
       <Card.Content class="q-body">
-        {#if readingError}
-          <p class="note">
-            {readingError === 'not signed in'
-              ? 'This machine is not signed in to Claude, so there is no limit to read.'
-              : readingError === 'token expired'
-                ? 'The Claude login on this machine has expired. Claude Code owns that file — signing in there restores this reading.'
-                : readingError}
-          </p>
-        {:else if orderedWindows.length === 0}
+        {#if orderedWindows.length === 0 && !readingError}
           <p class="note">No limit reading yet.</p>
-        {:else}
+        {:else if orderedWindows.length > 0}
           <Table.Root class="q-table">
             <Table.Header>
               <Table.Row>
@@ -237,6 +340,9 @@
               {/each}
             </Table.Body>
           </Table.Root>
+          {#if readingAge}
+            <p class="note">Last checked {readingAge}</p>
+          {/if}
         {/if}
 
         {#if claudeRows.length > 0}
@@ -268,6 +374,52 @@
         {/if}
       </Card.Content>
     </Card.Root>
+
+    <!-- JOURNEY.md block 4: Spend by session — ordered by cost, top drills in. -->
+    {#if sessionsBySpend.length > 0}
+      <Card.Root class="q-card">
+        <Card.Header class="q-head">
+          <Card.Title class="q-title">Sessions by spend</Card.Title>
+          <span class="q-sub">Live sessions ordered by cost — the top spender links to its detail</span>
+        </Card.Header>
+        <Card.Content class="q-body">
+          <Table.Root class="q-table">
+            <Table.Header>
+              <Table.Row>
+                <Table.Head></Table.Head>
+                <Table.Head>Session</Table.Head>
+                <Table.Head>Machine</Table.Head>
+                <Table.Head class="num">Context</Table.Head>
+                <Table.Head class="num">Cost</Table.Head>
+              </Table.Row>
+            </Table.Header>
+            <Table.Body>
+              {#each sessionsBySpend as row, i (row.id)}
+                <Table.Row>
+                  <Table.Cell class="glyph-cell">
+                    <span class="glyph-wrap">
+                      <HarnessGlyph harness={row.harness} />
+                    </span>
+                  </Table.Cell>
+                  <Table.Cell>
+                    {#if i === 0}
+                      <a class="session-link" href="/session/{row.id}">{row.label}</a>
+                    {:else}
+                      {row.label}
+                    {/if}
+                  </Table.Cell>
+                  <Table.Cell class="muted">{row.machine}</Table.Cell>
+                  <Table.Cell class="num muted">
+                    {row.contextPct !== null ? `${Math.round(row.contextPct)}%` : '—'}
+                  </Table.Cell>
+                  <Table.Cell class="num">{usd(row.cost)}</Table.Cell>
+                </Table.Row>
+              {/each}
+            </Table.Body>
+          </Table.Root>
+        </Card.Content>
+      </Card.Root>
+    {/if}
 
     <Card.Root class="q-card">
       <Card.Header class="q-head">
@@ -310,6 +462,18 @@
         {/if}
       </Card.Content>
     </Card.Root>
+
+    <!-- JOURNEY.md block 5: Unpriced models — promoted to a visible callout. -->
+    {#if missing.length > 0}
+      <Card.Root class="q-card unpriced">
+        <Card.Content class="q-body">
+          <p class="unpriced-text">
+            No published price for <span class="mono">{missing.join(', ')}</span> yet — the total
+            cannot account for it. Those models read as $0 rather than a guess.
+          </p>
+        </Card.Content>
+      </Card.Root>
+    {/if}
 
     <!-- DailyChart brings its own heading and range switcher, so this card is
          all body — a second header here would only repeat it. -->
@@ -370,13 +534,6 @@
     <Card.Root class="q-card">
       <Card.Content class="q-body"><BreakdownTable /></Card.Content>
     </Card.Root>
-
-    {#if missing.length > 0}
-      <p class="note">
-        No published price for <span class="mono">{missing.join(', ')}</span> — those read as $0
-        rather than a guess.
-      </p>
-    {/if}
   </div>
 </div>
 
@@ -411,6 +568,74 @@
     font-size: var(--text-base);
     color: var(--ink-muted);
   }
+
+  /* ---- Hero: spend against threshold ---- */
+  .hero {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+  .hero-main {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    background: var(--surface-raised);
+    border-radius: var(--radius-panel);
+    box-shadow: var(--shadow-lifted);
+    padding: var(--space-6);
+  }
+  .hero-spend {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+  }
+  .hero-amount {
+    font-size: var(--text-3xl);
+    font-weight: var(--weight-strong);
+    line-height: var(--leading-numeric);
+    font-variant-numeric: tabular-nums;
+  }
+  .hero-amount.ok { color: var(--data-ok); }
+  .hero-amount.warn { color: var(--data-warn); }
+  .hero-amount.bad { color: var(--data-bad); }
+  .hero-limit {
+    font-size: var(--text-xl);
+    color: var(--ink-muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .hero-track {
+    display: block;
+    position: relative;
+    height: 12px;
+    border-radius: var(--radius-pill);
+    background: var(--surface-sunken);
+  }
+  .hero-fill {
+    position: absolute;
+    inset: 0 auto 0 0;
+    border-radius: var(--radius-pill);
+    transition: width var(--c-500) ease-out;
+  }
+  .hero-fill.ok { background: var(--data-ok); }
+  .hero-fill.warn { background: var(--data-warn); }
+  .hero-fill.bad { background: var(--data-bad); }
+  .hero-meta {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+  }
+  .hero-reset {
+    font-size: var(--text-sm);
+    color: var(--ink-muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .hero-age {
+    font-size: var(--text-sm);
+    color: var(--ink-muted);
+  }
+
   .stats {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
@@ -494,43 +719,6 @@
       padding: 0;
     }
 
-    /* Stat tile → raised card wrapping a sunken hairline well. */
-    .q-stat {
-      height: 100%;
-      background: var(--surface-raised);
-      border-radius: var(--radius-panel);
-      box-shadow: var(--shadow-lifted);
-      padding: var(--space-4);
-      overflow: visible;
-      --tw-ring-shadow: 0 0 transparent;
-    }
-    .q-stat .q-well {
-      flex: 1 1 auto;
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-1);
-      justify-content: center;
-      background: var(--surface-field);
-      border: 1px solid var(--border-hairline);
-      border-radius: var(--radius-well);
-      padding: var(--space-4);
-    }
-    .q-stat .k {
-      color: var(--ink-label);
-      font-size: var(--text-sm);
-      font-weight: var(--weight-medium);
-    }
-    .q-stat .v {
-      font-size: var(--text-3xl);
-      font-weight: var(--weight-strong);
-      line-height: var(--leading-numeric);
-      color: var(--ink-strong);
-      font-variant-numeric: tabular-nums;
-    }
-    .q-stat .u {
-      color: var(--ink-muted);
-      font-size: var(--text-sm);
-    }
 
     /* Table → hairline dividers, uppercase micro-label header, tabular numerics.
        Table.Root ships its own overflow-x-auto container, so the whole card
@@ -642,6 +830,36 @@
     }
     .q-table .fill.bad {
       background: var(--data-bad);
+    }
+
+    /* Sessions-by-spend table additions. */
+    .q-table td.glyph-cell {
+      width: 24px;
+      padding-right: 0;
+      border-bottom: 1px solid var(--border-hairline);
+    }
+    .q-table .glyph-wrap {
+      display: block;
+      width: 16px;
+      height: 16px;
+      color: var(--ink-muted);
+    }
+    .q-table .session-link {
+      color: var(--ink-strong);
+      text-decoration: none;
+      font-weight: var(--weight-medium);
+    }
+    .q-table .session-link:hover {
+      text-decoration: underline;
+    }
+
+    /* Unpriced models callout. */
+    .q-card.unpriced {
+      border-left: 3px solid var(--data-warn);
+    }
+    .unpriced-text {
+      font-size: var(--text-sm);
+      color: var(--ink-muted);
     }
   }
 </style>

@@ -122,6 +122,7 @@
     jumpOpen = !jumpOpen;
   }
 
+  const limits = $derived(cockpit.usageLimitsAny());
   const onSession = $derived(page.url.pathname.startsWith('/session'));
 
   /** Which section the bar names, for the readers who arrived by URL. */
@@ -158,10 +159,13 @@
    * bar and the tab strip: two layout shifts, ±47px, on a load where nothing
    * was ever wrong.
    *
-   * So the banner waits for evidence. It appears when an attempt has actually
-   * failed, when a connection that once worked has dropped, or when the socket
-   * has simply not answered inside the grace below — never merely because the
-   * page is younger than the socket.
+   * So the banner waits for evidence, but only for the `connecting` phase —
+   * the grace period before the first attempt completes. Once the status is
+   * `disconnected` or `error`, the hub is known-unreachable and the banner
+   * fires without requiring a prior successful connection: an operator whose
+   * browser loads while the hub is already down sees the full-width banner
+   * immediately (after the grace), not caption-sized text buried in an empty
+   * state.
    */
   const CONNECT_GRACE = 4000;
   let graceOver = $state(false);
@@ -169,9 +173,17 @@
     const timer = setTimeout(() => (graceOver = true), CONNECT_GRACE);
     return () => clearTimeout(timer);
   });
-  const showBanner = $derived(
-    cockpit.status !== 'connected' && (everConnected || cockpit.connectFailed || graceOver)
-  );
+  const showBanner = $derived.by(() => {
+    const s = cockpit.status;
+    if (s === 'connected') return false;
+    // A socket that errored or was declared disconnected is a known fault —
+    // show the banner once the grace has elapsed or the attempt has failed,
+    // without requiring a prior successful connection.
+    if (s === 'disconnected' || s === 'error') return cockpit.connectFailed || graceOver;
+    // `connecting` is the transient every cold load passes through. Show the
+    // banner only when a prior connection has been lost and the grace elapsed.
+    return everConnected && graceOver;
+  });
 
   // The countdown is a clock, not a frame: 250ms is fast enough that the number
   // never looks stuck and slow enough to cost nothing.
@@ -236,6 +248,35 @@
       <span class="crumb">{crumb}</span>
 
       <div class="right">
+        <!-- Desktop budget and fleet status — phone shows UsageMeter instead. -->
+        {#if limits && cockpit.status === 'connected'}
+          <span class="desk-budget hidden min-[900px]:flex" title="Today's spend vs. limit">
+            <span class="desk-budget-text">
+              Today ${(limits.spendUsed ?? 0).toFixed(2)}
+              {#if limits.spendLimit !== null}
+                <span class="desk-budget-cap">/ ${limits.spendLimit.toFixed(0)}</span>
+              {/if}
+            </span>
+            {#if limits.spendLimit !== null && limits.spendLimit > 0}
+              {@const pct = Math.min(100, ((limits.spendUsed ?? 0) / limits.spendLimit) * 100)}
+              <span class="desk-budget-bar">
+                <span
+                  class="desk-budget-fill"
+                  class:warn={pct >= 70 && pct < 90}
+                  class:critical={pct >= 90}
+                  style="width: {pct}%"
+                ></span>
+              </span>
+            {/if}
+          </span>
+        {/if}
+
+        {#if cockpit.status === 'connected' && cockpit.machines.length > 0}
+          <span class="desk-machines hidden min-[900px]:inline">
+            {cockpit.onlineMachines.length} machine{cockpit.onlineMachines.length === 1 ? '' : 's'}
+          </span>
+        {/if}
+
         <!-- Jump is a single entry: the one command surface the top bar opens.
              The old phone thumb bar duplicated it; that bar is gone. -->
         <Button
@@ -470,6 +511,43 @@
     font-weight: var(--weight-strong);
     display: grid;
     place-items: center;
+  }
+
+  .desk-budget {
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--text-xs);
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-muted);
+  }
+  .desk-budget-cap {
+    color: var(--ink-faint);
+  }
+  .desk-budget-bar {
+    display: block;
+    width: 48px;
+    height: 4px;
+    border-radius: var(--radius-pill);
+    background: var(--surface-field);
+    overflow: hidden;
+  }
+  .desk-budget-fill {
+    display: block;
+    height: 100%;
+    border-radius: var(--radius-pill);
+    background: var(--data-ok);
+    transition: width var(--motion-fast) var(--ease-toggle);
+  }
+  .desk-budget-fill.warn {
+    background: var(--data-warn);
+  }
+  .desk-budget-fill.critical {
+    background: var(--data-bad);
+  }
+  .desk-machines {
+    font-size: var(--text-xs);
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-muted);
   }
 
   .banner {

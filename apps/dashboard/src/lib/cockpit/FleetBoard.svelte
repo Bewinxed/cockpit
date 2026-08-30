@@ -28,6 +28,7 @@
   import AttentionQueue from '$lib/cockpit/AttentionQueue.svelte';
   import LiveSessionRow from '$lib/cockpit/LiveSessionRow.svelte';
   import MachineCard from '$lib/cockpit/MachineCard.svelte';
+  import StatTile from '$lib/cockpit/StatTile.svelte';
   import {
     cockpit,
     isFailed,
@@ -293,12 +294,6 @@
   const contextClass = (pct: number | null) =>
     pct === null ? '' : pct >= 90 ? 'bad' : pct >= 70 ? 'warn' : '';
 
-  // The stat tile IS the recessed-well signature: a shadcn Card (raised) whose
-  // body is a sunken hairline well — a number sits *in* something, never on it.
-  // tailwind-merge drops the stock bg-card / ring defaults.
-  const tileClass =
-    'h-full gap-0 overflow-visible rounded-[var(--radius-panel)] bg-[var(--surface-raised)] p-[var(--c-card-pad)] shadow-[var(--shadow-lifted)] ring-0';
-
   // The machine-convergence list, dressed the same as every other fleet panel's
   // raised list (FleetAgents.svelte / FleetMemory.svelte's own `panelList`):
   // a raised card at zero padding, each row drawing its own top hairline.
@@ -330,18 +325,8 @@
       </Button>
     </div>
 
-    {#snippet stat(label: string, value: string | number, unit?: string)}
-      <Card.Root class={tileClass}>
-        <div class="well">
-          <span class="k">{label}</span>
-          <span class="v">{value}</span>
-          {#if unit}<span class="u">{unit}</span>{/if}
-        </div>
-      </Card.Root>
-    {/snippet}
-
     <div class="stats">
-      {@render stat('Sessions', cockpit.runningInstances.length)}
+      <StatTile label="Sessions" value={String(cockpit.runningInstances.length)} />
 
       <!-- Needs you is not a readout. It names this surface's job, so it is the
            control that reaches it (DESIGN.md §Open questions): pressing it
@@ -363,21 +348,20 @@
           pageNo = 1;
         }}
       >
-        <Card.Root class={tileClass}>
-          <div class="well">
-            <span class="k">Needs you</span>
-            {#if hubLive}
-              <span class="v">{cockpit.blocked.length}</span>
-            {:else}
-              <span class="v unknown" title="Unknown while reconnecting">—</span>
-              <span class="u">unknown while reconnecting</span>
-            {/if}
-          </div>
-        </Card.Root>
+        <StatTile
+          label="Needs you"
+          value={hubLive ? String(cockpit.blocked.length) : '—'}
+          unit={hubLive ? undefined : 'unknown while reconnecting'}
+          tone="attn"
+        />
       </button>
 
-      {@render stat('Machines', cockpit.onlineMachines.length, `of ${cockpit.machines.length}`)}
-      {@render stat('Spend today', `$${spend.toFixed(2)}`)}
+      <StatTile
+        label="Machines"
+        value={String(cockpit.onlineMachines.length)}
+        unit="of {cockpit.machines.length}"
+      />
+      <StatTile label="Spend today" value={`$${spend.toFixed(2)}`} />
     </div>
 
     <!-- Every machine's convergence with the rest of the fleet (leaf C2 —
@@ -526,8 +510,7 @@
                   <Table.Cell>
                     <div class="nm">
                       <span
-                        class="mark"
-                        style="background-color: var(--mark-{row.hue});"
+                        class="mark m{row.hue}"
                         aria-hidden="true"
                       >
                         <HarnessGlyph harness={row.harness} />
@@ -686,19 +669,15 @@
     outline: 2px solid var(--ring);
     outline-offset: 2px;
   }
-  .attn-tile:hover .well,
-  .attn-tile[aria-pressed='true'] .well {
+  .attn-tile:hover :global(.st-well),
+  .attn-tile[aria-pressed='true'] :global(.st-well) {
     border-color: var(--status-attn-ink);
   }
-  .attn-tile[aria-pressed='true'] .well {
+  .attn-tile[aria-pressed='true'] :global(.st-well) {
     background: var(--status-attn-bg);
   }
-  .attn-tile[aria-pressed='true'] .v {
+  .attn-tile[aria-pressed='true'] :global(.st-value) {
     color: var(--status-attn-ink);
-  }
-  /* An unread count is muted: it is an absence of knowledge, not a number. */
-  .v.unknown {
-    color: var(--ink-muted);
   }
   @media (prefers-reduced-motion: reduce) {
     .attn-tile,
@@ -708,35 +687,6 @@
     }
   }
 
-  /* the recessed well inside each raised stat card */
-  .well {
-    background: var(--surface-field);
-    border: 1px solid var(--border-hairline);
-    border-radius: var(--radius-well);
-    padding: var(--c-card-pad);
-    display: flex;
-    flex-direction: column;
-    gap: var(--c-card-gap);
-    justify-content: center;
-    flex: 1 1 auto;
-    min-height: 0;
-  }
-  .k {
-    color: var(--ink-label);
-    font-size: var(--text-sm);
-    font-weight: var(--weight-medium);
-  }
-  .v {
-    font-size: var(--text-3xl);
-    font-weight: var(--weight-strong);
-    line-height: var(--leading-numeric);
-    color: var(--ink-strong);
-    font-variant-numeric: tabular-nums;
-  }
-  .u {
-    color: var(--ink-muted);
-    font-size: var(--text-sm);
-  }
 
   /* The wrapper is layout-transparent, so an empty queue leaves no gap behind:
      the spacing belongs to the card, which only exists when something waits. */
@@ -877,6 +827,7 @@
     display: grid;
     place-items: center;
     background-image: var(--mark-overlay);
+    background-color: var(--mark-1);
   }
   .mark :global(svg) {
     width: var(--c-mark-glyph);
@@ -884,6 +835,13 @@
     display: block;
     color: var(--mark-glyph);
   }
+  .mark.m2 { background-color: var(--mark-2); }
+  .mark.m3 { background-color: var(--mark-3); }
+  .mark.m4 { background-color: var(--mark-4); }
+  .mark.m5 { background-color: var(--mark-5); }
+  .mark.m6 { background-color: var(--mark-6); }
+  .mark.m7 { background-color: var(--mark-7); }
+  .mark.m8 { background-color: var(--mark-8); }
 
   .nm {
     display: flex;
@@ -960,9 +918,6 @@
     .stats {
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: var(--space-3);
-    }
-    .v {
-      font-size: var(--text-2xl);
     }
     .bar {
       flex-wrap: wrap;

@@ -337,11 +337,14 @@
   --shadow-inset-sel: inset 0 1px 1px var(--shadow-tint);
   --shadow-action:    inset 0 -1px 0 var(--brand-edge), 0 1px 2px var(--shadow-tint-2);
 
-  /* type — one superfamily, rem scale (WCAG 1.4.4 resize) */
+  /* type — one superfamily, rem scale (WCAG 1.4.4 resize).
+     Floor: --text-xs never below 11px, --text-sm never below 12.5px.
+     The FlowAI reference body is 14px; --text-md (body copy) sits at 15px,
+     --text-base (caption/compact data) at 13.5px. */
   --font-body:    'Geist Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-display: var(--font-body);
-  --text-xs: 0.640625rem; --text-sm: 0.71875rem; --text-base: 0.8125rem; --text-md: 0.90625rem;
-  --text-lg: 1.03125rem; --text-xl: 1.15625rem; --text-2xl: 1.296875rem; --text-3xl: 1.46875rem; --text-4xl: 1.640625rem;
+  --text-xs: 0.6875rem; --text-sm: 0.78125rem; --text-base: 0.84375rem; --text-md: 0.9375rem;
+  --text-lg: 1.0625rem; --text-xl: 1.1875rem; --text-2xl: 1.3125rem; --text-3xl: 1.5rem; --text-4xl: 1.6875rem;
   --leading-tight: 1.2; --leading-body: 1.4; --leading-ui: 1.25; --leading-numeric: 1;
   --weight-body: 400; --weight-medium: 450; --weight-strong: 500;
   --track-display: -0.008em; --track-body: 0em; --track-caps: 0.01em;
@@ -364,7 +367,7 @@
   /* component dimension ramp. */
   --c-btn-h: 44px; --c-btn-pad: 16px; --c-btn-gap: 8px; --c-btn-fs: 14.5px;
   --c-mark: 26px; --c-mark-glyph: 14px;
-  --c-pill-h: 24px; --c-pill-gap: 6px; --c-pill-fs: 11.5px;
+  --c-pill-h: 24px; --c-pill-gap: 6px; --c-pill-fs: var(--text-sm);
   --c-nav-h: 40px; --c-card-pad: 14px; --c-card-gap: 10px;
 }
 
@@ -534,7 +537,7 @@
 
   body {
     @apply bg-background text-foreground;
-    font-size: var(--text-md); /* 14.5px — DESIGN.md body copy / nav step */
+    font-size: var(--text-md); /* 15px — DESIGN.md body copy / nav step */
     line-height: var(--leading-body);
   }
 
@@ -586,20 +589,20 @@
 }
 
 @utility text-body {
-  font-size: var(--text-md); /* 14.5px — body copy */
+  font-size: var(--text-md); /* 15px — body copy */
   line-height: var(--leading-body);
   letter-spacing: var(--track-body);
 }
 
 @utility text-caption {
-  font-size: var(--text-base); /* 13px — the anchor step */
+  font-size: var(--text-base); /* 13.5px — the anchor step */
   line-height: var(--leading-body);
   letter-spacing: var(--track-caps);
   color: var(--muted-foreground);
 }
 
 @utility text-micro {
-  font-size: var(--text-sm); /* 11.5px — section labels / chips step */
+  font-size: var(--text-sm); /* 12.5px — section labels / chips step */
   line-height: var(--leading-ui);
   letter-spacing: var(--track-caps);
 }
@@ -846,6 +849,57 @@
 ::view-transition-new(instance-*) {
   animation-duration: 240ms;
   animation-timing-function: var(--e-toggle);
+}
+
+/* ---- Coarse pointer (touch) relaxation ---------------------------------
+   The comps are desktop-only. Compact density is a fine-pointer affordance;
+   under pointer:coarse or narrow viewports, interactive rows grow to the
+   44×44px touch minimum (WCAG 2.5.8) and text floors at readable sizes.
+   This is the overhaul plan's stated rule: "compact is a fine-pointer
+   affordance only."  */
+@media (pointer: coarse) {
+  :root {
+    --c-nav-h: 44px;
+    --c-btn-h: 48px;
+    --c-pill-h: 28px;
+    --c-mark: 30px;
+    --text-xs: 0.75rem;    /* 12px floor on touch */
+    --text-sm: 0.8125rem;  /* 13px floor on touch */
+  }
+
+  /* Ensure all tappable elements meet the 44px minimum */
+  button, a, [role="button"], [role="tab"], [role="menuitem"],
+  input:not([type="hidden"]), select, textarea, summary {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Except inline links inside prose — those flow with text */
+  .prose a, p a, li a, span a {
+    min-height: unset;
+    min-width: unset;
+  }
+
+  /* Icon-only buttons get padding to meet the target without stretching visually */
+  button:has(> svg:only-child),
+  a:has(> svg:only-child) {
+    padding: 10px;
+    min-height: 44px;
+    min-width: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+}
+
+/* Small viewports also get the relaxation even with a fine pointer (laptop trackpads
+   on narrow windows still benefit from larger targets). */
+@media (max-width: 639px) {
+  :root {
+    --c-nav-h: 44px;
+    --text-xs: 0.75rem;
+    --text-sm: 0.8125rem;
+  }
 }
 
 /* Reduced motion: comprehension keeps its cross-fades, nothing travels. What
