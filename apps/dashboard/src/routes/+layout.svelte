@@ -33,71 +33,38 @@
    */
   const SESSION = /^\/session(\/|$)/;
 
-  /** Spoke order — the sidebar nav's top-to-bottom sequence. Position in this
-   *  array determines animation direction: navigating to a higher index slides
-   *  the old content left (you moved "down"), lower index slides right ("up").
-   *  Like iOS Settings or a tab controller where position drives direction. */
-  const SPOKE_ORDER = ['session', 'tools', 'rules', 'hooks', 'delegates', 'usage'];
+  /** Top-level spokes — clicking between these is instant. */
+  const SPOKE = /^\/(session|tools|rules|hooks|delegates|usage)\/?$/;
 
-  function spokeIndex(pathname: string): number {
-    const seg = pathname.split('/').filter(Boolean)[0] || 'session';
-    return SPOKE_ORDER.indexOf(seg);
-  }
-
-  // View transitions with directional awareness.
-  // - Session tab switches: skip (panes are already mounted)
-  // - Spoke navigation: directional slide (position in sidebar determines direction)
-  // - Drill-in/out: forward/back slide
-  // - Mobile gestures: push animation (data-nav already set)
+  // Only animate what needs animating.
+  // - Sidebar nav (spoke ↔ spoke): instant. No transition.
+  // - Session tab switches: instant here; the pane crossfade is CSS in session/+layout.
+  // - Same-page param changes (?tab=): instant.
+  // - Drill-in (Fleet → Session/[id]): subtle 100ms opacity fade.
+  // - Mobile gesture swipes: keep the push (data-nav already set by gesture handler).
   onNavigate((navigation) => {
     if (!document.startViewTransition) return;
+    if (!navigation.from || !navigation.to) return;
 
-    // Same-page param changes: no transition. Covers any page that updates
-    // query params without changing the route.
-    if (
-      navigation.from &&
-      navigation.to &&
-      navigation.from.url.pathname === navigation.to.url.pathname
-    ) {
-      return;
-    }
+    const from = navigation.from.url.pathname;
+    const to = navigation.to.url.pathname;
 
-    // Session tab switches: no transition — panes are visibility-toggled.
-    if (
-      !document.documentElement.dataset.nav &&
-      navigation.from &&
-      navigation.to &&
-      SESSION.test(navigation.from.url.pathname) &&
-      SESSION.test(navigation.to.url.pathname)
-    ) {
-      return;
-    }
+    // Same page, different params — instant.
+    if (from === to) return;
 
-    if (document.hidden) {
-      delete document.documentElement.dataset.nav;
-      return;
-    }
+    // Session tab switches — instant (panes handle their own crossfade).
+    if (!document.documentElement.dataset.nav && SESSION.test(from) && SESSION.test(to)) return;
+
+    // Spoke ↔ spoke — instant.
+    if (!document.documentElement.dataset.nav && SPOKE.test(from) && SPOKE.test(to)) return;
+
+    // Hidden or reduced motion — instant.
+    if (document.hidden) { delete document.documentElement.dataset.nav; return; }
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      delete document.documentElement.dataset.nav;
-      return;
+      delete document.documentElement.dataset.nav; return;
     }
 
-    // Determine direction from navigation context.
-    if (!document.documentElement.dataset.nav && navigation.from && navigation.to) {
-      const fromIdx = spokeIndex(navigation.from.url.pathname);
-      const toIdx = spokeIndex(navigation.to.url.pathname);
-
-      if (fromIdx >= 0 && toIdx >= 0 && fromIdx !== toIdx) {
-        // Lateral spoke navigation — direction from sidebar position.
-        document.documentElement.dataset.nav = toIdx > fromIdx ? 'next' : 'prev';
-      } else {
-        // Drill-in (adding depth) vs drill-out (removing depth).
-        const fromDepth = navigation.from.url.pathname.split('/').filter(Boolean).length;
-        const toDepth = navigation.to.url.pathname.split('/').filter(Boolean).length;
-        document.documentElement.dataset.nav = toDepth >= fromDepth ? 'next' : 'prev';
-      }
-    }
-
+    // Everything else (drill-in, drill-out, mobile gesture): animate.
     return new Promise((resolve) => {
       const transition = document.startViewTransition(async () => {
         resolve();

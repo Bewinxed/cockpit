@@ -792,68 +792,42 @@
   animation: none;
 }
 
-/* Directional view transitions — position in the sidebar determines direction.
-   Navigating "down" (Fleet → Tools) slides old content left, new content from
-   right. Navigating "up" (Tools → Fleet) reverses. Like iOS Settings or a
-   native tab controller where spatial position drives the animation.
-
-   On desktop the slide is subtle (6%) and fast (150ms) — enough to signal
-   direction without feeling like a page load. On mobile the gesture is
-   larger (18%) and slower (200ms) because the thumb drives it. */
-
-/* Default: forward / "next" direction */
+/* View transitions — only for drill-in/out and mobile gestures.
+   Sidebar nav and tab switches are instant (skipped in onNavigate).
+   When a transition does run, it's a fast opacity crossfade — no slide. */
 ::view-transition-old(root) {
-  animation: 150ms cubic-bezier(0.32, 0.72, 0, 1) both vt-slide-out;
+  animation: 100ms cubic-bezier(0.32, 0.72, 0, 1) both vt-fade-out;
 }
 ::view-transition-new(root) {
-  animation: 150ms cubic-bezier(0.32, 0.72, 0, 1) both vt-slide-in;
+  animation: 100ms cubic-bezier(0.32, 0.72, 0, 1) both vt-fade-in;
 }
 
-/* Backward / "prev" direction */
-html[data-nav='prev'] ::view-transition-old(root) {
-  animation-name: vt-slide-out-back;
+@keyframes vt-fade-out {
+  to   { opacity: 0; }
 }
-html[data-nav='prev'] ::view-transition-new(root) {
-  animation-name: vt-slide-in-back;
-}
-
-/* Forward: old exits left, new enters from right */
-@keyframes vt-slide-out {
-  to   { transform: translateX(-6%); opacity: 0; }
-}
-@keyframes vt-slide-in {
-  from { transform: translateX(6%); opacity: 0; }
+@keyframes vt-fade-in {
+  from { opacity: 0; }
 }
 
-/* Backward: old exits right, new enters from left */
-@keyframes vt-slide-out-back {
-  to   { transform: translateX(6%); opacity: 0; }
-}
-@keyframes vt-slide-in-back {
-  from { transform: translateX(-6%); opacity: 0; }
-}
-
-/* Mobile: larger travel distance for thumb-driven gestures */
+/* Mobile gesture swipes keep the directional push. */
 @media (max-width: 767px) {
-  ::view-transition-old(root) {
-    animation-duration: 200ms;
+  html[data-nav] ::view-transition-old(root) {
+    animation: 200ms cubic-bezier(0.32, 0.72, 0, 1) both vt-push-out;
   }
-  ::view-transition-new(root) {
-    animation-duration: 200ms;
+  html[data-nav] ::view-transition-new(root) {
+    animation: 200ms cubic-bezier(0.32, 0.72, 0, 1) both vt-push-in;
   }
-  @keyframes vt-slide-out {
-    to   { transform: translateX(-18%); opacity: 0; }
+  html[data-nav='prev'] ::view-transition-old(root) {
+    animation-name: vt-push-out-back;
   }
-  @keyframes vt-slide-in {
-    from { transform: translateX(18%); opacity: 0; }
-  }
-  @keyframes vt-slide-out-back {
-    to   { transform: translateX(18%); opacity: 0; }
-  }
-  @keyframes vt-slide-in-back {
-    from { transform: translateX(-18%); opacity: 0; }
+  html[data-nav='prev'] ::view-transition-new(root) {
+    animation-name: vt-push-in-back;
   }
 }
+@keyframes vt-push-out      { to   { transform: translateX(-18%); opacity: 0; } }
+@keyframes vt-push-in       { from { transform: translateX(18%);  opacity: 0; } }
+@keyframes vt-push-out-back { to   { transform: translateX(18%);  opacity: 0; } }
+@keyframes vt-push-in-back  { from { transform: translateX(-18%); opacity: 0; } }
 
 /* Card → header morphs share one soft curve. */
 ::view-transition-old(instance-*),
