@@ -646,6 +646,11 @@ export class PiHarness implements Harness {
     const memory = await syncMemory(PI_MEMORY, config.memory, sidecar.memory, report);
 
     await writeJson(PI_SIDECAR, { skills, ...(memory ? { memory } : {}) });
+    // pi keeps its OWN copy of the skills, so it has to make its own claim: the
+    // hub leaves bytes out only when every harness that converges them says it
+    // already has that hash, and a harness that stays silent is one the fleet
+    // would quietly stop sending content to.
+    report.have = { skills };
     return report;
   }
 
@@ -668,6 +673,9 @@ export class PiHarness implements Harness {
       const hash = (await file.exists()) ? hashText(await file.text()) : null;
       report.memory = hash === sidecar.memory ? { state: 'applied' } : { state: 'failed', detail: hash === null ? 'not on disk' : 'edited on this machine' };
     }
+    // The same claim the sync makes, from the sidecar it already read: a status
+    // that stayed silent would retract it and cost a full resend.
+    report.have = { skills: sidecar.skills };
     return report;
   }
 }

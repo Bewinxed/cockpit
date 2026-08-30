@@ -252,6 +252,26 @@ export const resumableSessions = async (): Promise<string[] | undefined> => {
 /**
  * Owns every live session on this machine and pumps their messages at the hub.
  */
+/**
+ * What EVERY claimant agrees this machine holds, by hash.
+ *
+ * Intersected, never unioned: more than one harness converges the fleet's
+ * skills, into more than one directory, so a hash one of them holds is not a
+ * hash the machine holds. The hub leaves content out on the strength of this,
+ * and the cost of being wrong is a harness stranded without files it needs.
+ *
+ * No claimants agree on nothing, which is the honest answer for a daemon whose
+ * harnesses do not report what they hold: it is then sent everything, exactly
+ * as it was before any of them could say.
+ */
+export const agreedHashes = (claims: Record<string, string>[]): Record<string, string> => {
+  const [first, ...rest] = claims;
+  if (!first) return {};
+  return Object.fromEntries(
+    Object.entries(first).filter(([name, hash]) => rest.every((claim) => claim[name] === hash))
+  );
+};
+
 export class SessionSupervisor {
   readonly #sessions = new Map<string, HarnessSession>();
   /** Outlives its session: a discard can arrive after the query already ended. */
@@ -922,11 +942,30 @@ export class SessionSupervisor {
     config: FleetConfig | undefined,
     which: 'syncFleet' | 'fleetStatus'
   ): Promise<FleetSyncReport> {
+    type State = import('@cockpit/core').FleetItemState;
     const mcp: FleetSyncReport['mcp'] = {};
     const marketplaces: FleetSyncReport['marketplaces'] = {};
     const plugins: FleetSyncReport['plugins'] = {};
-    const skills: Record<string, import('@cockpit/core').FleetItemState> = {};
+    const skills: Record<string, State> = {};
+    // Merged rather than dropped. This rebuilds the machine's one word from
+    // each harness's, and every field it does not name is a field the hub never
+    // hears about — which is how the memory documents, the memory hook, the
+    // hooks and (once it existed) `have` all went missing between a daemon that
+    // reported them and a hub that had nowhere to read them from.
+    const memoryDocs: Record<string, State> = {};
+    const hooks: Record<string, State> = {};
+    // One set per harness that converges the thing, INTERSECTED below — never
+    // unioned. Skills are written by more than one harness into more than one
+    // directory (claude's `~/.claude/skills`, pi's own), so a hash one of them
+    // holds is not a hash the machine holds: leaving those bytes out would
+    // strand every harness that still needs them. A harness that converges none
+    // reports no set and is not counted, which is why opencode — which reads
+    // claude's directory rather than keeping its own — does not veto every
+    // skill on the machine.
+    const skillClaims: Record<string, string>[] = [];
+    const pluginClaims: Record<string, string>[] = [];
     let memory: FleetSyncReport['memory'];
+    let memoryHook: FleetSyncReport['memoryHook'];
     for (const adapter of harnesses()) {
       const apply = which === 'syncFleet' ? adapter.syncFleet : adapter.fleetStatus;
       if (!apply) continue;
@@ -936,12 +975,28 @@ export class SessionSupervisor {
         Object.assign(marketplaces, report.marketplaces);
         Object.assign(plugins, report.plugins);
         Object.assign(skills, report.skills ?? {});
+        Object.assign(memoryDocs, report.memoryDocs ?? {});
+        Object.assign(hooks, report.hooks ?? {});
+        if (report.have?.skills) skillClaims.push(report.have.skills);
+        if (report.have?.plugins) pluginClaims.push(report.have.plugins);
         if (report.memory) memory = report.memory;
+        if (report.memoryHook) memoryHook = report.memoryHook;
       } catch (error) {
         warn(`${which} on ${adapter.kind} failed: ${error}`);
       }
     }
-    return { mcp, marketplaces, plugins, skills, ...(memory ? { memory } : {}), at: Date.now() };
+    return {
+      mcp,
+      marketplaces,
+      plugins,
+      skills,
+      memoryDocs,
+      hooks,
+      ...(memory ? { memory } : {}),
+      ...(memoryHook ? { memoryHook } : {}),
+      have: { skills: agreedHashes(skillClaims), plugins: agreedHashes(pluginClaims) },
+      at: Date.now(),
+    };
   }
 
   async #call(
