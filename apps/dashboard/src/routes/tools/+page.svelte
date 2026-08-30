@@ -31,7 +31,6 @@
     IconHookDuo,
   } from '$lib/icons';
   import { page } from '$app/state';
-  import { goto } from '$app/navigation';
   import type { PageData } from './$types';
 
   let { data }: { data: PageData } = $props();
@@ -77,9 +76,9 @@
   const activeTab = $derived(page.url.searchParams.get('tab') ?? 'tools');
 
   function switchTab(value: string) {
-    const url = new URL(page.url);
+    const url = new URL(location.href);
     url.searchParams.set('tab', value);
-    goto(url.toString(), { noScroll: true, replaceState: true });
+    history.replaceState(history.state, '', url);
   }
 
   /* Dress shadcn Card as the Quiet Ledger raised panel (--surface-raised,

@@ -52,10 +52,8 @@
   onNavigate((navigation) => {
     if (!document.startViewTransition) return;
 
-    // Same-page param changes (e.g. ?tab= on /tools): no transition.
-    // Switching tabs within a page is not navigation — it's the same surface
-    // showing a different panel. Animating it makes a tab click feel like
-    // a page reload.
+    // Same-page param changes: no transition. Covers any page that updates
+    // query params without changing the route.
     if (
       navigation.from &&
       navigation.to &&
