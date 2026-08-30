@@ -1,6 +1,6 @@
 <script lang="ts">
   import { toast } from 'svelte-sonner';
-  import type { FleetConfig, FleetSkillMeta, MarketplacePluginInfo } from '@cockpit/core';
+  import type { FleetConfig, FleetPlugin, FleetSkillMeta, MarketplacePluginInfo } from '@cockpit/core';
   import { IconPlus, IconRefresh, IconSearch, IconTrash, IconWarningTriangle } from '$lib/icons';
   import * as Alert from '$lib/components/ui/alert';
   import { Button } from '$lib/components/ui/button';
@@ -11,7 +11,7 @@
   import { confirm } from './confirm.svelte';
   import type { Machine } from './client.svelte';
   import {
-    catalogHost, formatBytes, marketplaceCatalog, refreshSkill,
+    catalogHost, formatBytes, marketplaceCatalog, refreshPlugin, refreshSkill,
     removeMarketplace, removePlugin, removeSkill, savePlugin, saveSkill,
   } from './fleet';
   import FleetStatusStrip from './FleetStatusStrip.svelte';
@@ -40,6 +40,9 @@
   const panelList = 'gap-0 overflow-hidden rounded-[var(--radius-panel)] border-0 bg-[var(--surface-raised)] p-0 shadow-[var(--shadow-lifted)] ring-1 ring-[var(--border-hairline)]';
   const panelPad = 'gap-[var(--space-3)] rounded-[var(--radius-panel)] border-0 bg-[var(--surface-raised)] p-[var(--space-6)] shadow-[var(--shadow-lifted)] ring-1 ring-[var(--border-hairline)]';
   const warnAlert = 'items-center rounded-[var(--radius-control)] border-[var(--warning-9)] bg-[var(--warning-3)] p-[var(--space-3)] [&>svg]:text-[var(--warning-11)]';
+  // A hub-side failure is not the amber a machine's is: nothing downstream of
+  // it can be fixed until it is, so it wears the fail tint.
+  const failAlert = 'items-center rounded-[var(--radius-control)] border-[var(--status-fail-ink)] bg-[var(--status-fail-bg)] p-[var(--space-3)] [&>svg]:text-[var(--status-fail-ink)]';
 
   function landed(row: FleetSkillMeta) {
     const at = skills.findIndex((other) => other.name === row.name);
@@ -63,6 +66,24 @@
       else toast.info(`${row.name} is already current.`);
     } catch (error) { toast.error(message(error)); }
     finally { delete working[row.name]; }
+  }
+
+  /**
+   * Re-resolve a plugin's bytes at the hub. The mirror of a skill's Retry, and
+   * the answer to the failure that had no affordance at all: a plugin the hub
+   * could not fetch never reached a machine, so nothing a machine is asked to
+   * do can help it.
+   */
+  async function refetch(row: FleetPlugin) {
+    busy[row.id] = true;
+    try {
+      const next = await refreshPlugin(row.id);
+      const at = config.plugins.findIndex((other) => other.id === row.id);
+      if (at !== -1) config.plugins[at] = next;
+      if (next.error) toast.error(next.error);
+      else toast.success(`${row.id} fetched — the machines get the files.`);
+    } catch (error) { toast.error(message(error)); }
+    finally { delete busy[row.id]; }
   }
 
   async function forget(row: FleetSkillMeta) {
@@ -232,7 +253,10 @@
             {#if row.error}
               <Alert.Root class={warnAlert}>
                 <IconWarningTriangle />
-                <Alert.Description class="font-mono text-micro text-[var(--warning-11)]">{row.error}</Alert.Description>
+                <Alert.Description class="flex flex-col gap-1">
+                  <span class="text-caption text-[var(--warning-11)]">The hub could not fetch this skill, so no machine has it.</span>
+                  <span class="font-mono text-micro text-[var(--warning-11)]">{row.error}</span>
+                </Alert.Description>
                 <Alert.Action>
                   <Button variant="outline" size="xs" class="shrink-0" disabled={working[row.name] === true} onclick={() => refresh(row)}>
                     {working[row.name] ? 'Retrying…' : 'Retry'}
@@ -361,7 +385,18 @@
         {#each config.plugins as row (row.id)}
           <li class="group flex flex-col gap-[var(--space-2)] border-t border-[var(--border-hairline)] p-[var(--space-4)] first:border-t-0">
             <div class="flex items-start gap-[var(--space-3)]">
-              <span class="min-w-0 flex-1 truncate font-mono text-caption">{row.id}</span>
+              <span class="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2">
+                <span class="truncate font-mono text-caption">{row.id}</span>
+                <!-- What the hub resolved this to, the same three facts a skill
+                     row shows. A plugin with neither is one no machine has been
+                     handed bytes for. -->
+                {#if row.bytes !== undefined}
+                  <span class="shrink-0 text-micro text-muted-foreground">{formatBytes(row.bytes)}</span>
+                {/if}
+                {#if row.hash}
+                  <span class="shrink-0 font-mono text-micro text-muted-foreground" title={row.hash}>{row.hash.slice(0, 7)}</span>
+                {/if}
+              </span>
               <Tooltip.Root>
                 <Tooltip.Trigger>
                   {#snippet child({ props })}
@@ -387,6 +422,24 @@
                 </Tooltip.Root>
               </span>
             </div>
+            <!-- A hub-side resolve failure, which is a different fault from a
+                 machine refusing to apply it: this one never reached a machine
+                 at all, so the chips below would say nothing about it. -->
+            {#if row.error}
+              <Alert.Root class={failAlert}>
+                <IconWarningTriangle />
+                <Alert.Description class="flex flex-col gap-1">
+                  <span class="text-caption text-[var(--status-fail-ink)]">The hub could not fetch this plugin, so no machine has it.</span>
+                  <span class="font-mono text-micro text-[var(--status-fail-ink)]">{row.error}</span>
+                </Alert.Description>
+                <Alert.Action>
+                  <Button variant="outline" size="xs" class="shrink-0" disabled={busy[row.id] === true} onclick={() => refetch(row)}>
+                    {busy[row.id] ? 'Fetching…' : 'Fetch again'}
+                  </Button>
+                </Alert.Action>
+              </Alert.Root>
+            {/if}
+
             {#if machines.length === 0 && settling}
               <Skeleton class="h-5 w-40 rounded-full" />
             {:else if machines.length === 0}

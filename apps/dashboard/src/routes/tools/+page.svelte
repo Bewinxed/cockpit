@@ -19,6 +19,7 @@
   import FleetMcp from '$lib/cockpit/FleetMcp.svelte';
   import FleetMemory from '$lib/cockpit/FleetMemory.svelte';
   import FleetSkills from '$lib/cockpit/FleetSkills.svelte';
+  import FleetTrouble from '$lib/cockpit/FleetTrouble.svelte';
   import ToolMatrix from '$lib/cockpit/ToolMatrix.svelte';
   import { orderMachines } from '$lib/cockpit/rail.svelte';
   import type { PageData } from './$types';
@@ -108,6 +109,20 @@
       {@render stat('Hooks', hooks.length)}
       {@render stat('Machines online', online, `of ${machines.length}`)}
     </section>
+
+    <!-- The index of what is wrong, above every panel that lists what the fleet
+         carries: the operator's first question on this page is not "what do we
+         have" but "did it land". It is also where the fleet board's failed-sync
+         badge lands, because the explanation and the retry are both here. -->
+    <Card.Root id="fleet-trouble" class="scroll-mt-6 {panelClass}">
+      <header class="phead">
+        <h2>Needs attention</h2>
+        <span class="psub">Everything the fleet could not fetch or could not apply</span>
+      </header>
+      <div class="pbody">
+        <FleetTrouble {machines} {skills} plugins={config.plugins} {settling} />
+      </div>
+    </Card.Root>
 
     <Card.Root class={panelClass}>
       <header class="phead">

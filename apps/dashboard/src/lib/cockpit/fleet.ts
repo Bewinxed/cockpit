@@ -321,6 +321,15 @@ export const removePlugin = (id: string): Promise<void> =>
   erase(`/api/fleet/plugins/${encodeURIComponent(id)}`, `remove ${id}`);
 
 /**
+ * Resolves a plugin's bytes at the hub again — the answer to a plugin the hub
+ * could not fetch, and to a machine that could not fetch it for itself. Comes
+ * back with the row, `error` and all, so a retry that failed again says so
+ * without a reload.
+ */
+export const refreshPlugin = (id: string): Promise<FleetPlugin> =>
+  send(`/api/fleet/plugins/${encodeURIComponent(id)}/refresh`, { method: 'POST' }, `refresh ${id}`);
+
+/**
  * Stores a skill and resolves it on the hub, once, for every machine. A source
  * the hub could not resolve still answers with a row — the failure is the row's
  * to carry, not this call's to throw.

@@ -361,6 +361,14 @@ export interface DbShape {
   }) => void;
   /** Enabled plugins with no resolved files and no recorded failure — what a resolve is for. */
   readonly unresolvedPlugins: () => string[];
+  /**
+   * Every plugin row without its files, `error` and all. What the DASHBOARD
+   * reads: {@link fleetConfig} answers the machines and deliberately carries
+   * neither the bookkeeping nor the failure, so a plugin the hub could not
+   * fetch was until now a row nothing on the page could tell apart from one
+   * that resolved.
+   */
+  readonly listPlugins: () => FleetPlugin[];
   /** Every skill row without its files — a catalog read should not weigh megabytes. */
   readonly listSkills: () => FleetSkillMeta[];
   /** Upsert of a resolve's outcome: the files it read, or the sentence it failed with. */
@@ -1222,6 +1230,24 @@ const make = (path: string): DbShape => {
         .where(eq(plugins.enabled, true))
         .all()
         .flatMap(({ id, hash, error }) => (hash || error ? [] : [id])),
+    listPlugins: () =>
+      db
+        .select({
+          id: plugins.id,
+          enabled: plugins.enabled,
+          hash: plugins.hash,
+          bytes: plugins.bytes,
+          error: plugins.error,
+        })
+        .from(plugins)
+        .all()
+        .map(({ id, enabled, hash, bytes, error }) => ({
+          id,
+          enabled,
+          ...(hash ? { hash } : {}),
+          ...(bytes === null ? {} : { bytes }),
+          ...(error ? { error } : {}),
+        })),
     putPlugin: ({ id, enabled }) => {
       const plugin: FleetPlugin = { id, enabled: enabled ?? true };
       db.insert(plugins)

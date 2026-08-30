@@ -15,6 +15,8 @@
   import type { Machine } from './client.svelte';
   import { adoptMemory, adoptMemoryDoc, formatBytes, memoryHistory, memoryVersion, peekMemory, pushMemory, removeMemory, removeMemoryDoc, restoreMemory, saveMemory, saveMemoryDoc, type FleetMemoryDocRow, type FleetMemoryRow, type FleetMemoryVersion } from './fleet';
   import { machineLabel } from './machine';
+  import FleetFault from './FleetFault.svelte';
+  import { causeOf } from './fleet-faults';
 
   let { memory = $bindable(), docs = $bindable(), machines, settling, error }: {
     memory: FleetMemoryRow | null; docs: FleetMemoryDocRow[]; machines: Machine[]; settling: boolean; error: string | null;
@@ -46,6 +48,14 @@
   const warnAlert = 'items-center rounded-[var(--radius-control)] border-[var(--warning-9)] bg-[var(--warning-3)] p-[var(--space-3)] [&>svg]:text-[var(--warning-11)]';
 
   const bytes = $derived(memory ? new TextEncoder().encode(memory.content).length : 0);
+  /**
+   * Machines whose model-memory hook did not register. Until now this had no
+   * renderer anywhere: a `memoryHook` stuck `failed` meant the SessionStart hook
+   * that puts `models/<model>.md` in front of the right session was not running,
+   * and nothing on any page said so — the documents below would read as
+   * perfectly in sync while nothing was loading them.
+   */
+  const hookFailed = $derived(machines.filter((row) => row.fleet?.memoryHook?.state === 'failed'));
   const applied = $derived(machines.filter((row) => row.fleet?.memory?.state === 'applied'));
   const drifted = $derived(machines.filter((row) => row.fleet?.memory?.state === 'failed'));
   const asleep = $derived(applied.filter((row) => row.status !== 'online'));
@@ -403,6 +413,28 @@
       <IconPlus class="shrink-0" />
       New document
     </Button>
+  {/if}
+
+  {#if hookFailed.length > 0}
+    <div class="flex flex-col gap-[var(--space-2)]">
+      <p class="max-w-prose text-caption text-muted-foreground">
+        The documents above are put in front of a session by a SessionStart hook cockpit registers.
+        Where it did not register, the files are on the machine and nothing reads them.
+      </p>
+      {#each hookFailed as machine (machine.machineId)}
+        {@const item = machine.fleet!.memoryHook!}
+        <FleetFault
+          {machines}
+          group={{
+            origin: 'machine',
+            cause: causeOf(item.detail),
+            scope: 'memoryHook',
+            machineId: machine.machineId,
+            faults: [{ origin: 'machine', scope: 'memoryHook', key: '', machineId: machine.machineId, detail: item.detail, cause: causeOf(item.detail) }],
+          }}
+        />
+      {/each}
+    </div>
   {/if}
 
   {#if historyOpen}

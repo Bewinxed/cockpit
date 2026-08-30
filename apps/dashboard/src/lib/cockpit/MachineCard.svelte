@@ -17,11 +17,10 @@
     buildConvergence,
     deployInfoOf,
     fleetSyncAgeMs,
-    fleetSyncFailures,
     isDeployDiverged,
-    SYNC_FAILURE_ANCHOR,
     type DeployKind,
   } from './convergence';
+  import { CAUSE, machineFaults } from './fleet-faults';
   import { formatDistanceToNow } from '$lib/utils/time';
   import type { Machine } from './client.svelte';
   import { machineLabel } from './machine';
@@ -31,7 +30,7 @@
 
   const online = $derived(machine.status === 'online');
   const build = $derived(buildConvergence(machine.build, hubBuild));
-  const failures = $derived(fleetSyncFailures(machine.fleet));
+  const failures = $derived(machineFaults(machine.machineId, machine.fleet));
   const syncAge = $derived(fleetSyncAgeMs(machine.fleet));
   // Structural read (convergence.ts's own doc): `deploy` does not exist on
   // AgentRow yet, so this is `undefined` on every board today and lights up
@@ -139,7 +138,10 @@
       <Tooltip.Root>
         <Tooltip.Trigger>
           {#snippet child({ props })}
-            <a {...props} href="/tools#{SYNC_FAILURE_ANCHOR[first.category]}" class={warnPill}>
+            <!-- Lands on the "Needs attention" panel, not on the panel that
+                 lists the row: what the reader needs first is what broke and
+                 why, and that is where both live. -->
+            <a {...props} href="/tools#fleet-trouble" class={warnPill}>
               <IconWarningTriangle class="size-3" />
               Fleet sync failed{failures.length > 1 ? ` (${failures.length})` : ''}
             </a>
@@ -147,7 +149,10 @@
         </Tooltip.Trigger>
         <Tooltip.Content class="max-w-72">
           <div class="flex flex-col gap-1">
-            <span>{first.detail ?? `${first.category} could not be applied.`}</span>
+            <!-- The named cause, not the raw string: `unknown option
+                 '--scope'` in a tooltip is what sent an operator to a terminal
+                 for an afternoon. -->
+            <span>{CAUSE[first.cause].title}.</span>
             {#if syncAge !== undefined}
               <span class="text-micro opacity-80">
                 Last synced {formatDistanceToNow(new Date(Date.now() - syncAge))} — resolve on Tools.

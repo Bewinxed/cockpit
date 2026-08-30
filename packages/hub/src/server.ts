@@ -2102,9 +2102,14 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
     // a definition is a page of markdown, and an editor that has to fetch each
     // one again is a round trip for nothing.
     .get('/api/fleet', () => {
-      const { mcp, marketplaces, plugins } = db.fleetConfig();
+      const { mcp, marketplaces } = db.fleetConfig();
       return {
-        config: { mcp, marketplaces, plugins },
+        // The plugins come from `listPlugins`, not from `fleetConfig`: the
+        // config is what a MACHINE is sent, and it carries neither the hash a
+        // resolve produced nor the sentence a failed one left. The dashboard
+        // needs both — a plugin the hub could not fetch and a plugin a machine
+        // would not install are different faults with different fixes.
+        config: { mcp, marketplaces, plugins: db.listPlugins() },
         skills: db.listSkills(),
         agents: db.listFleetAgents(),
         memory: db.getFleetMemory() ?? null,
@@ -2314,11 +2319,14 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
     // re-resolves on its own, because a plugin that resolved once is a plugin
     // every machine already agrees on.
     .post('/api/fleet/plugins/:id/refresh', async ({ params, status }) => {
-      const known = db.fleetConfig().plugins.some(({ id }) => id === params.id);
+      const known = db.listPlugins().some(({ id }) => id === params.id);
       if (!known) return status(404, `no plugin ${params.id} in this fleet`);
       await resolvePlugins([params.id]);
       fanOutFleet();
-      return { ok: true };
+      // The row itself, not `{ ok: true }`: a retry whose answer does not say
+      // whether it resolved is a retry the reader has to reload to read.
+      const row = db.listPlugins().find(({ id }) => id === params.id);
+      return row ?? status(404, `no plugin ${params.id} in this fleet`);
     })
     .delete('/api/fleet/plugins/:id', ({ params }) => {
       db.deletePlugin(params.id);

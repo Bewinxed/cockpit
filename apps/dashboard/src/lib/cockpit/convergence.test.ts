@@ -8,7 +8,6 @@ import {
   buildConvergence,
   deployInfoOf,
   fleetSyncAgeMs,
-  fleetSyncFailures,
   isDeployDiverged,
   isDeployNoteworthy,
 } from './convergence';
@@ -39,44 +38,7 @@ const report = (over: Partial<FleetSyncReport> = {}): FleetSyncReport => ({
   ...over,
 });
 
-test('no fleet report at all is no failures', () => {
-  expect(fleetSyncFailures(undefined)).toEqual([]);
-});
-
-test('a failed memory row is a first-class failure carrying its detail', () => {
-  const failures = fleetSyncFailures(
-    report({ memory: { state: 'failed', detail: 'edited on this machine — adopt it or overwrite' } })
-  );
-  expect(failures).toEqual([
-    { category: 'memory', key: '', detail: 'edited on this machine — adopt it or overwrite' },
-  ]);
-});
-
-test('every keyed category surfaces its own failed rows, applied and removed do not', () => {
-  const failures = fleetSyncFailures(
-    report({
-      mcp: { exa: { state: 'applied' }, broken: { state: 'failed', detail: 'spawn ENOENT' } },
-      plugins: { old: { state: 'removed' } },
-      skills: { gone: { state: 'failed' } },
-      hooks: { pre: { state: 'failed', detail: 'no checkout here' } },
-    })
-  );
-  expect(failures).toEqual([
-    { category: 'mcp', key: 'broken', detail: 'spawn ENOENT' },
-    { category: 'skills', key: 'gone', detail: undefined },
-    { category: 'hooks', key: 'pre', detail: 'no checkout here' },
-  ]);
-});
-
-test('a failed memory doc is reported by its own path, main memory left out', () => {
-  const failures = fleetSyncFailures(
-    report({
-      memory: { state: 'applied' },
-      memoryDocs: { 'models/deepseek.md': { state: 'failed', detail: 'kept its own copy' } },
-    })
-  );
-  expect(failures).toEqual([{ category: 'memoryDocs', key: 'models/deepseek.md', detail: 'kept its own copy' }]);
-});
+// The fleet-sync failure cases moved with the readers, to fleet-faults.test.ts.
 
 test('sync age is how long ago the report was taken, in ms', () => {
   const now = 1_700_000_000_000 + 11 * 24 * 60 * 60 * 1000; // 11 days later

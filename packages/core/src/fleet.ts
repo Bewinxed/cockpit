@@ -74,11 +74,26 @@ export interface FleetMarketplace extends FleetPlacement {
   source: string;
 }
 
-/** One installed plugin. `id` is the CLI's own `plugin@marketplace` form. */
+/**
+ * One installed plugin. `id` is the CLI's own `plugin@marketplace` form.
+ *
+ * `hash`, `bytes` and `error` are what the HUB resolved this row to, and they
+ * ride the dashboard's read only — the copy a machine is sent carries the
+ * files themselves ({@link FleetPluginPayload}) and has no use for the
+ * bookkeeping. `error` is a hub-side failure and a different fact from a
+ * machine's `failed` in {@link FleetSyncReport.plugins}: one says the bytes
+ * were never fetched, the other says a machine would not take them.
+ */
 export interface FleetPlugin extends FleetPlacement {
   id: string;
   /** Disabled rows are uninstalled from the machines, not merely disabled. */
   enabled: boolean;
+  /** Content hash of the resolved files; absent until a resolve succeeds. */
+  hash?: string;
+  /** Decoded size of the resolved files, for the dashboard to show. */
+  bytes?: number;
+  /** Why the last resolve at the hub failed, when it did. */
+  error?: string;
 }
 
 /** One file of a resolved skill; `path` is relative to the skill's directory. */
@@ -446,8 +461,38 @@ export interface FleetSyncReport {
     skills?: Record<string, string>;
     plugins?: Record<string, string>;
   };
+  /**
+   * The CLIs this sync leaned on, so a failure can be attributed to a binary
+   * rather than to the machine as a whole. Absent from a daemon that predates
+   * it, and from one that found nothing to report.
+   */
+  toolchain?: FleetToolchain;
   /** When the sync ran, ms epoch. */
   at: number;
+}
+
+/**
+ * One install of a CLI a sync depends on, as the machine found it.
+ *
+ * The reason this exists: a machine may carry several `claude` binaries at
+ * once (a homebrew one, an npm-global one, the local installer's), PATH picks
+ * whichever comes first, and a CLI too old for a flag the sync passes fails
+ * with a sentence that names neither the binary nor its version. Reporting the
+ * install makes that a fact on the dashboard rather than an expedition.
+ */
+export interface CliInstall {
+  /** Absolute path of the executable, resolved through any symlink. */
+  path: string;
+  /** What `--version` said, when it would say. */
+  version?: string;
+  /** Set on the one the sync actually ran — the binary a failure came out of. */
+  used?: boolean;
+}
+
+/** The CLIs a machine's sync leaned on, by the name they are known under. */
+export interface FleetToolchain {
+  /** Every `claude` this machine has; the one the sync ran is marked `used`. */
+  claude?: CliInstall[];
 }
 
 /** One installable plugin, as a linked marketplace's `marketplace.json` lists it. */

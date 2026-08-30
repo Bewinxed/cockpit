@@ -23,6 +23,8 @@ import type {
   FleetPluginPayload,
   FleetSkillPayload,
   FleetSyncReport,
+  FleetToolchain,
+  CliInstall,
   HookEvent,
   HookHandler,
   MachineMemoryDoc,
@@ -31,11 +33,11 @@ import type {
   SkillFile,
 } from '@cockpit/core';
 import { hookProblem, memoryDocProblem } from '@cockpit/core';
-import { chmod, readdir, rename, rm, rmdir, stat } from 'node:fs/promises';
+import { chmod, readdir, realpath, rename, rm, rmdir, stat } from 'node:fs/promises';
 import { platform } from 'node:os';
-import { isAbsolute, join } from 'node:path';
+import { delimiter, isAbsolute, join } from 'node:path';
 import { expandHome } from './fs';
-import { resolveBin, toolEnv } from './tools';
+import { resolveBin, toolEnv, toolPath } from './tools';
 
 /**
  * User-scope MCP servers live at the top level of this file — not in
@@ -329,6 +331,112 @@ const claudeBin = async (): Promise<string | undefined> => {
   const onPath = resolveBin('claude');
   if (onPath) return onPath;
   return (await Bun.file(LOCAL_CLAUDE).exists()) ? LOCAL_CLAUDE : undefined;
+};
+
+/**
+ * Where a `claude` ends up when it is not the one PATH answers with. Every
+ * entry is a real installer's destination: the CLI's own local installer, bun's
+ * and npm's global bins, homebrew's two prefixes, and the FHS one a package
+ * manager uses. The list exists so a SECOND install can be reported — a machine
+ * that has the version the operator just installed sitting behind a stale
+ * symlink is the whole of the failure this reports.
+ */
+const CLAUDE_ELSEWHERE = [
+  LOCAL_CLAUDE,
+  expandHome('~/.bun/bin/claude'),
+  expandHome('~/.local/bin/claude'),
+  expandHome('~/.npm-global/bin/claude'),
+  '/opt/homebrew/bin/claude',
+  '/usr/local/bin/claude',
+  '/usr/bin/claude',
+];
+
+/**
+ * How long one `claude --version` gets. Our choice, because: this is a probe
+ * run for diagnostics beside a sync that already takes minutes, and a CLI that
+ * will not print a version string in five seconds is one whose version is not
+ * worth holding the report open for. A probe that times out reports the path
+ * with no version, which is still the fact that matters.
+ */
+const VERSION_TIMEOUT_MS = 5_000;
+
+/** The first `x.y.z` a version command prints, the same rule tools.ts uses. */
+const VERSION_PATTERN = /\d+\.\d+\.\d+/;
+
+const askVersion = async (path: string): Promise<string | undefined> => {
+  try {
+    const child = Bun.spawn([path, '--version'], {
+      env: toolEnv(),
+      stdout: 'pipe',
+      stderr: 'pipe',
+      timeout: VERSION_TIMEOUT_MS,
+    });
+    const [out, err] = await Promise.all([
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ]);
+    await child.exited;
+    return `${out}${err}`.match(VERSION_PATTERN)?.[0];
+  } catch {
+    return undefined;
+  }
+};
+
+/**
+ * Every `claude` on this machine, PATH order first, with the one this sync ran
+ * marked. Deduplicated by what the path really points at, so a symlink and its
+ * target are one install — but reported under the path that was FOUND, because
+ * that is the one an operator has to move out of the way.
+ */
+export const claudeInstalls = async (used?: string): Promise<CliInstall[]> => {
+  const candidates = [
+    ...toolPath()
+      .split(delimiter)
+      .filter(Boolean)
+      .map((dir) => join(dir, 'claude')),
+    ...CLAUDE_ELSEWHERE,
+  ];
+
+  const seen = new Set<string>();
+  const found: string[] = [];
+  for (const path of candidates) {
+    if (!(await Bun.file(path).exists())) continue;
+    // A path that cannot be resolved is still a path: fall back to itself
+    // rather than dropping an install because one readlink failed.
+    const real = await realpath(path).catch(() => path);
+    if (seen.has(real)) continue;
+    seen.add(real);
+    found.push(path);
+  }
+
+  const usedReal = used ? await realpath(used).catch(() => used) : undefined;
+  return await Promise.all(
+    found.map(async (path) => {
+      const real = await realpath(path).catch(() => path);
+      const version = await askVersion(path);
+      return {
+        path,
+        ...(version ? { version } : {}),
+        ...(usedReal !== undefined && real === usedReal ? { used: true as const } : {}),
+      };
+    })
+  );
+};
+
+/**
+ * The toolchain, cached for this daemon's life and re-probed on every real
+ * sync. A status read is answered from the cache because spawning a CLI per
+ * status would make a passive read cost what an active one does; a sync
+ * re-probes because that is the moment an operator has just changed something
+ * and clicked to see whether it took.
+ */
+let toolchainCache: FleetToolchain | undefined;
+
+export const machineToolchain = async (fresh: boolean): Promise<FleetToolchain> => {
+  if (!fresh && toolchainCache) return toolchainCache;
+  const claude = await claudeInstalls(await claudeBin());
+  toolchainCache = claude.length > 0 ? { claude } : {};
+  return toolchainCache;
 };
 
 interface Ran {
@@ -1421,9 +1529,11 @@ const converge = async (config: FleetConfig): Promise<FleetSyncReport> => {
   // Read from what was just written rather than from the desired set: a row
   // that failed is a row this machine does NOT have, and claiming it would
   // suppress the very content the next sync needs to send.
+  const toolchain = await machineToolchain(true);
   return {
     ...report,
     have: { skills, plugins: installed.vendoredPlugins ?? {} },
+    ...(toolchain.claude ? { toolchain } : {}),
     at: Date.now(),
   };
 };
@@ -1536,6 +1646,11 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
     );
     hooks[id] = present ? { state: 'applied' } : { state: 'failed', detail: `not in ${settingsPath}` };
   }
+  // Claimed here too, and for the reason `have` above is: a status overwrites
+  // the stored report, so a status that left the toolchain out would retract
+  // the attribution the last sync established.
+  const toolchain = await machineToolchain(false);
+  if (toolchain.claude) report.toolchain = toolchain;
   return report;
 };
 

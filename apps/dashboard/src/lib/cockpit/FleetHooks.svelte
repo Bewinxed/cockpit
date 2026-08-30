@@ -11,9 +11,8 @@
   import * as Tooltip from '$lib/components/ui/tooltip';
   import { confirm } from './confirm.svelte';
   import type { Machine } from './client.svelte';
-  import { draftOf, hooksOf, message, removeHook, saveHook, type FleetHook } from './hooks';
-  import { machineLabel } from './machine';
-  import OsMark from './OsMark.svelte';
+  import { draftOf, message, removeHook, saveHook, type FleetHook } from './hooks';
+  import FleetStatusStrip from './FleetStatusStrip.svelte';
 
   /**
    * The sixth fleet panel: what runs on a session's own lifecycle, and where
@@ -167,19 +166,12 @@
               No machines yet — this lands on the first one that registers.
             </span>
           {:else}
-            <div class="flex flex-wrap items-center gap-1">
-              {#each machines as machine (machine.machineId)}
-                {@const item = hooksOf(machine)?.[row.id]}
-                {@const tone = item?.state === 'applied' ? 'text-success' : item?.state === 'failed' ? 'text-warning' : 'text-faint'}
-                <span
-                  class="inline-flex min-h-5 max-w-36 items-center gap-1 rounded-full px-2 text-micro {tone} {machine.status === 'online' ? '' : 'opacity-50'}"
-                  title="{machineLabel(machine.hostname)}: {item?.state ?? 'not reported'}{item?.detail ? ` — ${item.detail}` : ''}"
-                >
-                  <OsMark os={machine.os} class="size-3.5 shrink-0" />
-                  <span class="truncate">{machineLabel(machine.hostname)}</span>
-                </span>
-              {/each}
-            </div>
+            <!-- The same strip every other fleet row uses. It was a bare chip
+                 with a `title` attribute: a hook that failed to register is code
+                 that was supposed to run and did not, and its reason was
+                 reachable only by hovering the exact pixel with a mouse — never
+                 by keyboard, never on touch, never on the page. -->
+            <FleetStatusStrip {machines} kind="hooks" name={row.id} what="hook" />
           {/if}
         </li>
       {/each}

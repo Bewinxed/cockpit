@@ -966,6 +966,10 @@ export class SessionSupervisor {
     const pluginClaims: Record<string, string>[] = [];
     let memory: FleetSyncReport['memory'];
     let memoryHook: FleetSyncReport['memoryHook'];
+    // Merged the same way, and it has to be: the toolchain is what attributes a
+    // CLI failure to a binary, and a field this rebuild does not name is a field
+    // the hub never hears about.
+    let toolchain: FleetSyncReport['toolchain'];
     for (const adapter of harnesses()) {
       const apply = which === 'syncFleet' ? adapter.syncFleet : adapter.fleetStatus;
       if (!apply) continue;
@@ -981,6 +985,7 @@ export class SessionSupervisor {
         if (report.have?.plugins) pluginClaims.push(report.have.plugins);
         if (report.memory) memory = report.memory;
         if (report.memoryHook) memoryHook = report.memoryHook;
+        if (report.toolchain) toolchain = { ...toolchain, ...report.toolchain };
       } catch (error) {
         warn(`${which} on ${adapter.kind} failed: ${error}`);
       }
@@ -994,6 +999,7 @@ export class SessionSupervisor {
       hooks,
       ...(memory ? { memory } : {}),
       ...(memoryHook ? { memoryHook } : {}),
+      ...(toolchain ? { toolchain } : {}),
       have: { skills: agreedHashes(skillClaims), plugins: agreedHashes(pluginClaims) },
       at: Date.now(),
     };

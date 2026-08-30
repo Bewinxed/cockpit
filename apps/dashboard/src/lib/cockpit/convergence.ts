@@ -23,61 +23,14 @@ export function buildConvergence(build: BuildInfo | undefined, hubBuild: BuildIn
   return build.commit === hubBuild.commit ? 'current' : 'behind';
 }
 
-/** One fleet-config row a machine could not apply — a first-class fact, not a footnote. */
-export interface SyncFailure {
-  readonly category: 'mcp' | 'marketplaces' | 'plugins' | 'skills' | 'memory' | 'memoryDocs' | 'memoryHook' | 'hooks';
-  /** The entry's own key (a server/plugin/doc name); empty for the singular memory/memoryHook rows. */
-  readonly key: string;
-  readonly detail?: string;
-}
-
-const scanFailures = (
-  category: Exclude<SyncFailure['category'], 'memory' | 'memoryHook'>,
-  record: Record<string, { state: string; detail?: string }> | undefined
-): SyncFailure[] =>
-  Object.entries(record ?? {})
-    .filter(([, item]) => item.state === 'failed')
-    .map(([key, item]) => ({ category, key, detail: item.detail }));
-
 /**
- * Every row of a machine's fleet-sync report that is stuck `failed` — the
- * hub's own conflict-detection working correctly and then parking, waiting on
- * a decision (adopt or overwrite) nobody was told to make. Rendered, never
- * resolved, here: the hub's `/api/fleet/memory/adopt` and `/push` routes stay
- * a click the operator makes, not one this reader makes for them.
+ * The fleet-sync failure readers that used to live here — `SyncFailure`,
+ * `fleetSyncFailures` and `SYNC_FAILURE_ANCHOR` — now live in `fleet-faults.ts`
+ * as `Fault`, `machineFaults` and `SCOPE_ANCHOR`. They were the same concept
+ * twice: this file could say a row failed, and nothing anywhere could say WHY
+ * or what to do about it. One vocabulary answers both, so this one is gone
+ * rather than kept as its poorer half.
  */
-export function fleetSyncFailures(fleet: FleetSyncReport | undefined): SyncFailure[] {
-  if (!fleet) return [];
-  const failures: SyncFailure[] = [
-    ...scanFailures('mcp', fleet.mcp),
-    ...scanFailures('marketplaces', fleet.marketplaces),
-    ...scanFailures('plugins', fleet.plugins),
-    ...scanFailures('skills', fleet.skills),
-    ...scanFailures('memoryDocs', fleet.memoryDocs),
-    ...scanFailures('hooks', fleet.hooks),
-  ];
-  if (fleet.memory?.state === 'failed') failures.push({ category: 'memory', key: '', detail: fleet.memory.detail });
-  if (fleet.memoryHook?.state === 'failed') {
-    failures.push({ category: 'memoryHook', key: '', detail: fleet.memoryHook.detail });
-  }
-  return failures;
-}
-
-/**
- * Where the affordance for one category's failure already lives on `/tools`
- * (ids set on that page's own panels) — a badge links here rather than
- * growing a second adopt/overwrite control of its own.
- */
-export const SYNC_FAILURE_ANCHOR: Record<SyncFailure['category'], string> = {
-  mcp: 'fleet-mcp',
-  marketplaces: 'fleet-skills',
-  plugins: 'fleet-skills',
-  skills: 'fleet-skills',
-  memory: 'fleet-memory',
-  memoryDocs: 'fleet-memory',
-  memoryHook: 'fleet-memory',
-  hooks: 'fleet-hooks',
-};
 
 /**
  * How long ago a machine's fleet report was taken, in ms — `undefined` for a
