@@ -33,14 +33,22 @@
    */
   const SESSION = /^\/session(\/|$)/;
 
-  // Native page transitions: same-document view transitions, skipped for
-  // readers who prefer reduced motion; browsers without the API just navigate.
+  /** Top-level spokes — lateral siblings in the sidebar nav. Moving between
+   *  these is like switching tabs in one app, not navigating to a new page.
+   *  DESIGN.md §Motion: "Structure never animates." */
+  const SPOKE = /^\/(session|tools|rules|hooks|delegates|usage)\/?$/;
+
+  // Native page transitions: same-document view transitions.
+  // DESIGN.md §Motion: "Only the live channel moves. Structure — rows, cards,
+  // columns, chrome — never animates." Routine spoke navigation is instant;
+  // only depth changes (drill-in to a [id] route) and explicit gesture
+  // navigations (mobile swipes with data-nav set) earn a transition.
   onNavigate((navigation) => {
     if (!document.startViewTransition) return;
-    // Switching tabs is not going anywhere: crossfading the whole document
-    // between two tabs is what made a tab click read as a page load, and Fleet
-    // is the first tab in the strip. A swipe still animates — it names a
-    // direction, and the gesture is the thing being animated.
+
+    // Session tab switches: no transition. Switching tabs inside the session
+    // layout is a parameter change, not a navigation — the panes are already
+    // mounted and visibility-toggled.
     if (
       !document.documentElement.dataset.nav &&
       navigation.from &&
@@ -50,8 +58,20 @@
     ) {
       return;
     }
-    // A hidden document has nothing to animate, and Chrome aborts the
-    // transition there — which rejects `finished` under a navigation race.
+
+    // Lateral spoke navigation (Fleet ↔ Tools ↔ Rules ↔ Usage etc.):
+    // instant, no transition. These are sections in the same app — animating
+    // them makes every sidebar click feel like a page reload.
+    if (
+      !document.documentElement.dataset.nav &&
+      navigation.from &&
+      navigation.to &&
+      SPOKE.test(navigation.from.url.pathname) &&
+      SPOKE.test(navigation.to.url.pathname)
+    ) {
+      return;
+    }
+
     if (document.hidden) {
       delete document.documentElement.dataset.nav;
       return;
@@ -60,15 +80,13 @@
       delete document.documentElement.dataset.nav;
       return;
     }
+
+    // Depth change or explicit gesture — run the transition.
     return new Promise((resolve) => {
       const transition = document.startViewTransition(async () => {
         resolve();
         await navigation.complete.catch(() => {});
       });
-      // Cleared only once the animation has actually finished — the direction
-      // is read by CSS *during* it, so clearing any earlier means a swipe
-      // backwards animates forwards. Anything that navigates without setting a
-      // direction gets the forward push, which is the right default.
       const clear = () => delete document.documentElement.dataset.nav;
       transition.finished.then(clear, clear);
     });

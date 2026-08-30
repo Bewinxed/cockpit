@@ -792,12 +792,16 @@
   animation: none;
 }
 
+/* DESIGN.md §Motion: "Only the live channel moves. Structure never animates."
+   Drill-in transitions (Fleet → Session/[id]) get a fast opacity crossfade —
+   no translateY, no slide. Lateral spoke navigation skips transitions entirely
+   (handled in +layout.svelte's onNavigate). */
 ::view-transition-old(root) {
-  animation: 120ms var(--e-in) both vt-out;
+  animation: 100ms var(--e-in) both vt-out;
 }
 
 ::view-transition-new(root) {
-  animation: 180ms var(--e-in) both vt-in;
+  animation: 100ms var(--e-in) both vt-in;
 }
 
 @keyframes vt-out {
@@ -809,7 +813,6 @@
 @keyframes vt-in {
   from {
     opacity: 0;
-    transform: translateY(6px);
   }
 }
 
