@@ -792,68 +792,66 @@
   animation: none;
 }
 
-/* DESIGN.md §Motion: "Only the live channel moves. Structure never animates."
-   Drill-in transitions (Fleet → Session/[id]) get a fast opacity crossfade —
-   no translateY, no slide. Lateral spoke navigation skips transitions entirely
-   (handled in +layout.svelte's onNavigate). */
+/* Directional view transitions — position in the sidebar determines direction.
+   Navigating "down" (Fleet → Tools) slides old content left, new content from
+   right. Navigating "up" (Tools → Fleet) reverses. Like iOS Settings or a
+   native tab controller where spatial position drives the animation.
+
+   On desktop the slide is subtle (6%) and fast (150ms) — enough to signal
+   direction without feeling like a page load. On mobile the gesture is
+   larger (18%) and slower (200ms) because the thumb drives it. */
+
+/* Default: forward / "next" direction */
 ::view-transition-old(root) {
-  animation: 100ms var(--e-in) both vt-out;
+  animation: 150ms cubic-bezier(0.32, 0.72, 0, 1) both vt-slide-out;
 }
-
 ::view-transition-new(root) {
-  animation: 100ms var(--e-in) both vt-in;
+  animation: 150ms cubic-bezier(0.32, 0.72, 0, 1) both vt-slide-in;
 }
 
-@keyframes vt-out {
-  to {
-    opacity: 0;
-  }
+/* Backward / "prev" direction */
+html[data-nav='prev'] ::view-transition-old(root) {
+  animation-name: vt-slide-out-back;
+}
+html[data-nav='prev'] ::view-transition-new(root) {
+  animation-name: vt-slide-in-back;
 }
 
-@keyframes vt-in {
-  from {
-    opacity: 0;
-  }
+/* Forward: old exits left, new enters from right */
+@keyframes vt-slide-out {
+  to   { transform: translateX(-6%); opacity: 0; }
+}
+@keyframes vt-slide-in {
+  from { transform: translateX(6%); opacity: 0; }
 }
 
-/* Phones move sideways: the old page leaves the way the new one arrives. */
+/* Backward: old exits right, new enters from left */
+@keyframes vt-slide-out-back {
+  to   { transform: translateX(6%); opacity: 0; }
+}
+@keyframes vt-slide-in-back {
+  from { transform: translateX(-6%); opacity: 0; }
+}
+
+/* Mobile: larger travel distance for thumb-driven gestures */
 @media (max-width: 767px) {
   ::view-transition-old(root) {
-    animation: 200ms cubic-bezier(0.32, 0.72, 0, 1) both vt-push-out;
+    animation-duration: 200ms;
   }
   ::view-transition-new(root) {
-    animation: 200ms cubic-bezier(0.32, 0.72, 0, 1) both vt-push-in;
+    animation-duration: 200ms;
   }
-  html[data-nav='prev'] ::view-transition-old(root) {
-    animation-name: vt-push-out-back;
+  @keyframes vt-slide-out {
+    to   { transform: translateX(-18%); opacity: 0; }
   }
-  html[data-nav='prev'] ::view-transition-new(root) {
-    animation-name: vt-push-in-back;
+  @keyframes vt-slide-in {
+    from { transform: translateX(18%); opacity: 0; }
   }
-}
-
-@keyframes vt-push-out {
-  to {
-    transform: translateX(-18%);
-    opacity: 0;
+  @keyframes vt-slide-out-back {
+    to   { transform: translateX(18%); opacity: 0; }
   }
-}
-@keyframes vt-push-in {
-  from {
-    transform: translateX(18%);
-    opacity: 0;
-  }
-}
-@keyframes vt-push-out-back {
-  to {
-    transform: translateX(18%);
-    opacity: 0;
-  }
-}
-@keyframes vt-push-in-back {
-  from {
-    transform: translateX(-18%);
-    opacity: 0;
+  @keyframes vt-slide-in-back {
+    from { transform: translateX(-18%); opacity: 0; }
   }
 }
 

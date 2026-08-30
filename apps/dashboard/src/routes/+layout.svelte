@@ -33,41 +33,32 @@
    */
   const SESSION = /^\/session(\/|$)/;
 
-  /** Top-level spokes — lateral siblings in the sidebar nav. Moving between
-   *  these is like switching tabs in one app, not navigating to a new page.
-   *  DESIGN.md §Motion: "Structure never animates." */
-  const SPOKE = /^\/(session|tools|rules|hooks|delegates|usage)\/?$/;
+  /** Spoke order — the sidebar nav's top-to-bottom sequence. Position in this
+   *  array determines animation direction: navigating to a higher index slides
+   *  the old content left (you moved "down"), lower index slides right ("up").
+   *  Like iOS Settings or a tab controller where position drives direction. */
+  const SPOKE_ORDER = ['session', 'tools', 'rules', 'hooks', 'delegates', 'usage'];
 
-  // Native page transitions: same-document view transitions.
-  // DESIGN.md §Motion: "Only the live channel moves. Structure — rows, cards,
-  // columns, chrome — never animates." Routine spoke navigation is instant;
-  // only depth changes (drill-in to a [id] route) and explicit gesture
-  // navigations (mobile swipes with data-nav set) earn a transition.
+  function spokeIndex(pathname: string): number {
+    const seg = pathname.split('/').filter(Boolean)[0] || 'session';
+    return SPOKE_ORDER.indexOf(seg);
+  }
+
+  // View transitions with directional awareness.
+  // - Session tab switches: skip (panes are already mounted)
+  // - Spoke navigation: directional slide (position in sidebar determines direction)
+  // - Drill-in/out: forward/back slide
+  // - Mobile gestures: push animation (data-nav already set)
   onNavigate((navigation) => {
     if (!document.startViewTransition) return;
 
-    // Session tab switches: no transition. Switching tabs inside the session
-    // layout is a parameter change, not a navigation — the panes are already
-    // mounted and visibility-toggled.
+    // Session tab switches: no transition — panes are visibility-toggled.
     if (
       !document.documentElement.dataset.nav &&
       navigation.from &&
       navigation.to &&
       SESSION.test(navigation.from.url.pathname) &&
       SESSION.test(navigation.to.url.pathname)
-    ) {
-      return;
-    }
-
-    // Lateral spoke navigation (Fleet ↔ Tools ↔ Rules ↔ Usage etc.):
-    // instant, no transition. These are sections in the same app — animating
-    // them makes every sidebar click feel like a page reload.
-    if (
-      !document.documentElement.dataset.nav &&
-      navigation.from &&
-      navigation.to &&
-      SPOKE.test(navigation.from.url.pathname) &&
-      SPOKE.test(navigation.to.url.pathname)
     ) {
       return;
     }
@@ -81,7 +72,22 @@
       return;
     }
 
-    // Depth change or explicit gesture — run the transition.
+    // Determine direction from navigation context.
+    if (!document.documentElement.dataset.nav && navigation.from && navigation.to) {
+      const fromIdx = spokeIndex(navigation.from.url.pathname);
+      const toIdx = spokeIndex(navigation.to.url.pathname);
+
+      if (fromIdx >= 0 && toIdx >= 0 && fromIdx !== toIdx) {
+        // Lateral spoke navigation — direction from sidebar position.
+        document.documentElement.dataset.nav = toIdx > fromIdx ? 'next' : 'prev';
+      } else {
+        // Drill-in (adding depth) vs drill-out (removing depth).
+        const fromDepth = navigation.from.url.pathname.split('/').filter(Boolean).length;
+        const toDepth = navigation.to.url.pathname.split('/').filter(Boolean).length;
+        document.documentElement.dataset.nav = toDepth >= fromDepth ? 'next' : 'prev';
+      }
+    }
+
     return new Promise((resolve) => {
       const transition = document.startViewTransition(async () => {
         resolve();
