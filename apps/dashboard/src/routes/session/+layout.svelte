@@ -169,12 +169,16 @@
     display: flex;
     min-width: 0;
     min-height: 0;
-    visibility: visible;
   }
 
   /* `visibility`, never `display`: a hidden surface still lays out, so the
      virtualisers inside it keep their measurements and revealing one costs
-     nothing. */
+     nothing.
+     Only the HIDDEN state is declared, here and everywhere below this.
+     `visibility` inherits, but a descendant re-declaring `visible` un-hides
+     itself through a hidden ancestor — so a single `visibility: visible`
+     deeper in the tree is enough to paint a whole surface that is supposed
+     to be put away. */
   .hidden-surface {
     visibility: hidden;
     pointer-events: none;

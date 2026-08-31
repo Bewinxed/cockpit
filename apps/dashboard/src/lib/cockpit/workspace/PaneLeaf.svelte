@@ -337,11 +337,16 @@
     position: absolute;
     inset: 0;
     display: flex;
-    visibility: visible;
   }
 
   /* `visibility`, never `display`: a hidden pane still lays out, so the
-     virtualiser keeps its measurements and revealing one costs nothing. */
+     virtualiser keeps its measurements and revealing one costs nothing.
+     Note what is NOT here — `.pane` does not declare `visibility: visible`.
+     Visibility inherits, but a descendant that re-declares `visible`
+     un-hides ITSELF through a hidden ancestor, so writing it here made
+     every pane paint straight through the surface hiding this whole group,
+     and the fleet board and the transcripts rendered on top of each other.
+     Only the hidden state is ever stated; the visible one is inherited. */
   .pane-hidden {
     visibility: hidden;
     pointer-events: none;
