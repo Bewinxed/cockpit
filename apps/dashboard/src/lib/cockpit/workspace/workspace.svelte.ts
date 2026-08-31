@@ -20,6 +20,7 @@
 import { browser } from '$app/environment';
 import { pushState, replaceState } from '$app/navigation';
 import { workingSet } from '../working-set.svelte';
+import { cockpit } from '../client.svelte';
 
 /** A split: two or more children laid out along one axis. */
 export interface BranchNode {
@@ -268,8 +269,45 @@ function remember(
   };
 }
 
-/** The address of a conversation: the tree's own record, then the working set. */
+/**
+ * Where a conversation lives: which machine, which folder, which harness.
+ *
+ * The fleet already knows this. A cockpit instance carries its machine, and
+ * every online machine publishes a catalogue of the transcripts on its disk —
+ * so an id can be RESOLVED rather than carried around. It was being carried:
+ * copied into the URL, and into a most-recently-used record that evicts. Both
+ * copies could go stale or be lost, and when they were, a conversation with a
+ * perfectly good unique id became unreachable — not because anything was
+ * missing, but because the one thing that knew where it lived had never been
+ * asked.
+ *
+ * Asked in order of authority: the hub's own instances, then the machines'
+ * catalogues, then what we were told when the tab was opened. The first two
+ * are live, so a tab whose remembered address was lost heals itself as soon
+ * as the fleet answers.
+ */
 export function contextOf(sessionId: string): SessionContext | null {
+  const instance = cockpit.instances.find((row) => row.id === sessionId);
+  if (instance?.machineId) {
+    return {
+      machine: instance.machineId,
+      cwd: instance.cwd ?? '',
+      harness: instance.harness ?? 'claude',
+    };
+  }
+  for (const machine of cockpit.machines) {
+    if (machine.status !== 'online') continue;
+    const stored = cockpit
+      .catalogOf(machine.machineId)
+      .find((entry) => entry.sessionId === sessionId);
+    if (stored) {
+      return {
+        machine: machine.machineId,
+        cwd: stored.cwd ?? '',
+        harness: stored.harness ?? 'claude',
+      };
+    }
+  }
   return held.ctx?.[sessionId] ?? workingSet.contextOf(sessionId);
 }
 
