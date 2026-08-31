@@ -165,7 +165,7 @@
     opacity: 1;
     visibility: visible;
     transition:
-      opacity 200ms cubic-bezier(0.32, 0.72, 0, 1),
+      opacity 120ms cubic-bezier(0.32, 0.72, 0, 1),
       visibility 0s 0s;
   }
 
@@ -178,8 +178,8 @@
     visibility: hidden;
     view-transition-name: none;
     transition:
-      opacity 150ms cubic-bezier(0.32, 0.72, 0, 1),
-      visibility 0s 150ms;
+      opacity 100ms cubic-bezier(0.32, 0.72, 0, 1),
+      visibility 0s 100ms;
   }
 
   @media (prefers-reduced-motion: reduce) {

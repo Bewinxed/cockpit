@@ -17,7 +17,7 @@
   import * as Card from '$lib/components/ui/card';
   import { Skeleton } from '$lib/components/ui/skeleton';
   import type { FleetPlugin, FleetSkillMeta } from '@cockpit/core';
-  import { invalidateAll } from '$app/navigation';
+  import { invalidate } from '$app/navigation';
   import type { Machine } from './client.svelte';
   import FleetFault from './FleetFault.svelte';
   import { groupFaults, hubFaults, machineFaults } from './fleet-faults';
@@ -73,7 +73,12 @@
     <Card.Root class={panelList}>
       <ul class="list">
         {#each groups as group (group.origin + group.cause + group.scope + (group.machineId ?? ''))}
-          <li><FleetFault {group} {machines} onresolved={() => invalidateAll()} /></li>
+          <li><FleetFault {group} {machines} onresolved={() => {
+            // Scoped: only re-run the tools/fleet loads, not the root layout
+            // (which would needlessly refetch /api/instances + /api/instances/titles).
+            void invalidate((url: URL) =>
+              url.pathname.startsWith('/api/tools') || url.pathname.startsWith('/api/fleet'));
+          }} /></li>
         {/each}
         {#each silent as machine (machine.machineId)}
           <li>

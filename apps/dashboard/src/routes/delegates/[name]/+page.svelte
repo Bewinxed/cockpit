@@ -85,7 +85,7 @@
     try {
       await saveDelegateType(submission);
       toast.success(`${submission.name} is available to new sessions.`);
-      await goto('/delegates', { invalidateAll: true });
+      await goto('/delegates');
     } catch (error) {
       failed = message(error);
     } finally {
@@ -110,7 +110,7 @@
     deleting = true;
     try {
       await removeDelegateType(name);
-      await goto('/delegates', { invalidateAll: true });
+      await goto('/delegates');
     } catch (error) {
       failed = message(error);
       deleting = false;

@@ -3100,6 +3100,44 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
         return { blocks };
       }
     )
+    // Combined usage overview — one round-trip instead of five.
+    .get('/api/usage/overview', ({ query }) => {
+      const agents = db.listAgents();
+      const recentDays = Number(query.recentDays) || 3;
+      const since = Date.now() - recentDays * 24 * 60 * 60 * 1000;
+      const now = Date.now();
+
+      // Limits
+      const limits = {
+        machines: db.listUsageLimits().map((row) => ({
+          machineId: row.machineId,
+          hostname: agents.find((a) => a.machineId === row.machineId)?.hostname ?? row.machineId,
+          limits: row.payload,
+        })),
+      };
+
+      // Summaries by harness
+      const summaryFor = (harness: string) =>
+        db.usageSummary({ harness, groupBy: 'model' });
+
+      // Blocks by harness
+      const blocksFor = (harness: string) => {
+        const buckets = db.listUsageBuckets({ since, harness });
+        const blocks: (UsageBlock & { harness: string })[] = [];
+        for (const block of identifyBlocks(buckets.map(usageBucketFromRow), now))
+          blocks.push({ ...block, harness });
+        blocks.sort((a, b) => a.startTime - b.startTime);
+        return blocks;
+      };
+
+      return {
+        limits,
+        claude: summaryFor('claude'),
+        opencode: summaryFor('opencode'),
+        blocksClaude: blocksFor('claude'),
+        blocksOpenCode: blocksFor('opencode'),
+      };
+    })
     .ws('/ws', {
       message(ws, message) {
         if (!isEnvelope(message)) {

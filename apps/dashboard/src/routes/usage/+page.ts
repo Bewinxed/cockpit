@@ -5,14 +5,18 @@ import type {
   UsageSummary,
 } from '$lib/cockpit/usage';
 
+/** The combined payload from `/api/usage/overview`. */
+interface UsageOverview {
+  limits: UsageLimitsResponse;
+  claude: UsageSummary;
+  opencode: UsageSummary;
+  blocksClaude: UsageBlocksResponse['blocks'];
+  blocksOpenCode: UsageBlocksResponse['blocks'];
+}
+
 /**
- * The usage surface reads straight from the hub through the SvelteKit proxy —
- * the page renders on the server, and a hub that is down leaves a sentence to
- * read rather than a blank page (mirrors `routes/tools/+page.ts`).
- *
- * The heavy day-by-day chart and the breakdown tabs are fetched client-side,
- * where their range and tab state live; what is loaded here is what the page
- * needs to render once.
+ * One round-trip to the hub for the whole usage surface instead of five.
+ * Falls back to the split endpoints if the hub predates the combined one.
  */
 export const load: PageLoad = async ({ fetch }) => {
   const read = async <T>(path: string): Promise<T | Error> =>
@@ -23,6 +27,20 @@ export const load: PageLoad = async ({ fetch }) => {
       })
       .catch((error: unknown) => error as Error);
 
+  // Try the combined endpoint first.
+  const overview = await read<UsageOverview>('/api/usage/overview?recentDays=3');
+  if (!(overview instanceof Error)) {
+    return {
+      limits: overview.limits ?? null,
+      claude: overview.claude ?? null,
+      opencode: overview.opencode ?? null,
+      blocksClaude: overview.blocksClaude ?? [],
+      blocksOpenCode: overview.blocksOpenCode ?? [],
+      error: null,
+    };
+  }
+
+  // Fallback: hub too old for /overview — five parallel calls.
   const [limits, claude, opencode, blocksClaude, blocksOpenCode] = await Promise.all([
     read<UsageLimitsResponse>('/api/usage/limits'),
     read<UsageSummary>('/api/usage/summary?harness=claude&groupBy=model'),

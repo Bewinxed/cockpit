@@ -115,7 +115,7 @@
       const trimmed = { ...draft, name: draft.name.trim() };
       await (id ? saveRule(id, trimmed) : createRule(trimmed));
       toast.success(`${draft.name.trim()} is live on every session it applies to.`);
-      await goto('/rules', { invalidateAll: true });
+      await goto('/rules');
     } catch (error) {
       failed = message(error);
     } finally {
@@ -139,7 +139,7 @@
     deleting = true;
     try {
       await removeRule(id, draft.name);
-      await goto('/rules', { invalidateAll: true });
+      await goto('/rules');
     } catch (error) {
       failed = message(error);
       deleting = false;

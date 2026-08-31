@@ -56,8 +56,11 @@
     // Same page, different params — instant.
     if (from === to) return;
 
-    // Session tab switches — crossfade via VT (translate 0,0).
-    // Panes are visibility-toggled, VT captures old→new snapshots.
+    // Session tab switches skip VT entirely. The panes are visibility-toggled
+    // with their own CSS crossfade (opacity transition in session/+layout), so
+    // a VT here only adds ~300ms of capture/animate overhead on top of the
+    // transition that already runs. The DOM swap is 4ms; don't gate it.
+    if (SESSION.test(from) && SESSION.test(to)) return;
 
     // Hidden or reduced motion — instant.
     if (document.hidden) { delete document.documentElement.dataset.nav; return; }
@@ -76,27 +79,21 @@
         // Vertical: sidebar is top-to-bottom
         const down = toIdx > fromIdx;
         el.style.setProperty('--vt-old-x', '0');
-        el.style.setProperty('--vt-old-y', down ? '-12%' : '12%');
+        el.style.setProperty('--vt-old-y', down ? '-8%' : '8%');
         el.style.setProperty('--vt-new-x', '0');
-        el.style.setProperty('--vt-new-y', down ? '12%' : '-12%');
-      } else if (SESSION.test(from) && SESSION.test(to)) {
-        // Session tab switch: pure crossfade, no translate
-        el.style.setProperty('--vt-old-x', '0');
-        el.style.setProperty('--vt-old-y', '0');
-        el.style.setProperty('--vt-new-x', '0');
-        el.style.setProperty('--vt-new-y', '0');
+        el.style.setProperty('--vt-new-y', down ? '8%' : '-8%');
       } else {
         // Horizontal: drill-in/out
-        el.style.setProperty('--vt-old-x', '-12%');
+        el.style.setProperty('--vt-old-x', '-8%');
         el.style.setProperty('--vt-old-y', '0');
-        el.style.setProperty('--vt-new-x', '12%');
+        el.style.setProperty('--vt-new-x', '8%');
         el.style.setProperty('--vt-new-y', '0');
       }
     } else if (el.dataset.nav === 'prev') {
       // Back navigation
-      el.style.setProperty('--vt-old-x', '12%');
+      el.style.setProperty('--vt-old-x', '8%');
       el.style.setProperty('--vt-old-y', '0');
-      el.style.setProperty('--vt-new-x', '-12%');
+      el.style.setProperty('--vt-new-x', '-8%');
       el.style.setProperty('--vt-new-y', '0');
     }
 

@@ -195,7 +195,7 @@
     try {
       await saveHook(id ?? newId(), { ...draft, name: draft.name.trim() });
       toast.success(`${draft.name.trim()} is written to every machine it applies to.`);
-      await goto('/hooks', { invalidateAll: true });
+      await goto('/hooks');
     } catch (error) {
       failed = message(error);
     } finally {
@@ -219,7 +219,7 @@
     deleting = true;
     try {
       await removeHook(id, draft.name);
-      await goto('/hooks', { invalidateAll: true });
+      await goto('/hooks');
     } catch (error) {
       failed = message(error);
       deleting = false;
