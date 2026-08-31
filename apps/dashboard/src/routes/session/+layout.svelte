@@ -124,12 +124,24 @@
        as the conversations are, down to where it was scrolled and what it was
        peeking at. Panes crossfade on switch: opacity transitions while visibility
        gates layout participation. -->
-  <div class="pane absolute inset-0 flex" class:pane-hidden={!onBoard} inert={!onBoard}>
+  <!-- Only the ACTIVE pane gets view-transition-name so the VT API can
+       capture old→new without duplicate-name aborts (all panes coexist). -->
+  <div
+    class="pane absolute inset-0 flex"
+    class:pane-hidden={!onBoard}
+    inert={!onBoard}
+    style:view-transition-name={onBoard ? 'session-pane' : 'none'}
+  >
     <FleetBoard active={onBoard} />
   </div>
   {#each panes as pane (pane.id)}
     {@const active = pane.id === viewId}
-    <div class="pane absolute inset-0 flex" class:pane-hidden={!active} inert={!active}>
+    <div
+      class="pane absolute inset-0 flex"
+      class:pane-hidden={!active}
+      inert={!active}
+      style:view-transition-name={active ? 'session-pane' : 'none'}
+    >
       <SessionPane viewId={pane.id} browsing={pane.browsing} browsingCwd={pane.cwd} browsingHarness={pane.harness} {active} />
     </div>
   {/each}

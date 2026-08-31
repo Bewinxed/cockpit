@@ -799,6 +799,17 @@
   animation: none;
 }
 
+/* Session pane crossfade — only the active pane carries this name,
+   so the VT API morphs between old and new pane content. */
+::view-transition-old(session-pane) {
+  animation: 200ms cubic-bezier(0.32, 0.72, 0, 1) both vt-pane-out;
+}
+::view-transition-new(session-pane) {
+  animation: 200ms cubic-bezier(0.32, 0.72, 0, 1) both vt-pane-in;
+}
+@keyframes vt-pane-out { to   { opacity: 0; } }
+@keyframes vt-pane-in  { from { opacity: 0; } }
+
 /* Content transitions — direction set via CSS custom properties from JS.
    --vt-old-x/y: where the old content exits to
    --vt-new-x/y: where the new content enters from
