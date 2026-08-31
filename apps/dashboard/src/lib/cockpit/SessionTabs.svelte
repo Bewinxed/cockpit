@@ -11,8 +11,8 @@
    * off the strip and carries strong ink, so the selection survives greyscale.
    */
   import { onMount, untrack } from 'svelte';
-  import { goto } from '$app/navigation';
   import { page } from '$app/state';
+  import { workspace } from './workspace/workspace.svelte';
   import { IconBoxDuo, IconClose } from '$lib/icons';
   import { cockpit } from './client.svelte';
   import { resolveSessionTitle } from './links';
@@ -56,6 +56,22 @@
   onMount(() => {
     mounted = true;
   });
+
+  /**
+   * Which tab is lit, from the workspace rather than from the URL.
+   *
+   * The strip used to compare `page.url.pathname` against each tab's href,
+   * which meant the selection could not move until a navigation had completed.
+   * It now reads the same state the panes render from, so the tab lights up in
+   * the same frame the conversation appears — and a swipe, which never touches
+   * the router at all, moves the selection with it.
+   *
+   * `path` survives for one job only: lighting the right tab in the strip the
+   * SERVER drew, before the store exists to be asked.
+   */
+  const onHome = $derived(mounted ? workspace.activeSessionId === null : path === '/session');
+  const isActive = (id: string) =>
+    mounted ? workspace.activeSessionId === id : path === `/session/${id}`;
 
   const servedTabs = $derived((page.data as { tabs?: ServerTab[] }).tabs ?? []);
 
@@ -119,7 +135,10 @@
     };
   }
 
-  const held = $derived.by(() => workingSet.order.map(resolve));
+  // The workspace owns which conversations are open; the working set keeps
+  // what is known ABOUT them (the machine and folder a stored session is
+  // addressed by, and the name this browser last resolved it to).
+  const held = $derived.by(() => workspace.openIds.map(resolve));
 
   const tabs = $derived(mounted ? held : served);
 
@@ -138,20 +157,34 @@
     });
   });
 
-  /** Closing the tab you are reading leaves you on the board, not on a dead id. */
+  /**
+   * Show a conversation. The anchor keeps its `href` — it is a real link, so
+   * middle-click still opens a window and "Copy link" still copies something
+   * that works — but a plain left click is handled here instead, because
+   * letting it navigate would run the server load this whole design exists to
+   * avoid. Modified clicks fall through to the browser untouched.
+   */
+  function show(event: MouseEvent, id: string | null) {
+    if (event.defaultPrevented) return;
+    if (event.button !== 0) return;
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    workspace.activate(id);
+  }
+
+  /** Closing the tab you are reading falls to its neighbour, not to the board. */
   function close(id: string) {
-    workingSet.forget(id);
-    if (path === `/session/${id}`) goto('/session');
+    workspace.close(id);
   }
 
   /** Right-click actions beyond the close cross. */
   function closeOthers(keep: string) {
-    for (const id of [...workingSet.order]) if (id !== keep) workingSet.forget(id);
-    if (path !== `/session/${keep}`) goto(`/session/${keep}`);
+    for (const id of [...workspace.openIds]) if (id !== keep) workspace.close(id);
+    workspace.activate(keep);
   }
   function closeAll() {
-    for (const id of [...workingSet.order]) workingSet.forget(id);
-    goto('/session');
+    for (const id of [...workspace.openIds]) workspace.close(id);
+    workspace.activate(null);
   }
   const copyLink = (href: string) =>
     copyToClipboard('Link', new URL(href, location.origin).href);
@@ -160,10 +193,11 @@
 <div class="tabstrip" role="tablist" aria-label="Open sessions">
   <a
     class="tab home"
-    class:on={path === '/session'}
+    class:on={onHome}
     href="/session"
     role="tab"
-    aria-selected={path === '/session'}
+    aria-selected={onHome}
+    onclick={(e) => show(e, null)}
   >
     <span class="hic" aria-hidden="true"><IconBoxDuo /></span>
     <span class="nm">Fleet</span>
@@ -172,11 +206,18 @@
     <span class="rule" aria-hidden="true"></span>
   {/if}
   {#each tabs as tab (tab.id)}
-    {@const active = path === `/session/${tab.id}`}
+    {@const active = isActive(tab.id)}
     <ContextMenu.Root>
       <ContextMenu.Trigger class="contents">
         <div class="tab" class:on={active}>
-          <a class="tl" href={tab.href} role="tab" aria-selected={active} title={tab.label}>
+          <a
+            class="tl"
+            href={tab.href}
+            role="tab"
+            aria-selected={active}
+            title={tab.label}
+            onclick={(e) => show(e, tab.id)}
+          >
             <span class="tm m{tab.hue}" aria-hidden="true"><HarnessGlyph harness={tab.harness} /></span>
             <span class="nm">{tab.label}</span>
           </a>

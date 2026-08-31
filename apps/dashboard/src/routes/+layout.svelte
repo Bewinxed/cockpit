@@ -42,14 +42,15 @@
 
   // Only animate what needs animating.
   // - Sidebar nav (spoke <-> spoke): vertical slide keyed to spoke order.
-  // - Session tab switches: instant here; the pane crossfade is CSS in session/+layout.
   // - Same-page param changes (?tab=): instant.
   // - Drill-in (Fleet -> Session/[id]): horizontal push.
-  // - Mobile gesture swipes: keep the push (data-nav already set by gesture handler).
+  //
+  // Moving between conversations never arrives here at all: the workspace
+  // store shows the pane and writes the URL with `pushState`, which runs no
+  // navigation. The flag that used to tell this handler to stand down during a
+  // swipe is gone with the navigation it was suppressing.
   onNavigate((navigation) => {
     if (!document.startViewTransition) return;
-    // Swipe gesture already animated — skip the VT entirely.
-    if (document.documentElement.dataset.swipeNav !== undefined) return;
     if (!navigation.from || !navigation.to) return;
 
     const from = navigation.from.url.pathname;

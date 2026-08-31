@@ -1,0 +1,354 @@
+/**
+ * The workspace: what is on screen, as state rather than as a URL.
+ *
+ * This is the inversion the whole pane system rests on. Before it, the active
+ * conversation was `page.params.id` — which meant changing conversations was a
+ * `goto()`, which ran a server load, which landed *after* whatever animation
+ * had already finished, and reshuffled the transcript underneath it. A gesture
+ * needs an answer in the same frame the finger moves; a router cannot give one.
+ *
+ * So the tree below is the truth, and the URL is a projection of it written
+ * with `pushState` — shallow, no load, no `page.data` change. Nothing on the
+ * render path reads the URL back. A deep link still works, because the URL is
+ * read exactly once per real navigation to seed this store, and never again.
+ *
+ * Phase 1 runs the tree in its degenerate shape: one leaf, whose tab list is
+ * still owned by `workingSet`. The node types are the finished ones so the
+ * grid can grow into them without a rewrite; only the ownership of `tabs`
+ * moves later.
+ */
+import { browser } from '$app/environment';
+import { pushState, replaceState } from '$app/navigation';
+import { workingSet } from '../working-set.svelte';
+
+/** A split: two or more children laid out along one axis. */
+export interface BranchNode {
+  t: 'b';
+  id: string;
+  dir: 'h' | 'v';
+  /** Percentages, one per child, summing to 100. Written by paneforge. */
+  sizes: number[];
+  kids: PaneNode[];
+}
+
+/** A group of tabs with one showing — VS Code's editor group. */
+export interface LeafNode {
+  t: 'l';
+  id: string;
+  tabs: string[];
+  /** `null` is the fleet board: a leaf holding nothing is where you start. */
+  active: string | null;
+}
+
+export type PaneNode = BranchNode | LeafNode;
+
+export interface WorkspaceV1 {
+  v: 1;
+  root: PaneNode;
+  focusedLeaf: string;
+}
+
+const KEY = 'outpost-workspace';
+/** A year: the layout is a habit, not a session. Matches the working set. */
+const COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
+
+let seq = 0;
+const nodeId = (): string => `p${Date.now().toString(36)}${(seq++).toString(36)}`;
+
+const emptyLeaf = (): LeafNode => ({ t: 'l', id: nodeId(), tabs: [], active: null });
+
+function blank(): WorkspaceV1 {
+  const leaf = emptyLeaf();
+  return { v: 1, root: leaf, focusedLeaf: leaf.id };
+}
+
+/* ── Persistence ──────────────────────────────────────────────────────
+   localStorage is the source; the cookie is the copy the SERVER renders
+   from. Both are written on every mutation, exactly as the working set
+   does, so the first paint and the first client render agree. */
+
+const fromCookie = (): string | null => {
+  if (typeof document === 'undefined') return null;
+  const match = new RegExp(`(?:^|;\\s*)${KEY}=([^;]*)`).exec(document.cookie);
+  if (!match) return null;
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return null;
+  }
+};
+
+/** Whether a parsed value is actually a tree, and not merely JSON. */
+function validate(node: unknown): node is PaneNode {
+  if (!node || typeof node !== 'object') return false;
+  const n = node as Partial<BranchNode> & Partial<LeafNode>;
+  if (n.t === 'l') return typeof n.id === 'string' && Array.isArray(n.tabs);
+  if (n.t === 'b') {
+    return (
+      typeof n.id === 'string' &&
+      (n.dir === 'h' || n.dir === 'v') &&
+      Array.isArray(n.kids) &&
+      n.kids.length > 0 &&
+      n.kids.every(validate)
+    );
+  }
+  return false;
+}
+
+function parse(raw: string | null | undefined): WorkspaceV1 | null {
+  if (!raw) return null;
+  try {
+    const held = JSON.parse(raw) as WorkspaceV1;
+    if (held?.v !== 1 || !validate(held.root)) return null;
+    if (typeof held.focusedLeaf !== 'string') return null;
+    return held;
+  } catch {
+    return null;
+  }
+}
+
+function load(): WorkspaceV1 {
+  let stored: string | null = null;
+  try {
+    if (typeof localStorage !== 'undefined') stored = localStorage.getItem(KEY);
+  } catch {
+    // A browser that will not read storage still has the cookie.
+  }
+  const held = parse(stored) ?? parse(fromCookie());
+  if (held) return held;
+  // Migration: a reader who already has open tabs keeps them, in one leaf.
+  const carried = browser ? workingSet.order : [];
+  if (carried.length > 0) {
+    const leaf: LeafNode = { t: 'l', id: nodeId(), tabs: [...carried], active: null };
+    return { v: 1, root: leaf, focusedLeaf: leaf.id };
+  }
+  return blank();
+}
+
+const held = $state<WorkspaceV1>(load());
+
+function save(): void {
+  if (!browser) return;
+  const payload = JSON.stringify(held);
+  try {
+    if (typeof localStorage !== 'undefined') localStorage.setItem(KEY, payload);
+  } catch {
+    // A browser that will not store just starts the layout over next time.
+  }
+  try {
+    document.cookie = `${KEY}=${encodeURIComponent(payload)}; path=/; max-age=${COOKIE_MAX_AGE}; samesite=lax`;
+  } catch {
+    // Cookies refused: SSR falls back to the URL's session alone.
+  }
+}
+
+/* ── Tree walking ─────────────────────────────────────────────────────── */
+
+function leavesOf(node: PaneNode, out: LeafNode[] = []): LeafNode[] {
+  if (node.t === 'l') out.push(node);
+  else for (const kid of node.kids) leavesOf(kid, out);
+  return out;
+}
+
+function leafById(id: string): LeafNode | null {
+  return leavesOf(held.root).find((leaf) => leaf.id === id) ?? null;
+}
+
+function leafHolding(sessionId: string): LeafNode | null {
+  return leavesOf(held.root).find((leaf) => leaf.tabs.includes(sessionId)) ?? null;
+}
+
+/** The focused leaf, or the first one — `focusedLeaf` can name a closed leaf. */
+function focused(): LeafNode {
+  const named = leafById(held.focusedLeaf);
+  if (named) return named;
+  const first = leavesOf(held.root)[0];
+  held.focusedLeaf = first.id;
+  return first;
+}
+
+/* ── The URL projection ───────────────────────────────────────────────
+   One direction only. `urlFor` builds exactly the href the tab strip
+   builds, so a projected URL and a copied link are the same string. */
+
+export function urlFor(sessionId: string | null): string {
+  if (!sessionId) return '/session';
+  const ctx = workingSet.contextOf(sessionId);
+  if (!ctx) return `/session/${sessionId}`;
+  const q = new URLSearchParams({ machine: ctx.machine, cwd: ctx.cwd, harness: ctx.harness });
+  return `/session/${sessionId}?${q}`;
+}
+
+/** The session id a URL names, or `null` for the board. */
+export function sessionIdOf(url: URL): string | null {
+  const parts = url.pathname.split('/').filter(Boolean);
+  if (parts[0] !== 'session') return null;
+  return parts[1] ?? null;
+}
+
+/**
+ * Write the URL without running a load.
+ *
+ * `pushState` for a session the reader chose to visit, `replaceState` for
+ * moves that are not destinations of their own (focusing another pane). Our
+ * choice: Back should walk the conversations you went to, not every click
+ * that moved focus. Guarded on `browser` because the router does not exist
+ * during a render, and wrapped because SvelteKit throws if it is called
+ * before the router has initialised — a throw here would take the whole
+ * synchronous mutation down with it, and the URL is the one part of this
+ * that is allowed to be best-effort.
+ */
+function project(sessionId: string | null, mode: 'push' | 'replace'): void {
+  if (!browser) return;
+  const url = urlFor(sessionId);
+  try {
+    if (mode === 'push') pushState(url, {});
+    else replaceState(url, {});
+  } catch {
+    // Before the router is ready the URL is already correct — this is a
+    // no-op, not a failure.
+  }
+}
+
+/* ── The store ────────────────────────────────────────────────────────── */
+
+export const workspace = {
+  /** Every open conversation, in tab order, across every group. */
+  get openIds(): string[] {
+    return leavesOf(held.root).flatMap((leaf) => leaf.tabs);
+  },
+
+  /** The groups, left to right, for the grid and the mobile pager. */
+  get leaves(): LeafNode[] {
+    return leavesOf(held.root);
+  },
+
+  get root(): PaneNode {
+    return held.root;
+  },
+
+  get focusedLeafId(): string {
+    return focused().id;
+  },
+
+  /** What the reader is looking at — `null` is the fleet board. */
+  get activeSessionId(): string | null {
+    return focused().active;
+  },
+
+  /** Which conversation a given group is showing. */
+  activeOf(leafId: string): string | null {
+    return leafById(leafId)?.active ?? null;
+  },
+
+  leaf(leafId: string): LeafNode | null {
+    return leafById(leafId);
+  },
+
+  /** The group holding a conversation, for a tab that names no group. */
+  leafOf(sessionId: string): LeafNode | null {
+    return leafHolding(sessionId);
+  },
+
+  /**
+   * Show a conversation. The synchronous half of every tab click, swipe
+   * commit and drop — the re-render happens on this assignment, and the URL
+   * catches up afterwards without a load.
+   */
+  activate(sessionId: string | null, leafId?: string): void {
+    const leaf = (leafId ? leafById(leafId) : leafHolding(sessionId ?? '')) ?? focused();
+    if (sessionId && !leaf.tabs.includes(sessionId)) leaf.tabs.push(sessionId);
+    leaf.active = sessionId;
+    held.focusedLeaf = leaf.id;
+    save();
+    project(sessionId, 'push');
+  },
+
+  /** Move keyboard focus between groups without changing what is shown. */
+  focus(leafId: string): void {
+    const leaf = leafById(leafId);
+    if (!leaf || held.focusedLeaf === leafId) return;
+    held.focusedLeaf = leafId;
+    save();
+    project(leaf.active, 'replace');
+  },
+
+  /**
+   * Open a conversation, adding it to the focused group if it is not already
+   * held somewhere. `ctx` carries the machine/folder a STORED session needs
+   * to be addressed by — without it the tab rebuilds a bare `/session/{id}`,
+   * which resolves to a different conversation that happens to share an id.
+   */
+  open(
+    sessionId: string,
+    ctx?: { machine?: string | null; cwd?: string; harness?: string }
+  ): void {
+    if (ctx) workingSet.visit(sessionId, ctx);
+    else workingSet.visit(sessionId);
+    this.activate(sessionId, leafHolding(sessionId)?.id);
+  },
+
+  /**
+   * Bring a conversation on screen because the URL now names it — a deep
+   * link, a back button, a link from another route. Same shape as `open`,
+   * but it never writes the URL back: the URL is already what it is, and
+   * projecting it again would push a duplicate history entry.
+   */
+  reveal(
+    sessionId: string | null,
+    ctx?: { machine?: string | null; cwd?: string; harness?: string }
+  ): void {
+    if (sessionId) {
+      if (ctx) workingSet.visit(sessionId, ctx);
+      else workingSet.visit(sessionId);
+    }
+    const leaf = (sessionId ? leafHolding(sessionId) : null) ?? focused();
+    if (sessionId && !leaf.tabs.includes(sessionId)) leaf.tabs.push(sessionId);
+    leaf.active = sessionId;
+    held.focusedLeaf = leaf.id;
+    save();
+  },
+
+  /**
+   * Close a tab. The group falls back to its neighbour rather than to the
+   * board — closing the third of four conversations should leave you in the
+   * strip, not back at the fleet.
+   */
+  close(sessionId: string): void {
+    const leaf = leafHolding(sessionId);
+    if (!leaf) return;
+    const at = leaf.tabs.indexOf(sessionId);
+    leaf.tabs.splice(at, 1);
+    workingSet.forget(sessionId);
+    if (leaf.active === sessionId) {
+      leaf.active = leaf.tabs[at] ?? leaf.tabs[at - 1] ?? null;
+      if (leaf.id === held.focusedLeaf) project(leaf.active, 'push');
+    }
+    save();
+  },
+
+  /**
+   * The next conversation along a group's strip, or `null` when there is
+   * nowhere to go. Wraps, because on a phone there is no edge to see and
+   * continuing round is the shortest way back to the other end.
+   *
+   * Unlike the working set's old `step`, the reachable set is exactly this
+   * group's open tabs — a swipe can never land on a conversation that is not
+   * in the strip in front of you.
+   */
+  step(from: string | null, by: number, leafId?: string): string | null {
+    const leaf = leafId ? leafById(leafId) : focused();
+    if (!leaf || leaf.tabs.length < 2) return null;
+    const at = from ? leaf.tabs.indexOf(from) : -1;
+    if (at === -1) return leaf.tabs[0] ?? null;
+    return leaf.tabs[(at + by + leaf.tabs.length) % leaf.tabs.length] ?? null;
+  },
+
+  /** Adopt a tree the server rendered from the cookie, on first mount. */
+  hydrate(served: WorkspaceV1 | null): void {
+    if (!served || !validate(served.root)) return;
+    if (leavesOf(held.root).some((leaf) => leaf.tabs.length > 0)) return;
+    held.root = served.root;
+    held.focusedLeaf = served.focusedLeaf;
+  },
+};

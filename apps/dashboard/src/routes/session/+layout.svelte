@@ -1,23 +1,27 @@
 <script lang="ts">
   /**
-   * Session pane stacking, shared identity header, and swipe gesture.
+   * Session pane stacking and the shared identity header.
    *
-   * One pane is kept per open tab. Switching flips `visibility` — nothing
-   * unmounts, nothing is measured twice, scroll positions survive.
+   * One pane is kept per conversation the reader has opened. Switching flips
+   * `visibility` — nothing unmounts, nothing is measured twice, scroll
+   * positions survive.
    *
-   * Architecture:
-   * - ONE shared SessionHeader sits above the pane stack. Because it is a
-   *   single component instance, torph morphs the title, path and pill text
-   *   character-by-character on every tab switch — no crossfade, no
-   *   remount.
-   * - The TRANSCRIPT BODY slides directionally (tab-click or swipe).
-   * - The COMPOSER stays static — it is shared structure.
-   * - Horizontal swipe on the transcript area navigates between tabs, like
-   *   a finance app swiping between months.
+   * What changed here, and why everything else follows from it: the active
+   * conversation is `workspace.activeSessionId`, a plain piece of state, not
+   * `page.params.id`. A tab click assigns it and re-renders in the same frame;
+   * the URL is written afterwards with `pushState`, which runs no load. Because
+   * no load runs, `page.data` cannot change on a switch, so the server tail
+   * cannot land late and rebuild a transcript that is already on screen. That
+   * late landing was the layout shift; it is now structurally impossible rather
+   * than suppressed.
+   *
+   * The View-Transition suppression flag, the one-frame animation guards and
+   * the slide-direction interlocks that used to live here are gone with it.
+   * They existed only to hide the navigation cascade this no longer performs.
    */
   import type { Snippet } from 'svelte';
-  import { untrack } from 'svelte';
-  import { goto } from '$app/navigation';
+  import { onMount, untrack } from 'svelte';
+  import { afterNavigate } from '$app/navigation';
   import { page } from '$app/state';
   import type { EffortLevel, PermissionMode } from '@cockpit/core';
   import FleetBoard from '$lib/cockpit/FleetBoard.svelte';
@@ -30,91 +34,126 @@
     commandRecord,
     streamCapable,
     relaunchSession,
+    type HistorySource,
   } from '$lib/cockpit/client.svelte';
+  import { workspace, sessionIdOf } from '$lib/cockpit/workspace/workspace.svelte';
   import { workingSet } from '$lib/cockpit/working-set.svelte';
   import { resolveSessionTitle } from '$lib/cockpit/links';
   import { models, covers, ensureModels } from '$lib/cockpit/models.svelte';
   import { PERMISSION_MODES } from '$lib/cockpit/permission-modes';
-  import {
-    effortStops as getEffortStops,
-    hasEffortScale,
-  } from '$lib/cockpit/effort-levels';
+  import { effortStops as getEffortStops, hasEffortScale } from '$lib/cockpit/effort-levels';
 
   let { children }: { children: Snippet } = $props();
 
-  /* ── Pane management ─────────────────────────────────────────────── */
+  /* ── What is on screen ───────────────────────────────────────────── */
 
-  interface Pane {
+  const viewId = $derived(workspace.activeSessionId ?? '');
+  const onBoard = $derived(workspace.activeSessionId === null);
+
+  /* ── The server's answer, claimed once ───────────────────────────────
+     `page.data` only changes on a REAL navigation — a cold load, a deep
+     link, an arrival from another route. Reading it reactively would mean
+     every pane re-evaluating its claim whenever anything touched the page
+     store; worse, it was the mechanism by which a late-landing tail
+     rebuilt a transcript mid-animation. So it is captured by value, at the
+     two moments it can actually differ, and handed to the one pane it
+     belongs to as a prop. */
+
+  interface EntryData {
     id: string;
-    browsing: string | null;
-    cwd: string;
-    harness: string;
+    tail: unknown;
+    history: Promise<HistorySource | null> | null;
   }
 
-  const viewId = $derived(page.params.id ?? '');
-  const onBoard = $derived(page.url.pathname === '/session');
-
-  /** Slide direction for the transcript body on tab switch (click). */
-  let prevViewId = $state(viewId);
-  let slideDir = $state<'' | 'left' | 'right'>('');
-
-  $effect.pre(() => {
-    const cur = viewId;
-    const prev = prevViewId;
-    if (cur === prev) return;
-    // Swipe handles its own animation — suppress the tab-click slide
-    if (swipePhase !== 'idle') {
-      prevViewId = cur;
-      return;
-    }
-    const order = workingSet.order;
-    const curIdx = order.indexOf(cur);
-    const prevIdx = order.indexOf(prev);
-    slideDir = curIdx > prevIdx ? 'left' : curIdx < prevIdx ? 'right' : '';
-    prevViewId = cur;
+  const captureEntry = (): EntryData => ({
+    id: page.params.id ?? '',
+    tail: (page.data as { tail?: unknown }).tail ?? null,
+    history:
+      (page.data as { history?: Promise<HistorySource | null> | null }).history ?? null,
   });
 
-  $effect(() => {
-    if (!slideDir) return;
-    const id = setTimeout(() => { slideDir = ''; }, 260);
-    return () => clearTimeout(id);
+  let entry = $state<EntryData>(captureEntry());
+  afterNavigate(() => {
+    entry = captureEntry();
+    reconcileFromUrl();
   });
 
-  const browsing = $derived(page.url.searchParams.get('machine'));
+  /* ── URL → workspace ─────────────────────────────────────────────────
+     The other direction of the projection, and the only one that reads the
+     URL.
+
+     Deliberately NOT a `$effect` on `page.url`. A shallow `pushState` does
+     not re-run this layout's effects — measured, not assumed: an instrumented
+     effect fired twice at mount and never again across three tab clicks and
+     two back presses, leaving the store a whole history entry behind the
+     address bar. Reactivity is the wrong instrument here anyway. There are
+     exactly two ways the URL can move without this store having moved first,
+     and both are events: the browser walking history, and a real navigation
+     arriving from another route. So both are listened for, `location` is read
+     directly, and nothing depends on when a framework store catches up.
+
+     Our own `pushState` needs no reconciliation at all — the store was the
+     thing that moved first. The equality check makes that a no-op rather than
+     a second write. */
+
   const browsingCwd = $derived(page.url.searchParams.get('cwd') ?? '');
   const browsingHarness = $derived(page.url.searchParams.get('harness') ?? 'claude');
+  const browsingMachine = $derived(page.url.searchParams.get('machine'));
 
-  let panes = $state<Pane[]>(
-    viewId ? [{ id: viewId, browsing, cwd: browsingCwd, harness: browsingHarness }] : []
-  );
+  function reconcileFromUrl(): void {
+    const url = new URL(location.href);
+    const parts = url.pathname.split('/').filter(Boolean);
+    // Another route entirely — leave the workspace holding what it holds, so
+    // a trip to Usage and back does not cost the reader their place.
+    if (parts[0] !== 'session') return;
+    const urlId = parts[1] ?? null;
+    if (urlId === workspace.activeSessionId) return;
+    // Only carry context when the URL actually names a machine. A stored
+    // conversation's machine and folder are how it is addressed at all, and
+    // `workingSet.visit` SPREADS what it is given over what it holds — so
+    // handing it a blank context because this particular URL had no query
+    // string erases the real one, and the pane that had been reading a
+    // transcript a moment ago reports itself unreachable.
+    const machine = url.searchParams.get('machine');
+    workspace.reveal(
+      urlId,
+      urlId && machine
+        ? {
+            machine,
+            cwd: url.searchParams.get('cwd') ?? '',
+            harness: url.searchParams.get('harness') ?? 'claude',
+          }
+        : undefined
+    );
+  }
+
+  onMount(() => {
+    reconcileFromUrl();
+    const onPop = () => reconcileFromUrl();
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  });
+
+  /* ── Panes ───────────────────────────────────────────────────────────
+     A pane is mounted the first time its conversation is shown and then
+     kept for the life of the session — that is what makes a return to a
+     tab free. The list only grows here; closing a tab prunes it. */
+
+  let mounted = $state<string[]>([]);
 
   $effect.pre(() => {
     const id = viewId;
     if (!id) return;
-    const machineId = browsing;
-    const cwd = browsingCwd;
-    const harness = browsingHarness;
     untrack(() => {
-      workingSet.visit(id, { machine: machineId, cwd, harness });
-      const held = panes.find((pane) => pane.id === id);
-      if (!held) {
-        panes.push({ id, browsing: machineId, cwd, harness });
-        return;
-      }
-      if (machineId && !held.browsing) {
-        held.browsing = machineId;
-        held.cwd = cwd;
-        held.harness = harness;
-      }
+      if (!mounted.includes(id)) mounted.push(id);
     });
   });
 
   $effect(() => {
-    const open = new Set(workingSet.order);
-    const id = viewId;
+    const open = new Set(workspace.openIds);
     untrack(() => {
-      const keep = panes.filter((pane) => pane.id === id || open.has(pane.id));
-      if (keep.length !== panes.length) panes = keep;
+      const keep = mounted.filter((id) => open.has(id));
+      if (keep.length !== mounted.length) mounted = keep;
     });
   });
 
@@ -126,9 +165,10 @@
 
   let views = $state<Record<string, 'chat' | 'flow'>>({});
 
-  /* ── Shared header data ──────────────────────────────────────────── */
-  /* Computed from the cockpit store for the active viewId, fed to
-     the ONE SessionHeader instance so torph can morph the text. */
+  /* ── Shared header ───────────────────────────────────────────────────
+     ONE instance, above the stack. Because it is one instance and its text
+     comes from synchronous state, torph morphs the title character by
+     character on a switch instead of the whole bar being replaced. */
 
   const session = $derived(cockpit.session(viewId) ?? null);
   const machineId = $derived(cockpit.session(viewId)?.machineId ?? '');
@@ -140,9 +180,7 @@
   const title = $derived(
     resolveSessionTitle({
       title: cockpit.instances.find((i) => i.id === viewId)?.title,
-      firstMessage: session?.messages.find(
-        (m) => m.type === 'user' && m.content.trim()
-      )?.content,
+      firstMessage: session?.messages.find((m) => m.type === 'user' && m.content.trim())?.content,
       cwd: session?.cwd || browsingCwd,
       id: viewId,
     })
@@ -151,13 +189,9 @@
   const stats = $derived(cockpit.statsOf(viewId));
   const activity = $derived(cockpit.activityOf(viewId));
 
-  const machineRow = $derived(
-    cockpit.machines.find((m) => m.machineId === machineId) ?? null
-  );
+  const machineRow = $derived(cockpit.machines.find((m) => m.machineId === machineId) ?? null);
   const harnessReport = $derived(
-    machineRow?.harnesses?.find(
-      (report) => report.harness === session?.harness
-    ) ?? null
+    machineRow?.harnesses?.find((report) => report.harness === session?.harness) ?? null
   );
   const offeredModes = $derived(
     harnessReport
@@ -167,17 +201,15 @@
       : PERMISSION_MODES
   );
   const chosenModel = $derived(
-    session?.model
-      ? (models.offered.find((row) => covers(row, session.model!)) ?? null)
-      : null
+    session?.model ? (models.offered.find((row) => covers(row, session.model!)) ?? null) : null
   );
-  const harnessEffort = $derived(
-    harnessReport?.capabilities.effort !== false
-  );
+  const harnessEffort = $derived(harnessReport?.capabilities.effort !== false);
   const showEffort = $derived(harnessEffort && hasEffortScale(chosenModel));
   const effortStopsForModel = $derived(getEffortStops(chosenModel));
 
-  $effect(() => { ensureModels(); });
+  $effect(() => {
+    ensureModels();
+  });
 
   function onmodel(model: string): SettingChange {
     if (!machineId) return null;
@@ -185,270 +217,18 @@
   }
   function onpermission(mode: PermissionMode): SettingChange {
     if (!machineId) return null;
-    if (mode === 'bypassPermissions')
-      return relaunchSession(viewId, machineId, mode);
+    if (mode === 'bypassPermissions') return relaunchSession(viewId, machineId, mode);
     return submitCommand(viewId, machineId, 'set-permission-mode', { mode });
   }
   function oneffort(level: EffortLevel): SettingChange {
     if (!machineId) return null;
     return submitCommand(viewId, machineId, 'set-effort', { effort: level });
   }
-
-  /* ── Swipe gesture ───────────────────────────────────────────────── */
-  /* Horizontal swipe on the transcript body navigates between tabs.
-     The adjacent pane appears flush — "it was always there" — and the
-     finger's delta drives both panes in lockstep.
-
-     The gesture is ignored on interactive elements, the composer, and
-     horizontally scrollable containers (code blocks). */
-
-  type SwipePhase = 'idle' | 'tracking' | 'decided' | 'releasing';
-
-  let containerEl = $state<HTMLDivElement | null>(null);
-  let swipePhase = $state<SwipePhase>('idle');
-  let swipeDelta = $state(0);
-  let swipeTargetId = $state<string | null>(null);
-  let swipeDirection = $state<'left' | 'right' | null>(null);
-  let swipeContainerWidth = $state(0);
-  let swipeCompleting = $state(false);
-
-  /** True for one frame after a swipe resets — suppresses any stray
-   *  slideDir or VT animation from the goto settling. */
-  let swipeJustCompleted = $state(false);
-
-  // Touch tracking (not reactive — only read inside handlers)
-  let touchStartX = 0;
-  let touchStartY = 0;
-  let touchSamples: Array<{ x: number; t: number }> = [];
-
-  /**
-   * Whether this touch target should suppress the swipe.
-   *
-   * Interactive controls, the composer, and horizontally scrollable
-   * containers (code blocks with overflow) are all off-limits. The
-   * swipe fires only on the transcript body — the biggest unadorned
-   * surface in the pane.
-   */
-  function shouldIgnoreSwipe(target: EventTarget | null): boolean {
-    if (!(target instanceof HTMLElement)) return true;
-    // Only allow swipe inside the transcript-slide area
-    if (!target.closest('.transcript-slide')) return true;
-    // Not on interactive controls
-    if (
-      target.closest(
-        'button, a, input, textarea, select, [contenteditable="true"], ' +
-        '[role="button"], [role="link"], [role="tab"], .composer'
-      )
-    ) return true;
-    // Not inside horizontally scrollable containers
-    let node: HTMLElement | null = target;
-    const fence = target.closest('.transcript-slide');
-    while (node && node !== fence) {
-      const style = getComputedStyle(node);
-      if (
-        (style.overflowX === 'auto' || style.overflowX === 'scroll') &&
-        node.scrollWidth > node.clientWidth + 1
-      ) return true;
-      node = node.parentElement;
-    }
-    return false;
-  }
-
-  function handleTouchStart(e: TouchEvent) {
-    if (swipePhase !== 'idle' || onBoard) return;
-    if (shouldIgnoreSwipe(e.target)) return;
-    const touch = e.touches[0];
-    touchStartX = touch.clientX;
-    touchStartY = touch.clientY;
-    touchSamples = [{ x: touch.clientX, t: performance.now() }];
-    swipePhase = 'tracking';
-  }
-
-  function handleTouchMove(e: TouchEvent) {
-    if (swipePhase !== 'tracking' && swipePhase !== 'decided') return;
-    const touch = e.touches[0];
-    const dx = touch.clientX - touchStartX;
-    const dy = touch.clientY - touchStartY;
-
-    // Record sample for release velocity
-    const now = performance.now();
-    touchSamples.push({ x: touch.clientX, t: now });
-    if (touchSamples.length > 5) touchSamples.shift();
-
-    if (swipePhase === 'tracking') {
-      // Need a minimum displacement before committing
-      if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
-      // Vertical-dominant → it's a scroll, bail out
-      if (Math.abs(dy) > Math.abs(dx) * 0.7) {
-        swipePhase = 'idle';
-        return;
-      }
-      // Decide it's a horizontal swipe
-      const dir: 'left' | 'right' = dx < 0 ? 'left' : 'right';
-      const step = dir === 'left' ? 1 : -1;
-      const fallback = cockpit.instances.map((i) => i.id);
-      const target = workingSet.step(viewId, step, fallback);
-      if (!target || !containerEl) {
-        swipePhase = 'idle';
-        return;
-      }
-      swipeDirection = dir;
-      swipeTargetId = target;
-      swipeContainerWidth = containerEl.clientWidth;
-      swipePhase = 'decided';
-      // fall through to update delta
-    }
-
-    // Prevent vertical scroll once we own the gesture
-    e.preventDefault();
-
-    // Clamp: can't overshoot the adjacent pane
-    if (swipeDirection === 'left') {
-      swipeDelta = Math.max(Math.min(dx, 0), -swipeContainerWidth);
-    } else {
-      swipeDelta = Math.min(Math.max(dx, 0), swipeContainerWidth);
-    }
-  }
-
-  function handleTouchEnd() {
-    if (swipePhase === 'tracking') {
-      swipePhase = 'idle';
-      return;
-    }
-    if (swipePhase !== 'decided') return;
-
-    // Release velocity (px/ms)
-    let velocity = 0;
-    if (touchSamples.length >= 2) {
-      const first = touchSamples[0];
-      const last = touchSamples[touchSamples.length - 1];
-      const dt = last.t - first.t;
-      if (dt > 0) velocity = (last.x - first.x) / dt;
-    }
-
-    const ratio = Math.abs(swipeDelta) / swipeContainerWidth;
-    const fast =
-      swipeDirection === 'left' ? velocity < -0.3 : velocity > 0.3;
-    const far = ratio > 0.3;
-
-    releaseSwipe(far || fast);
-  }
-
-  function handleTouchCancel() {
-    if (swipePhase === 'decided') releaseSwipe(false);
-    else swipePhase = 'idle';
-  }
-
-  function releaseSwipe(complete: boolean) {
-    swipeCompleting = complete;
-    swipePhase = 'releasing';
-
-    // Set the final delta — the CSS transition animates from current
-    // position to this target.
-    swipeDelta = complete
-      ? swipeDirection === 'left' ? -swipeContainerWidth : swipeContainerWidth
-      : 0;
-
-    // Respect reduced motion — snap instantly
-    const reducedMotion =
-      typeof window !== 'undefined' &&
-      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const duration = reducedMotion ? 0 : complete ? 300 : 250;
-
-    setTimeout(async () => {
-      if (complete && swipeTargetId) {
-        // Prevent the tab-click slideDir from firing on this navigation
-        prevViewId = swipeTargetId;
-
-        // Build the URL with stored-session context if needed
-        const targetPane = panes.find((p) => p.id === swipeTargetId);
-        let url = `/session/${swipeTargetId}`;
-        if (targetPane?.browsing) {
-          const q = new URLSearchParams();
-          q.set('machine', targetPane.browsing);
-          q.set('cwd', targetPane.cwd);
-          q.set('harness', targetPane.harness);
-          url += `?${q.toString()}`;
-        }
-        // Tell the root layout's onNavigate to skip the View Transition
-        // for this goto — the swipe already animated the pane into place.
-        if (typeof document !== 'undefined') {
-          document.documentElement.dataset.swipeNav = '';
-        }
-        // Await navigation so viewId updates and the target pane becomes
-        // `active` BEFORE swipe state resets. Without this, the target
-        // briefly gets slide-hidden (forceVisible gone, active not yet true)
-        // and the CSS transition from opacity:0→1 plays a false re-slide.
-        await goto(url, { noScroll: true });
-        if (typeof document !== 'undefined') {
-          delete document.documentElement.dataset.swipeNav;
-        }
-      }
-      // Reset — the target pane is now the active one, so removing
-      // forceVisible and swipe transforms is a visual no-op.
-      swipePhase = 'idle';
-      swipeDelta = 0;
-      swipeTargetId = null;
-      swipeDirection = null;
-      swipeCompleting = false;
-      // Suppress any stray animation for one frame while the DOM settles
-      swipeJustCompleted = true;
-      requestAnimationFrame(() => { swipeJustCompleted = false; });
-    }, duration);
-  }
-
-  /**
-   * Svelte action: registers non-passive touch listeners so the swipe
-   * handler can call `preventDefault` on touchmove once it owns the
-   * gesture. Passive touchstart is fine — only touchmove needs the opt-out.
-   */
-  function swipeable(node: HTMLElement) {
-    node.addEventListener('touchstart', handleTouchStart, { passive: true });
-    node.addEventListener('touchmove', handleTouchMove, { passive: false });
-    node.addEventListener('touchend', handleTouchEnd, { passive: true });
-    node.addEventListener('touchcancel', handleTouchCancel, { passive: true });
-    return {
-      destroy() {
-        node.removeEventListener('touchstart', handleTouchStart);
-        node.removeEventListener('touchmove', handleTouchMove);
-        node.removeEventListener('touchend', handleTouchEnd);
-        node.removeEventListener('touchcancel', handleTouchCancel);
-      },
-    };
-  }
-
-  /* ── Derived pane transform helpers ─────────────────────────────── */
-
-  /**
-   * The active pane ALWAYS wears `translateX(0)` — even at rest. This
-   * prevents a stray CSS transition when the swipe resets: an empty
-   * string removes the inline property, the computed value flips from
-   * `translateX(0px)` to `none`, and even though `pane-releasing` is
-   * removed in the same Svelte tick the browser can still fire a
-   * one-frame transition flash. Keeping the value constant means there
-   * is never a property to transition.
-   */
-  function paneTransform(paneId: string, isActive: boolean): string {
-    if (swipePhase === 'idle' || swipePhase === 'tracking') {
-      return isActive ? 'translateX(0)' : '';
-    }
-    // Check swipe target BEFORE isActive — after goto completes but before
-    // swipe state resets, the target pane is both active AND the swipe target.
-    // It must keep the target formula (which evaluates to translateX(0) at
-    // the final delta), not the active formula (which would jump it to
-    // ±containerWidth and cause a false re-slide).
-    if (paneId === swipeTargetId) {
-      const sign = swipeDirection === 'left' ? 1 : -1;
-      return `translateX(${sign * swipeContainerWidth + swipeDelta}px)`;
-    }
-    if (isActive) return `translateX(${swipeDelta}px)`;
-    return '';
-  }
 </script>
 
-<!-- Shared SessionHeader — one instance, torph morphs text across tab switches.
-     Conditional on viewId (not session) so the header stays on screen during
-     the brief window between navigation and session-store population. -->
+<!-- One header for the stack. Conditional on there BEING a conversation, not
+     on the store having caught up with it, so it stays on screen through the
+     moment between opening a tab and its transcript arriving. -->
 {#if !onBoard && viewId}
   <SessionHeader
     {title}
@@ -479,43 +259,26 @@
   />
 {/if}
 
-<div
-  class="pane-stack relative min-h-0 min-w-0 flex-1 overflow-hidden"
-  bind:this={containerEl}
-  use:swipeable
->
-  <div
-    class="pane absolute inset-0 flex"
-    class:pane-hidden={!onBoard}
-    inert={!onBoard}
-  >
+<div class="pane-stack relative min-h-0 min-w-0 flex-1 overflow-hidden">
+  <div class="pane absolute inset-0 flex" class:pane-hidden={!onBoard} inert={!onBoard}>
     <FleetBoard active={onBoard} />
   </div>
 
-  {#each panes as pane (pane.id)}
-    {@const isActive = pane.id === viewId && !onBoard}
-    {@const isSwipeTarget =
-      swipePhase !== 'idle' && pane.id === swipeTargetId}
-    {@const shouldShow = isActive || isSwipeTarget}
-    <div
-      class="pane absolute inset-0 flex"
-      class:pane-hidden={!shouldShow}
-      class:pane-swiping={swipePhase === 'decided' && shouldShow}
-      class:pane-releasing={swipePhase === 'releasing' && shouldShow}
-      inert={!isActive && !isSwipeTarget}
-      style:transform={paneTransform(pane.id, isActive)}
-    >
+  {#each mounted as paneId (paneId)}
+    {@const isActive = paneId === viewId && !onBoard}
+    {@const ctx = workingSet.contextOf(paneId)}
+    <div class="pane absolute inset-0 flex" class:pane-hidden={!isActive} inert={!isActive}>
       <SessionPane
-        viewId={pane.id}
-        browsing={pane.browsing}
-        browsingCwd={pane.cwd}
-        browsingHarness={pane.harness}
+        viewId={paneId}
+        browsing={ctx?.machine ?? null}
+        browsingCwd={ctx?.cwd ?? ''}
+        browsingHarness={ctx?.harness ?? 'claude'}
+        serverTail={paneId === entry.id ? entry.tail : null}
+        serverHistory={paneId === entry.id ? entry.history : null}
         active={isActive}
-        slideDir={swipePhase !== 'idle' || swipeJustCompleted ? '' : (shouldShow && !isSwipeTarget ? slideDir : '')}
         hideHeader
-        view={views[pane.id] ?? 'chat'}
-        onview={(v) => (views[pane.id] = v)}
-        forceVisible={isSwipeTarget}
+        view={views[paneId] ?? 'chat'}
+        onview={(v) => (views[paneId] = v)}
       />
     </div>
   {/each}
@@ -524,9 +287,9 @@
 </div>
 
 <style>
-  /* Pane visibility: only the active pane (and the swipe target during
-     a gesture) is shown. The header lives above the stack — from the
-     user's perspective it persists while torph morphs the text. */
+  /* Only the active pane is shown. `visibility` rather than `display`,
+     deliberately: a hidden pane still lays out, so the virtualiser keeps its
+     measurements and revealing one costs nothing. */
   .pane {
     opacity: 1;
     visibility: visible;
@@ -535,30 +298,5 @@
   .pane-hidden {
     visibility: hidden;
     pointer-events: none;
-  }
-
-  /* During active drag: no CSS transition — the transform tracks the
-     finger directly. `will-change` promotes the layer so the compositor
-     handles the translation. */
-  .pane-swiping {
-    transition: none !important;
-    will-change: transform;
-  }
-
-  /* On release: animate to the final position (snap to place or
-     snap back) with the Apple-recommended deceleration curve.
-     Duration is set by the JS (300ms complete, 250ms cancel). */
-  .pane-releasing {
-    transition: transform 300ms cubic-bezier(0.16, 1, 0.3, 1);
-    will-change: transform;
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .pane,
-    .pane-hidden,
-    .pane-swiping,
-    .pane-releasing {
-      transition: none !important;
-    }
   }
 </style>

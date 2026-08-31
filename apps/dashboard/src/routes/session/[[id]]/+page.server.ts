@@ -115,14 +115,23 @@ function messagesUrl(source: HistorySource): string {
  * takes the newest turns off it, which the pane renders into the server's HTML.
  *
  * `history` stays a promise the shell paints around: it names the full streamed
- * read the client still performs. `tail` is NOT awaited — it streams to the
- * client as a deferred promise so navigation is instant. On SSR (first load),
- * the page renders its loading state; the tail resolves and fills in the
- * transcript. On client-side tab switches, the pane is already mounted with
- * WebSocket data, so the streamed tail is just a confirmation.
+ * read the client still performs.
+ *
+ * `tail` is awaited for a DOCUMENT request and skipped for a data request, and
+ * the difference is the whole point. On a cold load the awaited tail is what
+ * puts real transcript rows in the server's HTML — the reason the virtualiser
+ * carries an SSR path at all. On anything the client asks for afterwards it is
+ * dead weight: the socket already holds the conversation, and awaiting a second
+ * copy of it only delayed the answer.
+ *
+ * It used to be awaited on both, under a comment claiming it was awaited on
+ * neither. That was the layout shift: a tab switch ran this load, the tail
+ * landed after the animation had finished, and the transcript rebuilt itself
+ * from the slower of two identical sources. Switching conversations no longer
+ * reaches this file at all — the workspace store owns that now — so this gate
+ * is what remains for arrivals from another route.
  */
-export const load: PageServerLoad = async ({ params, url, fetch, depends, untrack }) => {
-  depends('data:session-tail');
+export const load: PageServerLoad = async ({ params, url, fetch, untrack, isDataRequest }) => {
   const viewId = untrack(() => params.id);
 
   if (!viewId) return { history: null, tail: null };
@@ -137,7 +146,10 @@ export const load: PageServerLoad = async ({ params, url, fetch, depends, untrac
       harness: untrack(() => url.searchParams.get('harness')) ?? 'claude',
       live: false,
     };
-    return { history: Promise.resolve(source), tail: await tailFor(fetch, source) };
+    return {
+      history: Promise.resolve(source),
+      tail: isDataRequest ? null : await tailFor(fetch, source),
+    };
   }
 
   let source: HistorySource | null = null;
@@ -163,7 +175,7 @@ export const load: PageServerLoad = async ({ params, url, fetch, depends, untrac
 
   return {
     history: Promise.resolve(source),
-    tail: source ? await tailFor(fetch, source) : null,
+    tail: source && !isDataRequest ? await tailFor(fetch, source) : null,
   };
 };
 

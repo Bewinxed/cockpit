@@ -8,7 +8,6 @@
    */
   import { untrack } from 'svelte';
   import type { TransitionConfig } from 'svelte/transition';
-  import { page } from '$app/state';
   import type {
     EffortLevel,
     HarnessKind,
@@ -58,27 +57,36 @@
     browsingCwd,
     browsingHarness,
     active,
-    slideDir = '',
+    serverTail = null,
+    serverHistory = null,
     hideHeader = false,
     view = 'chat' as 'chat' | 'flow',
     onview = (() => {}) as (v: 'chat' | 'flow') => void,
-    forceVisible = false,
   }: {
     viewId: string;
     browsing: string | null;
     browsingCwd: string;
     browsingHarness: string;
     active: boolean;
-    /** Slide direction for the transcript body: 'left' | 'right' | '' */
-    slideDir?: '' | 'left' | 'right';
+    /**
+     * The newest turns the SERVER read back, handed down by value.
+     *
+     * This used to be claimed from `page.data` under a `page.params.id ===
+     * viewId` guard — which only worked while the URL was the thing that
+     * decided which conversation was on screen. It no longer is. The layout
+     * captures the page's data once per real navigation and gives it to the
+     * one pane it was loaded for; every other pane reads its transcript over
+     * the socket, exactly as a background tab always did.
+     */
+    serverTail?: unknown;
+    /** Where the server said this conversation's transcript can be read from. */
+    serverHistory?: Promise<HistorySource | null> | null;
     /** When true, the SessionHeader is not rendered (a shared header is drawn by the parent). */
     hideHeader?: boolean;
     /** Which view to show: chat transcript or flow graph. Managed by parent. */
     view?: 'chat' | 'flow';
     /** Called when the user toggles between chat and flow. */
     onview?: (v: 'chat' | 'flow') => void;
-    /** Force transcript content visible even when not active (during swipe gesture). */
-    forceVisible?: boolean;
   } = $props();
 
   /** The newest turns the server read back, and the identity that names them. */
@@ -98,15 +106,11 @@
 
   /**
    * Where the server said this conversation's transcript can be read from —
-   * streamed with the page, so it is in hand before the socket is. Only the
-   * pane the URL points at may claim it; the others are open tabs, not this
-   * navigation.
+   * streamed with the page, so it is in hand before the socket is. The layout
+   * hands it to the pane this navigation actually loaded; the others are open
+   * tabs, not this navigation, and read over the socket instead.
    */
-  const history = $derived<Promise<HistorySource | null> | null>(
-    page.params.id === viewId
-      ? ((page.data as { history?: Promise<HistorySource | null> | null }).history ?? null)
-      : null
-  );
+  const history = $derived<Promise<HistorySource | null> | null>(serverHistory);
 
   /**
    * Reads a conversation's history over HTTP, falling back to the socket. The
@@ -205,11 +209,7 @@
    * stream had answered. Claimed by the pane the URL names, exactly as the
    * history descriptor above is.
    */
-  const tail = $derived(
-    page.params.id === viewId
-      ? ((page.data as { tail?: ServerTail | null }).tail ?? null)
-      : null
-  );
+  const tail = $derived((serverTail as ServerTail | null) ?? null);
 
   /**
    * The conversation as a session, built from the page's own data.
@@ -635,16 +635,10 @@
       class="body"
       style="--composer-clearance: calc({composerHeight}px + var(--space-4) + var(--space-4))"
     >
-      <!-- Transcript area: this is what slides on tab switch.
-           Header and composer stay put — only the transcript moves. -->
-      <div
-        class="transcript-slide"
-        class:slide-enter={active && slideDir !== ''}
-        class:slide-hidden={!active && !forceVisible}
-        class:slide-exit-left={!active && slideDir === 'left'}
-        class:slide-exit-right={!active && slideDir === 'right'}
-        style:--slide-enter-x={slideDir === 'left' ? '50px' : slideDir === 'right' ? '-50px' : '0'}
-      >
+      <!-- The transcript area. Movement between conversations is owned by the
+           pane above this one, so nothing here animates on a switch — this is
+           the surface a swipe carries, not the thing that carries it. -->
+      <div class="transcript-slide">
         {#if failure}
           <div class="stateful">
             <h2>
@@ -787,43 +781,8 @@
     flex: 1 1 auto;
     min-height: 0;
     overflow: hidden;
-    transform: translateX(0);
-    opacity: 1;
   }
 
-  /* Apple-style directional slide. Entrance is a confident arrival at the
-     Apple-recommended deceleration curve; exit is 20% faster — motion that
-     lingers on the way out reads as hesitation.
-     See: impeccable/animate — "exit faster than entrance." */
-  .slide-enter {
-    animation: slide-in 250ms cubic-bezier(0.16, 1, 0.3, 1) both;
-  }
-
-  .slide-hidden {
-    opacity: 0;
-    visibility: hidden;
-    transition:
-      transform 200ms cubic-bezier(0.16, 1, 0.3, 1),
-      opacity 200ms cubic-bezier(0.16, 1, 0.3, 1),
-      visibility 0s 200ms;
-  }
-
-  .slide-exit-left  { transform: translateX(-50px); }
-  .slide-exit-right { transform: translateX(50px); }
-
-  @keyframes slide-in {
-    from { transform: translateX(var(--slide-enter-x, 0)); opacity: 0.4; }
-    to   { transform: translateX(0); opacity: 1; }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .transcript-slide,
-    .slide-hidden {
-      transition: none;
-      transform: none !important;
-      animation: none !important;
-    }
-  }
   /* ── Loading skeleton ──────────────────────────────────────────────
      Placeholder lines that pulse while the session populates. Each line
      fades in staggered via animation-delay so the eye reads them top to
