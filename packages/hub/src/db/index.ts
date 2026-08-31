@@ -919,6 +919,21 @@ const make = (path: string): DbShape => {
     // ghosting, and separated at the source into the ones that can come back
     // and the ones whose transcript went with the process.
     settleInstances: (machineId, liveIds, resumable) => {
+      // Touch every sleeping session on this machine so it stays inside the
+      // 24-hour stale window. Without this a sleeping session whose machine
+      // IS connected falls off `/api/instances` after a day of idleness, and
+      // the dashboard shows "no messages yet" because the tab strip's SSR
+      // load can't find it.
+      db.update(instances)
+        .set({ updatedAt: new Date() })
+        .where(
+          and(
+            eq(instances.machineId, machineId),
+            eq(instances.status, 'sleeping'),
+          )
+        )
+        .run();
+
       // First, the ones it *does* carry. A dropped socket marks every session on
       // the machine `unknown` (see `reconcileInstances`), because from the hub's
       // side a daemon that vanished tells you nothing about the processes it
