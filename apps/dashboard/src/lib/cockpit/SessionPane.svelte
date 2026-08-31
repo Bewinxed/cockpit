@@ -58,12 +58,15 @@
     browsingCwd,
     browsingHarness,
     active,
+    slideDir = '',
   }: {
     viewId: string;
     browsing: string | null;
     browsingCwd: string;
     browsingHarness: string;
     active: boolean;
+    /** Slide direction for the transcript body: 'left' | 'right' | '' */
+    slideDir?: '' | 'left' | 'right';
   } = $props();
 
   /** The newest turns the server read back, and the identity that names them. */
@@ -617,7 +620,11 @@
 
     <div
       class="body"
-      style="--composer-clearance: calc({composerHeight}px + var(--space-4) + var(--space-4))"
+      class:body-active={active && slideDir !== ''}
+      class:body-hidden={!active}
+      class:body-slide-left={!active && slideDir === 'left'}
+      class:body-slide-right={!active && slideDir === 'right'}
+      style="--composer-clearance: calc({composerHeight}px + var(--space-4) + var(--space-4)); --body-enter-x: {slideDir === 'left' ? '4%' : slideDir === 'right' ? '-4%' : '0'}"
     >
       {#if failure}
         <!-- A valid URL that cannot be read says why. An empty scroller for a
@@ -742,6 +749,42 @@
     flex-direction: column;
     flex: 1 1 auto;
     min-height: 0;
+    transform: translateX(0);
+    opacity: 1;
+    transition:
+      transform 150ms cubic-bezier(0.32, 0.72, 0, 1),
+      opacity 150ms cubic-bezier(0.32, 0.72, 0, 1),
+      visibility 0s 0s;
+  }
+
+  /* Active body: slides in from the tab direction */
+  .body-active {
+    animation: body-enter 150ms cubic-bezier(0.32, 0.72, 0, 1) both;
+  }
+
+  /* Hidden body: fades out, slides in the exit direction */
+  .body-hidden {
+    opacity: 0;
+    visibility: hidden;
+    transition:
+      transform 120ms cubic-bezier(0.32, 0.72, 0, 1),
+      opacity 120ms cubic-bezier(0.32, 0.72, 0, 1),
+      visibility 0s 120ms;
+  }
+  .body-slide-left  { transform: translateX(-5%); }
+  .body-slide-right { transform: translateX(5%); }
+
+  @keyframes body-enter {
+    from { transform: translateX(var(--body-enter-x, 0)); opacity: 0; }
+    to   { transform: translateX(0); opacity: 1; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .body, .body-hidden {
+      transition: none;
+      transform: none !important;
+      animation: none !important;
+    }
   }
   .loading {
     display: grid;

@@ -39,6 +39,7 @@
   import { effortLabel, type EffortStop } from '../effort-levels';
   import ModelCombobox from '../ModelCombobox.svelte';
   import EffortSlider from '../EffortSlider.svelte';
+  import { TextMorph } from 'torph/svelte';
   import { IconChat, IconFlow, IconSettings, IconUnfold } from '$lib/icons';
   import { IsMobile } from '$lib/hooks/is-mobile.svelte';
   import { Button } from '$lib/components/ui/button';
@@ -448,9 +449,9 @@
 
 <header class="shead">
   <span class="mark m{markHue(seed)}" aria-hidden="true"><HarnessGlyph {harness} /></span>
-  <h1>{title}</h1>
-  <span class="path">{machineName} : {cwd}</span>
-  <span class="pill {pill.status}">{pill.label}</span>
+  <h1><TextMorph text={title} as="span" duration={120} /></h1>
+  <span class="path"><TextMorph text="{machineName} : {cwd}" as="span" duration={120} /></span>
+  <span class="pill {pill.status}"><TextMorph text={pill.label} as="span" duration={100} /></span>
 
   <div class="mid">
     <ToggleGroup.Root
