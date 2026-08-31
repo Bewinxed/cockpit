@@ -620,56 +620,59 @@
 
     <div
       class="body"
-      class:body-active={active && slideDir !== ''}
-      class:body-hidden={!active}
-      class:body-slide-left={!active && slideDir === 'left'}
-      class:body-slide-right={!active && slideDir === 'right'}
-      style="--composer-clearance: calc({composerHeight}px + var(--space-4) + var(--space-4)); --body-enter-x: {slideDir === 'left' ? '4%' : slideDir === 'right' ? '-4%' : '0'}"
+      style="--composer-clearance: calc({composerHeight}px + var(--space-4) + var(--space-4))"
     >
-      {#if failure}
-        <!-- A valid URL that cannot be read says why. An empty scroller for a
-             link that resolves is indistinguishable from a broken app. -->
-        <div class="stateful">
-          <h2>
-            {failure.reason === 'offline'
-              ? 'This machine is offline'
-              : "This transcript couldn't be read"}
-          </h2>
-          <p>{failure.message}</p>
-          <button type="button" onclick={() => (attempt += 1)}>Try again</button>
-        </div>
-      {:else if unaddressable && !readOnly}
-        <div class="stateful">
-          <h2>This session isn't reachable from here</h2>
-          <p>
-            The hub has no record of <code>{viewId}</code>, and there is no stored transcript to
-            show. Open it from its machine's stored sessions, and the link will carry the machine
-            and folder its transcript is filed under.
-          </p>
-          <a href="/session">Back to the fleet</a>
-        </div>
-      {:else if view === 'flow'}
-        <FlowView
-          instanceId={viewId}
-          messages={session.messages}
-          subagents={flowSubagents}
-          streamingToolId={session.currentTool?.toolId}
-          totalCostUsd={session.totalCost}
-        />
-      {:else}
-        <Transcript
-          {session}
-          {agentName}
-          {active}
-          {machineName}
-          cwd={session.cwd || browsingCwd}
-        />
-      {/if}
+      <!-- Transcript area: this is what slides on tab switch.
+           Header and composer stay put — only the transcript moves. -->
+      <div
+        class="transcript-slide"
+        class:slide-enter={active && slideDir !== ''}
+        class:slide-hidden={!active}
+        class:slide-exit-left={!active && slideDir === 'left'}
+        class:slide-exit-right={!active && slideDir === 'right'}
+        style:--slide-enter-x={slideDir === 'left' ? '5%' : slideDir === 'right' ? '-5%' : '0'}
+      >
+        {#if failure}
+          <div class="stateful">
+            <h2>
+              {failure.reason === 'offline'
+                ? 'This machine is offline'
+                : "This transcript couldn't be read"}
+            </h2>
+            <p>{failure.message}</p>
+            <button type="button" onclick={() => (attempt += 1)}>Try again</button>
+          </div>
+        {:else if unaddressable && !readOnly}
+          <div class="stateful">
+            <h2>This session isn't reachable from here</h2>
+            <p>
+              The hub has no record of <code>{viewId}</code>, and there is no stored transcript to
+              show. Open it from its machine's stored sessions, and the link will carry the machine
+              and folder its transcript is filed under.
+            </p>
+            <a href="/session">Back to the fleet</a>
+          </div>
+        {:else if view === 'flow'}
+          <FlowView
+            instanceId={viewId}
+            messages={session.messages}
+            subagents={flowSubagents}
+            streamingToolId={session.currentTool?.toolId}
+            totalCostUsd={session.totalCost}
+          />
+        {:else}
+          <Transcript
+            {session}
+            {agentName}
+            {active}
+            {machineName}
+            cwd={session.cwd || browsingCwd}
+          />
+        {/if}
+      </div>
 
+      <!-- Composer stays outside the slide — it's shared structure. -->
       {#if !failure && unaddressable}
-        <!-- Read-only, and said out loud. The transcript above is real; the
-             session behind it is not addressable from this tab, so there is no
-             composer at all rather than one that swallows what is typed. -->
         <p class="readonly">
           This transcript is stored; the session isn't reachable from here.
         </p>
@@ -688,9 +691,6 @@
         >
           {#snippet prompts()}
             {#each parked as request (request.requestId)}
-              <!-- The transition needs an element to hold; the card's own root
-                   belongs to Prompt. This wrapper is layout-transparent — a
-                   block box the section fills exactly. -->
               <div class="parked" out:promptExit>
                 <Prompt {request} onanswer={(result) => onanswer(request, result)} />
               </div>
@@ -699,10 +699,6 @@
         </Composer>
       {/if}
 
-      <!-- The transcript is virtualized, so a state flip inside a row is not
-           reliably announced. Failures are announced here instead, once, in the
-           pane that owns the composer — and only failures: acceptance is the
-           norm, and narrating the norm is how a live region becomes noise. -->
       <p class="announce" aria-live="polite" role="status">{sendFailure}</p>
     </div>
   {:else}
@@ -749,38 +745,46 @@
     flex-direction: column;
     flex: 1 1 auto;
     min-height: 0;
+  }
+
+  /* ── Transcript slide ─────────────────────────────────────────────
+     Only the transcript area slides on tab switch. Header and composer
+     stay put. The entering transcript slides in from the tab direction,
+     the exiting one slides out the opposite way. */
+  .transcript-slide {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
     transform: translateX(0);
     opacity: 1;
-    transition:
-      transform 150ms cubic-bezier(0.32, 0.72, 0, 1),
-      opacity 150ms cubic-bezier(0.32, 0.72, 0, 1),
-      visibility 0s 0s;
   }
 
-  /* Active body: slides in from the tab direction */
-  .body-active {
-    animation: body-enter 150ms cubic-bezier(0.32, 0.72, 0, 1) both;
+  .slide-enter {
+    animation: slide-in 180ms cubic-bezier(0.32, 0.72, 0, 1) both;
   }
 
-  /* Hidden body: fades out, slides in the exit direction */
-  .body-hidden {
+  .slide-hidden {
     opacity: 0;
     visibility: hidden;
     transition:
-      transform 120ms cubic-bezier(0.32, 0.72, 0, 1),
-      opacity 120ms cubic-bezier(0.32, 0.72, 0, 1),
-      visibility 0s 120ms;
+      transform 140ms cubic-bezier(0.32, 0.72, 0, 1),
+      opacity 140ms cubic-bezier(0.32, 0.72, 0, 1),
+      visibility 0s 140ms;
   }
-  .body-slide-left  { transform: translateX(-5%); }
-  .body-slide-right { transform: translateX(5%); }
 
-  @keyframes body-enter {
-    from { transform: translateX(var(--body-enter-x, 0)); opacity: 0; }
+  .slide-exit-left  { transform: translateX(-6%); }
+  .slide-exit-right { transform: translateX(6%); }
+
+  @keyframes slide-in {
+    from { transform: translateX(var(--slide-enter-x, 0)); opacity: 0; }
     to   { transform: translateX(0); opacity: 1; }
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .body, .body-hidden {
+    .transcript-slide,
+    .slide-hidden {
       transition: none;
       transform: none !important;
       animation: none !important;
