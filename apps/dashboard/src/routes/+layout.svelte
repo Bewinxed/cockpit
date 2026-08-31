@@ -56,8 +56,9 @@
     // Same page, different params — instant.
     if (from === to) return;
 
-    // Session tab switches — instant (panes handle their own crossfade).
-    if (!document.documentElement.dataset.nav && SESSION.test(from) && SESSION.test(to)) return;
+    // Session tab switches — use VT API with horizontal direction.
+    // The panes visibility-toggle (preserving scroll positions) while the
+    // VT API wraps the visual transition. Direction: horizontal crossfade.
 
     // Hidden or reduced motion — instant.
     if (document.hidden) { delete document.documentElement.dataset.nav; return; }
@@ -79,6 +80,12 @@
         el.style.setProperty('--vt-old-y', down ? '-12%' : '12%');
         el.style.setProperty('--vt-new-x', '0');
         el.style.setProperty('--vt-new-y', down ? '12%' : '-12%');
+      } else if (SESSION.test(from) && SESSION.test(to)) {
+        // Session tab switch: pure crossfade, no translate
+        el.style.setProperty('--vt-old-x', '0');
+        el.style.setProperty('--vt-old-y', '0');
+        el.style.setProperty('--vt-new-x', '0');
+        el.style.setProperty('--vt-new-y', '0');
       } else {
         // Horizontal: drill-in/out
         el.style.setProperty('--vt-old-x', '-12%');
