@@ -121,52 +121,35 @@ function messagesUrl(source: HistorySource): string {
  * transcript. On client-side tab switches, the pane is already mounted with
  * WebSocket data, so the streamed tail is just a confirmation.
  */
-export const load: PageServerLoad = async ({ params, url, fetch }) => {
-  const viewId = params.id;
-  // The fleet board. Nothing is open, so there is no history to read.
-  if (!viewId) return { deferred: { history: null, tail: null } };
+export const load: PageServerLoad = async ({ params, url, fetch, depends, untrack }) => {
+  // Custom dependency: the load only re-runs on invalidate('data:session-tail'),
+  // not on every param change. Tab switches don't re-fetch the transcript.
+  depends('data:session-tail');
+  const viewId = untrack(() => params.id);
 
-  // A `machine` in the query means the URL names a stored session outright —
-  // everything the read needs is in the link.
-  const machine = url.searchParams.get('machine');
+  if (!viewId) return { history: null, tail: null };
+
+  const machine = untrack(() => url.searchParams.get('machine'));
   if (machine) {
     const source: HistorySource = {
       viewId,
       machineId: machine,
       sessionId: viewId,
-      cwd: url.searchParams.get('cwd') ?? '',
-      harness: url.searchParams.get('harness') ?? 'claude',
+      cwd: untrack(() => url.searchParams.get('cwd')) ?? '',
+      harness: untrack(() => url.searchParams.get('harness')) ?? 'claude',
       live: false,
     };
-    return { deferred: { history: Promise.resolve(source), tail: tailFor(fetch, source) } };
+    return { history: Promise.resolve(source), tail: await tailFor(fetch, source) };
   }
 
-  // Everything deferred — navigation is instant. The source lookup and tail
-  // read stream in as they resolve. The pane already has WebSocket data.
-  const sourcePromise = resolveSource(fetch, viewId);
-
-  return {
-    deferred: {
-      history: sourcePromise,
-      tail: sourcePromise.then(source =>
-        source ? tailFor(fetch, source) : null
-      ),
-    },
-  };
-};
-
-/** Resolve the source for a live session — which machine holds it. */
-async function resolveSource(
-  fetch: typeof globalThis.fetch,
-  viewId: string
-): Promise<HistorySource | null> {
+  let source: HistorySource | null = null;
   try {
     const response = await fetch('/api/instances');
     if (response.ok) {
       const rows = (await response.json()) as InstanceRow[];
       const row = rows.find((instance) => instance.id === viewId);
       if (row) {
-        return {
+        source = {
           viewId,
           machineId: row.machineId,
           sessionId: row.sessionId ?? viewId,
@@ -177,11 +160,14 @@ async function resolveSource(
       }
     }
   } catch {
-    // The hub being unreachable is the ordinary case, not an exotic one: the
-    // pane falls back to the socket, which reports it for itself.
+    source = null;
   }
-  return null;
-}
+
+  return {
+    history: Promise.resolve(source),
+    tail: source ? await tailFor(fetch, source) : null,
+  };
+};
 
 /** The tail plus the identity the pane needs to name it before the store exists. */
 async function tailFor(fetch: typeof globalThis.fetch, source: HistorySource) {
