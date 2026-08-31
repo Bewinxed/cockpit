@@ -89,7 +89,7 @@
    */
   const history = $derived<Promise<HistorySource | null> | null>(
     page.params.id === viewId
-      ? ((page.data as { history?: Promise<HistorySource | null> | null }).history ?? null)
+      ? ((page.data as { deferred?: { history?: Promise<HistorySource | null> | null } }).deferred?.history ?? null)
       : null
   );
 
@@ -192,7 +192,7 @@
    */
   const tail = $derived(
     page.params.id === viewId
-      ? ((page.data as { tail?: ServerTail | null }).tail ?? null)
+      ? ((page.data as { deferred?: { tail?: ServerTail | null } }).deferred?.tail ?? null)
       : null
   );
 
@@ -208,7 +208,8 @@
   const seeded = $derived.by<SessionState | null>(() => {
     // Nothing read back means nothing to stand in for: the store's own empty
     // and loading states are better than a blank pane pretending to be one.
-    if (!tail || tail.messages.length === 0) return null;
+    // tail may be a deferred placeholder during SSR streaming (no .messages yet).
+    if (!tail || !('messages' in tail) || tail.messages.length === 0) return null;
     const blank = blankSession(viewId);
     const mapped = mapTranscript(viewId, tail.messages);
     blank.machineId = tail.machineId;
