@@ -133,11 +133,37 @@
     const named = await source;
     if (named && named.viewId === id) {
       const outcome = await streamHistory(named);
-      if (outcome.ok) return;
+      // A read that SUCCEEDED and returned nothing is not a read that
+      // worked. The stored path answers 200 with an empty body when it
+      // cannot find a transcript where the machine and folder say it should
+      // be — which is what happens to a conversation the hub knows as a live
+      // instance but whose harness files it somewhere else. Taking that as
+      // an answer left the pane on its loading state forever: no transcript,
+      // no failure, nothing to retry. Measured on one such session: the
+      // stored read returned 0 lines and the live read returned 1051.
+      if (outcome.ok && (cockpit.session(id)?.messages.length ?? 0) > 0) return;
       // Offline is the fleet's own state, not a fault in the read: say it
       // rather than asking a machine that is asleep a second time.
-      if (outcome.reason === 'offline') {
+      if (!outcome.ok && outcome.reason === 'offline') {
         failure = { reason: outcome.reason, message: outcome.message };
+        return;
+      }
+      // Empty from a stored read, but the hub may hold it as an instance —
+      // ask again by id alone, which is the address the live read wants.
+      // Deliberately `streamHistory` and not `backfillSession`: the latter
+      // asks the machine over the socket, and it is the HUB that has this
+      // conversation. Same session, two addresses, and only one of them
+      // answers.
+      if (outcome.ok) {
+        const live = await streamHistory({
+          viewId: id,
+          machineId: named.machineId,
+          sessionId: id,
+          cwd: named.cwd,
+          harness: named.harness,
+          live: true,
+        });
+        if (!live.ok && live.reason !== 'offline') void backfillSession(id);
         return;
       }
     }
