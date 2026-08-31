@@ -39,6 +39,33 @@
   /** Empty on the board, which is the one tab that is not a conversation. */
   const viewId = $derived(page.params.id ?? '');
   const onBoard = $derived(page.url.pathname === '/session');
+
+  /** Track previous viewId to determine slide direction on tab switch. */
+  let prevViewId = $state(viewId);
+  /** 'left' when the new tab is to the right (content slides left), 'right' when left, '' for first load. */
+  let slideDir = $state<'' | 'left' | 'right'>('');
+
+  // $effect.pre: runs BEFORE the DOM update so --pane-exit/--pane-enter are
+  // set on the container before the class changes fire the CSS transitions.
+  $effect.pre(() => {
+    const cur = viewId;
+    const prev = prevViewId;
+    if (cur === prev) return;
+    const order = workingSet.order;
+    const curIdx = order.indexOf(cur);
+    const prevIdx = order.indexOf(prev);
+    // Board (empty viewId) is index -1, treated as leftmost.
+    slideDir = curIdx > prevIdx ? 'left' : curIdx < prevIdx ? 'right' : '';
+    prevViewId = cur;
+  });
+
+  // Clear the direction after the transition ends so the next switch
+  // starts clean and hidden panes rest at translateX(0).
+  $effect(() => {
+    if (!slideDir) return;
+    const id = setTimeout(() => { slideDir = ''; }, 250);
+    return () => clearTimeout(id);
+  });
   /** A `machine` in the query means this id is a stored session, not a live one. */
   const browsing = $derived(page.url.searchParams.get('machine'));
   const browsingCwd = $derived(page.url.searchParams.get('cwd') ?? '');
@@ -118,7 +145,11 @@
      overflow this box and make the OUTER #main-content scrollable — scrolling the
      whole active pane, session header included, up under the tab strip. Each pane
      scrolls inside its own transcript; nothing here should. -->
-<div class="relative min-h-0 min-w-0 flex-1 overflow-hidden">
+<div
+    class="relative min-h-0 min-w-0 flex-1 overflow-hidden"
+    style:--pane-exit={slideDir === 'left' ? '-4%' : slideDir === 'right' ? '4%' : '0'}
+    style:--pane-enter={slideDir === 'left' ? '3%' : slideDir === 'right' ? '-3%' : '0'}
+  >
   <!-- Fleet is the strip's first tab, so the board is one more thing to switch
        between rather than somewhere the tabs stop: it is kept and hidden exactly
        as the conversations are, down to where it was scrolled and what it was
@@ -152,40 +183,49 @@
 </div>
 
 <style>
-  /* Session pane crossfade — surgical: only the transcript/board content
-     transitions, the tab strip and sidebar stay perfectly still.
-
-     Showing: visibility flips to visible instantly (0s), then opacity
-     fades in over 120ms. The pane is interactive immediately.
-
-     Hiding: opacity fades out over 100ms (exit faster than entrance),
-     then visibility flips to hidden (100ms delay), preserving the
-     virtualizer geometry the entire time. */
+  /* Session pane slide — directional, like swiping between iPad tabs.
+     --pane-exit: where the outgoing pane slides to (set on the container).
+     The incoming pane fades in at 0, the outgoing slides away + fades out.
+     Small translate — enough to feel directional, not enough to flash edge. */
   .pane {
     opacity: 1;
     visibility: visible;
+    transform: translateX(0);
     transition:
-      opacity 120ms cubic-bezier(0.32, 0.72, 0, 1),
+      opacity 150ms cubic-bezier(0.32, 0.72, 0, 1),
       visibility 0s 0s;
   }
 
+  /* The entering pane slides in from --pane-enter using a keyframe animation
+     (not a transition — transitions animate from the prior computed state,
+     which was the hidden pane's exit position, i.e. the wrong direction). */
   .pane-active {
     view-transition-name: session-pane;
+    animation: pane-enter 150ms cubic-bezier(0.32, 0.72, 0, 1) both;
+  }
+
+  @keyframes pane-enter {
+    from { transform: translateX(var(--pane-enter, 0)); opacity: 0; }
+    to   { transform: translateX(0); opacity: 1; }
   }
 
   .pane-hidden {
     opacity: 0;
     visibility: hidden;
+    transform: translateX(var(--pane-exit, 0));
     view-transition-name: none;
     transition:
-      opacity 100ms cubic-bezier(0.32, 0.72, 0, 1),
-      visibility 0s 100ms;
+      transform 120ms cubic-bezier(0.32, 0.72, 0, 1),
+      opacity 120ms cubic-bezier(0.32, 0.72, 0, 1),
+      visibility 0s 120ms;
   }
 
   @media (prefers-reduced-motion: reduce) {
     .pane,
     .pane-hidden {
       transition: none;
+      transform: none !important;
+      animation: none !important;
     }
   }
 </style>
