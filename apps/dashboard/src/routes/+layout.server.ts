@@ -64,7 +64,8 @@ function readVisits(raw: string | undefined): Visit[] {
   }
 }
 
-export const load: LayoutServerLoad = async ({ cookies, fetch, url }) => {
+export const load: LayoutServerLoad = async ({ cookies, fetch, url, depends, untrack }) => {
+  depends('data:tab-strip');
   const stored = Number(cookies.get(RAIL_KEY));
   const railWidth =
     Number.isFinite(stored) && stored > 0
@@ -72,17 +73,17 @@ export const load: LayoutServerLoad = async ({ cookies, fetch, url }) => {
       : RAIL_DEFAULT;
 
   const open = readVisits(cookies.get(WORKING_SET_KEY));
-  const here = currentId(url.pathname);
-  // Landing on a conversation puts it in the set (working-set.visit, from the
-  // session layout's effect) — so the server has to count it too, or the strip
-  // would gain a tab the instant it hydrated.
+  // Untrack URL access: tab switches change the URL but the client-side
+  // workingSet already manages the tab list. This server load is only for
+  // SSR first paint — re-running it on every tab switch wastes ~1s.
+  const here = untrack(() => currentId(url.pathname));
   if (here && !open.some((visit) => visit.id === here)) {
     open.push({
       id: here,
       at: Date.now(),
-      machine: url.searchParams.get('machine'),
-      cwd: url.searchParams.get('cwd') ?? '',
-      harness: url.searchParams.get('harness') ?? 'claude',
+      machine: untrack(() => url.searchParams.get('machine')),
+      cwd: untrack(() => url.searchParams.get('cwd')) ?? '',
+      harness: untrack(() => url.searchParams.get('harness')) ?? 'claude',
     });
   }
 
