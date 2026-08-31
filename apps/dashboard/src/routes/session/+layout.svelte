@@ -36,7 +36,8 @@
     relaunchSession,
     type HistorySource,
   } from '$lib/cockpit/client.svelte';
-  import { workspace, sessionIdOf } from '$lib/cockpit/workspace/workspace.svelte';
+  import { workspace } from '$lib/cockpit/workspace/workspace.svelte';
+  import { createSwipe } from '$lib/cockpit/workspace/gesture.svelte';
   import { workingSet } from '$lib/cockpit/working-set.svelte';
   import { resolveSessionTitle } from '$lib/cockpit/links';
   import { models, covers, ensureModels } from '$lib/cockpit/models.svelte';
@@ -49,6 +50,20 @@
 
   const viewId = $derived(workspace.activeSessionId ?? '');
   const onBoard = $derived(workspace.activeSessionId === null);
+
+  const swipe = createSwipe();
+
+  /**
+   * Which conversation the HEADER names.
+   *
+   * Not always the active one: once a drag has passed the point it would
+   * commit at, the header starts naming where the finger is going. Because
+   * there is one header instance and its text comes from synchronous state,
+   * torph morphs the title character by character *while the finger is still
+   * moving* — and morphs it back if the drag retreats. The header is
+   * therefore never showing something the lift is about to contradict.
+   */
+  const headerId = $derived(swipe.previewId ?? viewId);
 
   /* ── The server's answer, claimed once ───────────────────────────────
      `page.data` only changes on a REAL navigation — a cold load, a deep
@@ -149,6 +164,27 @@
     });
   });
 
+  /**
+   * Mount the conversations either side of this one, ahead of being asked.
+   *
+   * This is what makes a swipe reveal something rather than nothing. A pane
+   * that is mounted has already read its transcript, or is already showing
+   * that it is reading one; a pane that mounts when the gesture commits can
+   * only be blank until it catches up, which is precisely the blank the
+   * reader was complaining about. Hidden panes cost a `visibility` flip, so
+   * two of them is a cheap price for the neighbour always being there.
+   */
+  $effect(() => {
+    const here = workspace.activeSessionId;
+    if (!here) return;
+    const neighbours = [workspace.step(here, 1), workspace.step(here, -1)];
+    untrack(() => {
+      for (const id of neighbours) {
+        if (id && !mounted.includes(id)) mounted.push(id);
+      }
+    });
+  });
+
   $effect(() => {
     const open = new Set(workspace.openIds);
     untrack(() => {
@@ -170,8 +206,8 @@
      comes from synchronous state, torph morphs the title character by
      character on a switch instead of the whole bar being replaced. */
 
-  const session = $derived(cockpit.session(viewId) ?? null);
-  const machineId = $derived(cockpit.session(viewId)?.machineId ?? '');
+  const session = $derived(cockpit.session(headerId) ?? null);
+  const machineId = $derived(cockpit.session(headerId)?.machineId ?? '');
 
   const machineName = $derived(
     cockpit.machines.find((m) => m.machineId === machineId)?.hostname ?? machineId
@@ -179,15 +215,15 @@
 
   const title = $derived(
     resolveSessionTitle({
-      title: cockpit.instances.find((i) => i.id === viewId)?.title,
+      title: cockpit.instances.find((i) => i.id === headerId)?.title,
       firstMessage: session?.messages.find((m) => m.type === 'user' && m.content.trim())?.content,
       cwd: session?.cwd || browsingCwd,
-      id: viewId,
+      id: headerId,
     })
   );
 
-  const stats = $derived(cockpit.statsOf(viewId));
-  const activity = $derived(cockpit.activityOf(viewId));
+  const stats = $derived(cockpit.statsOf(headerId));
+  const activity = $derived(cockpit.activityOf(headerId));
 
   const machineRow = $derived(cockpit.machines.find((m) => m.machineId === machineId) ?? null);
   const harnessReport = $derived(
@@ -245,8 +281,8 @@
     totalTokens={stats.totalTokens}
     maxTokens={stats.maxTokens}
     cost={stats.cost}
-    view={views[viewId] ?? 'chat'}
-    onview={(v) => (views[viewId] = v)}
+    view={views[headerId] ?? 'chat'}
+    onview={(v) => (views[headerId] = v)}
     {offeredModes}
     effortStops={effortStopsForModel}
     {showEffort}
@@ -259,15 +295,28 @@
   />
 {/if}
 
-<div class="pane-stack relative min-h-0 min-w-0 flex-1 overflow-hidden">
+<div class="pane-stack relative min-h-0 min-w-0 flex-1 overflow-hidden" use:swipe.action>
   <div class="pane absolute inset-0 flex" class:pane-hidden={!onBoard} inert={!onBoard}>
     <FleetBoard active={onBoard} />
   </div>
 
+  <!-- `active` is passed `shown` rather than `isActive`: a pane sliding into
+       view has to be building its rows while it travels, or it arrives blank
+       and fills in afterwards — the very thing the gesture exists to avoid.
+       Input still belongs to the active pane alone, which `inert` enforces,
+       so this grants sight without granting control. -->
   {#each mounted as paneId (paneId)}
     {@const isActive = paneId === viewId && !onBoard}
+    {@const offset = swipe.offsetOf(paneId, isActive)}
+    {@const shown = isActive || offset !== null}
     {@const ctx = workingSet.contextOf(paneId)}
-    <div class="pane absolute inset-0 flex" class:pane-hidden={!isActive} inert={!isActive}>
+    <div
+      class="pane absolute inset-0 flex"
+      class:pane-hidden={!shown}
+      inert={!isActive}
+      style:transform={offset === null ? 'translateX(0)' : `translateX(${offset}px)`}
+      style:transition={swipe.transition}
+    >
       <SessionPane
         viewId={paneId}
         browsing={ctx?.machine ?? null}
@@ -275,7 +324,7 @@
         browsingHarness={ctx?.harness ?? 'claude'}
         serverTail={paneId === entry.id ? entry.tail : null}
         serverHistory={paneId === entry.id ? entry.history : null}
-        active={isActive}
+        active={shown}
         hideHeader
         view={views[paneId] ?? 'chat'}
         onview={(v) => (views[paneId] = v)}
