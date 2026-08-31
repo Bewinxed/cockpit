@@ -59,6 +59,10 @@
     browsingHarness,
     active,
     slideDir = '',
+    hideHeader = false,
+    view = 'chat' as 'chat' | 'flow',
+    onview = (() => {}) as (v: 'chat' | 'flow') => void,
+    forceVisible = false,
   }: {
     viewId: string;
     browsing: string | null;
@@ -67,6 +71,14 @@
     active: boolean;
     /** Slide direction for the transcript body: 'left' | 'right' | '' */
     slideDir?: '' | 'left' | 'right';
+    /** When true, the SessionHeader is not rendered (a shared header is drawn by the parent). */
+    hideHeader?: boolean;
+    /** Which view to show: chat transcript or flow graph. Managed by parent. */
+    view?: 'chat' | 'flow';
+    /** Called when the user toggles between chat and flow. */
+    onview?: (v: 'chat' | 'flow') => void;
+    /** Force transcript content visible even when not active (during swipe gesture). */
+    forceVisible?: boolean;
   } = $props();
 
   /** The newest turns the server read back, and the identity that names them. */
@@ -437,7 +449,6 @@
     (session?.pending ?? []).filter((p) => !routedToParent(p))
   );
 
-  let view = $state<'chat' | 'flow'>('chat');
   let draft = $state('');
   /** The composer instance, for the one thing a binding cannot hand back. */
   let composer = $state<ReturnType<typeof Composer> | null>(null);
@@ -590,6 +601,7 @@
 
 <div class="pane">
   {#if session}
+    {#if !hideHeader}
     <SessionHeader
       {title}
       seed={session.cwd || browsingCwd || viewId}
@@ -606,7 +618,7 @@
       maxTokens={stats.maxTokens}
       cost={stats.cost}
       {view}
-      onview={(v) => (view = v)}
+      {onview}
       {offeredModes}
       effortStops={effortStopsForModel}
       {showEffort}
@@ -617,6 +629,7 @@
       trackedCommand={commandRecord}
       streaming={streamCapable()}
     />
+    {/if}
 
     <div
       class="body"
@@ -627,7 +640,7 @@
       <div
         class="transcript-slide"
         class:slide-enter={active && slideDir !== ''}
-        class:slide-hidden={!active}
+        class:slide-hidden={!active && !forceVisible}
         class:slide-exit-left={!active && slideDir === 'left'}
         class:slide-exit-right={!active && slideDir === 'right'}
         style:--slide-enter-x={slideDir === 'left' ? '50px' : slideDir === 'right' ? '-50px' : '0'}
@@ -761,28 +774,28 @@
     opacity: 1;
   }
 
-  /* Apple-style matched motion: enter and exit share the same duration
-     and easing so they feel like one continuous push. The outgoing
-     transcript slides away at exactly the speed the incoming one arrives.
-     Ease-out spring approximation — fast start, soft land. */
+  /* Apple-style directional slide. Entrance is a confident arrival at the
+     Apple-recommended deceleration curve; exit is 20% faster — motion that
+     lingers on the way out reads as hesitation.
+     See: impeccable/animate — "exit faster than entrance." */
   .slide-enter {
-    animation: slide-in 250ms cubic-bezier(0.2, 0.9, 0.3, 1) both;
+    animation: slide-in 250ms cubic-bezier(0.16, 1, 0.3, 1) both;
   }
 
   .slide-hidden {
     opacity: 0;
     visibility: hidden;
     transition:
-      transform 250ms cubic-bezier(0.2, 0.9, 0.3, 1),
-      opacity 250ms cubic-bezier(0.2, 0.9, 0.3, 1),
-      visibility 0s 250ms;
+      transform 200ms cubic-bezier(0.16, 1, 0.3, 1),
+      opacity 200ms cubic-bezier(0.16, 1, 0.3, 1),
+      visibility 0s 200ms;
   }
 
   .slide-exit-left  { transform: translateX(-50px); }
   .slide-exit-right { transform: translateX(50px); }
 
   @keyframes slide-in {
-    from { transform: translateX(var(--slide-enter-x, 0)); opacity: 0.3; }
+    from { transform: translateX(var(--slide-enter-x, 0)); opacity: 0.4; }
     to   { transform: translateX(0); opacity: 1; }
   }
 
