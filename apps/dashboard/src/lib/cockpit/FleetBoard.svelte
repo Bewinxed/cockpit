@@ -178,6 +178,7 @@
   /* ---- filters ------------------------------------------------------- */
 
   let search = $state('');
+  let showAllNotRunning = $state(false);
   /** '' is "All machines"; otherwise a machineId. */
   let machineFilter = $state('');
   const STATES: { value: PillStatus | ''; label: string }[] = [
@@ -394,13 +395,20 @@
          sleeping or unknown session would otherwise be absent from the whole
          board. Shown apart, never folded into live work or its counts. -->
     {#if notRunning.length > 0}
+      {@const CAP = 20}
+      {@const capped = showAllNotRunning ? notRunning : notRunning.slice(0, CAP)}
       <div class="not-running">
         <div class="sec">Not running ({notRunning.length})</div>
         <div class="not-running-rows">
-          {#each notRunning as row (row.id)}
+          {#each capped as row (row.id)}
             <LiveSessionRow instance={row} />
           {/each}
         </div>
+        {#if !showAllNotRunning && notRunning.length > CAP}
+          <button type="button" class="show-all" onclick={() => (showAllNotRunning = true)}>
+            Show all {notRunning.length} sessions
+          </button>
+        {/if}
       </div>
     {/if}
 
@@ -722,6 +730,20 @@
   .not-running-rows {
     display: flex;
     flex-direction: column;
+  }
+  .show-all {
+    padding: var(--space-3) var(--space-4);
+    font-size: var(--text-sm);
+    color: var(--ink-muted);
+    background: none;
+    border: 1px dashed var(--border-hairline);
+    border-radius: var(--radius-control);
+    cursor: pointer;
+    margin-top: var(--space-2);
+  }
+  .show-all:hover {
+    color: var(--ink-strong);
+    border-color: var(--border-control);
   }
 
   .bar {

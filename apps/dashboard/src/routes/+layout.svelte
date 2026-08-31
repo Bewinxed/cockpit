@@ -56,9 +56,10 @@
     // Same page, different params — instant.
     if (from === to) return;
 
-    // Session tab switches — use VT API with horizontal direction.
-    // The panes visibility-toggle (preserving scroll positions) while the
-    // VT API wraps the visual transition. Direction: horizontal crossfade.
+    // Session tab switches — skip VT, let pane CSS handle the crossfade.
+    // The VT's navigation.complete blocks on svelte.settled() which takes
+    // 3+ seconds with many reactive derivations when the fleet board shows.
+    if (!document.documentElement.dataset.nav && SESSION.test(from) && SESSION.test(to)) return;
 
     // Hidden or reduced motion — instant.
     if (document.hidden) { delete document.documentElement.dataset.nav; return; }

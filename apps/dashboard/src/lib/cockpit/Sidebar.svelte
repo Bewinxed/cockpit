@@ -57,6 +57,7 @@
   /* ---- spawn ---------------------------------------------------------- */
 
   let spawnOpen = $state(false);
+  let showAllNR = $state(false);
   let spawnPrefill = $state<{ machineId?: string; cwd?: string; projectId?: string } | undefined>(
     undefined
   );
@@ -345,9 +346,11 @@
          nothing for them at all. Kept in its own section, never folded into
          the Fleet pill or the "Running now" live tail. -->
     {#if notRunning.length > 0}
+      {@const SIDEBAR_CAP = 15}
+      {@const cappedNR = showAllNR ? notRunning : notRunning.slice(0, SIDEBAR_CAP)}
       <div class="sec">Not running</div>
       <div class="rows">
-        {#each notRunning as row (row.id)}
+        {#each cappedNR as row (row.id)}
           {@const Sprite = sessionSprite(row.id)}
           {@const rowStale = isStale(row)}
           <a
@@ -363,6 +366,11 @@
             <ActivityDot activity="idle" sleeping={!rowStale} stale={rowStale} />
           </a>
         {/each}
+        {#if !showAllNR && notRunning.length > SIDEBAR_CAP}
+          <button type="button" class="row dim" onclick={() => (showAllNR = true)}>
+            {notRunning.length - SIDEBAR_CAP} more…
+          </button>
+        {/if}
       </div>
     {/if}
   </div>
