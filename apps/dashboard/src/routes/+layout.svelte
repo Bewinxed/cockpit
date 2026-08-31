@@ -65,17 +65,33 @@
       delete document.documentElement.dataset.nav; return;
     }
 
-    // Spoke-to-spoke: set vertical direction from sidebar order.
-    if (!document.documentElement.dataset.nav) {
+    // Compute direction and set it as CSS custom properties on :root.
+    // Custom properties work reliably in all browsers including iOS Safari,
+    // unlike data-attribute selectors on view-transition pseudo-elements.
+    const el = document.documentElement;
+    if (!el.dataset.nav) {
       const fromIdx = spokeIndex(from);
       const toIdx = spokeIndex(to);
-      console.debug('[nav]', from, '→', to, 'idx:', fromIdx, '→', toIdx);
       if (fromIdx >= 0 && toIdx >= 0 && fromIdx !== toIdx) {
-        document.documentElement.dataset.nav = toIdx > fromIdx ? 'down' : 'up';
-        console.debug('[nav] direction:', document.documentElement.dataset.nav);
+        // Vertical: sidebar is top-to-bottom
+        const down = toIdx > fromIdx;
+        el.style.setProperty('--vt-old-x', '0');
+        el.style.setProperty('--vt-old-y', down ? '-12%' : '12%');
+        el.style.setProperty('--vt-new-x', '0');
+        el.style.setProperty('--vt-new-y', down ? '12%' : '-12%');
       } else {
-        console.debug('[nav] spoke check failed, fromIdx:', fromIdx, 'toIdx:', toIdx);
+        // Horizontal: drill-in/out
+        el.style.setProperty('--vt-old-x', '-12%');
+        el.style.setProperty('--vt-old-y', '0');
+        el.style.setProperty('--vt-new-x', '12%');
+        el.style.setProperty('--vt-new-y', '0');
       }
+    } else if (el.dataset.nav === 'prev') {
+      // Back navigation
+      el.style.setProperty('--vt-old-x', '12%');
+      el.style.setProperty('--vt-old-y', '0');
+      el.style.setProperty('--vt-new-x', '-12%');
+      el.style.setProperty('--vt-new-y', '0');
     }
 
     return new Promise((resolve) => {
@@ -83,7 +99,13 @@
         resolve();
         await navigation.complete.catch(() => {});
       });
-      const clear = () => delete document.documentElement.dataset.nav;
+      const clear = () => {
+        delete el.dataset.nav;
+        el.style.removeProperty('--vt-old-x');
+        el.style.removeProperty('--vt-old-y');
+        el.style.removeProperty('--vt-new-x');
+        el.style.removeProperty('--vt-new-y');
+      };
       transition.finished.then(clear, clear);
     });
   });
