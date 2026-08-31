@@ -22,6 +22,21 @@
 
   const leaf = (path: string) => path.split('/').filter(Boolean).pop() ?? path;
 
+  /**
+   * What has been typed. Read here, not just handed to the filter, because
+   * WHICH sessions are offered depends on it: a few recent ones per machine
+   * when the box is empty, and every stored session on every machine the
+   * moment it is not. Rendering all of them unfiltered would be a list
+   * nobody asked for; searching only the newest few would be a search box
+   * that cannot find things.
+   */
+  let query = $state('');
+
+  /**
+   * How many stored sessions each machine offers the palette when nothing has
+   * been typed. Typing searches the WHOLE catalogue — a palette that can only
+   * find eight per machine is a recent-list wearing a search box.
+   */
   const RECENT_PER_MACHINE = 8;
 
   const GROUPS = ['Projects', 'Machines', 'Running sessions', 'Recent sessions'];
@@ -56,7 +71,10 @@
       });
     }
     for (const machine of cockpit.machines) {
-      for (const info of cockpit.catalogOf(machine.machineId).slice(0, RECENT_PER_MACHINE)) {
+      // Unfiltered, this is a landing list and stays short. The moment the
+      // reader types, every stored session on every machine is in scope.
+      const catalog = cockpit.catalogOf(machine.machineId);
+      for (const info of query.trim() ? catalog : catalog.slice(0, RECENT_PER_MACHINE)) {
         rows.push({
           id: `stored:${machine.machineId}:${info.sessionId}`,
           group: 'Recent sessions',
@@ -104,7 +122,7 @@
   description="Jump to a project, machine, or session"
   class="sm:max-w-xl"
 >
-  <Command.Input placeholder="Jump to a project, machine, or session…" />
+  <Command.Input bind:value={query} placeholder="Jump to a project, machine, or session…" />
 
   <Command.List class="max-h-[60vh]">
     <Command.Empty>Nothing matches that.</Command.Empty>

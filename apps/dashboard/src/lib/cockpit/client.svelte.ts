@@ -2728,7 +2728,7 @@ function ask<T>(
 export async function loadCatalog(machineId: string): Promise<void> {
   try {
     state.catalog[machineId] = await machineControl<SDKSessionInfo[]>(machineId, 'listSessions', [
-      { limit: SESSION_CATALOG_LIMIT },
+      SESSION_CATALOG_LIMIT > 0 ? { limit: SESSION_CATALOG_LIMIT } : {},
     ]);
   } catch (error) {
     console.error(`[cockpit] listSessions on ${machineId} failed:`, error);
