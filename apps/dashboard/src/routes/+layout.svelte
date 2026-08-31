@@ -56,10 +56,8 @@
     // Same page, different params — instant.
     if (from === to) return;
 
-    // Session tab switches — skip VT, let pane CSS handle the crossfade.
-    // The VT's navigation.complete blocks on svelte.settled() which takes
-    // 3+ seconds with many reactive derivations when the fleet board shows.
-    if (!document.documentElement.dataset.nav && SESSION.test(from) && SESSION.test(to)) return;
+    // Session tab switches — crossfade via VT (translate 0,0).
+    // Panes are visibility-toggled, VT captures old→new snapshots.
 
     // Hidden or reduced motion — instant.
     if (document.hidden) { delete document.documentElement.dataset.nav; return; }
