@@ -799,47 +799,23 @@
   animation: none;
 }
 
-/* Default: drill-in/out — horizontal push */
+/* Content transitions — direction set via CSS custom properties from JS.
+   --vt-old-x/y: where the old content exits to
+   --vt-new-x/y: where the new content enters from
+   No data-attribute selectors needed — works on all browsers. */
 ::view-transition-old(content) {
-  animation: 200ms cubic-bezier(0.32, 0.72, 0, 1) both vt-push-out;
+  animation: 200ms cubic-bezier(0.32, 0.72, 0, 1) both vt-exit;
 }
 ::view-transition-new(content) {
-  animation: 200ms cubic-bezier(0.32, 0.72, 0, 1) both vt-push-in;
+  animation: 200ms cubic-bezier(0.32, 0.72, 0, 1) both vt-enter;
 }
 
-/* Vertical: sidebar nav (data-nav='down' or 'up') */
-html[data-nav='down']::view-transition-old(content) {
-  animation: 200ms cubic-bezier(0.32, 0.72, 0, 1) both vt-slide-up-out;
+@keyframes vt-exit {
+  to { transform: translate(var(--vt-old-x, -12%), var(--vt-old-y, 0)); opacity: 0; }
 }
-html[data-nav='down']::view-transition-new(content) {
-  animation: 200ms cubic-bezier(0.32, 0.72, 0, 1) both vt-slide-up-in;
+@keyframes vt-enter {
+  from { transform: translate(var(--vt-new-x, 12%), var(--vt-new-y, 0)); opacity: 0; }
 }
-html[data-nav='up']::view-transition-old(content) {
-  animation: 200ms cubic-bezier(0.32, 0.72, 0, 1) both vt-slide-down-out;
-}
-html[data-nav='up']::view-transition-new(content) {
-  animation: 200ms cubic-bezier(0.32, 0.72, 0, 1) both vt-slide-down-in;
-}
-
-/* Back: drill-out (data-nav='prev') */
-html[data-nav='prev']::view-transition-old(content) {
-  animation: 200ms cubic-bezier(0.32, 0.72, 0, 1) both vt-push-out-back;
-}
-html[data-nav='prev']::view-transition-new(content) {
-  animation: 200ms cubic-bezier(0.32, 0.72, 0, 1) both vt-push-in-back;
-}
-
-/* Vertical keyframes — content slides up/down (sidebar nav) */
-@keyframes vt-slide-up-out   { to   { transform: translateY(-12%); opacity: 0; } }
-@keyframes vt-slide-up-in    { from { transform: translateY(12%);  opacity: 0; } }
-@keyframes vt-slide-down-out { to   { transform: translateY(12%);  opacity: 0; } }
-@keyframes vt-slide-down-in  { from { transform: translateY(-12%); opacity: 0; } }
-
-/* Horizontal keyframes — drill in/out */
-@keyframes vt-push-out      { to   { transform: translateX(-12%); opacity: 0; } }
-@keyframes vt-push-in       { from { transform: translateX(12%);  opacity: 0; } }
-@keyframes vt-push-out-back { to   { transform: translateX(12%);  opacity: 0; } }
-@keyframes vt-push-in-back  { from { transform: translateX(-12%); opacity: 0; } }
 
 /* Card -> header morphs share one soft curve. */
 ::view-transition-old(instance-*),
