@@ -546,6 +546,37 @@
     flex-shrink: 0;
   }
 
+  /* What a narrowing group gives up, in the order it can afford to.
+     The path goes first — the machine and folder are recoverable from the
+     tab and the settings panel. The stats go next; they are a reading, not
+     an identity. The title and the state pill are the last things standing,
+     because between them they answer "which conversation is this, and does
+     it need me" — which is the whole job of this bar. */
+  @container leaf (max-width: 620px) {
+    .shead {
+      padding: 0 var(--space-4);
+    }
+    .path {
+      display: none;
+    }
+    /* The disclosure keeps its gear and loses its summary: the settings are
+       still one press away, and the words naming them are the panel's job
+       once there is no room to read them here. */
+    .shead :global(.settings-label) {
+      display: none;
+    }
+  }
+  @container leaf (max-width: 470px) {
+    /* The view switch falls back to its glyphs. Chat and Flow are two
+       icons the reader already knows by this point. */
+    .shead :global(.view-item span) {
+      display: none;
+    }
+    .shead :global(.meta) {
+      display: none;
+    }
+  }
+
   /* Identity mark — inlined from the retired outpost ItemMark so this header
      carries no $lib/outpost dependency; same tokens, same top-light overlay.
      The glyph is the session's own duotone sprite, so two runs in one repo

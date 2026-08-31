@@ -70,7 +70,12 @@ function fenced(target: EventTarget | null, fence: HTMLElement): boolean {
   return false;
 }
 
-export function createSwipe() {
+/**
+ * `leafOf` is a getter rather than a value: a group's identity is a prop,
+ * and capturing it once would bind the gesture to whichever group this
+ * component happened to render first.
+ */
+export function createSwipe(leafOf: () => string | undefined = () => undefined) {
   let phase = $state<Phase>('idle');
   let delta = $state(0);
   let width = $state(0);
@@ -107,7 +112,7 @@ export function createSwipe() {
       // names is already where the eye expects it. Nothing animates as a
       // result — the transform is removed in the same breath that the pane
       // becomes the active one, so the two cancel.
-      if (settled) workspace.activate(settled);
+      if (settled) workspace.activate(settled, leafOf());
       reset();
     }, wait);
   }
@@ -162,9 +167,19 @@ export function createSwipe() {
       return null;
     },
 
-    /** Attaches the listeners. `touchmove` must be non-passive to claim. */
-    action(node: HTMLElement) {
+    /**
+     * Attaches the listeners. `touchmove` must be non-passive so the gesture
+     * can claim the touch once it owns it.
+     *
+     * `enabled` is a parameter rather than a condition on the `use:` because
+     * a directive cannot be applied conditionally — and detaching listeners
+     * mid-gesture would strand the state machine part-way through a drag.
+     */
+    action(node: HTMLElement, enabled: boolean = true) {
+      let live = enabled;
+
       const onStart = (event: TouchEvent) => {
+        if (!live) return;
         if (phase !== 'idle' || event.touches.length !== 1) return;
         if (fenced(event.target, node)) return;
         const touch = event.touches[0];
@@ -191,7 +206,9 @@ export function createSwipe() {
             return;
           }
           const dir: 'left' | 'right' = dx < 0 ? 'left' : 'right';
-          const next = workspace.step(workspace.activeSessionId, dir === 'left' ? 1 : -1);
+          const leafId = leafOf();
+          const from = leafId ? workspace.activeOf(leafId) : workspace.activeSessionId;
+          const next = workspace.step(from, dir === 'left' ? 1 : -1, leafId);
           if (!next) {
             phase = 'idle';
             return;
@@ -241,6 +258,10 @@ export function createSwipe() {
       node.addEventListener('touchcancel', onCancel, { passive: true });
 
       return {
+        update(next: boolean) {
+          live = next;
+          if (!next && phase !== 'idle') reset();
+        },
         destroy() {
           if (settleTimer) clearTimeout(settleTimer);
           node.removeEventListener('touchstart', onStart);

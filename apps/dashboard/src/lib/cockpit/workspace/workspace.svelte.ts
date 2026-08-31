@@ -167,6 +167,71 @@ function focused(): LeafNode {
   return first;
 }
 
+/** The branch holding a node, or `null` for the root. */
+function parentOf(target: PaneNode, node: PaneNode = held.root): BranchNode | null {
+  if (node.t === 'l') return null;
+  if (node.kids.includes(target)) return node;
+  for (const kid of node.kids) {
+    const found = parentOf(target, kid);
+    if (found) return found;
+  }
+  return null;
+}
+
+/** Put `next` where `old` currently sits. */
+function replace(old: PaneNode, next: PaneNode): void {
+  const parent = parentOf(old);
+  if (!parent) {
+    held.root = next;
+    return;
+  }
+  parent.kids[parent.kids.indexOf(old)] = next;
+}
+
+/** Even shares, so a fresh split lands down the middle. */
+const evenly = (count: number): number[] => Array.from({ length: count }, () => 100 / count);
+
+/**
+ * Put the tree back into a shape the renderer can trust, after any mutation.
+ *
+ * Three rules, each of which exists because the alternative renders something
+ * absurd: a branch with one child is a split with nothing to split against; a
+ * leaf holding nothing is a pane with no tab strip and no content; and a size
+ * list that has come loose from its children makes paneforge lay out against
+ * a length it no longer has.
+ *
+ * The root is the exception to the empty-leaf rule: a workspace with nothing
+ * open is not broken, it is the fleet board.
+ */
+function normalize(node: PaneNode = held.root): PaneNode | null {
+  if (node.t === 'l') {
+    return node.tabs.length > 0 || node === held.root ? node : null;
+  }
+  const kids = node.kids.map((kid) => normalize(kid)).filter((kid): kid is PaneNode => !!kid);
+  if (kids.length === 0) return null;
+  if (kids.length === 1) return kids[0];
+  // A child that survived may have been promoted out of a branch of the same
+  // direction; folding it in keeps `h(a, h(b, c))` from rendering as nested
+  // groups when it means the same thing as `h(a, b, c)`.
+  const flat: PaneNode[] = [];
+  for (const kid of kids) {
+    if (kid.t === 'b' && kid.dir === node.dir) flat.push(...kid.kids);
+    else flat.push(kid);
+  }
+  node.kids = flat;
+  if (node.sizes.length !== flat.length) node.sizes = evenly(flat.length);
+  return node;
+}
+
+function settle(): void {
+  const root = normalize();
+  held.root = root ?? emptyLeaf();
+  if (!leafById(held.focusedLeaf)) {
+    held.focusedLeaf = leavesOf(held.root)[0].id;
+  }
+  save();
+}
+
 /* ── The URL projection ───────────────────────────────────────────────
    One direction only. `urlFor` builds exactly the href the tab strip
    builds, so a projected URL and a copied link are the same string. */
@@ -322,9 +387,14 @@ export const workspace = {
     workingSet.forget(sessionId);
     if (leaf.active === sessionId) {
       leaf.active = leaf.tabs[at] ?? leaf.tabs[at - 1] ?? null;
-      if (leaf.id === held.focusedLeaf) project(leaf.active, 'push');
     }
-    save();
+    // Closing the last tab of a split half closes the half: a group with
+    // nothing in it is a divider with a blank on one side, which is not a
+    // state worth being able to reach.
+    settle();
+    if (leaf.id === held.focusedLeaf || !leafById(leaf.id)) {
+      project(this.activeSessionId, 'push');
+    }
   },
 
   /**
@@ -342,6 +412,93 @@ export const workspace = {
     const at = from ? leaf.tabs.indexOf(from) : -1;
     if (at === -1) return leaf.tabs[0] ?? null;
     return leaf.tabs[(at + by + leaf.tabs.length) % leaf.tabs.length] ?? null;
+  },
+
+  /**
+   * Split a group, putting a conversation in the new half.
+   *
+   * "Always move": a conversation lives in exactly one group, so it leaves
+   * wherever it was. That is the invariant that keeps session state keyed by
+   * id alone — no pane owns a private copy of a scroll position or a draft,
+   * because no conversation is ever in two places to disagree about.
+   */
+  split(leafId: string, edge: 'left' | 'right' | 'top' | 'bottom', sessionId: string): void {
+    const target = leafById(leafId);
+    if (!target) return;
+    const from = leafHolding(sessionId);
+    // Splitting a group against its only tab would leave an empty half.
+    if (from === target && target.tabs.length < 2) return;
+    if (from) {
+      from.tabs.splice(from.tabs.indexOf(sessionId), 1);
+      if (from.active === sessionId) from.active = from.tabs[0] ?? null;
+    }
+    const fresh: LeafNode = { t: 'l', id: nodeId(), tabs: [sessionId], active: sessionId };
+    const dir = edge === 'left' || edge === 'right' ? 'h' : 'v';
+    const before = edge === 'left' || edge === 'top';
+    const kids = before ? [fresh, target] : [target, fresh];
+    replace(target, { t: 'b', id: nodeId(), dir, sizes: evenly(2), kids });
+    held.focusedLeaf = fresh.id;
+    settle();
+    project(sessionId, 'push');
+  },
+
+  /**
+   * Move a conversation into a group that already exists, at an index in its
+   * strip. Same invariant as `split`: it leaves where it was first.
+   */
+  move(sessionId: string, leafId: string, index?: number): void {
+    const target = leafById(leafId);
+    if (!target) return;
+    const from = leafHolding(sessionId);
+    if (from) {
+      from.tabs.splice(from.tabs.indexOf(sessionId), 1);
+      if (from.active === sessionId) from.active = from.tabs[0] ?? null;
+    }
+    const at = index === undefined ? target.tabs.length : Math.max(0, Math.min(index, target.tabs.length));
+    target.tabs.splice(at, 0, sessionId);
+    target.active = sessionId;
+    held.focusedLeaf = target.id;
+    settle();
+    project(sessionId, 'push');
+  },
+
+  /** Reorder within one group's strip, for a drag that never left it. */
+  reorder(leafId: string, sessionId: string, index: number): void {
+    const leaf = leafById(leafId);
+    if (!leaf) return;
+    const at = leaf.tabs.indexOf(sessionId);
+    if (at === -1) return;
+    leaf.tabs.splice(at, 1);
+    leaf.tabs.splice(Math.max(0, Math.min(index, leaf.tabs.length)), 0, sessionId);
+    save();
+  },
+
+  /** Record a resize. Written by paneforge as the divider moves. */
+  resize(branchId: string, sizes: number[]): void {
+    const walk = (node: PaneNode): BranchNode | null => {
+      if (node.t === 'l') return null;
+      if (node.id === branchId) return node;
+      for (const kid of node.kids) {
+        const found = walk(kid);
+        if (found) return found;
+      }
+      return null;
+    };
+    const branch = walk(held.root);
+    if (!branch || branch.sizes.length !== sizes.length) return;
+    branch.sizes = sizes;
+    save();
+  },
+
+  /** Close a whole group, and everything open in it. */
+  closeLeaf(leafId: string): void {
+    const leaf = leafById(leafId);
+    if (!leaf) return;
+    for (const id of [...leaf.tabs]) workingSet.forget(id);
+    leaf.tabs = [];
+    leaf.active = null;
+    settle();
+    project(this.activeSessionId, 'replace');
   },
 
   /** Adopt a tree the server rendered from the cookie, on first mount. */

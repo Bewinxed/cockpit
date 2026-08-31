@@ -1,78 +1,58 @@
 <script lang="ts">
   /**
-   * Session pane stacking and the shared identity header.
+   * The workspace surface: the fleet board, and the groups of conversations
+   * arranged over it.
    *
-   * One pane is kept per conversation the reader has opened. Switching flips
-   * `visibility` — nothing unmounts, nothing is measured twice, scroll
-   * positions survive.
+   * What this file owns is small, deliberately. It reconciles the URL with
+   * the workspace, holds the server's answer for whichever conversation the
+   * page was entered with, and decides whether the reader gets a grid or a
+   * single group. Everything about a group — its tabs, its identity bar, its
+   * panes, its swipe — belongs to `PaneLeaf`, once per group rather than once
+   * per app. That is what makes a split two workstations instead of one view
+   * showing two things.
    *
-   * What changed here, and why everything else follows from it: the active
-   * conversation is `workspace.activeSessionId`, a plain piece of state, not
-   * `page.params.id`. A tab click assigns it and re-renders in the same frame;
-   * the URL is written afterwards with `pushState`, which runs no load. Because
-   * no load runs, `page.data` cannot change on a switch, so the server tail
-   * cannot land late and rebuild a transcript that is already on screen. That
-   * late landing was the layout shift; it is now structurally impossible rather
-   * than suppressed.
-   *
-   * The View-Transition suppression flag, the one-frame animation guards and
-   * the slide-direction interlocks that used to live here are gone with it.
-   * They existed only to hide the navigation cascade this no longer performs.
+   * The active conversation is `workspace.activeSessionId`, a plain piece of
+   * state, not `page.params.id`. Showing one assigns it and re-renders in the
+   * same frame; the URL is written afterwards with `pushState`, which runs no
+   * load. Because no load runs, `page.data` cannot change on a switch, so the
+   * server tail cannot land late and rebuild a transcript already on screen —
+   * which is what the View-Transition suppression flag and the one-frame
+   * animation guards used to be hiding.
    */
   import type { Snippet } from 'svelte';
-  import { onMount, untrack } from 'svelte';
+  import { onMount } from 'svelte';
   import { afterNavigate } from '$app/navigation';
   import { page } from '$app/state';
-  import type { EffortLevel, PermissionMode } from '@cockpit/core';
   import FleetBoard from '$lib/cockpit/FleetBoard.svelte';
-  import SessionPane from '$lib/cockpit/SessionPane.svelte';
-  import SessionHeader, { type SettingChange } from '$lib/cockpit/transcript/SessionHeader.svelte';
-  import {
-    cockpit,
-    syncSubscriptions,
-    submitCommand,
-    commandRecord,
-    streamCapable,
-    relaunchSession,
-    type HistorySource,
-  } from '$lib/cockpit/client.svelte';
+  import PaneGrid from '$lib/cockpit/workspace/PaneGrid.svelte';
+  import PaneLeaf from '$lib/cockpit/workspace/PaneLeaf.svelte';
+  import { syncSubscriptions, type HistorySource } from '$lib/cockpit/client.svelte';
   import { workspace } from '$lib/cockpit/workspace/workspace.svelte';
-  import { createSwipe } from '$lib/cockpit/workspace/gesture.svelte';
-  import { workingSet } from '$lib/cockpit/working-set.svelte';
-  import { resolveSessionTitle } from '$lib/cockpit/links';
-  import { models, covers, ensureModels } from '$lib/cockpit/models.svelte';
-  import { PERMISSION_MODES } from '$lib/cockpit/permission-modes';
-  import { effortStops as getEffortStops, hasEffortScale } from '$lib/cockpit/effort-levels';
+  import { IsMobile } from '$lib/hooks/is-mobile.svelte';
 
   let { children }: { children: Snippet } = $props();
 
-  /* ── What is on screen ───────────────────────────────────────────── */
+  /** 900px is this app's desktop line, not the 768 the hook defaults to. */
+  const narrow = new IsMobile(900);
 
-  const viewId = $derived(workspace.activeSessionId ?? '');
   const onBoard = $derived(workspace.activeSessionId === null);
 
-  const swipe = createSwipe();
-
   /**
-   * Which conversation the HEADER names.
-   *
-   * Not always the active one: once a drag has passed the point it would
-   * commit at, the header starts naming where the finger is going. Because
-   * there is one header instance and its text comes from synchronous state,
-   * torph morphs the title character by character *while the finger is still
-   * moving* — and morphs it back if the drag retreats. The header is
-   * therefore never showing something the lift is about to contradict.
+   * A phone gets ONE group and the swipe; the grid is a desktop arrangement.
+   * The tree still holds whatever splits were made at a desk — it is simply
+   * not drawn — so widening the window restores them rather than discarding
+   * them.
    */
-  const headerId = $derived(swipe.previewId ?? viewId);
+  const soleLeaf = $derived(
+    workspace.leaves.find((leaf) => leaf.id === workspace.focusedLeafId) ?? workspace.leaves[0]
+  );
 
   /* ── The server's answer, claimed once ───────────────────────────────
      `page.data` only changes on a REAL navigation — a cold load, a deep
-     link, an arrival from another route. Reading it reactively would mean
-     every pane re-evaluating its claim whenever anything touched the page
-     store; worse, it was the mechanism by which a late-landing tail
-     rebuilt a transcript mid-animation. So it is captured by value, at the
-     two moments it can actually differ, and handed to the one pane it
-     belongs to as a prop. */
+     link, an arrival from another route. It is captured by value at the two
+     moments it can differ, and handed to the one pane it belongs to. Read
+     reactively, it was the mechanism by which a late-landing tail rebuilt a
+     transcript mid-animation. */
 
   interface EntryData {
     id: string;
@@ -83,8 +63,7 @@
   const captureEntry = (): EntryData => ({
     id: page.params.id ?? '',
     tail: (page.data as { tail?: unknown }).tail ?? null,
-    history:
-      (page.data as { history?: Promise<HistorySource | null> | null }).history ?? null,
+    history: (page.data as { history?: Promise<HistorySource | null> | null }).history ?? null,
   });
 
   let entry = $state<EntryData>(captureEntry());
@@ -94,26 +73,13 @@
   });
 
   /* ── URL → workspace ─────────────────────────────────────────────────
-     The other direction of the projection, and the only one that reads the
-     URL.
-
      Deliberately NOT a `$effect` on `page.url`. A shallow `pushState` does
-     not re-run this layout's effects — measured, not assumed: an instrumented
-     effect fired twice at mount and never again across three tab clicks and
-     two back presses, leaving the store a whole history entry behind the
-     address bar. Reactivity is the wrong instrument here anyway. There are
-     exactly two ways the URL can move without this store having moved first,
-     and both are events: the browser walking history, and a real navigation
-     arriving from another route. So both are listened for, `location` is read
-     directly, and nothing depends on when a framework store catches up.
-
-     Our own `pushState` needs no reconciliation at all — the store was the
-     thing that moved first. The equality check makes that a no-op rather than
-     a second write. */
-
-  const browsingCwd = $derived(page.url.searchParams.get('cwd') ?? '');
-  const browsingHarness = $derived(page.url.searchParams.get('harness') ?? 'claude');
-  const browsingMachine = $derived(page.url.searchParams.get('machine'));
+     not re-run this layout's effects — measured, not assumed: an
+     instrumented effect fired twice at mount and never again across three
+     tab clicks and two back presses, leaving the store a whole history entry
+     behind the address bar. There are exactly two ways the URL can move
+     without this store having moved first, and both are events: the browser
+     walking history, and a real navigation from another route. */
 
   function reconcileFromUrl(): void {
     const url = new URL(location.href);
@@ -125,10 +91,9 @@
     if (urlId === workspace.activeSessionId) return;
     // Only carry context when the URL actually names a machine. A stored
     // conversation's machine and folder are how it is addressed at all, and
-    // `workingSet.visit` SPREADS what it is given over what it holds — so
-    // handing it a blank context because this particular URL had no query
-    // string erases the real one, and the pane that had been reading a
-    // transcript a moment ago reports itself unreachable.
+    // `workingSet.visit` SPREADS what it is given over what it holds — so a
+    // blank context from a URL with no query string erases the real one, and
+    // a pane that was reading a transcript reports itself unreachable.
     const machine = url.searchParams.get('machine');
     workspace.reveal(
       urlId,
@@ -149,204 +114,68 @@
     return () => window.removeEventListener('popstate', onPop);
   });
 
-  /* ── Panes ───────────────────────────────────────────────────────────
-     A pane is mounted the first time its conversation is shown and then
-     kept for the life of the session — that is what makes a return to a
-     tab free. The list only grows here; closing a tab prunes it. */
-
-  let mounted = $state<string[]>([]);
-
-  $effect.pre(() => {
-    const id = viewId;
-    if (!id) return;
-    untrack(() => {
-      if (!mounted.includes(id)) mounted.push(id);
-    });
-  });
-
-  /**
-   * Mount the conversations either side of this one, ahead of being asked.
-   *
-   * This is what makes a swipe reveal something rather than nothing. A pane
-   * that is mounted has already read its transcript, or is already showing
-   * that it is reading one; a pane that mounts when the gesture commits can
-   * only be blank until it catches up, which is precisely the blank the
-   * reader was complaining about. Hidden panes cost a `visibility` flip, so
-   * two of them is a cheap price for the neighbour always being there.
-   */
-  $effect(() => {
-    const here = workspace.activeSessionId;
-    if (!here) return;
-    const neighbours = [workspace.step(here, 1), workspace.step(here, -1)];
-    untrack(() => {
-      for (const id of neighbours) {
-        if (id && !mounted.includes(id)) mounted.push(id);
-      }
-    });
-  });
-
-  $effect(() => {
-    const open = new Set(workspace.openIds);
-    untrack(() => {
-      const keep = mounted.filter((id) => open.has(id));
-      if (keep.length !== mounted.length) mounted = keep;
-    });
-  });
-
   $effect(() => {
     syncSubscriptions();
   });
-
-  /* ── Per-pane view state (chat / flow) ───────────────────────────── */
-
-  let views = $state<Record<string, 'chat' | 'flow'>>({});
-
-  /* ── Shared header ───────────────────────────────────────────────────
-     ONE instance, above the stack. Because it is one instance and its text
-     comes from synchronous state, torph morphs the title character by
-     character on a switch instead of the whole bar being replaced. */
-
-  const session = $derived(cockpit.session(headerId) ?? null);
-  const machineId = $derived(cockpit.session(headerId)?.machineId ?? '');
-
-  const machineName = $derived(
-    cockpit.machines.find((m) => m.machineId === machineId)?.hostname ?? machineId
-  );
-
-  const title = $derived(
-    resolveSessionTitle({
-      title: cockpit.instances.find((i) => i.id === headerId)?.title,
-      firstMessage: session?.messages.find((m) => m.type === 'user' && m.content.trim())?.content,
-      cwd: session?.cwd || browsingCwd,
-      id: headerId,
-    })
-  );
-
-  const stats = $derived(cockpit.statsOf(headerId));
-  const activity = $derived(cockpit.activityOf(headerId));
-
-  const machineRow = $derived(cockpit.machines.find((m) => m.machineId === machineId) ?? null);
-  const harnessReport = $derived(
-    machineRow?.harnesses?.find((report) => report.harness === session?.harness) ?? null
-  );
-  const offeredModes = $derived(
-    harnessReport
-      ? PERMISSION_MODES.filter((mode) =>
-          harnessReport.capabilities.permissionModes.includes(mode.value)
-        )
-      : PERMISSION_MODES
-  );
-  const chosenModel = $derived(
-    session?.model ? (models.offered.find((row) => covers(row, session.model!)) ?? null) : null
-  );
-  const harnessEffort = $derived(harnessReport?.capabilities.effort !== false);
-  const showEffort = $derived(harnessEffort && hasEffortScale(chosenModel));
-  const effortStopsForModel = $derived(getEffortStops(chosenModel));
-
-  $effect(() => {
-    ensureModels();
-  });
-
-  function onmodel(model: string): SettingChange {
-    if (!machineId) return null;
-    return submitCommand(viewId, machineId, 'set-model', { model });
-  }
-  function onpermission(mode: PermissionMode): SettingChange {
-    if (!machineId) return null;
-    if (mode === 'bypassPermissions') return relaunchSession(viewId, machineId, mode);
-    return submitCommand(viewId, machineId, 'set-permission-mode', { mode });
-  }
-  function oneffort(level: EffortLevel): SettingChange {
-    if (!machineId) return null;
-    return submitCommand(viewId, machineId, 'set-effort', { effort: level });
-  }
 </script>
 
-<!-- One header for the stack. Conditional on there BEING a conversation, not
-     on the store having caught up with it, so it stays on screen through the
-     moment between opening a tab and its transcript arriving. -->
-{#if !onBoard && viewId}
-  <SessionHeader
-    {title}
-    seed={session?.cwd || browsingCwd || viewId}
-    harness={session?.harness ?? browsingHarness}
-    {machineName}
-    cwd={session?.cwd || browsingCwd}
-    {activity}
-    model={session?.model ?? null}
-    permissionMode={session?.permissionMode ?? null}
-    effort={session?.effort ?? null}
-    mcpCount={session?.mcp?.length ?? null}
-    turns={stats.turns}
-    totalTokens={stats.totalTokens}
-    maxTokens={stats.maxTokens}
-    cost={stats.cost}
-    view={views[headerId] ?? 'chat'}
-    onview={(v) => (views[headerId] = v)}
-    {offeredModes}
-    effortStops={effortStopsForModel}
-    {showEffort}
-    {harnessEffort}
-    {onmodel}
-    {onpermission}
-    {oneffort}
-    trackedCommand={commandRecord}
-    streaming={streamCapable()}
-  />
-{/if}
-
-<div class="pane-stack relative min-h-0 min-w-0 flex-1 overflow-hidden" use:swipe.action>
-  <div class="pane absolute inset-0 flex" class:pane-hidden={!onBoard} inert={!onBoard}>
+<div class="surface">
+  <!-- The board is a HOME rather than a peer: it is what is there when no
+       conversation is, and it holds its scroll position underneath the
+       groups rather than being rebuilt on every visit. -->
+  <div class="board" class:hidden-surface={!onBoard} inert={!onBoard}>
     <FleetBoard active={onBoard} />
   </div>
 
-  <!-- `visible` is `shown`, not `isActive`: a pane sliding into view has to be
-       building its rows while it travels, or it arrives blank and fills in
-       afterwards — the very thing the gesture exists to avoid. `focused` stays
-       with the active pane, so the one being read rides its streaming tail
-       while the one merely passing through rebuilds on the scheduler's turn.
-       Input belongs to the active pane alone, which `inert` enforces. -->
-  {#each mounted as paneId (paneId)}
-    {@const isActive = paneId === viewId && !onBoard}
-    {@const offset = swipe.offsetOf(paneId, isActive)}
-    {@const shown = isActive || offset !== null}
-    {@const ctx = workingSet.contextOf(paneId)}
-    <div
-      class="pane absolute inset-0 flex"
-      class:pane-hidden={!shown}
-      inert={!isActive}
-      style:transform={offset === null ? 'translateX(0)' : `translateX(${offset}px)`}
-      style:transition={swipe.transition}
-    >
-      <SessionPane
-        viewId={paneId}
-        browsing={ctx?.machine ?? null}
-        browsingCwd={ctx?.cwd ?? ''}
-        browsingHarness={ctx?.harness ?? 'claude'}
-        serverTail={paneId === entry.id ? entry.tail : null}
-        serverHistory={paneId === entry.id ? entry.history : null}
-        visible={shown}
-        focused={isActive}
-        hideHeader
-        view={views[paneId] ?? 'chat'}
-        onview={(v) => (views[paneId] = v)}
+  <div class="groups" class:hidden-surface={onBoard} inert={onBoard}>
+    {#if narrow.current}
+      {#if soleLeaf}
+        <PaneLeaf
+          leaf={soleLeaf}
+          entryId={entry.id}
+          entryTail={entry.tail}
+          entryHistory={entry.history}
+          swipeable
+          showTabs={false}
+        />
+      {/if}
+    {:else}
+      <PaneGrid
+        node={workspace.root}
+        entryId={entry.id}
+        entryTail={entry.tail}
+        entryHistory={entry.history}
       />
-    </div>
-  {/each}
+    {/if}
+  </div>
 
   {@render children()}
 </div>
 
 <style>
-  /* Only the active pane is shown. `visibility` rather than `display`,
-     deliberately: a hidden pane still lays out, so the virtualiser keeps its
-     measurements and revealing one costs nothing. */
-  .pane {
-    opacity: 1;
+  .surface {
+    position: relative;
+    display: flex;
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .board,
+  .groups {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    min-width: 0;
+    min-height: 0;
     visibility: visible;
   }
 
-  .pane-hidden {
+  /* `visibility`, never `display`: a hidden surface still lays out, so the
+     virtualisers inside it keep their measurements and revealing one costs
+     nothing. */
+  .hidden-surface {
     visibility: hidden;
     pointer-events: none;
   }

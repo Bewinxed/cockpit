@@ -22,6 +22,7 @@
   import ConfirmDialog from './ConfirmDialog.svelte';
   import Sidebar from './Sidebar.svelte';
   import SessionTabs from './SessionTabs.svelte';
+  import { workspace } from './workspace/workspace.svelte';
   import UsageMeter from './UsageMeter.svelte';
 
   const RAIL_KEY = 'cockpit-rail-width';
@@ -117,14 +118,36 @@
   });
 
   function shortcut(event: KeyboardEvent) {
-    if (event.key.toLowerCase() !== 'k' || !(event.metaKey || event.ctrlKey)) return;
+    if (!(event.metaKey || event.ctrlKey)) return;
     if (isTyping()) return;
-    event.preventDefault();
-    jumpOpen = !jumpOpen;
+    const key = event.key.toLowerCase();
+    if (key === 'k') {
+      event.preventDefault();
+      jumpOpen = !jumpOpen;
+      return;
+    }
+    // Split the focused group, putting the conversation in front into the new
+    // half. `mod+\` is the binding VS Code uses for exactly this, and this is
+    // a straight copy of that model — borrowing the gesture's name too costs
+    // nothing and saves the reader learning a second one.
+    if (key === '\\' && onSession) {
+      const here = workspace.activeSessionId;
+      if (!here || workspace.openIds.length < 2) return;
+      event.preventDefault();
+      workspace.split(workspace.focusedLeafId, event.shiftKey ? 'bottom' : 'right', here);
+    }
   }
 
   const limits = $derived(cockpit.usageLimitsAny());
   const onSession = $derived(page.url.pathname.startsWith('/session'));
+
+  /**
+   * The app strip is the LONE group's strip. Once the workspace is split,
+   * each group draws its own — and keeping this one as well would put two
+   * rows of tabs on screen listing the same conversations, one of which
+   * could not say which half it was talking about.
+   */
+  const appStrip = $derived(onSession && workspace.leaves.length < 2);
 
   /** Which section the bar names, for the readers who arrived by URL. */
   const crumb = $derived.by(() => {
@@ -318,7 +341,7 @@
       </div>
     {/if}
 
-    {#if onSession}
+    {#if appStrip}
       <SessionTabs />
     {/if}
 

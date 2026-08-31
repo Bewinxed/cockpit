@@ -232,6 +232,23 @@
         </div>
       </ContextMenu.Trigger>
       <ContextMenu.Content>
+        <!-- Splitting has to be reachable BEFORE there is a split: the
+             per-group strips only appear once the workspace has more than one
+             group, so if this were the only place they lived the feature
+             could never be started. -->
+        <ContextMenu.Item
+          onSelect={() => workspace.split(workspace.focusedLeafId, 'right', tab.id)}
+          disabled={workspace.openIds.length < 2}
+        >
+          Split right
+        </ContextMenu.Item>
+        <ContextMenu.Item
+          onSelect={() => workspace.split(workspace.focusedLeafId, 'bottom', tab.id)}
+          disabled={workspace.openIds.length < 2}
+        >
+          Split down
+        </ContextMenu.Item>
+        <ContextMenu.Separator />
         <ContextMenu.Item onSelect={() => close(tab.id)}>Close</ContextMenu.Item>
         <ContextMenu.Item onSelect={() => closeOthers(tab.id)} disabled={tabs.length < 2}>
           Close others
