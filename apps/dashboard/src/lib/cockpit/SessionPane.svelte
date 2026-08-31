@@ -665,6 +665,15 @@
             </p>
             <a href="/session">Back to the fleet</a>
           </div>
+        {:else if !session.initialized && session.messages.length === 0}
+          <!-- Skeleton: session exists but transcript hasn't arrived yet -->
+          <div class="loading-skeleton">
+            <div class="sk-block sk-wide" style="--sk-delay: 0ms"></div>
+            <div class="sk-block sk-narrow" style="--sk-delay: 60ms"></div>
+            <div class="sk-block sk-wide" style="--sk-delay: 120ms"></div>
+            <div class="sk-block sk-medium" style="--sk-delay: 180ms"></div>
+            <div class="sk-block sk-narrow" style="--sk-delay: 240ms"></div>
+          </div>
         {:else if view === 'flow'}
           <FlowView
             instanceId={viewId}

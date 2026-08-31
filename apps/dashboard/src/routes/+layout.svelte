@@ -48,6 +48,8 @@
   // - Mobile gesture swipes: keep the push (data-nav already set by gesture handler).
   onNavigate((navigation) => {
     if (!document.startViewTransition) return;
+    // Swipe gesture already animated — skip the VT entirely.
+    if (document.documentElement.dataset.swipeNav !== undefined) return;
     if (!navigation.from || !navigation.to) return;
 
     const from = navigation.from.url.pathname;

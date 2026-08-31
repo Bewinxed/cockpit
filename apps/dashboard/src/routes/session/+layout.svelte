@@ -62,6 +62,11 @@
     const cur = viewId;
     const prev = prevViewId;
     if (cur === prev) return;
+    // Swipe handles its own animation — suppress the tab-click slide
+    if (swipePhase !== 'idle') {
+      prevViewId = cur;
+      return;
+    }
     const order = workingSet.order;
     const curIdx = order.indexOf(cur);
     const prevIdx = order.indexOf(prev);
@@ -206,6 +211,10 @@
   let swipeDirection = $state<'left' | 'right' | null>(null);
   let swipeContainerWidth = $state(0);
   let swipeCompleting = $state(false);
+
+  /** True for one frame after a swipe resets — suppresses any stray
+   *  slideDir or VT animation from the goto settling. */
+  let swipeJustCompleted = $state(false);
 
   // Touch tracking (not reactive — only read inside handlers)
   let touchStartX = 0;
@@ -361,11 +370,19 @@
           q.set('harness', targetPane.harness);
           url += `?${q.toString()}`;
         }
+        // Tell the root layout's onNavigate to skip the View Transition
+        // for this goto — the swipe already animated the pane into place.
+        if (typeof document !== 'undefined') {
+          document.documentElement.dataset.swipeNav = '';
+        }
         // Await navigation so viewId updates and the target pane becomes
         // `active` BEFORE swipe state resets. Without this, the target
         // briefly gets slide-hidden (forceVisible gone, active not yet true)
         // and the CSS transition from opacity:0→1 plays a false re-slide.
         await goto(url, { noScroll: true });
+        if (typeof document !== 'undefined') {
+          delete document.documentElement.dataset.swipeNav;
+        }
       }
       // Reset — the target pane is now the active one, so removing
       // forceVisible and swipe transforms is a visual no-op.
@@ -374,6 +391,9 @@
       swipeTargetId = null;
       swipeDirection = null;
       swipeCompleting = false;
+      // Suppress any stray animation for one frame while the DOM settles
+      swipeJustCompleted = true;
+      requestAnimationFrame(() => { swipeJustCompleted = false; });
     }, duration);
   }
 
@@ -399,9 +419,19 @@
 
   /* ── Derived pane transform helpers ─────────────────────────────── */
 
+  /**
+   * The active pane ALWAYS wears `translateX(0)` — even at rest. This
+   * prevents a stray CSS transition when the swipe resets: an empty
+   * string removes the inline property, the computed value flips from
+   * `translateX(0px)` to `none`, and even though `pane-releasing` is
+   * removed in the same Svelte tick the browser can still fire a
+   * one-frame transition flash. Keeping the value constant means there
+   * is never a property to transition.
+   */
   function paneTransform(paneId: string, isActive: boolean): string {
-    if (swipePhase === 'idle') return '';
-    if (swipePhase === 'tracking') return '';
+    if (swipePhase === 'idle' || swipePhase === 'tracking') {
+      return isActive ? 'translateX(0)' : '';
+    }
     // Check swipe target BEFORE isActive — after goto completes but before
     // swipe state resets, the target pane is both active AND the swipe target.
     // It must keep the target formula (which evaluates to translateX(0) at
@@ -481,7 +511,7 @@
         browsingCwd={pane.cwd}
         browsingHarness={pane.harness}
         active={isActive}
-        slideDir={swipePhase !== 'idle' ? '' : (shouldShow && !isSwipeTarget ? slideDir : '')}
+        slideDir={swipePhase !== 'idle' || swipeJustCompleted ? '' : (shouldShow && !isSwipeTarget ? slideDir : '')}
         hideHeader
         view={views[pane.id] ?? 'chat'}
         onview={(v) => (views[pane.id] = v)}
