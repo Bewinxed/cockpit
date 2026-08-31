@@ -26,7 +26,7 @@
     relaunchSession,
     type HistorySource,
   } from '../client.svelte';
-  import { workspace, type LeafNode } from './workspace.svelte';
+  import { workspace, contextOf, type LeafNode } from './workspace.svelte';
   import { createSwipe } from './gesture.svelte';
   import { paneDropTarget, dropHint } from './dnd.svelte';
   import { workingSet } from '../working-set.svelte';
@@ -137,7 +137,7 @@
 
   const session = $derived(cockpit.session(headerId) ?? null);
   const machineId = $derived(cockpit.session(headerId)?.machineId ?? '');
-  const headerCtx = $derived(workingSet.contextOf(headerId));
+  const headerCtx = $derived(contextOf(headerId));
 
   const machineName = $derived(
     cockpit.machines.find((m) => m.machineId === machineId)?.hostname ?? machineId
@@ -256,7 +256,7 @@
       {@const isActive = paneId === viewId}
       {@const offset = swipe.offsetOf(paneId, isActive)}
       {@const shown = isActive || offset !== null}
-      {@const ctx = workingSet.contextOf(paneId)}
+      {@const ctx = contextOf(paneId)}
       <div
         class="pane"
         class:pane-hidden={!shown}

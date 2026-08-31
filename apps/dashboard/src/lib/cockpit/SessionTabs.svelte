@@ -12,7 +12,7 @@
    */
   import { onMount, untrack } from 'svelte';
   import { page } from '$app/state';
-  import { workspace } from './workspace/workspace.svelte';
+  import { workspace, urlFor, contextOf } from './workspace/workspace.svelte';
   import { dragSession } from './workspace/dnd.svelte';
   import { IconBoxDuo, IconClose } from '$lib/icons';
   import { cockpit } from './client.svelte';
@@ -107,10 +107,8 @@
     // A stored session addresses itself with its machine/cwd/harness; drop
     // that and /session/{id} opens a different session with the same id. Live
     // sessions have no context and are addressed by id alone.
-    const ctx = workingSet.contextOf(id);
-    const href = ctx
-      ? `/session/${id}?${new URLSearchParams({ machine: ctx.machine, cwd: ctx.cwd, harness: ctx.harness })}`
-      : `/session/${id}`;
+    const ctx = contextOf(id);
+    const href = urlFor(id);
     const title = row?.title;
     const firstMessage = view?.messages.find((m) => m.type === 'user' && m.content.trim())?.content;
     const named = !!title?.trim() || !!firstMessage?.trim();

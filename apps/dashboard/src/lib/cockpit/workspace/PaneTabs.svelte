@@ -19,7 +19,7 @@
   import * as ContextMenu from '$lib/components/ui/context-menu';
   import { copyToClipboard } from '../copy';
   import { workingSet } from '../working-set.svelte';
-  import { workspace, urlFor, type LeafNode } from './workspace.svelte';
+  import { workspace, urlFor, contextOf, type LeafNode } from './workspace.svelte';
   import { dragSession, tabDropTarget, dropHint } from './dnd.svelte';
 
   let { leaf }: { leaf: LeafNode } = $props();
@@ -36,7 +36,7 @@
   function resolve(id: string): Tab {
     const row = cockpit.instances.find((instance) => instance.id === id);
     const view = cockpit.session(id);
-    const ctx = workingSet.contextOf(id);
+    const ctx = contextOf(id);
     const title = row?.title;
     const firstMessage = view?.messages.find((m) => m.type === 'user' && m.content.trim())?.content;
     const named = !!title?.trim() || !!firstMessage?.trim();

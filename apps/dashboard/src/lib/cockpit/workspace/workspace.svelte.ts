@@ -42,10 +42,28 @@ export interface LeafNode {
 
 export type PaneNode = BranchNode | LeafNode;
 
+/** How a stored conversation is addressed: which machine, which folder. */
+export interface SessionContext {
+  machine: string;
+  cwd: string;
+  harness: string;
+}
+
 export interface WorkspaceV1 {
   v: 1;
   root: PaneNode;
   focusedLeaf: string;
+  /**
+   * The address of every conversation the tree holds.
+   *
+   * This lives HERE, beside the ids that need it, rather than being looked
+   * up in the working set — which is a most-recently-used record with a cap
+   * on it, and evicts. The tree can hold more tabs than that cap remembers,
+   * so an evicted conversation came back addressed by id alone, resolved to
+   * a different session that happened to share it, and rendered as
+   * unreachable. Two records of one fact, one of them allowed to forget.
+   */
+  ctx?: Record<string, SessionContext>;
 }
 
 const KEY = 'outpost-workspace';
@@ -59,7 +77,7 @@ const emptyLeaf = (): LeafNode => ({ t: 'l', id: nodeId(), tabs: [], active: nul
 
 function blank(): WorkspaceV1 {
   const leaf = emptyLeaf();
-  return { v: 1, root: leaf, focusedLeaf: leaf.id };
+  return { v: 1, root: leaf, focusedLeaf: leaf.id, ctx: {} };
 }
 
 /* ── Persistence ──────────────────────────────────────────────────────
@@ -236,9 +254,28 @@ function settle(): void {
    One direction only. `urlFor` builds exactly the href the tab strip
    builds, so a projected URL and a copied link are the same string. */
 
+/** Records how a conversation is addressed, if this is news. */
+function remember(
+  sessionId: string,
+  ctx?: { machine?: string | null; cwd?: string; harness?: string }
+): void {
+  if (!ctx?.machine) return;
+  held.ctx ??= {};
+  held.ctx[sessionId] = {
+    machine: ctx.machine,
+    cwd: ctx.cwd ?? '',
+    harness: ctx.harness ?? 'claude',
+  };
+}
+
+/** The address of a conversation: the tree's own record, then the working set. */
+export function contextOf(sessionId: string): SessionContext | null {
+  return held.ctx?.[sessionId] ?? workingSet.contextOf(sessionId);
+}
+
 export function urlFor(sessionId: string | null): string {
   if (!sessionId) return '/session';
-  const ctx = workingSet.contextOf(sessionId);
+  const ctx = contextOf(sessionId);
   if (!ctx) return `/session/${sessionId}`;
   const q = new URLSearchParams({ machine: ctx.machine, cwd: ctx.cwd, harness: ctx.harness });
   return `/session/${sessionId}?${q}`;
@@ -348,6 +385,7 @@ export const workspace = {
     sessionId: string,
     ctx?: { machine?: string | null; cwd?: string; harness?: string }
   ): void {
+    remember(sessionId, ctx);
     if (ctx) workingSet.visit(sessionId, ctx);
     else workingSet.visit(sessionId);
     this.activate(sessionId, leafHolding(sessionId)?.id);
@@ -364,6 +402,7 @@ export const workspace = {
     ctx?: { machine?: string | null; cwd?: string; harness?: string }
   ): void {
     if (sessionId) {
+      remember(sessionId, ctx);
       if (ctx) workingSet.visit(sessionId, ctx);
       else workingSet.visit(sessionId);
     }
@@ -385,6 +424,7 @@ export const workspace = {
     const at = leaf.tabs.indexOf(sessionId);
     leaf.tabs.splice(at, 1);
     workingSet.forget(sessionId);
+    if (held.ctx) delete held.ctx[sessionId];
     if (leaf.active === sessionId) {
       leaf.active = leaf.tabs[at] ?? leaf.tabs[at - 1] ?? null;
     }

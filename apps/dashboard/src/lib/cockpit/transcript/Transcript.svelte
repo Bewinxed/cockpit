@@ -105,6 +105,24 @@
   let primed = false;
   /** Bumped by the scheduler. The ONLY dependency of an unfocused rebuild. */
   let rebuildTick = $state(0);
+  /**
+   * What the session looked like when these rows were last built.
+   *
+   * Coming back to a conversation used to rebuild every row and re-render
+   * them — markdown parsed, code highlighted — whether or not a single word
+   * had arrived while it was away. Measured on a real switch: one 256ms task
+   * with the main thread blocked for all of it, which is the delay a reader
+   * feels as the tab "sticking".
+   *
+   * Nothing that has not changed needs rebuilding. When the print matches,
+   * the SAME array is returned, so the keyed each sees identical rows, no
+   * component re-renders, and the pane simply becomes visible again.
+   */
+  let builtPrint = '';
+  const printOf = (): string =>
+    `${session.messages.length}:${session.streaming.length}:` +
+    `${session.thinkingStream.length}:${session.busy ? 1 : 0}:${session.pending.length}:` +
+    `${session.openBlock ? 1 : 0}`;
   /** Dev-only: the gate that catches an accidentally tracked session read. */
   const countBuild = (): void => {
     if (!import.meta.env.DEV || typeof window === 'undefined') return;
@@ -119,14 +137,20 @@
     if (!visible && primed) return { rows: frozen, shifted: false };
     if (visible && !isFocused && primed) {
       void rebuildTick;
-      return untrack(() => {
-        countBuild();
-        return build();
-      });
+      return untrack(() => (printOf() === builtPrint ? { rows: frozen, shifted: false } : run()));
     }
-    countBuild();
-    return build();
+    // Reading the print tracks exactly the handful of fields that mean "there
+    // is something new to draw", so an unchanged session cannot invalidate
+    // this at all — and a changed one still rebuilds on the very next frame.
+    if (primed && printOf() === builtPrint) return { rows: frozen, shifted: false };
+    return run();
   });
+
+  function run(): { rows: Row[]; shifted: boolean } {
+    countBuild();
+    builtPrint = printOf();
+    return build();
+  }
 
   function build(): { rows: Row[]; shifted: boolean } {
     const next = buildRows(session);
