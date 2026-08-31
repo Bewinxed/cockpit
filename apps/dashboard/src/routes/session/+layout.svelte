@@ -129,8 +129,8 @@
   <div
     class="pane absolute inset-0 flex"
     class:pane-hidden={!onBoard}
+    class:pane-active={onBoard}
     inert={!onBoard}
-    style:view-transition-name={onBoard ? 'session-pane' : 'none'}
   >
     <FleetBoard active={onBoard} />
   </div>
@@ -139,8 +139,8 @@
     <div
       class="pane absolute inset-0 flex"
       class:pane-hidden={!active}
+      class:pane-active={active}
       inert={!active}
-      style:view-transition-name={active ? 'session-pane' : 'none'}
     >
       <SessionPane viewId={pane.id} browsing={pane.browsing} browsingCwd={pane.cwd} browsingHarness={pane.harness} {active} />
     </div>
@@ -169,9 +169,14 @@
       visibility 0s 0s;
   }
 
+  .pane-active {
+    view-transition-name: session-pane;
+  }
+
   .pane-hidden {
     opacity: 0;
     visibility: hidden;
+    view-transition-name: none;
     transition:
       opacity 150ms cubic-bezier(0.32, 0.72, 0, 1),
       visibility 0s 150ms;
