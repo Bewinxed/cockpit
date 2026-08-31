@@ -346,7 +346,7 @@
       window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const duration = reducedMotion ? 0 : complete ? 300 : 250;
 
-    setTimeout(() => {
+    setTimeout(async () => {
       if (complete && swipeTargetId) {
         // Prevent the tab-click slideDir from firing on this navigation
         prevViewId = swipeTargetId;
@@ -361,9 +361,14 @@
           q.set('harness', targetPane.harness);
           url += `?${q.toString()}`;
         }
-        void goto(url, { noScroll: true });
+        // Await navigation so viewId updates and the target pane becomes
+        // `active` BEFORE swipe state resets. Without this, the target
+        // briefly gets slide-hidden (forceVisible gone, active not yet true)
+        // and the CSS transition from opacity:0→1 plays a false re-slide.
+        await goto(url, { noScroll: true });
       }
-      // Reset
+      // Reset — the target pane is now the active one, so removing
+      // forceVisible and swipe transforms is a visual no-op.
       swipePhase = 'idle';
       swipeDelta = 0;
       swipeTargetId = null;
@@ -397,11 +402,16 @@
   function paneTransform(paneId: string, isActive: boolean): string {
     if (swipePhase === 'idle') return '';
     if (swipePhase === 'tracking') return '';
-    if (isActive) return `translateX(${swipeDelta}px)`;
+    // Check swipe target BEFORE isActive — after goto completes but before
+    // swipe state resets, the target pane is both active AND the swipe target.
+    // It must keep the target formula (which evaluates to translateX(0) at
+    // the final delta), not the active formula (which would jump it to
+    // ±containerWidth and cause a false re-slide).
     if (paneId === swipeTargetId) {
       const sign = swipeDirection === 'left' ? 1 : -1;
       return `translateX(${sign * swipeContainerWidth + swipeDelta}px)`;
     }
+    if (isActive) return `translateX(${swipeDelta}px)`;
     return '';
   }
 </script>

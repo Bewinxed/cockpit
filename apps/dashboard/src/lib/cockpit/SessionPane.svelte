@@ -715,7 +715,15 @@
       <p class="announce" aria-live="polite" role="status">{sendFailure}</p>
     </div>
   {:else}
-    <div class="loading">Opening session…</div>
+    <!-- Skeleton loading state — placeholder lines that shimmer while
+         the session store is being populated. -->
+    <div class="loading-skeleton">
+      <div class="sk-block sk-wide" style="--sk-delay: 0ms"></div>
+      <div class="sk-block sk-narrow" style="--sk-delay: 60ms"></div>
+      <div class="sk-block sk-wide" style="--sk-delay: 120ms"></div>
+      <div class="sk-block sk-medium" style="--sk-delay: 180ms"></div>
+      <div class="sk-block sk-narrow" style="--sk-delay: 240ms"></div>
+    </div>
   {/if}
 </div>
 
@@ -807,12 +815,48 @@
       animation: none !important;
     }
   }
-  .loading {
-    display: grid;
-    place-items: center;
+  /* ── Loading skeleton ──────────────────────────────────────────────
+     Placeholder lines that pulse while the session populates. Each line
+     fades in staggered via animation-delay so the eye reads them top to
+     bottom rather than all at once. The shimmer travels along the
+     gradient so the skeleton feels alive, not stuck. */
+  .loading-skeleton {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: var(--space-6) var(--space-7);
     flex: 1 1 auto;
-    color: var(--ink-muted);
-    font-size: var(--text-sm);
+  }
+  .sk-block {
+    height: 14px;
+    border-radius: 7px;
+    background: linear-gradient(
+      90deg,
+      var(--surface-hover) 25%,
+      var(--border-hairline) 50%,
+      var(--surface-hover) 75%
+    );
+    background-size: 200% 100%;
+    animation:
+      sk-appear 300ms var(--sk-delay, 0ms) cubic-bezier(0.16, 1, 0.3, 1) both,
+      sk-shimmer 1.6s ease-in-out infinite;
+  }
+  .sk-wide   { width: 72%; }
+  .sk-medium { width: 55%; }
+  .sk-narrow { width: 38%; }
+  @keyframes sk-appear {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes sk-shimmer {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .sk-block {
+      animation: none;
+      opacity: 0.5;
+    }
   }
 
   /**
