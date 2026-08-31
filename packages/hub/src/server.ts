@@ -39,6 +39,7 @@ import {
   AGENT_BUSY,
   agentProblem,
   ASK_USER_QUESTION,
+  CONTROL_GET_SESSION_INFO,
   CONTROL_GET_SESSION_MESSAGES,
   CONTROL_LIST_SESSIONS,
   deriveTitleFromFirstMessage,
@@ -993,6 +994,20 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
    * against but this.
    */
   const waiting = new Map<string, (frame: ControlResult) => void>();
+
+  /**
+   * Where each conversation lives, once somebody has had to find out.
+   *
+   * `null` is a remembered "nobody holds this", which matters as much as a
+   * hit: without it a mistyped or deleted id would sweep every connected
+   * machine on every render that mentioned it. Cleared whenever a machine
+   * joins, because a machine arriving is precisely the event that can turn a
+   * `null` into an answer.
+   */
+  const locations = new Map<
+    string,
+    { id: string; machineId: string; cwd: string; harness: string } | null
+  >();
 
   /**
    * Asks a machine something and waits for the frame that answers it. A machine
@@ -1957,6 +1972,80 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
         );
       }
     )
+    // WHERE a conversation lives: which machine, which folder, which harness.
+    //
+    // A session id is a uuid and does not collide, so it identifies a
+    // conversation completely — but it does not LOCATE one, and the two got
+    // conflated. Every link carried the machine and folder around as query
+    // parameters, and every client kept its own copy in a capped
+    // most-recently-used record. Both were caches of a fact the fleet already
+    // knew, and when a cache was lost or evicted the conversation became
+    // unreachable: not missing, just unaddressed.
+    //
+    // So the fleet answers instead. The hub's own row first, which covers
+    // everything it ever spawned or adopted. Failing that, ask the connected
+    // machines whether they hold a transcript under that id — the harnesses
+    // already answer exactly this question, and asking one id is a lookup
+    // rather than the fleet-wide directory sweep a catalogue read would be
+    // (898 files and 1.1GB on one machine here, which is why the catalogue is
+    // capped and why a capped catalogue was never the thing to resolve
+    // against).
+    //
+    // The answer is kept, so a conversation is located once per hub lifetime
+    // and every reader after the first is a map lookup. Deliberately in
+    // memory: this is a cache of something the machines can always be asked
+    // again, and a stale row on disk claiming a transcript lives somewhere it
+    // no longer does would be worse than the question being asked twice.
+    .get('/api/instances/:id/location', async ({ params }) => {
+      const id = params.id;
+      if (!id) return null;
+
+      const known = locations.get(id);
+      if (known !== undefined) return known;
+
+      const row = db.getInstancesByIds([id])[0];
+      if (row?.machineId) {
+        const found = {
+          id,
+          machineId: row.machineId,
+          cwd: row.cwd ?? '',
+          harness: row.harness ?? 'claude',
+        };
+        locations.set(id, found);
+        return found;
+      }
+
+      // Nobody spawned it here, so it is a transcript somebody left on a disk.
+      // Ask the machines that are actually reachable, newest contact first.
+      for (const agent of db.listAgents()) {
+        if (!registry.agent(agent.machineId)) continue;
+        const answer = await callAgent(
+          agent.machineId,
+          CONTROL_GET_SESSION_INFO,
+          [id],
+          READ_TIMEOUT_MS
+        );
+        if (answer === 'offline' || answer === 'timeout' || !answer.ok) continue;
+        const info = answer.result as
+          | { sessionId?: string; cwd?: string; harness?: string }
+          | undefined
+          | null;
+        if (!info?.sessionId) continue;
+        const found = {
+          id,
+          machineId: agent.machineId,
+          cwd: info.cwd ?? '',
+          harness: info.harness ?? 'claude',
+        };
+        locations.set(id, found);
+        return found;
+      }
+
+      // Remembered as unknown too, so a bad id cannot make every render sweep
+      // the fleet. A machine coming online clears this (see `locations`).
+      locations.set(id, null);
+      return null;
+    })
     // A session's stored transcript over HTTP, which is the only way a page can
     // have one before its socket is up. The dashboard used to read history with
     // a `getSessionMessages` control over its own WebSocket, so a reload showed
@@ -3148,6 +3237,10 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
         switch (message.verb) {
           case 'register': {
             registry.registerAgent(message.machineId, ws);
+            // A machine arriving can turn a remembered "nobody holds this"
+            // into an answer, so the negatives go. The hits stay: a
+            // conversation does not move between machines.
+            for (const [id, where] of locations) if (where === null) locations.delete(id);
             db.upsertAgent({
               machineId: message.machineId,
               hostname: peek(message.payload, 'hostname') ?? message.machineId,

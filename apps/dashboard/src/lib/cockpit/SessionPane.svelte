@@ -39,6 +39,7 @@
     type SendExtras,
     type SessionState,
   } from './client.svelte';
+  import { locate } from './workspace/workspace.svelte';
   import { PERMISSION_MODES } from './permission-modes';
   import { effortStops, hasEffortScale } from './effort-levels';
   import { covers, ensureModels, models } from './models.svelte';
@@ -168,6 +169,24 @@
       }
     }
     if (!stored) {
+      // Nothing local knows where this conversation lives — not the hub's
+      // instances, not any machine's catalogue, not what we were told when
+      // the tab was opened. Ask the fleet directly before giving up: a
+      // transcript older than a catalogue's cut-off is not a transcript that
+      // has stopped existing.
+      const found = await locate(id);
+      if (found?.machine) {
+        const outcome = await openTranscript({
+          viewId: id,
+          machineId: found.machine,
+          sessionId: id,
+          cwd: found.cwd,
+          harness: found.harness as never,
+        });
+        if (outcome.ok) return;
+        failure = { reason: outcome.reason, message: outcome.message };
+        return;
+      }
       void backfillSession(id);
       return;
     }
