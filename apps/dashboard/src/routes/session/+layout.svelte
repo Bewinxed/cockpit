@@ -340,7 +340,11 @@
       ? swipeDirection === 'left' ? -swipeContainerWidth : swipeContainerWidth
       : 0;
 
-    const duration = complete ? 300 : 250;
+    // Respect reduced motion — snap instantly
+    const reducedMotion =
+      typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const duration = reducedMotion ? 0 : complete ? 300 : 250;
 
     setTimeout(() => {
       if (complete && swipeTargetId) {
