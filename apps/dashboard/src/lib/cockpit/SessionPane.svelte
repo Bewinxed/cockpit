@@ -192,7 +192,7 @@
    */
   const tail = $derived(
     page.params.id === viewId
-      ? ((page.data as { tail?: ServerTail | null }).tail ?? null)
+      ? ((page.data as { deferred?: { tail?: ServerTail | null } }).deferred?.tail ?? null)
       : null
   );
 

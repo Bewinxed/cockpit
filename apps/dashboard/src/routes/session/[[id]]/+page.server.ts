@@ -115,8 +115,11 @@ function messagesUrl(source: HistorySource): string {
  * takes the newest turns off it, which the pane renders into the server's HTML.
  *
  * `history` stays a promise the shell paints around: it names the full streamed
- * read the client still performs. `tail` is awaited, because a promise cannot
- * be server-rendered — and rendering it is the whole point.
+ * read the client still performs. `tail` is NOT awaited — it streams to the
+ * client as a deferred promise so navigation is instant. On SSR (first load),
+ * the page renders its loading state; the tail resolves and fills in the
+ * transcript. On client-side tab switches, the pane is already mounted with
+ * WebSocket data, so the streamed tail is just a confirmation.
  */
 export const load: PageServerLoad = async ({ params, url, fetch }) => {
   const viewId = params.id;
@@ -135,20 +138,34 @@ export const load: PageServerLoad = async ({ params, url, fetch }) => {
       harness: url.searchParams.get('harness') ?? 'claude',
       live: false,
     };
-    return { history: Promise.resolve(source), tail: await tailFor(fetch, source) };
+    // Nested under `deferred` so SvelteKit streams it instead of awaiting.
+    // Navigation is instant; the tail arrives when ready.
+    return { history: Promise.resolve(source), deferred: { tail: tailFor(fetch, source) } };
   }
 
   // A live session carries only its id. Its row on the hub says which machine
   // holds it — which the browser would otherwise not know until the socket
   // delivered the fleet, the wait this whole path exists to remove.
-  let source: HistorySource | null = null;
+  const source = await resolveSource(fetch, viewId);
+
+  return {
+    history: Promise.resolve(source),
+    deferred: { tail: source ? tailFor(fetch, source) : Promise.resolve(null) },
+  };
+};
+
+/** Resolve the source for a live session — which machine holds it. */
+async function resolveSource(
+  fetch: typeof globalThis.fetch,
+  viewId: string
+): Promise<HistorySource | null> {
   try {
     const response = await fetch('/api/instances');
     if (response.ok) {
       const rows = (await response.json()) as InstanceRow[];
       const row = rows.find((instance) => instance.id === viewId);
       if (row) {
-        source = {
+        return {
           viewId,
           machineId: row.machineId,
           sessionId: row.sessionId ?? viewId,
@@ -161,14 +178,9 @@ export const load: PageServerLoad = async ({ params, url, fetch }) => {
   } catch {
     // The hub being unreachable is the ordinary case, not an exotic one: the
     // pane falls back to the socket, which reports it for itself.
-    source = null;
   }
-
-  return {
-    history: Promise.resolve(source),
-    tail: source ? await tailFor(fetch, source) : null,
-  };
-};
+  return null;
+}
 
 /** The tail plus the identity the pane needs to name it before the store exists. */
 async function tailFor(fetch: typeof globalThis.fetch, source: HistorySource) {
