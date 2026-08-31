@@ -10,6 +10,8 @@
 		"typecheck": "bun --bun svelte-fast-check --incremental"
 	},
 	"dependencies": {
+		"@atlaskit/pragmatic-drag-and-drop": "^3.1.0",
+		"@atlaskit/pragmatic-drag-and-drop-hitbox": "^2.2.0",
 		"@cockpit/core": "workspace:*",
 		"@dagrejs/dagre": "^1.1.8",
 		"@fontsource-variable/geist": "^5.3.0",

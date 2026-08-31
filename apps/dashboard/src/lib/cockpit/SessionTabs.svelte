@@ -13,6 +13,7 @@
   import { onMount, untrack } from 'svelte';
   import { page } from '$app/state';
   import { workspace } from './workspace/workspace.svelte';
+  import { dragSession } from './workspace/dnd.svelte';
   import { IconBoxDuo, IconClose } from '$lib/icons';
   import { cockpit } from './client.svelte';
   import { resolveSessionTitle } from './links';
@@ -209,7 +210,7 @@
     {@const active = isActive(tab.id)}
     <ContextMenu.Root>
       <ContextMenu.Trigger class="contents">
-        <div class="tab" class:on={active}>
+        <div class="tab" class:on={active} use:dragSession={{ sessionId: tab.id, from: null }}>
           <a
             class="tl"
             href={tab.href}

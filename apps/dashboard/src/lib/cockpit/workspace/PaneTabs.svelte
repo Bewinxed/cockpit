@@ -20,6 +20,7 @@
   import { copyToClipboard } from '../copy';
   import { workingSet } from '../working-set.svelte';
   import { workspace, urlFor, type LeafNode } from './workspace.svelte';
+  import { dragSession, tabDropTarget, dropHint } from './dnd.svelte';
 
   let { leaf }: { leaf: LeafNode } = $props();
 
@@ -86,11 +87,21 @@
 </script>
 
 <div class="tabstrip" role="tablist" aria-label="Open sessions in this group">
-  {#each tabs as tab (tab.id)}
+  {#each tabs as tab, i (tab.id)}
     {@const active = leaf.active === tab.id}
     <ContextMenu.Root>
       <ContextMenu.Trigger class="contents">
-        <div class="tab" class:on={active}>
+        <!-- The caret marks where the tab would land, drawn on the side the
+             pointer is nearest. Graphite, like every structural mark here:
+             the one loud colour belongs to a session asking for something. -->
+        <div
+          class="tab"
+          class:on={active}
+          class:drop-before={dropHint.tabIndexIn(leaf.id) === i}
+          class:drop-after={dropHint.tabIndexIn(leaf.id) === i + 1 && i === tabs.length - 1}
+          use:dragSession={{ sessionId: tab.id, from: leaf.id }}
+          use:tabDropTarget={{ leafId: leaf.id, index: i, sessionId: tab.id }}
+        >
           <a
             class="tl"
             href={tab.href}
@@ -170,6 +181,7 @@
   }
 
   .tab {
+    position: relative;
     display: flex;
     align-items: center;
     flex-shrink: 0;
@@ -178,6 +190,30 @@
     border-radius: var(--radius-control);
     color: var(--ink-muted);
   }
+  /* Where it would land. A 2px rule against the gap between tabs, so the
+     answer is unambiguous about WHICH side without moving anything. */
+  .tab.drop-before::before,
+  .tab.drop-after::after {
+    content: '';
+    position: absolute;
+    top: 3px;
+    bottom: 3px;
+    width: 2px;
+    border-radius: 1px;
+    background: var(--ink-strong);
+  }
+  .tab.drop-before::before {
+    left: -2px;
+  }
+  .tab.drop-after::after {
+    right: -2px;
+  }
+
+  /* The tab being carried recedes; it is somewhere else now. */
+  :global(.tab[data-dragging]) {
+    opacity: 0.4;
+  }
+
   .tab.on {
     background: var(--surface-field);
     box-shadow: var(--shadow-tile);

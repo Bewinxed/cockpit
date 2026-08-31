@@ -1,6 +1,7 @@
 <script lang="ts">
   /** One stored session from `listSessions`, linking to its read-only transcript. */
   import type { SDKSessionInfo } from '@cockpit/core';
+  import { dragSession } from './workspace/dnd.svelte';
   import { formatDistanceToNow } from '$lib/utils/time';
   import { sessionTitle, transcriptHref } from './links';
   import StoredSessionMenu from './StoredSessionMenu.svelte';
@@ -24,6 +25,11 @@
 
 <StoredSessionMenu {machineId} {info}>
   <a
+    use:dragSession={{
+      sessionId: info.sessionId,
+      from: null,
+      ctx: () => ({ machine: machineId, cwd: info.cwd ?? '', harness: info.harness ?? 'claude' }),
+    }}
     href={transcriptHref(machineId, info)}
     class="flex min-h-9 items-center rounded-[var(--radius-control)] px-4 py-1.5
       transition-colors duration-150 ease-out hover:bg-accent hover:text-accent-foreground"

@@ -18,6 +18,7 @@
 <script lang="ts">
   /** One live session, as the session index and a project home both list it. */
   import { onMount } from 'svelte';
+  import { dragSession } from './workspace/dnd.svelte';
   import { fly } from 'svelte/transition';
   import { quintOut } from 'svelte/easing';
   import { Badge } from '$lib/components/ui/badge';
@@ -137,6 +138,7 @@
 
 <LiveSessionMenu {instance}>
   <a
+    use:dragSession={{ sessionId: instance.id, from: null }}
     href="/session/{instance.id}"
     title={sleeping ? SLEEPING_HINT : stale ? UNKNOWN_HINT : undefined}
     class="group flex min-h-9 flex-col justify-center gap-0.5 rounded-[var(--radius-control)] px-4 py-1.5

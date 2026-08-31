@@ -28,6 +28,7 @@
   } from '../client.svelte';
   import { workspace, type LeafNode } from './workspace.svelte';
   import { createSwipe } from './gesture.svelte';
+  import { paneDropTarget, dropHint } from './dnd.svelte';
   import { workingSet } from '../working-set.svelte';
   import { resolveSessionTitle } from '../links';
   import { models, covers, ensureModels } from '../models.svelte';
@@ -62,6 +63,10 @@
 
   /** A lone group defers to the app strip; a split group owns its tabs. */
   const stripVisible = $derived(showTabs ?? workspace.leaves.length > 1);
+
+  /** What a drop hovering this group would do, if anything. */
+  const splitEdge = $derived(dropHint.splits(leaf.id));
+  const joins = $derived(dropHint.joins(leaf.id));
 
   const viewId = $derived(leaf.active ?? '');
   /** Whether the reader's keyboard belongs to this group. */
@@ -217,7 +222,18 @@
     />
   {/if}
 
-  <div class="stack" use:swipe.action={swipeable}>
+  <!-- Where a dropped conversation would go, shown as the shape it would
+       take: half the group when a split is on offer, the whole of it when
+       the drop would simply join these tabs. The indicator and the hitbox
+       read the same 25% band, so the picture cannot promise something the
+       drop will not do. -->
+  {#if splitEdge}
+    <div class="drop-preview drop-{splitEdge}" aria-hidden="true"></div>
+  {:else if joins}
+    <div class="drop-preview drop-whole" aria-hidden="true"></div>
+  {/if}
+
+  <div class="stack" use:swipe.action={swipeable} use:paneDropTarget={leaf.id}>
     {#each mounted as paneId (paneId)}
       {@const isActive = paneId === viewId}
       {@const offset = swipe.offsetOf(paneId, isActive)}
@@ -280,6 +296,32 @@
   }
   .leaf-focused .rail {
     opacity: 0.5;
+  }
+
+  /* Graphite and a hairline, never the accent — a drop preview is
+     structure being proposed, not a session asking for something. */
+  .drop-preview {
+    position: absolute;
+    z-index: 3;
+    pointer-events: none;
+    background: var(--surface-hover);
+    border: 1px solid var(--border-strong);
+    opacity: 0.9;
+  }
+  .drop-whole {
+    inset: 0;
+  }
+  .drop-left {
+    inset: 0 50% 0 0;
+  }
+  .drop-right {
+    inset: 0 0 0 50%;
+  }
+  .drop-top {
+    inset: 0 0 50% 0;
+  }
+  .drop-bottom {
+    inset: 50% 0 0 0;
   }
 
   .stack {
