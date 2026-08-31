@@ -630,7 +630,7 @@
         class:slide-hidden={!active}
         class:slide-exit-left={!active && slideDir === 'left'}
         class:slide-exit-right={!active && slideDir === 'right'}
-        style:--slide-enter-x={slideDir === 'left' ? '5%' : slideDir === 'right' ? '-5%' : '0'}
+        style:--slide-enter-x={slideDir === 'left' ? '50px' : slideDir === 'right' ? '-50px' : '0'}
       >
         {#if failure}
           <div class="stateful">
@@ -774,8 +774,8 @@
       visibility 0s 140ms;
   }
 
-  .slide-exit-left  { transform: translateX(-6%); }
-  .slide-exit-right { transform: translateX(6%); }
+  .slide-exit-left  { transform: translateX(-50px); }
+  .slide-exit-right { transform: translateX(50px); }
 
   @keyframes slide-in {
     from { transform: translateX(var(--slide-enter-x, 0)); opacity: 0; }
