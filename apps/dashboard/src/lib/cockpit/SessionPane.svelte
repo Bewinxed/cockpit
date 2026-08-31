@@ -89,7 +89,7 @@
    */
   const history = $derived<Promise<HistorySource | null> | null>(
     page.params.id === viewId
-      ? ((page.data as { history?: Promise<HistorySource | null> | null }).history ?? null)
+      ? ((page.data as { deferred?: { history?: Promise<HistorySource | null> | null } }).deferred?.history ?? null)
       : null
   );
 

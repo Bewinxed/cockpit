@@ -124,7 +124,7 @@ function messagesUrl(source: HistorySource): string {
 export const load: PageServerLoad = async ({ params, url, fetch }) => {
   const viewId = params.id;
   // The fleet board. Nothing is open, so there is no history to read.
-  if (!viewId) return { history: null, tail: null };
+  if (!viewId) return { deferred: { history: null, tail: null } };
 
   // A `machine` in the query means the URL names a stored session outright —
   // everything the read needs is in the link.
@@ -138,19 +138,20 @@ export const load: PageServerLoad = async ({ params, url, fetch }) => {
       harness: url.searchParams.get('harness') ?? 'claude',
       live: false,
     };
-    // Nested under `deferred` so SvelteKit streams it instead of awaiting.
-    // Navigation is instant; the tail arrives when ready.
-    return { history: Promise.resolve(source), deferred: { tail: tailFor(fetch, source) } };
+    return { deferred: { history: Promise.resolve(source), tail: tailFor(fetch, source) } };
   }
 
-  // A live session carries only its id. Its row on the hub says which machine
-  // holds it — which the browser would otherwise not know until the socket
-  // delivered the fleet, the wait this whole path exists to remove.
-  const source = await resolveSource(fetch, viewId);
+  // Everything deferred — navigation is instant. The source lookup and tail
+  // read stream in as they resolve. The pane already has WebSocket data.
+  const sourcePromise = resolveSource(fetch, viewId);
 
   return {
-    history: Promise.resolve(source),
-    deferred: { tail: source ? tailFor(fetch, source) : Promise.resolve(null) },
+    deferred: {
+      history: sourcePromise,
+      tail: sourcePromise.then(source =>
+        source ? tailFor(fetch, source) : null
+      ),
+    },
   };
 };
 
