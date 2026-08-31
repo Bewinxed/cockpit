@@ -89,7 +89,7 @@
    */
   const history = $derived<Promise<HistorySource | null> | null>(
     page.params.id === viewId
-      ? ((page.data as { deferred?: { history?: Promise<HistorySource | null> | null } }).deferred?.history ?? null)
+      ? ((page.data as { history?: Promise<HistorySource | null> | null }).history ?? null)
       : null
   );
 
@@ -192,7 +192,7 @@
    */
   const tail = $derived(
     page.params.id === viewId
-      ? ((page.data as { deferred?: { tail?: ServerTail | null } }).deferred?.tail ?? null)
+      ? ((page.data as { tail?: ServerTail | null }).tail ?? null)
       : null
   );
 
