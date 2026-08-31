@@ -761,24 +761,28 @@
     opacity: 1;
   }
 
+  /* Apple-style matched motion: enter and exit share the same duration
+     and easing so they feel like one continuous push. The outgoing
+     transcript slides away at exactly the speed the incoming one arrives.
+     Ease-out spring approximation — fast start, soft land. */
   .slide-enter {
-    animation: slide-in 180ms cubic-bezier(0.32, 0.72, 0, 1) both;
+    animation: slide-in 250ms cubic-bezier(0.2, 0.9, 0.3, 1) both;
   }
 
   .slide-hidden {
     opacity: 0;
     visibility: hidden;
     transition:
-      transform 140ms cubic-bezier(0.32, 0.72, 0, 1),
-      opacity 140ms cubic-bezier(0.32, 0.72, 0, 1),
-      visibility 0s 140ms;
+      transform 250ms cubic-bezier(0.2, 0.9, 0.3, 1),
+      opacity 250ms cubic-bezier(0.2, 0.9, 0.3, 1),
+      visibility 0s 250ms;
   }
 
   .slide-exit-left  { transform: translateX(-50px); }
   .slide-exit-right { transform: translateX(50px); }
 
   @keyframes slide-in {
-    from { transform: translateX(var(--slide-enter-x, 0)); opacity: 0; }
+    from { transform: translateX(var(--slide-enter-x, 0)); opacity: 0.3; }
     to   { transform: translateX(0); opacity: 1; }
   }
 
