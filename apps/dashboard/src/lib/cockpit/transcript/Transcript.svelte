@@ -6,10 +6,11 @@
    * genuine arrivals — and blocked-on-you — through a dedicated live region
    * beside the log, never through the virtualized container itself.
    */
-  import { tick } from 'svelte';
+  import { tick, untrack } from 'svelte';
   import { browser } from '$app/environment';
   import { Virtualizer } from 'virtua/svelte';
   import type { SessionState } from '../client.svelte';
+  import { rebuildScheduler } from '../workspace/scheduler.svelte';
   import { buildRows, type Row } from './rows';
   import { describeTool } from '$lib/components/features/tool-cards/descriptors';
   import MessageRow from './MessageRow.svelte';
@@ -24,15 +25,28 @@
 
   let {
     session,
+    visible,
+    focused = undefined,
     agentName,
-    active,
     machineName = '',
     cwd = '',
     onlanded,
   }: {
     session: SessionState;
+    /**
+     * Whether this transcript is on screen at all. Governs whether rows are
+     * built: a pane nobody can see stops reading its session entirely.
+     */
+    visible: boolean;
+    /**
+     * Whether this is the transcript being worked in. Governs how EAGERLY
+     * rows are rebuilt, and who gets to ride the tail and announce.
+     *
+     * Defaults to `visible`, so the single-pane case — one transcript, on
+     * screen, being read — behaves exactly as it always has.
+     */
+    focused?: boolean;
     agentName: string;
-    active: boolean;
     /** Where this session runs — named in the empty state, nowhere else. */
     machineName?: string;
     /** The folder it runs in — named in the empty state, nowhere else. */
@@ -40,6 +54,19 @@
     /** Optional callback when the transcript first renders content. */
     onlanded?: () => void;
   } = $props();
+
+  /** One transcript, on screen, being read: `focused` follows `visible`. */
+  const isFocused = $derived(focused ?? visible);
+
+  /**
+   * The old single flag, kept as the name the rest of this file reads.
+   *
+   * Everything below that asks "am I the transcript the reader is at" —
+   * riding the streaming tail, announcing turns, landing on reactivation —
+   * means FOCUSED. Only the row-building freeze means VISIBLE, and it says
+   * so where it happens.
+   */
+  const active = $derived(isFocused);
 
   /**
    * The folded rows — frozen while this pane is off screen.
@@ -54,24 +81,54 @@
    * large one. With several tabs open and one session streaming, the reader
    * pays that for a picture nobody can see.
    *
-   * So an inactive transcript stops reading the session at all. While `active`
-   * is false the body below touches only `active` and the array it already
-   * built, which means nothing the session writes can invalidate it — there is
-   * no recompute to skip because there is no invalidation. virtua stays mounted
-   * on the rows it already has, so the DOM, the heights it measured and the
-   * scroll offset are all untouched and a frozen pane costs nothing per frame.
+   * So an invisible transcript stops reading the session at all. While
+   * `visible` is false the body below touches only `visible` and the array it
+   * already built, which means nothing the session writes can invalidate it —
+   * there is no recompute to skip because there is no invalidation. virtua
+   * stays mounted on the rows it already has, so the DOM, the heights it
+   * measured and the scroll offset are all untouched and a frozen pane costs
+   * nothing per frame.
    *
-   * `active` is tracked, so flipping it back on invalidates this once: the pane
-   * catches up in a single recompute, and the tail-follow effect below re-lands
-   * it if the reader was at the tail when they left.
+   * `visible` is tracked, so flipping it back on invalidates this once: the
+   * pane catches up in a single recompute, and the tail-follow effect below
+   * re-lands it if the reader was at the tail when they left.
+   *
+   * The grid adds a third state between those two. A pane that is visible but
+   * NOT focused still has to show what its agent is saying, but rebuilding it
+   * on every frame of its own stream is what makes four panes cost four times
+   * one. So it reads the session under `untrack` and depends on nothing but a
+   * counter the scheduler bumps when this pane's turn comes round. The session
+   * can write as often as it likes; only the tick invalidates this.
    */
   let frozen: Row[] = [];
   /** Whether `frozen` holds a real build yet — the first one is unconditional. */
   let primed = false;
+  /** Bumped by the scheduler. The ONLY dependency of an unfocused rebuild. */
+  let rebuildTick = $state(0);
+  /** Dev-only: the gate that catches an accidentally tracked session read. */
+  const countBuild = (): void => {
+    if (!import.meta.env.DEV || typeof window === 'undefined') return;
+    const w = window as unknown as { __transcriptBuilds?: Record<string, number> };
+    w.__transcriptBuilds ??= {};
+    const key = session.instanceId;
+    w.__transcriptBuilds[key] = (w.__transcriptBuilds[key] ?? 0) + 1;
+  };
   const built = $derived.by<{ rows: Row[]; shifted: boolean }>(() => {
     // A pane born off screen would otherwise hold an empty transcript until it
-    // was first looked at, so the first build never consults `active`.
-    if (!active && primed) return { rows: frozen, shifted: false };
+    // was first looked at, so the first build never consults `visible`.
+    if (!visible && primed) return { rows: frozen, shifted: false };
+    if (visible && !isFocused && primed) {
+      void rebuildTick;
+      return untrack(() => {
+        countBuild();
+        return build();
+      });
+    }
+    countBuild();
+    return build();
+  });
+
+  function build(): { rows: Row[]; shifted: boolean } {
     const next = buildRows(session);
     // PREPEND DETECTION for virtua's `shift` mode: an older history chunk
     // arriving puts new rows ABOVE everything on screen — without `shift`,
@@ -88,7 +145,28 @@
       oldFirst !== undefined &&
       next.findIndex((row) => row.key === oldFirst) > 0;
     return { rows: next, shifted };
+  }
+
+  /**
+   * Take a turn in the rotation while visible but unfocused, and give it back
+   * on focus or on leaving the screen. The fingerprint is every cheap O(1)
+   * reading that means "there is something new to draw" — deliberately not a
+   * deep comparison, because the point is to skip the expensive build, not to
+   * do an expensive check first.
+   */
+  $effect(() => {
+    if (!visible || isFocused) return;
+    return rebuildScheduler.join(
+      session.instanceId,
+      () =>
+        `${session.messages.length}:${session.streaming.length}:` +
+        `${session.thinkingStream.length}:${session.busy ? 1 : 0}:${session.pending.length}`,
+      () => {
+        rebuildTick += 1;
+      }
+    );
   });
+
   // Side effects that the derived CANNOT carry (Svelte forbids writes inside
   // $derived). An $effect runs after the derived is read but before the DOM
   // renders, so the bookkeeping stays in sync with what the Virtualizer sees.

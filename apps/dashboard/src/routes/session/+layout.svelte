@@ -300,11 +300,12 @@
     <FleetBoard active={onBoard} />
   </div>
 
-  <!-- `active` is passed `shown` rather than `isActive`: a pane sliding into
-       view has to be building its rows while it travels, or it arrives blank
-       and fills in afterwards — the very thing the gesture exists to avoid.
-       Input still belongs to the active pane alone, which `inert` enforces,
-       so this grants sight without granting control. -->
+  <!-- `visible` is `shown`, not `isActive`: a pane sliding into view has to be
+       building its rows while it travels, or it arrives blank and fills in
+       afterwards — the very thing the gesture exists to avoid. `focused` stays
+       with the active pane, so the one being read rides its streaming tail
+       while the one merely passing through rebuilds on the scheduler's turn.
+       Input belongs to the active pane alone, which `inert` enforces. -->
   {#each mounted as paneId (paneId)}
     {@const isActive = paneId === viewId && !onBoard}
     {@const offset = swipe.offsetOf(paneId, isActive)}
@@ -324,7 +325,8 @@
         browsingHarness={ctx?.harness ?? 'claude'}
         serverTail={paneId === entry.id ? entry.tail : null}
         serverHistory={paneId === entry.id ? entry.history : null}
-        active={shown}
+        visible={shown}
+        focused={isActive}
         hideHeader
         view={views[paneId] ?? 'chat'}
         onview={(v) => (views[paneId] = v)}

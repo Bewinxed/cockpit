@@ -56,7 +56,8 @@
     browsing,
     browsingCwd,
     browsingHarness,
-    active,
+    visible,
+    focused = undefined,
     serverTail = null,
     serverHistory = null,
     hideHeader = false,
@@ -67,7 +68,13 @@
     browsing: string | null;
     browsingCwd: string;
     browsingHarness: string;
-    active: boolean;
+    /** Whether this pane is on screen at all — governs row building. */
+    visible: boolean;
+    /**
+     * Whether this pane is the one being worked in. Defaults to `visible`,
+     * so a single-pane layout behaves exactly as it always has.
+     */
+    focused?: boolean;
     /**
      * The newest turns the SERVER read back, handed down by value.
      *
@@ -680,7 +687,8 @@
           <Transcript
             {session}
             {agentName}
-            {active}
+            {visible}
+            {focused}
             {machineName}
             cwd={session.cwd || browsingCwd}
           />
