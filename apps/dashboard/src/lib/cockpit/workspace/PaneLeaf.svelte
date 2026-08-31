@@ -94,13 +94,31 @@
     });
   });
 
+  /**
+   * Mount the conversations either side, but only where they can be reached
+   * by a gesture, and never on the critical path of the switch itself.
+   *
+   * Prewarming exists so a swipe reveals something rather than nothing. A
+   * pointer cannot swipe, so on a desktop it buys nothing and costs a great
+   * deal: each neighbour is a whole pane, transcript and virtualiser, and
+   * mounting two of them synchronously put 224ms of flush behind a tab click
+   * that the handler itself finished in 1ms.
+   *
+   * Even where it IS wanted it waits: the switch settles first, and the
+   * neighbours arrive after, so the conversation the reader asked for is
+   * never behind the two they did not.
+   */
   $effect(() => {
+    if (!swipeable) return;
     const here = leaf.active;
     if (!here) return;
     const neighbours = [workspace.step(here, 1, leaf.id), workspace.step(here, -1, leaf.id)];
-    untrack(() => {
-      for (const id of neighbours) if (id && !mounted.includes(id)) mounted.push(id);
-    });
+    const warm = setTimeout(() => {
+      untrack(() => {
+        for (const id of neighbours) if (id && !mounted.includes(id)) mounted.push(id);
+      });
+    }, 120);
+    return () => clearTimeout(warm);
   });
 
   $effect(() => {

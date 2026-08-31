@@ -142,12 +142,21 @@
   const onSession = $derived(page.url.pathname.startsWith('/session'));
 
   /**
-   * The app strip is the LONE group's strip. Once the workspace is split,
-   * each group draws its own — and keeping this one as well would put two
-   * rows of tabs on screen listing the same conversations, one of which
-   * could not say which half it was talking about.
+   * The app strip is the LONE group's strip — and the board's only one.
+   *
+   * Once the workspace is split each group draws its own, and keeping this
+   * one as well would put two rows of tabs on screen listing the same
+   * conversations, one of which could not say which half it meant. But the
+   * per-group strips live inside the surface the fleet board covers, so
+   * hiding this on the board as well left nothing to click: a split reader
+   * who went to Fleet could not get back to a conversation at all.
+   *
+   * So it follows what is on screen rather than what the tree holds: the
+   * board always has a strip, and a split session view does not need one.
    */
-  const appStrip = $derived(onSession && workspace.leaves.length < 2);
+  const appStrip = $derived(
+    onSession && (workspace.activeSessionId === null || workspace.leaves.length < 2)
+  );
 
   /** Which section the bar names, for the readers who arrived by URL. */
   const crumb = $derived.by(() => {

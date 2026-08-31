@@ -23,6 +23,7 @@
   import { onMount } from 'svelte';
   import { afterNavigate } from '$app/navigation';
   import { page } from '$app/state';
+  import { browser } from '$app/environment';
   import FleetBoard from '$lib/cockpit/FleetBoard.svelte';
   import PaneGrid from '$lib/cockpit/workspace/PaneGrid.svelte';
   import PaneLeaf from '$lib/cockpit/workspace/PaneLeaf.svelte';
@@ -106,6 +107,14 @@
         : undefined
     );
   }
+
+  // Synchronously, during the first client render. The store restores what
+  // was open from localStorage at module load, so without this the first
+  // paint showed whatever conversation was last active and only corrected to
+  // the URL's answer on mount — the view visibly changing under the reader a
+  // frame after it appeared. The URL is the address; it wins before anything
+  // is drawn, not after.
+  if (browser) reconcileFromUrl();
 
   onMount(() => {
     reconcileFromUrl();

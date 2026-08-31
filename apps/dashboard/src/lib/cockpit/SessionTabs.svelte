@@ -195,6 +195,7 @@
   <a
     class="tab home"
     class:on={onHome}
+    draggable="false"
     href="/session"
     role="tab"
     aria-selected={onHome}
@@ -213,6 +214,7 @@
         <div class="tab" class:on={active} use:dragSession={{ sessionId: tab.id, from: null }}>
           <a
             class="tl"
+            draggable="false"
             href={tab.href}
             role="tab"
             aria-selected={active}

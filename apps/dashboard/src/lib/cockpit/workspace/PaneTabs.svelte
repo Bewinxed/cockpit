@@ -103,6 +103,7 @@
           use:tabDropTarget={{ leafId: leaf.id, index: i, sessionId: tab.id }}
         >
           <a
+            draggable="false"
             class="tl"
             href={tab.href}
             role="tab"
