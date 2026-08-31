@@ -209,7 +209,7 @@
     // Nothing read back means nothing to stand in for: the store's own empty
     // and loading states are better than a blank pane pretending to be one.
     // tail may be a deferred placeholder during SSR streaming (no .messages yet).
-    if (!tail || tail.messages.length === 0) return null;
+    if (!tail || tail.viewId !== viewId || tail.messages.length === 0) return null;
     const blank = blankSession(viewId);
     const mapped = mapTranscript(viewId, tail.messages);
     blank.machineId = tail.machineId;

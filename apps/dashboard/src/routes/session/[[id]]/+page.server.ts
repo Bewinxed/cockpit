@@ -121,19 +121,20 @@ function messagesUrl(source: HistorySource): string {
  * transcript. On client-side tab switches, the pane is already mounted with
  * WebSocket data, so the streamed tail is just a confirmation.
  */
-export const load: PageServerLoad = async ({ params, url, fetch }) => {
-  const viewId = params.id;
+export const load: PageServerLoad = async ({ params, url, fetch, depends, untrack }) => {
+  depends('data:session-tail');
+  const viewId = untrack(() => params.id);
 
   if (!viewId) return { history: null, tail: null };
 
-  const machine = url.searchParams.get('machine');
+  const machine = untrack(() => url.searchParams.get('machine'));
   if (machine) {
     const source: HistorySource = {
       viewId,
       machineId: machine,
       sessionId: viewId,
-      cwd: url.searchParams.get('cwd') ?? '',
-      harness: url.searchParams.get('harness') ?? 'claude',
+      cwd: untrack(() => url.searchParams.get('cwd')) ?? '',
+      harness: untrack(() => url.searchParams.get('harness')) ?? 'claude',
       live: false,
     };
     return { history: Promise.resolve(source), tail: await tailFor(fetch, source) };
