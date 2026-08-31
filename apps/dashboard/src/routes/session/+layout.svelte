@@ -153,16 +153,16 @@
     opacity: 1;
     visibility: visible;
     transition:
-      opacity 120ms cubic-bezier(0.32, 0.72, 0, 1),
-      visibility 0s;
+      opacity 200ms cubic-bezier(0.32, 0.72, 0, 1),
+      visibility 0s 0s;
   }
 
   .pane-hidden {
     opacity: 0;
     visibility: hidden;
     transition:
-      opacity 100ms cubic-bezier(0.32, 0.72, 0, 1),
-      visibility 0s 100ms;
+      opacity 150ms cubic-bezier(0.32, 0.72, 0, 1),
+      visibility 0s 150ms;
   }
 
   @media (prefers-reduced-motion: reduce) {
