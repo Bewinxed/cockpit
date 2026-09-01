@@ -490,6 +490,45 @@ export interface InstanceRow {
   lastError?: string | null;
   /** When the row last moved. */
   updatedAt?: string | number | Date | null;
+  /**
+   * The supervisor's standing autopilot for this session, set from the
+   * composer popover. `null` means never configured; disabling keeps the
+   * prompt rather than discarding it, so re-enabling does not mean retyping
+   * it. Absent on a hub that predates the column.
+   */
+  autopilot?: { enabled: boolean; prompt: string; updatedAt: number } | null;
+}
+
+/**
+ * One line of the supervisor's intervention log — `supervisor_events`
+ * (packages/hub `db/schema.ts`), read over `GET /api/supervisor/events` and
+ * pushed as a `supervisor_event` frame. Silent verdicts are recorded too: the
+ * log is the only place any of this is visible, so "it looked and did
+ * nothing" has to show up the same as "it spoke".
+ *
+ * `DelegateEvent`, the nearest sibling shape, lives in the dashboard app
+ * (`apps/dashboard/src/lib/whiffle/types.ts`) rather than here — but both the
+ * hub (which records these rows) and the dashboard (which reads them) need
+ * this type, and the hub does not import from the dashboard app. Core is the
+ * one home both sides already share.
+ */
+export interface SupervisorEvent {
+  /** The hub's row id — what a fold deduplicates on and orders by. */
+  id: number;
+  instanceId: string;
+  /** Which mechanism produced the verdict. */
+  source: 'rule' | 'autopilot';
+  /** The rule that fired, for `source: 'rule'`; null for autopilot. */
+  ruleId: string | null;
+  verdict: 'silent' | 'reply' | 'escalate' | 'ask' | 'error' | 'skipped';
+  /** Sent into the session (`reply`) or shown to the operator (`escalate`/`ask`); null for the rest. */
+  message: string | null;
+  /** The supervisor's own one-line rationale — logged, never sent to the session. */
+  note: string | null;
+  /** Which model answered, when one did. */
+  model: string | null;
+  latencyMs: number | null;
+  createdAt: number;
 }
 
 /**
@@ -653,6 +692,12 @@ export const WHIFFLE_ENV = {
   serviceMode: 'WHIFFLE_SERVICE_MODE',
   /** The npm registry installs and self-updates go through. */
   registry: 'WHIFFLE_REGISTRY',
+  /** The OpenAI-compatible router the supervisor calls for verdicts. */
+  supervisorUrl: 'WHIFFLE_SUPERVISOR_URL',
+  /** Which model on that router answers — an alias, when the router has one. */
+  supervisorModel: 'WHIFFLE_SUPERVISOR_MODEL',
+  /** The router's API key, when it asks for one. Absent for a local router. */
+  supervisorKey: 'WHIFFLE_SUPERVISOR_KEY',
 } as const;
 
 /** One of {@link WHIFFLE_ENV}'s variable names. */
