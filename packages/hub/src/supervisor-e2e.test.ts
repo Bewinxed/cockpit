@@ -266,6 +266,7 @@ const createInstance = (instanceId: string, machineId: string): void => {
     machineId,
     cwd: '/tmp/test',
     harness: 'claude',
+    kind: 'mainline',
   });
   db.markInstanceLive(instanceId);
 };
@@ -287,7 +288,7 @@ let daemon: Daemon;
 
 beforeAll(async () => {
   const server = app.listen(0);
-  hubPort = server.server!.port;
+  hubPort = Number(server.server!.port);
 
   // Configure the supervisor to point at our fake OpenAI server.
   await fetch(`http://localhost:${hubPort}/api/supervisor/config`, {
@@ -336,7 +337,7 @@ describe('supervisor e2e', () => {
       matchKind: 'phrase',
       caseSensitive: false,
       wholeWord: false,
-      watch: 'assistant',
+      watch: 'text',
       action: 'llm',
       reply: '',
       prompt: 'Watch for false done claims and demand proof.',
@@ -409,7 +410,7 @@ describe('supervisor e2e', () => {
       matchKind: 'phrase',
       caseSensitive: false,
       wholeWord: false,
-      watch: 'assistant',
+      watch: 'text',
       action: 'llm',
       reply: '',
       prompt: 'This prompt should NOT be used when autopilot is active.',
@@ -471,7 +472,7 @@ describe('supervisor e2e', () => {
       matchKind: 'phrase',
       caseSensitive: false,
       wholeWord: false,
-      watch: 'assistant',
+      watch: 'text',
       action: 'llm',
       reply: '',
       prompt: 'Escalate everything for testing.',
@@ -542,7 +543,7 @@ describe('supervisor e2e', () => {
       matchKind: 'phrase',
       caseSensitive: false,
       wholeWord: false,
-      watch: 'assistant',
+      watch: 'text',
       action: 'llm',
       reply: '',
       prompt: 'Check for stalls.',
@@ -613,7 +614,7 @@ describe('supervisor e2e', () => {
     dashboard.close();
   });
 
-  test('3e: consecutive cap — fourth reply forced to escalate, counter resets on non-supervisor turn', async () => {
+  test('3e: consecutive cap — fourth reply forced to escalate, mute holds until a human send', async () => {
     resetFake();
     const instanceId = `consec-${crypto.randomUUID().slice(0, 8)}`;
     createInstance(instanceId, MACHINE);
@@ -627,7 +628,7 @@ describe('supervisor e2e', () => {
       matchKind: 'phrase',
       caseSensitive: false,
       wholeWord: false,
-      watch: 'assistant',
+      watch: 'text',
       action: 'llm',
       reply: '',
       prompt: 'Keep correcting.',
@@ -687,20 +688,58 @@ describe('supervisor e2e', () => {
     );
     expect(agentSends).toHaveLength(0);
 
-    // The forced escalate did not issue a send, so initiatedTurn is false.
-    // The next turn resets consecutive and unmutes — the supervisor can reply again.
+    // Mute persists across non-human turns: a rule or delegate waking the
+    // session must NOT hand the supervisor its voice back.
     daemon.received.length = 0;
+    nextVerdict = { verdict: 'reply', message: 'Still muted?', note: 'should not send' };
+    completeTurn(daemon, instanceId, 'A turn started by some other automated sender.');
+    await until(
+      () => {
+        const events = db.listSupervisorEvents({ instanceId, limit: 30 });
+        return events.some((e) => e.verdict === 'skipped' && e.note?.includes('muted'));
+      },
+      'muted skip event',
+    );
+    await quiet();
+    expect(
+      daemon.received.filter((e) => e.verb === 'send' && e.instanceId === instanceId),
+    ).toHaveLength(0);
+
+    // Only the operator's own send takes the mute off: a dashboard send rides
+    // the hub's relay, which notes the human touch (noteHumanSend).
+    const { socket: opSocket, ready: opReady } = openWebSocket('/ws/dashboard', () => {});
+    await opReady;
+    opSocket.send(
+      JSON.stringify({
+        verb: 'send',
+        machineId: MACHINE,
+        instanceId,
+        payload: {
+          instanceId,
+          message: {
+            type: 'user',
+            message: { role: 'user', content: 'I am back, carry on.' },
+            parent_tool_use_id: null,
+            origin: { kind: 'human' },
+          },
+        },
+      }),
+    );
+    // The human send is relayed to the daemon (that envelope is the relay,
+    // not a supervisor reply — drain it before asserting).
+    await until(
+      () => daemon.received.some((e) => e.verb === 'send' && e.instanceId === instanceId),
+      'human send relayed',
+    );
+    daemon.received.length = 0;
+
     nextVerdict = { verdict: 'reply', message: 'Welcome back.', note: 'reset' };
     completeTurn(daemon, instanceId, 'Human-initiated turn after cap.');
     await until(
       () => daemon.received.some((e) => e.verb === 'send' && e.instanceId === instanceId),
-      'reply after consecutive reset',
+      'reply after human unmute',
     );
-
-    const finalSend = daemon.received.find(
-      (e) => e.verb === 'send' && e.instanceId === instanceId,
-    )!;
-    expect(finalSend).toBeDefined();
+    opSocket.close();
   });
 
   test('3f: fake OpenAI returns 500 → error event, zero sends to agent', async () => {
@@ -717,7 +756,7 @@ describe('supervisor e2e', () => {
       matchKind: 'phrase',
       caseSensitive: false,
       wholeWord: false,
-      watch: 'assistant',
+      watch: 'text',
       action: 'llm',
       reply: '',
       prompt: 'Watch for errors.',
@@ -770,7 +809,7 @@ describe('supervisor e2e', () => {
       matchKind: 'phrase',
       caseSensitive: false,
       wholeWord: false,
-      watch: 'assistant',
+      watch: 'text',
       action: 'llm',
       reply: '',
       prompt: 'Watch for garbage.',

@@ -41,6 +41,14 @@ export interface TelegramBridge {
   readonly setAnswerRecorder: (
     record: (machineId: string, instanceId: string, requestId: string, result: PermissionResult) => void
   ) => void;
+  /**
+   * The supervisor's human-touch observer, registered after construction for
+   * the same reason as {@link setAnswerRecorder}: a Telegram reply lands in
+   * the session through this bridge's own socket send, so the hub's relay
+   * never sees it — without this, answering an escalation from the phone
+   * would leave the supervisor muted against the operator's evident wish.
+   */
+  readonly setHumanSendObserver: (observe: (instanceId: string) => void) => void;
 }
 
 export interface TelegramServices {
@@ -328,6 +336,8 @@ export const createTelegramBridge = ({
   let recordAnswer:
     | ((machineId: string, instanceId: string, requestId: string, result: PermissionResult) => void)
     | undefined;
+  /** Set by the server once the supervisor exists; called on every talkBack. */
+  let humanSendObserver: ((instanceId: string) => void) | undefined;
 
   const resolve = (envelope: Envelope, requestId: string, result: PermissionResult): boolean => {
     const request = envelope.payload as PermissionRequest;
@@ -371,12 +381,16 @@ export const createTelegramBridge = ({
       ...(carried?.images && { images: carried.images }),
       ...(carried?.attachments && { attachments: carried.attachments }),
     };
-    return toAgent({
+    const delivered = toAgent({
       verb: 'send',
       machineId: entry.machineId,
       instanceId: entry.instanceId,
       payload,
     });
+    // The operator typed this from the phone — the supervisor's mute defers
+    // to exactly this kind of touch.
+    if (delivered) humanSendObserver?.(entry.instanceId);
+    return delivered;
   };
 
   const onAsk = (envelope: Envelope): void => {
@@ -640,6 +654,9 @@ export const createTelegramBridge = ({
     start,
     setAnswerRecorder(record) {
       recordAnswer = record;
+    },
+    setHumanSendObserver(observe) {
+      humanSendObserver = observe;
     },
   };
 };

@@ -1398,6 +1398,7 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
   // The Telegram bridge answers straight down the agent socket, past every
   // recording site above — so it files its answers through this instead.
   telegram?.setAnswerRecorder(recordDelegateAnswer);
+  telegram?.setHumanSendObserver((instanceId) => supervisor.noteHumanSend(instanceId));
 
   const awaitingInstall = (machineId: string, toolId: string): boolean => {
     for (const install of pendingInstalls.values())
@@ -1784,6 +1785,15 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
       }`
     );
     if (!forwarded || !message.instanceId) return false;
+    // The operator's hand on the session: a send relayed for a dashboard is
+    // human unless its origin says otherwise (system/peer sends come from
+    // hub-side senders, not this relay). It clears a supervisor
+    // consecutive-cap mute — the cap hands control to the human, and this is
+    // the human taking it.
+    const sendOriginKind = (message.payload as { message?: { origin?: { kind?: string } } } | null)
+      ?.message?.origin?.kind;
+    if (sendOriginKind === undefined || sendOriginKind === 'human')
+      supervisor.noteHumanSend(message.instanceId);
     // The first thing a session is asked is what it is called, until
     // something names it properly.
     if (!hasAttachments(message.payload))

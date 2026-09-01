@@ -189,6 +189,20 @@ export class SupervisorEngine {
   }
 
   /**
+   * The operator touched this session — a dashboard or Telegram send relayed
+   * by the hub. This is the ONLY thing that clears a consecutive-cap mute:
+   * the cap exists to hand control back to the human, so only the human's
+   * hand takes it off.
+   */
+  noteHumanSend(instanceId: string): void {
+    const state = this.#state.get(instanceId);
+    if (!state) return;
+    state.consecutive = 0;
+    state.initiatedTurn = false;
+    state.muted = false;
+  }
+
+  /**
    * One frame — called right after `ruleEngine.observe`, same throw-nothing
    * envelope. Never awaits the LLM; evaluation is fire-and-forget.
    */
@@ -235,8 +249,12 @@ export class SupervisorEngine {
         state.consecutive++;
         state.initiatedTurn = false;
       } else {
+        // A non-supervisor turn resets the streak, but NOT the mute: rules
+        // and delegates also start turns, and letting them unmute would let
+        // the supervisor ping-pong with another automated sender forever.
+        // Only an actual human send (noteHumanSend, called from the hub's
+        // relay points) takes the mute off.
         state.consecutive = 0;
-        state.muted = false;
       }
       void this.#evaluate(instanceId, turnText, files, commands, now).catch(() => {});
       return;
@@ -288,7 +306,8 @@ export class SupervisorEngine {
       return;
     }
 
-    // Loop guard: muted until a human-initiated turn resets.
+    // Loop guard: muted until the operator sends into the session
+    // (noteHumanSend) — no turn, however initiated, clears it on its own.
     if (state.muted) {
       const event = this.#record(instanceId, {
         source: 'autopilot',
