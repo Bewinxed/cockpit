@@ -33,6 +33,7 @@ import type {
   UsageLimitsReading,
 } from '@whiffle/core';
 import { classifyCommand, RESOLVE_PERMISSION, WHIFFLE_SCRATCH_TAG } from '@whiffle/core';
+import { goto } from '$app/navigation';
 import { toast } from 'svelte-sonner';
 
 import type { SubagentState } from '$lib/utils/flow-types';
@@ -804,16 +805,46 @@ function supervisorEventOf(frame: FramePayload): SupervisorEvent | null {
 const SUPERVISOR_EVENT_CAP = 200;
 
 /** Files a supervisor event into the ring, newest first, capped. */
-function recordSupervisorEvent(event: SupervisorEvent): void {
+function recordSupervisorEvent(event: SupervisorEvent): boolean {
   const ring = state.supervisorEvents;
   // Deduplicate by id — the same row can arrive via REST seed and broadcast.
-  if (ring.some((e) => e.id === event.id)) return;
+  if (ring.some((e) => e.id === event.id)) return false;
   // Insert newest-first: find the position to keep descending-id order.
   const idx = ring.findIndex((e) => e.id < event.id);
   if (idx === -1) ring.push(event);
   else ring.splice(idx, 0, event);
   // Cap.
   if (ring.length > SUPERVISOR_EVENT_CAP) ring.length = SUPERVISOR_EVENT_CAP;
+  return true;
+}
+
+/**
+ * The verdicts that must not die quietly in the panel's log. An `error` means
+ * the supervisor's brain is broken — a misconfigured URL or a dead router
+ * failing every turn invisibly is exactly how the first field bug survived
+ * three evaluations unnoticed. An escalation is the supervisor handing the
+ * session back to the operator; if the operator is looking at the dashboard,
+ * the hand-off happens here, not just on the phone.
+ */
+function announceSupervisorEvent(event: SupervisorEvent): void {
+  const row = state.instances.find((i) => i.id === event.instanceId);
+  const where = row?.title ?? (row?.cwd ? row.cwd.split('/').filter(Boolean).pop() : undefined) ?? 'a session';
+  const open = { label: 'Open', onClick: () => void goto(`/session/${event.instanceId}`) };
+  if (event.verdict === 'error') {
+    // One toast per (session, cause) — sonner replaces by id, so a broken
+    // brain failing every turn updates one toast instead of stacking forty.
+    toast.error(`Supervisor error — ${event.note ?? 'unknown'}`, {
+      id: `sup-error-${event.instanceId}-${event.note ?? ''}`,
+      description: where,
+      action: open,
+    });
+  } else if (event.verdict === 'escalate' || event.verdict === 'ask') {
+    toast.warning(event.message ?? 'The supervisor needs you.', {
+      id: `sup-esc-${event.id}`,
+      description: `${event.source === 'autopilot' ? 'Autopilot' : 'Supervisor'} — ${where}`,
+      action: open,
+    });
+  }
 }
 
 /**
@@ -924,7 +955,9 @@ function handleFrame(frame: FramePayload): void {
 
   const supervisorEvent = supervisorEventOf(frame);
   if (supervisorEvent) {
-    recordSupervisorEvent(supervisorEvent);
+    // Announce only what is genuinely new — the REST seed replays history
+    // through the same recorder and must never replay its toasts.
+    if (recordSupervisorEvent(supervisorEvent)) announceSupervisorEvent(supervisorEvent);
     return;
   }
 
