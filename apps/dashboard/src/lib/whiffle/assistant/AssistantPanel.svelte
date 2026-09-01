@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { IconAssistant } from '$lib/icons';
   /**
    * The assistant panel — DESKTOP: floating pane per mock shell law (380×899,
    * top 40/right 24, radius 16, header 47); MOBILE (<900px): vaul-svelte
@@ -105,17 +106,6 @@
     }
   }
 
-  /** Desktop: set inert on main/aside behind the scrim. */
-  $effect(() => {
-    if (isMobile) return;
-    const els = document.querySelectorAll<HTMLElement>('main, aside.rail');
-    if (open) {
-      els.forEach((el) => el.setAttribute('inert', ''));
-    } else {
-      els.forEach((el) => el.removeAttribute('inert'));
-    }
-    return () => els.forEach((el) => el.removeAttribute('inert'));
-  });
 
   /** Relative time in the product voice: "3s", "2m", "1h", "2d". */
   function ago(ts: number): string {
@@ -159,11 +149,7 @@
       <div class="panel-inner">
         <header class="panel-head">
           <span class="a-logo">
-            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-              <path d="M3.845 3.845a2.883 2.883 0 0 0 0 4.077L5.432 9.51c.012-.014.555.503.568.49l4-4c.013-.013-.504-.556-.49-.568L7.922 3.845a2.883 2.883 0 0 0-4.077 0m1.288 11.462a.483.483 0 0 1 .9 0l.157.4a.48.48 0 0 0 .272.273l.398.157a.486.486 0 0 1 0 .903l-.398.158a.48.48 0 0 0-.272.273l-.157.4a.483.483 0 0 1-.9 0l-.157-.4a.48.48 0 0 0-.272-.273l-.398-.158a.486.486 0 0 1 0-.903l.398-.157a.48.48 0 0 0 .272-.274z" opacity=".5" />
-              <path d="M16.1 2.307a.483.483 0 0 1 .9 0l.43 1.095a.48.48 0 0 0 .272.274l1.091.432a.486.486 0 0 1 0 .903l-1.09.432a.5.5 0 0 0-.273.273L17 6.81a.483.483 0 0 1-.9 0l-.43-1.095a.5.5 0 0 0-.273-.273l-1.09-.432a.486.486 0 0 1 0-.903l1.09-.432a.5.5 0 0 0 .273-.274z" opacity=".7" />
-              <path d="M10.568 6.49c-.012.014-.555-.503-.568-.49l-4 4c-.013.013.504.556.49.568l9.588 9.587a2.883 2.883 0 1 0 4.078-4.077z" />
-            </svg>
+            <IconAssistant />
           </span>
           <span class="a-t"><b>Whiffle</b> Assistant</span>
           <span class="a-role">Assistant</span>
@@ -174,24 +160,17 @@
   </Drawer.Root>
 {:else if open}
   <!-- DESKTOP: floating pane per mock shell law -->
-  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-  <div class="scrim" onclick={close} role="presentation"></div>
   <div
     bind:this={panelEl}
     class="panel"
     role="dialog"
-    aria-modal="true"
     aria-label="Whiffle Assistant"
     tabindex="-1"
     onkeydown={onKeydown}
   >
     <header class="panel-head">
       <span class="a-logo">
-        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-          <path d="M3.845 3.845a2.883 2.883 0 0 0 0 4.077L5.432 9.51c.012-.014.555.503.568.49l4-4c.013-.013-.504-.556-.49-.568L7.922 3.845a2.883 2.883 0 0 0-4.077 0m1.288 11.462a.483.483 0 0 1 .9 0l.157.4a.48.48 0 0 0 .272.273l.398.157a.486.486 0 0 1 0 .903l-.398.158a.48.48 0 0 0-.272.273l-.157.4a.483.483 0 0 1-.9 0l-.157-.4a.48.48 0 0 0-.272-.273l-.398-.158a.486.486 0 0 1 0-.903l.398-.157a.48.48 0 0 0 .272-.274z" opacity=".5" />
-          <path d="M16.1 2.307a.483.483 0 0 1 .9 0l.43 1.095a.48.48 0 0 0 .272.274l1.091.432a.486.486 0 0 1 0 .903l-1.09.432a.5.5 0 0 0-.273.273L17 6.81a.483.483 0 0 1-.9 0l-.43-1.095a.5.5 0 0 0-.273-.273l-1.09-.432a.486.486 0 0 1 0-.903l1.09-.432a.5.5 0 0 0 .273-.274z" opacity=".7" />
-          <path d="M10.568 6.49c-.012.014-.555-.503-.568-.49l-4 4c-.013.013.504.556.49.568l9.588 9.587a2.883 2.883 0 1 0 4.078-4.077z" />
-        </svg>
+        <IconAssistant />
       </span>
       <span class="a-t"><b>Whiffle</b> Assistant</span>
       <span class="a-role">Assistant</span>
@@ -272,11 +251,7 @@
         <div class="empty">
           <div class="empty-grid"></div>
           <div class="empty-orb">
-            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-              <path d="M3.845 3.845a2.883 2.883 0 0 0 0 4.077L5.432 9.51c.012-.014.555.503.568.49l4-4c.013-.013-.504-.556-.49-.568L7.922 3.845a2.883 2.883 0 0 0-4.077 0m1.288 11.462a.483.483 0 0 1 .9 0l.157.4a.48.48 0 0 0 .272.273l.398.157a.486.486 0 0 1 0 .903l-.398.158a.48.48 0 0 0-.272.273l-.157.4a.483.483 0 0 1-.9 0l-.157-.4a.48.48 0 0 0-.272-.273l-.398-.158a.486.486 0 0 1 0-.903l.398-.157a.48.48 0 0 0 .272-.274z" opacity=".5" />
-              <path d="M16.1 2.307a.483.483 0 0 1 .9 0l.43 1.095a.48.48 0 0 0 .272.274l1.091.432a.486.486 0 0 1 0 .903l-1.09.432a.5.5 0 0 0-.273.273L17 6.81a.483.483 0 0 1-.9 0l-.43-1.095a.5.5 0 0 0-.273-.273l-1.09-.432a.486.486 0 0 1 0-.903l1.09-.432a.5.5 0 0 0 .273-.274z" opacity=".7" />
-              <path d="M10.568 6.49c-.012.014-.555-.503-.568-.49l-4 4c-.013.013.504.556.49.568l9.588 9.587a2.883 2.883 0 1 0 4.078-4.077z" />
-            </svg>
+            <IconAssistant />
           </div>
           <h4 class="empty-h">No interventions yet</h4>
           <p class="empty-p">When the supervisor acts on a session, every verdict appears here — replies, escalations, and the ones it let pass.</p>
@@ -318,20 +293,10 @@
 {/snippet}
 
 <style>
-  /* ---- SCRIM + PANEL (DESKTOP) ---- */
-  .scrim {
-    position: fixed;
-    inset: 0;
-    z-index: 50;
-    background: var(--scrim-soft);
-    -webkit-backdrop-filter: blur(2px);
-    backdrop-filter: blur(2px);
-    animation: scrim-in var(--motion-base) var(--ease-entry) both;
-  }
-  @keyframes scrim-in {
-    from { opacity: 0; }
-  }
-
+  /* ---- PANEL (DESKTOP) ----
+     Non-modal by operator verdict: the panel floats over a page that stays
+     fully interactive — no scrim, no inert. It descends from its summon in
+     the top bar on the doctrine's entry curve. */
   .panel {
     position: fixed;
     top: 40px;
@@ -345,12 +310,12 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    animation: panel-in var(--motion-base) var(--ease-entry) both;
+    animation: panel-in var(--c-300) var(--e-in) both;
   }
   @keyframes panel-in {
     from {
       opacity: 0;
-      transform: translateY(12px) scale(0.97);
+      transform: translateY(-8px) scale(0.98);
     }
   }
 
@@ -376,7 +341,7 @@
     display: grid;
     place-items: center;
   }
-  .a-logo svg {
+  .a-logo :global(svg) {
     width: 14px;
     height: 14px;
   }
@@ -531,7 +496,7 @@
     place-items: center;
     position: relative;
   }
-  .empty-orb svg {
+  .empty-orb :global(svg) {
     width: 22px;
     height: 22px;
     color: var(--ink-body);
@@ -669,7 +634,6 @@
 
   /* ---- REDUCED MOTION ---- */
   @media (prefers-reduced-motion: reduce) {
-    .scrim,
     .panel {
       animation: none;
     }

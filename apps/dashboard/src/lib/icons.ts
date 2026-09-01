@@ -158,3 +158,5 @@ export { default as IconToolQuestion } from '~icons/solar/question-circle-bold-d
 export { default as IconToolGeneric } from '~icons/solar/sledgehammer-bold-duotone';
 export { default as IconHookDuo } from '~icons/solar/routing-2-bold-duotone';
 export { default as IconSubagentDuo } from '~icons/solar/branching-paths-down-bold-duotone';
+/** The assistant/supervisor: an eye in scan corners — oversight across sessions, in the set's own stroke. */
+export { default as IconAssistant } from '~icons/solar/eye-scan-linear';

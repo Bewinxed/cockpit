@@ -333,6 +333,11 @@
             <span class="badge">{whiffle.blockedCount}</span>
           </a>
         {/if}
+        <AssistantOrb
+          bind:ref={orbEl}
+          open={assistantOpen}
+          onclick={() => (assistantOpen = !assistantOpen)}
+        />
         <!-- No always-on hub dot: a green light that is green 99% of the time
              says nothing. Connection health folds into the banner below, which
              is shown only when the hub is NOT connected. -->
@@ -372,11 +377,6 @@
 <!-- One dialog for every destructive confirm in the app (see confirm.svelte.ts). -->
 <ConfirmDialog />
 
-<AssistantOrb
-  bind:ref={orbEl}
-  open={assistantOpen}
-  onclick={() => (assistantOpen = !assistantOpen)}
-/>
 <AssistantPanel bind:open={assistantOpen} {orbEl} />
 
 <style>
