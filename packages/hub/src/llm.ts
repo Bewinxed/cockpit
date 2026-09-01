@@ -79,10 +79,19 @@ export type VerdictResult =
  * the hub already uses for router failures (telegram-media.ts `refusal()`).
  */
 export async function verdictFor(req: VerdictRequest): Promise<VerdictResult> {
+  // The SDK appends `/chat/completions` to baseURL — it wants the API root
+  // (`…/v1`), while our config stores the server root, the same value probe()
+  // takes. Normalize here so both share one convention; a configured URL that
+  // already ends in /v1 passes through untouched.
+  const root = req.baseUrl.replace(/\/+$/, '');
   const provider = createOpenAICompatible({
     name: 'supervisor',
-    baseURL: req.baseUrl,
+    baseURL: root.endsWith('/v1') ? root : `${root}/v1`,
     apiKey: req.apiKey,
+    // Without this the provider silently strips `response_format` and the
+    // model free-texts its answer — vLLM behind the router supports guided
+    // JSON, so declare it and let generateObject send the schema.
+    supportsStructuredOutputs: true,
   });
 
   const t0 = Date.now();
