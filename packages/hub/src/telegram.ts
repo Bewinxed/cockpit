@@ -27,6 +27,8 @@ export interface TelegramBridge {
   /** Answered somewhere else, or died with its process: the buttons are stale. */
   readonly onSettled: (requestId: string) => void;
   readonly onError: (instanceId: string, message: string) => void;
+  /** The supervisor wants the operator's attention — escalation or question. */
+  readonly onSupervisor: (instanceId: string, text: string) => void;
   /** A session's own words to the owner — no ask, no buttons, no answer. */
   readonly onUserMessage: (envelope: Envelope) => void;
   readonly start: () => void;
@@ -448,6 +450,21 @@ export const createTelegramBridge = ({
     });
   };
 
+  const onSupervisor = (instanceId: string, message: string): void => {
+    if (chatId === undefined) return;
+    const row = db.listInstances().find((instance) => instance.id === instanceId);
+    if (!row) return;
+    const lines = [
+      `${header(instanceId, '🤖')}`,
+      `<code>${esc(clip(message, 900))}</code>`,
+      `→ ${esc(dashboardUrl(registry))}/session/${instanceId}`,
+    ];
+    const text = fit(lines);
+    void send(text).then((sent) => {
+      if (sent) track(sent.message_id, { instanceId, machineId: row.machineId, text });
+    });
+  };
+
   const onUserMessage = (envelope: Envelope): void => {
     if (chatId === undefined) return;
     const { instanceId, text: raw } = envelope.payload as UserMessage;
@@ -618,6 +635,7 @@ export const createTelegramBridge = ({
     onAsk,
     onSettled,
     onError,
+    onSupervisor,
     onUserMessage,
     start,
     setAnswerRecorder(record) {

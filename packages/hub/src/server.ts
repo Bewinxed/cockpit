@@ -25,6 +25,7 @@ import type {
   RuleDraft,
   SendPayload,
   SessionPulse,
+  SupervisorEvent,
   SkillFile,
   SpawnPayload,
   ToolState,
@@ -63,6 +64,8 @@ import {
   TOOL_CATALOG,
   toolSpec,
   UPDATE_WHIFFLE,
+  readEnv,
+  WHIFFLE_ENV,
 } from '@whiffle/core';
 import { Elysia, t } from 'elysia';
 import { websocket } from 'elysia/websocket';
@@ -70,6 +73,8 @@ import { buildInfo } from './build';
 import { HUB_VERSION } from './config';
 import { delegateTypesRoutes, makeDelegateTypes } from './delegate-types';
 import { RuleEngine } from './rules';
+import { SupervisorEngine } from './supervisor';
+import { probe } from './llm';
 import type { AgentAuth, DbShape, DelegateEvent, InstanceKind } from './db';
 import { usageBucketFromRow } from './db';
 import type { PendingShape } from './pending';
@@ -166,6 +171,9 @@ const ruleBody = t.Object({
     harness: t.Optional(t.String()),
     model: t.Optional(t.String()),
   }),
+  trigger: t.Optional(t.Union([t.Literal('pattern'), t.Literal('every-turn')], { default: 'pattern' })),
+  action: t.Optional(t.Union([t.Literal('reply'), t.Literal('llm')], { default: 'reply' })),
+  prompt: t.Optional(t.Union([t.String(), t.Null()], { default: null })),
 });
 
 /**
@@ -825,6 +833,33 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
   });
 
   /**
+   * The supervisor's intervention log, to every dashboard, the moment it is
+   * written — same envelope shape as {@link publishDelegateEvent}.
+   */
+  const publishSupervisorEvent = (instanceId: string, event: SupervisorEvent): void => {
+    const row = db.listInstances().find((r) => r.id === instanceId);
+    if (!row) return;
+    registry.broadcast({
+      verb: 'frames',
+      machineId: row.machineId,
+      instanceId,
+      payload: { kind: 'supervisor_event', instanceId, event },
+    });
+  };
+
+  /**
+   * LLM supervisor — watches the same frames the rule engine does and, when
+   * configured, evaluates turns against autopilot or LLM rules off the frame
+   * path. Constructed symmetrically to {@link ruleEngine}.
+   */
+  const supervisor = new SupervisorEngine({
+    db,
+    agent: (machineId) => registry.agent(machineId),
+    telegram,
+    publish: publishSupervisorEvent,
+  });
+
+  /**
    * Drops a dead process's parked questions, telling whoever carried them
    * elsewhere that they are over — a Telegram message whose buttons still work
    * after the session behind them is gone is a message that lies.
@@ -843,6 +878,8 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
     // Nor is anything it was holding ever going to run. A queued row that
     // outlives the process holding it is the same lie in a quieter font.
     forgetQueue(instanceId);
+    // The supervisor's turn buffers for a dead session are waste.
+    supervisor.forget(instanceId);
   };
 
   /**
@@ -2376,6 +2413,83 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
         return state;
       }
     )
+    // ── supervisor ────────────────────────────────────────────────────────
+    .get('/api/supervisor', async ({ status }) => {
+      const dbConfig = db.getSupervisorConfig();
+      const baseUrl = dbConfig?.baseUrl || readEnv(WHIFFLE_ENV.supervisorUrl) || null;
+      const model = dbConfig?.model || readEnv(WHIFFLE_ENV.supervisorModel) || null;
+      const enabled = dbConfig?.enabled ?? false;
+      const configured = !!(baseUrl && model);
+
+      const config = {
+        enabled,
+        baseUrl,
+        model,
+      };
+
+      if (!configured) {
+        return { config, status: { configured: false } };
+      }
+
+      const probeResult = await probe(baseUrl!, model!);
+      return {
+        config,
+        status: {
+          configured: true,
+          reachable: probeResult.reachable,
+          ...(probeResult.resolvedModel ? { resolvedModel: probeResult.resolvedModel } : {}),
+        },
+      };
+    })
+    .put(
+      '/api/supervisor/config',
+      {
+        body: t.Object({
+          enabled: t.Boolean(),
+          baseUrl: t.String(),
+          model: t.String(),
+          apiKey: t.Optional(t.String()),
+        }),
+      },
+      ({ body }) => {
+        db.putSupervisorConfig({
+          enabled: body.enabled,
+          baseUrl: body.baseUrl,
+          model: body.model,
+          ...(body.apiKey !== undefined ? { apiKey: body.apiKey } : {}),
+        });
+        return { ok: true };
+      }
+    )
+    .get('/api/supervisor/events', ({ query }) => {
+      const instanceId = typeof query.instanceId === 'string' ? query.instanceId : undefined;
+      const limit = typeof query.limit === 'string' ? parseInt(query.limit, 10) : 100;
+      return db.listSupervisorEvents({
+        instanceId,
+        limit: Number.isFinite(limit) && limit > 0 ? limit : 100,
+      });
+    })
+    .put(
+      '/api/autopilot/:instanceId',
+      { body: t.Object({ enabled: t.Boolean(), prompt: t.String() }) },
+      ({ params, body, status }) => {
+        if (body.enabled && body.prompt.trim().length < 10) {
+          return status(
+            400,
+            'A standing prompt of under ten characters is not one — say what the autopilot should watch for.'
+          );
+        }
+        const row = db.listInstances().find((r) => r.id === params.instanceId);
+        if (!row) return status(404, 'No such session.');
+        db.setInstanceAutopilot(params.instanceId, {
+          enabled: body.enabled,
+          prompt: body.prompt.trim(),
+          updatedAt: Date.now(),
+        });
+        publishInstances(row.machineId);
+        return { ok: true };
+      }
+    )
     .put(
       '/api/fleet/marketplaces/:name',
       { body: t.Object({ source: t.String() }) },
@@ -3558,6 +3672,10 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
             // otherwise be the only thing waiting for it.
             if (kind === 'frame' && message.instanceId) {
               ruleEngine.observe(
+                message.instanceId,
+                (message.payload as FramePayload & { kind: 'frame' }).message
+              );
+              supervisor.observe(
                 message.instanceId,
                 (message.payload as FramePayload & { kind: 'frame' }).message
               );
