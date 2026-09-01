@@ -3615,7 +3615,12 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
               if (!streams.admitFrame(message.instanceId, readProvenance(message))) break;
             }
             if (message.requestId && kind === 'permission_request') {
+              // A replayed ask (the daemon re-announces unresolved asks after
+              // every register) refreshes the parked copy without a second
+              // Telegram message or a second routing decision.
+              const alreadyParked = pending.get(message.requestId) !== undefined;
               pending.remember(message.requestId, message);
+              if (alreadyParked) break;
               // A delegate's ask routes to its parent; the user is only the
               // fallback. The parent must be live — otherwise the ask is the
               // user's exactly as it was before this feature.

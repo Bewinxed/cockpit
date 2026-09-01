@@ -330,6 +330,21 @@ export class SessionSupervisor {
   /** Re-registers this machine, so a changed auth state reaches the fleet. */
   reannounce: () => void = () => {};
 
+  /**
+   * Every permission ask still waiting for an answer, by requestId — the frame
+   * body exactly as it was sunk. The hub parks asks in memory only, so a hub
+   * restart forgets the question while this daemon still holds the callback:
+   * the session blocks forever on an answer nobody can send. Replayed after
+   * every registration (replayOpenAsks); the hub re-parks and re-notifies only
+   * what it does not already know.
+   */
+  readonly #openAsks = new Map<string, Parameters<FrameSink>[0]>();
+
+  /** Re-sinks every unresolved ask — called by the daemon after register. */
+  replayOpenAsks(): void {
+    for (const body of this.#openAsks.values()) this.sink(body);
+  }
+
   dispatch(envelope: Envelope): void {
     const key = envelope.instanceId ?? '';
     const queue = (this.#queues.get(key) ?? Promise.resolve())
@@ -615,7 +630,9 @@ export class SessionSupervisor {
       permission: (request) => {
         this.#pulseBlocked.set(instanceId, (this.#pulseBlocked.get(instanceId) ?? 0) + 1);
         this.#emitPulse(instanceId, true);
-        this.sink({ kind: 'permission_request', instanceId, harness: adapter.kind, ...request });
+        const body = { kind: 'permission_request' as const, instanceId, harness: adapter.kind, ...request };
+        this.#openAsks.set(request.requestId, body);
+        this.sink(body);
       },
       busy: (active) => {
         if (active) this.#busy.add(instanceId);
@@ -626,6 +643,9 @@ export class SessionSupervisor {
       failed: (error) => this.#fail(instanceId, error),
       emit: (envelope) => this.emit(envelope),
       closed: () => {
+        // A dead process is never going to answer anything it asked.
+        for (const [requestId, body] of this.#openAsks)
+          if ('instanceId' in body && body.instanceId === instanceId) this.#openAsks.delete(requestId);
         if (holder.session && this.#sessions.get(instanceId) === holder.session) {
           this.#sessions.delete(instanceId);
           this.#busy.delete(instanceId);
@@ -1068,6 +1088,7 @@ export class SessionSupervisor {
 
     if (method === RESOLVE_PERMISSION) {
       this.#session(instanceId).resolvePermission(args[0] as string, args[1] as PermissionResult);
+      this.#openAsks.delete(args[0] as string);
       const left = (this.#pulseBlocked.get(instanceId) ?? 1) - 1;
       if (left <= 0) this.#pulseBlocked.delete(instanceId);
       else this.#pulseBlocked.set(instanceId, left);

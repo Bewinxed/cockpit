@@ -336,6 +336,11 @@ const attach = (
     send(socket, { verb: 'register', machineId: identity.machineId, payload });
     yield* Effect.logInfo(`registered with ${url}`);
     markLive();
+    // A hub that restarted while a session sat on a permission ask has
+    // forgotten the question; the callback is still parked here. Replay every
+    // unresolved ask so the hub can re-park it — it re-notifies only what it
+    // does not already know.
+    supervisor.replayOpenAsks();
 
     supervisor.reannounce = () => {
       if (socket.readyState !== WebSocket.OPEN) return;
