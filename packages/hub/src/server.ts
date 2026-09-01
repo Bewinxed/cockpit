@@ -2424,7 +2424,7 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
       }
     )
     // ── supervisor ────────────────────────────────────────────────────────
-    .get('/api/supervisor', async ({ status }) => {
+    .get('/api/supervisor', async () => {
       const dbConfig = db.getSupervisorConfig();
       const baseUrl = dbConfig?.baseUrl || readEnv(WHIFFLE_ENV.supervisorUrl) || null;
       const model = dbConfig?.model || readEnv(WHIFFLE_ENV.supervisorModel) || null;
