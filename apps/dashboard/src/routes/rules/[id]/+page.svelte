@@ -3,7 +3,7 @@
   import { page } from '$app/state';
   import { goto } from '$app/navigation';
   import { toast } from 'svelte-sonner';
-  import type { HarnessKind, RuleDraft, RuleTiming, RuleWatch } from '@whiffle/core';
+  import type { HarnessKind, RuleAction, RuleDraft, RuleTiming, RuleTrigger, RuleWatch } from '@whiffle/core';
   import { HARNESSES, ruleProblem, ruleSentence } from '@whiffle/core';
   import { IconArrowRight, IconTrash } from '$lib/icons';
   import { Button } from '$lib/components/ui/button';
@@ -16,7 +16,7 @@
   import { whiffle } from '$lib/whiffle/client.svelte';
   import RuleActivity from '$lib/whiffle/RuleActivity.svelte';
   import RuleTester from '$lib/whiffle/RuleTester.svelte';
-  import { blankRule, createRule, draftOf, message, removeRule, saveRule } from '$lib/whiffle/rules';
+  import { blankRule, createRule, draftOf, message, removeRule, saveRule, WHIP_PRESETS } from '$lib/whiffle/rules';
   import { confirm } from '$lib/whiffle/confirm.svelte';
   import type { PageData } from './$types';
 
@@ -89,6 +89,40 @@
   ];
 
   const how = $derived(TIMING.find((option) => option.value === draft.timing)?.how ?? '');
+
+  /** Switching trigger clears fields that belong to the other shape. */
+  function setTrigger(next: RuleTrigger) {
+    draft.trigger = next;
+    if (next === 'every-turn') {
+      // every-turn + reply is illegal; force llm action
+      draft.action = 'llm';
+      draft.timing = 'turn';
+      draft.interrupt = false;
+      draft.requireAck = false;
+    }
+  }
+
+  /** Switching action clears fields that belong to the other shape. */
+  function setAction(next: RuleAction) {
+    draft.action = next;
+    if (next === 'llm') {
+      draft.timing = 'turn';
+      draft.interrupt = false;
+      draft.requireAck = false;
+    }
+  }
+
+  /** Fills the form from a whip preset — the click-to-fill rack. */
+  function usePreset(preset: (typeof WHIP_PRESETS)[number]) {
+    draft.name = preset.name;
+    draft.trigger = preset.trigger;
+    draft.action = preset.action;
+    draft.prompt = preset.prompt;
+    draft.timing = 'turn';
+    draft.interrupt = false;
+    draft.requireAck = false;
+    draft.enabled = true;
+  }
 
   /** Interruption is only meaningful mid-turn; changing away from it clears the flag. */
   function setTiming(next: RuleTiming) {
@@ -202,6 +236,36 @@
       </label>
     </header>
 
+    {#if data.composing}
+      <section class="flex flex-col gap-4 rounded-[var(--radius-panel)] bg-card p-5 shadow-md">
+        <div class="flex flex-col gap-1">
+          <h2 class="text-body font-medium">Whip presets</h2>
+          <p class="max-w-prose text-micro text-muted-foreground">
+            Pre-written supervisor rules that beat bad habits out of coding agents. Click one to
+            fill the form — it is an ordinary rule once saved.
+          </p>
+        </div>
+        <ul class="flex flex-col">
+          {#each WHIP_PRESETS as preset (preset.name)}
+            <li class="flex flex-wrap items-start justify-between gap-3 border-t border-[var(--border-hairline)] py-3 first:border-t-0 first:pt-0">
+              <div class="flex min-w-0 flex-1 flex-col gap-1" style="flex-basis: 280px">
+                <span class="text-caption font-medium text-[color:var(--ink-strong)]">{preset.name}</span>
+                <span class="text-micro text-muted-foreground">{preset.prompt}</span>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onclick={() => usePreset(preset)}
+              >
+                Use
+              </Button>
+            </li>
+          {/each}
+        </ul>
+      </section>
+    {/if}
+
     <section class="flex flex-col gap-4 rounded-[var(--radius-panel)] bg-card p-5 shadow-md">
       <div class="flex flex-col gap-1">
         <h2 class="text-body font-medium">What to watch for</h2>
@@ -210,88 +274,118 @@
         </p>
       </div>
 
-      <ToggleGroup.Root
-        type="single"
-        variant="outline"
-        size="sm"
-        value={draft.matchKind}
-        onValueChange={(next) => next && (draft.matchKind = next as 'phrase' | 'regex')}
-        class="w-full"
-      >
-        <ToggleGroup.Item value="phrase" class="flex-1 text-caption">A phrase</ToggleGroup.Item>
-        <ToggleGroup.Item value="regex" class="flex-1 text-caption">
-          A regular expression
-        </ToggleGroup.Item>
-      </ToggleGroup.Root>
-
-      <label class="flex flex-col gap-1.5 text-caption">
-        {draft.matchKind === 'phrase' ? 'Phrase' : 'Expression'}
-        <Input
-          bind:value={draft.pattern}
-          onblur={() => (touched.pattern = true)}
-          autocomplete="off"
-          spellcheck="false"
-          aria-invalid={shown('pattern') ? 'true' : undefined}
-          placeholder={draft.matchKind === 'phrase'
-            ? 'honest caveat'
-            : 'should (work|be fine)|probably works'}
-          class="font-mono text-sm md:text-sm"
-        />
-        {#if shown('pattern')}
-          <span class="text-micro text-destructive">{wrong.pattern}</span>
-        {:else if draft.matchKind === 'regex'}
-          <span class="text-micro text-muted-foreground">
-            JavaScript syntax. It is matched against the whole message, not line by line.
-          </span>
-        {/if}
-      </label>
-
-      <div class="flex flex-wrap items-center gap-2">
-        <Toggle
-          variant="outline"
-          size="sm"
-          pressed={draft.caseSensitive}
-          onPressedChange={(next) => (draft.caseSensitive = next)}
-        >
-          Case sensitive
-        </Toggle>
-        {#if draft.matchKind === 'phrase'}
-          <Toggle
-            variant="outline"
-            size="sm"
-            pressed={draft.wholeWord}
-            onPressedChange={(next) => (draft.wholeWord = next)}
-          >
-            Whole words only
-          </Toggle>
-        {/if}
-      </div>
-
       <fieldset class="flex flex-col gap-1.5 text-caption">
-        <legend class="mb-1.5">Read</legend>
+        <legend class="mb-1.5">Trigger</legend>
         <ToggleGroup.Root
           type="single"
           variant="outline"
           size="sm"
-          value={draft.watch}
-          onValueChange={(next) => next && (draft.watch = next as RuleWatch)}
+          value={draft.trigger}
+          onValueChange={(next) => next && setTrigger(next as RuleTrigger)}
           class="w-full"
         >
-          {#each WATCH as option (option.value)}
-            <ToggleGroup.Item value={option.value} class="flex-1 text-caption">
-              {option.label}
-            </ToggleGroup.Item>
-          {/each}
+          <ToggleGroup.Item value="pattern" class="flex-1 text-caption">
+            A pattern match
+          </ToggleGroup.Item>
+          <ToggleGroup.Item value="every-turn" class="flex-1 text-caption">
+            Every turn
+          </ToggleGroup.Item>
         </ToggleGroup.Root>
-        {#if draft.watch !== 'text' && draft.timing === 'turn'}
-          <span class="text-micro text-warning">
-            Reasoning is not kept once a turn is over. To watch thinking, fire on the message or the
-            moment instead.
+        {#if shown('trigger')}
+          <span class="text-micro text-destructive">{wrong.trigger}</span>
+        {/if}
+        {#if draft.trigger === 'every-turn'}
+          <span class="text-micro text-muted-foreground">
+            The rule fires at the end of every turn — no pattern needed. The supervisor judges
+            each turn and decides what to do.
           </span>
         {/if}
       </fieldset>
 
-      <RuleTester {draft} bind:sample />
+      {#if draft.trigger === 'pattern'}
+        <ToggleGroup.Root
+          type="single"
+          variant="outline"
+          size="sm"
+          value={draft.matchKind}
+          onValueChange={(next) => next && (draft.matchKind = next as 'phrase' | 'regex')}
+          class="w-full"
+        >
+          <ToggleGroup.Item value="phrase" class="flex-1 text-caption">A phrase</ToggleGroup.Item>
+          <ToggleGroup.Item value="regex" class="flex-1 text-caption">
+            A regular expression
+          </ToggleGroup.Item>
+        </ToggleGroup.Root>
+
+        <label class="flex flex-col gap-1.5 text-caption">
+          {draft.matchKind === 'phrase' ? 'Phrase' : 'Expression'}
+          <Input
+            bind:value={draft.pattern}
+            onblur={() => (touched.pattern = true)}
+            autocomplete="off"
+            spellcheck="false"
+            aria-invalid={shown('pattern') ? 'true' : undefined}
+            placeholder={draft.matchKind === 'phrase'
+              ? 'honest caveat'
+              : 'should (work|be fine)|probably works'}
+            class="font-mono text-sm md:text-sm"
+          />
+          {#if shown('pattern')}
+            <span class="text-micro text-destructive">{wrong.pattern}</span>
+          {:else if draft.matchKind === 'regex'}
+            <span class="text-micro text-muted-foreground">
+              JavaScript syntax. It is matched against the whole message, not line by line.
+            </span>
+          {/if}
+        </label>
+
+        <div class="flex flex-wrap items-center gap-2">
+          <Toggle
+            variant="outline"
+            size="sm"
+            pressed={draft.caseSensitive}
+            onPressedChange={(next) => (draft.caseSensitive = next)}
+          >
+            Case sensitive
+          </Toggle>
+          {#if draft.matchKind === 'phrase'}
+            <Toggle
+              variant="outline"
+              size="sm"
+              pressed={draft.wholeWord}
+              onPressedChange={(next) => (draft.wholeWord = next)}
+            >
+              Whole words only
+            </Toggle>
+          {/if}
+        </div>
+
+        <fieldset class="flex flex-col gap-1.5 text-caption">
+          <legend class="mb-1.5">Read</legend>
+          <ToggleGroup.Root
+            type="single"
+            variant="outline"
+            size="sm"
+            value={draft.watch}
+            onValueChange={(next) => next && (draft.watch = next as RuleWatch)}
+            class="w-full"
+          >
+            {#each WATCH as option (option.value)}
+              <ToggleGroup.Item value={option.value} class="flex-1 text-caption">
+                {option.label}
+              </ToggleGroup.Item>
+            {/each}
+          </ToggleGroup.Root>
+          {#if draft.watch !== 'text' && draft.timing === 'turn'}
+            <span class="text-micro text-warning">
+              Reasoning is not kept once a turn is over. To watch thinking, fire on the message or the
+              moment instead.
+            </span>
+          {/if}
+        </fieldset>
+
+        <RuleTester {draft} bind:sample />
+      {/if}
     </section>
 
     <section class="flex flex-col gap-4 rounded-[var(--radius-panel)] bg-card p-5 shadow-md">
@@ -303,51 +397,99 @@
         </p>
       </div>
 
-      <label class="flex flex-col gap-1.5 text-caption">
-        Reply
-        <Textarea
-          bind:value={draft.reply}
-          onblur={() => (touched.reply = true)}
-          rows={4}
-          aria-invalid={shown('reply') ? 'true' : undefined}
-          placeholder="if there's an honest caveat that you are aware of and you're just reporting it to the user instead of fixing it, then your work is not done yet"
-          class="resize-y text-sm md:text-sm"
-        />
-        {#if shown('reply')}
-          <span class="text-micro text-destructive">{wrong.reply}</span>
-        {/if}
-      </label>
-
       <fieldset class="flex flex-col gap-1.5 text-caption">
-        <legend class="mb-1.5">Send it</legend>
+        <legend class="mb-1.5">Action</legend>
         <ToggleGroup.Root
           type="single"
           variant="outline"
           size="sm"
-          value={draft.timing}
-          onValueChange={(next) => next && setTiming(next as RuleTiming)}
+          value={draft.action}
+          onValueChange={(next) => next && setAction(next as RuleAction)}
           class="w-full"
         >
-          {#each TIMING as option (option.value)}
-            <ToggleGroup.Item value={option.value} class="flex-1 text-caption">
-              {option.label}
-            </ToggleGroup.Item>
-          {/each}
+          <ToggleGroup.Item value="reply" class="flex-1 text-caption" disabled={draft.trigger === 'every-turn'}>
+            Canned reply
+          </ToggleGroup.Item>
+          <ToggleGroup.Item value="llm" class="flex-1 text-caption">
+            LLM verdict
+          </ToggleGroup.Item>
         </ToggleGroup.Root>
-        <span class="max-w-prose text-micro text-muted-foreground">{how}</span>
+        {#if draft.action === 'llm'}
+          <span class="text-micro text-muted-foreground">
+            The supervisor reads the turn and decides what to say. You write the standing
+            instructions; it writes the reply.
+          </span>
+        {/if}
       </fieldset>
 
-      {#if draft.timing === 'immediate'}
-        <label class="flex items-start gap-3">
-          <Switch bind:checked={draft.interrupt} class="mt-0.5" />
-          <span class="flex flex-col gap-0.5">
-            <span class="text-caption">Interrupt the running turn</span>
-            <span class="max-w-prose text-micro text-muted-foreground">
-              A claude session reads it mid-turn without stopping. Other harnesses cut the turn
-              short to deliver it, which loses whatever they were partway through.
-            </span>
-          </span>
+      {#if draft.action === 'reply'}
+        <label class="flex flex-col gap-1.5 text-caption">
+          Reply
+          <Textarea
+            bind:value={draft.reply}
+            onblur={() => (touched.reply = true)}
+            rows={4}
+            aria-invalid={shown('reply') ? 'true' : undefined}
+            placeholder="if there's an honest caveat that you are aware of and you're just reporting it to the user instead of fixing it, then your work is not done yet"
+            class="resize-y text-sm md:text-sm"
+          />
+          {#if shown('reply')}
+            <span class="text-micro text-destructive">{wrong.reply}</span>
+          {/if}
         </label>
+      {:else}
+        <label class="flex flex-col gap-1.5 text-caption">
+          Supervisor instructions
+          <Textarea
+            bind:value={draft.prompt}
+            onblur={() => (touched.prompt = true)}
+            rows={4}
+            aria-invalid={shown('prompt') ? 'true' : undefined}
+            placeholder="If the agent claims work is done without pasting test output, reject the claim. Tell it to run the tests and paste the full output."
+            class="resize-y text-sm md:text-sm"
+          />
+          {#if shown('prompt')}
+            <span class="text-micro text-destructive">{wrong.prompt}</span>
+          {/if}
+        </label>
+      {/if}
+
+      {#if draft.action === 'reply'}
+        <fieldset class="flex flex-col gap-1.5 text-caption">
+          <legend class="mb-1.5">Send it</legend>
+          <ToggleGroup.Root
+            type="single"
+            variant="outline"
+            size="sm"
+            value={draft.timing}
+            onValueChange={(next) => next && setTiming(next as RuleTiming)}
+            class="w-full"
+          >
+            {#each TIMING as option (option.value)}
+              <ToggleGroup.Item value={option.value} class="flex-1 text-caption">
+                {option.label}
+              </ToggleGroup.Item>
+            {/each}
+          </ToggleGroup.Root>
+          <span class="max-w-prose text-micro text-muted-foreground">{how}</span>
+        </fieldset>
+
+        {#if draft.timing === 'immediate'}
+          <label class="flex items-start gap-3">
+            <Switch bind:checked={draft.interrupt} class="mt-0.5" />
+            <span class="flex flex-col gap-0.5">
+              <span class="text-caption">Interrupt the running turn</span>
+              <span class="max-w-prose text-micro text-muted-foreground">
+                A claude session reads it mid-turn without stopping. Other harnesses cut the turn
+                short to deliver it, which loses whatever they were partway through.
+              </span>
+            </span>
+          </label>
+        {/if}
+      {:else}
+        {#if shown('timing')}
+          <span class="text-micro text-destructive">{wrong.timing}</span>
+        {/if}
       {/if}
     </section>
 
@@ -424,31 +566,33 @@
       </div>
     </section>
 
-    <section class="flex flex-col gap-4 rounded-[var(--radius-panel)] bg-card p-5 shadow-md">
-      <div class="flex flex-col gap-1">
-        <h2 class="text-body font-medium">Making it stick</h2>
-        <p class="max-w-prose text-micro text-muted-foreground">
-          A note a session can read and walk past is a note a session will read and walk past.
-        </p>
-      </div>
+    {#if draft.action === 'reply'}
+      <section class="flex flex-col gap-4 rounded-[var(--radius-panel)] bg-card p-5 shadow-md">
+        <div class="flex flex-col gap-1">
+          <h2 class="text-body font-medium">Making it stick</h2>
+          <p class="max-w-prose text-micro text-muted-foreground">
+            A note a session can read and walk past is a note a session will read and walk past.
+          </p>
+        </div>
 
-      <label class="flex items-start gap-3">
-        <Switch bind:checked={draft.requireAck} class="mt-0.5" />
-        <span class="flex flex-col gap-0.5">
-          <span class="text-caption">Keep firing until the session acknowledges</span>
-          <span class="max-w-prose text-micro text-muted-foreground">
-            {#if draft.requireAck}
-              The session has to call <span class="font-mono">acknowledge_rule</span> and say what it
-              did about it. Until then the rule fires again every time it is tripped, and the reminder
-              counts up. It stops after ten in one session.
-            {:else}
-              The rule fires once per session and then goes quiet, whether or not anything came of
-              it.
-            {/if}
+        <label class="flex items-start gap-3">
+          <Switch bind:checked={draft.requireAck} class="mt-0.5" />
+          <span class="flex flex-col gap-0.5">
+            <span class="text-caption">Keep firing until the session acknowledges</span>
+            <span class="max-w-prose text-micro text-muted-foreground">
+              {#if draft.requireAck}
+                The session has to call <span class="font-mono">acknowledge_rule</span> and say what it
+                did about it. Until then the rule fires again every time it is tripped, and the reminder
+                counts up. It stops after ten in one session.
+              {:else}
+                The rule fires once per session and then goes quiet, whether or not anything came of
+                it.
+              {/if}
+            </span>
           </span>
-        </span>
-      </label>
-    </section>
+        </label>
+      </section>
+    {/if}
 
     <!-- Only a saved rule has a history; a draft has caught nothing by definition. -->
     {#if id}
