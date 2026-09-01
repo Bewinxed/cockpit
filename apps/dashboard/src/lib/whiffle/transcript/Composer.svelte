@@ -44,6 +44,7 @@
     oninterruptsend,
     onstop,
     prompts,
+    leading,
   }: {
     value?: string;
     /**
@@ -74,6 +75,8 @@
     oninterruptsend?: (text: string, extras: SendExtras) => void;
     onstop: () => void;
     prompts?: Snippet;
+    /** Controls rendered before the attach button in the composer row. */
+    leading?: Snippet;
   } = $props();
 
   type PendingImage = { mediaType: string; data: string; name: string };
@@ -520,6 +523,7 @@
     ></textarea>
 
     <div class="ctrls">
+      {@render leading?.()}
       <button
         class="att-btn"
         type="button"

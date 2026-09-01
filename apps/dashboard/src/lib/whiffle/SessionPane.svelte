@@ -49,6 +49,7 @@
   import Transcript from './transcript/Transcript.svelte';
   // StaticTail removed — virtua's ssrCount renders the tail directly.
   import Composer, { type Mention } from './transcript/Composer.svelte';
+  import AutopilotToggle from './AutopilotToggle.svelte';
   import Prompt from './transcript/Prompt.svelte';
   import FlowView from '$lib/components/features/flow/FlowView.svelte';
 
@@ -404,6 +405,7 @@
 
   const stats = $derived(whiffle.statsOf(viewId));
   const activity = $derived(whiffle.activityOf(viewId));
+  const instanceRow = $derived(whiffle.instances.find((i) => i.id === viewId));
 
   // The session settings — model, permission mode, effort — are switchable from
   // the header now, so the same reference data the spawn form uses is derived
@@ -758,6 +760,9 @@
           {oninterruptsend}
           {onstop}
         >
+          {#snippet leading()}
+            <AutopilotToggle instanceId={viewId} instance={instanceRow} />
+          {/snippet}
           {#snippet prompts()}
             {#each parked as request (request.requestId)}
               <div class="parked" out:promptExit>
