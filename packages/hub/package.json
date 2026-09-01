@@ -13,13 +13,16 @@
     "db:push": "drizzle-kit push"
   },
   "dependencies": {
+    "@ai-sdk/openai-compatible": "^3.0.41",
     "@whiffle/core": "workspace:*",
+    "ai": "^7.0.87",
     "bonjour-service": "^1.4.4",
     "drizzle-orm": "^0.44.0",
     "effect": "beta",
     "elysia": "next",
     "exact-mirror": "^1.2.2",
-    "typebox": "^1.3.0"
+    "typebox": "^1.3.0",
+    "valibot": "^1.4.2"
   },
   "devDependencies": {
     "@types/bun": "latest",
