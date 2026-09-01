@@ -18,6 +18,7 @@ import type {
   RuleState,
   RuleStats,
   SkillFile,
+  SupervisorEvent,
   ToolPolicy,
   ToolStatus,
   UsageBucket,
@@ -47,6 +48,8 @@ import {
   ruleState,
   rules,
   skills,
+  supervisorConfig,
+  supervisorEvents,
   tools,
   usageBuckets,
   usageLimits,
@@ -531,6 +534,39 @@ export interface DbShape {
     groupBy: UsageGroupBy;
   }) => UsageSummary;
 
+  /** Sets (or clears) the autopilot configuration on a session. */
+  readonly setInstanceAutopilot: (
+    instanceId: string,
+    value: { enabled: boolean; prompt: string; updatedAt: number } | null
+  ) => void;
+  /** Files one supervisor evaluation result and prunes to newest 5,000 rows (plan: our choice). */
+  readonly recordSupervisorEvent: (event: {
+    instanceId: string;
+    source: 'rule' | 'autopilot';
+    ruleId?: string;
+    verdict: 'silent' | 'reply' | 'escalate' | 'ask' | 'error' | 'skipped';
+    message?: string;
+    note?: string;
+    model?: string;
+    latencyMs?: number;
+  }) => SupervisorEvent;
+  /** Newest first; optionally filtered to one session; default limit 100. */
+  readonly listSupervisorEvents: (filter: { instanceId?: string; limit?: number }) => SupervisorEvent[];
+  /** The supervisor's own configuration, or undefined while none is stored. */
+  readonly getSupervisorConfig: () => {
+    enabled: boolean;
+    baseUrl: string | null;
+    model: string | null;
+    apiKey: string | null;
+    updatedAt: Date;
+  } | undefined;
+  /** Upserts the supervisor's configuration (single-row table). */
+  readonly putSupervisorConfig: (config: {
+    enabled?: boolean;
+    baseUrl?: string | null;
+    model?: string | null;
+    apiKey?: string | null;
+  }) => void;
   /** Every rule, newest first — what the engine reloads and the editor lists. */
   readonly listRules: () => Rule[];
   /** One rule, or nothing when it has been deleted out from under a caller. */
@@ -573,12 +609,15 @@ const ruleOf = (row: typeof rules.$inferSelect): Rule => ({
   id: row.id,
   name: row.name,
   enabled: row.enabled,
+  trigger: row.trigger,
   pattern: row.pattern,
   matchKind: row.matchKind,
   caseSensitive: row.caseSensitive,
   wholeWord: row.wholeWord,
   watch: row.watch,
+  action: row.action,
   reply: row.reply,
+  prompt: row.prompt,
   timing: row.timing,
   interrupt: row.interrupt,
   requireAck: row.requireAck,
@@ -676,6 +715,12 @@ export const usageBucketFromRow = (row: UsageBucketRow): UsageBucket => ({
 
 /** The one row the fleet's memory ever takes: there is one document, not a list. */
 const MEMORY_ID = 'memory';
+
+/** The one row the supervisor config ever takes — same precedent as `MEMORY_ID`. */
+const SUPERVISOR_CONFIG_ID = 'supervisor';
+
+/** How many supervisor event rows to keep — bounded without a scheduler (plan: our choice). */
+const SUPERVISOR_EVENTS_RETENTION = 5_000;
 
 /** How far back the memory can be taken. Deep enough to undo a bad day, not a log. */
 const HISTORY_LIMIT = 20;
@@ -1590,7 +1635,10 @@ const make = (path: string): DbShape => {
         // so every listing — the rail, the tab strip, the first server render —
         // already carries it and no label changes once a transcript loads. The
         // column itself stays as it was: a given title is still what wins here.
-        .map((row) => (row.title ? row : { ...row, title: row.derivedTitle })),
+        .map((row) => ({
+          ...(row.title ? row : { ...row, title: row.derivedTitle }),
+          ...(row.autopilot ? { autopilot: row.autopilot } : {}),
+        })),
     getInstancesByIds: (ids) => {
       if (ids.length === 0) return [];
       return db
@@ -1806,6 +1854,115 @@ const make = (path: string): DbShape => {
       return { rows, totals, missingPricing };
     },
 
+    setInstanceAutopilot: (instanceId, value) => {
+      db.update(instances)
+        .set({ autopilot: value, updatedAt: new Date() })
+        .where(eq(instances.id, instanceId))
+        .run();
+    },
+    recordSupervisorEvent: (event) => {
+      const row = db
+        .insert(supervisorEvents)
+        .values({
+          instanceId: event.instanceId,
+          source: event.source,
+          ruleId: event.ruleId ?? null,
+          verdict: event.verdict,
+          message: event.message ?? null,
+          note: event.note ?? null,
+          model: event.model ?? null,
+          latencyMs: event.latencyMs ?? null,
+        })
+        .returning()
+        .get();
+      // Prune to newest SUPERVISOR_EVENTS_RETENTION rows.
+      const cutoff = db
+        .select({ id: supervisorEvents.id })
+        .from(supervisorEvents)
+        .orderBy(desc(supervisorEvents.id))
+        .limit(1)
+        .offset(SUPERVISOR_EVENTS_RETENTION)
+        .get();
+      if (cutoff) {
+        db.delete(supervisorEvents).where(lte(supervisorEvents.id, cutoff.id)).run();
+      }
+      return {
+        id: row.id,
+        instanceId: row.instanceId,
+        source: row.source,
+        ruleId: row.ruleId,
+        verdict: row.verdict,
+        message: row.message,
+        note: row.note,
+        model: row.model,
+        latencyMs: row.latencyMs,
+        createdAt: row.createdAt.getTime(),
+      };
+    },
+    listSupervisorEvents: ({ instanceId, limit }) =>
+      db
+        .select()
+        .from(supervisorEvents)
+        .where(instanceId ? eq(supervisorEvents.instanceId, instanceId) : undefined)
+        .orderBy(desc(supervisorEvents.createdAt), desc(supervisorEvents.id))
+        .limit(limit ?? 100)
+        .all()
+        .map((row) => ({
+          id: row.id,
+          instanceId: row.instanceId,
+          source: row.source,
+          ruleId: row.ruleId,
+          verdict: row.verdict,
+          message: row.message,
+          note: row.note,
+          model: row.model,
+          latencyMs: row.latencyMs,
+          createdAt: row.createdAt.getTime(),
+        })),
+    getSupervisorConfig: () => {
+      const row = db
+        .select()
+        .from(supervisorConfig)
+        .where(eq(supervisorConfig.id, SUPERVISOR_CONFIG_ID))
+        .get();
+      return row
+        ? {
+            enabled: row.enabled,
+            baseUrl: row.baseUrl,
+            model: row.model,
+            apiKey: row.apiKey,
+            updatedAt: row.updatedAt,
+          }
+        : undefined;
+    },
+    putSupervisorConfig: (config) => {
+      const stored = db
+        .select()
+        .from(supervisorConfig)
+        .where(eq(supervisorConfig.id, SUPERVISOR_CONFIG_ID))
+        .get();
+      const values = {
+        id: SUPERVISOR_CONFIG_ID,
+        enabled: config.enabled ?? stored?.enabled ?? false,
+        baseUrl: config.baseUrl === undefined ? (stored?.baseUrl ?? null) : config.baseUrl,
+        model: config.model === undefined ? (stored?.model ?? null) : config.model,
+        apiKey: config.apiKey === undefined ? (stored?.apiKey ?? null) : config.apiKey,
+        updatedAt: new Date(),
+      };
+      db.insert(supervisorConfig)
+        .values(values)
+        .onConflictDoUpdate({
+          target: supervisorConfig.id,
+          set: {
+            enabled: values.enabled,
+            baseUrl: values.baseUrl,
+            model: values.model,
+            apiKey: values.apiKey,
+            updatedAt: values.updatedAt,
+          },
+        })
+        .run();
+    },
     listRules: () => db.select().from(rules).orderBy(desc(rules.createdAt)).all().map(ruleOf),
 
     getRule: (id) => {
@@ -1818,12 +1975,15 @@ const make = (path: string): DbShape => {
         id: rule.id,
         name: rule.name,
         enabled: rule.enabled,
+        trigger: rule.trigger,
         pattern: rule.pattern,
         matchKind: rule.matchKind,
         caseSensitive: rule.caseSensitive,
         wholeWord: rule.wholeWord,
         watch: rule.watch,
+        action: rule.action,
         reply: rule.reply,
+        prompt: rule.prompt,
         timing: rule.timing,
         interrupt: rule.interrupt,
         requireAck: rule.requireAck,
@@ -1840,12 +2000,15 @@ const make = (path: string): DbShape => {
           set: {
             name: values.name,
             enabled: values.enabled,
+            trigger: values.trigger,
             pattern: values.pattern,
             matchKind: values.matchKind,
             caseSensitive: values.caseSensitive,
             wholeWord: values.wholeWord,
             watch: values.watch,
+            action: values.action,
             reply: values.reply,
+            prompt: values.prompt,
             timing: values.timing,
             interrupt: values.interrupt,
             requireAck: values.requireAck,

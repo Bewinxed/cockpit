@@ -204,6 +204,13 @@
       "when": 1788071977359,
       "tag": "0028_mighty_ronan",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "6",
+      "when": 1788254564648,
+      "tag": "0029_square_purple_man",
+      "breakpoints": true
     }
   ]
 }

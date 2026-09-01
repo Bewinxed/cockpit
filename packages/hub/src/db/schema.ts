@@ -8,9 +8,11 @@ import type {
   HarnessReport,
   HookEvent,
   HookHandler,
+  RuleAction,
   RuleMatchKind,
   RuleScope,
   RuleTiming,
+  RuleTrigger,
   RuleWatch,
   SkillFile,
   ToolStatus,
@@ -136,6 +138,13 @@ export const instances = sqliteTable('instances', {
     .default('starting'),
   /** Why the session died, for a dashboard that was not watching when it did. */
   lastError: text('last_error'),
+  /**
+   * The supervisor's standing autopilot for this session: `{enabled, prompt,
+   * updatedAt}` as JSON text, following the `rules.scope` idiom. Null means
+   * never configured; disabling keeps the prompt.
+   */
+  autopilot: text('autopilot', { mode: 'json' })
+    .$type<{ enabled: boolean; prompt: string; updatedAt: number }>(),
   createdAt: timestamp('created_at').notNull().$defaultFn(() => new Date()),
   updatedAt: timestamp('updated_at').notNull().$defaultFn(() => new Date()),
 });
@@ -383,13 +392,19 @@ export const rules = sqliteTable('rules', {
   name: text('name').notNull(),
   /** A disabled rule stays here, keeps its history, and stops firing. */
   enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+  /** What starts the evaluation: `pattern` (default, every rule before this) or `every-turn`. */
+  trigger: text('trigger').$type<RuleTrigger>().notNull().default('pattern'),
   pattern: text('pattern').notNull(),
   matchKind: text('match_kind').$type<RuleMatchKind>().notNull().default('phrase'),
   caseSensitive: integer('case_sensitive', { mode: 'boolean' }).notNull().default(false),
   wholeWord: integer('whole_word', { mode: 'boolean' }).notNull().default(false),
   /** Whether the rule reads the session's answer, its reasoning, or both. */
   watch: text('watch').$type<RuleWatch>().notNull().default('text'),
+  /** What the rule does when it fires: `reply` (default) or `llm` (supervisor evaluates). */
+  action: text('action').$type<RuleAction>().notNull().default('reply'),
   reply: text('reply').notNull(),
+  /** `action: 'llm'` only: the operator's standing instructions for the supervisor. */
+  prompt: text('prompt'),
   /** `turn` wakes an idle session, `message` queues, `immediate` cuts in. */
   timing: text('timing').$type<RuleTiming>().notNull().default('turn'),
   /** `immediate` only: deliver mid-turn instead of waiting for a boundary. */
@@ -495,4 +510,49 @@ export const fleetHookHistory = sqliteTable('fleet_hook_history', {
   /** `fleet` for every version today — a hook is never edited from a machine. */
   source: text('source').notNull(),
   createdAt: timestamp('created_at').notNull().$defaultFn(() => new Date()),
+});
+
+/** What the supervisor's verdict was on a given evaluation. */
+export type SupervisorVerdict = 'silent' | 'reply' | 'escalate' | 'ask' | 'error' | 'skipped';
+
+/** What triggered the evaluation: a matched rule, or the session's autopilot. */
+export type SupervisorSource = 'rule' | 'autopilot';
+
+/**
+ * The supervisor's intervention log: every evaluation the supervisor ran on a
+ * session — including silent ones and skips. Mirrored structurally from
+ * `delegate_events`; pruned to newest 5,000 rows at insert (plan: our choice).
+ */
+export const supervisorEvents = sqliteTable(
+  'supervisor_events',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    instanceId: text('instance_id').notNull(),
+    source: text('source').$type<SupervisorSource>().notNull(),
+    ruleId: text('rule_id'),
+    verdict: text('verdict').$type<SupervisorVerdict>().notNull(),
+    message: text('message'),
+    note: text('note'),
+    model: text('model'),
+    latencyMs: integer('latency_ms'),
+    createdAt: timestamp('created_at').notNull().$defaultFn(() => new Date()),
+  },
+  (table) => [
+    index('supervisor_events_instance_created_idx').on(table.instanceId, table.createdAt),
+  ]
+);
+
+/**
+ * The supervisor's own configuration — one row, keyed `'supervisor'`,
+ * following the `fleetMemory` / `MEMORY_ID` single-row precedent. Neither
+ * DB nor env URL present means disabled.
+ */
+export const supervisorConfig = sqliteTable('supervisor_config', {
+  /** Always `'supervisor'`: the hub has one, and a table with a key says so cheaply. */
+  id: text('id').primaryKey(),
+  enabled: integer('enabled', { mode: 'boolean' }).notNull().default(false),
+  baseUrl: text('base_url'),
+  model: text('model'),
+  apiKey: text('api_key'),
+  updatedAt: timestamp('updated_at').notNull().$defaultFn(() => new Date()),
 });
