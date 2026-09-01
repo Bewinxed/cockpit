@@ -1,0 +1,677 @@
+<script lang="ts">
+  /**
+   * The assistant panel — DESKTOP: floating pane per mock shell law (380×899,
+   * top 40/right 24, radius 16, header 47); MOBILE (<900px): vaul-svelte
+   * drawer. Contents this slice: supervisor status, focused session autopilot
+   * state, live intervention log. No chat composer (JOURNEY.md boundary).
+   *
+   * Shell law source: mocks/v5-assistant.html, PLAN.md §C9.
+   * A11y intent: mocks/v3-assistant.html syncModal JS.
+   */
+  import { onMount } from 'svelte';
+  import { goto } from '$app/navigation';
+  import * as Drawer from '$lib/components/ui/drawer';
+  import { whiffle } from '../client.svelte';
+  import { workspace } from '../workspace/workspace.svelte';
+  import {
+    loadSupervisor,
+    loadSupervisorEvents,
+    type SupervisorStatus,
+  } from '../supervisor';
+  import type { SupervisorEvent } from '@whiffle/core';
+
+  let {
+    open = $bindable(false),
+    orbEl,
+  }: {
+    open: boolean;
+    /** The orb button — focus returns here on close. */
+    orbEl?: HTMLButtonElement | null;
+  } = $props();
+
+  let isMobile = $state(false);
+  let panelEl: HTMLElement | null = $state(null);
+
+  /** Supervisor config + live probe. */
+  let sup: SupervisorStatus | null = $state(null);
+  let supError: string | null = $state(null);
+
+  /** Events seeded from REST, then kept live from the client ring. */
+  let seededEvents: SupervisorEvent[] = $state([]);
+  let seeded = $state(false);
+
+  const events = $derived.by(() => {
+    const live = whiffle.supervisorEvents;
+    if (!seeded) return [];
+    const merged = [...live];
+    for (const row of seededEvents) {
+      if (!merged.some((e) => e.id === row.id)) merged.push(row);
+    }
+    merged.sort((a, b) => b.id - a.id);
+    return merged.slice(0, 200);
+  });
+
+  /** The focused session's autopilot state, when viewing a session. */
+  const focusedSession = $derived.by(() => {
+    const id = workspace.activeSessionId;
+    if (!id) return null;
+    const row = whiffle.instances.find((r) => r.id === id);
+    return row ?? null;
+  });
+
+  const autopilot = $derived(focusedSession?.autopilot ?? null);
+
+  function checkMobile() {
+    isMobile = window.matchMedia('(max-width: 899px)').matches;
+  }
+
+  onMount(() => {
+    checkMobile();
+    const mq = window.matchMedia('(max-width: 899px)');
+    const handler = () => checkMobile();
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  });
+
+  $effect(() => {
+    if (!open) return;
+    loadSupervisor()
+      .then((s) => {
+        sup = s;
+        supError = null;
+      })
+      .catch((e) => {
+        supError = e instanceof Error ? e.message : String(e);
+      });
+    loadSupervisorEvents({ limit: 100 })
+      .then((rows) => {
+        seededEvents = rows;
+        seeded = true;
+      })
+      .catch(() => {
+        seeded = true;
+      });
+  });
+
+  function close() {
+    open = false;
+    orbEl?.focus();
+  }
+
+  function onKeydown(event: KeyboardEvent) {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      close();
+    }
+  }
+
+  /** Desktop: set inert on main/aside behind the scrim. */
+  $effect(() => {
+    if (isMobile) return;
+    const els = document.querySelectorAll<HTMLElement>('main, aside.rail');
+    if (open) {
+      els.forEach((el) => el.setAttribute('inert', ''));
+    } else {
+      els.forEach((el) => el.removeAttribute('inert'));
+    }
+    return () => els.forEach((el) => el.removeAttribute('inert'));
+  });
+
+  /** Relative time in the product voice: "3s", "2m", "1h", "2d". */
+  function ago(ts: number): string {
+    const s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+    if (s < 60) return `${s}s`;
+    const m = Math.floor(s / 60);
+    if (m < 60) return `${m}m`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h`;
+    return `${Math.floor(h / 24)}d`;
+  }
+
+  /** The cwd's last path segment — the session's label in this log. */
+  function cwdLeaf(cwd: string): string {
+    const parts = cwd.replace(/\/$/, '').split('/');
+    return parts[parts.length - 1] || cwd;
+  }
+
+  function navigateToSession(instanceId: string) {
+    close();
+    goto(`/session/${instanceId}`);
+  }
+
+  const VERDICT_TONE: Record<string, string> = {
+    silent: 'muted',
+    reply: 'live',
+    escalate: 'attn',
+    ask: 'attn',
+    error: 'fail',
+    skipped: 'muted',
+  };
+</script>
+
+{#if isMobile}
+  <!-- MOBILE-FIRST: vaul-svelte drawer -->
+  <Drawer.Root bind:open direction="bottom" shouldScaleBackground={false}>
+    <Drawer.Content class="assistant-drawer">
+      <Drawer.Header>
+        <Drawer.Title class="sr-only">Whiffle Assistant</Drawer.Title>
+      </Drawer.Header>
+      <div class="panel-inner">
+        <header class="panel-head">
+          <span class="a-logo">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M3.845 3.845a2.883 2.883 0 0 0 0 4.077L5.432 9.51c.012-.014.555.503.568.49l4-4c.013-.013-.504-.556-.49-.568L7.922 3.845a2.883 2.883 0 0 0-4.077 0m1.288 11.462a.483.483 0 0 1 .9 0l.157.4a.48.48 0 0 0 .272.273l.398.157a.486.486 0 0 1 0 .903l-.398.158a.48.48 0 0 0-.272.273l-.157.4a.483.483 0 0 1-.9 0l-.157-.4a.48.48 0 0 0-.272-.273l-.398-.158a.486.486 0 0 1 0-.903l.398-.157a.48.48 0 0 0 .272-.274z" opacity=".5" />
+              <path d="M16.1 2.307a.483.483 0 0 1 .9 0l.43 1.095a.48.48 0 0 0 .272.274l1.091.432a.486.486 0 0 1 0 .903l-1.09.432a.5.5 0 0 0-.273.273L17 6.81a.483.483 0 0 1-.9 0l-.43-1.095a.5.5 0 0 0-.273-.273l-1.09-.432a.486.486 0 0 1 0-.903l1.09-.432a.5.5 0 0 0 .273-.274z" opacity=".7" />
+              <path d="M10.568 6.49c-.012.014-.555-.503-.568-.49l-4 4c-.013.013.504.556.49.568l9.588 9.587a2.883 2.883 0 1 0 4.078-4.077z" />
+            </svg>
+          </span>
+          <span class="a-t"><b>Whiffle</b> Assistant</span>
+          <span class="a-role">Assistant</span>
+        </header>
+        {@render panelContents()}
+      </div>
+    </Drawer.Content>
+  </Drawer.Root>
+{:else if open}
+  <!-- DESKTOP: floating pane per mock shell law -->
+  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+  <div class="scrim" onclick={close} role="presentation"></div>
+  <div
+    bind:this={panelEl}
+    class="panel"
+    role="dialog"
+    aria-modal="true"
+    aria-label="Whiffle Assistant"
+    tabindex="-1"
+    onkeydown={onKeydown}
+  >
+    <header class="panel-head">
+      <span class="a-logo">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M3.845 3.845a2.883 2.883 0 0 0 0 4.077L5.432 9.51c.012-.014.555.503.568.49l4-4c.013-.013-.504-.556-.49-.568L7.922 3.845a2.883 2.883 0 0 0-4.077 0m1.288 11.462a.483.483 0 0 1 .9 0l.157.4a.48.48 0 0 0 .272.273l.398.157a.486.486 0 0 1 0 .903l-.398.158a.48.48 0 0 0-.272.273l-.157.4a.483.483 0 0 1-.9 0l-.157-.4a.48.48 0 0 0-.272-.273l-.398-.158a.486.486 0 0 1 0-.903l.398-.157a.48.48 0 0 0 .272-.274z" opacity=".5" />
+          <path d="M16.1 2.307a.483.483 0 0 1 .9 0l.43 1.095a.48.48 0 0 0 .272.274l1.091.432a.486.486 0 0 1 0 .903l-1.09.432a.5.5 0 0 0-.273.273L17 6.81a.483.483 0 0 1-.9 0l-.43-1.095a.5.5 0 0 0-.273-.273l-1.09-.432a.486.486 0 0 1 0-.903l1.09-.432a.5.5 0 0 0 .273-.274z" opacity=".7" />
+          <path d="M10.568 6.49c-.012.014-.555-.503-.568-.49l-4 4c-.013.013.504.556.49.568l9.588 9.587a2.883 2.883 0 1 0 4.078-4.077z" />
+        </svg>
+      </span>
+      <span class="a-t"><b>Whiffle</b> Assistant</span>
+      <span class="a-role">Assistant</span>
+      <button class="a-x" type="button" aria-label="Close assistant" onclick={close}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true">
+          <path d="M6 6l12 12M18 6L6 18" />
+        </svg>
+      </button>
+    </header>
+    {@render panelContents()}
+  </div>
+{/if}
+
+{#snippet panelContents()}
+  <div class="body">
+    <!-- Supervisor status -->
+    <section class="sect">
+      <h3 class="sect-h">Supervisor</h3>
+      {#if supError}
+        <p class="sect-note fail">Could not reach the supervisor. {supError}</p>
+      {:else if !sup}
+        <p class="sect-note muted">Loading...</p>
+      {:else if !sup.status.configured}
+        <div class="status-block">
+          <span class="dot off"></span>
+          <span class="status-label">Not configured</span>
+        </div>
+        <p class="sect-note">Set a supervisor model under fleet settings to enable automated session oversight.</p>
+      {:else if sup.status.reachable}
+        <div class="status-block">
+          <span class="dot on"></span>
+          <span class="status-label">{sup.status.resolvedModel ?? sup.config.model ?? 'Connected'}</span>
+        </div>
+      {:else}
+        <div class="status-block">
+          <span class="dot off"></span>
+          <span class="status-label">Unreachable</span>
+        </div>
+        {#if sup.status.error}
+          <p class="sect-note fail">{sup.status.error}</p>
+        {/if}
+      {/if}
+    </section>
+
+    <!-- Focused session autopilot -->
+    {#if focusedSession}
+      <section class="sect">
+        <h3 class="sect-h">Autopilot</h3>
+        {#if autopilot?.enabled}
+          <div class="status-block">
+            <span class="dot on"></span>
+            <span class="status-label">Enabled</span>
+          </div>
+          {#if autopilot.prompt}
+            <p class="sect-note prompt-clip">{autopilot.prompt}</p>
+          {/if}
+          <p class="sect-hint">Edit the standing prompt from the session composer.</p>
+        {:else if autopilot && !autopilot.enabled}
+          <div class="status-block">
+            <span class="dot off"></span>
+            <span class="status-label">Paused</span>
+          </div>
+          <p class="sect-hint">Re-enable from the session composer.</p>
+        {:else}
+          <div class="status-block">
+            <span class="dot off"></span>
+            <span class="status-label">Off</span>
+          </div>
+          <p class="sect-hint">Enable autopilot from the session composer to let the supervisor answer on your behalf.</p>
+        {/if}
+      </section>
+    {/if}
+
+    <!-- Intervention log -->
+    <section class="sect log-sect">
+      <h3 class="sect-h">Interventions</h3>
+      {#if events.length === 0}
+        <div class="empty">
+          <div class="empty-grid"></div>
+          <div class="empty-orb">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M3.845 3.845a2.883 2.883 0 0 0 0 4.077L5.432 9.51c.012-.014.555.503.568.49l4-4c.013-.013-.504-.556-.49-.568L7.922 3.845a2.883 2.883 0 0 0-4.077 0m1.288 11.462a.483.483 0 0 1 .9 0l.157.4a.48.48 0 0 0 .272.273l.398.157a.486.486 0 0 1 0 .903l-.398.158a.48.48 0 0 0-.272.273l-.157.4a.483.483 0 0 1-.9 0l-.157-.4a.48.48 0 0 0-.272-.273l-.398-.158a.486.486 0 0 1 0-.903l.398-.157a.48.48 0 0 0 .272-.274z" opacity=".5" />
+              <path d="M16.1 2.307a.483.483 0 0 1 .9 0l.43 1.095a.48.48 0 0 0 .272.274l1.091.432a.486.486 0 0 1 0 .903l-1.09.432a.5.5 0 0 0-.273.273L17 6.81a.483.483 0 0 1-.9 0l-.43-1.095a.5.5 0 0 0-.273-.273l-1.09-.432a.486.486 0 0 1 0-.903l1.09-.432a.5.5 0 0 0 .273-.274z" opacity=".7" />
+              <path d="M10.568 6.49c-.012.014-.555-.503-.568-.49l-4 4c-.013.013.504.556.49.568l9.588 9.587a2.883 2.883 0 1 0 4.078-4.077z" />
+            </svg>
+          </div>
+          <h4 class="empty-h">No interventions yet</h4>
+          <p class="empty-p">When the supervisor acts on a session, every verdict appears here — replies, escalations, and the ones it let pass.</p>
+        </div>
+      {:else}
+        <ul class="log">
+          {#each events as ev (ev.id)}
+            {@const session = whiffle.instances.find((r) => r.id === ev.instanceId)}
+            {@const tone = VERDICT_TONE[ev.verdict] ?? 'muted'}
+            <li class="log-row">
+              <span class="log-time">{ago(ev.createdAt)}</span>
+              {#if session}
+                <button
+                  type="button"
+                  class="log-session"
+                  onclick={() => navigateToSession(ev.instanceId)}
+                  title={session.cwd}
+                >
+                  {session.title ?? session.derivedTitle ?? cwdLeaf(session.cwd)}
+                </button>
+              {:else}
+                <span class="log-session-gone" title={ev.instanceId}>
+                  {ev.instanceId.slice(0, 8)}
+                </span>
+              {/if}
+              <span class="log-source">{ev.source}</span>
+              <span class="log-verdict {tone}">{ev.verdict}</span>
+              {#if ev.message}
+                <span class="log-msg" title={ev.message}>
+                  {ev.message.length > 80 ? ev.message.slice(0, 77) + '...' : ev.message}
+                </span>
+              {/if}
+            </li>
+          {/each}
+        </ul>
+      {/if}
+    </section>
+  </div>
+{/snippet}
+
+<style>
+  /* ---- SCRIM + PANEL (DESKTOP) ---- */
+  .scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    background: var(--scrim-soft);
+    -webkit-backdrop-filter: blur(2px);
+    backdrop-filter: blur(2px);
+    animation: scrim-in var(--motion-base) var(--ease-entry) both;
+  }
+  @keyframes scrim-in {
+    from { opacity: 0; }
+  }
+
+  .panel {
+    position: fixed;
+    top: 40px;
+    right: 24px;
+    width: 380px;
+    height: min(899px, calc(100dvh - 64px));
+    z-index: 60;
+    background: var(--surface-overlay);
+    border-radius: 16px;
+    box-shadow: var(--shadow-overlay);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    animation: panel-in var(--motion-base) var(--ease-entry) both;
+  }
+  @keyframes panel-in {
+    from {
+      opacity: 0;
+      transform: translateY(12px) scale(0.97);
+    }
+  }
+
+  /* ---- HEADER (shared mobile + desktop) ---- */
+  .panel-head {
+    height: 47px;
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 0 12px;
+    border-bottom: 1px solid var(--border-hairline);
+  }
+  .a-logo {
+    width: 25px;
+    height: 25px;
+    flex: 0 0 auto;
+    border-radius: var(--radius-well);
+    background: var(--brand-solid);
+    background-image: var(--gradient-action);
+    box-shadow: var(--shadow-action);
+    color: var(--on-brand);
+    display: grid;
+    place-items: center;
+  }
+  .a-logo svg {
+    width: 14px;
+    height: 14px;
+  }
+  .a-t {
+    font-size: var(--text-md);
+    color: var(--ink-strong);
+  }
+  .a-t b {
+    font-weight: var(--weight-strong);
+  }
+  .a-role {
+    margin-left: 8px;
+    display: inline-flex;
+    align-items: center;
+    height: 19px;
+    padding: 0 8px;
+    border-radius: var(--radius-pill);
+    font-size: var(--text-xs);
+    font-weight: var(--weight-strong);
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    background: var(--surface-sunken);
+    color: var(--ink-muted);
+  }
+  .a-x {
+    margin-left: auto;
+    width: 28px;
+    height: 28px;
+    flex: 0 0 auto;
+    border: 0;
+    background: var(--surface-sunken);
+    border-radius: var(--radius-well);
+    color: var(--ink-muted);
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    transition: background var(--motion-fast) var(--ease-toggle);
+  }
+  .a-x svg {
+    width: 14px;
+    height: 14px;
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .a-x:hover {
+      background: var(--surface-hover);
+      color: var(--ink-body);
+    }
+  }
+  .a-x:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+  }
+
+  /* ---- BODY ---- */
+  .body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: var(--space-4) var(--space-4) var(--space-5);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-5);
+  }
+
+  .sect {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+  .sect-h {
+    font-size: var(--text-sm);
+    font-weight: var(--weight-strong);
+    color: var(--ink-body);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .sect-note {
+    font-size: var(--text-base);
+    line-height: var(--leading-body);
+    color: var(--ink-muted);
+  }
+  .sect-note.fail {
+    color: var(--status-fail-ink);
+  }
+  .sect-hint {
+    font-size: var(--text-xs);
+    color: var(--ink-muted);
+    line-height: var(--leading-body);
+  }
+  .prompt-clip {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .status-block {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  .dot {
+    width: 7px;
+    height: 7px;
+    border-radius: var(--radius-pill);
+    flex: 0 0 auto;
+  }
+  .dot.on {
+    background: var(--data-ok);
+  }
+  .dot.off {
+    background: var(--neutral-7);
+  }
+  .status-label {
+    font-size: var(--text-base);
+    font-weight: var(--weight-medium);
+    color: var(--ink-row);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ---- EMPTY STATE (mock anatomy) ---- */
+  .empty {
+    flex: 1 1 auto;
+    position: relative;
+    display: grid;
+    place-items: center;
+    min-height: 200px;
+    padding: var(--space-5);
+    text-align: center;
+  }
+  .empty-grid {
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(var(--border-hairline) 1px, transparent 1px),
+      linear-gradient(90deg, var(--border-hairline) 1px, transparent 1px);
+    background-size: 22px 22px;
+    opacity: 0.5;
+    mask-image: radial-gradient(closest-side, #000, transparent);
+    -webkit-mask-image: radial-gradient(closest-side, #000, transparent);
+  }
+  .empty-orb {
+    width: 52px;
+    height: 52px;
+    border-radius: var(--radius-pill);
+    background: var(--surface-field);
+    border: 1px solid var(--border-hairline);
+    box-shadow: var(--shadow-lifted);
+    display: grid;
+    place-items: center;
+    position: relative;
+  }
+  .empty-orb svg {
+    width: 22px;
+    height: 22px;
+    color: var(--ink-body);
+  }
+  .empty-h {
+    font-size: var(--text-md);
+    font-weight: var(--weight-strong);
+    color: var(--ink-strong);
+    margin-top: var(--space-3);
+    position: relative;
+  }
+  .empty-p {
+    font-size: var(--text-base);
+    line-height: var(--leading-body);
+    color: var(--ink-muted);
+    margin-top: var(--space-1);
+    max-width: 260px;
+    position: relative;
+  }
+
+  /* ---- LOG ---- */
+  .log-sect {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+  .log {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    overflow-y: auto;
+    min-height: 0;
+  }
+  .log-row {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-2);
+    padding: var(--space-1) 0;
+    font-size: var(--text-sm);
+    line-height: var(--leading-ui);
+    min-height: 0;
+  }
+  .log-time {
+    flex: 0 0 auto;
+    width: 28px;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-muted);
+    font-size: var(--text-xs);
+  }
+  .log-session {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100px;
+    border: 0;
+    background: none;
+    padding: 0;
+    font: inherit;
+    color: var(--ink-row);
+    cursor: pointer;
+    text-decoration: none;
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .log-session:hover {
+      color: var(--ink-strong);
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+  }
+  .log-session:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 1px;
+    border-radius: 2px;
+  }
+  .log-session-gone {
+    flex: 0 0 auto;
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--ink-muted);
+  }
+  .log-source {
+    flex: 0 0 auto;
+    font-size: var(--text-xs);
+    color: var(--ink-muted);
+  }
+  .log-verdict {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    height: 18px;
+    padding: 0 6px;
+    border-radius: var(--radius-pill);
+    font-size: var(--text-xs);
+    font-weight: var(--weight-strong);
+  }
+  .log-verdict.muted {
+    background: var(--surface-sunken);
+    color: var(--ink-muted);
+  }
+  .log-verdict.live {
+    background: var(--status-live-bg);
+    color: var(--status-live-ink);
+  }
+  .log-verdict.attn {
+    background: var(--status-attn-bg);
+    color: var(--status-attn-ink);
+  }
+  .log-verdict.fail {
+    background: var(--status-fail-bg);
+    color: var(--status-fail-ink);
+  }
+  .log-msg {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--text-xs);
+    color: var(--ink-muted);
+  }
+
+  /* ---- MOBILE DRAWER OVERRIDES ---- */
+  :global(.assistant-drawer) {
+    max-height: 85dvh !important;
+  }
+  .panel-inner {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  /* ---- REDUCED MOTION ---- */
+  @media (prefers-reduced-motion: reduce) {
+    .scrim,
+    .panel {
+      animation: none;
+    }
+  }
+</style>

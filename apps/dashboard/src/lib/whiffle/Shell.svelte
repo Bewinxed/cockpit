@@ -24,6 +24,8 @@
   import SessionTabs from './SessionTabs.svelte';
   import { workspace } from './workspace/workspace.svelte';
   import UsageMeter from './UsageMeter.svelte';
+  import AssistantOrb from './assistant/AssistantOrb.svelte';
+  import AssistantPanel from './assistant/AssistantPanel.svelte';
 
   const RAIL_KEY = 'whiffle-rail-width';
   const RAIL_MIN = 216;
@@ -43,6 +45,8 @@
   let railWidth = $state(clamp(initialRailWidth));
   let jumpOpen = $state(false);
   let railOpen = $state(false);
+  let assistantOpen = $state(false);
+  let orbEl: HTMLButtonElement | null = $state(null);
 
   /**
    * The rail's width is settled before the first paint, in two places at once.
@@ -367,6 +371,13 @@
 <JumpPalette bind:open={jumpOpen} />
 <!-- One dialog for every destructive confirm in the app (see confirm.svelte.ts). -->
 <ConfirmDialog />
+
+<AssistantOrb
+  bind:ref={orbEl}
+  open={assistantOpen}
+  onclick={() => (assistantOpen = !assistantOpen)}
+/>
+<AssistantPanel bind:open={assistantOpen} {orbEl} />
 
 <style>
   .skip {
