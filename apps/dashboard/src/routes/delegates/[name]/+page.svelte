@@ -3,7 +3,7 @@
   import { page } from '$app/state';
   import { goto } from '$app/navigation';
   import { toast } from 'svelte-sonner';
-  import type { DelegateType } from '$lib/cockpit/delegate-types';
+  import type { DelegateType } from '$lib/whiffle/delegate-types';
   import {
     blankDelegateType,
     DELEGATE_EFFORTS,
@@ -12,14 +12,14 @@
     message,
     removeDelegateType,
     saveDelegateType,
-  } from '$lib/cockpit/delegate-types';
+  } from '$lib/whiffle/delegate-types';
   import { IconArrowRight, IconTrash } from '$lib/icons';
   import { Button } from '$lib/components/ui/button';
   import { Input } from '$lib/components/ui/input';
   import { NativeSelect } from '$lib/components/ui/native-select';
   import { Textarea } from '$lib/components/ui/textarea';
   import * as Alert from '$lib/components/ui/alert';
-  import { confirm } from '$lib/cockpit/confirm.svelte';
+  import { confirm } from '$lib/whiffle/confirm.svelte';
   import type { PageData } from './$types';
 
   /**
@@ -119,7 +119,7 @@
 </script>
 
 <svelte:head>
-  <title>{data.composing ? 'New delegate type' : draft.name || 'Delegate type'} &middot; Outpost</title>
+  <title>{data.composing ? 'New delegate type' : draft.name || 'Delegate type'} &middot; Whiffle</title>
 </svelte:head>
 
 <div class="flex-1 overflow-y-auto p-6">

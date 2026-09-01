@@ -4,7 +4,7 @@
  */
 
 import type { Node, Edge } from '@xyflow/svelte';
-import type { Message } from '$lib/cockpit/types';
+import type { Message } from '$lib/whiffle/types';
 
 /**
  * A subagent branch, as both the chat view's branch card and the flow view draw

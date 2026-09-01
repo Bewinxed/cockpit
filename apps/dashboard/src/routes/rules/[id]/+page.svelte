@@ -3,8 +3,8 @@
   import { page } from '$app/state';
   import { goto } from '$app/navigation';
   import { toast } from 'svelte-sonner';
-  import type { HarnessKind, RuleDraft, RuleTiming, RuleWatch } from '@cockpit/core';
-  import { HARNESSES, ruleProblem, ruleSentence } from '@cockpit/core';
+  import type { HarnessKind, RuleDraft, RuleTiming, RuleWatch } from '@whiffle/core';
+  import { HARNESSES, ruleProblem, ruleSentence } from '@whiffle/core';
   import { IconArrowRight, IconTrash } from '$lib/icons';
   import { Button } from '$lib/components/ui/button';
   import { Input } from '$lib/components/ui/input';
@@ -13,11 +13,11 @@
   import { Textarea } from '$lib/components/ui/textarea';
   import { Toggle } from '$lib/components/ui/toggle';
   import * as ToggleGroup from '$lib/components/ui/toggle-group';
-  import { cockpit } from '$lib/cockpit/client.svelte';
-  import RuleActivity from '$lib/cockpit/RuleActivity.svelte';
-  import RuleTester from '$lib/cockpit/RuleTester.svelte';
-  import { blankRule, createRule, draftOf, message, removeRule, saveRule } from '$lib/cockpit/rules';
-  import { confirm } from '$lib/cockpit/confirm.svelte';
+  import { whiffle } from '$lib/whiffle/client.svelte';
+  import RuleActivity from '$lib/whiffle/RuleActivity.svelte';
+  import RuleTester from '$lib/whiffle/RuleTester.svelte';
+  import { blankRule, createRule, draftOf, message, removeRule, saveRule } from '$lib/whiffle/rules';
+  import { confirm } from '$lib/whiffle/confirm.svelte';
   import type { PageData } from './$types';
 
   /**
@@ -58,7 +58,7 @@
   /** Every model the fleet is actually running, so the filter is not free text. */
   const models = $derived([
     ...new Set(
-      cockpit.instances
+      whiffle.instances
         .map((row) => row.model)
         .filter((model): model is string => typeof model === 'string' && model !== '')
     ),
@@ -148,7 +148,7 @@
 </script>
 
 <svelte:head>
-  <title>{data.composing ? 'New rule' : draft.name || 'Rule'} · cockpit</title>
+  <title>{data.composing ? 'New rule' : draft.name || 'Rule'} · Whiffle</title>
 </svelte:head>
 
 <div class="flex-1 overflow-y-auto p-6">
@@ -206,7 +206,7 @@
       <div class="flex flex-col gap-1">
         <h2 class="text-body font-medium">What to watch for</h2>
         <p class="max-w-prose text-micro text-muted-foreground">
-          Cockpit reads what a session writes, not what you write to it.
+          Whiffle reads what a session writes, not what you write to it.
         </p>
       </div>
 
@@ -296,9 +296,9 @@
 
     <section class="flex flex-col gap-4 rounded-[var(--radius-panel)] bg-card p-5 shadow-md">
       <div class="flex flex-col gap-1">
-        <h2 class="text-body font-medium">What cockpit sends back</h2>
+        <h2 class="text-body font-medium">What Whiffle sends back</h2>
         <p class="max-w-prose text-micro text-muted-foreground">
-          The session is told this is cockpit and not you, so it does not answer you for something
+          The session is told this is Whiffle and not you, so it does not answer you for something
           you never said.
         </p>
       </div>
@@ -368,7 +368,7 @@
             onchange={(event) => narrow('machineId', event.currentTarget.value)}
           >
             <option value="">Every machine</option>
-            {#each cockpit.machines as machine (machine.machineId)}
+            {#each whiffle.machines as machine (machine.machineId)}
               <option value={machine.machineId}>{machine.hostname}</option>
             {/each}
           </NativeSelect>
@@ -382,7 +382,7 @@
             onchange={(event) => narrow('projectId', event.currentTarget.value)}
           >
             <option value="">Every project</option>
-            {#each cockpit.projects as project (project.id)}
+            {#each whiffle.projects as project (project.id)}
               <option value={project.id}>{project.name}</option>
             {/each}
           </NativeSelect>

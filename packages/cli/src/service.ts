@@ -1,7 +1,7 @@
-import type { AgentRow } from '@cockpit/core';
-import { COCKPIT_ENV, COCKPIT_HUB_PORT } from '@cockpit/core';
-import { sessiondEndpoint } from '@cockpit/core/sessiond';
-import { migrateLegacyDb } from '@cockpit/hub/src/migrate-db';
+import type { AgentRow } from '@whiffle/core';
+import { readEnv, WHIFFLE_ENV, WHIFFLE_HUB_PORT } from '@whiffle/core';
+import { sessiondEndpoint } from '@whiffle/core/sessiond';
+import { migrateLegacyDb } from '@whiffle/hub/src/migrate-db';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { chmod } from 'node:fs/promises';
 import { homedir, platform } from 'node:os';
@@ -46,14 +46,14 @@ export type ServiceMode = 'prod' | 'dev';
  * record of how a service was installed. Never set in prod, so a unit without it
  * is a prod install.
  */
-const MODE_ENV = 'COCKPIT_SERVICE_MODE';
+const MODE_ENV = WHIFFLE_ENV.serviceMode;
 
 /** Thrown for anything the caller can fix — a wrong platform, a failed launchctl. */
 export class ServiceError extends Error {}
 
 /** systemd wants a name, launchd wants a reverse-DNS label; they are one service. */
-const unitName = (id: ServiceId): string => `cockpit-${id}.service`;
-const label = (id: ServiceId): string => `dev.cockpit.${id}`;
+const unitName = (id: ServiceId): string => `whiffle-${id}.service`;
+const label = (id: ServiceId): string => `dev.whiffle.${id}`;
 
 const SYSTEMD_DIR = join(
   process.env.XDG_CONFIG_HOME ?? join(homedir(), '.config'),
@@ -65,7 +65,7 @@ const systemdPath = (id: ServiceId): string => join(SYSTEMD_DIR, unitName(id));
 const launchAgentPath = (id: ServiceId): string =>
   join(homedir(), 'Library', 'LaunchAgents', `${label(id)}.plist`);
 const launchAgentLog = (id: ServiceId): string =>
-  join(homedir(), 'Library', 'Logs', `cockpit-${id}.log`);
+  join(homedir(), 'Library', 'Logs', `whiffle-${id}.log`);
 
 /**
  * The checkout this CLI is running from. The hub and the dashboard are served
@@ -103,7 +103,7 @@ export const CHECKOUT_ROOT = ROOT;
  * {@link deployInit} installs units for a checkout that is *not* the one this
  * CLI is running from: the deployment clone at {@link DEPLOY_ROOT} (C8). The
  * default layout — {@link HERE} — resolves to exactly what these constants were,
- * so `cockpit service install` is unchanged.
+ * so `whiffle service install` is unchanged.
  */
 interface Layout {
   readonly root: string;
@@ -120,7 +120,7 @@ interface Layout {
    * back under vite.config.ts, where `status` cannot follow it.
    */
   readonly dashboardVite: string;
-  /** The `cockpit` entry point the agent unit runs `up` with. */
+  /** The `whiffle` entry point the agent unit runs `up` with. */
   readonly cliEntry: string;
 }
 
@@ -184,16 +184,16 @@ const servicePath = (): string => {
  */
 const dataDir = (): string =>
   platform() === 'darwin'
-    ? join(homedir(), 'Library', 'Application Support', 'cockpit')
-    : join(process.env.XDG_DATA_HOME ?? join(homedir(), '.local', 'share'), 'cockpit');
+    ? join(homedir(), 'Library', 'Application Support', 'whiffle')
+    : join(process.env.XDG_DATA_HOME ?? join(homedir(), '.local', 'share'), 'whiffle');
 
-const DEFAULT_DB_PATH = join(dataDir(), 'cockpit.db');
+const DEFAULT_DB_PATH = join(dataDir(), 'whiffle.db');
 
 /** How long a liveness probe is worth waiting for before it has said enough. */
 const PROBE_TIMEOUT_MS = 2000;
 
 const hubOrigin = (): string =>
-  `http://127.0.0.1:${process.env[COCKPIT_ENV.hubPort] ?? COCKPIT_HUB_PORT}`;
+  `http://127.0.0.1:${readEnv(WHIFFLE_ENV.hubPort) ?? WHIFFLE_HUB_PORT}`;
 
 /** A probe answers or it does not; nothing it finds is worth throwing over. */
 const probeJson = async <T>(url: string): Promise<T | undefined> => {
@@ -224,7 +224,7 @@ const probeAgent = async (): Promise<string | undefined> => {
   if (!agents) return undefined;
   // Imported here rather than at the top so the other two probes, and every
   // other verb, never pay for the agent SDK.
-  const { machineId } = await import('@cockpit/agent');
+  const { machineId } = await import('@whiffle/agent');
   const id = await machineId();
   const self = agents.find((agent) => agent.machineId === id);
   return self
@@ -233,11 +233,11 @@ const probeAgent = async (): Promise<string | undefined> => {
 };
 
 /**
- * Where sessiond listens, as this machine derives it (`@cockpit/core/sessiond`,
+ * Where sessiond listens, as this machine derives it (`@whiffle/core/sessiond`,
  * design §12), with the same override the daemon's entry point honours.
  */
 const sessiondSocket = (): string =>
-  process.env.COCKPIT_SESSIOND_ENDPOINT ?? sessiondEndpoint();
+  process.env.WHIFFLE_SESSIOND_ENDPOINT ?? sessiondEndpoint();
 
 /**
  * A unix socket that is merely *there* proves nothing — a sessiond killed with
@@ -306,21 +306,21 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
   hub: {
     id: 'hub',
     mode: 'prod',
-    description: 'Cockpit hub',
-    // `bun run --filter '@cockpit/hub' start` needs a shell for the quoting and
+    description: 'Whiffle hub',
+    // `bun run --filter '@whiffle/hub' start` needs a shell for the quoting and
     // a cwd for the workspace lookup; the entry point needs neither and boots
     // the same process.
     command: [process.execPath, HUB_ENTRY],
     environment: {
-      // The hub's DB_PATH defaults to `./cockpit.db` — relative to wherever it
+      // The hub's DB_PATH defaults to `./whiffle.db` — relative to wherever it
       // was started. A unit that leaves this unset opens a second, empty
       // database in whatever directory the init system chose, and the fleet
       // comes up blank with nothing to say why. Point it at the platform data
-      // dir (C9: ~/.local/share/cockpit on linux, ~/Library/Application
-      // Support/cockpit on darwin) rather than the checkout: the hub's own
+      // dir (C9: ~/.local/share/whiffle on linux, ~/Library/Application
+      // Support/whiffle on darwin) rather than the checkout: the hub's own
       // boot migration (see packages/hub/src/index.ts) carries an existing
       // in-tree database there the first time it finds one.
-      COCKPIT_DB_PATH: DEFAULT_DB_PATH, // ~/.local/share/cockpit or ~/Library/Application Support/cockpit
+      [WHIFFLE_ENV.dbPath]: DEFAULT_DB_PATH, // ~/.local/share/whiffle or ~/Library/Application Support/whiffle
     },
     workingDirectory: ROOT,
     after: ['network-online.target'],
@@ -329,7 +329,7 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
     restartSec: 2,
     check: () => {
       if (!existsSync(HUB_ENTRY)) {
-        throw new ServiceError(`no hub at ${HUB_ENTRY} — is ${ROOT} a cockpit checkout?`);
+        throw new ServiceError(`no hub at ${HUB_ENTRY} — is ${ROOT} a whiffle checkout?`);
       }
       return undefined;
     },
@@ -339,7 +339,7 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
   dashboard: {
     id: 'dashboard',
     mode: 'prod',
-    description: 'Cockpit dashboard',
+    description: 'Whiffle dashboard',
     command: [process.execPath, DASHBOARD_ENTRY],
     environment: { PORT: DASHBOARD_PORT, HOST: DASHBOARD_HOST },
     workingDirectory: ROOT,
@@ -356,7 +356,7 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
     check: () =>
       existsSync(DASHBOARD_BUILD)
         ? undefined
-        : `no dashboard build at ${DASHBOARD_BUILD}, so its service will restart until there is one.\nMake it with \`bun run --filter '@cockpit/dashboard' build\`.`,
+        : `no dashboard build at ${DASHBOARD_BUILD}, so its service will restart until there is one.\nMake it with \`bun run --filter '@whiffle/dashboard' build\`.`,
     probe: probeDashboard,
   },
 
@@ -373,7 +373,7 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
    * stdout pipe, which is strictly worse than dead children. The cgroup kill is
    * also what makes recovery simple: systemd tears down the remainder, the
    * fresh sessiond starts on a new epoch with an empty register, and `restore()`
-   * runs. `cockpit-agent.service` needs no KillMode tuning at all once the
+   * runs. `whiffle-agent.service` needs no KillMode tuning at all once the
    * children live over here — its restart is free by construction. So
    * {@link unit} emits no `KillMode=` for anybody, and that absence is the
    * decision, not an oversight.
@@ -381,7 +381,7 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
   sessiond: {
     id: 'sessiond',
     mode: 'prod',
-    description: 'Cockpit sessiond',
+    description: 'Whiffle sessiond',
     command: [process.execPath, SESSIOND_ENTRY],
     environment: {},
     // Not the checkout: sessiond spawns children with a cwd the agent hands it
@@ -397,7 +397,7 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
     restartSec: 2,
     check: () => {
       if (!existsSync(SESSIOND_ENTRY)) {
-        throw new ServiceError(`no sessiond at ${SESSIOND_ENTRY} — is ${ROOT} a cockpit checkout?`);
+        throw new ServiceError(`no sessiond at ${SESSIOND_ENTRY} — is ${ROOT} a whiffle checkout?`);
       }
       return undefined;
     },
@@ -407,7 +407,7 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
   agent: {
     id: 'agent',
     mode: 'prod',
-    description: 'Cockpit agent',
+    description: 'Whiffle agent',
     /**
      * This same CLI, `up`, under the same Bun that is running right now.
      * Installing from a checkout therefore installs that checkout, which is
@@ -518,10 +518,10 @@ const xml = (value: string): string =>
  * It is documentation in the artefact, never enforcement.
  */
 const orderingComment = (spec: ServiceSpec): string => {
-  // Only sibling cockpit services mean anything under launchd; systemd targets
+  // Only sibling whiffle services mean anything under launchd; systemd targets
   // like `network-online.target` have no launchd counterpart to name.
   const siblings = spec.after
-    .map((target) => /^cockpit-(.+)\.service$/.exec(target)?.[1])
+    .map((target) => /^whiffle-(.+)\.service$/.exec(target)?.[1])
     .filter((id): id is string => id !== undefined && isServiceId(id))
     .map((id) => label(id as ServiceId));
   if (siblings.length === 0) return '';
@@ -749,7 +749,7 @@ interface BusyReport {
  */
 const agentBusy = async (): Promise<number | 'unknown'> => {
   // Imported here rather than at the top so no other verb pays for the agent SDK.
-  const { machineId } = await import('@cockpit/agent');
+  const { machineId } = await import('@whiffle/agent');
   const report = await probeJson<BusyReport>(
     `${hubOrigin()}/api/agents/${await machineId()}/busy`
   );
@@ -898,7 +898,7 @@ const restartLaunchAgent = async (
   note: (line: string) => void
 ): Promise<void> => {
   if (!existsSync(launchAgentPath(spec.id))) {
-    throw new ServiceError(`${spec.id} is not installed — \`cockpit service install ${spec.id}\` first.`);
+    throw new ServiceError(`${spec.id} is not installed — \`whiffle service install ${spec.id}\` first.`);
   }
   if (await launchctlHas('kickstart')) {
     const kicked = await run(['launchctl', 'kickstart', '-k', `${guiDomain()}/${label(spec.id)}`]);
@@ -914,7 +914,7 @@ const restartSystemdUnit = async (
   note: (line: string) => void
 ): Promise<void> => {
   if (!existsSync(systemdPath(spec.id))) {
-    throw new ServiceError(`${spec.id} is not installed — \`cockpit service install ${spec.id}\` first.`);
+    throw new ServiceError(`${spec.id} is not installed — \`whiffle service install ${spec.id}\` first.`);
   }
   const restarted = await run(['systemctl', '--user', 'restart', unitName(spec.id)]);
   if (restarted.exitCode !== 0) throw failed('systemctl --user restart', restarted);
@@ -1008,7 +1008,7 @@ export const service = async (
 ): Promise<void> => {
   const host = platform();
   if (host !== 'darwin' && host !== 'linux') {
-    throw new ServiceError(`cockpit service does not know how to manage a service on ${host}`);
+    throw new ServiceError(`whiffle service does not know how to manage a service on ${host}`);
   }
   const mac = host === 'darwin';
   const specs = ids.map((id) => specFor(id, mode));
@@ -1042,7 +1042,7 @@ export const service = async (
     case 'logs': {
       const [spec] = specs;
       if (!spec || specs.length > 1) {
-        throw new ServiceError(`cockpit service logs reads one service: ${SERVICE_IDS.join(', ')}`);
+        throw new ServiceError(`whiffle service logs reads one service: ${SERVICE_IDS.join(', ')}`);
       }
       return mac ? launchAgentLogs(spec, follow) : systemdLogs(spec, follow);
     }
@@ -1089,7 +1089,7 @@ export interface LedgerEntry {
 
 /**
  * The ad-hoc ledger, next to the socket it belongs to (design §11). Only
- * `cockpit up` in a terminal ever writes it: under service management the
+ * `whiffle up` in a terminal ever writes it: under service management the
  * cgroup gives the same guarantee for free, and this file is not consulted.
  */
 export const sessiondLedgerPath = (): string =>
@@ -1232,23 +1232,23 @@ export const sweepSessiondOrphans = async (
 /**
  * Where the deployment clone lives. Our choice: per-user so it needs no sudo,
  * under a dotdir so it is nobody's working copy, and deliberately outside every
- * dev checkout. `COCKPIT_DEPLOY_ROOT` overrides it — how the tests point at a
+ * dev checkout. `WHIFFLE_DEPLOY_ROOT` overrides it — how the tests point at a
  * scratch directory.
  *
- * Named here rather than imported from `@cockpit/agent`, exactly as
+ * Named here rather than imported from `@whiffle/agent`, exactly as
  * `update.ts` names the unit paths this file writes: the two ends of the deploy
  * channel agree on a constant, and neither package may depend on the other.
  */
 export const deployRoot = (): string =>
-  process.env.COCKPIT_DEPLOY_ROOT ?? join(homedir(), '.cockpit', 'app');
+  readEnv(WHIFFLE_ENV.deployRoot) ?? join(homedir(), '.whiffle', 'app');
 
 /** The marker that licenses an automatic pull. Its absence is the safety property. */
-export const DEPLOY_MARKER = '.cockpit-deploy';
+export const DEPLOY_MARKER = '.whiffle-deploy';
 
 /** The branch a deployment clone tracks. */
 export const DEPLOY_BRANCH = 'main';
 
-/** Written to `<root>/.cockpit-deploy`, read by the daemon's poller. */
+/** Written to `<root>/.whiffle-deploy`, read by the daemon's poller. */
 export interface DeployMarker {
   readonly root: string;
   readonly origin: string;
@@ -1353,7 +1353,7 @@ const occupied = (root: string): boolean => {
 };
 
 /**
- * `cockpit deploy init` — the whole of C8's setup, in the order it has to
+ * `whiffle deploy init` — the whole of C8's setup, in the order it has to
  * happen: clone `origin/main` into {@link deployRoot}, install, build the
  * dashboard, write the marker, and install units that point at the clone with
  * the C9 data-dir database path.
@@ -1371,18 +1371,18 @@ export const deployInit = async ({
   run: runner = runStep,
   install,
   dbPath = DEFAULT_DB_PATH,
-  legacyDb = join(ROOT, 'packages', 'hub', 'cockpit.db'),
+  legacyDb = join(ROOT, 'packages', 'hub', 'whiffle.db'),
 }: DeployInitOptions): Promise<DeployInitResult> => {
   const host = platform();
   if (host !== 'darwin' && host !== 'linux') {
-    throw new ServiceError(`cockpit deploy does not know how to install services on ${host}`);
+    throw new ServiceError(`whiffle deploy does not know how to install services on ${host}`);
   }
 
   const marked = existsSync(join(root, DEPLOY_MARKER));
   if (occupied(root) && !marked) {
     throw new ServiceError(
       `${root} already exists and is not a deployment clone (no ${DEPLOY_MARKER}). ` +
-        `Refusing to touch it — move it aside, or point elsewhere with COCKPIT_DEPLOY_ROOT.`
+        `Refusing to touch it — move it aside, or point elsewhere with WHIFFLE_DEPLOY_ROOT.`
     );
   }
 
@@ -1441,7 +1441,7 @@ export const deployInit = async ({
     origin: remote,
     branch,
     createdAt: new Date().toISOString(),
-    createdBy: 'cockpit deploy init',
+    createdBy: 'whiffle deploy init',
   };
   await Bun.write(join(root, DEPLOY_MARKER), `${JSON.stringify(marker, null, 2)}\n`);
   await chmod(join(root, DEPLOY_MARKER), 0o600);
@@ -1452,7 +1452,7 @@ export const deployInit = async ({
     await step(
       runner,
       'building the dashboard',
-      [process.execPath, 'run', '--filter', '@cockpit/dashboard', 'build'],
+      [process.execPath, 'run', '--filter', '@whiffle/dashboard', 'build'],
       root,
       note
     );

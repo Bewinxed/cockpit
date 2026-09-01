@@ -7,7 +7,7 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /*
- * OUTPOST — design foundation
+ * WHIFFLE — design foundation
  *
  * Visual world (user-pinned 2026-08-07): Apple × Airbnb.
  * From Apple: fluid, physical, interruptible motion; translucent chrome
@@ -242,8 +242,8 @@
 }
 
 /* =============================================================================
-   OUTPOST — "Quiet Ledger" semantic tokens (TIER 2 alias + TIER 3 system).
-   Ported from mocks/tokens.css — the layer every Outpost component resolves
+   WHIFFLE — "Quiet Ledger" semantic tokens (TIER 2 alias + TIER 3 system).
+   Ported from mocks/tokens.css — the layer every Whiffle component resolves
    through. TIER 1 ramps + the shadcn 27-var bridge live above; this adds the
    surfaces / inks / status chips / identity marks / cool elevation / rem type
    scale / space / radii / motion the redesigned surfaces are built on.
@@ -699,7 +699,7 @@
   font-weight: inherit;
 }
 
-/* ---- Project identity color (see lib/cockpit/identity.ts). Elements set
+/* ---- Project identity color (see lib/whiffle/identity.ts). Elements set
    --identity-h inline; these utilities tune lightness/chroma per appearance.
    Identity is ink, tint, and underline — never a status dot. */
 @utility identity-ink {

@@ -2,13 +2,13 @@
   import { untrack } from 'svelte';
   import { goto } from '$app/navigation';
   import { toast } from 'svelte-sonner';
-  import type { RuleRow } from '@cockpit/core';
-  import { ruleSentence } from '@cockpit/core';
+  import type { RuleRow } from '@whiffle/core';
+  import { ruleSentence } from '@whiffle/core';
   import { IconAlert, IconPlus, IconTrash } from '$lib/icons';
   import { Button } from '$lib/components/ui/button';
   import * as Card from '$lib/components/ui/card';
   import * as Alert from '$lib/components/ui/alert';
-  import { confirm } from '$lib/cockpit/confirm.svelte';
+  import { confirm } from '$lib/whiffle/confirm.svelte';
   import { Badge } from '$lib/components/ui/badge';
   import { Toggle } from '$lib/components/ui/toggle';
   import * as Tooltip from '$lib/components/ui/tooltip';
@@ -21,7 +21,7 @@
     saveRule,
     since,
     times,
-  } from '$lib/cockpit/rules';
+  } from '$lib/whiffle/rules';
   import type { PageData } from './$types';
 
   /**
@@ -122,7 +122,7 @@
   }
 </script>
 
-<svelte:head><title>Rules &middot; Outpost</title></svelte:head>
+<svelte:head><title>Rules &middot; Whiffle</title></svelte:head>
 
 <!-- Stat tile: a raised shadcn Card whose body is a sunken hairline well — the
      Quiet Ledger recessed-field signature, a number set *in* the surface. -->
@@ -140,7 +140,7 @@
     <header class="head">
       <p class="sub">
         Standing instructions the hub enforces on every session it watches. When a session says
-        something a rule is looking for, cockpit answers it — and keeps answering until the
+        something a rule is looking for, Whiffle answers it — and keeps answering until the
         session acknowledges what it was told.
       </p>
       <Button class={btnPrimary} onclick={() => goto('/rules/new')}>

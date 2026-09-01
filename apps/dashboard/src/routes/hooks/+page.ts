@@ -1,4 +1,4 @@
-import type { HooksPayload } from '$lib/cockpit/hooks';
+import type { HooksPayload } from '$lib/whiffle/hooks';
 import type { PageLoad } from './$types';
 
 /**

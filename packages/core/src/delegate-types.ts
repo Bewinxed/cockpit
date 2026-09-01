@@ -57,7 +57,7 @@ export const delegateTypeProblem = (draft: Partial<DelegateType>): string | unde
 
 /**
  * The fleet's seed set (inserted once, only when the table is empty): the
- * five routing decisions already made for cockpit's own delegation surface.
+ * five routing decisions already made for whiffle's own delegation surface.
  */
 export const DEFAULT_DELEGATE_TYPES: DelegateType[] = [
   {

@@ -7,9 +7,9 @@ import type {
   HeartbeatPayload,
   SpawnPayload,
   ToolStatus,
-} from '@cockpit/core';
-import { COCKPIT_ENV, COCKPIT_HUB_PORT } from '@cockpit/core';
-import { fetchClaudeLimits } from '@cockpit/core/usage/limits';
+} from '@whiffle/core';
+import { WHIFFLE_ENV, WHIFFLE_HUB_PORT } from '@whiffle/core';
+import { fetchClaudeLimits } from '@whiffle/core/usage/limits';
 import { Data, Duration, Effect, Fiber, Schedule } from 'effect';
 import { arch, hostname, platform } from 'node:os';
 import { buildInfo } from './build';
@@ -22,7 +22,7 @@ import { probeTools } from './tools';
 import { harnesses } from './harnesses';
 import { UsageScanner } from './usage/scanner';
 
-const DEFAULT_HUB_URL = `ws://localhost:${COCKPIT_HUB_PORT}/ws`;
+const DEFAULT_HUB_URL = `ws://localhost:${WHIFFLE_HUB_PORT}/ws`;
 const HEARTBEAT_INTERVAL = Duration.seconds(15);
 const USAGE_INTERVAL = Duration.seconds(60);
 const USAGE_FULL_REBUILD_MS = 30 * 60 * 1000;
@@ -67,7 +67,7 @@ export interface RegisterPayload extends MachineIdentity {
    */
   tools?: ToolStatus[];
   /**
-   * The cockpit this daemon is running (NEW.md §12), as it reported at register.
+   * The whiffle this daemon is running (NEW.md §12), as it reported at register.
    */
   build?: BuildInfo;
   /**
@@ -516,13 +516,13 @@ const attach = (
 /**
  * Runs until interrupted: connect, register, heartbeat, reconnect on loss.
  *
- * `auth` is what the caller already found out — `cockpit up` probes before it
+ * `auth` is what the caller already found out — `whiffle up` probes before it
  * gets here, because it may still be able to fix it. A daemon started any other
  * way asks for itself.
  */
 export const startDaemon = (auth?: AuthState) =>
   Effect.gen(function* () {
-    const url = process.env[COCKPIT_ENV.hubUrl] ?? DEFAULT_HUB_URL;
+    const url = process.env[WHIFFLE_ENV.hubUrl] ?? DEFAULT_HUB_URL;
     // Re-pinned by `onSustainedFailure` below, read fresh by every attempt
     // `reconnecting` makes — see its own doc for why a plain closure variable
     // is enough: each attempt calls `session` anew, in the same tick that
@@ -534,8 +534,8 @@ export const startDaemon = (auth?: AuthState) =>
     const machineIdValue = yield* Effect.promise(() => machineId());
     // Child processes — the opencode server and its plugins most of all — read
     // the machine's identity and the hub off the environment they inherit.
-    process.env[COCKPIT_ENV.machineId] = machineIdValue;
-    process.env[COCKPIT_ENV.hubUrl] = url;
+    process.env[WHIFFLE_ENV.machineId] = machineIdValue;
+    process.env[WHIFFLE_ENV.hubUrl] = url;
     // The sessions this daemon spawns carry the deny list in their own options;
     // the settings file is how the `claude` the user starts by hand gets it too.
     const denied = yield* Effect.promise(() => convergeDeniedTools());
@@ -569,7 +569,7 @@ export const startDaemon = (auth?: AuthState) =>
     // on start (USAGE-SPEC.md §5.1), so a reconnect must not reset it.
     const scanner = yield* Effect.promise(() => UsageScanner.load());
 
-    yield* Effect.logInfo(`cockpit agent ${identity.machineId} connecting to ${url}`);
+    yield* Effect.logInfo(`whiffle agent ${identity.machineId} connecting to ${url}`);
     // The connection — and only the connection — is what the loop re-enters.
     // The supervisor above it keeps its sessions and the scanner keeps its
     // dedup set across every reconnect; an interrupt still unwinds through this

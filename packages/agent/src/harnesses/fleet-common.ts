@@ -6,14 +6,14 @@
  * `~/.config/opencode/skills/`, pi to `~/.pi/agent/skills/`. A skill *is* its
  * files and the memory document *is* its text, so the hash is the whole
  * economy: an unchanged skill costs one comparison however many megabytes it
- * arrived with. What cockpit wrote is named in a per-directory sidecar, and
+ * arrived with. What whiffle wrote is named in a per-directory sidecar, and
  * only what the sidecar names is ever taken away.
  */
 import type {
   FleetItemState,
   FleetMemory,
   FleetSkillPayload,
-} from '@cockpit/core';
+} from '@whiffle/core';
 import { rm, rename, stat } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 import { memoryPlan } from '../fleet';
@@ -33,7 +33,7 @@ export const readJson = async <T>(path: string): Promise<T | undefined> => {
 
 /** Written whole and moved into place — a half-written config is a broken machine. */
 export const writeJson = async (path: string, value: unknown): Promise<void> => {
-  const temp = `${path}.cockpit-${process.pid}`;
+  const temp = `${path}.whiffle-${process.pid}`;
   await Bun.write(temp, JSON.stringify(value, null, 2));
   await rename(temp, path);
 };
@@ -146,7 +146,7 @@ const DRIFTED = 'edited on this machine — adopt it or overwrite';
 /**
  * Applies the memory plan and answers with the hash the harness now manages, or
  * nothing when it manages none. The file is only ever deleted when it is still
- * exactly what cockpit wrote.
+ * exactly what whiffle wrote.
  */
 export const syncMemory = async (
   path: string,

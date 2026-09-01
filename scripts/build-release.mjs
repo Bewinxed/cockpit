@@ -2,14 +2,14 @@
 /**
  * Builds the one thing a user installs.
  *
- * Cockpit is a bun workspace: six packages that import each other by name and
+ * Whiffle is a bun workspace: six packages that import each other by name and
  * run straight from TypeScript. That is a fine way to develop and an
- * impossible way to publish — `@cockpit/agent`, `hub`, `core`, `auth` and
+ * impossible way to publish — `@whiffle/agent`, `hub`, `core`, `auth` and
  * `sessiond` are all `private`, and the CLI's `bin` points at a `.ts` file that
  * only Bun can execute.
  *
  * So the workspace is bundled INTO the CLI rather than published beside it.
- * A user installs `cockpit` and gets one dependency, not six that have to be
+ * A user installs `whiffle` and gets one dependency, not six that have to be
  * version-matched with each other on every release. Real npm dependencies stay
  * external and are resolved normally by whoever installs — bundling
  * `@anthropic-ai/claude-agent-sdk` or drizzle's native bindings would be
@@ -35,7 +35,7 @@ const externals = async () => {
     if (!existsSync(path)) continue;
     const json = JSON.parse(await readFile(path, 'utf8'));
     for (const dep of Object.keys(json.dependencies ?? {})) {
-      if (!dep.startsWith('@cockpit/')) names.add(dep);
+      if (!dep.startsWith('@whiffle/')) names.add(dep);
     }
   }
   return [...names].sort();
@@ -53,16 +53,16 @@ await mkdir(OUT, { recursive: true });
 const external = await externals();
 say(`${external.length} dependencies stay external`);
 
-// 1. The CLI, with every @cockpit/* package folded in.
+// 1. The CLI, with every @whiffle/* package folded in.
 say('bundling the cli');
 const cliPkgEarly = JSON.parse(await readFile(join(ROOT, 'packages/cli/package.json'), 'utf8'));
 await run([
   'bun', 'build', join(ROOT, 'packages/cli/src/cli.ts'),
   '--target', 'bun',
   '--outfile', join(OUT, 'cli.js'),
-  // The binary reports the manifest's version, so `cockpit --version` and the
+  // The binary reports the manifest's version, so `whiffle --version` and the
   // published package can never disagree about what this is.
-  '--define', `__COCKPIT_VERSION__=${JSON.stringify(cliPkgEarly.version)}`,
+  '--define', `__WHIFFLE_VERSION__=${JSON.stringify(cliPkgEarly.version)}`,
   ...external.flatMap((name) => ['--external', name]),
 ]);
 const cli = await readFile(join(OUT, 'cli.js'), 'utf8');
@@ -71,7 +71,7 @@ await chmod(join(OUT, 'cli.js'), 0o755);
 
 // 2. The dashboard, built and carried whole.
 say('building the dashboard');
-await run(['bun', 'run', '--filter', '@cockpit/dashboard', 'build']);
+await run(['bun', 'run', '--filter', '@whiffle/dashboard', 'build']);
 await mkdir(join(OUT, 'dashboard'), { recursive: true });
 await cp(join(ROOT, 'apps/dashboard/build'), join(OUT, 'dashboard/build'), { recursive: true });
 await cp(join(ROOT, 'apps/dashboard/serve.js'), join(OUT, 'dashboard/serve.js'));
@@ -81,7 +81,7 @@ await cp(join(ROOT, 'apps/dashboard/serve.js'), join(OUT, 'dashboard/serve.js'))
  * What a dependency actually resolved to here, rather than what it was asked
  * for. The workspace asks for `elysia: next` and `effect: beta`, which is a
  * reasonable thing to track in a repo and an unreasonable thing to publish: a
- * dist-tag moves, so two users installing the same version of cockpit a month
+ * dist-tag moves, so two users installing the same version of whiffle a month
  * apart would get different libraries underneath it. The published manifest
  * pins what this build was actually tested against.
  */
@@ -117,20 +117,20 @@ for (const pkg of ['cli', 'agent', 'hub', 'core', 'auth', 'sessiond']) {
   if (!existsSync(path)) continue;
   const json = JSON.parse(await readFile(path, 'utf8'));
   for (const [name, range] of Object.entries(json.dependencies ?? {})) {
-    if (!name.startsWith('@cockpit/')) deps[name] = await resolved(name, range);
+    if (!name.startsWith('@whiffle/')) deps[name] = await resolved(name, range);
   }
 }
 await writeFile(
   join(OUT, 'package.json'),
   `${JSON.stringify(
     {
-      name: '@bewinxed/outpost',
+      name: 'whiffle',
       version: cliPkg.version,
       description: 'Self-hosted fleet control plane for AI coding agents',
       license: root.license ?? 'MIT',
       repository: root.repository ?? 'https://github.com/Bewinxed/cockpit',
       type: 'module',
-      bin: { cockpit: './cli.js' },
+      bin: { whiffle: './cli.js' },
       files: ['cli.js', 'dashboard'],
       engines: { bun: '>=1.4.0' },
       dependencies: Object.fromEntries(Object.entries(deps).sort(([a], [b]) => a.localeCompare(b))),
@@ -141,4 +141,4 @@ await writeFile(
   )}\n`
 );
 
-say(`release/ is ready — @bewinxed/outpost@${cliPkg.version}`);
+say(`release/ is ready — whiffle@${cliPkg.version}`);

@@ -7,7 +7,7 @@
   import { untrack } from 'svelte';
   import { fly } from 'svelte/transition';
   import { quintOut } from 'svelte/easing';
-  import type { JsonValue, TranscriptGroup } from '$lib/cockpit/types';
+  import type { JsonValue, TranscriptGroup } from '$lib/whiffle/types';
 
   interface Props {
     groups: TranscriptGroup[];

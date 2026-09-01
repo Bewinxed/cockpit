@@ -6,10 +6,11 @@ import type {
   SendPayload,
   UserAnswers,
   UserQuestion,
-} from '@cockpit/core';
-import { ASK_USER_QUESTION, COCKPIT_ENV, RESOLVE_PERMISSION } from '@cockpit/core';
+} from '@whiffle/core';
+import { ASK_USER_QUESTION, RESOLVE_PERMISSION, WHIFFLE_ENV, readEnv } from '@whiffle/core';
 import type { DbShape } from './db';
 import type { PendingShape } from './pending';
+import { hostname } from 'node:os';
 import type { RegistryShape } from './registry';
 import type { Intake, TelegramMedia } from './telegram-media';
 import { carriesMedia, createMediaIntake } from './telegram-media';
@@ -50,7 +51,7 @@ export interface TelegramServices {
 const CREDENTIAL_ID = 'telegram';
 
 /** Overridable so a test can point the bridge at a local stand-in. */
-const API_BASE = Bun.env.COCKPIT_TELEGRAM_API ?? 'https://api.telegram.org';
+const API_BASE = Bun.env.WHIFFLE_TELEGRAM_API ?? 'https://api.telegram.org';
 
 /** Telegram's own ceiling on a message, and how long a `getUpdates` may hang. */
 const MESSAGE_LIMIT = 4096;
@@ -64,8 +65,41 @@ const TRACKED_MESSAGES = 500;
 const TRACK_TTL_MS = 24 * 60 * 60_000;
 const SWEEP_INTERVAL_MS = 60 * 60_000;
 
-/** Where a message that is too big to answer here sends the reader instead. */
-const DASHBOARD_URL = 'https://outpost.bewinxed.com';
+/**
+ * The explicit answer, for a hub whose public URL it cannot see: behind a
+ * reverse proxy or a tunnel, the origin a browser used is the proxy's, not the
+ * one the operator wants in a message. Read directly rather than through core's
+ * `readEnv`: `WHIFFLE_ENV` has no key for it.
+ */
+const DASHBOARD_URL_OVERRIDE = Bun.env.WHIFFLE_DASHBOARD_URL;
+
+/**
+ * The port the dashboard is served on, for the composed fallback below. The
+ * default matches the one the installer gives the dashboard unit
+ * (`packages/cli/src/service.ts`, `PORT ?? '3000'`); a hub that cannot import
+ * the CLI has to be told separately when that is changed.
+ */
+const DASHBOARD_PORT = Bun.env.WHIFFLE_DASHBOARD_PORT ?? '3000';
+
+/**
+ * Where a message that is too big to answer here sends the reader instead.
+ *
+ * Observed rather than configured, because a hub cannot know its own
+ * externally-reachable address: it may be reached by tailnet name, by LAN
+ * address, through a container's published port or a proxy, and nothing in its
+ * own environment distinguishes those. But it is the thing dashboards connect
+ * TO — so rather than being told an address, it watches one arrive. Every
+ * dashboard websocket carries the `Origin` its browser reached the hub from,
+ * which is by construction a URL that worked for a real client, which is
+ * exactly the property a link sent to a phone needs.
+ *
+ * In precedence order: the operator's override, then the last origin observed
+ * (loopback and unparseable ones already discarded by the registry), then a URL
+ * composed from this machine's hostname — the best guess available on a hub no
+ * dashboard has ever connected to, and better than no link at all.
+ */
+const dashboardUrl = (registry: RegistryShape): string =>
+  DASHBOARD_URL_OVERRIDE ?? registry.dashboardOrigin() ?? `http://${hostname()}:${DASHBOARD_PORT}`;
 
 /** One bridged message, and what replying to it means. */
 interface Tracked {
@@ -170,9 +204,9 @@ export const createTelegramBridge = ({
   db,
   pending,
 }: TelegramServices): TelegramBridge | null => {
-  const token = Bun.env[COCKPIT_ENV.telegramToken];
+  const token = readEnv(WHIFFLE_ENV.telegramToken);
   if (!token) {
-    console.log('[telegram] no COCKPIT_TELEGRAM_TOKEN — bridge off');
+    console.log(`[telegram] no ${WHIFFLE_ENV.telegramToken} — bridge off`);
     return null;
   }
 
@@ -365,7 +399,10 @@ export const createTelegramBridge = ({
         lines.push('', `<b>${esc(clip(question.question, 400))}</b>`);
         for (const option of question.options) lines.push(`• ${esc(clip(option.label, 200))}`);
       }
-      lines.push('', `Answer in the dashboard → ${DASHBOARD_URL}/session/${request.instanceId}`);
+      lines.push(
+        '',
+        `Answer in the dashboard → ${esc(dashboardUrl(registry))}/session/${request.instanceId}`
+      );
     } else {
       lines.push('', `<b>${esc(request.toolName)}</b>`);
       const detail = glance(request.input);

@@ -1,5 +1,5 @@
 import { error } from '@sveltejs/kit';
-import type { RuleRow, RulesPayload } from '$lib/cockpit/rules';
+import type { RuleRow, RulesPayload } from '$lib/whiffle/rules';
 import type { PageLoad } from './$types';
 
 /**

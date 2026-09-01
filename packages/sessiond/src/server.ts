@@ -24,7 +24,7 @@ import { unlink } from 'node:fs/promises';
 import { createConnection, createServer, type Server, type Socket } from 'node:net';
 import { randomUUID } from 'node:crypto';
 import { dirname } from 'node:path';
-import { SessionRing, type BuildInfo } from '@cockpit/core';
+import { SessionRing, type BuildInfo } from '@whiffle/core';
 // The protocol lives behind its own subpath: `sessiond.ts` reaches for `node:os`
 // to derive the endpoint, and the core barrel is imported by the browser bundle.
 import {
@@ -34,7 +34,7 @@ import {
   type SessiondProcInfo,
   type SessiondServerMessage,
   type ProcSpec,
-} from '@cockpit/core/sessiond';
+} from '@whiffle/core/sessiond';
 
 /**
  * The idempotency window, from the hub's own discipline

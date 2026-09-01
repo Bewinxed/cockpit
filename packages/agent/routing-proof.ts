@@ -15,13 +15,13 @@
  * Run with `bun routing-proof.ts`. Each failed assertion prints one JSON DIAG.
  */
 import { handoffActions } from './src/harnesses/handoff-shared';
-import type { Envelope } from '@cockpit/core';
+import type { Envelope } from '@whiffle/core';
 
 const PORT = 34777;
 const BASE = `http://localhost:${PORT}`;
 const WS = `ws://localhost:${PORT}`;
-const PROOF_DIR = '/tmp/cockpit-routing-proof';
-const DB_PATH = `${PROOF_DIR}/cockpit.db`;
+const PROOF_DIR = '/tmp/whiffle-routing-proof';
+const DB_PATH = `${PROOF_DIR}/whiffle.db`;
 const HUB_ENTRY = new URL('../hub/src/index.ts', import.meta.url).pathname;
 
 const M = 'proof-machine';
@@ -90,9 +90,9 @@ await Bun.$`mkdir -p ${PROOF_DIR}`.quiet();
 const hub = Bun.spawn(['bun', HUB_ENTRY], {
   env: {
     ...Bun.env,
-    COCKPIT_DB_PATH: DB_PATH,
-    COCKPIT_HUB_PORT: String(PORT),
-    COCKPIT_NO_MDNS: '1',
+    WHIFFLE_DB_PATH: DB_PATH,
+    WHIFFLE_HUB_PORT: String(PORT),
+    WHIFFLE_NO_MDNS: '1',
   },
   stdout: 'inherit',
   stderr: 'inherit',
@@ -252,7 +252,7 @@ try {
   );
 
   // ---- C: answerDelegate emits the measured resolvePermission shape ----
-  Bun.env.COCKPIT_HUB_URL = `${WS}/ws`;
+  Bun.env.WHIFFLE_HUB_URL = `${WS}/ws`;
   const emitted: Envelope[] = [];
   const actions = handoffActions({
     instanceId: P_A,

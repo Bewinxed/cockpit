@@ -3,7 +3,7 @@ import { type KnownMarketplace, linkedNameIn, toUnlink, upgradeMarketplaces } fr
 
 /**
  * A marketplace is added by its source and linked under the name its own
- * `marketplace.json` declares, which is not the name cockpit stores. Resolving
+ * `marketplace.json` declares, which is not the name whiffle stores. Resolving
  * one to the other is what keeps a successful add from being reported as a
  * failure, and what makes `plugin@marketplace` name something the CLI knows.
  */
@@ -13,7 +13,7 @@ const rtd: Record<string, KnownMarketplace> = {
   rtd: known({ source: 'github', repo: 'ryanthedev/rtd-claude-inn' }),
 };
 
-test('the name cockpit stores wins when the CLI linked it under that name', () => {
+test('the name whiffle stores wins when the CLI linked it under that name', () => {
   const linked = { interfaces: known({ source: 'github', repo: 'jakubkrehel/skills' }) };
   expect(linkedNameIn(linked, 'interfaces', 'jakubkrehel/skills')).toBe('interfaces');
 });
@@ -40,7 +40,7 @@ test('a marketplace the CLI never linked resolves to nothing', () => {
   expect(linkedNameIn({}, 'rtd-claude-inn', 'ryanthedev/rtd-claude-inn')).toBeUndefined();
 });
 
-test('a source cockpit has no match for does not borrow another entry name', () => {
+test('a source whiffle has no match for does not borrow another entry name', () => {
   const two = {
     ...rtd,
     interfaces: known({ source: 'github', repo: 'jakubkrehel/skills' }),
@@ -50,7 +50,7 @@ test('a source cockpit has no match for does not borrow another entry name', () 
 });
 
 /**
- * The sidecar names what is cockpit's to take away, so a name it carries has
+ * The sidecar names what is whiffle's to take away, so a name it carries has
  * to be one the CLI answers to. An older sidecar's bare string is only that
  * when the CLI still lists it.
  */
@@ -62,7 +62,7 @@ test('an older sidecar name the CLI lists is kept, under both names', () => {
 });
 
 test('an older sidecar name the CLI never linked is dropped, not removed later', () => {
-  // `rtd-claude-inn` is cockpit's name; the CLI only ever knew `rtd`. Carrying
+  // `rtd-claude-inn` is whiffle's name; the CLI only ever knew `rtd`. Carrying
   // it forward is what would aim a `marketplace remove` at nothing.
   expect(upgradeMarketplaces(['rtd-claude-inn'], rtd)).toEqual([]);
 });
@@ -82,7 +82,7 @@ test('a mixed sidecar upgrades the strings and leaves the rest alone', () => {
   ).toEqual([{ name: 'interfaces', linkedAs: 'interfaces' }, { name: 'x', linkedAs: 'rtd' }]);
 });
 
-/** What cockpit unlinks is what it linked and config no longer asks for. */
+/** What whiffle unlinks is what it linked and config no longer asks for. */
 const asConfig = (...names: string[]) => ({
   marketplaces: names.map((name) => ({ name, source: `who/${name}` })),
 });
@@ -93,7 +93,7 @@ test('a marketplace config dropped is unlinked, under the name the CLI knows', (
 });
 
 test('renaming it in config unlinks nothing: the link did not move', () => {
-  // The regression this guards: cockpit's name went `rtd-claude-inn` -> `rtd`,
+  // The regression this guards: whiffle's name went `rtd-claude-inn` -> `rtd`,
   // both resolve to the link `rtd`, and unlinking it would undo the same sync.
   const managed = [{ name: 'rtd-claude-inn', linkedAs: 'rtd' }];
   const kept = [{ name: 'rtd', linkedAs: 'rtd' }];

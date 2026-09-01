@@ -2,15 +2,15 @@ import { afterAll, expect, test } from 'bun:test';
 import { makeDb } from './db';
 
 /**
- * A scratch database, so the fleet's own `cockpit.db` is never what a test
+ * A scratch database, so the fleet's own `whiffle.db` is never what a test
  * writes to.
  *
- * The path is named rather than set through `COCKPIT_DB_PATH`. `DB_PATH` is
+ * The path is named rather than set through `WHIFFLE_DB_PATH`. `DB_PATH` is
  * read once, when `../config` is first imported, and `bun test` runs every file
  * in one process — so the variable only worked for whichever test won the race
- * to import it, and the losers wrote a stray `cockpit.db` into the repo root.
+ * to import it, and the losers wrote a stray `whiffle.db` into the repo root.
  */
-const DB_FILE = `/tmp/cockpit-delegate-events-${crypto.randomUUID()}.db`;
+const DB_FILE = `/tmp/whiffle-delegate-events-${crypto.randomUUID()}.db`;
 const db = makeDb(DB_FILE);
 
 afterAll(async () => {

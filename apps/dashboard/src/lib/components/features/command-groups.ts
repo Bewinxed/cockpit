@@ -1,4 +1,4 @@
-import type { AvailableCommand } from '@cockpit/core';
+import type { AvailableCommand } from '@whiffle/core';
 
 /**
  * A run of commands the palette shows under one heading, or — when `source` is
@@ -121,7 +121,7 @@ export function groupCommands(ordered: AvailableCommand[]): CommandGroup[] {
 /**
  * What a row reads as under its heading: the heading already carries the
  * namespace, so `interfaces:better-ui` shows as `better-ui` and the MCP prompt
- * `mcp__outpost__handoff` as `handoff`. Only the label shortens — what the
+ * `mcp__whiffle__handoff` as `handoff`. Only the label shortens — what the
  * composer inserts, and what a screen reader announces, is the full name.
  */
 export function displayName(command: AvailableCommand): string {

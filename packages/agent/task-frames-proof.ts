@@ -32,7 +32,7 @@
  */
 import { claudeHarness } from './src/harnesses/claude';
 import type { HarnessContext, HarnessSession } from './src/harness';
-import type { NeutralMessage } from '@cockpit/core';
+import type { NeutralMessage } from '@whiffle/core';
 
 const PROOF_DIR = '/tmp/task-frames-proof';
 

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { Duration, Effect, Fiber, Schedule } from 'effect';
-import type { SpawnPayload } from '@cockpit/core';
+import type { SpawnPayload } from '@whiffle/core';
 import { adoptable, custodyRow, HEALTHY_CONNECTION, reconnect, reconnecting } from './daemon';
 
 /**

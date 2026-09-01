@@ -20,14 +20,14 @@ import {
  * No real repository and no real git: every runner here is injected, so nothing
  * in this file can fetch, clone, or touch a deployment root.
  */
-const scratch = mkdtempSync(join(tmpdir(), 'cockpit-deploy-wire-'));
+const scratch = mkdtempSync(join(tmpdir(), 'whiffle-deploy-wire-'));
 
 /** A marked clone, so `checkDeploy` gets past the guard and asks the fake git. */
 writeFileSync(
   join(scratch, DEPLOY_MARKER),
   JSON.stringify({
     root: scratch,
-    origin: 'ssh://example.invalid/cockpit.git',
+    origin: 'ssh://example.invalid/whiffle.git',
     branch: 'main',
     createdAt: new Date().toISOString(),
     createdBy: 'deploy-wire.test.ts',
@@ -101,7 +101,7 @@ describe('the box the daemon reads', () => {
   });
 
   test('an unmarked tree reports `unmarked` rather than nothing, and asks git nothing', async () => {
-    const bare = mkdtempSync(join(tmpdir(), 'cockpit-deploy-wire-unmarked-'));
+    const bare = mkdtempSync(join(tmpdir(), 'whiffle-deploy-wire-unmarked-'));
     const asked: string[] = [];
     const watcher = new DeployWatcher({
       root: bare,

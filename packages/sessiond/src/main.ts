@@ -4,11 +4,12 @@
  * future Windows port has to touch (design §11, §12).
  */
 
-import { sessiondEndpoint } from '@cockpit/core/sessiond';
+import { sessiondEndpoint } from '@whiffle/core/sessiond';
 import { SessiondServer } from './server';
 
 const main = async (): Promise<void> => {
-  const endpoint = process.env.COCKPIT_SESSIOND_ENDPOINT ?? sessiondEndpoint();
+  // Read directly: `WHIFFLE_ENV` has no key for sessiond's own override.
+  const endpoint = process.env.WHIFFLE_SESSIOND_ENDPOINT ?? sessiondEndpoint();
   const server = new SessiondServer();
   await server.listen(endpoint);
   console.log(`[sessiond] listening on ${endpoint} epoch=${server.epoch}`);

@@ -5,7 +5,7 @@
  * caught up — without a terminal on it, and without clobbering a dev machine
  * that is mid-edit.
  */
-import type { UpdateReport } from '@cockpit/core';
+import type { UpdateReport } from '@whiffle/core';
 import { homedir, platform } from 'node:os';
 import { join } from 'node:path';
 import { REPO_ROOT } from './build';
@@ -33,7 +33,7 @@ export interface UpdateOptions {
   busy?: number;
   /**
    * Which checkout to update. Defaults to the one this daemon is running out of
-   * — which is the whole of what the manual `updateCockpit` control ever meant.
+   * — which is the whole of what the manual `updateWhiffle` control ever meant.
    * The deployment poller passes the marked clone explicitly (C8), because
    * "wherever this file happens to sit" is not a thing to pull into.
    */
@@ -95,21 +95,22 @@ const git = (args: string[], cwd?: string): Promise<Ran> => run(['git', ...args]
 const failed = (step: string, ran: Ran): Error =>
   new Error(`${step} failed: ${ran.said || `exited ${ran.code}`}`);
 
-/** The three services `cockpit service install` puts on a machine, in start order. */
+/** The three services `whiffle service install` puts on a machine, in start order. */
 type Service = 'hub' | 'dashboard' | 'agent';
 
 /**
  * Where that install left them — the same two paths it writes, named here
- * because the daemon cannot depend on the CLI that owns them.
+ * because the daemon cannot depend on the CLI that owns them. The unit names
+ * must stay identical to the installer's in `packages/cli`.
  */
 const unitPath = (id: Service): string =>
   platform() === 'darwin'
-    ? join(homedir(), 'Library', 'LaunchAgents', `dev.cockpit.${id}.plist`)
+    ? join(homedir(), 'Library', 'LaunchAgents', `dev.whiffle.${id}.plist`)
     : join(
         process.env.XDG_CONFIG_HOME ?? join(homedir(), '.config'),
         'systemd',
         'user',
-        `cockpit-${id}.service`
+        `whiffle-${id}.service`
       );
 
 /** A service nobody installed here is not this machine's to restart. */
@@ -117,8 +118,8 @@ const isInstalled = (id: Service): Promise<boolean> => Bun.file(unitPath(id)).ex
 
 const restartCommand = (id: Service): string[] =>
   platform() === 'darwin'
-    ? ['launchctl', 'kickstart', '-k', `gui/${process.getuid?.() ?? 0}/dev.cockpit.${id}`]
-    : ['systemctl', '--user', 'restart', `cockpit-${id}.service`];
+    ? ['launchctl', 'kickstart', '-k', `gui/${process.getuid?.() ?? 0}/dev.whiffle.${id}`]
+    : ['systemctl', '--user', 'restart', `whiffle-${id}.service`];
 
 /** How long the reply gets to reach the hub before this daemon goes down with it. */
 const RESTART_DELAY_S = 1;
@@ -164,7 +165,7 @@ export const pullArgs = (branch?: string): string[] =>
   branch ? ['pull', '--ff-only', 'origin', branch] : ['pull', '--ff-only'];
 
 /**
- * Everything the `updateCockpit` control does, in the order it has to happen.
+ * Everything the `updateWhiffle` control does, in the order it has to happen.
  * Every field of the report is what actually took place: a step that was
  * asked for and did not run says why in `skipped` rather than reading as done.
  */
@@ -210,7 +211,7 @@ export const updateCheckout = async ({
 
     if (await buildsDashboard(root)) {
       const built = await run(
-        [process.execPath, 'run', '--filter', '@cockpit/dashboard', 'build'],
+        [process.execPath, 'run', '--filter', '@whiffle/dashboard', 'build'],
         BUILD_TIMEOUT_MS,
         root
       );
@@ -304,7 +305,7 @@ export const watchDeployment = (options: DeployWatchOptions = {}): DeployPoller 
 
 /**
  * Where this machine stands against the deployment branch, asked once. What
- * `cockpit deploy status` prints, and what the daemon can answer with.
+ * `whiffle deploy status` prints, and what the daemon can answer with.
  */
 export const deploymentState = (root: string = deployRoot()): Promise<DeployState> =>
   checkDeploy({ root });

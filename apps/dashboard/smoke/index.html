@@ -110,7 +110,7 @@ const table = `
     </tr>
   </thead>
   <tbody data-slot="table-body" class="[&_tr:last-child]:border-0">
-    ${[["cockpit-dashboard","bg-success-bg text-success-ink","idle","1.2M","2m ago","text-success"],
+    ${[["whiffle-dashboard","bg-success-bg text-success-ink","idle","1.2M","2m ago","text-success"],
        ["fleet-runner","bg-warning-bg text-warning-ink","working","840k","just now","text-warning"],
        ["token-bridge","bg-attention-bg text-attention-ink","needs you","2.4M","11m ago","text-error"],
        ["nightly-sweep","bg-error-bg text-error-ink","failed","96k","1h ago","text-error"]]
@@ -145,7 +145,7 @@ const board = (mode) => `
     <aside class="w-[228px] shrink-0 bg-sidebar border-r border-sidebar-border text-sidebar-foreground flex flex-col">
       <div class="h-[57px] flex items-center gap-2.5 px-3.5">
         <span class="size-[26px] rounded-[7px] action-surface grid place-items-center text-[13px] font-bold">C</span>
-        <b class="text-[15px] font-semibold text-foreground">Cockpit</b>
+        <b class="text-[15px] font-semibold text-foreground">Whiffle</b>
       </div>
       <div data-slot="sidebar-content" class="px-2.5 ${SB_CONTENT}">
         <div data-slot="sidebar-group-label" class="${SB_GROUP_LABEL}">Workspace</div>

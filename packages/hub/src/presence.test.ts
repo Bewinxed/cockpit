@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from 'bun:test';
-import type { AgentRow } from '@cockpit/core';
+import type { AgentRow } from '@whiffle/core';
 import { makeDb } from './db';
 import type { PendingShape } from './pending';
 import type { HubSocket, RegistryShape } from './registry';
@@ -24,7 +24,7 @@ import { createServer } from './server';
  * A scratch database, for the reason every other suite here keeps one: `bun
  * test` runs every file in one process, so a shared path is a shared race.
  */
-const DB_FILE = `/tmp/cockpit-presence-${crypto.randomUUID()}.db`;
+const DB_FILE = `/tmp/whiffle-presence-${crypto.randomUUID()}.db`;
 const db = makeDb(DB_FILE);
 
 const LIVE = 'machine-live';
@@ -66,6 +66,8 @@ const makeTestRegistry = (): RegistryShape & { readonly sockets: Map<string, Hub
       const entry = dashboards.get(socket.id);
       if (entry) entry.subscriptions = new Set(instanceIds);
     },
+    noteDashboardOrigin: () => {},
+    dashboardOrigin: () => undefined,
     rememberRequester: (requestId, socket) => requesters.set(requestId, socket),
     takeRequester: (requestId) => {
       const socket = requesters.get(requestId);

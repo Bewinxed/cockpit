@@ -1,5 +1,5 @@
-import { costForUsage, totalTokens } from '@cockpit/core';
-import type { RawOpenCodeMessage, UsageTokens } from '@cockpit/core';
+import { costForUsage, totalTokens } from '@whiffle/core';
+import type { RawOpenCodeMessage, UsageTokens } from '@whiffle/core';
 import { Database } from 'bun:sqlite';
 import { readdir } from 'node:fs/promises';
 import { homedir } from 'node:os';

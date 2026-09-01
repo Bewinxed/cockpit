@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, setSystemTime, test } from 'bun:test';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fetchClaudeLimits } from '@cockpit/core/usage/limits';
+import { fetchClaudeLimits } from '@whiffle/core/usage/limits';
 
 /**
  * Backoff & stale retention for `fetchClaudeLimits` (USAGE-SPEC.md §4.5).

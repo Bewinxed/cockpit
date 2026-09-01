@@ -8,7 +8,7 @@
  *     sessiond: the child would land in the *agent's* cgroup and die with the
  *     next agent restart, which is precisely the `KillMode` trap this whole
  *     build exists to escape. Under a service, a missing sessiond is a loud
- *     install-time error; only a hand-run `cockpit up` spawns one.
+ *     install-time error; only a hand-run `whiffle up` spawns one.
  *  2. {@link SessiondClient} — NDJSON over the unix socket: `spawn`/`write`/
  *     `signal`/`stdin_end`/`subscribe`/`list`, `commandId` minted once per
  *     mutation so a re-delivery after a socket drop is re-acked rather than
@@ -42,7 +42,7 @@ import {
   type SessiondLine,
   type SessiondProcInfo,
   type SessiondServerMessage,
-} from '@cockpit/core/sessiond';
+} from '@whiffle/core/sessiond';
 
 /**
  * How long a dial or a `welcome` may take before the agent calls the endpoint
@@ -70,13 +70,13 @@ export const ADHOC_START_TIMEOUT_MS = 10_000;
  *   for a launchd-started process. A login shell inherits the literal `0`
  *   placeholder instead, which is why the value — not merely its presence —
  *   is what decides.
- * - `COCKPIT_SERVICE_MODE` is cockpit's own unit-set marker
+ * - `WHIFFLE_SERVICE_MODE` is whiffle's own unit-set marker
  *   (`cli/src/service.ts:45`, `MODE_ENV`); honoured here so a dev-mode unit is
  *   still recognised as service-managed.
  */
 export const serviceManaged = (env: NodeJS.ProcessEnv = process.env): boolean => {
   if (env.INVOCATION_ID) return true;
-  if (env.COCKPIT_SERVICE_MODE) return true;
+  if (env.WHIFFLE_SERVICE_MODE) return true;
   const xpc = env.XPC_SERVICE_NAME;
   return xpc !== undefined && xpc !== '' && xpc !== '0';
 };
@@ -91,8 +91,8 @@ export class SessiondUnavailableError extends Error {
     super(
       `[sessiond] nothing is listening on ${endpoint}, and this agent is service-managed — ` +
         'refusing to ad-hoc spawn one (its children would land in the agent cgroup and die ' +
-        'with the next agent restart). Install and start the unit: `cockpit service install` ' +
-        'then `systemctl --user start cockpit-sessiond`.'
+        'with the next agent restart). Install and start the unit: `whiffle service install` ' +
+        'then `systemctl --user start whiffle-sessiond`.'
     );
     this.name = 'SessiondUnavailableError';
   }
@@ -127,7 +127,7 @@ const adhocCommand = (): { command: string; args: string[] } => ({
  *
  * The guard, restated because it is the reason this function is not a plain
  * "spawn if absent": under systemd/launchd a child spawned from here inherits
- * the agent's cgroup, so the next `systemctl restart cockpit-agent` kills every
+ * the agent's cgroup, so the next `systemctl restart whiffle-agent` kills every
  * session — the exact failure sessiond was built to remove. Service mode gets a
  * loud error; ad-hoc mode gets a detached daemon.
  */
@@ -142,7 +142,7 @@ export const ensureSessiond = async (
   const child = spawnProcess(command, args, {
     detached: true,
     stdio: 'ignore',
-    env: { ...env, COCKPIT_SESSIOND_ENDPOINT: endpoint },
+    env: { ...env, WHIFFLE_SESSIOND_ENDPOINT: endpoint },
   });
   child.unref();
 

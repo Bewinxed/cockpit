@@ -24,11 +24,11 @@
   import { afterNavigate } from '$app/navigation';
   import { page } from '$app/state';
   import { browser } from '$app/environment';
-  import FleetBoard from '$lib/cockpit/FleetBoard.svelte';
-  import PaneGrid from '$lib/cockpit/workspace/PaneGrid.svelte';
-  import PaneLeaf from '$lib/cockpit/workspace/PaneLeaf.svelte';
-  import { syncSubscriptions, type HistorySource } from '$lib/cockpit/client.svelte';
-  import { workspace } from '$lib/cockpit/workspace/workspace.svelte';
+  import FleetBoard from '$lib/whiffle/FleetBoard.svelte';
+  import PaneGrid from '$lib/whiffle/workspace/PaneGrid.svelte';
+  import PaneLeaf from '$lib/whiffle/workspace/PaneLeaf.svelte';
+  import { syncSubscriptions, type HistorySource } from '$lib/whiffle/client.svelte';
+  import { workspace } from '$lib/whiffle/workspace/workspace.svelte';
   import { IsMobile } from '$lib/hooks/is-mobile.svelte';
 
   let { children }: { children: Snippet } = $props();

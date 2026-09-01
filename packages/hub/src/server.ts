@@ -34,7 +34,7 @@ import type {
   Verb,
   IngestMark,
   RegisterAckPayload,
-} from '@cockpit/core';
+} from '@whiffle/core';
 import {
   AGENT_BUSY,
   agentProblem,
@@ -62,8 +62,8 @@ import {
   RESTART_RESUMABLE,
   TOOL_CATALOG,
   toolSpec,
-  UPDATE_COCKPIT,
-} from '@cockpit/core';
+  UPDATE_WHIFFLE,
+} from '@whiffle/core';
 import { Elysia, t } from 'elysia';
 import { websocket } from 'elysia/websocket';
 import { buildInfo } from './build';
@@ -433,7 +433,7 @@ const peekResumable = (payload: unknown): string[] | undefined => {
 };
 
 /**
- * `register`'s word on the cockpit the daemon is running (NEW.md §12). Absent
+ * `register`'s word on the whiffle the daemon is running (NEW.md §12). Absent
  * from a daemon that predates it and from the re-announce, and the row keeps
  * what it had either way.
  */
@@ -1854,7 +1854,7 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
       async ({ params, body, status }) => {
         const answer = await callAgent(
           params.machineId,
-          UPDATE_COCKPIT,
+          UPDATE_WHIFFLE,
           [body],
           UPDATE_TIMEOUT_MS
         );
@@ -2585,7 +2585,7 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
         return memory;
       }
     )
-    // The machines take back only what their own sidecar says cockpit wrote:
+    // The machines take back only what their own sidecar says whiffle wrote:
     // one edited by hand on a machine stays there, unmanaged. The set goes with
     // it — a linked document with no main file to link it is not a memory, and
     // the machines would keep converging on documents nothing points at.
@@ -3765,6 +3765,9 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
     .ws('/ws/dashboard', {
       open(ws) {
         registry.addDashboard(ws);
+        // The one moment the hub learns a URL that reaches its own dashboard:
+        // this browser just used one. See `dashboardUrl` in telegram.ts.
+        registry.noteDashboardOrigin(ws.headers.origin);
         // The board, before it is asked for. This is the FIRST message every
         // dashboard receives, which is what makes it the handshake: it carries
         // `capabilities`, so a client knows on connect whether this hub speaks

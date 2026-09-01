@@ -1,10 +1,10 @@
 /**
  * The harness-neutral spine (the 2026-08 rework).
  *
- * Cockpit once tunnelled Claude Agent SDK types verbatim — `@cockpit/core`
+ * Whiffle once tunnelled Claude Agent SDK types verbatim — `@whiffle/core`
  * re-exported the SDK, the agent spawned `query()` and the dashboard folded SDK
  * messages into view state. Making the product harness-agnostic means the wire,
- * the hub and the dashboard all speak a vocabulary cockpit owns, and each
+ * the hub and the dashboard all speak a vocabulary whiffle owns, and each
  * harness (claude, opencode, pi, …) is a daemon-side adapter that translates its
  * native events into it.
  *
@@ -20,7 +20,7 @@
  *   dependencies, never shared on the wire.
  */
 
-/** The harnesses cockpit can spawn sessions on. Adding one is a new adapter. */
+/** The harnesses whiffle can spawn sessions on. Adding one is a new adapter. */
 export type HarnessKind = 'claude' | 'opencode' | 'pi';
 
 export const HARNESSES: readonly HarnessKind[] = ['claude', 'opencode', 'pi'];
@@ -37,7 +37,7 @@ export type PermissionMode =
 /**
  * How hard the model thinks, and how much it spends doing it: Claude Code's
  * effort scale, in its own order. Hand-written rather than tunnelled from the
- * SDK — nothing in this file imports a harness SDK, and `@cockpit/core` has no
+ * SDK — nothing in this file imports a harness SDK, and `@whiffle/core` has no
  * dependencies at all — but it is the SDK's `EffortLevel` verbatim, so the
  * claude adapter hands it straight on.
  *
@@ -296,7 +296,7 @@ export type NeutralOrigin =
   | { kind: 'human' }
   | { kind: 'peer'; from?: string; name?: string; fromSession?: string; body?: string }
   /**
-   * Cockpit's own word, not the user's and not another session's: today, a rule
+   * Whiffle's own word, not the user's and not another session's: today, a rule
    * that fired. `name` is what fired it, e.g. `rule:Honest caveat`. Kept apart
    * from `peer` so a transcript can say who is really talking — a model that
    * mistakes a rule for the user apologises to nobody.
@@ -304,12 +304,12 @@ export type NeutralOrigin =
   | { kind: 'system'; name?: string };
 
 /**
- * Whether a user message was put into the session by cockpit rather than typed
+ * Whether a user message was put into the session by whiffle rather than typed
  * by the reader.
  *
  * This is what decides whether a harness echoes the message back as a frame.
  * The reader's own words already have a local copy in the dashboard, added when
- * they hit send; anything cockpit injects has no such copy, so unless the
+ * they hit send; anything whiffle injects has no such copy, so unless the
  * harness frames it, it does not appear until the transcript is re-read from
  * disk. That was exactly the bug: rule messages arrived, the session acted on
  * them, and the chat stayed empty until a refresh.
@@ -530,7 +530,7 @@ export interface HarnessCapabilities {
   costUsd: boolean;
   thinking: boolean;
   images: boolean;
-  /** Peer-to-peer hand-off tools (`mcp__outpost__*` for claude). */
+  /** Peer-to-peer hand-off tools (`mcp__whiffle__*` for claude). */
   handoff: boolean;
   hooks: boolean;
   plugins: boolean;

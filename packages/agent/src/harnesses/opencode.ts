@@ -57,7 +57,7 @@ import type {
   UserAnswers,
   UserQuestion,
   UserQuestionResult,
-} from '@cockpit/core';
+} from '@whiffle/core';
 import {
   ASK_USER_QUESTION,
   CONTROL_CONTEXT_USAGE,
@@ -70,13 +70,13 @@ import {
   CONTROL_SET_PERMISSION_MODE,
   CONTROL_SUPPORTED_COMMANDS,
   CONTROL_SUPPORTED_MODELS,
-  isInjected,} from '@cockpit/core';
+  isInjected,} from '@whiffle/core';
 import { resolveBin } from '../tools';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-// The protocol subpath, never the `@cockpit/core` barrel: `sessiond.ts` reaches
+// The protocol subpath, never the `@whiffle/core` barrel: `sessiond.ts` reaches
 // for `node:os` and the barrel is imported by the browser bundle (see f2e1c4c).
-import { sessiondEndpoint, type ProcSpec } from '@cockpit/core/sessiond';
+import { sessiondEndpoint, type ProcSpec } from '@whiffle/core/sessiond';
 import { ensureSessiond, SessiondClient } from '../sessiond-client';
 import { readJson, readSidecar, syncMemory, syncSkillFiles, writeJson } from './fleet-common';
 import { fetchDelegateTypes } from './handoff-shared';
@@ -87,10 +87,10 @@ const OPENCODE_DIR = join(homedir(), '.config', 'opencode');
 const OPENCODE_SKILLS = join(OPENCODE_DIR, 'skills');
 const OPENCODE_MEMORY = join(OPENCODE_DIR, 'AGENTS.md');
 const OPENCODE_CONFIG = join(OPENCODE_DIR, 'opencode.json');
-const OPENCODE_SIDECAR = join(OPENCODE_DIR, 'cockpit-fleet.json');
+const OPENCODE_SIDECAR = join(OPENCODE_DIR, 'whiffle-fleet.json');
 const OPENCODE_PLUGINS = join(OPENCODE_DIR, 'plugins');
 const OPENCODE_PACKAGE = join(OPENCODE_DIR, 'package.json');
-const OPENCODE_HANDOFF_PLUGIN = join(OPENCODE_PLUGINS, 'cockpit-handoff.js');
+const OPENCODE_HANDOFF_PLUGIN = join(OPENCODE_PLUGINS, 'whiffle-handoff.js');
 
 /**
  * The server's identity under sessiond. One headless server per machine owns
@@ -229,9 +229,9 @@ export const attachOpencodeServer = async (options: {
  */
 const buildHandoffPluginSource = (typeLine: string): string => `import { tool } from "@opencode-ai/plugin";
 
-const ws = process.env.COCKPIT_HUB_URL ?? "ws://localhost:3456/ws";
+const ws = process.env.WHIFFLE_HUB_URL ?? "ws://localhost:3456/ws";
 const HUB = ws.replace(/^ws/, "http").replace(/\\/ws$/, "");
-const MACHINE = process.env.COCKPIT_MACHINE_ID ?? "";
+const MACHINE = process.env.WHIFFLE_MACHINE_ID ?? "";
 
 const leaf = (p) => p.split("/").filter(Boolean).pop() ?? p;
 const short = (id) => id.slice(0, 8);
@@ -342,7 +342,7 @@ async function relay(verb, body) {
   }
 }
 
-export const CockpitHandoff = async () => {
+export const WhiffleHandoff = async () => {
   return {
     tool: {
       list_sessions: tool({
@@ -629,7 +629,7 @@ export const CockpitHandoff = async () => {
           }
           // Answers alone: this side never held the delegate's tool call, so the
           // harness that parked the ask folds them back into it (QUESTION_DISMISSED
-          // and settledQuestionResult in @cockpit/core — this plugin ships as source
+          // and settledQuestionResult in @whiffle/core — this plugin ships as source
           // and cannot import them). A denial carries words for the same reason.
           const result = deny
             ? { behavior: "deny", message: "The user dismissed the question without answering it." }
@@ -733,7 +733,7 @@ const questionsOf = (raw: unknown): UserQuestion[] | null => {
  *
  * Taking it from the part rather than from the `question.*` events is what
  * makes every route agree. The part completes whether the answer came through
- * cockpit, through opencode's own TUI, or from any other client on the server —
+ * whiffle, through opencode's own TUI, or from any other client on the server —
  * and because opencode stores it, a reloaded transcript replays it too. Events
  * would have covered only the live case, and only the routes we thought of.
  *
@@ -832,8 +832,8 @@ export const OPENCODE_CAPABILITIES: HarnessCapabilities = {
   fleet: true,
 };
 
-/** The scratch tag sidecar — opencode sessions have no tag, so cockpit keeps its own. */
-const TAGS_PATH = join(homedir(), '.config', 'opencode', 'cockpit-tags.json');
+/** The scratch tag sidecar — opencode sessions have no tag, so whiffle keeps its own. */
+const TAGS_PATH = join(homedir(), '.config', 'opencode', 'whiffle-tags.json');
 
 const readTags = async (): Promise<Record<string, string>> => {
   const file = Bun.file(TAGS_PATH);
@@ -1113,17 +1113,17 @@ export class OpencodeSession implements HarnessSession {
         });
         break;
       }
-      // A question can also be settled where cockpit cannot see it — in
+      // A question can also be settled where whiffle cannot see it — in
       // opencode's own TUI, or by any other client on the same server. Without
       // these the `tool_use` the ask emitted never closes, and the row sits on
       // "waiting for your answer" for the rest of the session while the model
       // has long since moved on.
       //
       // `#questionData` is the guard against answering twice: `resolvePermission`
-      // clears the entry before it replies, so the echo of cockpit's own reply
-      // finds nothing here and falls through. Only a settlement cockpit did not
+      // clears the entry before it replies, so the echo of whiffle's own reply
+      // finds nothing here and falls through. Only a settlement whiffle did not
       // make still has its questions on hand.
-      // A settlement cockpit did not make — opencode's own TUI, or any other
+      // A settlement whiffle did not make — opencode's own TUI, or any other
       // client on the server. The transcript needs nothing here, because the
       // `question` tool part completes on every route and carries the answers
       // with it; this only lets go of the parked request so a later
@@ -1851,7 +1851,7 @@ export class OpencodeSession implements HarnessSession {
 export class OpencodeHarness implements Harness {
   readonly kind = 'opencode' as const;
   readonly capabilities = OPENCODE_CAPABILITIES;
-  auth: import('@cockpit/core').AuthState = 'authenticated';
+  auth: import('@whiffle/core').AuthState = 'authenticated';
 
   #client: OpencodeClient | null = null;
   /** The URL the sessiond-held server announced; the sessions' `fetch` base. */
@@ -1892,10 +1892,10 @@ export class OpencodeHarness implements Harness {
    * property the whole leaf exists for.
    */
   async sessiond(
-    // `COCKPIT_SESSIOND_ENDPOINT` is sessiond's own override
+    // `WHIFFLE_SESSIOND_ENDPOINT` is sessiond's own override
     // (`sessiond/src/main.ts`), honoured here too so a dev run — or a test —
     // points both halves at a scratch socket instead of the real one.
-    endpoint: string = process.env.COCKPIT_SESSIOND_ENDPOINT ?? sessiondEndpoint()
+    endpoint: string = process.env.WHIFFLE_SESSIOND_ENDPOINT ?? sessiondEndpoint()
   ): Promise<SessiondClient> {
     const existing = await this.#sessiond?.catch(() => undefined);
     if (existing && !existing.closed) return existing;
@@ -2256,7 +2256,7 @@ export class OpencodeHarness implements Harness {
         return (result.data as Todo[])
           .filter((todo) => todo.status !== 'cancelled')
           .map(
-            (todo): import('@cockpit/core').NeutralTask => ({
+            (todo): import('@whiffle/core').NeutralTask => ({
               id: todo.id,
               subject: todo.content,
               status:
@@ -2303,7 +2303,7 @@ export class OpencodeHarness implements Harness {
 
     const mcp = await syncOpencodeMcp(config.mcp, sidecar.mcp ?? [], report.mcp);
     // Remove the skills/memory the pre-2026-08-14 sync wrote; opencode reads
-    // ~/.claude/skills/ and its own memory file, so cockpit no longer owns these.
+    // ~/.claude/skills/ and its own memory file, so whiffle no longer owns these.
     if (Object.keys(sidecar.skills).length > 0) {
       await syncSkillFiles(OPENCODE_SKILLS, [], sidecar.skills, report.skills!);
     }

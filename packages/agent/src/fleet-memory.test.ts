@@ -1,11 +1,11 @@
 import { expect, test } from 'bun:test';
-import { memoryDocProblem } from '@cockpit/core';
+import { memoryDocProblem } from '@whiffle/core';
 import { memoryPlan, memorySetPlan, withoutHooks } from './fleet';
 
 /**
  * The user CLAUDE.md decision (NEW.md §11), row by row. Everything the daemon
  * does to `~/.claude/CLAUDE.md` comes out of these three hashes, so this is
- * where "cockpit overwrote what I wrote" is caught rather than on a machine.
+ * where "whiffle overwrote what I wrote" is caught rather than on a machine.
  */
 const FLEET = 'aaa';
 const MINE = 'bbb';
@@ -36,7 +36,7 @@ test('a managed file edited on the machine drifts until somebody says', () => {
   expect(memoryPlan({ hash: FLEET, force: true }, MINE, FLEET)).toBe('write');
 });
 
-test('the fleet keeping none takes back exactly what cockpit wrote', () => {
+test('the fleet keeping none takes back exactly what whiffle wrote', () => {
   expect(memoryPlan(null, FLEET, FLEET)).toBe('remove');
   expect(memoryPlan(undefined, FLEET, FLEET)).toBe('remove');
 });
@@ -45,7 +45,7 @@ test('and leaves an edited one where it is', () => {
   expect(memoryPlan(null, MINE, FLEET)).toBe('unmanage');
 });
 
-test('a machine cockpit never wrote to has nothing to do', () => {
+test('a machine whiffle never wrote to has nothing to do', () => {
   expect(memoryPlan(null, MINE, undefined)).toBe('none');
   expect(memoryPlan(null, null, undefined)).toBe('none');
 });
@@ -135,7 +135,7 @@ test('a document path is relative, forward-slashed markdown', () => {
  * registering in it has to be something that can be undone without taking
  * anything of theirs with it.
  */
-const OURS = '/home/x/.claude/cockpit-model-memory.sh';
+const OURS = '/home/x/.claude/whiffle-model-memory.sh';
 
 test('removing the hook leaves every other hook where it is', () => {
   const theirs = { hooks: [{ type: 'command', command: '/home/x/bin/notify' }] };

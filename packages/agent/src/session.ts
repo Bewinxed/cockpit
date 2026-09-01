@@ -26,19 +26,19 @@ import type {
   SessionPulse,
   SpawnPayload,
   StopPayload,
-} from '@cockpit/core';
+} from '@whiffle/core';
 import {
   AGENT_BUSY,
   alreadyIngested,
-  COCKPIT_SCRATCH_TAG,
+  WHIFFLE_SCRATCH_TAG,
   FLEET_STATUS,
   FLEET_SYNC,
   readIngested,
   repoPath,
   resumeCursor,
   RESOLVE_PERMISSION,
-  UPDATE_COCKPIT,
-} from '@cockpit/core';
+  UPDATE_WHIFFLE,
+} from '@whiffle/core';
 import type { Harness, HarnessContext, HarnessSession } from './harness';
 import { harness as harnessOf, harnesses } from './harnesses';
 import { installTool, probeTools } from './tools';
@@ -132,7 +132,7 @@ interface Worktree {
 }
 
 /** Where a side quest's worktrees live, relative to the repo they branch off. */
-const WORKTREE_DIR = '.cockpit-worktrees';
+const WORKTREE_DIR = '.whiffle-worktrees';
 
 /**
  * A side quest's transcript, kept out of the catalogs the rails read. The tag
@@ -315,7 +315,7 @@ export class SessionSupervisor {
 
   readonly #daemonFunctions: Record<string, ControlMethod> = {
     [AGENT_BUSY]: () => ({ busy: this.#busy.size, instances: [...this.#busy] }),
-    [UPDATE_COCKPIT]: (options) =>
+    [UPDATE_WHIFFLE]: (options) =>
       updateCheckout({ ...(options as UpdateOptions), busy: this.#busy.size }),
   };
 
@@ -780,7 +780,7 @@ export class SessionSupervisor {
     if (!quest?.sessionId || quest.tagged) return;
     const { sessionId, dir } = quest;
     quest.tagged = true;
-    void adapter.tagSession(sessionId, COCKPIT_SCRATCH_TAG, dir).catch((error: unknown) => {
+    void adapter.tagSession(sessionId, WHIFFLE_SCRATCH_TAG, dir).catch((error: unknown) => {
       quest.tagged = false;
       warn(`could not tag side quest ${sessionId}: ${error}`);
     });
@@ -942,7 +942,7 @@ export class SessionSupervisor {
     config: FleetConfig | undefined,
     which: 'syncFleet' | 'fleetStatus'
   ): Promise<FleetSyncReport> {
-    type State = import('@cockpit/core').FleetItemState;
+    type State = import('@whiffle/core').FleetItemState;
     const mcp: FleetSyncReport['mcp'] = {};
     const marketplaces: FleetSyncReport['marketplaces'] = {};
     const plugins: FleetSyncReport['plugins'] = {};

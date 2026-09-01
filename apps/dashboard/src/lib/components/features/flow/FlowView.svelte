@@ -14,8 +14,8 @@
   import '@xyflow/svelte/dist/style.css';
   import { onMount } from 'svelte';
   import { theme } from '$lib/theme.svelte';
-  import type { Message } from '$lib/cockpit/types';
-  import { copyToClipboard } from '$lib/cockpit/copy';
+  import type { Message } from '$lib/whiffle/types';
+  import { copyToClipboard } from '$lib/whiffle/copy';
   import type { SubagentState } from '$lib/utils/flow-types';
   import FlowContextMenu from './FlowContextMenu.svelte';
   import FlowAutoFit from './FlowAutoFit.svelte';

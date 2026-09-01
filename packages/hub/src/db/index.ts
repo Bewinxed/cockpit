@@ -21,8 +21,8 @@ import type {
   ToolPolicy,
   ToolStatus,
   UsageBucket,
-} from '@cockpit/core';
-import { RESTART_LOST, resolveRates } from '@cockpit/core';
+} from '@whiffle/core';
+import { RESTART_LOST, resolveRates } from '@whiffle/core';
 import { Context, Effect, Layer } from 'effect';
 import { and, desc, eq, gt, gte, inArray, isNotNull, isNull, lte, ne, notInArray, or, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
@@ -700,12 +700,12 @@ const hashHookMaterial = (hook: {
 /**
  * Opens (and migrates) a database at `path`.
  *
- * Exported for tests. Going through `COCKPIT_DB_PATH` instead is a trap:
+ * Exported for tests. Going through `WHIFFLE_DB_PATH` instead is a trap:
  * `DB_PATH` is read once, when `../config` is first imported, and `bun test`
  * runs every test file in one process — so a test that sets the variable only
  * gets its own database if it happens to be the file that loads `config`
  * first. Whichever test loses that race writes to the fleet's real
- * `cockpit.db`. Naming the path leaves nothing to load order.
+ * `whiffle.db`. Naming the path leaves nothing to load order.
  */
 export const makeDb = (path: string): DbShape => make(path);
 
@@ -1187,7 +1187,7 @@ const make = (path: string): DbShape => {
           ];
         }),
       // Null rather than absent: a fleet that keeps no memory is what has a
-      // machine give back the copy cockpit wrote it — the linked documents
+      // machine give back the copy whiffle wrote it — the linked documents
       // included, since a set with no main file is not a set.
       memory: (() => {
         const stored = getFleetMemory();

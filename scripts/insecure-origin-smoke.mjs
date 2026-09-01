@@ -26,11 +26,11 @@
  * the exact failure mode this file was written to rule out.
  *
  * Usage: node scripts/insecure-origin-smoke.mjs
- * Requires: `bun run --filter '@cockpit/dashboard' build` beforehand — this
+ * Requires: `bun run --filter '@whiffle/dashboard' build` beforehand — this
  * script previews the existing build, it does not build one.
  *
  * Env:
- *   HUB_URL (default http://127.0.0.1:3456) — the hub the front proxy puts
+ *   WHIFFLE_HUB_URL (default http://127.0.0.1:3456) — the hub the front proxy puts
  *     behind the previewed build's own origin, so the dashboard can reach it.
  *   SMOKE_UNREACHABLE_SESSION — an instance id whose MACHINE the hub cannot
  *     reach. Required for the failed-ghost block, which sends for real and
@@ -46,8 +46,8 @@ import path from 'node:path';
 
 const repoRoot = path.resolve(fileURLToPath(import.meta.url), '../..');
 const dashboardDir = path.join(repoRoot, 'apps/dashboard');
-const INSECURE_HOST = 'insecure.cockpit.test';
-const HUB_URL = process.env.HUB_URL ?? 'http://127.0.0.1:3456';
+const INSECURE_HOST = 'insecure.whiffle.test';
+const WHIFFLE_HUB_URL = process.env.WHIFFLE_HUB_URL ?? 'http://127.0.0.1:3456';
 /**
  * Distinctive enough to locate the row, obviously a test if it were ever seen,
  * and UNIQUE PER RUN — a row left behind by an earlier run must never be
@@ -63,7 +63,7 @@ const GHOST_PROBE_TEXT = `insecure-origin smoke: undeliverable probe ${Date.now(
  * must never do is reach a live agent. Two attempts to guarantee that from
  * inside the browser both failed and both actually delivered: `socket.close()`
  * is asynchronous (the socket is still OPEN for the rest of the tick), and a
- * stubbed `globalThis.__cockpitSocket` is overwritten by the client's own
+ * stubbed `globalThis.__whiffleSocket` is overwritten by the client's own
  * reconnect before the keystroke lands. Measured, in this repo, against a real
  * hub: five probe messages delivered to somebody's running session.
  *
@@ -163,7 +163,7 @@ function startFrontProxy({ port, previewPort, hub }) {
   // This host is not allowed."), and it answers that refusal with a 200 HTML
   // page — so a harness that only checks for uncaught exceptions will happily
   // report PASS having measured Vite's error page instead of the dashboard.
-  // The browser still sees `insecure.cockpit.test`, which is the only thing
+  // The browser still sees `insecure.whiffle.test`, which is the only thing
   // the origin's security state is computed from.
   const to = (req) =>
     /^\/(ws|api)(\/|$)/.test(req.url ?? '')
@@ -239,7 +239,7 @@ try {
   });
 
   await waitForServer(previewUrl);
-  frontProxy = await startFrontProxy({ port, previewPort, hub: new URL(HUB_URL) });
+  frontProxy = await startFrontProxy({ port, previewPort, hub: new URL(WHIFFLE_HUB_URL) });
   await waitForServer(`http://127.0.0.1:${port}`);
 
   const chromiumExe = findChromiumExecutable();

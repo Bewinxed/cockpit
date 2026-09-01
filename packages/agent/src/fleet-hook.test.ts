@@ -11,8 +11,8 @@ import { MEMORY_HOOK } from './fleet';
  * that quietly matches nothing, is a machine where every session silently gets
  * no per-model guidance and nobody finds out.
  */
-const home = await mkdtemp(join(tmpdir(), 'cockpit-hook-'));
-const script = join(home, 'cockpit-model-memory.sh');
+const home = await mkdtemp(join(tmpdir(), 'whiffle-hook-'));
+const script = join(home, 'whiffle-model-memory.sh');
 const models = join(home, '.claude', 'memories', 'models');
 
 await Bun.write(script, MEMORY_HOOK);
@@ -65,7 +65,7 @@ test('no model at all is shown nothing — the main CLAUDE.md carries the pointe
 });
 
 test('a machine with no memories directory is quiet about it', async () => {
-  const bare = await mkdtemp(join(tmpdir(), 'cockpit-hook-bare-'));
+  const bare = await mkdtemp(join(tmpdir(), 'whiffle-hook-bare-'));
   try {
     const child = Bun.spawn(['sh', script], {
       env: { HOME: bare, PATH: process.env.PATH ?? '' },

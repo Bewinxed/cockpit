@@ -25,7 +25,7 @@ import { handler } from './build/handler.js';
 
 const PORT = Number(process.env.PORT ?? 3000);
 const HOST = process.env.HOST ?? '0.0.0.0';
-const target = new URL(process.env.COCKPIT_HUB_URL || 'http://localhost:3456');
+const target = new URL(process.env.WHIFFLE_HUB_URL || 'http://localhost:3456');
 const targetPort = Number(target.port || 80);
 
 const server = http.createServer(handler);
@@ -36,7 +36,7 @@ server.on('upgrade', (req, socket, head) => {
   // the eventual reset becomes a process-level throw — taking the server, and
   // every other dashboard socket, down with it.
   socket.on('error', (error) => {
-    console.warn(`[cockpit] websocket socket error on ${req.url}: ${error.code ?? error.message}`);
+    console.warn(`[whiffle] websocket socket error on ${req.url}: ${error.code ?? error.message}`);
   });
   if (!req.url?.startsWith('/ws')) return socket.destroy();
 
@@ -58,7 +58,7 @@ server.on('upgrade', (req, socket, head) => {
 
   upstream.on('error', (error) => {
     console.warn(
-      `[cockpit] hub ws proxy could not reach ${target.host}: ${error.code ?? error.message}`
+      `[whiffle] hub ws proxy could not reach ${target.host}: ${error.code ?? error.message}`
     );
     socket.destroy();
   });

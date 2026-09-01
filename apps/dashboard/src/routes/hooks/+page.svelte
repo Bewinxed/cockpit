@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { newId } from '$lib/cockpit/id';
+  import { newId } from '$lib/whiffle/id';
   import { untrack } from 'svelte';
   import { goto } from '$app/navigation';
   import { toast } from 'svelte-sonner';
-  import { hookSentence } from '@cockpit/core';
+  import { hookSentence } from '@whiffle/core';
   import { IconAlert, IconHook, IconPlus, IconTrash } from '$lib/icons';
   import { Button } from '$lib/components/ui/button';
   import * as Card from '$lib/components/ui/card';
@@ -11,8 +11,8 @@
   import { Badge } from '$lib/components/ui/badge';
   import { Toggle } from '$lib/components/ui/toggle';
   import * as Tooltip from '$lib/components/ui/tooltip';
-  import { confirm } from '$lib/cockpit/confirm.svelte';
-  import { cockpit } from '$lib/cockpit/client.svelte';
+  import { confirm } from '$lib/whiffle/confirm.svelte';
+  import { whiffle } from '$lib/whiffle/client.svelte';
   import {
     draftOf,
     HOOK_TEMPLATES,
@@ -21,7 +21,7 @@
     removeHook,
     saveHook,
     type FleetHook,
-  } from '$lib/cockpit/hooks';
+  } from '$lib/whiffle/hooks';
   import type { PageData } from './$types';
 
   /**
@@ -61,7 +61,7 @@
   const enabledTotal = $derived(hooks.filter((hook) => hook.enabled).length);
   const eventsCovered = $derived(new Set(hooks.filter((hook) => hook.enabled).map((hook) => hook.event)).size);
   const machinesApplied = $derived(
-    cockpit.machines.filter((machine) => Object.values(hooksOf(machine) ?? {}).some((state) => state.state === 'applied')).length
+    whiffle.machines.filter((machine) => Object.values(hooksOf(machine) ?? {}).some((state) => state.state === 'applied')).length
   );
 
   async function toggle(row: FleetHook, enabled: boolean) {
@@ -116,16 +116,16 @@
 
   const appliedLine = (row: FleetHook): string | null => {
     if (!row.enabled) return null;
-    const total = cockpit.machines.length;
+    const total = whiffle.machines.length;
     if (total === 0) return null;
-    const applied = cockpit.machines.filter((machine) => hooksOf(machine)?.[row.id]?.state === 'applied').length;
-    const failed = cockpit.machines.filter((machine) => hooksOf(machine)?.[row.id]?.state === 'failed').length;
+    const applied = whiffle.machines.filter((machine) => hooksOf(machine)?.[row.id]?.state === 'applied').length;
+    const failed = whiffle.machines.filter((machine) => hooksOf(machine)?.[row.id]?.state === 'failed').length;
     if (failed > 0) return `Applied on ${applied} of ${total} machines — ${failed} failed.`;
     return `Applied on ${applied} of ${total} machines.`;
   };
 </script>
 
-<svelte:head><title>Hooks &middot; Outpost</title></svelte:head>
+<svelte:head><title>Hooks &middot; Whiffle</title></svelte:head>
 
 {#snippet stat(label: string, value: string | number, unit?: string)}
   <Card.Root class={tileClass}>
@@ -142,8 +142,8 @@
     <header class="head">
       <p class="sub">
         Scripts and calls the fleet runs on a session's own lifecycle — before a tool call, after
-        a turn ends, when a session starts. Cockpit writes each one to every machine and keeps it
-        converged; a session is never told cockpit is the one running it.
+        a turn ends, when a session starts. Whiffle writes each one to every machine and keeps it
+        converged; a session is never told Whiffle is the one running it.
       </p>
       <Button class={btnPrimary} onclick={() => goto('/hooks/new')}>
         <IconPlus class="shrink-0" />
@@ -155,7 +155,7 @@
       {@render stat('Hooks', hooks.length)}
       {@render stat('Enabled', enabledTotal, `of ${hooks.length}`)}
       {@render stat('Events covered', eventsCovered, 'of 31')}
-      {@render stat('Machines applied', machinesApplied, `of ${cockpit.machines.length}`)}
+      {@render stat('Machines applied', machinesApplied, `of ${whiffle.machines.length}`)}
     </section>
 
     {#if data.error}

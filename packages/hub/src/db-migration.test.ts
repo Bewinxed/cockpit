@@ -6,7 +6,7 @@ import { migrateLegacyDb } from './index';
 
 /**
  * Scratch directories only, per the C9 leaf brief — this exercises the move
- * logic, never the fleet's own `cockpit.db`.
+ * logic, never the fleet's own `whiffle.db`.
  */
 let scratch: string;
 
@@ -15,10 +15,10 @@ afterEach(() => {
 });
 
 const setup = () => {
-  scratch = mkdtempSync(join(tmpdir(), 'cockpit-db-migration-'));
+  scratch = mkdtempSync(join(tmpdir(), 'whiffle-db-migration-'));
   return {
     legacy: join(scratch, 'legacy', 'cockpit.db'),
-    target: join(scratch, 'data', 'cockpit', 'cockpit.db'),
+    target: join(scratch, 'data', 'whiffle', 'whiffle.db'),
   };
 };
 
@@ -58,7 +58,7 @@ test('second boot after a move is a no-op', () => {
 test('target already present: legacy file is left untouched', () => {
   const { legacy, target } = setup();
   mkdirSync(join(scratch, 'legacy'), { recursive: true });
-  mkdirSync(join(scratch, 'data', 'cockpit'), { recursive: true });
+  mkdirSync(join(scratch, 'data', 'whiffle'), { recursive: true });
   writeFileSync(legacy, 'stale-legacy');
   writeFileSync(target, 'live-target');
 

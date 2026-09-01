@@ -1,5 +1,5 @@
-import { cacheCreationCount, costForUsage } from '@cockpit/core';
-import type { RawClaudeUsage, UsageTokens } from '@cockpit/core';
+import { cacheCreationCount, costForUsage } from '@whiffle/core';
+import type { RawClaudeUsage, UsageTokens } from '@whiffle/core';
 import { readdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';

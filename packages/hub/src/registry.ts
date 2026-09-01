@@ -1,4 +1,4 @@
-import type { Envelope } from '@cockpit/core';
+import type { Envelope } from '@whiffle/core';
 import { Context, Effect, Layer } from 'effect';
 
 /**
@@ -28,11 +28,46 @@ export interface RegistryShape {
   readonly broadcastFrame: (envelope: Envelope, instanceId: string) => void;
   /** Replaces a dashboard's subscription set whole — one verb, no add/remove bookkeeping. */
   readonly setSubscriptions: (socket: HubSocket, instanceIds: string[]) => void;
+  /**
+   * Remembers the origin a dashboard just connected from, if it is one worth
+   * linking to. Junk is dropped rather than rejected loudly — a client is free
+   * to send whatever `Origin` it likes.
+   */
+  readonly noteDashboardOrigin: (origin: string | undefined) => void;
+  /** The most recent usable dashboard origin, or nothing if none has connected. */
+  readonly dashboardOrigin: () => string | undefined;
   /** Routes the reply to a forwarded `control` back to the dashboard that asked. */
   readonly rememberRequester: (requestId: string, socket: HubSocket) => void;
   /** Consumes the route — a `requestId` is answered once. */
   readonly takeRequester: (requestId: string) => HubSocket | undefined;
 }
+
+/**
+ * Hosts a link is pointless with. A message goes to a phone, and loopback names
+ * resolve on the phone, not on the machine the dashboard is running on.
+ */
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '0.0.0.0', '[::1]', '[::]']);
+
+/**
+ * The origin as something safe to put in a link, or nothing.
+ *
+ * `Origin` is a header the client writes, so it is parsed rather than believed:
+ * anything that is not an absolute http(s) URL is dropped, and so is loopback —
+ * see {@link LOOPBACK_HOSTS}. What comes back is `URL.origin`, which is scheme,
+ * host and port and nothing else: no path, no query, no credentials.
+ */
+const usableOrigin = (origin: string | undefined): string | undefined => {
+  if (!origin) return undefined;
+  let url: URL;
+  try {
+    url = new URL(origin);
+  } catch {
+    return undefined;
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return undefined;
+  if (LOOPBACK_HOSTS.has(url.hostname)) return undefined;
+  return url.origin;
+};
 
 /** A control whose reply never came stops being routable after this. */
 const REQUESTER_TTL_MS = 5 * 60_000;
@@ -45,6 +80,13 @@ const make = (): RegistryShape => {
   /** One entry per dashboard socket, with the instances it subscribes to. */
   const dashboards = new Map<string, { socket: HubSocket; subscriptions: Set<string> }>();
   const requesters = new Map<string, { socket: HubSocket; at: number }>();
+  /**
+   * The last origin a dashboard reached this hub from. Kept rather than derived
+   * because the hub has no other way to learn it — see `dashboardUrl` in
+   * `telegram.ts`. Newest wins: an operator who has moved to a new hostname is
+   * telling the hub so by opening the dashboard there.
+   */
+  let lastDashboardOrigin: string | undefined;
 
   const sweep = setInterval(() => {
     const cutoff = Date.now() - REQUESTER_TTL_MS;
@@ -86,6 +128,11 @@ const make = (): RegistryShape => {
       const entry = dashboards.get(socket.id);
       if (entry) entry.subscriptions = new Set(instanceIds);
     },
+    noteDashboardOrigin: (origin) => {
+      const usable = usableOrigin(origin);
+      if (usable) lastDashboardOrigin = usable;
+    },
+    dashboardOrigin: () => lastDashboardOrigin,
     rememberRequester: (requestId, socket) => {
       requesters.set(requestId, { socket, at: Date.now() });
     },

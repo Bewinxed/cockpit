@@ -3,7 +3,7 @@ import type {
   UsageBlocksResponse,
   UsageLimitsResponse,
   UsageSummary,
-} from '$lib/cockpit/usage';
+} from '$lib/whiffle/usage';
 
 /** The combined payload from `/api/usage/overview`. */
 interface UsageOverview {

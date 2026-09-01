@@ -15,7 +15,7 @@ import {
 
 /**
  * `deploy init` against a *local bare repository* in a scratch directory.
- * Nothing here reaches the real origin, the real ~/.cockpit/app, or an init
+ * Nothing here reaches the real origin, the real ~/.whiffle/app, or an init
  * system: the unit install is injected, and the only steps allowed to shell out
  * for real are git ones inside the scratch tree. `bun install` and the
  * dashboard build are stubbed — this test is about the layout the verb
@@ -62,14 +62,14 @@ const captor = () => {
 };
 
 beforeAll(async () => {
-  scratch = mkdtempSync(join(tmpdir(), 'cockpit-deploy-init-'));
+  scratch = mkdtempSync(join(tmpdir(), 'whiffle-deploy-init-'));
   origin = join(scratch, 'origin.git');
   await sh(scratch, 'git', 'init', '--bare', '--initial-branch=main', origin);
   const work = join(scratch, 'work');
   await sh(scratch, 'git', 'clone', origin, work);
   await sh(work, 'git', 'config', 'user.email', 'test@example.invalid');
   await sh(work, 'git', 'config', 'user.name', 'deploy test');
-  await Bun.write(join(work, 'package.json'), '{"name":"cockpit","workspaces":["packages/*"]}\n');
+  await Bun.write(join(work, 'package.json'), '{"name":"whiffle","workspaces":["packages/*"]}\n');
   await sh(work, 'git', 'add', '-A');
   await sh(work, 'git', 'commit', '-m', 'first');
   await sh(work, 'git', 'push', 'origin', 'main');
@@ -85,7 +85,7 @@ let root: string;
 const notes: string[] = [];
 
 beforeAll(async () => {
-  root = join(scratch, 'home', '.cockpit', 'app');
+  root = join(scratch, 'home', '.whiffle', 'app');
   const runner = recorder();
   const capture = captor();
   result = await deployInit({
@@ -97,8 +97,8 @@ beforeAll(async () => {
     install: capture.install,
     // Never the operator's own database, not even to read: both ends are
     // scratch paths that do not exist, so the move is a no-op here.
-    dbPath: join(scratch, 'data', 'cockpit.db'),
-    legacyDb: join(scratch, 'nonexistent', 'cockpit.db'),
+    dbPath: join(scratch, 'data', 'whiffle.db'),
+    legacyDb: join(scratch, 'nonexistent', 'whiffle.db'),
   });
   steps = runner.steps;
   installed = capture.installed;
@@ -120,7 +120,7 @@ describe('the clone it builds (G1)', () => {
       root,
       origin,
       branch: 'main',
-      createdBy: 'cockpit deploy init',
+      createdBy: 'whiffle deploy init',
     });
     expect(Number.isFinite(Date.parse(marker.createdAt as string))).toBe(true);
     expect(result.marker).toEqual(marker as never);
@@ -138,7 +138,7 @@ describe('the clone it builds (G1)', () => {
     const shape = steps.map((argv) => argv.slice(0, 4).join(' '));
     expect(shape.some((line) => line.startsWith('git clone --branch main'))).toBe(true);
     const install = shape.findIndex((line) => line.endsWith(' install'));
-    const build = shape.findIndex((line) => line.includes('--filter @cockpit/dashboard'));
+    const build = shape.findIndex((line) => line.includes('--filter @whiffle/dashboard'));
     expect(install).toBeGreaterThan(0);
     expect(build).toBeGreaterThan(install);
   });
@@ -179,10 +179,10 @@ describe('the units it generates point at the clone (G1)', () => {
     if (!hub) throw new Error('no hub unit was generated');
     const dataDir =
       platform() === 'darwin'
-        ? join(homedir(), 'Library', 'Application Support', 'cockpit')
-        : join(process.env.XDG_DATA_HOME ?? join(homedir(), '.local', 'share'), 'cockpit');
-    expect(hub.text).toContain(`COCKPIT_DB_PATH=${join(dataDir, 'cockpit.db')}`);
-    expect(hub.text).not.toContain(`COCKPIT_DB_PATH=${root}`);
+        ? join(homedir(), 'Library', 'Application Support', 'whiffle')
+        : join(process.env.XDG_DATA_HOME ?? join(homedir(), '.local', 'share'), 'whiffle');
+    expect(hub.text).toContain(`WHIFFLE_DB_PATH=${join(dataDir, 'whiffle.db')}`);
+    expect(hub.text).not.toContain(`WHIFFLE_DB_PATH=${root}`);
   });
 
   test('they are handed to the installer, and to nothing else', () => {
@@ -204,8 +204,8 @@ describe('what it refuses', () => {
           note: () => {},
         run: recorder().run,
         install: capture.install,
-        dbPath: join(scratch, 'data', 'cockpit.db'),
-        legacyDb: join(scratch, 'nonexistent', 'cockpit.db'),
+        dbPath: join(scratch, 'data', 'whiffle.db'),
+        legacyDb: join(scratch, 'nonexistent', 'whiffle.db'),
       })
     ).rejects.toThrow(ServiceError);
     expect(await Bun.file(join(occupied, 'README.md')).text()).toBe('mine\n');
@@ -233,16 +233,16 @@ describe('what it refuses', () => {
 });
 
 test('the deploy root is per-user, outside any checkout, and overridable', () => {
-  const previous = process.env.COCKPIT_DEPLOY_ROOT;
-  delete process.env.COCKPIT_DEPLOY_ROOT;
+  const previous = process.env.WHIFFLE_DEPLOY_ROOT;
+  delete process.env.WHIFFLE_DEPLOY_ROOT;
   try {
-    expect(deployRoot()).toBe(join(homedir(), '.cockpit', 'app'));
+    expect(deployRoot()).toBe(join(homedir(), '.whiffle', 'app'));
   } finally {
-    if (previous !== undefined) process.env.COCKPIT_DEPLOY_ROOT = previous;
+    if (previous !== undefined) process.env.WHIFFLE_DEPLOY_ROOT = previous;
   }
-  process.env.COCKPIT_DEPLOY_ROOT = '/tmp/elsewhere';
+  process.env.WHIFFLE_DEPLOY_ROOT = '/tmp/elsewhere';
   expect(deployRoot()).toBe('/tmp/elsewhere');
-  delete process.env.COCKPIT_DEPLOY_ROOT;
+  delete process.env.WHIFFLE_DEPLOY_ROOT;
 });
 
 /**
@@ -259,16 +259,16 @@ describe('the database it rescues', () => {
   test('moves the legacy file, with its -wal and -shm, out of the checkout', async () => {
     const checkout = join(scratch, 'devtree', 'packages', 'hub');
     mkdirSync(checkout, { recursive: true });
-    const legacy = join(checkout, 'cockpit.db');
+    const legacy = join(checkout, 'whiffle.db');
     for (const suffix of ['', '-wal', '-shm']) {
       await Bun.write(`${legacy}${suffix}`, `the fleet's memory${suffix}`);
     }
-    const target = join(scratch, 'rescued', 'cockpit.db');
+    const target = join(scratch, 'rescued', 'whiffle.db');
 
     const notes: string[] = [];
     const capture = captor();
     await deployInit({
-      root: join(scratch, 'home2', '.cockpit', 'app'),
+      root: join(scratch, 'home2', '.whiffle', 'app'),
       origin,
       ids: ['hub'],
       note: (line) => notes.push(line),
@@ -289,14 +289,14 @@ describe('the database it rescues', () => {
   test('a database already at the target is never clobbered', async () => {
     const checkout = join(scratch, 'devtree2', 'packages', 'hub');
     mkdirSync(checkout, { recursive: true });
-    const legacy = join(checkout, 'cockpit.db');
+    const legacy = join(checkout, 'whiffle.db');
     await Bun.write(legacy, 'the stale one');
-    const target = join(scratch, 'rescued2', 'cockpit.db');
+    const target = join(scratch, 'rescued2', 'whiffle.db');
     await Bun.write(target, 'the live one');
 
     const capture = captor();
     await deployInit({
-      root: join(scratch, 'home3', '.cockpit', 'app'),
+      root: join(scratch, 'home3', '.whiffle', 'app'),
       origin,
       ids: ['hub'],
       note: () => {},

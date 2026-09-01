@@ -1,4 +1,4 @@
-import type { RulesPayload } from '$lib/cockpit/rules';
+import type { RulesPayload } from '$lib/whiffle/rules';
 import type { PageLoad } from './$types';
 
 /**

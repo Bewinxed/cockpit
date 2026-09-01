@@ -1,4 +1,4 @@
-import type { ProjectRow } from '$lib/cockpit/client.svelte';
+import type { ProjectRow } from '$lib/whiffle/client.svelte';
 import type { PageLoad } from './$types';
 
 /**

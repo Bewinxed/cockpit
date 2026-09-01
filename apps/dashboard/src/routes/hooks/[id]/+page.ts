@@ -1,5 +1,5 @@
 import { error } from '@sveltejs/kit';
-import type { FleetHook, HooksPayload } from '$lib/cockpit/hooks';
+import type { FleetHook, HooksPayload } from '$lib/whiffle/hooks';
 import type { PageLoad } from './$types';
 
 /**

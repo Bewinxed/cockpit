@@ -1,5 +1,5 @@
 import { query, type AccountInfo, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
-import type { AuthState } from '@cockpit/core';
+import type { AuthState } from '@whiffle/core';
 import { homedir, platform } from 'node:os';
 
 /** The keychain item Claude Code keeps its OAuth credentials in on macOS. */

@@ -1,5 +1,5 @@
 {
-	"name": "@cockpit/core",
+	"name": "@whiffle/core",
 	"version": "0.1.0",
 	"private": true,
 	"type": "module",

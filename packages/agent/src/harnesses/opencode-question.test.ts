@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import type { Event, OpencodeClient } from '@opencode-ai/sdk';
-import type { UserQuestionResult } from '@cockpit/core';
-import { ASK_USER_QUESTION } from '@cockpit/core';
+import type { UserQuestionResult } from '@whiffle/core';
+import { ASK_USER_QUESTION } from '@whiffle/core';
 import type { HarnessContext } from '../harness';
 import { OpencodeSession, toTranscript } from './opencode';
 
@@ -9,7 +9,7 @@ import { OpencodeSession, toTranscript } from './opencode';
  * A question in opencode rides on an ordinary tool part named `question`, and
  * that part is the whole of what needs reading: opencode keeps the asked
  * questions in `state.input`, the chosen answers in `state.metadata.answers`,
- * and completes the part whether the answer came through cockpit, through
+ * and completes the part whether the answer came through whiffle, through
  * opencode's own TUI, or from any other client on the server. Because it is
  * stored like any other part, a reopened transcript replays it too.
  *
@@ -115,7 +115,7 @@ test('a completed question part carries the answers, whoever answered it', () =>
   const { session, frames } = drive();
   session.handle(part('running'));
   // `metadata.answers` is exactly what a real server stored after the question
-  // was answered by a direct POST — the route cockpit never sees.
+  // was answered by a direct POST — the route whiffle never sees.
   session.handle(part('completed', { answers: [['Rust', 'Zig']], truncated: false }));
 
   expect(frames.toolResult).toHaveLength(1);
@@ -157,7 +157,7 @@ test('a single-choice question keeps its answer a string, not a list of one', ()
   expect(answered.answers).toEqual({ 'Pick languages': 'Rust' });
 });
 
-test('answering through cockpit does not also write its own row', () => {
+test('answering through whiffle does not also write its own row', () => {
   const { session, frames } = drive();
   // The ask parks a permission; it must not draw a row of its own, or the same
   // question appears twice under two different ids.

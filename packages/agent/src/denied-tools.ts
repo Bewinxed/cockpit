@@ -15,8 +15,8 @@ const SETTINGS = expandHome('~/.claude/settings.json');
 export const DENIED_WEB_TOOLS = ['WebSearch', 'WebFetch'] as const;
 
 /**
- * Claude Code's own subagent tools, denied on every cockpit-spawned session so
- * delegation has exactly one door: the fleet's `delegate` tool (`outpost` MCP
+ * Claude Code's own subagent tools, denied on every whiffle-spawned session so
+ * delegation has exactly one door: the fleet's `delegate` tool (`whiffle` MCP
  * server), routed through the delegate-types registry. The hub sees and the
  * dashboard shows a native `Task` subagent's activity same as anything else in
  * the transcript — the reason for the denial is routing, not visibility: only
@@ -83,7 +83,7 @@ export const convergeDeniedTools = async (): Promise<DenyConvergence> => {
 
     // Written whole and moved into place: a half-written settings file is a
     // machine whose next `claude` starts with none of the user's settings.
-    const temp = `${SETTINGS}.cockpit-${process.pid}`;
+    const temp = `${SETTINGS}.whiffle-${process.pid}`;
     await Bun.write(temp, JSON.stringify(next, null, 2));
     await rename(temp, SETTINGS);
     return { state: 'applied' };

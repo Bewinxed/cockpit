@@ -1,7 +1,7 @@
-import type { FleetConfig } from '@cockpit/core';
-import type { FleetSnapshot } from '$lib/cockpit/fleet';
-import type { HooksPayload } from '$lib/cockpit/hooks';
-import type { ToolsSnapshot } from '$lib/cockpit/tools';
+import type { FleetConfig } from '@whiffle/core';
+import type { FleetSnapshot } from '$lib/whiffle/fleet';
+import type { HooksPayload } from '$lib/whiffle/hooks';
+import type { ToolsSnapshot } from '$lib/whiffle/tools';
 import type { PageLoad } from './$types';
 
 const EMPTY: FleetConfig = { mcp: [], marketplaces: [], plugins: [] };

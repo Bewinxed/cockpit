@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
-import type { Envelope, PermissionResult, UserQuestion } from '@cockpit/core';
-import { COCKPIT_ENV, QUESTION_DISMISSED, settledQuestionResult } from '@cockpit/core';
+import type { Envelope, PermissionResult, UserQuestion } from '@whiffle/core';
+import { WHIFFLE_ENV, QUESTION_DISMISSED, settledQuestionResult } from '@whiffle/core';
 import type { HandoffActions } from './handoff-shared';
 import { handoffActions } from './handoff-shared';
 
@@ -13,7 +13,7 @@ import { handoffActions } from './handoff-shared';
  * required parameter `questions` is missing"), killing the delegate's tool
  * call. The harness that parked the ask is the only side still holding the
  * input, so it puts it back: the shape the dashboard has always sent
- * (`questionAnswer` in apps/dashboard/src/lib/cockpit/question.ts).
+ * (`questionAnswer` in apps/dashboard/src/lib/whiffle/question.ts).
  */
 const questions: UserQuestion[] = [
   {
@@ -104,8 +104,8 @@ const rows = [
  */
 const withHub = async (run: (actions: HandoffActions, sent: Envelope[]) => Promise<void>) => {
   const hub = Bun.serve({ port: 0, fetch: () => Response.json(rows) });
-  const was = process.env[COCKPIT_ENV.hubUrl];
-  process.env[COCKPIT_ENV.hubUrl] = `ws://localhost:${hub.port}/ws`;
+  const was = process.env[WHIFFLE_ENV.hubUrl];
+  process.env[WHIFFLE_ENV.hubUrl] = `ws://localhost:${hub.port}/ws`;
   // A suite earlier in this process leaves its own `fetch` mock installed on
   // the global; the roster is a real HTTP read and wants the real one.
   const wasFetch = globalThis.fetch;
@@ -121,8 +121,8 @@ const withHub = async (run: (actions: HandoffActions, sent: Envelope[]) => Promi
       sent
     );
   } finally {
-    if (was === undefined) delete process.env[COCKPIT_ENV.hubUrl];
-    else process.env[COCKPIT_ENV.hubUrl] = was;
+    if (was === undefined) delete process.env[WHIFFLE_ENV.hubUrl];
+    else process.env[WHIFFLE_ENV.hubUrl] = was;
     globalThis.fetch = wasFetch;
     hub.stop(true);
   }

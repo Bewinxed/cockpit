@@ -4,7 +4,7 @@
   import { getToolGlance, getToolStatus, getResultGlimpse } from '$lib/utils/tool-display';
   import { toolFamily } from '../../tool-cards/descriptors';
   import * as Collapsible from '$lib/components/ui/collapsible';
-  import type { Message } from '$lib/cockpit/types';
+  import type { Message } from '$lib/whiffle/types';
 
   // Props passed by SvelteFlow
   let { data } = $props<{

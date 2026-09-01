@@ -16,11 +16,11 @@
  *
  * WHAT IS REAL HERE: a real sessiond in a real separate process, the real
  * `SessionSupervisor`, the real claude adapter's `adopt`, and the real
- * `readProvenance`/`alreadyIngested` rules from @cockpit/core. The hub is
+ * `readProvenance`/`alreadyIngested` rules from @whiffle/core. The hub is
  * modelled by the six lines of `createStreamHub`'s `admitFrame`
  * (packages/hub/src/stream.ts:554-562), mirrored rather than imported: the
  * agent package compiles with `rootDir: ./src` and does not depend on
- * @cockpit/hub, so importing it would break `tsc --noEmit`. Every RULE the
+ * @whiffle/hub, so importing it would break `tsc --noEmit`. Every RULE the
  * mirror stands on is the exported production one.
  *
  * SAFETY, the rules of leaf D2's and D3's suites, unchanged: the child is a
@@ -41,7 +41,7 @@ import {
   type FramePayload,
   type FrameProvenance,
   type IngestMark,
-} from '@cockpit/core';
+} from '@whiffle/core';
 import { SessiondClient, probeEndpoint } from './sessiond-client';
 import { SessionSupervisor } from './session';
 
@@ -78,10 +78,10 @@ writeFileSync(
 const spawned: string[] = [];
 
 beforeAll(async () => {
-  process.env.COCKPIT_SESSIOND_ENDPOINT = endpoint;
+  process.env.WHIFFLE_SESSIOND_ENDPOINT = endpoint;
   const main = join(import.meta.dir, '..', '..', 'sessiond', 'src', 'main.ts');
   daemon = spawn(process.execPath, [main], {
-    env: { ...process.env, COCKPIT_SESSIOND_ENDPOINT: endpoint },
+    env: { ...process.env, WHIFFLE_SESSIOND_ENDPOINT: endpoint },
     stdio: 'ignore',
   });
   const deadline = Date.now() + 10_000;

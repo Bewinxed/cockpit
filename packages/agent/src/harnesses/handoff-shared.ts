@@ -16,18 +16,18 @@ import type {
   PermissionResult,
   SendPayload,
   SpawnPayload,
-} from '@cockpit/core';
-import { COCKPIT_ENV, COCKPIT_HUB_PORT, QUESTION_DISMISSED } from '@cockpit/core';
+} from '@whiffle/core';
+import { WHIFFLE_ENV, WHIFFLE_HUB_PORT, QUESTION_DISMISSED } from '@whiffle/core';
 import { briefTitle } from '../brief-title';
 
 /** Where the hub answers REST, derived from the websocket url the daemon uses. */
 const hubHttpUrl = (): string => {
-  const ws = process.env[COCKPIT_ENV.hubUrl] ?? `ws://localhost:${COCKPIT_HUB_PORT}/ws`;
+  const ws = process.env[WHIFFLE_ENV.hubUrl] ?? `ws://localhost:${WHIFFLE_HUB_PORT}/ws`;
   return ws.replace(/^ws/, 'http').replace(/\/ws$/, '');
 };
 
 /**
- * The fleet's delegate types (`@cockpit/core`'s `DelegateType`), read once
+ * The fleet's delegate types (`@whiffle/core`'s `DelegateType`), read once
  * per session. There is no fleet sync path for them yet (unlike MCP servers
  * and skills) — a daemon fetches this directly from the hub it already knows
  * the address of, right before it builds the `delegate` tool's description,
@@ -507,7 +507,7 @@ export const handoffActions = ({ instanceId, cwd, emit, delegateTypes = [] }: Ha
     // `updatedInput` has to carry the whole call back or the harness refuses it
     // for the `questions` it is missing, so the harness that parked the ask
     // folds these into the input it kept (settledQuestionResult in
-    // @cockpit/core, mirroring the dashboard's questionAnswer). A denial says so
+    // @whiffle/core, mirroring the dashboard's questionAnswer). A denial says so
     // in words for the same reason: the model is told why, not merely that.
     const result: PermissionResult = deny
       ? { behavior: 'deny', message: QUESTION_DISMISSED }

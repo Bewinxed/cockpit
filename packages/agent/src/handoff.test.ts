@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import type { Envelope, SendPayload } from '@cockpit/core';
-import { COCKPIT_ENV } from '@cockpit/core';
+import type { Envelope, SendPayload } from '@whiffle/core';
+import { WHIFFLE_ENV } from '@whiffle/core';
 import { handoffTools } from './handoff';
 
 /**
@@ -20,7 +20,7 @@ let hub: ReturnType<typeof Bun.serve>;
 
 beforeAll(() => {
   hub = Bun.serve({ port: 0, fetch: () => Response.json(rows) });
-  process.env[COCKPIT_ENV.hubUrl] = `ws://localhost:${hub.port}/ws`;
+  process.env[WHIFFLE_ENV.hubUrl] = `ws://localhost:${hub.port}/ws`;
 });
 
 afterAll(() => hub.stop(true));

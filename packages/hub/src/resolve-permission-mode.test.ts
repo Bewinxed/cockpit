@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import type { InstanceRow } from '@cockpit/core';
+import type { InstanceRow } from '@whiffle/core';
 import { resolveDelegatePermissionMode } from './server';
 
 /** A row with just the fields the walk reads; the rest are irrelevant to it. */

@@ -32,7 +32,7 @@ export const emptyIndex = (): UsageIndex => ({
  * gets a fresh dir under the XDG data home (USAGE-SPEC.md §5.1's fallback).
  */
 export const usageIndexPath = (): string =>
-  join(process.env.XDG_DATA_HOME ?? join(homedir(), '.local', 'share'), 'cockpit', FILE_NAME);
+  join(process.env.XDG_DATA_HOME ?? join(homedir(), '.local', 'share'), 'whiffle', FILE_NAME);
 
 /** Loads the index, or null when it is missing/corrupt/from another version. */
 export const loadIndex = async (): Promise<UsageIndex | null> => {
@@ -80,7 +80,7 @@ export const loadIndex = async (): Promise<UsageIndex | null> => {
 export const saveIndex = async (index: UsageIndex): Promise<void> => {
   const path = usageIndexPath();
   await mkdir(dirname(path), { recursive: true });
-  const temp = `${path}.cockpit-${process.pid}`;
+  const temp = `${path}.whiffle-${process.pid}`;
   await Bun.write(temp, JSON.stringify(index));
   await rename(temp, path);
 };

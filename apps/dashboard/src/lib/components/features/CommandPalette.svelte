@@ -1,7 +1,7 @@
 <script lang="ts">
   import { IconCommand, IconSkill, IconSettings, IconCodeFile } from '$lib/icons';
   import { displayName, filterCommands, groupCommands } from './command-groups';
-  import type { AvailableCommand } from '@cockpit/core';
+  import type { AvailableCommand } from '@whiffle/core';
 
   interface Props {
     commands: AvailableCommand[];

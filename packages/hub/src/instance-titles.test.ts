@@ -1,6 +1,6 @@
 import { afterAll, expect, test } from 'bun:test';
 import { Database } from 'bun:sqlite';
-import type { Envelope } from '@cockpit/core';
+import type { Envelope } from '@whiffle/core';
 import { makeDb } from './db';
 import type { HubSocket, RegistryShape } from './registry';
 import type { PendingShape } from './pending';
@@ -13,7 +13,7 @@ import { createServer } from './server';
  * A scratch database, for the reason every other suite here keeps one — see
  * instance-title.test.ts.
  */
-const DB_FILE = `/tmp/cockpit-instance-titles-${crypto.randomUUID()}.db`;
+const DB_FILE = `/tmp/whiffle-instance-titles-${crypto.randomUUID()}.db`;
 const db = makeDb(DB_FILE);
 
 afterAll(async () => {
@@ -36,7 +36,7 @@ const backdate = (id: string): void => {
 };
 
 const aged = (id: string, fields: { title?: string; derived?: string }): void => {
-  db.openInstance({ id, machineId: MACHINE, cwd: '/home/o/cockpit', kind: 'mainline', ...(fields.title ? { title: fields.title } : {}) });
+  db.openInstance({ id, machineId: MACHINE, cwd: '/home/o/whiffle', kind: 'mainline', ...(fields.title ? { title: fields.title } : {}) });
   if (fields.derived) db.noteDerivedTitle(id, fields.derived);
   db.stopInstance(id);
   backdate(id);
@@ -68,7 +68,7 @@ test('but its row still answers when it is asked for by id', () => {
 });
 
 test('a discarded side quest stays gone, however it is asked for', () => {
-  db.openInstance({ id: 'thrown-away', machineId: MACHINE, cwd: '/home/o/cockpit', kind: 'scratch', title: 'A side quest' });
+  db.openInstance({ id: 'thrown-away', machineId: MACHINE, cwd: '/home/o/whiffle', kind: 'scratch', title: 'A side quest' });
   db.discardInstance('thrown-away');
 
   expect(db.getInstancesByIds(['thrown-away'])).toEqual([]);
@@ -83,7 +83,7 @@ test('the machine is only asked for its catalog when something is unnamed', () =
   db.openInstance({
     id: 'stored-nameless',
     machineId: MACHINE,
-    cwd: '/home/o/cockpit',
+    cwd: '/home/o/whiffle',
     sessionId: 'sdk-session-1',
     kind: 'mainline',
   });
@@ -113,6 +113,8 @@ const registry: RegistryShape = {
   broadcast: (_: Envelope) => {},
   broadcastFrame: () => {},
   setSubscriptions: () => {},
+  noteDashboardOrigin: () => {},
+  dashboardOrigin: () => undefined,
   rememberRequester: () => {},
   takeRequester: () => undefined,
 };
@@ -163,7 +165,7 @@ test('a conversation nobody ever named, on a machine nobody can reach, answers n
 
 test('an ask may carry the machine/cwd/harness a stored-session tab addresses itself with', async () => {
   const titles = await askTitles([
-    { id: 'old-titled', machine: MACHINE, cwd: '/home/o/cockpit', harness: 'claude' },
+    { id: 'old-titled', machine: MACHINE, cwd: '/home/o/whiffle', harness: 'claude' },
     // The strip stores a machine-less visit as an explicit null.
     { id: 'old-derived', machine: null },
   ]);

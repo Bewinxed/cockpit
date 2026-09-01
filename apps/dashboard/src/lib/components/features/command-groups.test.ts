@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import type { AvailableCommand } from '@cockpit/core';
+import type { AvailableCommand } from '@whiffle/core';
 import {
   commandAt,
   displayName,
@@ -34,7 +34,7 @@ test('a list with no namespaces keeps the order it arrived in', () => {
 
 test('unnamespaced first, then plugins alphabetically, then MCP servers', () => {
   const ordered = orderCommands([
-    prompt('outpost', 'handoff'),
+    prompt('whiffle', 'handoff'),
     plugin('interfaces', 'better-ui'),
     builtin('review'),
     plugin('mattpocock-skills', 'tdd'),
@@ -50,7 +50,7 @@ test('unnamespaced first, then plugins alphabetically, then MCP servers', () => 
     'interfaces:better-ui',
     'mattpocock-skills:tdd',
     'mcp__gmail__draft',
-    'mcp__outpost__handoff',
+    'mcp__whiffle__handoff',
   ]);
 });
 
@@ -58,7 +58,7 @@ test('groups start where their first command sits in the flat list', () => {
   const ordered = orderCommands([
     plugin('interfaces', 'better-ui'),
     builtin('review'),
-    prompt('outpost', 'handoff'),
+    prompt('whiffle', 'handoff'),
     plugin('interfaces', 'better-colors'),
   ]);
 
@@ -73,7 +73,7 @@ test('groups start where their first command sits in the flat list', () => {
       start: 1,
       names: ['interfaces:better-colors', 'interfaces:better-ui'],
     },
-    { source: 'outpost', start: 3, names: ['mcp__outpost__handoff'] },
+    { source: 'whiffle', start: 3, names: ['mcp__whiffle__handoff'] },
   ]);
 });
 
@@ -84,14 +84,14 @@ test('a list with no namespaces is one headingless group', () => {
 });
 
 test('a namespace filtered down to nothing leaves no group behind', () => {
-  const commands = [builtin('review'), plugin('interfaces', 'better-ui'), prompt('outpost', 'handoff')];
+  const commands = [builtin('review'), plugin('interfaces', 'better-ui'), prompt('whiffle', 'handoff')];
   const groups = groupCommands(filterCommands(commands, '/better'));
   expect(groups.map((group) => group.source)).toEqual(['interfaces']);
 });
 
 test('a row shows the leaf, never the namespace it sits under', () => {
   expect(displayName(plugin('interfaces', 'better-ui'))).toBe('better-ui');
-  expect(displayName(prompt('outpost', 'handoff'))).toBe('handoff');
+  expect(displayName(prompt('whiffle', 'handoff'))).toBe('handoff');
   expect(displayName(builtin('review'))).toBe('review');
 });
 

@@ -23,13 +23,13 @@ import path from "path";
  * that reset from taking the server (and every dashboard socket) down with it.
  */
 const hubWsProxy = (): Plugin => ({
-  name: 'cockpit:hub-ws-proxy',
+  name: 'whiffle:hub-ws-proxy',
   configureServer(server) {
-    const target = new URL(process.env.COCKPIT_HUB_URL || 'http://localhost:3456');
+    const target = new URL(process.env.WHIFFLE_HUB_URL || 'http://localhost:3456');
     server.httpServer?.on('upgrade', (req, socket, head) => {
       socket.on('error', (error: NodeJS.ErrnoException) => {
         server.config.logger.warn(
-          `[cockpit] websocket socket error on ${req.url}: ${error.code ?? error.message}`,
+          `[whiffle] websocket socket error on ${req.url}: ${error.code ?? error.message}`,
           { timestamp: true }
         );
       });
@@ -56,7 +56,7 @@ const hubWsProxy = (): Plugin => ({
       });
       proxyReq.on('error', (error: NodeJS.ErrnoException) => {
         server.config.logger.warn(
-          `[cockpit] hub ws proxy could not reach ${target.host}: ${error.code ?? error.message}`,
+          `[whiffle] hub ws proxy could not reach ${target.host}: ${error.code ?? error.message}`,
           { timestamp: true }
         );
         socket.destroy();

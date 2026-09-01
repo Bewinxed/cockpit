@@ -20,7 +20,7 @@ import { deployUpdate, pullArgs } from './update';
 /**
  * Everything here runs against a *local bare repository* in a scratch
  * directory, cloned and advanced by this file. Nothing touches the real origin,
- * the real ~/.cockpit/app, or any service: no `systemctl`, no `launchctl`, no
+ * the real ~/.whiffle/app, or any service: no `systemctl`, no `launchctl`, no
  * pull against a remote anybody else can see, and no timer — the poller's state
  * machine is driven by explicit `tick()` calls.
  */
@@ -63,7 +63,7 @@ const writeMarker = async (root: string): Promise<void> => {
 };
 
 beforeAll(async () => {
-  scratch = mkdtempSync(join(tmpdir(), 'cockpit-deploy-'));
+  scratch = mkdtempSync(join(tmpdir(), 'whiffle-deploy-'));
   origin = join(scratch, 'origin.git');
   await sh(scratch, 'git', 'init', '--bare', '--initial-branch=main', origin);
 

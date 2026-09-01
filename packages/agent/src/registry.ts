@@ -15,31 +15,25 @@
  *
  * What this module does NOT do is decide when. It reports what is installed
  * and what is available; acting on the difference is the operator's, through
- * `cockpit update` or the fleet control that calls it.
+ * `whiffle update` or the fleet control that calls it.
  */
-import type { UpdateReport } from '@cockpit/core';
+import type { UpdateReport } from '@whiffle/core';
+import { WHIFFLE_ENV, readEnv } from '@whiffle/core';
 import { restartStack, run } from './update';
 
 /**
  * What a user installs. One package, so a fleet has one version to compare.
  *
- * SCOPED, and that is a safety property rather than a naming preference. This
- * name is what every machine in a fleet will run `install` against
- * unattended — so whoever controls it controls those machines. An unscoped
- * generic word is squattable, transferable, and may already belong to somebody
- * else: `cockpit` on npm is a 2012 Mozilla command-line component, and
- * `outpost` is taken too. Pointing an auto-updater at either would have had
- * fleets installing a stranger's package. A scope can only ever be published
- * to by its owner.
- *
- * `outpost` rather than `cockpit` because that is the product's public name
- * (PRODUCT.md: "Outpost is the sole public-facing name").
+ * This name is what every machine in a fleet runs `install` against
+ * unattended, so whoever controls it controls those machines. Unscoped, which
+ * only holds as a safety property while the name stays ours on npm: never
+ * point this at a generic word we do not own, and never let the publish lapse.
  */
-export const PACKAGE_NAME = '@bewinxed/outpost';
+export const PACKAGE_NAME = 'whiffle';
 
 /** The registry, overridable for a private mirror or an air-gapped fleet. */
 export const registryUrl = (): string =>
-  process.env.COCKPIT_REGISTRY?.replace(/\/$/, '') || 'https://registry.npmjs.org';
+  readEnv(WHIFFLE_ENV.registry)?.replace(/\/$/, '') || 'https://registry.npmjs.org';
 
 /** Long enough for a slow mirror, short enough not to wedge a poll. */
 const REGISTRY_TIMEOUT_MS = 10_000;

@@ -1,11 +1,11 @@
 <script lang="ts">
-  import { newId } from '$lib/cockpit/id';
+  import { newId } from '$lib/whiffle/id';
   import { untrack } from 'svelte';
   import { page } from '$app/state';
   import { goto } from '$app/navigation';
   import { toast } from 'svelte-sonner';
-  import type { HookDraft, HookEvent, HookHandler } from '@cockpit/core';
-  import { HOOK_EVENTS, hookEventInfo, hookProblem, hookSentence, hookTakesMatcher } from '@cockpit/core';
+  import type { HookDraft, HookEvent, HookHandler } from '@whiffle/core';
+  import { HOOK_EVENTS, hookEventInfo, hookProblem, hookSentence, hookTakesMatcher } from '@whiffle/core';
   import { IconArrowRight, IconTrash } from '$lib/icons';
   import { Button } from '$lib/components/ui/button';
   import { Input } from '$lib/components/ui/input';
@@ -13,8 +13,8 @@
   import { Switch } from '$lib/components/ui/switch';
   import { Textarea } from '$lib/components/ui/textarea';
   import * as ToggleGroup from '$lib/components/ui/toggle-group';
-  import { cockpit } from '$lib/cockpit/client.svelte';
-  import HookTester from '$lib/cockpit/HookTester.svelte';
+  import { whiffle } from '$lib/whiffle/client.svelte';
+  import HookTester from '$lib/whiffle/HookTester.svelte';
   import {
     blankHook,
     draftOf,
@@ -24,8 +24,8 @@
     restoreHookVersion,
     saveHook,
     type HookVersion,
-  } from '$lib/cockpit/hooks';
-  import { confirm } from '$lib/cockpit/confirm.svelte';
+  } from '$lib/whiffle/hooks';
+  import { confirm } from '$lib/whiffle/confirm.svelte';
   import type { PageData } from './$types';
 
   /**
@@ -180,8 +180,8 @@
     event.preventDefault();
     attempted = true;
     if (!ready || busy) return;
-    const total = cockpit.machines.length;
-    const project = cockpit.projects.find((candidate) => candidate.id === draft.projectId);
+    const total = whiffle.machines.length;
+    const project = whiffle.projects.find((candidate) => candidate.id === draft.projectId);
     const ok = await confirm({
       title: data.composing ? `Write ${draft.name.trim()} to the fleet?` : `Save ${draft.name.trim()}?`,
       body: scoped
@@ -228,7 +228,7 @@
 </script>
 
 <svelte:head>
-  <title>{data.composing ? 'New hook' : draft.name || 'Hook'} · Outpost</title>
+  <title>{data.composing ? 'New hook' : draft.name || 'Hook'} · Whiffle</title>
 </svelte:head>
 
 <div class="flex-1 overflow-y-auto p-6">
@@ -346,7 +346,7 @@
       <div class="flex flex-col gap-1">
         <h2 class="text-body font-medium">What it runs</h2>
         <p class="max-w-prose text-micro text-muted-foreground">
-          Cockpit writes this to every machine it applies to and registers it — no prompt, no
+          Whiffle writes this to every machine it applies to and registers it — no prompt, no
           approval, every time the event fires.
         </p>
       </div>
@@ -380,7 +380,7 @@
             <span class="text-micro text-destructive">{wrong.script}</span>
           {:else}
             <span class="text-micro text-muted-foreground">
-              Written to every machine, at a path cockpit picks — the hook always points at that
+              Written to every machine, at a path Whiffle picks — the hook always points at that
               copy, never at one you keep locally.
             </span>
           {/if}
@@ -436,7 +436,7 @@
             autocomplete="off"
             spellcheck="false"
             aria-invalid={shown('url') ? 'true' : undefined}
-            placeholder="https://example.com/hooks/cockpit"
+            placeholder="https://example.com/hooks/whiffle"
             class="font-mono text-sm md:text-sm"
           />
           {#if shown('url')}
@@ -583,7 +583,7 @@
         Scope
         <NativeSelect class="w-full" value={draft.projectId ?? ''} onchange={(event) => setProject(event.currentTarget.value)}>
           <option value="">Every machine in the fleet</option>
-          {#each cockpit.projects as project (project.id)}
+          {#each whiffle.projects as project (project.id)}
             <option value={project.id}>{project.name}</option>
           {/each}
         </NativeSelect>

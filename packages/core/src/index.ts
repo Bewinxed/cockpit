@@ -1,7 +1,7 @@
 import type { FleetSyncReport } from './fleet';
 import type { ToolStatus } from './tools';
 
-// The harness-neutral spine (2026-08 rework). Cockpit owns these types; the
+// The harness-neutral spine (2026-08 rework). Whiffle owns these types; the
 // harness adapters (claude, opencode, pi) translate their native events into
 // them, the hub peeks them, the dashboard folds them. See harness.ts for the
 // rules. The `SDK*` names are kept for one release so the dashboard's imports
@@ -15,7 +15,7 @@ export * from './tools';
 export * from './fleet';
 
 // Usage, cost & limits (USAGE-SPEC.md §4). Pure types/math only; `limits.ts`
-// reads credentials with node:fs and lives under the `@cockpit/core/usage/limits`
+// reads credentials with node:fs and lives under the `@whiffle/core/usage/limits`
 // subpath instead.
 export * from './usage';
 
@@ -53,7 +53,7 @@ export * from './ring';
 // reaches for `node:os` and `node:path` to derive its endpoint, and this barrel
 // is imported by the dashboard — a browser bundle, where Vite externalises
 // `node:*` and the first property access throws, taking the whole client module
-// down with it. Import them from `@cockpit/core/sessiond` instead; the subpath
+// down with it. Import them from `@whiffle/core/sessiond` instead; the subpath
 // export exists for exactly that, as `./usage/limits` already does.
 
 // How a session with no given title names itself: its first user message,
@@ -186,7 +186,7 @@ export interface RepoInfo {
 
 /**
  * What the machine-scoped `listRepos` control answers with. The GitHub CLI is
- * the machine's own credential store — cockpit never holds a token.
+ * the machine's own credential store — whiffle never holds a token.
  */
 export type ReposResult = RepoInfo[] | { error: 'gh-missing' | 'gh-unauthenticated' };
 
@@ -337,7 +337,7 @@ export interface AgentRow {
    */
   fleet?: FleetSyncReport;
   /**
-   * The cockpit build this machine's daemon is running (NEW.md §12).
+   * The whiffle build this machine's daemon is running (NEW.md §12).
    */
   build?: BuildInfo;
   /**
@@ -376,7 +376,7 @@ export interface DeployInfo {
 
 /** What a daemon reports about the checkout it was started from. */
 export interface BuildInfo {
-  /** `@cockpit/agent`'s package version. */
+  /** `@whiffle/agent`'s package version. */
   version: string;
   /** Short git SHA, when the checkout is a git one. */
   commit?: string;
@@ -387,7 +387,7 @@ export interface BuildInfo {
 }
 
 /**
- * What an {@link UPDATE_COCKPIT} run did. Every field is what actually
+ * What an {@link UPDATE_WHIFFLE} run did. Every field is what actually
  * happened, not what was asked for.
  */
 export interface UpdateReport {
@@ -407,7 +407,7 @@ export interface UpdateReport {
  * Turns the machine's checkout into the current one: `git pull`, install,
  * rebuild the dashboard, restart the hub and dashboard services.
  */
-export const UPDATE_COCKPIT = 'updateCockpit';
+export const UPDATE_WHIFFLE = 'updateWhiffle';
 
 /**
  * Whether this machine's daemon is in the middle of anything — how a restart
@@ -599,29 +599,79 @@ export type FramePayload =
       pulse: SessionPulse;
     };
 
-export const COCKPIT_HUB_PORT = 3456;
+export const WHIFFLE_HUB_PORT = 3456;
 
 /**
  * The session tag a side quest's transcript carries (NEW.md §1). The agent
  * applies it when the session names itself and clears it when the quest is
  * kept; the catalogs the rails read hide what wears it.
  */
-export const COCKPIT_SCRATCH_TAG = 'cockpit-scratch';
-
-export const COCKPIT_ENV = {
-  hubUrl: 'COCKPIT_HUB_URL',
-  hubPort: 'COCKPIT_HUB_PORT',
-  machineId: 'COCKPIT_MACHINE_ID',
-  /** `1` stops the hub advertising itself over mDNS. */
-  noMdns: 'COCKPIT_NO_MDNS',
-  /** The bot the hub reaches its owner's Telegram on. */
-  telegramToken: 'COCKPIT_TELEGRAM_TOKEN',
-  telegramAsrUrl: 'COCKPIT_TELEGRAM_ASR_URL',
-  telegramAsrModel: 'COCKPIT_TELEGRAM_ASR_MODEL',
-  telegramAsrMode: 'COCKPIT_TELEGRAM_ASR_MODE',
-} as const;
+export const WHIFFLE_SCRATCH_TAG = 'whiffle-scratch';
 
 /**
- * The mDNS service the hub advertises and `cockpit` browses for.
+ * Every environment variable whiffle reads, by the name it is spelled on a
+ * machine. This is the inventory: a variable that is not in here is one nobody
+ * will find next time, so add it here first and read it through
+ * {@link readEnv}.
+ *
+ * Four call sites read a name below as a bare literal, and are meant to. Each
+ * runs somewhere this module cannot be imported, not somewhere the registry
+ * does not apply — being listed here is what keeps them findable:
+ * `packages/hub/drizzle.config.ts` (drizzle-kit bundles it with its own loader
+ * and never resolves workspace TypeScript), `apps/dashboard/serve.js` and
+ * `vite.config.ts` (outside the app bundle), and the opencode handoff plugin
+ * source in `packages/agent/src/harnesses/opencode.ts` (a string executed in
+ * the opencode child process).
  */
-export const COCKPIT_MDNS_TYPE = 'cockpit';
+export const WHIFFLE_ENV = {
+  hubUrl: 'WHIFFLE_HUB_URL',
+  hubPort: 'WHIFFLE_HUB_PORT',
+  machineId: 'WHIFFLE_MACHINE_ID',
+  /** `1` stops the hub advertising itself over mDNS. */
+  noMdns: 'WHIFFLE_NO_MDNS',
+  /**
+   * Overrides the socket `sessiondEndpoint()` derives — the daemon listens on
+   * it and every client dials it, so both ends must read the same variable.
+   */
+  sessiondEndpoint: 'WHIFFLE_SESSIOND_ENDPOINT',
+  /** Where the links the bridge sends point. */
+  dashboardUrl: 'WHIFFLE_DASHBOARD_URL',
+  /** The bot the hub reaches its owner's Telegram on. */
+  telegramToken: 'WHIFFLE_TELEGRAM_TOKEN',
+  /** Telegram's API origin, for pointing the bridge at a proxy. */
+  telegramApi: 'WHIFFLE_TELEGRAM_API',
+  telegramAsrUrl: 'WHIFFLE_TELEGRAM_ASR_URL',
+  telegramAsrModel: 'WHIFFLE_TELEGRAM_ASR_MODEL',
+  telegramAsrMode: 'WHIFFLE_TELEGRAM_ASR_MODE',
+  /** Where the hub's SQLite file lives, overriding the default data dir. */
+  dbPath: 'WHIFFLE_DB_PATH',
+  /** The deployment clone the daemon watches (PLAN.md contract C8). */
+  deployRoot: 'WHIFFLE_DEPLOY_ROOT',
+  /** How often that clone is polled, in seconds. */
+  deployPoll: 'WHIFFLE_DEPLOY_POLL',
+  /** Which service manager the installer targets: `systemd`, `launchd`, … */
+  serviceMode: 'WHIFFLE_SERVICE_MODE',
+  /** The npm registry installs and self-updates go through. */
+  registry: 'WHIFFLE_REGISTRY',
+} as const;
+
+/** One of {@link WHIFFLE_ENV}'s variable names. */
+export type WhiffleEnvVar = (typeof WHIFFLE_ENV)[keyof typeof WHIFFLE_ENV];
+
+/**
+ * Reads one of whiffle's environment variables. Typed to the registry so a
+ * variable cannot escape it as a bare literal again — which is how five of
+ * them escaped in the first place.
+ *
+ * `env` is a parameter so callers that hold a child's environment — the
+ * spawner, the installer's rendered unit — can resolve against it too.
+ */
+export const readEnv = (
+  name: WhiffleEnvVar,
+  env: Record<string, string | undefined> = process.env,
+): string | undefined => env[name];
+
+/**
+ * The mDNS service the hub advertises and `whiffle` browses for.
+ */
+export const WHIFFLE_MDNS_TYPE = 'whiffle';

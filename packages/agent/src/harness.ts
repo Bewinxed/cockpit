@@ -1,7 +1,7 @@
 /**
  * The daemon-side harness abstraction (2026-08 rework).
  *
- * A harness is a plugin that turns one coding-agent runtime into cockpit's
+ * A harness is a plugin that turns one coding-agent runtime into whiffle's
  * neutral spine: it spawns sessions, translates their events into
  * {@link NeutralMessage} frames, parks permission requests under a `requestId`,
  * and answers the machine-scoped session catalog. The supervisor
@@ -28,8 +28,8 @@ import type {
   PermissionUpdate,
   SessionMessage,
   SpawnPayload,
-} from '@cockpit/core';
-import type { SendPayload } from '@cockpit/core';
+} from '@whiffle/core';
+import type { SendPayload } from '@whiffle/core';
 
 /** Everything a harness needs from the supervisor while it owns a session. */
 export interface HarnessContext {
@@ -96,7 +96,7 @@ export interface Harness {
   machine?(method: string, args: unknown[]): Promise<unknown> | undefined;
   /** Applies the hub's fleet config to this harness's own files; reports per entry. */
   syncFleet?(config: FleetConfig): Promise<FleetSyncReport>;
-  /** What the harness has of what cockpit last put on it, without changing it. */
+  /** What the harness has of what whiffle last put on it, without changing it. */
   fleetStatus?(): Promise<FleetSyncReport>;
   /** What `register` reports as this harness's auth, cached from {@link detect}. */
   auth: AuthState;

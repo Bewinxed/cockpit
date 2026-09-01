@@ -5,7 +5,7 @@
  *
  * Usage:
  * ```ts
- * import { login, logout, isAuthenticated, getValidAccessToken } from '@cockpit/auth';
+ * import { login, logout, isAuthenticated, getValidAccessToken } from '@whiffle/auth';
  *
  * // Check if authenticated
  * if (await isAuthenticated()) {

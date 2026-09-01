@@ -1,7 +1,7 @@
 <script lang="ts">
   import { IconUser } from '$lib/icons';
   import { Handle, Position, useStore } from '@xyflow/svelte';
-  import type { Message } from '$lib/cockpit/types';
+  import type { Message } from '$lib/whiffle/types';
 
   // Props passed by SvelteFlow
   let { data } = $props<{

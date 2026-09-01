@@ -1,17 +1,17 @@
 import { afterAll, expect, test } from 'bun:test';
-import { deriveTitleFromFirstMessage } from '@cockpit/core';
+import { deriveTitleFromFirstMessage } from '@whiffle/core';
 import { makeDb } from './db';
 
 /**
- * A scratch database, so the fleet's own `cockpit.db` is never what a test
+ * A scratch database, so the fleet's own `whiffle.db` is never what a test
  * writes to.
  *
- * The path is named rather than set through `COCKPIT_DB_PATH`. `DB_PATH` is
+ * The path is named rather than set through `WHIFFLE_DB_PATH`. `DB_PATH` is
  * read once, when `../config` is first imported, and `bun test` runs every file
  * in one process — so the variable only worked for whichever test won the race
- * to import it, and the losers wrote a stray `cockpit.db` into the repo root.
+ * to import it, and the losers wrote a stray `whiffle.db` into the repo root.
  */
-const DB_FILE = `/tmp/cockpit-instance-title-${crypto.randomUUID()}.db`;
+const DB_FILE = `/tmp/whiffle-instance-title-${crypto.randomUUID()}.db`;
 const db = makeDb(DB_FILE);
 
 afterAll(async () => {
@@ -29,7 +29,7 @@ test("a delegate's spawn title is what the listing reads back", () => {
   db.openInstance({
     id: 'delegate-1',
     machineId: MACHINE,
-    cwd: '/home/o/cockpit',
+    cwd: '/home/o/whiffle',
     parentInstanceId: 'parent-1',
     title: 'Carry the delegate brief headline end to end',
     kind: 'scratch',
@@ -39,7 +39,7 @@ test("a delegate's spawn title is what the listing reads back", () => {
 });
 
 test('a spawn with no title leaves the row untitled', () => {
-  db.openInstance({ id: 'plain-1', machineId: MACHINE, cwd: '/home/o/cockpit', kind: 'mainline' });
+  db.openInstance({ id: 'plain-1', machineId: MACHINE, cwd: '/home/o/whiffle', kind: 'mainline' });
 
   expect(rowOf('plain-1')?.title).toBeNull();
 });
@@ -67,7 +67,7 @@ test("a spawn title outranks the first message: the derived name is never writte
 });
 
 test('a slash command names the session by the command, not its markup echo', () => {
-  db.openInstance({ id: 'slash-1', machineId: MACHINE, cwd: '/home/o/cockpit', kind: 'mainline' });
+  db.openInstance({ id: 'slash-1', machineId: MACHINE, cwd: '/home/o/whiffle', kind: 'mainline' });
   db.noteDerivedTitle(
     'slash-1',
     deriveTitleFromFirstMessage(
@@ -79,7 +79,7 @@ test('a slash command names the session by the command, not its markup echo', ()
 });
 
 test('a first message longer than the limit is cut, not stored whole', () => {
-  db.openInstance({ id: 'long-1', machineId: MACHINE, cwd: '/home/o/cockpit', kind: 'mainline' });
+  db.openInstance({ id: 'long-1', machineId: MACHINE, cwd: '/home/o/whiffle', kind: 'mainline' });
   db.noteDerivedTitle('long-1', deriveTitleFromFirstMessage('x'.repeat(200)));
 
   expect(rowOf('long-1')?.title).toBe('x'.repeat(80));
@@ -89,7 +89,7 @@ test('re-opening a titled row — a restore — keeps the title it already had',
   db.openInstance({
     id: 'delegate-1',
     machineId: MACHINE,
-    cwd: '/home/o/cockpit',
+    cwd: '/home/o/whiffle',
     parentInstanceId: 'parent-1',
     kind: 'scratch',
   });

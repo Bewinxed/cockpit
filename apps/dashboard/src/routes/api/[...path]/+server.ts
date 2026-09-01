@@ -1,7 +1,8 @@
+import { readEnv, WHIFFLE_ENV } from '@whiffle/core';
 import type { RequestHandler } from './$types';
 
 /**
- * The hub's HTTP origin, derived from COCKPIT_HUB_URL. That variable is a
+ * The hub's HTTP origin, derived from WHIFFLE_HUB_URL. That variable is a
  * WebSocket URL (e.g. `ws://localhost:3456/ws`) — the same one the agent and
  * the browser socket use — so the REST base is it with the scheme mapped to
  * http(s) and the trailing `/ws` path dropped. Without this the api route did
@@ -9,7 +10,7 @@ import type { RequestHandler } from './$types';
  * every load returned "Failed to connect to hub server".
  */
 const HUB_URL = (() => {
-  const raw = process.env.COCKPIT_HUB_URL || 'http://localhost:3456';
+  const raw = readEnv(WHIFFLE_ENV.hubUrl) || 'http://localhost:3456';
   const http = raw.replace(/^ws(s?):\/\//, 'http$1://').replace(/\/ws\/?$/, '');
   return http.replace(/\/+$/, '');
 })();

@@ -4,7 +4,7 @@
  * that is. Read here rather than shared with the agent: the hub does not depend
  * on the daemon, and this is thirty lines of git.
  */
-import type { BuildInfo } from '@cockpit/core';
+import type { BuildInfo } from '@whiffle/core';
 import { resolve } from 'node:path';
 import { HUB_VERSION } from './config';
 

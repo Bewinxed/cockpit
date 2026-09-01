@@ -1,4 +1,4 @@
-import type { DelegateTypesPayload } from '$lib/cockpit/delegate-types';
+import type { DelegateTypesPayload } from '$lib/whiffle/delegate-types';
 import type { PageLoad } from './$types';
 
 /**

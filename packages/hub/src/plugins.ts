@@ -2,7 +2,7 @@
  * Resolving a fleet plugin to its files, at the hub, once for every machine.
  *
  * The rest of the fleet already works this way — skills.ts says it outright:
- * "an installer CLI is a wrapper around copying a directory, so cockpit runs
+ * "an installer CLI is a wrapper around copying a directory, so whiffle runs
  * none of them". Plugins were the exception. Sync told every machine to run
  * `claude plugin install`, and that command goes to the network: it reads the
  * marketplace's manifest, finds `{ "source": "github", "repo": "owner/name" }`,
@@ -21,10 +21,10 @@
  * writes them into a marketplace of its own and installs from that directory,
  * which is a form the CLI already supports (a plugin `source` may be a path
  * relative to its marketplace, which is how the official marketplace vendors
- * its own). The CLI still registers the plugin — cockpit does not pretend to
+ * its own). The CLI still registers the plugin — whiffle does not pretend to
  * own `installed_plugins.json` — but it no longer fetches anything.
  */
-import type { FleetPluginPayload, MarketplacePluginInfo } from '@cockpit/core';
+import type { FleetPluginPayload, MarketplacePluginInfo } from '@whiffle/core';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join, normalize } from 'node:path';
@@ -72,7 +72,7 @@ const marketplaceRoot = async (source: string, work: string): Promise<string> =>
     if (!response.ok) throw new Error(`${url.href} answered ${response.status}`);
     return await unpack(response, work, url.pathname);
   }
-  throw new Error(`${source} is not a marketplace source cockpit knows how to fetch`);
+  throw new Error(`${source} is not a marketplace source whiffle knows how to fetch`);
 };
 
 /**
@@ -92,7 +92,7 @@ const pluginRoot = async (
     return inside(marketplace, source);
   }
   if (!source || typeof source !== 'object') {
-    throw new Error(`${entry.name} has no source cockpit can read`);
+    throw new Error(`${entry.name} has no source whiffle can read`);
   }
   const spec = source as Record<string, unknown>;
   const kind = typeof spec.source === 'string' ? spec.source : undefined;
@@ -124,7 +124,7 @@ const pluginRoot = async (
     return path ? inside(root, path) : root;
   }
 
-  throw new Error(`${entry.name}'s source kind "${kind ?? 'unknown'}" is not one cockpit fetches`);
+  throw new Error(`${entry.name}'s source kind "${kind ?? 'unknown'}" is not one whiffle fetches`);
 };
 
 /** One resolved plugin, or the sentence saying why it is not. */
@@ -143,7 +143,7 @@ export const resolveMarketplacePlugins = async (
   names: readonly string[]
 ): Promise<ResolvedPlugin[]> => {
   if (names.length === 0) return [];
-  const work = await mkdtemp(join(tmpdir(), 'cockpit-plugins-'));
+  const work = await mkdtemp(join(tmpdir(), 'whiffle-plugins-'));
   try {
     const root = await marketplaceRoot(marketplaceSource, work);
     const manifestPath = join(root, '.claude-plugin', 'marketplace.json');
@@ -151,7 +151,7 @@ export const resolveMarketplacePlugins = async (
       | Manifest
       | undefined;
     if (!manifest?.plugins) {
-      throw new Error(`${marketplaceSource} has no .claude-plugin/marketplace.json cockpit could read`);
+      throw new Error(`${marketplaceSource} has no .claude-plugin/marketplace.json whiffle could read`);
     }
 
     const resolved: ResolvedPlugin[] = [];

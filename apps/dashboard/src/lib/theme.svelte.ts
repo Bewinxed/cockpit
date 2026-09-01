@@ -4,7 +4,7 @@ type Theme = 'light' | 'dark' | 'system';
 
 function getInitialTheme(): Theme {
   if (!browser) return 'light';
-  const stored = localStorage.getItem('cockpit-theme') as Theme | null;
+  const stored = localStorage.getItem('whiffle-theme') as Theme | null;
   return stored || 'light';
 }
 
@@ -47,7 +47,7 @@ class ThemeState {
   set(value: Theme) {
     this.current = value;
     if (browser) {
-      localStorage.setItem('cockpit-theme', value);
+      localStorage.setItem('whiffle-theme', value);
       applyTheme(value);
     }
   }

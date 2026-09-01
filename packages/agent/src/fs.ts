@@ -3,7 +3,7 @@
  * text reads/writes for editing a repo's markdown. Deliberately not a file
  * transfer — anything bigger belongs in a session, not in this tunnel.
  */
-import type { FsEntry, FsPayload } from '@cockpit/core';
+import type { FsEntry, FsPayload } from '@whiffle/core';
 import { readdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -22,7 +22,7 @@ export const expandHome = (path: string): string => {
 const MAX_READ_BYTES = 512 * 1024;
 
 /**
- * Cockpit is a single-user tool on a trusted network (NEW.md §6), so this is a
+ * Whiffle is a single-user tool on a trusted network (NEW.md §6), so this is a
  * guard against a mistyped path reaching kernel and system state, not an
  * attacker: the whole rest of the machine is deliberately reachable.
  */

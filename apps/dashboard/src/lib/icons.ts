@@ -111,7 +111,7 @@ export { default as IconSubagentsDuo } from '~icons/solar/users-group-rounded-bo
 
 /*
  * The marks a folder can be given by hand (see `FOLDER_MARKS` in
- * lib/cockpit/folder-prefs.svelte.ts). Duotone, like every other "what this
+ * lib/whiffle/folder-prefs.svelte.ts). Duotone, like every other "what this
  * is" glyph, and picked to span the kinds of work a directory holds rather
  * than to be a complete icon set.
  */

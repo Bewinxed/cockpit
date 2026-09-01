@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
-import type { AgentRow, AuthState } from '@cockpit/core';
-import { COCKPIT_ENV, COCKPIT_HUB_PORT } from '@cockpit/core';
+import type { AgentRow, AuthState } from '@whiffle/core';
+import { readEnv, WHIFFLE_ENV, WHIFFLE_HUB_PORT, WHIFFLE_MDNS_TYPE } from '@whiffle/core';
 import { CONFIG_PATH, readConfig } from './config';
 import { discoverHub, type Hub } from './discover';
 import { clearToken, login, LoginError, saveToken } from './login';
@@ -24,22 +24,22 @@ import {
  * binary cannot claim a version the manifest does not. `0.0.0-dev` is what a
  * checkout reports, which is true: a checkout is not a release.
  */
-declare const __COCKPIT_VERSION__: string | undefined;
+declare const __WHIFFLE_VERSION__: string | undefined;
 const CLI_VERSION =
-  typeof __COCKPIT_VERSION__ === 'string' ? __COCKPIT_VERSION__ : '0.0.0-dev';
+  typeof __WHIFFLE_VERSION__ === 'string' ? __WHIFFLE_VERSION__ : '0.0.0-dev';
 
-const HELP = `cockpit ${CLI_VERSION} — join this machine to a cockpit fleet
+const HELP = `whiffle ${CLI_VERSION} — join this machine to a whiffle fleet
 
 Usage
-  cockpit up [--hub <url>] [--verbose]      run the agent daemon on this machine
-  cockpit hub [--verbose]                   run the hub here
-  cockpit status [--hub <url>] [--verbose]  print the hub it found, and the fleet
-  cockpit service <${SERVICE_ACTIONS.join('|')}> [service...]
-                                            run cockpit as per-user services
-  cockpit update [--check] [--to <version>] install the newest release and restart
-  cockpit deploy init [--origin <url>]      developer mode: run from a git clone
-  cockpit login [--token <token>]           give this machine a Claude Code token
-  cockpit logout                            forget it
+  whiffle up [--hub <url>] [--verbose]      run the agent daemon on this machine
+  whiffle hub [--verbose]                   run the hub here
+  whiffle status [--hub <url>] [--verbose]  print the hub it found, and the fleet
+  whiffle service <${SERVICE_ACTIONS.join('|')}> [service...]
+                                            run whiffle as per-user services
+  whiffle update [--check] [--to <version>] install the newest release and restart
+  whiffle deploy init [--origin <url>]      developer mode: run from a git clone
+  whiffle login [--token <token>]           give this machine a Claude Code token
+  whiffle logout                            forget it
 
 Services
   ${SERVICE_IDS.join(', ')} — each its own per-user service, started by systemd or
@@ -61,7 +61,7 @@ Services
   reached to answer the question at all.
 
 Deploying
-  \`cockpit deploy init\` clones ${DEPLOY_BRANCH} into ${deployRoot()} — a checkout
+  \`whiffle deploy init\` clones ${DEPLOY_BRANCH} into ${deployRoot()} — a checkout
   that is nobody's working copy — installs it, builds the dashboard, writes a
   ${DEPLOY_MARKER} marker and installs the services pointing at that clone
   instead of at your editor's checkout. From then on the daemon fetches
@@ -90,36 +90,36 @@ Options
 
 Signing in
   The daemon runs Claude Code as you, so it needs the credentials you logged in
-  with. Run it as a service — \`cockpit service install\` — and on macOS it
+  with. Run it as a service — \`whiffle service install\` — and on macOS it
   inherits your desktop session and reads them from the login keychain, which is
   the whole fix. A daemon started over SSH cannot: the keychain refuses a process
   with no GUI session, and every turn comes back "Not logged in".
 
-  Where that is not possible — a headless box — \`cockpit login\` mints a token
+  Where that is not possible — a headless box — \`whiffle login\` mints a token
   instead, kept in ${CONFIG_PATH} at mode 0600 and exported to the daemon as
   CLAUDE_CODE_OAUTH_TOKEN, which skips the keychain entirely.
 
 Finding the hub, in order — the first that answers wins
-  1. --hub, then ${COCKPIT_ENV.hubUrl}
+  1. --hub, then ${WHIFFLE_ENV.hubUrl}
   2. the last hub that answered, remembered in ${CONFIG_PATH}
-  3. mDNS on the local link (_cockpit._tcp)
-  4. online Tailscale peers, on ${COCKPIT_ENV.hubPort} (default ${COCKPIT_HUB_PORT})
-  5. http://localhost:${COCKPIT_HUB_PORT}
+  3. mDNS on the local link (_${WHIFFLE_MDNS_TYPE}._tcp)
+  4. online Tailscale peers, on ${WHIFFLE_ENV.hubPort} (default ${WHIFFLE_HUB_PORT})
+  5. http://localhost:${WHIFFLE_HUB_PORT}
 
   Step 3 only ever sees the local link. mDNS is multicast, and multicast does
   not travel over Tailscale — a hub on the far side of a tailnet is found by
   step 4, never by step 3.
 
 Environment
-  ${COCKPIT_ENV.hubUrl}    hub to use, same as --hub
-  ${COCKPIT_ENV.hubPort}   port the probes try (default ${COCKPIT_HUB_PORT})
-  ${COCKPIT_ENV.noMdns}=1  stop \`cockpit hub\` advertising itself
+  ${WHIFFLE_ENV.hubUrl}    hub to use, same as --hub
+  ${WHIFFLE_ENV.hubPort}   port the probes try (default ${WHIFFLE_HUB_PORT})
+  ${WHIFFLE_ENV.noMdns}=1  stop \`whiffle hub\` advertising itself
 `;
 
-const NO_HUB = `cockpit: no hub found.
+const NO_HUB = `whiffle: no hub found.
 
-Start one with \`cockpit hub\`, or point this machine at an existing one with
-\`cockpit up --hub http://host:${COCKPIT_HUB_PORT}\`. Run again with --verbose to
+Start one with \`whiffle hub\`, or point this machine at an existing one with
+\`whiffle up --hub http://host:${WHIFFLE_HUB_PORT}\`. Run again with --verbose to
 see what each step tried.`;
 
 interface Args {
@@ -266,7 +266,7 @@ const status = async (args: Args): Promise<number> => {
     .then((response) => (response.ok ? (response.json() as Promise<AgentRow[]>) : undefined))
     .catch(() => undefined);
   if (!agents) {
-    console.error(`\ncockpit: ${hub.httpUrl} did not answer /api/agents`);
+    console.error(`\nwhiffle: ${hub.httpUrl} did not answer /api/agents`);
     return 1;
   }
   printFleet(agents);
@@ -293,11 +293,11 @@ const applyToken = async (): Promise<boolean> => {
  */
 const authNote = (state: Exclude<AuthState, 'authenticated'>): string =>
   state === 'unreadable-credentials'
-    ? `cockpit: this machine has Claude Code credentials, but this process cannot read them.
+    ? `whiffle: this machine has Claude Code credentials, but this process cannot read them.
 They live in your login keychain, and the keychain only opens for a process
 inside your desktop session — a daemon started over SSH is not one, so sessions
 will start and then answer "Not logged in". Logging in again will not change it.`
-    : `cockpit: nobody is signed in to Claude Code on this machine, so sessions will
+    : `whiffle: nobody is signed in to Claude Code on this machine, so sessions will
 start and then answer "Not logged in".`;
 
 /**
@@ -308,7 +308,7 @@ start and then answer "Not logged in".`;
  */
 const preflight = async (): Promise<AuthState> => {
   // Loaded here rather than at the top so `status` never pays for the agent SDK.
-  const { probeAuth } = await import('@cockpit/agent');
+  const { probeAuth } = await import('@whiffle/agent');
   const state = await probeAuth();
   if (state === 'authenticated') return state;
 
@@ -316,8 +316,8 @@ const preflight = async (): Promise<AuthState> => {
 
   if (!process.stdin.isTTY) {
     console.error(`
-Fix it from this machine with \`cockpit login\`, or run the daemon as a service
-— \`cockpit service install\` — which on macOS is enough on its own. Starting
+Fix it from this machine with \`whiffle login\`, or run the daemon as a service
+— \`whiffle service install\` — which on macOS is enough on its own. Starting
 anyway; the fleet will show this machine as needing sign-in.`);
     return state;
   }
@@ -337,17 +337,17 @@ const up = async (args: Args): Promise<number> => {
     console.error(NO_HUB);
     return 1;
   }
-  console.log(`cockpit: hub ${hub.httpUrl} (found by ${hub.source})`);
+  console.log(`whiffle: hub ${hub.httpUrl} (found by ${hub.source})`);
 
   await applyToken();
   const auth = await preflight();
   if (process.stdin.isTTY) {
-    console.log('cockpit: `cockpit service install` runs this in the background instead.');
+    console.log('whiffle: `whiffle service install` runs this in the background instead.');
   }
 
   // The daemon reads its hub from the environment, so this is the handoff.
-  process.env[COCKPIT_ENV.hubUrl] = hub.wsUrl;
-  const { runDaemon, watchDeployment } = await import('@cockpit/agent');
+  process.env[WHIFFLE_ENV.hubUrl] = hub.wsUrl;
+  const { runDaemon, watchDeployment } = await import('@whiffle/agent');
   runDaemon(auth);
   // The git-pull path is DEVELOPER MODE now, and off unless asked for.
   //
@@ -356,13 +356,13 @@ const up = async (args: Args): Promise<number> => {
   // to run their own fleet and the wrong thing to ship — it makes every commit
   // a release, with no version to name, nothing to roll back to, and no gate
   // between a push and somebody else's machine. Users update from the registry
-  // (`cockpit update`), where a release is a published version that was built
+  // (`whiffle update`), where a release is a published version that was built
   // once and can be pinned.
   //
   // Kept, rather than deleted, because running the fleet straight from a
   // checkout is genuinely how this gets developed. It simply has to be chosen:
-  // COCKPIT_DEPLOY_POLL=1, or a clone that says so in its own marker.
-  if (process.env.COCKPIT_DEPLOY_POLL === '1') {
+  // WHIFFLE_DEPLOY_POLL=1, or a clone that says so in its own marker.
+  if (readEnv(WHIFFLE_ENV.deployPoll) === '1') {
     watchDeployment({ root: CHECKOUT_ROOT });
   }
   return 0;
@@ -370,11 +370,11 @@ const up = async (args: Args): Promise<number> => {
 
 const runService = async (args: Args): Promise<number> => {
   if (!isServiceAction(args.action)) {
-    throw new UsageError(`cockpit service needs one of: ${SERVICE_ACTIONS.join(', ')}`);
+    throw new UsageError(`whiffle service needs one of: ${SERVICE_ACTIONS.join(', ')}`);
   }
   const named = args.rest.map((id) => {
     if (!isServiceId(id)) {
-      throw new UsageError(`cockpit service does not know ${id} — one of: ${SERVICE_IDS.join(', ')}`);
+      throw new UsageError(`whiffle service does not know ${id} — one of: ${SERVICE_IDS.join(', ')}`);
     }
     return id;
   });
@@ -393,7 +393,7 @@ const runService = async (args: Args): Promise<number> => {
 };
 
 /**
- * `cockpit deploy init` (PLAN.md C8). One verb, and deliberately only one: the
+ * `whiffle deploy init` (PLAN.md C8). One verb, and deliberately only one: the
  * clone is created here, and every deploy after it is a push to the deploy
  * branch that the daemon's poller picks up.
  */
@@ -405,27 +405,27 @@ const runService = async (args: Args): Promise<number> => {
  * installed and the services come back on it.
  */
 const runUpdate = async (args: Args): Promise<number> => {
-  const { checkVersion, registryUpdate } = await import('@cockpit/agent');
+  const { checkVersion, registryUpdate } = await import('@whiffle/agent');
   const state = await checkVersion(CLI_VERSION);
 
   if (state.latest === null) {
-    console.error(`cockpit: could not reach the registry — ${state.reason ?? 'no reason given'}`);
-    console.error(`cockpit: this machine stays on ${state.installed}.`);
+    console.error(`whiffle: could not reach the registry — ${state.reason ?? 'no reason given'}`);
+    console.error(`whiffle: this machine stays on ${state.installed}.`);
     return 1;
   }
 
   const wanted = args.to;
   if (!wanted && !state.behind) {
-    console.log(`cockpit ${state.installed} is the newest release.`);
+    console.log(`whiffle ${state.installed} is the newest release.`);
     return 0;
   }
   if (args.check) {
-    console.log(`cockpit ${state.installed} installed; ${state.latest} available.`);
-    console.log('Run `cockpit update` to install it.');
+    console.log(`whiffle ${state.installed} installed; ${state.latest} available.`);
+    console.log('Run `whiffle update` to install it.');
     return 0;
   }
 
-  console.log(`cockpit: ${state.installed} → ${wanted ?? state.latest}`);
+  console.log(`whiffle: ${state.installed} → ${wanted ?? state.latest}`);
   const report = await registryUpdate({
     installed: state.installed,
     ...(wanted ? { to: wanted } : {}),
@@ -439,7 +439,7 @@ const runUpdate = async (args: Args): Promise<number> => {
 
 const runDeploy = async (args: Args): Promise<number> => {
   if (args.action !== 'init') {
-    throw new UsageError('cockpit deploy takes one verb: init');
+    throw new UsageError('whiffle deploy takes one verb: init');
   }
   const result = await deployInit({
     ...(args.origin === undefined ? {} : { origin: args.origin }),
@@ -456,7 +456,7 @@ const runDeploy = async (args: Args): Promise<number> => {
 
 /** Importing the hub boots it: its entry point listens, and then stays up. */
 const hub = async (): Promise<number> => {
-  await import('@cockpit/hub');
+  await import('@whiffle/hub');
   return 0;
 };
 
@@ -487,13 +487,13 @@ const run = async (argv: string[]): Promise<number> => {
     case 'login':
       if (args.token) await saveToken(args.token);
       else await login();
-      console.log(`cockpit: token saved to ${CONFIG_PATH}. Restart the daemon to use it.`);
+      console.log(`whiffle: token saved to ${CONFIG_PATH}. Restart the daemon to use it.`);
       return 0;
     case 'logout':
       console.log(
         (await clearToken())
-          ? `cockpit: token cleared from ${CONFIG_PATH}.`
-          : 'cockpit: no token was stored.'
+          ? `whiffle: token cleared from ${CONFIG_PATH}.`
+          : 'whiffle: no token was stored.'
       );
       return 0;
     default:
@@ -503,11 +503,11 @@ const run = async (argv: string[]): Promise<number> => {
 
 const code = await run(Bun.argv.slice(2)).catch((error: unknown) => {
   if (error instanceof UsageError) {
-    console.error(`cockpit: ${error.message}\n\nRun \`cockpit --help\`.`);
+    console.error(`whiffle: ${error.message}\n\nRun \`whiffle --help\`.`);
     return 2;
   }
   if (error instanceof LoginError || error instanceof ServiceError) {
-    console.error(`cockpit: ${error.message}`);
+    console.error(`whiffle: ${error.message}`);
     return 1;
   }
   throw error;

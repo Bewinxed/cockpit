@@ -16,7 +16,7 @@
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { NeutralMessage, NeutralUserMessage } from '@cockpit/core';
+import type { NeutralMessage, NeutralUserMessage } from '@whiffle/core';
 // The adapter answers permissions in the SDK's own `PermissionResult` shape —
 // that is what a `control_response` carries — not the neutral alias of the same
 // name in core, which is what crosses the hub's wire.
@@ -144,7 +144,7 @@ test('a NON-permission control during custody fails visibly, in band', () => {
   r.custody.ingest(line('"subtype":"mcp_message"'));
 
   // In band: the CLI is told this request will never be served, so the tool
-  // call fails instead of hanging on the outpost server that died with the
+  // call fails instead of hanging on the whiffle server that died with the
   // agent.
   expect(r.written).toHaveLength(1);
   const answer = JSON.parse(r.written[0]!) as {
@@ -244,7 +244,7 @@ test(
     const dir = mkdtempSync(join(tmpdir(), 'custody-live-'));
     const endpoint = join(dir, 'sessiond.sock');
     const daemon = spawn(process.execPath, [join(import.meta.dir, '..', '..', '..', 'sessiond', 'src', 'main.ts')], {
-      env: { ...process.env, COCKPIT_SESSIOND_ENDPOINT: endpoint },
+      env: { ...process.env, WHIFFLE_SESSIOND_ENDPOINT: endpoint },
       stdio: 'ignore',
     });
     try {

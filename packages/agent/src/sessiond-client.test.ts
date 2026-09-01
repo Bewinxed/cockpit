@@ -38,7 +38,7 @@ const startDaemon = async (): Promise<string> => {
   const endpoint = join(scratch(), 'sessiond.sock');
   const main = join(import.meta.dir, '..', '..', 'sessiond', 'src', 'main.ts');
   const daemon: ChildProcess = spawn(process.execPath, [main], {
-    env: { ...process.env, COCKPIT_SESSIOND_ENDPOINT: endpoint },
+    env: { ...process.env, WHIFFLE_SESSIOND_ENDPOINT: endpoint },
     stdio: 'ignore',
   });
   cleanups.push(() => daemon.kill('SIGKILL'));
@@ -153,14 +153,14 @@ test('an unknown verb is answered, never fatal — the §5 capability probe', as
 
 // --------------------------------------------------------------- the guard
 
-test('serviceManaged reads systemd, launchd and cockpit\'s own unit marker', () => {
+test('serviceManaged reads systemd, launchd and whiffle\'s own unit marker', () => {
   // systemd sets INVOCATION_ID on every unit-started process (systemd.exec(5)).
   expect(serviceManaged({ INVOCATION_ID: 'e6b1c0…' })).toBe(true);
-  // cockpit's own unit marker (`cli/src/service.ts`, MODE_ENV) — a dev-mode
+  // whiffle's own unit marker (`cli/src/service.ts`, MODE_ENV) — a dev-mode
   // unit is still a unit.
-  expect(serviceManaged({ COCKPIT_SERVICE_MODE: 'dev' })).toBe(true);
+  expect(serviceManaged({ WHIFFLE_SERVICE_MODE: 'dev' })).toBe(true);
   // launchd's equivalent carries the job label…
-  expect(serviceManaged({ XPC_SERVICE_NAME: 'com.cockpit.agent' })).toBe(true);
+  expect(serviceManaged({ XPC_SERVICE_NAME: 'com.whiffle.agent' })).toBe(true);
   // …but a login shell inherits the literal placeholder, which is NOT a unit.
   expect(serviceManaged({ XPC_SERVICE_NAME: '0' })).toBe(false);
   expect(serviceManaged({})).toBe(false);
@@ -180,7 +180,7 @@ test('under service management a missing sessiond is a loud error, NEVER an ad-h
   // restart kills every session it was holding — the exact KillMode trap
   // sessiond was built to escape. The error names the install-time fix.
   await expect(ensureSessiond(endpoint, { INVOCATION_ID: 'unit-1' })).rejects.toThrow(
-    'systemctl --user start cockpit-sessiond'
+    'systemctl --user start whiffle-sessiond'
   );
 
   // Nothing was started: the socket is still absent after both refusals.

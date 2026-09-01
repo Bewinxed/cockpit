@@ -1,12 +1,12 @@
-import type { InstanceRow, SessionMessage } from '@cockpit/core';
-import { turnStart } from '$lib/cockpit/frames';
+import type { InstanceRow, SessionMessage } from '@whiffle/core';
+import { turnStart } from '$lib/whiffle/frames';
 import { TRANSCRIPT_FIRST_CHUNK } from '$lib/config';
 import type { PageServerLoad } from './$types';
 
 /**
  * Where this conversation's stored transcript can be read from, resolved on the
  * server so the browser can start reading it without waiting for its socket.
- * Mirrors `HistorySource` in the cockpit store.
+ * Mirrors `HistorySource` in the whiffle store.
  */
 interface HistorySource {
   viewId: string;

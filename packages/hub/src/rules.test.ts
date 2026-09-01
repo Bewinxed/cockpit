@@ -1,6 +1,6 @@
 import { afterAll, beforeEach, expect, test } from 'bun:test';
-import type { Envelope, NeutralMessage, Rule, RuleDraft, SendPayload } from '@cockpit/core';
-import { RULE_FIRE_CEILING } from '@cockpit/core';
+import type { Envelope, NeutralMessage, Rule, RuleDraft, SendPayload } from '@whiffle/core';
+import { RULE_FIRE_CEILING } from '@whiffle/core';
 import { makeDb } from './db';
 import { RuleEngine } from './rules';
 
@@ -10,12 +10,12 @@ import { RuleEngine } from './rules';
  * testing the stub. Only the socket is faked, because that is the one thing a
  * test cannot have.
  *
- * The path is named rather than set through `COCKPIT_DB_PATH`. Under `bun test`
+ * The path is named rather than set through `WHIFFLE_DB_PATH`. Under `bun test`
  * every file shares one process, `DB_PATH` is read once at import, and the file
- * that loses that race writes its fixtures into the fleet's real `cockpit.db` —
+ * that loses that race writes its fixtures into the fleet's real `whiffle.db` —
  * which is exactly what happened before this was pinned.
  */
-const DB_FILE = `/tmp/cockpit-rules-${crypto.randomUUID()}.db`;
+const DB_FILE = `/tmp/whiffle-rules-${crypto.randomUUID()}.db`;
 const db = makeDb(DB_FILE);
 
 afterAll(async () => {
@@ -101,7 +101,7 @@ test('a turn rule fires when the turn ends, and wakes the session', () => {
 
   expect(sent).toHaveLength(1);
   const message = sent[0]!.payload.message;
-  // The reply, verbatim and alone. Nothing names cockpit, the rule, or a tool.
+  // The reply, verbatim and alone. Nothing names whiffle, the rule, or a tool.
   expect(body(sent[0]!)).toBe(rule.reply);
   // `shouldQuery` is the whole point of the `turn` timing: the session is idle,
   // and a queued append it never reads changes nothing.
@@ -119,7 +119,7 @@ test('nothing in what the session reads betrays that a rule sent it', () => {
   const text = body(sent[0]!).toLowerCase();
   // A session that can see the detector games the phrase rather than the habit,
   // so none of the machinery may appear in the message it reads.
-  for (const tell of ['cockpit', 'rule', 'acknowledge', 'acknowledge_rule', rule.id]) {
+  for (const tell of ['whiffle', 'rule', 'acknowledge', 'acknowledge_rule', rule.id]) {
     expect(text).not.toContain(tell.toLowerCase());
   }
   expect(body(sent[0]!)).toBe(rule.reply);
@@ -270,7 +270,7 @@ test('quoting the nag back does not re-trigger it — the loop this would otherw
   // the guard this fires forever: the reply contains the phrase by definition.
   turn(
     engine,
-    `You told me: [cockpit rule — ${rule.name}]\n\n${rule.reply}\n\nI have dealt with it.`
+    `You told me: [whiffle rule — ${rule.name}]\n\n${rule.reply}\n\nI have dealt with it.`
   );
 
   expect(sent).toHaveLength(0);

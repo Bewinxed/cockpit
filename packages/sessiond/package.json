@@ -1,5 +1,5 @@
 {
-  "name": "@cockpit/sessiond",
+  "name": "@whiffle/sessiond",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -16,7 +16,7 @@
     "start": "bun src/main.ts"
   },
   "dependencies": {
-    "@cockpit/core": "workspace:*"
+    "@whiffle/core": "workspace:*"
   },
   "devDependencies": {
     "@types/bun": "latest",

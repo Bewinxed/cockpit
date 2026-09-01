@@ -1,5 +1,5 @@
-import type { SendPayload } from '@cockpit/core';
-import { COCKPIT_ENV } from '@cockpit/core';
+import type { SendPayload } from '@whiffle/core';
+import { WHIFFLE_ENV, readEnv } from '@whiffle/core';
 
 /** Telegram's own ceiling on what a bot may fetch, and how long fetching may take. */
 const FILE_LIMIT = 20 * 1024 * 1024;
@@ -218,16 +218,16 @@ export const createMediaIntake = ({ call, filesBase }: MediaServices): MediaInta
   };
 
   const transcribe = async (bytes: Uint8Array, filename: string): Promise<Intake> => {
-    const url = Bun.env[COCKPIT_ENV.telegramAsrUrl]?.replace(/\/+$/, '');
+    const url = readEnv(WHIFFLE_ENV.telegramAsrUrl)?.replace(/\/+$/, '');
     if (!url) return { kind: 'refused', reason: "Transcription isn't configured yet." };
-    const handle = Bun.env[COCKPIT_ENV.telegramAsrModel] ?? DEFAULT_MODEL;
+    const handle = readEnv(WHIFFLE_ENV.telegramAsrModel) ?? DEFAULT_MODEL;
 
     const name = await named(url, handle);
     if (typeof name !== 'string') return { kind: 'refused', reason: name.error };
     const cold = await warm(url, name);
     if (cold) return { kind: 'refused', reason: cold };
 
-    const chat = Bun.env[COCKPIT_ENV.telegramAsrMode] === 'chat';
+    const chat = readEnv(WHIFFLE_ENV.telegramAsrMode) === 'chat';
     const response = await (chat
       ? // An audio-capable LLM has no transcription API — it is asked to
         // transcribe the way it is asked anything, with the audio attached.

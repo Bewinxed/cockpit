@@ -3,7 +3,7 @@
  * runs, so a machine quietly a month behind is the normal failure — this is what
  * lets the hub say so instead of the user finding out through a protocol error.
  */
-import type { BuildInfo } from '@cockpit/core';
+import type { BuildInfo } from '@whiffle/core';
 import { resolve } from 'node:path';
 
 /** The checkout this daemon runs out of — up from `packages/agent/src`. */

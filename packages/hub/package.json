@@ -1,5 +1,5 @@
 {
-  "name": "@cockpit/hub",
+  "name": "@whiffle/hub",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -13,7 +13,7 @@
     "db:push": "drizzle-kit push"
   },
   "dependencies": {
-    "@cockpit/core": "workspace:*",
+    "@whiffle/core": "workspace:*",
     "bonjour-service": "^1.4.4",
     "drizzle-orm": "^0.44.0",
     "effect": "beta",

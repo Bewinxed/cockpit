@@ -6,7 +6,7 @@
  */
 import { OpencodeHarness } from './src/harnesses/opencode';
 import type { Harness, HarnessContext, HarnessSession } from './src/harness';
-import type { NeutralMessage, NeutralUserMessage, SpawnPayload } from '@cockpit/core';
+import type { NeutralMessage, NeutralUserMessage, SpawnPayload } from '@whiffle/core';
 
 const PROOF_DIR = '/tmp/opencode-proof-dir';
 

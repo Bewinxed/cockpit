@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <link rel="icon" href="%sveltekit.assets%/favicon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
-    <title>Outpost — mission control for Claude Code</title>
+    <title>Whiffle — mission control for Claude Code</title>
     <!--
       The two faces the first viewport is actually set in, fetched alongside the
       stylesheet rather than after it. Both are `font-display: swap`, so without
@@ -25,7 +25,7 @@
   </head>
   <body data-sveltekit-preload-data="hover">
     <!--
-    THESIS: Outpost answers "what is every agent doing, what needs me" in one
+    THESIS: Whiffle answers "what is every agent doing, what needs me" in one
     glance, then one click deep. It refuses the stacked-form admin page and the
     stretched single column.
     OWN-WORLD: Apple x Airbnb. Warm-white canvas (warm charcoal at night),
@@ -61,7 +61,7 @@
     -->
     <script>
       try {
-        var w = parseInt(localStorage.getItem('cockpit-rail-width'), 10);
+        var w = parseInt(localStorage.getItem('whiffle-rail-width'), 10);
         if (w >= 216 && w <= 520)
           document.documentElement.style.setProperty('--rail-w', w + 'px');
       } catch (e) {

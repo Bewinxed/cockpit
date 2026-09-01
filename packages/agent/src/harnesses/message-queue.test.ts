@@ -18,8 +18,8 @@ import { expect, test } from 'bun:test';
 // SDK's `SDKUserMessage` — not the neutral alias of the same name in core,
 // which is what crosses the wire.
 import type { SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
-import type { NeutralUserMessage } from '@cockpit/core';
-import { MESSAGE_DEQUEUED, MESSAGE_QUEUED } from '@cockpit/core';
+import type { NeutralUserMessage } from '@whiffle/core';
+import { MESSAGE_DEQUEUED, MESSAGE_QUEUED } from '@whiffle/core';
 import { InputStream, dequeuedFrame, queuedFrame, queuedText } from './claude';
 
 const turn = (text: string): SDKUserMessage =>

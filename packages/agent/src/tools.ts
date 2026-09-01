@@ -4,8 +4,8 @@
  * — every fact about a particular tool lives in {@link TOOL_CATALOG}, and
  * nothing here names one.
  */
-import type { ToolInstallMethod, ToolPlatform, ToolSpec, ToolStatus } from '@cockpit/core';
-import { TOOL_CATALOG, toolSpec } from '@cockpit/core';
+import type { ToolInstallMethod, ToolPlatform, ToolSpec, ToolStatus } from '@whiffle/core';
+import { TOOL_CATALOG, toolSpec } from '@whiffle/core';
 import { arch, platform, tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import { expandHome } from './fs';

@@ -1,11 +1,11 @@
-import type { AuthState } from '@cockpit/core';
+import type { AuthState } from '@whiffle/core';
 import {
   buildAuthorizationUrl,
   exchangeCodeForTokens,
   generateCodeChallenge,
   generateCodeVerifier,
   saveCredentials,
-} from '@cockpit/auth';
+} from '@whiffle/auth';
 import { homedir, platform, userInfo } from 'node:os';
 import { probeAuth } from './auth';
 

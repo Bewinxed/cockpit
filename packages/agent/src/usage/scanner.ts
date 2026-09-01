@@ -1,5 +1,5 @@
-import { floorToHour, totalTokens } from '@cockpit/core';
-import type { UsageBucket } from '@cockpit/core';
+import { floorToHour, totalTokens } from '@whiffle/core';
+import type { UsageBucket } from '@whiffle/core';
 import { stat } from 'node:fs/promises';
 import { emptyIndex, loadIndex, saveIndex, type UsageIndex } from './index-store';
 import { listClaudeFiles, parseClaudeRecords } from './scan-claude';

@@ -6,8 +6,8 @@ import {
   tailscaleCandidates,
   toHttpBase,
   toWsUrl,
-} from '@cockpit/agent';
-import { COCKPIT_ENV, COCKPIT_HUB_PORT, COCKPIT_MDNS_TYPE } from '@cockpit/core';
+} from '@whiffle/agent';
+import { readEnv, WHIFFLE_ENV, WHIFFLE_HUB_PORT, WHIFFLE_MDNS_TYPE } from '@whiffle/core';
 import { CONFIG_PATH, readConfig, writeConfig } from './config';
 
 /** Which rung of the ladder answered. */
@@ -34,14 +34,14 @@ export interface DiscoverOptions {
  * did it pick that one" has to be readable without a debugger.
  *
  * The mDNS browse, the tailscale walk, and the probe itself live in
- * `@cockpit/agent`'s `discovery` module — they are shared with the daemon's
+ * `@whiffle/agent`'s `discovery` module — they are shared with the daemon's
  * own re-discovery on a sustained reconnect failure. This file keeps only the
- * rungs that are specific to a `cockpit up`: being told outright, the CLI's
+ * rungs that are specific to a `whiffle up`: being told outright, the CLI's
  * cached config, and localhost.
  */
 export const discoverHub = async ({ hub, log }: DiscoverOptions = {}): Promise<Hub | undefined> => {
   const note = log ?? ((): void => {});
-  const port = Number(process.env[COCKPIT_ENV.hubPort] ?? COCKPIT_HUB_PORT);
+  const port = Number(readEnv(WHIFFLE_ENV.hubPort) ?? WHIFFLE_HUB_PORT);
 
   const settle = async (httpUrl: string, source: HubSource): Promise<Hub> => {
     await writeConfig({ hubUrl: httpUrl });
@@ -50,17 +50,17 @@ export const discoverHub = async ({ hub, log }: DiscoverOptions = {}): Promise<H
 
   // 1. Being told outranks being clever, and an explicit hub is not probed: the
   //    daemon is allowed to start before the hub it was pointed at exists.
-  const explicit = hub ?? process.env[COCKPIT_ENV.hubUrl];
+  const explicit = hub ?? readEnv(WHIFFLE_ENV.hubUrl);
   if (explicit) {
     const source = hub ? 'flag' : 'env';
     const base = toHttpBase(explicit);
     if (base) {
-      note(`[1/5] ${source === 'flag' ? '--hub' : COCKPIT_ENV.hubUrl}: ${base}`);
+      note(`[1/5] ${source === 'flag' ? '--hub' : WHIFFLE_ENV.hubUrl}: ${base}`);
       return settle(base, source);
     }
-    note(`[1/5] ${source === 'flag' ? '--hub' : COCKPIT_ENV.hubUrl}: ${explicit} is not a URL`);
+    note(`[1/5] ${source === 'flag' ? '--hub' : WHIFFLE_ENV.hubUrl}: ${explicit} is not a URL`);
   } else {
-    note(`[1/5] --hub / ${COCKPIT_ENV.hubUrl}: not set`);
+    note(`[1/5] --hub / ${WHIFFLE_ENV.hubUrl}: not set`);
   }
 
   // 2. The hub found last time is the hub most runs want, so it costs one probe.
@@ -78,7 +78,7 @@ export const discoverHub = async ({ hub, log }: DiscoverOptions = {}): Promise<H
   }
 
   // 3. Same network, nothing configured.
-  note(`[3/5] mDNS _${COCKPIT_MDNS_TYPE}._tcp.local: browsing ${MDNS_BROWSE_MS}ms`);
+  note(`[3/5] mDNS _${WHIFFLE_MDNS_TYPE}._tcp.local: browsing ${MDNS_BROWSE_MS}ms`);
   const advertised = await browseMdns();
   if (advertised.length > 0) {
     note(`[3/5] mDNS advertised ${advertised.join(', ')}: probing`);

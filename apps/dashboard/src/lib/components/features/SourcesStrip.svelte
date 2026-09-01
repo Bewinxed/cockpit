@@ -12,7 +12,7 @@
   import { prefersReducedMotion } from 'svelte/motion';
   import * as Collapsible from '$lib/components/ui/collapsible';
   import { IconChevronRight } from '$lib/icons';
-  import { faviconFor, type SourceRef } from '$lib/cockpit/sources';
+  import { faviconFor, type SourceRef } from '$lib/whiffle/sources';
 
   interface Props {
     sources: SourceRef[];

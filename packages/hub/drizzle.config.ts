@@ -5,6 +5,8 @@ export default defineConfig({
   out: './drizzle',
   dialect: 'sqlite',
   dbCredentials: {
-    url: process.env.COCKPIT_DB_PATH ?? './cockpit.db',
+    // A plain read rather than core's `readEnv`: drizzle-kit bundles this
+    // config on its own and never sees the workspace's TypeScript sources.
+    url: process.env.WHIFFLE_DB_PATH ?? './whiffle.db',
   },
 });

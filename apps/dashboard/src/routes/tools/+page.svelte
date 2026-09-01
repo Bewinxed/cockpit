@@ -7,21 +7,21 @@
    * through panels. (JOURNEY.md §4)
    */
   import { onMount, untrack } from 'svelte';
-  import type { FleetAgent, FleetConfig, FleetSkillMeta } from '@cockpit/core';
+  import type { FleetAgent, FleetConfig, FleetSkillMeta } from '@whiffle/core';
   import * as Tooltip from '$lib/components/ui/tooltip';
   import * as Card from '$lib/components/ui/card';
   import * as Tabs from '$lib/components/ui/tabs';
-  import { cockpit } from '$lib/cockpit/client.svelte';
-  import type { FleetMemoryDocRow, FleetMemoryRow } from '$lib/cockpit/fleet';
-  import type { FleetHook } from '$lib/cockpit/hooks';
-  import FleetAgents from '$lib/cockpit/FleetAgents.svelte';
-  import FleetHooks from '$lib/cockpit/FleetHooks.svelte';
-  import FleetMcp from '$lib/cockpit/FleetMcp.svelte';
-  import FleetMemory from '$lib/cockpit/FleetMemory.svelte';
-  import FleetSkills from '$lib/cockpit/FleetSkills.svelte';
-  import FleetTrouble from '$lib/cockpit/FleetTrouble.svelte';
-  import ToolMatrix from '$lib/cockpit/ToolMatrix.svelte';
-  import { orderMachines } from '$lib/cockpit/rail.svelte';
+  import { whiffle } from '$lib/whiffle/client.svelte';
+  import type { FleetMemoryDocRow, FleetMemoryRow } from '$lib/whiffle/fleet';
+  import type { FleetHook } from '$lib/whiffle/hooks';
+  import FleetAgents from '$lib/whiffle/FleetAgents.svelte';
+  import FleetHooks from '$lib/whiffle/FleetHooks.svelte';
+  import FleetMcp from '$lib/whiffle/FleetMcp.svelte';
+  import FleetMemory from '$lib/whiffle/FleetMemory.svelte';
+  import FleetSkills from '$lib/whiffle/FleetSkills.svelte';
+  import FleetTrouble from '$lib/whiffle/FleetTrouble.svelte';
+  import ToolMatrix from '$lib/whiffle/ToolMatrix.svelte';
+  import { orderMachines } from '$lib/whiffle/rail.svelte';
   import {
     IconToolGeneric,
     IconToolMcp,
@@ -35,7 +35,7 @@
 
   let { data }: { data: PageData } = $props();
 
-  const machines = $derived(orderMachines(cockpit.machines));
+  const machines = $derived(orderMachines(whiffle.machines));
   const online = $derived(machines.filter((one) => one.status === 'online').length);
 
   /**
@@ -95,7 +95,7 @@
 </script>
 
 <svelte:head>
-  <title>Tools &middot; Outpost</title>
+  <title>Tools &middot; Whiffle</title>
 </svelte:head>
 
 <!-- The fleet panels all reach for a tooltip; without an ancestor provider they

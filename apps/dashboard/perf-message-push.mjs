@@ -63,7 +63,7 @@ await new Promise(r => {
 await sleep(3000);
 
 const sessions = await evaluate(`(() => {
-  const d = window.__cockpitDebug;
+  const d = window.__whiffleDebug;
   if (!d?.state) return [];
   return (d.state.instances || [])
     .filter(r => r.status === 'running' || r.status === 'starting')
@@ -95,7 +95,7 @@ for (let attempt = 0; attempt < 15; attempt++) {
   transcriptCheck = await evaluate(`(() => {
     const transcript = document.querySelector('[data-transcript-content]');
     const scroller = document.querySelector('[tabindex="-1"]');
-    const msgCount = window.__cockpitDebug?.state?.sessions?.['${chosen.id}']?.messages?.length ?? 0;
+    const msgCount = window.__whiffleDebug?.state?.sessions?.['${chosen.id}']?.messages?.length ?? 0;
     return {
       hasTranscript: !!transcript,
       hasScroller: !!scroller,
@@ -147,7 +147,7 @@ for (let i = 0; i < 10; i++) {
 
   // Push one message and wait for rendering
   const pushResult = await evaluate(`new Promise(resolve => {
-    const d = window.__cockpitDebug;
+    const d = window.__whiffleDebug;
     const s = d?.state?.sessions?.['${chosen.id}'];
     if (!s) { resolve({ error: 'no session' }); return; }
 
@@ -241,7 +241,7 @@ console.log(`  Frame budget verdict: ${(avgScript + avgLayout + avgRecalc) < 16 
 
 // ── CLEANUP ─────────────────────────────────────────────────────────
 await evaluate(`(() => {
-  const s = window.__cockpitDebug?.state?.sessions?.['${chosen.id}'];
+  const s = window.__whiffleDebug?.state?.sessions?.['${chosen.id}'];
   if (!s) return;
   s.messages = s.messages.filter(m => !m.id?.startsWith('perf-push-'));
 })()`);

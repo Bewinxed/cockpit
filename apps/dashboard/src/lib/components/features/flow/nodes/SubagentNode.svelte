@@ -2,11 +2,11 @@
   import { IconSkill, IconSpinner, IconSuccess, IconError, IconChevronRight, IconChevronDown, IconLayers } from '$lib/icons';
   import { Handle, Position, useStore, useSvelteFlow } from '@xyflow/svelte';
   import * as Collapsible from '$lib/components/ui/collapsible';
-  import type { Message } from '$lib/cockpit/types';
+  import type { Message } from '$lib/whiffle/types';
   import type { SubagentState } from '$lib/utils/flow-types';
   import { getToolGlance, getToolStatus } from '$lib/utils/tool-display';
   import { toolFamily } from '../../tool-cards/descriptors';
-  import { modelLabel } from '$lib/cockpit/models.svelte';
+  import { modelLabel } from '$lib/whiffle/models.svelte';
   import {
     ELAPSED_TIME_UPDATE_INTERVAL,
     ZOOM_THRESHOLD_OVERVIEW,

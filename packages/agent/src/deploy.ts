@@ -11,13 +11,14 @@
  * Mac's daemon ran for 21 days without ever learning that main had moved,
  * because nothing looked.
  *
- * The guard is the marker. A checkout with no `.cockpit-deploy` in it is not a
+ * The guard is the marker. A checkout with no `.whiffle-deploy` in it is not a
  * deployment clone, and this module will not so much as *fetch* in one, let
  * alone pull. That is deliberately the first thing every path here checks: a dev
  * tree must be structurally unable to auto-pull, and "we remembered to check"
  * is not a structure.
  */
-import type { DeployInfo } from '@cockpit/core';
+import type { DeployInfo } from '@whiffle/core';
+import { WHIFFLE_ENV, readEnv } from '@whiffle/core';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
@@ -25,18 +26,18 @@ import { join } from 'node:path';
  * The marker file, relative to the clone's root. Its presence — and nothing
  * else — is what licenses an automatic pull.
  */
-export const DEPLOY_MARKER = '.cockpit-deploy';
+export const DEPLOY_MARKER = '.whiffle-deploy';
 
 /**
  * Where a machine's deployment clone lives. Our choice: per-user so it needs no
  * sudo, under a dotdir so it is nobody's working copy, and deliberately outside
  * every dev checkout so `git clean -fdx` in one cannot reach it.
  *
- * `COCKPIT_DEPLOY_ROOT` overrides it — that is how the tests point at a scratch
+ * `WHIFFLE_DEPLOY_ROOT` overrides it — that is how the tests point at a scratch
  * directory, and how a machine with a different home layout is accommodated.
  */
 export const deployRoot = (): string =>
-  process.env.COCKPIT_DEPLOY_ROOT ?? join(homedir(), '.cockpit', 'app');
+  readEnv(WHIFFLE_ENV.deployRoot) ?? join(homedir(), '.whiffle', 'app');
 
 /** The branch a deployment clone follows. Push to it and the fleet deploys. */
 export const DEPLOY_BRANCH = 'main';
@@ -49,7 +50,7 @@ export const DEPLOY_BRANCH = 'main';
  */
 export const DEPLOY_POLL_MS = 60_000;
 
-/** What `cockpit deploy init` wrote, read back. */
+/** What `whiffle deploy init` wrote, read back. */
 export interface DeployMarker {
   /** The clone's root, as init resolved it. */
   readonly root: string;
@@ -271,7 +272,7 @@ export interface DeployTick {
 
 /**
  * A tick, flattened onto the shape the wire and the board share
- * ({@link DeployInfo} in `@cockpit/core`). Everything the fuller
+ * ({@link DeployInfo} in `@whiffle/core`). Everything the fuller
  * {@link DeployState} carries — heads, targets, the two counts — is already in
  * the sentence {@link describeDeploy} writes, so the wire carries one kind and
  * one sentence rather than six shapes the reader would have to re-narrate.
@@ -317,7 +318,7 @@ export interface DeployWatcherOptions {
   readonly report?: (tick: DeployTick) => void;
 }
 
-const say = (line: string): void => console.error(`cockpit deploy: ${line}`);
+const say = (line: string): void => console.error(`whiffle deploy: ${line}`);
 
 /**
  * The default report: every skew and every deploy is spoken once, and a state

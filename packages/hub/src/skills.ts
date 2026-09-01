@@ -1,10 +1,10 @@
 /**
  * Resolving a plain skill to its files (NEW.md §11). An installer CLI is a
- * wrapper around copying a directory into `~/.claude/skills/`, so cockpit runs
+ * wrapper around copying a directory into `~/.claude/skills/`, so whiffle runs
  * none of them: the hub downloads the source once, reads the skill out of it,
  * and sync carries the files to every machine.
  */
-import type { SkillFile } from '@cockpit/core';
+import type { SkillFile } from '@whiffle/core';
 import { $ } from 'bun';
 import { lstat, mkdir, mkdtemp, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -62,7 +62,7 @@ const REFS = ['HEAD', 'main', 'master'];
  * Where a repo keeps its skills, in the order the skills CLI looks — except
  * that `.claude/skills` comes before `.agents/skills`: a repo that ships one
  * variant per agent has tuned the Claude one for Claude Code, and that is the
- * one a cockpit fleet wants.
+ * one a whiffle fleet wants.
  */
 const CONTAINERS = [
   'skills',
@@ -204,11 +204,11 @@ export const readTree = async (
 ): Promise<{ files: SkillFile[]; hash: string; bytes: number }> => {
   const found = await walk(dir);
   if (found.length > MAX_FILES) {
-    throw new Error(`${what} has ${found.length} files; cockpit carries at most ${MAX_FILES}`);
+    throw new Error(`${what} has ${found.length} files; whiffle carries at most ${MAX_FILES}`);
   }
   const bytes = found.reduce((total, file) => total + file.size, 0);
   if (bytes > MAX_BYTES) {
-    throw new Error(`${what} is ${bytes} bytes; cockpit carries at most ${MAX_BYTES}`);
+    throw new Error(`${what} is ${bytes} bytes; whiffle carries at most ${MAX_BYTES}`);
   }
   const files: SkillFile[] = [];
   for (const file of found) {
@@ -389,9 +389,9 @@ const fetchSkill = async (
  */
 export const resolveSkill = async (source: string): Promise<ResolvedSkill | UnresolvedSkill> => {
   const parsed = parseSkillSource(source);
-  if (!parsed) return { error: `${source} is not a source cockpit knows how to fetch` };
+  if (!parsed) return { error: `${source} is not a source whiffle knows how to fetch` };
 
-  const work = await mkdtemp(join(tmpdir(), 'cockpit-skill-'));
+  const work = await mkdtemp(join(tmpdir(), 'whiffle-skill-'));
   try {
     return await fetchSkill(parsed, work);
   } catch (error) {

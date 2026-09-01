@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from 'bun:test';
-import type { AgentRow } from '@cockpit/core';
+import type { AgentRow } from '@whiffle/core';
 import { makeDb } from './db';
 import type { PendingShape } from './pending';
 import type { HubSocket, RegistryShape } from './registry';
@@ -19,7 +19,7 @@ import { createServer } from './server';
  * A scratch database, for the reason every other suite here keeps one: `bun
  * test` runs every file in one process, so a shared path is a shared race.
  */
-const DB_FILE = `/tmp/cockpit-deploy-wire-${crypto.randomUUID()}.db`;
+const DB_FILE = `/tmp/whiffle-deploy-wire-${crypto.randomUUID()}.db`;
 const db = makeDb(DB_FILE);
 
 const MACHINE = 'machine-deploy';
@@ -53,6 +53,8 @@ const makeTestRegistry = (): RegistryShape => {
       const entry = dashboards.get(socket.id);
       if (entry) entry.subscriptions = new Set(instanceIds);
     },
+    noteDashboardOrigin: () => {},
+    dashboardOrigin: () => undefined,
     rememberRequester: (requestId, socket) => requesters.set(requestId, socket),
     takeRequester: (requestId) => {
       const socket = requesters.get(requestId);
@@ -148,7 +150,7 @@ test('a daemon that says nothing about deployment leaves the field absent, not "
 test('a diverged clone reaches the board intact, refusal and all', async () => {
   const peer = await connect('/ws');
   const detail =
-    '/home/op/.cockpit/app has DIVERGED from origin — 2 local commit(s) and 3 upstream, head aaa1111 vs bbb2222. Refusing to update: a reset here would destroy work nobody has a copy of. Resolve it by hand.';
+    '/home/op/.whiffle/app has DIVERGED from origin — 2 local commit(s) and 3 upstream, head aaa1111 vs bbb2222. Refusing to update: a reset here would destroy work nobody has a copy of. Resolve it by hand.';
   await register(peer, { ...IDENTITY, deploy: { kind: 'diverged', detail } });
   expect(await agentRow().then((row) => row.deploy)).toEqual({ kind: 'diverged', detail });
   peer.close();

@@ -2,7 +2,7 @@
   import { IconAgent, IconSparkles, IconSpinner } from '$lib/icons';
   import { Handle, Position, useStore } from '@xyflow/svelte';
   import { Markdown } from '$lib/components/ui/markdown';
-  import type { Message } from '$lib/cockpit/types';
+  import type { Message } from '$lib/whiffle/types';
 
   // Props passed by SvelteFlow
   let { data } = $props<{

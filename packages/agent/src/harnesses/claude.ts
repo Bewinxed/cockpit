@@ -1,7 +1,7 @@
 /**
  * The Claude Code adapter.
  *
- * The original harness — everything cockpit did before harnesses existed ran on
+ * The original harness — everything whiffle did before harnesses existed ran on
  * it, so this file is the quarry the other adapters are measured against. It
  * spawns `@anthropic-ai/claude-agent-sdk`'s `query()`, feeds it an
  * `AsyncIterable` prompt, parks `canUseTool` under the SDK's `requestId`, and
@@ -40,7 +40,7 @@ import type {
   UserQuestion,
   UserQuestionAnswered,
   UserQuestionResult,
-} from '@cockpit/core';
+} from '@whiffle/core';
 import {
   ASK_USER_QUESTION,
   CONTROL_SET_EFFORT,
@@ -52,7 +52,7 @@ import {
   READ_SKILL_FILES,
   isInjected,
   settledQuestionResult,
-} from '@cockpit/core';
+} from '@whiffle/core';
 import {
   fleetStatus,
   inspectConfig,
@@ -62,7 +62,7 @@ import {
   syncFleetConfig,
 } from '../fleet';
 import { DENIED_NATIVE_SUBAGENT_TOOLS, DENIED_WEB_TOOLS } from '../denied-tools';
-import { handoffServer } from '../handoff';
+import { MCP_SERVER_NAME, handoffServer } from '../handoff';
 import { fetchDelegateTypes } from './handoff-shared';
 import { probeAuth, unlockKeychain } from '../auth';
 import { beginLogin, clearCredentials, completeLogin, exportCredentials, importCredentials } from '../login';
@@ -75,7 +75,7 @@ import {
   SessiondClient,
   type SessiondWelcomeInfo,
 } from '../sessiond-client';
-import { sessiondEndpoint } from '@cockpit/core/sessiond';
+import { sessiondEndpoint } from '@whiffle/core/sessiond';
 // Type-only, and deliberately so: `session.ts` imports the harness registry
 // this file is part of, so a value import here would close a module cycle.
 import type { SessiondAwareContext } from '../session';
@@ -534,7 +534,7 @@ class ClaudeSession implements HarnessSession {
     skills?: string[],
     denyTools?: string[],
     /** Fetched once by `spawn()` before this session existed; frozen from here on. */
-    delegateTypes?: import('@cockpit/core').DelegateType[],
+    delegateTypes?: import('@whiffle/core').DelegateType[],
     /**
      * The sessiond connection this session's CLI child lives under. Not
      * optional in practice — `spawn()` always supplies it, and there is no
@@ -550,12 +550,12 @@ class ClaudeSession implements HarnessSession {
     const turn = new Turn();
     this.#turn = turn;
 
-    // Claude in Chrome is on by default for every cockpit session.
+    // Claude in Chrome is on by default for every whiffle session.
     //
     // The CLI resolves it in `shouldEnableClaudeInChrome`, in this order:
     // OAuth scope -> `--chrome`/`--no-chrome` -> `CLAUDE_CODE_ENABLE_CFC` ->
     // `if (!isInteractive()) return false` -> `~/.claude.json`'s
-    // `claudeInChromeDefaultEnabled`. Every cockpit session is non-interactive
+    // `claudeInChromeDefaultEnabled`. Every whiffle session is non-interactive
     // stream-json, so it always trips the interactive gate and never reads the
     // config key — setting `claudeInChromeDefaultEnabled: true` cannot work
     // here at any value. `--chrome` short-circuits above that gate.
@@ -577,7 +577,7 @@ class ClaudeSession implements HarnessSession {
         extraArgs,
         mcpServers: {
           ...((options as { mcpServers?: Record<string, unknown> } | undefined)?.mcpServers ?? {}),
-          outpost: handoffServer(
+          [MCP_SERVER_NAME]: handoffServer(
             { instanceId, cwd: workdir, emit: (envelope) => ctx.emit(envelope), delegateTypes },
             // Keyed under BOTH the handler's text and the serialized payload:
             // CLIs before ~2.1.x forward the handler's text block, current ones
@@ -612,7 +612,7 @@ class ClaudeSession implements HarnessSession {
         ...(permissionMode ? { permissionMode: permissionMode as import('@anthropic-ai/claude-agent-sdk').PermissionMode } : {}),
         ...(model && { model }),
         // Left out entirely when nobody chose: the SDK's own default is the
-        // model's, and writing a level here would put cockpit's guess in its
+        // model's, and writing a level here would put whiffle's guess in its
         // place on every model whose scale we cannot see.
         ...(effort && { effort }),
         ...(permissionMode === 'bypassPermissions' && {
@@ -630,7 +630,7 @@ class ClaudeSession implements HarnessSession {
         // THE SEAM (design §4.1). The SDK builds the CLI's command line and
         // hands it here instead of spawning it; we forward it to sessiond and
         // hand back a `SpawnedProcess` over the socket. Nothing downstream —
-        // `canUseTool` parking, `InputStream`, the queue frames, the outpost
+        // `canUseTool` parking, `InputStream`, the queue frames, the whiffle
         // MCP server on the control channel — can tell the difference, which
         // is exactly the contract this option exists to provide. What changes
         // is custody: the child is sessiond's, and it outlives this agent.
@@ -844,7 +844,7 @@ class ClaudeSession implements HarnessSession {
     // knows whether the model was in fact ready for it, and between `query()`
     // being constructed and its first pull nothing is waiting on the stream
     // while the session is plainly idle. So: the turn says it is busy AND the
-    // push had to hold it. Anything cockpit INJECTS (a hand-off brief, a rule's
+    // push had to hold it. Anything whiffle INJECTS (a hand-off brief, a rule's
     // message) is already echoed as a real user frame at the bottom of this
     // method — announcing it here would draw the same message twice, once
     // waiting and once said.
@@ -869,7 +869,7 @@ class ClaudeSession implements HarnessSession {
     // A hand-off is queued rather than asked (`shouldQuery: false`), so the SDK
     // appends it and emits nothing until the session next takes a turn. Echoed
     // as the frame the SDK will not send, so it appears the moment it lands.
-    // The same is true of anything else cockpit injects — a rule's message has
+    // The same is true of anything else whiffle injects — a rule's message has
     // no local copy in any dashboard, so without this echo it stays invisible
     // until the transcript is read back from disk.
     if (isInjected(message.origin)) {
@@ -1036,7 +1036,7 @@ export const CUSTODY_DEGRADED = 'custody_degraded';
  *    answer goes back as a raw `control_response` line, because that is what
  *    the `Query` would have written anyway;
  *  - any OTHER control the CLI asks of the absent agent (an `mcp_message` for
- *    the outpost server, a hook callback) is answered with an explicit in-band
+ *    the whiffle server, a hook callback) is answered with an explicit in-band
  *    error, so the tool call FAILS VISIBLY instead of hanging forever on a
  *    handler that no longer exists;
  *  - at the turn's next `result` line the child's stdin is EOF'd and the
@@ -1133,7 +1133,7 @@ export class ClaudeCustody implements HarnessSession {
         toolName: inner.tool_name ?? 'unknown',
         input: inner.input ?? {},
         ...(Array.isArray(inner.permission_suggestions)
-          ? { suggestions: inner.permission_suggestions as import('@cockpit/core').PermissionUpdate[] }
+          ? { suggestions: inner.permission_suggestions as import('@whiffle/core').PermissionUpdate[] }
           : {}),
         ...(inner.tool_name === ASK_USER_QUESTION ? { requestKind: 'question' as const } : {}),
       });
@@ -1143,7 +1143,7 @@ export class ClaudeCustody implements HarnessSession {
     // Refused in-band and said out loud, so the tool call fails where the
     // reader can see it rather than hanging on a promise nobody holds.
     const subtype = request.request?.subtype ?? 'unknown';
-    const reason = `cockpit: agent restarted; \`${subtype}\` cannot be served during custody`;
+    const reason = `whiffle: agent restarted; \`${subtype}\` cannot be served during custody`;
     this.write(controlError(requestId, reason));
     this.ctx.frame({
       type: 'system',
@@ -1179,7 +1179,7 @@ export class ClaudeCustody implements HarnessSession {
 
   /** Every non-permission control fails visibly, for the reason above. */
   control(method: string): Promise<unknown> {
-    const reason = `cockpit: agent restarted; control \`${method}\` is unavailable until this session hands back (custody)`;
+    const reason = `whiffle: agent restarted; control \`${method}\` is unavailable until this session hands back (custody)`;
     this.ctx.frame({
       type: 'system',
       subtype: CUSTODY_DEGRADED,
@@ -1212,7 +1212,7 @@ export class ClaudeCustody implements HarnessSession {
   async stop(): Promise<void> {
     // A stop during custody is the operator ending the session, not a
     // hand-off: nothing is parked afterwards and nothing is respawned.
-    for (const requestId of this.#parked) this.write(controlError(requestId, 'cockpit: session stopped'));
+    for (const requestId of this.#parked) this.write(controlError(requestId, 'whiffle: session stopped'));
     this.#parked.clear();
     this.#held.length = 0;
     this.#handedOff = true;
@@ -1251,10 +1251,10 @@ export class ClaudeHarness implements Harness {
   #sessiond: Promise<SessiondClient> | undefined;
 
   async sessiond(
-    // `COCKPIT_SESSIOND_ENDPOINT` is sessiond's own override
+    // `WHIFFLE_SESSIOND_ENDPOINT` is sessiond's own override
     // (`sessiond/src/main.ts`), honoured on this side too so a dev run — or a
     // test — can point both halves at a scratch socket instead of the real one.
-    endpoint: string = process.env.COCKPIT_SESSIOND_ENDPOINT ?? sessiondEndpoint()
+    endpoint: string = process.env.WHIFFLE_SESSIOND_ENDPOINT ?? sessiondEndpoint()
   ): Promise<SessiondClient> {
     const existing = await this.#sessiond?.catch(() => undefined);
     if (existing && !existing.closed) return existing;
@@ -1354,7 +1354,7 @@ export class ClaudeHarness implements Harness {
           ctx.frame({
             type: 'system',
             subtype: 'sessiond_stream_gap',
-            text: `cockpit: sessiond's replay window overflowed; this transcript resumes at line ${nextSeq}`,
+            text: `whiffle: sessiond's replay window overflowed; this transcript resumes at line ${nextSeq}`,
           } as unknown as NeutralMessage),
       },
       options.afterSeq
@@ -1441,7 +1441,7 @@ export class ClaudeHarness implements Harness {
     }
   }
 
-  syncFleet(config: import('@cockpit/core').FleetConfig) {
+  syncFleet(config: import('@whiffle/core').FleetConfig) {
     return syncFleetConfig(config);
   }
 

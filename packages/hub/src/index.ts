@@ -2,7 +2,7 @@ import { Effect, Layer } from 'effect';
 import { DB_PATH, HUB_PORT, HUB_VERSION } from './config';
 import { Db, DbLayer } from './db';
 import { advertise } from './mdns';
-// The move itself lives in its own module so `cockpit deploy init` can run it
+// The move itself lives in its own module so `whiffle deploy init` can run it
 // from the checkout that actually holds the legacy file. See migrate-db.ts.
 import { migrateLegacyDb } from './migrate-db';
 import { Pending, PendingLayer } from './pending';
@@ -22,7 +22,7 @@ const main = Effect.gen(function* () {
   // 147 files), and the socket is silent that whole time. 120s clears the
   // resolver's own 60s fetch timeout with room for the hash.
   createServer({ registry, db, pending, telegram }).listen({ port: HUB_PORT, idleTimeout: 120 });
-  yield* Effect.log(`cockpit hub ${HUB_VERSION} listening on :${HUB_PORT}`);
+  yield* Effect.log(`whiffle hub ${HUB_VERSION} listening on :${HUB_PORT}`);
   advertise(HUB_PORT);
   // After `listen`, so the first ask the bridge can be handed is one this hub
   // is already able to receive.

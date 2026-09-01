@@ -42,7 +42,7 @@ import {
   type StreamDelta,
   type StreamReset,
   type StreamSubscribe,
-} from '@cockpit/core';
+} from '@whiffle/core';
 import type { HubSocket } from './registry';
 
 export { RING_SIZE };

@@ -110,11 +110,11 @@ export interface SkillFile {
  *
  * `source` forms the hub's resolver accepts. Installer CLIs are deliberately
  * never run: an installer is a wrapper around "copy files into
- * `~/.claude/skills/<name>`", and cockpit does the copy itself.
+ * `~/.claude/skills/<name>`", and whiffle does the copy itself.
  * - `skills:owner/repo[@skill][#ref]` — a skills.sh-style slug (what the
  *   user would have typed after `bunx skills add`). The repo tarball is
  *   walked in the CLI's own discovery order, except `.claude/skills/` wins
- *   over `.agents/skills/` — cockpit wants the Claude-tuned variant.
+ *   over `.agents/skills/` — whiffle wants the Claude-tuned variant.
  * - `github:owner/repo[/path][@ref]` — the repo tarball, `path` pointing at
  *   the skill directory.
  * - `npm:package[@version]` — the registry tarball, for the few packages
@@ -175,7 +175,7 @@ export interface FleetPluginPayload {
  * One subagent the fleet keeps (NEW.md §11), without the file it is. A subagent
  * *is* its markdown — YAML front matter over a body that becomes the system
  * prompt — and its identity is the front matter's `name`, not the filename. So
- * cockpit stores the file verbatim and re-models none of it.
+ * whiffle stores the file verbatim and re-models none of it.
  */
 export interface FleetAgentMeta {
   name: string;
@@ -202,7 +202,7 @@ export interface FleetAgent extends FleetAgentMeta {
  * A subagent's front matter, as far as anything outside Claude Code reads it:
  * the two fields that make the file usable, and the three a row shows. The file
  * is the interface — every other field passes through untouched, because
- * cockpit is not a second schema for it.
+ * whiffle is not a second schema for it.
  */
 export interface AgentFrontMatter {
   name?: string;
@@ -389,7 +389,7 @@ export interface FleetConfig {
   pluginPayloads?: FleetPluginPayload[];
   /**
    * The fleet's user-scope CLAUDE.md, or null when the fleet keeps none —
-   * which is what has a machine give back the copy cockpit wrote it.
+   * which is what has a machine give back the copy whiffle wrote it.
    */
   memory?: FleetMemory | null;
   /**
@@ -512,7 +512,7 @@ export interface DiscoveredMcp {
   name: string;
   scope: FleetScope;
   config: FleetMcpConfig;
-  /** Whether cockpit wrote it — an unmanaged row is one worth adopting. */
+  /** Whether whiffle wrote it — an unmanaged row is one worth adopting. */
   managed: boolean;
   /**
    * Set when a nearer scope defines the same name and wins. Claude Code's own
@@ -536,7 +536,7 @@ export interface DiscoveredSkill {
 /**
  * What a session started in `cwd` would actually see, and what a machine has
  * outside any project when `cwd` is absent. The answer to two questions the
- * dashboard asks: "what is on this machine that cockpit does not manage?" and
+ * dashboard asks: "what is on this machine that whiffle does not manage?" and
  * "what will this folder give me?" — asked the moment a folder is chosen.
  */
 export interface ConfigInspection {
@@ -550,7 +550,7 @@ export interface ConfigInspection {
   marketplaces: string[];
   /**
    * The machine's own user CLAUDE.md, or null when it has none. `managed` says
-   * cockpit wrote what is there — an unmanaged one is worth adopting. `docs`
+   * whiffle wrote what is there — an unmanaged one is worth adopting. `docs`
    * is whatever the machine has under `~/.claude/memories/`, read the same way
    * and absent from a daemon that predates the set.
    */

@@ -2,15 +2,15 @@
   import { untrack } from 'svelte';
   import { goto } from '$app/navigation';
   import { toast } from 'svelte-sonner';
-  import type { DelegateType } from '$lib/cockpit/delegate-types';
-  import { message, removeDelegateType } from '$lib/cockpit/delegate-types';
+  import type { DelegateType } from '$lib/whiffle/delegate-types';
+  import { message, removeDelegateType } from '$lib/whiffle/delegate-types';
   import { IconPlus, IconSubagent, IconTrash } from '$lib/icons';
   import { Button } from '$lib/components/ui/button';
   import * as Card from '$lib/components/ui/card';
   import * as Alert from '$lib/components/ui/alert';
   import { Badge } from '$lib/components/ui/badge';
   import * as Tooltip from '$lib/components/ui/tooltip';
-  import { confirm } from '$lib/cockpit/confirm.svelte';
+  import { confirm } from '$lib/whiffle/confirm.svelte';
   import type { PageData } from './$types';
 
   /**
@@ -78,7 +78,7 @@
     'rounded-[var(--radius-control)] border-[var(--error-9)] bg-[var(--error-3)] !text-[color:var(--error-11)]';
 </script>
 
-<svelte:head><title>Delegates &middot; Outpost</title></svelte:head>
+<svelte:head><title>Delegates &middot; Whiffle</title></svelte:head>
 
 {#snippet stat(label: string, value: string | number, unit?: string)}
   <Card.Root class={tileClass}>

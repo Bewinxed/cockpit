@@ -17,16 +17,16 @@
    * addition.
    */
   import type { PageData } from './$types';
-  import type { LimitWindow } from '@cockpit/core';
+  import type { LimitWindow } from '@whiffle/core';
   import * as Card from '$lib/components/ui/card';
   import * as Table from '$lib/components/ui/table';
   import { Badge } from '$lib/components/ui/badge';
-  import { compactNumber, usd, type UsageSummaryRow } from '$lib/cockpit/usage';
-  import { cockpit } from '$lib/cockpit/client.svelte';
-  import StatTile from '$lib/cockpit/StatTile.svelte';
-  import HarnessGlyph from '$lib/cockpit/HarnessGlyph.svelte';
-  import DailyChart from '$lib/cockpit/usage/DailyChart.svelte';
-  import BreakdownTable from '$lib/cockpit/usage/BreakdownTable.svelte';
+  import { compactNumber, usd, type UsageSummaryRow } from '$lib/whiffle/usage';
+  import { whiffle } from '$lib/whiffle/client.svelte';
+  import StatTile from '$lib/whiffle/StatTile.svelte';
+  import HarnessGlyph from '$lib/whiffle/HarnessGlyph.svelte';
+  import DailyChart from '$lib/whiffle/usage/DailyChart.svelte';
+  import BreakdownTable from '$lib/whiffle/usage/BreakdownTable.svelte';
 
   let { data }: { data: PageData } = $props();
 
@@ -133,10 +133,10 @@
       cost: number;
       contextPct: number | null;
     }[] = [];
-    for (const instance of cockpit.runningInstances) {
-      const stats = cockpit.statsOf(instance.id);
+    for (const instance of whiffle.runningInstances) {
+      const stats = whiffle.statsOf(instance.id);
       if (stats.cost === null) continue;
-      const machine = cockpit.machines.find((m) => m.machineId === instance.machineId);
+      const machine = whiffle.machines.find((m) => m.machineId === instance.machineId);
       rows.push({
         id: instance.id,
         label: instance.title ?? instance.derivedTitle ?? instance.cwd.split('/').pop() ?? instance.id,
@@ -185,7 +185,7 @@
 </script>
 
 <svelte:head>
-  <title>Usage &middot; Outpost</title>
+  <title>Usage &middot; Whiffle</title>
 </svelte:head>
 
 <div class="page">
@@ -656,7 +656,7 @@
      shadcn default (`ring-1`, `bg-card`, the 8/12/16 spacing
      ladder), because an unmodified shadcn surface is a High-severity tell. */
   :global {
-    /* Card → the raised panel (was outpost Panel). */
+    /* Card → the raised panel (was whiffle Panel). */
     .q-card {
       background: var(--surface-raised);
       border-radius: var(--radius-panel);

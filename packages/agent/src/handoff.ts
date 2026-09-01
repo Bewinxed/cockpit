@@ -5,7 +5,7 @@ import { handoffActions, type HandoffDeps } from './harnesses/handoff-shared';
 /**
  * The tools a Claude session uses to hand work to another session. The bodies
  * are the shared {@link handoffActions}; this file only wraps them in the
- * in-process MCP server the claude SDK injects under the name `outpost`.
+ * in-process MCP server the claude SDK injects under the name `whiffle`.
  *
  * Two properties are load-bearing and set by the shared actions, not here:
  * `origin: peer` marks the message as another agent's word, and
@@ -13,6 +13,12 @@ import { handoffActions, type HandoffDeps } from './harnesses/handoff-shared';
  */
 
 export type { HandoffDeps };
+
+/**
+ * The name the SDK injects this server under, and so the prefix of every tool
+ * it exposes: `mcp__whiffle__handoff`, `…__start_session`, `…__delegate`.
+ */
+export const MCP_SERVER_NAME = 'whiffle';
 
 /**
  * Called when a tool handler returns structured data the Claude SDK would
@@ -260,7 +266,7 @@ export function handoffTools(deps: HandoffDeps, onStructured?: OnStructuredResul
 
 export function handoffServer(deps: HandoffDeps, onStructured?: OnStructuredResult) {
   return createSdkMcpServer({
-    name: 'outpost',
+    name: MCP_SERVER_NAME,
     version: '1.0.0',
     instructions:
       'A repository may have several sessions; the listing shows where each works, not what it ' +

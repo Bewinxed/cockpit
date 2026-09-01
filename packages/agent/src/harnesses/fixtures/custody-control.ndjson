@@ -20,5 +20,5 @@
 {"type":"system","subtype":"init","session_id":"ses-custody-1","uuid":"u-init","tools":[],"model":"claude-opus-4-6"}
 {"type":"assistant","session_id":"ses-custody-1","uuid":"u-a1","parent_tool_use_id":null,"message":{"id":"msg_1","type":"message","role":"assistant","model":"claude-opus-4-6","content":[{"type":"text","text":"reading the file"}],"stop_reason":null,"usage":{"input_tokens":10,"output_tokens":4}}}
 {"type":"control_request","request_id":"req-perm-1","request":{"subtype":"can_use_tool","tool_name":"Bash","input":{"command":"rm -rf build"},"tool_use_id":"toolu_1"}}
-{"type":"control_request","request_id":"req-mcp-1","request":{"subtype":"mcp_message","server_name":"outpost","message":{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"delegate"}}}}
+{"type":"control_request","request_id":"req-mcp-1","request":{"subtype":"mcp_message","server_name":"whiffle","message":{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"delegate"}}}}
 {"type":"result","subtype":"success","session_id":"ses-custody-1","uuid":"u-res","is_error":false,"duration_ms":1200,"duration_api_ms":900,"num_turns":1,"result":"done","total_cost_usd":0.01,"usage":{"input_tokens":10,"output_tokens":4,"cache_creation_input_tokens":2,"cache_read_input_tokens":3}}

@@ -39,13 +39,13 @@ import type {
   SessionMessage,
   SendPayload,
   SpawnPayload,
-} from '@cockpit/core';
+} from '@whiffle/core';
 import {
   CONTROL_CONTEXT_USAGE,
   CONTROL_INTERRUPT,
   CONTROL_SET_MODEL,
   CONTROL_SUPPORTED_MODELS,
-} from '@cockpit/core';
+} from '@whiffle/core';
 import { resolveBin } from '../tools';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -56,7 +56,7 @@ import type { Harness, HarnessContext, HarnessSession } from '../harness';
 const PI_DIR = join(homedir(), '.pi', 'agent');
 const PI_SKILLS = join(PI_DIR, 'skills');
 const PI_MEMORY = join(PI_DIR, 'AGENTS.md');
-const PI_SIDECAR = join(PI_DIR, 'cockpit-fleet.json');
+const PI_SIDECAR = join(PI_DIR, 'whiffle-fleet.json');
 
 export const PI_CAPABILITIES: HarnessCapabilities = {
   interrupt: true,

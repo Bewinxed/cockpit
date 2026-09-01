@@ -1,6 +1,6 @@
 import { afterAll, expect, test } from 'bun:test';
-import type { ControlPayload, Envelope, SendPayload, SessionStreamEvent } from '@cockpit/core';
-import { RESOLVE_PERMISSION, STREAM_V1 } from '@cockpit/core';
+import type { ControlPayload, Envelope, SendPayload, SessionStreamEvent } from '@whiffle/core';
+import { RESOLVE_PERMISSION, STREAM_V1 } from '@whiffle/core';
 import { makeDb } from './db';
 import type { PendingShape } from './pending';
 import type { HubSocket, RegistryShape } from './registry';
@@ -16,7 +16,7 @@ import { createStreamHub, RING_SIZE, type ControlResultFrame, type StreamPorts }
  * A scratch database, for the reason every other suite here keeps one: `bun
  * test` runs every file in one process, so a shared path is a shared race.
  */
-const DB_FILE = `/tmp/cockpit-stream-${crypto.randomUUID()}.db`;
+const DB_FILE = `/tmp/whiffle-stream-${crypto.randomUUID()}.db`;
 const db = makeDb(DB_FILE);
 
 const MACHINE = 'machine-1';
@@ -509,6 +509,8 @@ const makeTestRegistry = (): RegistryShape & { readonly forwarded: Envelope[] } 
       const entry = dashboards.get(socket.id);
       if (entry) entry.subscriptions = new Set(instanceIds);
     },
+    noteDashboardOrigin: () => {},
+    dashboardOrigin: () => undefined,
     rememberRequester: (requestId, socket) => requesters.set(requestId, socket),
     takeRequester: (requestId) => {
       const socket = requesters.get(requestId);

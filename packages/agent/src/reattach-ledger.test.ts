@@ -25,7 +25,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { FramePayload, FrameProvenance } from '@cockpit/core';
+import type { FramePayload, FrameProvenance } from '@whiffle/core';
 import { SessiondClient, probeEndpoint } from './sessiond-client';
 import { SessionSupervisor } from './session';
 
@@ -69,10 +69,10 @@ const spawned: string[] = [];
 beforeAll(async () => {
   // Both halves point at the scratch socket: the adapter reads this env var for
   // exactly this reason (`claude.ts`'s `sessiond()`).
-  process.env.COCKPIT_SESSIOND_ENDPOINT = endpoint;
+  process.env.WHIFFLE_SESSIOND_ENDPOINT = endpoint;
   const main = join(import.meta.dir, '..', '..', 'sessiond', 'src', 'main.ts');
   daemon = spawn(process.execPath, [main], {
-    env: { ...process.env, COCKPIT_SESSIOND_ENDPOINT: endpoint },
+    env: { ...process.env, WHIFFLE_SESSIOND_ENDPOINT: endpoint },
     stdio: 'ignore',
   });
   const deadline = Date.now() + 10_000;

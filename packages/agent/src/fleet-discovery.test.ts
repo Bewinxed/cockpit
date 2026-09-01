@@ -9,7 +9,7 @@ import { mergeMcp, pluginSkillRoots, skillDescription, skillsIn } from './fleet'
  * Everything here runs against a scratch directory or a plain object — the
  * machine's own `~/.claude` is what this feature reads, never what it tests on.
  */
-const scratch = await mkdtemp(join(tmpdir(), 'cockpit-discovery-'));
+const scratch = await mkdtemp(join(tmpdir(), 'whiffle-discovery-'));
 afterAll(() => rm(scratch, { recursive: true, force: true }));
 
 const stdio = (command: string) => ({ command });
@@ -32,7 +32,7 @@ test('a name in two scopes: the nearer wins and the further says so', () => {
   expect(found.find((row) => row.name === 'repo')?.shadowedBy).toBeUndefined();
 });
 
-test('only the user scope can be cockpit\'s, and only what the sidecar names', () => {
+test('only the user scope can be whiffle\'s, and only what the sidecar names', () => {
   const found = mergeMcp(
     [
       { scope: 'project', servers: { exa: stdio('project-exa') } },

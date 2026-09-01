@@ -5,7 +5,7 @@
   import { quintOut } from 'svelte/easing';
   import { buttonVariants } from '$lib/components/ui/button';
   import { cn } from '$lib/utils';
-  import type { AvailableCommand } from '@cockpit/core';
+  import type { AvailableCommand } from '@whiffle/core';
 
   interface Props {
     version: string;

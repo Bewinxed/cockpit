@@ -3,7 +3,7 @@
  * right spawn + send envelopes without touching the hub or a server.
  */
 import { handoffActions } from './src/harnesses/handoff-shared';
-import type { Envelope } from '@cockpit/core';
+import type { Envelope } from '@whiffle/core';
 
 const envelopes: Envelope[] = [];
 

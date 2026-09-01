@@ -12,15 +12,15 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { FleetPluginPayload } from '@cockpit/core';
+import type { FleetPluginPayload } from '@whiffle/core';
 import { writeVendoredMarketplace } from './fleet';
 
 /**
- * A scratch directory, never `~/.claude/cockpit-marketplace`: this machine runs
+ * A scratch directory, never `~/.claude/whiffle-marketplace`: this machine runs
  * the operator's live sessions, and a test is not allowed to touch what they
  * are running out of.
  */
-const VENDOR_DIR = mkdtempSync(join(tmpdir(), 'cockpit-vendor-'));
+const VENDOR_DIR = mkdtempSync(join(tmpdir(), 'whiffle-vendor-'));
 
 const b64 = (text: string): string => Buffer.from(text).toString('base64');
 
@@ -46,7 +46,7 @@ test('writes a marketplace whose plugins are vendored beside it', async () => {
   );
 
   const manifest = await Bun.file(join(VENDOR_DIR, '.claude-plugin', 'marketplace.json')).json();
-  expect(manifest.name).toBe('cockpit');
+  expect(manifest.name).toBe('whiffle');
   // Every source is relative, which is what makes the install a local read.
   expect(manifest.plugins.map((p: { source: string }) => p.source)).toEqual([
     './plugins/design-for-ai',

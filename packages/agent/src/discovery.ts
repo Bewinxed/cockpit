@@ -2,17 +2,17 @@ import { chmod } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { COCKPIT_ENV, COCKPIT_HUB_PORT, COCKPIT_MDNS_TYPE } from '@cockpit/core';
+import { WHIFFLE_ENV, WHIFFLE_HUB_PORT, WHIFFLE_MDNS_TYPE, readEnv } from '@whiffle/core';
 import { Bonjour, type Service } from 'bonjour-service';
 
 /**
- * The network rungs of hub discovery, shared between `cockpit up`
- * (`@cockpit/cli`'s `discoverHub`) and the daemon's own re-discovery on a
+ * The network rungs of hub discovery, shared between `whiffle up`
+ * (`@whiffle/cli`'s `discoverHub`) and the daemon's own re-discovery on a
  * sustained reconnect failure (`rediscoverHub`, below).
  *
  * This lives on the agent side of the package graph, not core and not cli:
- * `@cockpit/cli` already depends on `@cockpit/agent` (it dynamically imports
- * `runDaemon` and `machineId` from here for `cockpit up`), so the reverse
+ * `@whiffle/cli` already depends on `@whiffle/agent` (it dynamically imports
+ * `runDaemon` and `machineId` from here for `whiffle up`), so the reverse
  * dependency — agent importing from cli — would be a cycle. `discover.ts`
  * imports these instead of keeping its own copies of the mDNS/tailscale/probe
  * logic; its own rungs (`--hub`/env, the CLI's cached config, localhost) and
@@ -40,7 +40,7 @@ export const toHttpBase = (raw: string): string | undefined => {
 export const toWsUrl = (httpBase: string): string => `${httpBase.replace(/^http/, 'ws')}/ws`;
 
 /**
- * What tells a cockpit hub apart from whatever else is listening on the port:
+ * What tells a whiffle hub apart from whatever else is listening on the port:
  * `/api/agents` is the fleet, so a 200 carrying an array is the whole test.
  */
 export const probeHub = async (httpUrl: string): Promise<boolean> => {
@@ -69,7 +69,7 @@ export const firstToAnswer = async (
 };
 
 /**
- * Browses `_cockpit._tcp.local` for as long as it takes the first hub to answer.
+ * Browses `_whiffle._tcp.local` for as long as it takes the first hub to answer.
  *
  * This is link-local multicast. It does not cross a router and it does not cross
  * a tailnet — a hub reachable only over Tailscale is invisible here no matter
@@ -85,7 +85,7 @@ export const browseMdns = (): Promise<string[]> =>
       bonjour.destroy();
       resolve(candidates);
     };
-    const browser = bonjour.find({ type: COCKPIT_MDNS_TYPE, protocol: 'tcp' }, (service: Service) => {
+    const browser = bonjour.find({ type: WHIFFLE_MDNS_TYPE, protocol: 'tcp' }, (service: Service) => {
       const addresses = (service.addresses ?? []).filter((address) => IPV4.test(address));
       if (addresses.length > 0) settle(addresses.map((address) => `http://${address}:${service.port}`));
     });
@@ -142,13 +142,13 @@ export const tailscaleCandidates = async (port: number): Promise<{ ip: string; h
 /**
  * Where the CLI keeps `hubUrl` — mirrors `CONFIG_PATH` in
  * `packages/cli/src/config.ts` exactly, so a re-pin written from here and a
- * `cockpit up` run on the same machine agree on one file. Duplicated rather
+ * `whiffle up` run on the same machine agree on one file. Duplicated rather
  * than imported for the same reason the rungs above are not re-exported from
  * cli: the dependency only runs cli → agent.
  */
 const CONFIG_PATH = join(
   process.env.XDG_CONFIG_HOME ?? join(homedir(), '.config'),
-  'cockpit',
+  'whiffle',
   'config.json'
 );
 const CONFIG_MODE = 0o600;
@@ -190,7 +190,7 @@ export interface RediscoverProbes {
  * way `discoverHub` does, and returns it.
  *
  * Skips two of `discoverHub`'s five rungs on purpose: `--hub`/env have nothing
- * new to read this long after `cockpit up` started, and localhost is not a
+ * new to read this long after `whiffle up` started, and localhost is not a
  * rung a *relocated* hub can land on — a hub that was reachable on this
  * machine would have answered the pinned URL already if the pinned URL was
  * localhost, so retrying it here only finds the same failure again.
@@ -203,7 +203,7 @@ export const rediscoverHub = async (probes: RediscoverProbes = {}): Promise<stri
   const probe = probes.probe ?? probeHub;
   const findMdns = probes.browseMdns ?? browseMdns;
   const findTailscale = probes.tailscaleCandidates ?? tailscaleCandidates;
-  const port = probes.port ?? Number(process.env[COCKPIT_ENV.hubPort] ?? COCKPIT_HUB_PORT);
+  const port = probes.port ?? Number(readEnv(WHIFFLE_ENV.hubPort) ?? WHIFFLE_HUB_PORT);
 
   const settle = async (httpUrl: string, rung: string): Promise<string> => {
     note(`[rediscover/${rung}] ${httpUrl} answered — repinning`);

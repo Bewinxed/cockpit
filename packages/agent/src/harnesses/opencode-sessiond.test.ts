@@ -40,7 +40,7 @@ const startDaemon = async (): Promise<string> => {
   const endpoint = join(scratch(), 'sessiond.sock');
   const main = join(import.meta.dir, '..', '..', '..', 'sessiond', 'src', 'main.ts');
   const daemon: ChildProcess = spawn(process.execPath, [main], {
-    env: { ...process.env, COCKPIT_SESSIOND_ENDPOINT: endpoint },
+    env: { ...process.env, WHIFFLE_SESSIOND_ENDPOINT: endpoint },
     stdio: 'ignore',
   });
   cleanups.push(() => daemon.kill('SIGKILL'));

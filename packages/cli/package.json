@@ -1,9 +1,9 @@
 {
-  "name": "@cockpit/cli",
+  "name": "@whiffle/cli",
   "version": "0.1.0",
   "type": "module",
   "bin": {
-    "cockpit": "./src/cli.ts"
+    "whiffle": "./src/cli.ts"
   },
   "main": "./src/index.ts",
   "types": "./src/index.ts",
@@ -15,9 +15,9 @@
     "start": "bun src/cli.ts"
   },
   "dependencies": {
-    "@cockpit/agent": "workspace:*",
-    "@cockpit/core": "workspace:*",
-    "@cockpit/hub": "workspace:*",
+    "@whiffle/agent": "workspace:*",
+    "@whiffle/core": "workspace:*",
+    "@whiffle/hub": "workspace:*",
     "bonjour-service": "^1.4.4"
   },
   "devDependencies": {

@@ -31,7 +31,7 @@ describe('sessiond joins the service set', () => {
 
   test('the systemd unit carries the design §11 supervision settings', () => {
     const text = serviceDefinition('sessiond', 'prod', 'systemd');
-    expect(text).toContain('Description=Cockpit sessiond');
+    expect(text).toContain('Description=Whiffle sessiond');
     expect(text).toContain('StartLimitIntervalSec=0');
     expect(text).toContain('Restart=on-failure');
     expect(text).toContain('RestartSec=2');
@@ -60,7 +60,7 @@ describe('sessiond joins the service set', () => {
 
   test('the launchd plist is well-formed and names the same entry point', () => {
     const text = serviceDefinition('sessiond', 'prod', 'launchd');
-    expect(text).toContain('<key>Label</key>\n  <string>dev.cockpit.sessiond</string>');
+    expect(text).toContain('<key>Label</key>\n  <string>dev.whiffle.sessiond</string>');
     expect(text).toContain('packages/sessiond/src/main.ts');
     // `restartOnSuccess: false` — a drained sessiond exited because it was told to.
     expect(text).toContain('<key>SuccessfulExit</key>');
@@ -83,23 +83,23 @@ describe('the agent orders after sessiond', () => {
     // and unable to start a single session. `Requires=` makes that fail once,
     // loudly, rather than once per spawn.
     expect(ordering).toEqual([
-      'Requires=cockpit-sessiond.service',
-      'Wants=cockpit-hub.service',
-      'After=cockpit-hub.service',
-      'After=cockpit-sessiond.service',
+      'Requires=whiffle-sessiond.service',
+      'Wants=whiffle-hub.service',
+      'After=whiffle-hub.service',
+      'After=whiffle-sessiond.service',
     ]);
   });
 
   test('the hub stays soft — losing it must not take the agent down', () => {
     const text = serviceDefinition('agent', 'prod', 'systemd');
-    expect(text).toContain('Wants=cockpit-hub.service');
-    expect(text).not.toContain('Requires=cockpit-hub.service');
+    expect(text).toContain('Wants=whiffle-hub.service');
+    expect(text).not.toContain('Requires=whiffle-hub.service');
   });
 
   test('launchd: recorded in the plist, since launchd has no ordering to enforce', () => {
     const text = serviceDefinition('agent', 'prod', 'launchd');
     expect(text).toContain(
-      '<!-- ordering: starts after dev.cockpit.hub, dev.cockpit.sessiond — launchd has no ordering, so this is recorded, not enforced -->'
+      '<!-- ordering: starts after dev.whiffle.hub, dev.whiffle.sessiond — launchd has no ordering, so this is recorded, not enforced -->'
     );
   });
 
@@ -192,7 +192,7 @@ describe('the ad-hoc pid ledger', () => {
   });
 
   test('the ledger round-trips and rejects malformed entries', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'cockpit-ledger-'));
+    const dir = mkdtempSync(join(tmpdir(), 'whiffle-ledger-'));
     const path = join(dir, 'sessiond-children.json');
     try {
       expect(await readSessiondLedger(path)).toEqual([]); // no file yet
@@ -207,7 +207,7 @@ describe('the ad-hoc pid ledger', () => {
   });
 
   test('a sweep whose entries all fail the start-time match kills nothing', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'cockpit-ledger-'));
+    const dir = mkdtempSync(join(tmpdir(), 'whiffle-ledger-'));
     const path = join(dir, 'sessiond-children.json');
     try {
       // pid 1 exists on every machine this file supports, and this start time is
@@ -225,7 +225,7 @@ describe('the ad-hoc pid ledger', () => {
   });
 
   test('an empty ledger is a no-op', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'cockpit-ledger-'));
+    const dir = mkdtempSync(join(tmpdir(), 'whiffle-ledger-'));
     try {
       expect(await sweepSessiondOrphans(() => {}, join(dir, 'missing.json'))).toEqual([]);
     } finally {

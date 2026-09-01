@@ -14,8 +14,8 @@
   import type { Snippet } from 'svelte';
   import { onNavigate } from '$app/navigation';
   import { Toaster } from '$lib/components/ui/sonner';
-  import Shell from '$lib/cockpit/Shell.svelte';
-  import { ensureConnected } from '$lib/cockpit/client.svelte';
+  import Shell from '$lib/whiffle/Shell.svelte';
+  import { ensureConnected } from '$lib/whiffle/client.svelte';
   import { enableLongPressMenus } from '$lib/utils/longpress';
   import type { LayoutServerData } from './$types';
 

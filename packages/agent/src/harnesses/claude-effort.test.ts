@@ -3,9 +3,9 @@ import { mkdtempSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { SESSIOND_V1 } from '@cockpit/core/sessiond';
-import type { Envelope, NeutralMessage, SpawnPayload } from '@cockpit/core';
-import { CONTROL_SET_EFFORT } from '@cockpit/core';
+import { SESSIOND_V1 } from '@whiffle/core/sessiond';
+import type { Envelope, NeutralMessage, SpawnPayload } from '@whiffle/core';
+import { CONTROL_SET_EFFORT } from '@whiffle/core';
 import type { HarnessContext } from '../harness';
 
 /**
@@ -15,7 +15,7 @@ import type { HarnessContext } from '../harness';
  * and the generic control proxy would have gone looking for one.
  *
  * The SDK is stood in for, because the real `query()` starts a CLI. What is
- * being tested is what cockpit asks it for, which is exactly what the stand-in
+ * being tested is what whiffle asks it for, which is exactly what the stand-in
  * records.
  */
 const spawned: { options: Record<string, unknown> }[] = [];
@@ -71,10 +71,10 @@ const fakeSessiond = createServer((socket) => {
   );
 });
 await new Promise<void>((resolve) => fakeSessiond.listen(endpoint, resolve));
-process.env.COCKPIT_SESSIOND_ENDPOINT = endpoint;
+process.env.WHIFFLE_SESSIOND_ENDPOINT = endpoint;
 afterAll(() => {
   fakeSessiond.close();
-  delete process.env.COCKPIT_SESSIOND_ENDPOINT;
+  delete process.env.WHIFFLE_SESSIOND_ENDPOINT;
 });
 
 const { ClaudeHarness } = await import('./claude');

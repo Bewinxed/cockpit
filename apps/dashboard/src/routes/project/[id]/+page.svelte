@@ -2,7 +2,7 @@
   /**
    * The project home (NEW.md §1, north star 4): what this is and what is
    * happening — read from the repo's own files, never from a store of
-   * Outpost's own.
+   * Whiffle's own.
    */
   import { untrack } from 'svelte';
   import { goto } from '$app/navigation';
@@ -16,24 +16,24 @@
   import { Input } from '$lib/components/ui/input';
   import { Textarea } from '$lib/components/ui/textarea';
   import MemoryCard from '$lib/components/features/MemoryCard.svelte';
-  import { cockpit, deleteProject, machineFs, spawnSession } from '$lib/cockpit/client.svelte';
-  import type { ProjectRow } from '$lib/cockpit/client.svelte';
-  import { readDocs, type Doc } from '$lib/cockpit/docs';
-  import { spawnPrefs, rememberSpawn } from '$lib/cockpit/spawnPrefs.svelte';
-  import { machineLabel } from '$lib/cockpit/machine';
-  import OsMark from '$lib/cockpit/OsMark.svelte';
-  import LiveSessionRow from '$lib/cockpit/LiveSessionRow.svelte';
-  import StoredSessionRow from '$lib/cockpit/StoredSessionRow.svelte';
-  import MachineInventory from '$lib/cockpit/MachineInventory.svelte';
+  import { whiffle, deleteProject, machineFs, spawnSession } from '$lib/whiffle/client.svelte';
+  import type { ProjectRow } from '$lib/whiffle/client.svelte';
+  import { readDocs, type Doc } from '$lib/whiffle/docs';
+  import { spawnPrefs, rememberSpawn } from '$lib/whiffle/spawnPrefs.svelte';
+  import { machineLabel } from '$lib/whiffle/machine';
+  import OsMark from '$lib/whiffle/OsMark.svelte';
+  import LiveSessionRow from '$lib/whiffle/LiveSessionRow.svelte';
+  import StoredSessionRow from '$lib/whiffle/StoredSessionRow.svelte';
+  import MachineInventory from '$lib/whiffle/MachineInventory.svelte';
   import type { PageData } from './$types';
 
   let { data }: { data: PageData } = $props();
 
   const project = $derived<ProjectRow | null>(
-    (data.project && cockpit.project(data.project.id)) ?? data.project
+    (data.project && whiffle.project(data.project.id)) ?? data.project
   );
   const machine = $derived(
-    cockpit.machines.find((row) => row.machineId === project?.machineId) ?? null
+    whiffle.machines.find((row) => row.machineId === project?.machineId) ?? null
   );
 
   let docs = $state<Doc[]>([]);
@@ -64,7 +64,7 @@
 
   $effect(() => {
     const current = project;
-    const ready = cockpit.status === 'connected';
+    const ready = whiffle.status === 'connected';
     if (!current || !ready || loadedFor === current.id) return;
     loadedFor = current.id;
     untrack(() => {
@@ -155,8 +155,8 @@
     clipped = element ? element.scrollHeight > element.clientHeight + 4 : false;
   });
 
-  const live = $derived(project ? cockpit.liveIn(project) : []);
-  const stored = $derived(project ? cockpit.storedIn(project) : []);
+  const live = $derived(project ? whiffle.liveIn(project) : []);
+  const stored = $derived(project ? whiffle.storedIn(project) : []);
   const storedVisible = $derived(showMore ? stored : stored.slice(0, 8));
 
   function startSession(scratch: boolean) {
@@ -209,7 +209,7 @@
 </script>
 
 <svelte:head>
-  <title>{project?.name ?? 'Project'} &middot; Outpost</title>
+  <title>{project?.name ?? 'Project'} &middot; Whiffle</title>
 </svelte:head>
 
 {#if !project}
@@ -524,7 +524,7 @@
           {#snippet footer()}
             {#if claudeEditing}
               <p class="border-t border-border px-4 py-2 text-micro text-muted-foreground">
-                This file is the repo's own — commit it to share it. Git is its sync; Outpost does not replicate it.
+                This file is the repo's own — commit it to share it. Git is its sync; Whiffle does not replicate it.
               </p>
             {/if}
           {/snippet}

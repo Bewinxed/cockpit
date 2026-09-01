@@ -63,7 +63,7 @@ await sleep(3000);
 
 // Find running sessions
 const sessionIds = await evaluate(`(() => {
-  const d = window.__cockpitDebug;
+  const d = window.__whiffleDebug;
   if (!d?.state) return [];
   const instances = d.state.instances || [];
   return instances
@@ -88,7 +88,7 @@ await new Promise(r => {
 await sleep(4000);
 
 const firstStats = await evaluate(`(() => {
-  const d = window.__cockpitDebug?.state;
+  const d = window.__whiffleDebug?.state;
   const s = d?.sessions?.['${first}'];
   return {
     messages: s?.messages?.length ?? 0,
@@ -198,7 +198,7 @@ const activeSession = sessionIds[0];
 
 // Measure FPS during simulated streaming
 const streamFps = await evaluate(`(() => {
-  const d = window.__cockpitDebug;
+  const d = window.__whiffleDebug;
   const s = d?.state?.sessions?.['${activeSession}'];
   if (!s) return { error: 'no session' };
 
@@ -256,7 +256,7 @@ await cdp('Performance.disable');
 await cdp('Performance.enable');
 
 const pushFps = await evaluate(`(() => {
-  const d = window.__cockpitDebug;
+  const d = window.__whiffleDebug;
   const s = d?.state?.sessions?.['${activeSession}'];
   if (!s) return { error: 'no session' };
 

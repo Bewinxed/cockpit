@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import type { Event, OpencodeClient } from '@opencode-ai/sdk';
-import type { NeutralMessage } from '@cockpit/core';
+import type { NeutralMessage } from '@whiffle/core';
 import type { HarnessContext } from '../harness';
 import { OpencodeSession } from './opencode';
 

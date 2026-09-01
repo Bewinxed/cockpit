@@ -1,5 +1,5 @@
-import type { InstanceRow } from '@cockpit/core';
-import { resolveSessionTitle } from '$lib/cockpit/links';
+import type { InstanceRow } from '@whiffle/core';
+import { resolveSessionTitle } from '$lib/whiffle/links';
 import type { LayoutServerLoad } from './$types';
 
 /**
@@ -7,7 +7,7 @@ import type { LayoutServerLoad } from './$types';
  * here rather than imported so the server never pulls the client store (and its
  * module-level `$state`) into a request.
  */
-const WORKING_SET_KEY = 'outpost-working-set';
+const WORKING_SET_KEY = 'whiffle-working-set';
 
 /** The stored shape, mirrored from `Visit` in working-set.svelte.ts. */
 interface Visit {
@@ -27,7 +27,7 @@ interface Visit {
  * the default and the rail visibly jumped once the client read the real value
  * on mount. The bounds mirror Shell.svelte's clamp.
  */
-const RAIL_KEY = 'cockpit-rail-width';
+const RAIL_KEY = 'whiffle-rail-width';
 const RAIL_MIN = 216;
 const RAIL_MAX = 520;
 const RAIL_DEFAULT = 340;

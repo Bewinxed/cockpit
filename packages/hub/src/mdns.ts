@@ -1,10 +1,10 @@
-import { COCKPIT_ENV, COCKPIT_MDNS_TYPE } from '@cockpit/core';
+import { WHIFFLE_ENV, WHIFFLE_MDNS_TYPE, readEnv } from '@whiffle/core';
 import { Bonjour } from 'bonjour-service';
 import { hostname } from 'node:os';
 import { HUB_VERSION } from './config';
 
 /**
- * Announces the hub on the local link, so `cockpit up` on a machine plugged into
+ * Announces the hub on the local link, so `whiffle up` on a machine plugged into
  * the same network finds it without being told anything.
  *
  * Multicast is link-local by definition: this announcement does not cross a
@@ -13,7 +13,7 @@ import { HUB_VERSION } from './config';
  * carry that case.
  */
 export const advertise = (port: number): void => {
-  if (Bun.env[COCKPIT_ENV.noMdns] === '1') {
+  if (readEnv(WHIFFLE_ENV.noMdns) === '1') {
     console.log('[hub] mDNS advertisement disabled');
     return;
   }
@@ -23,14 +23,14 @@ export const advertise = (port: number): void => {
   try {
     const bonjour = new Bonjour();
     const service = bonjour.publish({
-      name: `cockpit-${hostname()}`,
-      type: COCKPIT_MDNS_TYPE,
+      name: `whiffle-${hostname()}`,
+      type: WHIFFLE_MDNS_TYPE,
       protocol: 'tcp',
       port,
       txt: { version: HUB_VERSION },
     });
     service.on('error', (error: Error) => console.log(`[hub] mDNS unavailable: ${error.message}`));
-    console.log(`[hub] advertising _${COCKPIT_MDNS_TYPE}._tcp on :${port}`);
+    console.log(`[hub] advertising _${WHIFFLE_MDNS_TYPE}._tcp on :${port}`);
   } catch (error) {
     console.log(`[hub] mDNS unavailable: ${(error as Error).message}`);
   }

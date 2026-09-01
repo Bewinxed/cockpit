@@ -1,10 +1,10 @@
 <script lang="ts">
   /** Walks a machine's filesystem over the `fs` verb so a cwd can be picked, not typed. */
   import { IconArrowUp, IconCheck, IconFolder, IconSpinner } from '$lib/icons';
-  import type { FsEntry, SDKSessionInfo } from '@cockpit/core';
+  import type { FsEntry, SDKSessionInfo } from '@whiffle/core';
   import { Button } from '$lib/components/ui/button';
   import * as Collapsible from '$lib/components/ui/collapsible';
-  import { cockpit, machineFs } from '$lib/cockpit/client.svelte';
+  import { whiffle, machineFs } from '$lib/whiffle/client.svelte';
 
   let {
     machineId,
@@ -34,7 +34,7 @@
   /** Whatever the field already says, else where this machine was working last. */
   function seed(): string {
     if (value.startsWith('/')) return trim(value);
-    const recent = cockpit
+    const recent = whiffle
       .catalogOf(machineId)
       .reduce<SDKSessionInfo | null>(
         (best, info) => (info.cwd && (!best || info.lastModified > best.lastModified) ? info : best),

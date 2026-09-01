@@ -26,7 +26,7 @@ import {
   type Envelope,
   type FrameProvenance,
   type IngestMark,
-} from '@cockpit/core';
+} from '@whiffle/core';
 import { makeDb } from './db';
 import type { PendingShape } from './pending';
 import type { HubSocket, RegistryShape } from './registry';
@@ -346,7 +346,7 @@ test('a malformed provenance reads as absent, never as a mark', () => {
 // G4 (hub half): the wired hub — a real agent socket at a real `createServer`.
 // ---------------------------------------------------------------------------
 
-const DB_FILE = `/tmp/cockpit-ingest-${crypto.randomUUID()}.db`;
+const DB_FILE = `/tmp/whiffle-ingest-${crypto.randomUUID()}.db`;
 const db = makeDb(DB_FILE);
 const MACHINE = `machine-ingest-${crypto.randomUUID()}`;
 db.upsertAgent({ machineId: MACHINE, hostname: 'box', os: 'linux', auth: 'authenticated' });
@@ -372,6 +372,8 @@ const registry: RegistryShape = (() => {
       const entry = dashboards.get(socket.id);
       if (entry) entry.subscriptions = new Set(instanceIds);
     },
+    noteDashboardOrigin: () => {},
+    dashboardOrigin: () => undefined,
     rememberRequester: (requestId, socket) => requesters.set(requestId, socket),
     takeRequester: (requestId) => {
       const socket = requesters.get(requestId);
@@ -530,7 +532,7 @@ test('the announced seam is relayed to a following dashboard like any other fram
       message: {
         type: 'system',
         subtype: 'sessiond_stream_gap',
-        text: "cockpit: sessiond's replay window overflowed; this transcript resumes at line 4321",
+        text: "whiffle: sessiond's replay window overflowed; this transcript resumes at line 4321",
       },
     },
   });

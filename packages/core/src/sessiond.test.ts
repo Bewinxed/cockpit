@@ -35,35 +35,35 @@ afterEach(() => {
 test('linux with XDG_RUNTIME_DIR set: socket lives under the runtime dir', () => {
   setPlatform('linux');
   process.env.XDG_RUNTIME_DIR = '/run/user/1000';
-  expect(sessiondEndpoint()).toBe('/run/user/1000/cockpit/sessiond.sock');
+  expect(sessiondEndpoint()).toBe('/run/user/1000/whiffle/sessiond.sock');
 });
 
-test('linux with no XDG_RUNTIME_DIR: falls back to ~/.cockpit (ad-hoc runs)', () => {
+test('linux with no XDG_RUNTIME_DIR: falls back to ~/.whiffle (ad-hoc runs)', () => {
   setPlatform('linux');
   const endpoint = sessiondEndpoint();
-  expect(endpoint.endsWith('/.cockpit/sessiond.sock')).toBe(true);
+  expect(endpoint.endsWith('/.whiffle/sessiond.sock')).toBe(true);
   expect(endpoint.includes('undefined')).toBe(false);
 });
 
-test('darwin: always ~/.cockpit, never XDG_RUNTIME_DIR (sun_path is 104 bytes there)', () => {
+test('darwin: always ~/.whiffle, never XDG_RUNTIME_DIR (sun_path is 104 bytes there)', () => {
   setPlatform('darwin');
   process.env.XDG_RUNTIME_DIR = '/run/user/1000';
   const endpoint = sessiondEndpoint();
-  expect(endpoint.endsWith('/.cockpit/sessiond.sock')).toBe(true);
+  expect(endpoint.endsWith('/.whiffle/sessiond.sock')).toBe(true);
   expect(endpoint.includes('/run/user/1000')).toBe(false);
 });
 
 test('win32: a reserved named-pipe name, keyed by the OS username', () => {
   setPlatform('win32');
   process.env.USERNAME = 'alex';
-  expect(sessiondEndpoint()).toBe('\\\\.\\pipe\\cockpit-sessiond-alex');
+  expect(sessiondEndpoint()).toBe('\\\\.\\pipe\\whiffle-sessiond-alex');
 });
 
 test('win32 with no USERNAME: falls back to USER, then a fixed default', () => {
   setPlatform('win32');
   process.env.USER = 'alex';
-  expect(sessiondEndpoint()).toBe('\\\\.\\pipe\\cockpit-sessiond-alex');
+  expect(sessiondEndpoint()).toBe('\\\\.\\pipe\\whiffle-sessiond-alex');
 
   delete process.env.USER;
-  expect(sessiondEndpoint()).toBe('\\\\.\\pipe\\cockpit-sessiond-default');
+  expect(sessiondEndpoint()).toBe('\\\\.\\pipe\\whiffle-sessiond-default');
 });
