@@ -12,6 +12,7 @@
   import * as Drawer from '$lib/components/ui/drawer';
   import Switch from '$lib/components/ui/switch/switch.svelte';
   import { setAutopilot } from './autopilot';
+  import { whiffle } from './client.svelte';
 
   let {
     instanceId,
@@ -32,6 +33,49 @@
   let enabled = $state(false);
 
   const active = $derived(instance?.autopilot?.enabled === true);
+
+  /**
+   * The supervisor's live presence: `evaluating` spins a halo around this
+   * button while the verdict model deliberates; `settled` pulses the halo
+   * once in the verdict's color, then the accessor times it out. The tick
+   * below re-reads after the pulse window so the halo actually leaves the
+   * DOM instead of lingering until the next unrelated update.
+   */
+  let activityTick = $state(0);
+  const activity = $derived.by(() => {
+    void activityTick; // re-read after the pulse window closes
+    return whiffle.supervisorActivityOf(instanceId);
+  });
+  $effect(() => {
+    if (activity?.phase !== 'settled') return;
+    const remaining = Math.max(100, 2_600 - (Date.now() - activity.at));
+    const timer = setTimeout(() => activityTick++, remaining + 50);
+    return () => clearTimeout(timer);
+  });
+  const evaluating = $derived(activity?.phase === 'evaluating');
+  const settled = $derived(activity?.phase === 'settled' ? activity.verdict : null);
+  const verdictInk = $derived(
+    settled === 'reply'
+      ? 'var(--accent-solid)'
+      : settled === 'escalate' || settled === 'ask'
+        ? 'var(--status-attn-ink)'
+        : settled === 'error'
+          ? 'var(--error-11)'
+          : 'var(--ink-muted)'
+  );
+  const presence = $derived(
+    evaluating
+      ? 'The supervisor is reading this turn…'
+      : settled === 'silent'
+        ? 'Supervisor: let it pass'
+        : settled === 'reply'
+          ? 'Supervisor: replied'
+          : settled === 'escalate' || settled === 'ask'
+            ? 'Supervisor: escalated to you'
+            : settled === 'error'
+              ? 'Supervisor: errored'
+              : null
+  );
 
   function seed() {
     draft = instance?.autopilot?.prompt ?? '';
@@ -99,7 +143,16 @@
           type="button"
           aria-pressed={active}
           aria-label={active ? 'Autopilot enabled' : 'Autopilot'}
+          title={presence ?? (active ? 'Autopilot enabled' : 'Autopilot')}
         >
+          {#if evaluating}
+            <span class="ap-halo ap-halo-spin" aria-hidden="true"></span>
+          {:else if settled}
+            {#key activity}
+              <span class="ap-halo ap-halo-pulse" style:--verdict-ink={verdictInk} aria-hidden="true"
+              ></span>
+            {/key}
+          {/if}
           <IconSkill />
         </button>
       {/snippet}
@@ -122,7 +175,16 @@
           type="button"
           aria-pressed={active}
           aria-label={active ? 'Autopilot enabled' : 'Autopilot'}
+          title={presence ?? (active ? 'Autopilot enabled' : 'Autopilot')}
         >
+          {#if evaluating}
+            <span class="ap-halo ap-halo-spin" aria-hidden="true"></span>
+          {:else if settled}
+            {#key activity}
+              <span class="ap-halo ap-halo-pulse" style:--verdict-ink={verdictInk} aria-hidden="true"
+              ></span>
+            {/key}
+          {/if}
           <IconSkill />
         </button>
       {/snippet}
@@ -136,8 +198,13 @@
   </Popover.Root>
 {/if}
 
+{#if presence}
+  <span class="sr-only" role="status" aria-live="polite">{presence}</span>
+{/if}
+
 <style>
   .ap-trigger {
+    position: relative;
     width: var(--cin-ctl, 34px);
     height: var(--cin-ctl, 34px);
     flex: 0 0 auto;
@@ -152,6 +219,61 @@
       background-color var(--c-100) var(--e-in),
       color var(--c-100) var(--e-in),
       transform var(--c-100) var(--e-in);
+  }
+  /* The supervisor's halo: a hairline ring floating just outside the control.
+     Deliberating = a short arc orbiting (conic gradient, masked to a ring);
+     settled = one full-ring pulse in the verdict's ink, then gone. */
+  .ap-halo {
+    position: absolute;
+    inset: -3px;
+    border-radius: calc(var(--radius-panel) - var(--cin-pad, var(--space-2)) + 3px);
+    pointer-events: none;
+    padding: 1.5px;
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+  }
+  .ap-halo-spin {
+    background: conic-gradient(
+      from 0deg,
+      transparent 0 62%,
+      color-mix(in oklab, var(--accent-solid) 60%, transparent) 78%,
+      var(--accent-solid) 92%,
+      transparent 100%
+    );
+    animation: ap-halo-orbit 1400ms linear infinite;
+  }
+  @keyframes ap-halo-orbit {
+    to {
+      transform: rotate(1turn);
+    }
+  }
+  .ap-halo-pulse {
+    background: var(--verdict-ink, var(--ink-muted));
+    animation: ap-halo-fade 2400ms var(--e-in) both;
+  }
+  @keyframes ap-halo-fade {
+    0% {
+      opacity: 0.9;
+    }
+    100% {
+      opacity: 0;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .ap-halo-spin {
+      animation: none;
+      background: color-mix(in oklab, var(--accent-solid) 45%, transparent);
+    }
+    .ap-halo-pulse {
+      animation: none;
+      opacity: 0.5;
+    }
   }
   .ap-trigger :global(svg) {
     width: 17px;

@@ -44,11 +44,26 @@ export interface SupervisorSender {
   send: (envelope: Envelope<SendPayload>) => void;
 }
 
+/**
+ * Fired the moment an evaluation actually begins — the transient half of the
+ * supervisor's visible life. Every evaluation is guaranteed to terminate in a
+ * published {@link SupervisorEvent}, so a consumer can treat that event as
+ * this signal's close; nothing here is persisted.
+ */
+export interface SupervisorStatusSignal {
+  phase: 'evaluating';
+  source: 'rule' | 'autopilot';
+  ruleId: string | null;
+  at: number;
+}
+
 export interface SupervisorEngineDeps {
   db: DbShape;
   agent: (machineId: string) => SupervisorSender | undefined;
   telegram?: { onSupervisor(instanceId: string, text: string): void };
   publish: (instanceId: string, event: SupervisorEvent) => void;
+  /** Optional transient broadcast: the dashboard's "thinking" indicator. */
+  status?: (instanceId: string, status: SupervisorStatusSignal) => void;
 }
 
 // ── per-instance state ─────────────────────────────────────────────────
@@ -173,14 +188,16 @@ export class SupervisorEngine {
   readonly #agent: (machineId: string) => SupervisorSender | undefined;
   readonly #telegram?: { onSupervisor(instanceId: string, text: string): void };
   readonly #publish: (instanceId: string, event: SupervisorEvent) => void;
+  readonly #status?: (instanceId: string, status: SupervisorStatusSignal) => void;
   readonly #state = new Map<string, InstanceState>();
   readonly #semaphore = new Semaphore(SUPERVISOR_MAX_CONCURRENT, SEMAPHORE_QUEUE_CAP);
 
-  constructor({ db, agent, telegram, publish }: SupervisorEngineDeps) {
+  constructor({ db, agent, telegram, publish, status }: SupervisorEngineDeps) {
     this.#db = db;
     this.#agent = agent;
     this.#telegram = telegram;
     this.#publish = publish;
+    this.#status = status;
   }
 
   /** Drop all tracked state for a finished session. */
@@ -338,6 +355,14 @@ export class SupervisorEngine {
     if (!selection) return;
 
     state.inFlight = true;
+    // The visible half of the evaluation: the dashboard shows the supervisor
+    // deliberating from this signal until the terminal event lands.
+    this.#status?.(instanceId, {
+      phase: 'evaluating',
+      source: selection.source,
+      ruleId: selection.ruleId ?? null,
+      at: Date.now(),
+    });
 
     // Global semaphore — cap concurrent LLM calls.
     const acquired = await this.#semaphore.acquire();

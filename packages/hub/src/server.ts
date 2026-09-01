@@ -73,7 +73,7 @@ import { buildInfo } from './build';
 import { HUB_VERSION } from './config';
 import { delegateTypesRoutes, makeDelegateTypes } from './delegate-types';
 import { RuleEngine } from './rules';
-import { SupervisorEngine } from './supervisor';
+import { SupervisorEngine, type SupervisorStatusSignal } from './supervisor';
 import { probe } from './llm';
 import type { AgentAuth, DbShape, DelegateEvent, InstanceKind } from './db';
 import { usageBucketFromRow } from './db';
@@ -847,6 +847,18 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
     });
   };
 
+  /** Transient twin of {@link publishSupervisorEvent}: never persisted. */
+  const publishSupervisorStatus = (instanceId: string, status: SupervisorStatusSignal): void => {
+    const row = db.listInstances().find((r) => r.id === instanceId);
+    if (!row) return;
+    registry.broadcast({
+      verb: 'frames',
+      machineId: row.machineId,
+      instanceId,
+      payload: { kind: 'supervisor_status', instanceId, status },
+    });
+  };
+
   /**
    * LLM supervisor — watches the same frames the rule engine does and, when
    * configured, evaluates turns against autopilot or LLM rules off the frame
@@ -857,6 +869,7 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
     agent: (machineId) => registry.agent(machineId),
     telegram,
     publish: publishSupervisorEvent,
+    status: publishSupervisorStatus,
   });
 
   /**

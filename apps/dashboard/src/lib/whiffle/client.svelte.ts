@@ -405,6 +405,17 @@ const state = $state({
    * (PLAN §C9). Seeded from REST and kept live by `supervisor_event` frames.
    */
   supervisorEvents: [] as SupervisorEvent[],
+  /**
+   * The supervisor's live presence per session: `evaluating` from the hub's
+   * transient status frame until the terminal event settles it; `settled`
+   * carries the verdict briefly so the composer can pulse it. Never persisted,
+   * never seeded from REST — this is strictly what is happening right now.
+   */
+  supervisorActivity: {} as Record<
+    string,
+    | { phase: 'evaluating'; source: 'rule' | 'autopilot'; since: number }
+    | { phase: 'settled'; verdict: SupervisorEvent['verdict']; at: number }
+  >,
   /** Stored sessions per machine, newest first (`listSessions` through the tunnel). */
   catalog: {} as Record<string, SDKSessionInfo[]>,
   /**
@@ -801,6 +812,18 @@ function supervisorEventOf(frame: FramePayload): SupervisorEvent | null {
   return event as SupervisorEvent;
 }
 
+/** The transient "supervisor is thinking" push — structural twin of the event. */
+function supervisorStatusOf(
+  frame: FramePayload
+): { instanceId: string; source: 'rule' | 'autopilot'; at: number } | null {
+  const candidate: { kind: string; instanceId?: unknown; status?: unknown } = frame;
+  if (candidate.kind !== 'supervisor_status') return null;
+  const status = candidate.status;
+  if (typeof status !== 'object' || status === null) return null;
+  if (typeof candidate.instanceId !== 'string') return null;
+  return { instanceId: candidate.instanceId, ...(status as { source: 'rule' | 'autopilot'; at: number }) };
+}
+
 /** Cap sourced from PLAN §C9: 200 in memory. */
 const SUPERVISOR_EVENT_CAP = 200;
 
@@ -957,7 +980,32 @@ function handleFrame(frame: FramePayload): void {
   if (supervisorEvent) {
     // Announce only what is genuinely new — the REST seed replays history
     // through the same recorder and must never replay its toasts.
-    if (recordSupervisorEvent(supervisorEvent)) announceSupervisorEvent(supervisorEvent);
+    if (recordSupervisorEvent(supervisorEvent)) {
+      announceSupervisorEvent(supervisorEvent);
+      // Settle the composer's thinking halo into a verdict pulse — except for
+      // the in-flight/queue skips, which describe a SECOND turn while the
+      // first evaluation is still genuinely running.
+      const stillRunning =
+        supervisorEvent.verdict === 'skipped' &&
+        (supervisorEvent.note === 'in-flight' || supervisorEvent.note === 'semaphore queue full');
+      if (!stillRunning) {
+        state.supervisorActivity[supervisorEvent.instanceId] = {
+          phase: 'settled',
+          verdict: supervisorEvent.verdict,
+          at: Date.now(),
+        };
+      }
+    }
+    return;
+  }
+
+  const supervisorStatus = supervisorStatusOf(frame);
+  if (supervisorStatus) {
+    state.supervisorActivity[supervisorStatus.instanceId] = {
+      phase: 'evaluating',
+      source: supervisorStatus.source,
+      since: supervisorStatus.at,
+    };
     return;
   }
 
@@ -4029,6 +4077,19 @@ export const whiffle = {
   /** Supervisor events for one session, newest first. */
   supervisorEventsOf: (instanceId: string): SupervisorEvent[] =>
     state.supervisorEvents.filter((e) => e.instanceId === instanceId),
+  /**
+   * The supervisor's live presence for one session, time-bounded at read:
+   * an evaluation older than the engine's own budget means the terminal
+   * frame was lost — show nothing rather than a stuck halo; a settled
+   * verdict is only worth pulsing for a moment.
+   */
+  supervisorActivityOf: (instanceId: string) => {
+    const activity = state.supervisorActivity[instanceId];
+    if (!activity) return undefined;
+    if (activity.phase === 'evaluating' && Date.now() - activity.since > 300_000) return undefined;
+    if (activity.phase === 'settled' && Date.now() - activity.at > 2_600) return undefined;
+    return activity;
+  },
   /** The ask a permission requestId belongs to, whichever delegate raised it. */
   delegateAskOf: (requestId: string): DelegateAskEvent | null => {
     for (const events of Object.values(state.delegateEvents)) {
