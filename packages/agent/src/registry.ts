@@ -1,0 +1,163 @@
+/**
+ * Updating from the registry, which is how a machine that is not the author's
+ * gets new code.
+ *
+ * The deployment clone this replaces tracked a git branch: a machine pulled
+ * whatever had landed on `main` and built it locally. That is a reasonable way
+ * for one person to run their own fleet and an unreasonable thing to hand to
+ * users. It means every commit is a release, there is no version to name, no
+ * way to say "stay on the previous one", and every machine needs git and a
+ * full toolchain to produce a binary the author already built.
+ *
+ * A published version is a fact instead of a moving reference. It can be
+ * pinned, compared across a fleet, and rolled back to. The bytes are built
+ * once, by the release that made them, rather than once per machine.
+ *
+ * What this module does NOT do is decide when. It reports what is installed
+ * and what is available; acting on the difference is the operator's, through
+ * `cockpit update` or the fleet control that calls it.
+ */
+import type { UpdateReport } from '@cockpit/core';
+import { restartStack, run } from './update';
+
+/**
+ * What a user installs. One package, so a fleet has one version to compare.
+ *
+ * SCOPED, and that is a safety property rather than a naming preference. This
+ * name is what every machine in a fleet will run `install` against
+ * unattended — so whoever controls it controls those machines. An unscoped
+ * generic word is squattable, transferable, and may already belong to somebody
+ * else: `cockpit` on npm is a 2012 Mozilla command-line component, and
+ * `outpost` is taken too. Pointing an auto-updater at either would have had
+ * fleets installing a stranger's package. A scope can only ever be published
+ * to by its owner.
+ *
+ * `outpost` rather than `cockpit` because that is the product's public name
+ * (PRODUCT.md: "Outpost is the sole public-facing name").
+ */
+export const PACKAGE_NAME = '@bewinxed/outpost';
+
+/** The registry, overridable for a private mirror or an air-gapped fleet. */
+export const registryUrl = (): string =>
+  process.env.COCKPIT_REGISTRY?.replace(/\/$/, '') || 'https://registry.npmjs.org';
+
+/** Long enough for a slow mirror, short enough not to wedge a poll. */
+const REGISTRY_TIMEOUT_MS = 10_000;
+/** An install fetches a package and its tree; it is allowed to take a while. */
+const INSTALL_TIMEOUT_MS = 300_000;
+
+export interface VersionCheck {
+  /** What this machine is running. */
+  installed: string;
+  /** What the registry offers, or `null` when it could not be reached. */
+  latest: string | null;
+  /** Whether the two differ — never a guess: `null` latest means unknown. */
+  behind: boolean;
+  /** Why `latest` is null, when it is. */
+  reason?: string;
+}
+
+/**
+ * Compares two versions the way a release train moves: newest wins, and
+ * anything unparseable loses to anything parseable rather than throwing. A
+ * machine must never fail to report its state because a version string was
+ * shaped oddly.
+ */
+export const isNewer = (candidate: string, current: string): boolean => {
+  const parts = (value: string): number[] =>
+    value
+      .replace(/^v/, '')
+      .split(/[.\-+]/)
+      .map((piece) => (/^\d+$/.test(piece) ? Number(piece) : Number.NaN));
+  const a = parts(candidate);
+  const b = parts(current);
+  for (let i = 0; i < Math.max(a.length, b.length); i += 1) {
+    const left = a[i] ?? 0;
+    const right = b[i] ?? 0;
+    if (Number.isNaN(left) || Number.isNaN(right)) {
+      // A prerelease segment against a release: fewer segments is the release,
+      // and a release is newer than the prerelease that led to it.
+      if (Number.isNaN(left) && !Number.isNaN(right)) return false;
+      if (!Number.isNaN(left) && Number.isNaN(right)) return true;
+      continue;
+    }
+    if (left !== right) return left > right;
+  }
+  return false;
+};
+
+/** What the registry says the newest published version is. */
+export const latestVersion = async (): Promise<{ version: string | null; reason?: string }> => {
+  const url = `${registryUrl()}/${PACKAGE_NAME}/latest`;
+  try {
+    const response = await fetch(url, {
+      signal: AbortSignal.timeout(REGISTRY_TIMEOUT_MS),
+      headers: { accept: 'application/json' },
+    });
+    if (!response.ok) return { version: null, reason: `${url} answered ${response.status}` };
+    const body = (await response.json()) as { version?: unknown };
+    return typeof body.version === 'string'
+      ? { version: body.version }
+      : { version: null, reason: `${url} returned no version` };
+  } catch (error) {
+    return { version: null, reason: error instanceof Error ? error.message : String(error) };
+  }
+};
+
+/**
+ * Where this machine stands. Answerable while offline — an unreachable
+ * registry reports itself as unreachable rather than as "up to date", because
+ * a fleet view that cannot tell those apart is the thing that let a stuck
+ * deployment sit unnoticed for a day.
+ */
+export const checkVersion = async (installed: string): Promise<VersionCheck> => {
+  const { version, reason } = await latestVersion();
+  if (!version) return { installed, latest: null, behind: false, ...(reason ? { reason } : {}) };
+  return { installed, latest: version, behind: isNewer(version, installed) };
+};
+
+/**
+ * Install a version and bring the services onto it.
+ *
+ * Global, because the services are launched by systemd units that name a
+ * binary rather than a checkout — the same reason this is an install and not
+ * a build. `bun add -g` rather than npm: it is the runtime the units already
+ * use, and asking a machine to have a second package manager to update the
+ * first is how an update path acquires its own dependencies.
+ */
+export const registryUpdate = async ({
+  installed,
+  to,
+  restartAgent = true,
+  force = false,
+  busy = 0,
+}: {
+  installed: string;
+  /** A version, or `latest`. */
+  to?: string;
+  restartAgent?: boolean;
+  force?: boolean;
+  busy?: number;
+}): Promise<UpdateReport> => {
+  const target = to ?? 'latest';
+  const spec = `${PACKAGE_NAME}@${target}`;
+
+  const install = await run([process.execPath, 'add', '-g', spec], INSTALL_TIMEOUT_MS);
+  if (!install.ok) {
+    throw new Error(`installing ${spec} failed: ${install.said || `exit ${install.code}`}`);
+  }
+
+  const after = await latestVersion();
+  const report: UpdateReport = {
+    from: installed,
+    to: target === 'latest' ? (after.version ?? target) : target,
+    pulled: `installed ${spec}`,
+    installed: true,
+    // Nothing is built on the machine any more: the release built it once.
+    built: false,
+    restarted: [],
+  };
+  return restartStack(report, { restartAgent, force, busy }, [
+    'the dashboard ships built, so nothing was compiled here',
+  ]);
+};

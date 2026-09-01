@@ -31,6 +31,15 @@ export {
   type DeployState,
 } from './deploy';
 export {
+  checkVersion,
+  isNewer,
+  latestVersion,
+  PACKAGE_NAME,
+  registryUpdate,
+  registryUrl,
+  type VersionCheck,
+} from './registry';
+export {
   deploymentState,
   updateCheckout,
   watchDeployment,

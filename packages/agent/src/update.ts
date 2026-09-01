@@ -58,7 +58,7 @@ const INSTALL_TIMEOUT_MS = 5 * 60_000;
 const BUILD_TIMEOUT_MS = 10 * 60_000;
 const SERVICE_TIMEOUT_MS = 30_000;
 
-interface Ran {
+export interface Ran {
   ok: boolean;
   code: number;
   /** The tail of what it said: what it printed, or what it failed with. */
@@ -70,7 +70,7 @@ interface Ran {
  * running if it hangs: a pull against an unreachable remote would otherwise hold
  * the control open forever, and the hub would never hear how the update went.
  */
-const run = async (argv: string[], timeoutMs: number, cwd: string = REPO_ROOT): Promise<Ran> => {
+export const run = async (argv: string[], timeoutMs: number, cwd: string = REPO_ROOT): Promise<Ran> => {
   const child = Bun.spawn(argv, {
     cwd,
     env: toolEnv(),
@@ -221,6 +221,23 @@ export const updateCheckout = async ({
     }
   }
 
+  return restartStack(report, { restartAgent, force, busy }, skipped);
+};
+
+/**
+ * Bring the services onto whatever code is now on disk.
+ *
+ * Split out from the git flow because the interesting part of an update is not
+ * how the bytes arrived — it is the order the stack comes back in, and which
+ * pieces are allowed to go down while somebody is waiting on the answer. That
+ * reasoning is identical whether the new code came from a pull or from a
+ * registry install, and it is the part that is easy to get subtly wrong.
+ */
+export const restartStack = async (
+  report: UpdateReport,
+  { restartAgent, force, busy = 0 }: { restartAgent?: boolean; force?: boolean; busy?: number },
+  skipped: string[]
+): Promise<UpdateReport> => {
   // The dashboard restarts in front of whoever asked; the hub cannot. An update
   // is asked for *through* the hub, so restarting it inline kills the socket the
   // reply is still travelling on and the caller reads a timeout for an update

@@ -19,7 +19,14 @@ import {
 } from './service';
 
 /** Reported by `--version`; keep in sync with package.json. */
-const CLI_VERSION = '0.1.0';
+/**
+ * Injected by the release build from `packages/cli/package.json`, so the
+ * binary cannot claim a version the manifest does not. `0.0.0-dev` is what a
+ * checkout reports, which is true: a checkout is not a release.
+ */
+declare const __COCKPIT_VERSION__: string | undefined;
+const CLI_VERSION =
+  typeof __COCKPIT_VERSION__ === 'string' ? __COCKPIT_VERSION__ : '0.0.0-dev';
 
 const HELP = `cockpit ${CLI_VERSION} — join this machine to a cockpit fleet
 
@@ -29,7 +36,8 @@ Usage
   cockpit status [--hub <url>] [--verbose]  print the hub it found, and the fleet
   cockpit service <${SERVICE_ACTIONS.join('|')}> [service...]
                                             run cockpit as per-user services
-  cockpit deploy init [--origin <url>]      run the services from a clean clone
+  cockpit update [--check] [--to <version>] install the newest release and restart
+  cockpit deploy init [--origin <url>]      developer mode: run from a git clone
   cockpit login [--token <token>]           give this machine a Claude Code token
   cockpit logout                            forget it
 
@@ -70,6 +78,8 @@ Options
   --hub <url>     hub to use, as http://host:port or ws://host:port/ws
   --token <token> a \`claude setup-token\` token, for \`login\` without a terminal
   --dev           for \`service install\`: run from the checkout, watching it
+  --check         for \`update\`: say what is available, install nothing
+  --to <version>  for \`update\`: a named release instead of the newest
   --origin <url>  for \`deploy init\`: the remote to clone (default this one's)
   --when-idle     for \`service restart\`: wait for this machine's sessions first
   --force         for \`service restart\`: restart the agent mid-turn anyway
@@ -121,6 +131,10 @@ interface Args {
   hub?: string;
   token?: string;
   origin?: string;
+  /** `update --to <version>`: a specific release rather than the newest. */
+  to?: string;
+  /** `update --check`: report what is available and change nothing. */
+  check: boolean;
   dev: boolean;
   whenIdle: boolean;
   force: boolean;
@@ -135,6 +149,7 @@ class UsageError extends Error {}
 const parseArgs = (argv: string[]): Args => {
   const args: Args = {
     rest: [],
+    check: false,
     dev: false,
     whenIdle: false,
     force: false,
@@ -157,6 +172,13 @@ const parseArgs = (argv: string[]): Args => {
       case '--origin':
         args.origin = argv[++index];
         if (!args.origin) throw new UsageError('--origin needs a git URL');
+        break;
+      case '--to':
+        args.to = argv[++index];
+        if (!args.to) throw new UsageError('--to needs a version');
+        break;
+      case '--check':
+        args.check = true;
         break;
       case '--dev':
         args.dev = true;
@@ -327,18 +349,22 @@ const up = async (args: Args): Promise<number> => {
   process.env[COCKPIT_ENV.hubUrl] = hub.wsUrl;
   const { runDaemon, watchDeployment } = await import('@cockpit/agent');
   runDaemon(auth);
-  // Started unconditionally, because it is safe unconditionally: the first
-  // thing every poll does is look for the marker, and a checkout without one is
-  // never fetched, compared or pulled. On a dev machine this is a no-op that
-  // costs one `stat` a minute; on a deployed machine it is what makes a push to
-  // main reach it (C8).
+  // The git-pull path is DEVELOPER MODE now, and off unless asked for.
   //
-  // Pointed at THIS agent's own checkout, not at `deployRoot()`. The default
-  // would aim every agent at `~/.cockpit/app` regardless of where it runs from,
-  // so a dev-tree agent would poll the clone, pull into it, and restart the
-  // service stack it is not part of — the safety the comment above claims is
-  // only true when the root is the poller's own tree.
-  watchDeployment({ root: CHECKOUT_ROOT });
+  // It used to run unconditionally: a machine with a deployment clone tracked
+  // `main` and pulled whatever landed there. That is a fine way for the author
+  // to run their own fleet and the wrong thing to ship — it makes every commit
+  // a release, with no version to name, nothing to roll back to, and no gate
+  // between a push and somebody else's machine. Users update from the registry
+  // (`cockpit update`), where a release is a published version that was built
+  // once and can be pinned.
+  //
+  // Kept, rather than deleted, because running the fleet straight from a
+  // checkout is genuinely how this gets developed. It simply has to be chosen:
+  // COCKPIT_DEPLOY_POLL=1, or a clone that says so in its own marker.
+  if (process.env.COCKPIT_DEPLOY_POLL === '1') {
+    watchDeployment({ root: CHECKOUT_ROOT });
+  }
   return 0;
 };
 
@@ -371,6 +397,46 @@ const runService = async (args: Args): Promise<number> => {
  * clone is created here, and every deploy after it is a push to the deploy
  * branch that the daemon's poller picks up.
  */
+/**
+ * What this machine is running, and what it could be.
+ *
+ * `--check` answers without changing anything, which is what a fleet view and
+ * a nervous operator both want first. Without it, the newest release is
+ * installed and the services come back on it.
+ */
+const runUpdate = async (args: Args): Promise<number> => {
+  const { checkVersion, registryUpdate } = await import('@cockpit/agent');
+  const state = await checkVersion(CLI_VERSION);
+
+  if (state.latest === null) {
+    console.error(`cockpit: could not reach the registry — ${state.reason ?? 'no reason given'}`);
+    console.error(`cockpit: this machine stays on ${state.installed}.`);
+    return 1;
+  }
+
+  const wanted = args.to;
+  if (!wanted && !state.behind) {
+    console.log(`cockpit ${state.installed} is the newest release.`);
+    return 0;
+  }
+  if (args.check) {
+    console.log(`cockpit ${state.installed} installed; ${state.latest} available.`);
+    console.log('Run `cockpit update` to install it.');
+    return 0;
+  }
+
+  console.log(`cockpit: ${state.installed} → ${wanted ?? state.latest}`);
+  const report = await registryUpdate({
+    installed: state.installed,
+    ...(wanted ? { to: wanted } : {}),
+    force: args.force ?? false,
+  });
+  console.log(`installed ${report.to}`);
+  if (report.restarted.length > 0) console.log(`restarted ${report.restarted.join(', ')}`);
+  if (report.skipped) console.log(`skipped   ${report.skipped}`);
+  return 0;
+};
+
 const runDeploy = async (args: Args): Promise<number> => {
   if (args.action !== 'init') {
     throw new UsageError('cockpit deploy takes one verb: init');
@@ -414,6 +480,8 @@ const run = async (argv: string[]): Promise<number> => {
       return status(args);
     case 'service':
       return runService(args);
+    case 'update':
+      return runUpdate(args);
     case 'deploy':
       return runDeploy(args);
     case 'login':
