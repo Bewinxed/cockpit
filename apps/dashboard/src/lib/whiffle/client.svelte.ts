@@ -29,6 +29,7 @@ import type {
   SlashCommand,
   SpawnPayload,
   StopPayload,
+  SupervisorEvent,
   UsageLimitsReading,
 } from '@whiffle/core';
 import { classifyCommand, RESOLVE_PERMISSION, WHIFFLE_SCRATCH_TAG } from '@whiffle/core';
@@ -398,6 +399,11 @@ const state = $state({
    * delegate card renders its child's exchange, not its own.
    */
   delegateEvents: {} as Record<string, DelegateEvent[]>,
+  /**
+   * The supervisor's intervention log, newest first, capped at 200 in memory
+   * (PLAN §C9). Seeded from REST and kept live by `supervisor_event` frames.
+   */
+  supervisorEvents: [] as SupervisorEvent[],
   /** Stored sessions per machine, newest first (`listSessions` through the tunnel). */
   catalog: {} as Record<string, SDKSessionInfo[]>,
   /**
@@ -785,6 +791,31 @@ function recordDelegateEvent(event: DelegateEvent): void {
   foldDelegateEvent(state.delegateEvents[event.instanceId], event);
 }
 
+/** The hub's supervisor-event push, structurally the same as delegate events. */
+function supervisorEventOf(frame: FramePayload): SupervisorEvent | null {
+  const candidate: { kind: string; event?: unknown } = frame;
+  if (candidate.kind !== 'supervisor_event') return null;
+  const event = candidate.event;
+  if (typeof event !== 'object' || event === null) return null;
+  return event as SupervisorEvent;
+}
+
+/** Cap sourced from PLAN §C9: 200 in memory. */
+const SUPERVISOR_EVENT_CAP = 200;
+
+/** Files a supervisor event into the ring, newest first, capped. */
+function recordSupervisorEvent(event: SupervisorEvent): void {
+  const ring = state.supervisorEvents;
+  // Deduplicate by id — the same row can arrive via REST seed and broadcast.
+  if (ring.some((e) => e.id === event.id)) return;
+  // Insert newest-first: find the position to keep descending-id order.
+  const idx = ring.findIndex((e) => e.id < event.id);
+  if (idx === -1) ring.push(event);
+  else ring.splice(idx, 0, event);
+  // Cap.
+  if (ring.length > SUPERVISOR_EVENT_CAP) ring.length = SUPERVISOR_EVENT_CAP;
+}
+
 /**
  * Keeps {@link SessionState.workingSince} in step with what the session is
  * doing. Anything that can change {@link activityOf} calls this: the clock
@@ -888,6 +919,12 @@ function handleFrame(frame: FramePayload): void {
   const delegateEvent = delegateEventOf(frame);
   if (delegateEvent) {
     recordDelegateEvent(delegateEvent);
+    return;
+  }
+
+  const supervisorEvent = supervisorEventOf(frame);
+  if (supervisorEvent) {
+    recordSupervisorEvent(supervisorEvent);
     return;
   }
 
@@ -3952,6 +3989,13 @@ export const whiffle = {
    */
   delegateEventsOf: (instanceId: string): DelegateEvent[] =>
     state.delegateEvents[instanceId] ?? [],
+  /** The supervisor's intervention log, newest first, capped in memory. */
+  get supervisorEvents(): SupervisorEvent[] {
+    return state.supervisorEvents;
+  },
+  /** Supervisor events for one session, newest first. */
+  supervisorEventsOf: (instanceId: string): SupervisorEvent[] =>
+    state.supervisorEvents.filter((e) => e.instanceId === instanceId),
   /** The ask a permission requestId belongs to, whichever delegate raised it. */
   delegateAskOf: (requestId: string): DelegateAskEvent | null => {
     for (const events of Object.values(state.delegateEvents)) {

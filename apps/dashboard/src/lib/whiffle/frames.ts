@@ -1225,11 +1225,19 @@ export interface Transcript {
  * that was nothing but an image still opened one.
  */
 /**
- * The rule's own name, out of the `rule:<name>` the origin carries. Falls back
- * to something honest rather than empty when a hub predates the naming.
+ * The rule's own name, out of the `rule:<name>` or `supervisor:<name>` the
+ * origin carries. Supervisor origins render for the operator only (C7 opacity):
+ * `supervisor:autopilot` → "Autopilot"; `supervisor:<rule>` → "Supervisor — <rule>".
+ * Falls back to something honest rather than empty when a hub predates the naming.
  */
-const ruleLabel = (name?: string): string =>
-  name?.replace(/^rule:/, '').trim() || 'a rule';
+const ruleLabel = (name?: string): string => {
+  if (!name) return 'a rule';
+  if (name.startsWith('supervisor:')) {
+    const tail = name.slice('supervisor:'.length).trim();
+    return tail === 'autopilot' ? 'Autopilot' : `Supervisor — ${tail || 'a rule'}`;
+  }
+  return name.replace(/^rule:/, '').trim() || 'a rule';
+};
 
 export function turnStart(
   entry: SessionMessage
