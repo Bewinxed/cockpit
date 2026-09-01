@@ -9,7 +9,7 @@ import { buildRows, foldMessages, isHarnessNote, parseHarnessNote } from './rows
  * row depends on — and the parser under it, against the real wire shape.
  *
  * SPECIMEN: lifted verbatim (body elided) from a stored Claude Code transcript,
- * `~/.claude/projects/-home-bewinxed-cockpit/89a7eb5e-….jsonl`. It arrives as
+ * `~/.claude/projects/-home-bewinxed-whiffle/89a7eb5e-….jsonl`. It arrives as
  * `message.role === 'user'` with `message.content` a plain STRING, and it opens
  * directly on the tag — there is no `[SYSTEM NOTIFICATION]` preamble on the
  * stored path.
@@ -17,7 +17,7 @@ import { buildRows, foldMessages, isHarnessNote, parseHarnessNote } from './rows
 const SPECIMEN = `<task-notification>
 <task-id>aad4dccf5841ae021</task-id>
 <tool-use-id>toolu_01FvibmDFmAvhSw643Lwmhiz</tool-use-id>
-<output-file>/tmp/claude-1000/-home-bewinxed-cockpit/89a7eb5e/tasks/aad4dccf5841ae021.output</output-file>
+<output-file>/tmp/claude-1000/-home-bewinxed-whiffle/89a7eb5e/tasks/aad4dccf5841ae021.output</output-file>
 <status>completed</status>
 <summary>Agent "Finish opencode question rendering" finished</summary>
 <note>A task-notification fires each time this agent stops with no live background children of its own.</note>

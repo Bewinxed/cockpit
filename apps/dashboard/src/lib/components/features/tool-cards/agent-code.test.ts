@@ -13,7 +13,7 @@ import {
 } from './agent-code';
 
 const paths: ReadonlyArray<readonly [path: string, language: AgentCodeLanguage | null]> = [
-  ['/home/bewinxed/cockpit/apps/dashboard/src/lib/prose.ts', 'typescript'],
+  ['/home/bewinxed/whiffle/apps/dashboard/src/lib/prose.ts', 'typescript'],
   ['src/lib/components/ui/markdown/markdown.svelte', 'svelte'],
   ['scripts/deploy.SH', 'bash'],
   ['packages/hub/src/server.mts', 'typescript'],

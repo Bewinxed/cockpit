@@ -89,7 +89,7 @@
  *
  * WHAT IS DELIBERATELY NOT COVERED, stated rather than implied:
  *   text direction    RTL is measured and REPORTED here, but does not fail the
- *                     build. Cockpit ships English only, JOURNEY.md specifies no
+ *                     build. Whiffle ships English only, JOURNEY.md specifies no
  *                     localisation, and the logical-property work to support it
  *                     is a real change with no consumer today. If i18n is ever
  *                     scoped, this flips to failing and the physical

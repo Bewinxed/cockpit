@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
  * by hand, by `bun --watch`, or as a service — none of which are guaranteed to
  * be run from this directory.
  */
-export const LEGACY_DB_PATH = fileURLToPath(new URL('../cockpit.db', import.meta.url));
+export const LEGACY_DB_PATH = fileURLToPath(new URL('../whiffle.db', import.meta.url));
 
 /**
  * The one-time C9 cutover. Older units (and bare `bun run hub`) left the fleet's

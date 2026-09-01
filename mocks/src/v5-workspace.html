@@ -6,13 +6,13 @@
      dark #121313); the production bridge maps them to the same tokens. -->
 <meta name="theme-color" content="#fcfdfd" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#121313" media="(prefers-color-scheme: dark)">
-<title>Outpost — Workspace surface (v5, Phase 8)</title>
+<title>Whiffle — Workspace surface (v5, Phase 8)</title>
 <link rel="preload" href="./fonts/geist-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="./fonts/geist.css">
 <link rel="stylesheet" href="./tokens.css">
 <style>
 /* =============================================================================
-   OUTPOST — PHASE 8 "WORKSPACE SURFACE" (tab strip · split view · gestures ·
+   WHIFFLE — PHASE 8 "WORKSPACE SURFACE" (tab strip · split view · gestures ·
    mobile shell)
 
    Token discipline: this file links mocks/tokens.css. Its <style> references
@@ -556,7 +556,7 @@ body[data-ws="reordered"] .ws-tabbed{display:block}
 </style></head><body aria-label="Workspace">
 
 <aside aria-label="Fleet navigation">
-  <div class="brand"><div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M4 4h8v16H4z" fill="currentColor"/></svg></div><b>Outpost</b>
+  <div class="brand"><div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M4 4h8v16H4z" fill="currentColor"/></svg></div><b>Whiffle</b>
     <button type="button" class="home" aria-label="Home (fleet board)">{{solar:widget-5}}</button>
   </div>
 
@@ -590,7 +590,7 @@ body[data-ws="reordered"] .ws-tabbed{display:block}
     <button type="button" class="back" aria-label="Home (back to fleet board)" id="ws-home">{{solar:alt-arrow-left}}</button>
     <span class="mark"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l7 4v8l-7 4-7-4V8z"/></svg></span>
     <h1>wire delegate row outcomes</h1>
-    <span class="path">nixbox : ~/cockpit</span>
+    <span class="path">nixbox : ~/whiffle</span>
     <span class="pill fs-pill live">
       <svg class="g-live" viewBox="0 0 12 12" fill="currentColor"><circle cx="6" cy="6" r="3.1"/></svg>
       <span class="fs-label">running</span>
@@ -677,7 +677,7 @@ body[data-ws="reordered"] .ws-tabbed{display:block}
           <div class="cmd">rm -rf apps/dashboard/.svelte-kit<span class="eff">Removes a generated build-cache folder inside apps/dashboard only; recreated by the next build.</span></div>
           <dl class="scope">
             <dt>Machine</dt><dd>nixbox <span class="no">— other machines not affected</span></dd>
-            <dt>Path</dt><dd class="mono">/home/bewinxed/cockpit/apps/dashboard/.svelte-kit</dd>
+            <dt>Path</dt><dd class="mono">/home/bewinxed/whiffle/apps/dashboard/.svelte-kit</dd>
             <dt>Network</dt><dd>No network access requested.</dd>
             <dt>Future</dt><dd>Approving covers this one command; it does not widen what the agent may run later.</dd>
           </dl>

@@ -143,7 +143,7 @@ export interface MessageMetadata {
   reportKind?: 'report' | 'failed';
   /** A `user.delegate_ask`'s hub permission requestId — what it waits on to be answered. */
   askRequestId?: string;
-  /** A `user.delegate_ask`'s display label, e.g. `cockpit#506dfafb`. */
+  /** A `user.delegate_ask`'s display label, e.g. `whiffle#506dfafb`. */
   askLabel?: string;
   preTokens?: number;
   trigger?: 'manual' | 'auto';

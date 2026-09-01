@@ -1,4 +1,4 @@
-# Design Plan — Cockpit visual overhaul from FlowAI comps
+# Design Plan — Whiffle visual overhaul from FlowAI comps
 
 **Date:** 2026-08-18
 **Status:** complete
@@ -14,8 +14,8 @@
 
 ## Context
 
-Cockpit (UI wordmark "Outpost") is a self-hosted fleet control plane for AI coding agents. A
-`cockpit` daemon runs on each machine, joins a hub over tailnet/LAN via mDNS, and a browser
+Whiffle (UI wordmark "Whiffle") is a self-hosted fleet control plane for AI coding agents. A
+`whiffle` daemon runs on each machine, joins a hub over tailnet/LAN via mDNS, and a browser
 dashboard gives one board across every machine, project, and running agent session — what each is
 doing, what needs a human, and what it costs. Harnesses: Claude Code, OpenCode, pi. A Telegram
 bridge lets the operator approve permissions from a phone.
@@ -183,7 +183,7 @@ requires, so structure is derived from the job rather than copied from a discard
       [outcome]` form; Functional, Emotional, and Social jobs all populated.
 - [ ] DW-1.4: Journey table carries all six columns (Phase · Actions · Mindset · Emotion ·
       Touchpoints · Opportunities); header states actor, scenario, and scope; phase names are
-      Cockpit-specific rather than the generic five.
+      Whiffle-specific rather than the generic five.
 - [ ] DW-1.5: `**Research basis:**` reads a named source or the literal `UNGROUNDED`;
       `**Decision model:**` names loyalty loop or messy middle and never AIDA.
 - [ ] DW-1.6: IA states an organization scheme and structure type from the doctrine's enumerated
@@ -812,7 +812,7 @@ file and no gate. Split so the amendment is gated like any other Discover output
 branch is clean: if the kill test cuts the panel, **Phase 9b simply does not run.**
 
 **Constraints:**
-- **The scope test is cross-session.** Every agent in Cockpit is bound to one session — one repo, one
+- **The scope test is cross-session.** Every agent in Whiffle is bound to one session — one repo, one
   machine, one task — so none can see across the fleet. The assistant's only defensible territory is
   the class of question no single agent can answer: which sessions are stuck and why, where spend
   went, what a delegate on another machine concluded, which sessions touched a given file.
@@ -850,7 +850,7 @@ DW items are N/A.
 
 **Why the whole thing is late.** The panel was built early by transcribing the reference comp, which
 is backwards: **information architecture comes from the job, not from a comp.** FlowAI's core content
-is workflows — non-conversational — so an assistant is additive there. Cockpit's core content *is
+is workflows — non-conversational — so an assistant is additive there. Whiffle's core content *is
 already a conversation with an AI*, so "an AI you ask about your AI" has to earn its place or it is a
 fifth wheel. The visual work stands and is preserved; the mandate is Phase 9a's to establish.
 Deferred rather than smuggled into Phase 1 because the user has a body of ideas to bring to it.
@@ -996,7 +996,7 @@ measured with `ui-observer` against a rendered page; the rest are reviewed again
 | **Phase 3's verb changed from "derive" to "formalize, complete, re-solve"** | Three of the DNA protocol's four axes are already pinned by decisions in this plan (type voice by specimen measurement, signature move, composition by the fidelity gate); only motion vocabulary is free, so a five-candidate diverge would yield five identical candidates and a dealt hand would fail the gate. The genuinely undone work is large and now stated: no token system (112 and 113 raw hex in the mocks), no dark ramp as tokens, no DESIGN.md/JOURNEY.md/CLAUDE.md. |
 | **Phase 9 split into 9a (Discover) / 9b (Design)** | Defining a job and adjudicating scope are Discover activities writing into `JOURNEY.md`, an artifact Phase 1 gates — running them inside a Design phase smeared the stages and left the deliverable with no file and no gate. The split also makes the delete branch clean: if the kill test cuts the panel, 9b simply does not run. |
 | **10 phases**, with 3 running parallel to 2 | DNA consumes the job and register from Phase 1 but not the page specs; linearizing it behind Phase 2 would be artificial. Gates still hold. |
-| **The assistant deferred to Phase 9, job-first, look preserved** | It was built early by transcribing the reference comp — backwards, since IA comes from the job and not from a comp. FlowAI's content is workflows, so an assistant is additive there; Cockpit's content is already a conversation with an AI, so it must earn its place. The measured shell (380×899, inset 24/40, scrim .06, pitch 44) is preserved as law; the mandate is written in Phase 9 with a kill test, and deleting the panel stays a live outcome. Deferred rather than folded into Phase 1 because the user has a body of ideas to bring to it. |
+| **The assistant deferred to Phase 9, job-first, look preserved** | It was built early by transcribing the reference comp — backwards, since IA comes from the job and not from a comp. FlowAI's content is workflows, so an assistant is additive there; Whiffle's content is already a conversation with an AI, so it must earn its place. The measured shell (380×899, inset 24/40, scrim .06, pitch 44) is preserved as law; the mandate is written in Phase 9 with a kill test, and deleting the panel stays a live outcome. Deferred rather than folded into Phase 1 because the user has a body of ideas to bring to it. |
 | **Phase 8 split: surface design here, implementation contract to a code plan** | It was first written whole. Review found DW items like "a tab switch runs no `load` function" and "the active tab is awaited while the rest stream" are implementation contracts that none of this plan's doctrine can adjudicate, and that its edge-case block had become a changelog of shipped bug fixes. The surface work (tab strip, split, gesture ownership, device-class shell) stays; routing, streamed SSR, nanoid and `vite-plugin-pwa` move to `.code-foundations/`. The measured evidence stays recorded here so the code plan inherits it. |
 | **Doctrine corrected on Phase 8: `ai-native` out, `surface` in** | Taxonomy §2 routes conventional screen-UI operability *away* from `ai-native` to `usability`, and nothing in Phase 8 is agent/LLM-interface design. `responsive` covers width-scaling only; standalone-PWA device class, safe areas and coarse-pointer semantics are `surface`. |
 | **Phase 5 split from Phase 4** | The transcript is the core surface, is where the two-density decision is actually tested, and is the one thing the comps say nothing about. `ai-native` matches it and nothing else. |

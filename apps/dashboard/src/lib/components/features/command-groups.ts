@@ -55,7 +55,7 @@ export function orderCommands(commands: AvailableCommand[]): AvailableCommand[] 
  * The `/token` being typed at the caret, or `null`.
  *
  * The menu is only live while the caret sits inside the token, and only when the
- * `/` opens a word — `/home/cockpit` and `see /tmp/x` are paths the reader is
+ * `/` opens a word — `/home/whiffle` and `see /tmp/x` are paths the reader is
  * writing, not commands they are reaching for, and a menu over one would fight
  * them mid-sentence.
  */

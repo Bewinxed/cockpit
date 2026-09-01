@@ -1,13 +1,13 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Outpost — Agent surface (v5, compact)</title>
+<title>Whiffle — Agent surface (v5, compact)</title>
 <link rel="preload" href="./fonts/geist-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="./fonts/geist.css">
 <link rel="stylesheet" href="./tokens.css">
 <style>
 /* =============================================================================
-   OUTPOST — PHASE 5 "AGENT SURFACE" (compact density)
+   WHIFFLE — PHASE 5 "AGENT SURFACE" (compact density)
    The transcript, composer + fixed anchors, approval & question cards, subagent
    tree (delegates are separate sessions, folded as subagent branches), assistant
    panel, and stop / interrupt — every interactive control
@@ -565,7 +565,7 @@ body[data-ux="idle"] .fs-stop{opacity:.45;cursor:default}
 </style></head><body>
 
 <aside aria-label="Fleet navigation">
-  <div class="brand"><div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M4 4h8v16H4z" fill="currentColor"/></svg></div><b>Outpost</b>
+  <div class="brand"><div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M4 4h8v16H4z" fill="currentColor"/></svg></div><b>Whiffle</b>
     <button type="button" class="home" aria-label="Home (fleet board)"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path d="M13 15.4C13 13.3258 13 12.2887 13.659 11.6444C14.318 11 15.3787 11 17.5 11C19.6213 11 20.682 11 21.341 11.6444C22 12.2887 22 13.3258 22 15.4V17.6C22 19.6742 22 20.7113 21.341 21.3556C20.682 22 19.6213 22 17.5 22C15.3787 22 14.318 22 13.659 21.3556C13 20.7113 13 19.6742 13 17.6V15.4Z" opacity=".5"/><path d="M2 8.6C2 10.6742 2 11.7113 2.65901 12.3556C3.31802 13 4.37868 13 6.5 13C8.62132 13 9.68198 13 10.341 12.3556C11 11.7113 11 10.6742 11 8.6V6.4C11 4.32582 11 3.28873 10.341 2.64437C9.68198 2 8.62132 2 6.5 2C4.37868 2 3.31802 2 2.65901 2.64437C2 3.28873 2 4.32582 2 6.4V8.6Z"/><path d="M13 5.5C13 4.4128 13 3.8692 13.1713 3.44041C13.3996 2.86867 13.8376 2.41443 14.389 2.17761C14.8024 2 15.3266 2 16.375 2H18.625C19.6734 2 20.1976 2 20.611 2.17761C21.1624 2.41443 21.6004 2.86867 21.8287 3.44041C22 3.8692 22 4.4128 22 5.5C22 6.5872 22 7.1308 21.8287 7.55959C21.6004 8.13133 21.1624 8.58557 20.611 8.82239C20.1976 9 19.6734 9 18.625 9H16.375C15.3266 9 14.8024 9 14.389 8.82239C13.8376 8.58557 13.3996 8.13133 13.1713 7.55959C13 7.1308 13 6.5872 13 5.5Z"/><path d="M2 18.5C2 19.5872 2 20.1308 2.17127 20.5596C2.39963 21.1313 2.83765 21.5856 3.38896 21.8224C3.80245 22 4.32663 22 5.375 22H7.625C8.67337 22 9.19755 22 9.61104 21.8224C10.1624 21.5856 10.6004 21.1313 10.8287 20.5596C11 20.1308 11 19.5872 11 18.5C11 17.4128 11 16.8692 10.8287 16.4404C10.6004 15.8687 10.1624 15.4144 9.61104 15.1776C9.19755 15 8.67337 15 7.625 15H5.375C4.32663 15 3.80245 15 3.38896 15.1776C2.83765 15.4144 2.39963 15.8687 2.17127 16.4404C2 16.8692 2 17.4128 2 18.5Z" opacity=".5"/></g></svg></button>
   </div>
 
@@ -605,7 +605,7 @@ body[data-ux="idle"] .fs-stop{opacity:.45;cursor:default}
     <button type="button" class="back" aria-label="Back to fleet board"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path d="M11.5956 8.30273L8.16485 11.6296C7.94505 11.8428 7.94505 12.1573 8.16485 12.3704L14.7953 18.8001C15.2091 19.2013 16 18.9581 16 18.4297V12.7071L11.5956 8.30273Z"/><path d="M15.9999 11.2929L15.9999 5.5703C15.9999 5.04189 15.2089 4.79869 14.7952 5.1999L12.3135 7.60648L15.9999 11.2929Z" opacity=".5"/></g></svg></button>
     <span class="mark"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l7 4v8l-7 4-7-4V8z"/></svg></span>
     <h1>wire delegate row outcomes</h1>
-    <span class="path">nixbox : ~/cockpit</span>
+    <span class="path">nixbox : ~/whiffle</span>
     <span class="pill fs-pill attn">
   <svg class="glyph g-live" viewBox="0 0 12 12" fill="currentColor"><circle cx="6" cy="6" r="3.1"/></svg>
   <svg class="glyph g-attn" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9.4V2.6M3 5.6 6 2.6l3 3"/></svg>
@@ -667,7 +667,7 @@ body[data-ux="idle"] .fs-stop{opacity:.45;cursor:default}
       <div class="cmd">rm -rf apps/dashboard/.svelte-kit<span class="eff">Removes a generated build-cache folder inside apps/dashboard only; recreated by the next build. Nothing else is deleted.</span></div>
       <dl class="scope">
         <dt>Machine</dt><dd>nixbox <span class="no">— mba-m3 and hetzner-01 are not affected</span></dd>
-        <dt>Path</dt><dd class="mono">/home/bewinxed/cockpit/apps/dashboard/.svelte-kit</dd>
+        <dt>Path</dt><dd class="mono">/home/bewinxed/whiffle/apps/dashboard/.svelte-kit</dd>
         <dt>Network</dt><dd>No network access requested.</dd>
         <dt>Undo</dt><dd>Regenerated by the next <span class="mono">vite build</span>. No checkpoint needed.</dd>
         <dt>Future</dt><dd>Approving covers this one command. It does not widen what the agent may run later.</dd>
@@ -677,8 +677,8 @@ body[data-ux="idle"] .fs-stop{opacity:.45;cursor:default}
         <button type="button" class="refuse"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path fill-rule="evenodd" d="M22 12C22 17.5228 17.5228 22 12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2C17.5228 2 22 6.47715 22 12Z" opacity=".5"/><path d="M8.46967 8.46967C8.76256 8.17678 9.23744 8.17678 9.53033 8.46967L12 10.9393L14.4697 8.46967C14.7626 8.17678 15.2374 8.17678 15.5303 8.46967C15.8232 8.76256 15.8232 9.23744 15.5303 9.53033L13.0607 12L15.5303 14.4697C15.8232 14.7626 15.8232 15.2374 15.5303 15.5303C15.2374 15.8232 14.7626 15.8232 14.4697 15.5303L12 13.0607L9.53033 15.5303C9.23744 15.8232 8.76256 15.8232 8.46967 15.5303C8.17678 15.2374 8.17678 14.7626 8.46967 14.4697L10.9393 12L8.46967 9.53033C8.17678 9.23744 8.17678 8.76256 8.46967 8.46967Z"/></g></svg>Deny</button>
       </div>
       <div class="widen">
-        <p>This would let the agent run <span class="mono">rm -rf</span> in <span class="mono">~/cockpit</span> unprompted in future — a wider grant than the command above.</p>
-        <button type="button"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path d="M12 3C9.68925 3 8.23007 5.58716 5.31171 10.7615L4.94805 11.4063C2.52291 15.7061 1.31034 17.856 2.40626 19.428C3.50217 21 6.21356 21 11.6363 21H12.3637C17.7864 21 20.4978 21 21.5937 19.428C22.6897 17.856 21.4771 15.7061 19.0519 11.4063L18.6883 10.7615C15.7699 5.58716 14.3107 3 12 3Z" opacity=".5"/><path d="M12 7.25C12.4142 7.25 12.75 7.58579 12.75 8V13C12.75 13.4142 12.4142 13.75 12 13.75C11.5858 13.75 11.25 13.4142 11.25 13V8C11.25 7.58579 11.5858 7.25 12 7.25Z"/><path d="M12 17C12.5523 17 13 16.5523 13 16C13 15.4477 12.5523 15 12 15C11.4477 15 11 15.4477 11 16C11 16.5523 11.4477 17 12 17Z"/></g></svg>Always allow rm -rf in ~/cockpit</button>
+        <p>This would let the agent run <span class="mono">rm -rf</span> in <span class="mono">~/whiffle</span> unprompted in future — a wider grant than the command above.</p>
+        <button type="button"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path d="M12 3C9.68925 3 8.23007 5.58716 5.31171 10.7615L4.94805 11.4063C2.52291 15.7061 1.31034 17.856 2.40626 19.428C3.50217 21 6.21356 21 11.6363 21H12.3637C17.7864 21 20.4978 21 21.5937 19.428C22.6897 17.856 21.4771 15.7061 19.0519 11.4063L18.6883 10.7615C15.7699 5.58716 14.3107 3 12 3Z" opacity=".5"/><path d="M12 7.25C12.4142 7.25 12.75 7.58579 12.75 8V13C12.75 13.4142 12.4142 13.75 12 13.75C11.5858 13.75 11.25 13.4142 11.25 13V8C11.25 7.58579 11.5858 7.25 12 7.25Z"/><path d="M12 17C12.5523 17 13 16.5523 13 16C13 15.4477 12.5523 15 12 15C11.4477 15 11 15.4477 11 16C11 16.5523 11.4477 17 12 17Z"/></g></svg>Always allow rm -rf in ~/whiffle</button>
         <p class="imp">Widens future permissions for every session in this folder, on every machine. Reviewable under Rules.</p>
       </div>
     </section>
@@ -704,10 +704,10 @@ body[data-ux="idle"] .fs-stop{opacity:.45;cursor:default}
 
 <!-- ============================ ASSISTANT PANEL ============================ -->
 <div class="asst-scrim"></div>
-<section class="asst" aria-label="Outpost Assistant" aria-live="polite">
+<section class="asst" aria-label="Whiffle Assistant" aria-live="polite">
   <header>
     <span class="a-logo"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill="currentColor" d="M3.845 3.845a2.883 2.883 0 0 0 0 4.077L5.432 9.51c.012-.014.555.503.568.49l4-4c.013-.013-.504-.556-.49-.568L7.922 3.845a2.883 2.883 0 0 0-4.077 0m1.288 11.462a.483.483 0 0 1 .9 0l.157.4a.48.48 0 0 0 .272.273l.398.157a.486.486 0 0 1 0 .903l-.398.158a.48.48 0 0 0-.272.273l-.157.4a.483.483 0 0 1-.9 0l-.157-.4a.48.48 0 0 0-.272-.273l-.398-.158a.486.486 0 0 1 0-.903l.398-.157a.48.48 0 0 0 .272-.274z" opacity=".5"/><path fill="currentColor" d="M19.967 9.13a.483.483 0 0 1 .9 0l.156.399c.05.125.148.224.273.273l.398.158a.486.486 0 0 1 0 .902l-.398.158a.5.5 0 0 0-.273.273l-.156.4a.483.483 0 0 1-.9 0l-.157-.4a.5.5 0 0 0-.272-.273l-.398-.158a.486.486 0 0 1 0-.902l.398-.158a.5.5 0 0 0 .272-.273z" opacity=".2"/><path fill="currentColor" d="M16.1 2.307a.483.483 0 0 1 .9 0l.43 1.095a.48.48 0 0 0 .272.274l1.091.432a.486.486 0 0 1 0 .903l-1.09.432a.5.5 0 0 0-.273.273L17 6.81a.483.483 0 0 1-.9 0l-.43-1.095a.5.5 0 0 0-.273-.273l-1.09-.432a.486.486 0 0 1 0-.903l1.09-.432a.5.5 0 0 0 .273-.274z" opacity=".7"/><path fill="currentColor" d="M10.568 6.49c-.012.014-.555-.503-.568-.49l-4 4c-.013.013.504.556.49.568l9.588 9.587a2.883 2.883 0 1 0 4.078-4.077z"/></svg></span>
-    <span class="a-t"><b>Outpost</b> Assistant</span>
+    <span class="a-t"><b>Whiffle</b> Assistant</span>
     <button class="a-x" type="button" aria-label="Close assistant"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path fill-rule="evenodd" d="M22 12C22 17.5228 17.5228 22 12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2C17.5228 2 22 6.47715 22 12Z" opacity=".5"/><path d="M8.46967 8.46967C8.76256 8.17678 9.23744 8.17678 9.53033 8.46967L12 10.9393L14.4697 8.46967C14.7626 8.17678 15.2374 8.17678 15.5303 8.46967C15.8232 8.76256 15.8232 9.23744 15.5303 9.53033L13.0607 12L15.5303 14.4697C15.8232 14.7626 15.8232 15.2374 15.5303 15.5303C15.2374 15.8232 14.7626 15.8232 14.4697 15.5303L12 13.0607L9.53033 15.5303C9.23744 15.8232 8.76256 15.8232 8.46967 15.5303C8.17678 15.2374 8.17678 14.7626 8.46967 14.4697L10.9393 12L8.46967 9.53033C8.17678 9.23744 8.17678 8.76256 8.46967 8.46967Z"/></g></svg></button>
   </header>
   <div class="a-body">

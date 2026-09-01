@@ -1,13 +1,13 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Outpost — Fleet assistant (v5, Phase 9b)</title>
+<title>Whiffle — Fleet assistant (v5, Phase 9b)</title>
 <link rel="preload" href="./fonts/geist-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="./fonts/geist.css">
 <link rel="stylesheet" href="./tokens.css">
 <style>
 /* =============================================================================
-   OUTPOST — PHASE 9b  FLEET ASSISTANT, on the PRESERVED measured shell.
+   WHIFFLE — PHASE 9b  FLEET ASSISTANT, on the PRESERVED measured shell.
    The shell is LAW (DW-9b.1): panel 380x899, inset 24 right / 40 top,
    scrim rgba(0,0,0,.06)=--scrim-soft, suggestion pitch 44 (40h + 4 gap),
    radius 16, header 47. A change of job changed what the rows SAY (Phase 9a's
@@ -40,7 +40,7 @@
 
    DESIGN-DELIVERABLE — DISTINGUISHABILITY (DW-9b.3). Two AI surfaces share this
    screen: the session TRANSCRIPT ("Claude Code", inline, in the page flow) and
-   the ASSISTANT ("Outpost Assistant", a floating panel over a scrim). The
+   the ASSISTANT ("Whiffle Assistant", a floating panel over a scrim). The
    non-positional cue is the assistant's own NAME + orb mark + a persistent
    "Assistant" role tag in its header — legible wherever the reader lands, never
    position-alone.
@@ -183,7 +183,7 @@ svg{display:block}
 
 <div class="app" aria-hidden="true">
   <aside class="side">
-    <div class="brand"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M4 4h8v16H4z" fill="currentColor"/></svg></i>Outpost</div>
+    <div class="brand"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M4 4h8v16H4z" fill="currentColor"/></svg></i>Whiffle</div>
     <div class="lbl">Fleet</div>
     <a><svg viewBox="0 0 24 24" fill="currentColor">{{solar:widget-5}}</svg>Fleet</a>
     <a><svg viewBox="0 0 24 24" fill="currentColor">{{solar:tuning-2}}</svg>Tools</a>
@@ -195,7 +195,7 @@ svg{display:block}
     <header class="shead">
       <span class="mk"><svg viewBox="0 0 24 24" fill="currentColor">{{solar:programming}}</svg></span>
       <h1>wire delegate row outcomes</h1>
-      <span class="path">nixbox : ~/cockpit</span>
+      <span class="path">nixbox : ~/whiffle</span>
       <span class="pill"><span class="d"></span>running</span>
     </header>
     <div class="tr">
@@ -215,10 +215,10 @@ svg{display:block}
 </div>
 
 <div class="asst-scrim"></div>
-<section class="asst" role="complementary" aria-label="Outpost Assistant" aria-live="polite">
+<section class="asst" role="complementary" aria-label="Whiffle Assistant" aria-live="polite">
   <header>
     <span class="a-logo"><svg viewBox="0 0 24 24" fill="currentColor">{{solar:magic-stick-3}}</svg></span>
-    <span class="a-t"><b>Outpost</b> Assistant</span>
+    <span class="a-t"><b>Whiffle</b> Assistant</span>
     <span class="a-role">Assistant</span>
     <button class="a-x" type="button" aria-label="Close assistant"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
   </header>

@@ -72,17 +72,17 @@ export default tseslint.config(
 	{
 		files: ['apps/dashboard/src/**'],
 		ignores: [
-			'apps/dashboard/src/lib/cockpit/id.ts',              // the sanctioned newId()
-			'apps/dashboard/src/lib/cockpit/copy.ts',            // the sanctioned clipboard wrapper
+			'apps/dashboard/src/lib/whiffle/id.ts',              // the sanctioned newId()
+			'apps/dashboard/src/lib/whiffle/copy.ts',            // the sanctioned clipboard wrapper
 			'apps/dashboard/src/lib/hooks/use-clipboard.svelte.ts',
 			'apps/dashboard/src/**/*.test.ts',                   // bun tests: real runtime, APIs exist
 		],
 		rules: {
 			'no-restricted-properties': ['error',
 				{ object: 'crypto',    property: 'randomUUID',
-					message: 'Secure-context only — absent over plain http off localhost. Use newId() from $lib/cockpit/id.' },
+					message: 'Secure-context only — absent over plain http off localhost. Use newId() from $lib/whiffle/id.' },
 				{ object: 'navigator', property: 'clipboard',
-					message: 'Secure-context only. Use copyToClipboard() from $lib/cockpit/copy, or the use-clipboard hook.' },
+					message: 'Secure-context only. Use copyToClipboard() from $lib/whiffle/copy, or the use-clipboard hook.' },
 			],
 			// `no-restricted-properties` only matches when the object is a bare
 			// Identifier, so it sees `crypto.randomUUID()` and misses
@@ -93,11 +93,11 @@ export default tseslint.config(
 			'no-restricted-syntax': ['error',
 				{
 					selector: "MemberExpression[property.name='randomUUID']",
-					message: 'Secure-context only — absent over plain http off localhost. Use newId() from $lib/cockpit/id.',
+					message: 'Secure-context only — absent over plain http off localhost. Use newId() from $lib/whiffle/id.',
 				},
 				{
 					selector: "MemberExpression[property.name='clipboard']",
-					message: 'Secure-context only. Use copyToClipboard() from $lib/cockpit/copy, or the use-clipboard hook.',
+					message: 'Secure-context only. Use copyToClipboard() from $lib/whiffle/copy, or the use-clipboard hook.',
 				},
 			],
 		},

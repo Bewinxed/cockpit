@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "cockpit",
+      "name": "whiffle",
       "dependencies": {
         "torph": "^0.1.0",
       },

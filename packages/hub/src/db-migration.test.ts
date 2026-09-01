@@ -17,7 +17,7 @@ afterEach(() => {
 const setup = () => {
   scratch = mkdtempSync(join(tmpdir(), 'whiffle-db-migration-'));
   return {
-    legacy: join(scratch, 'legacy', 'cockpit.db'),
+    legacy: join(scratch, 'legacy', 'whiffle.db'),
     target: join(scratch, 'data', 'whiffle', 'whiffle.db'),
   };
 };

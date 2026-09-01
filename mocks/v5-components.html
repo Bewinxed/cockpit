@@ -1,13 +1,13 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Outpost — Component library (v5)</title>
+<title>Whiffle — Component library (v5)</title>
 <link rel="preload" href="./fonts/geist-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="./fonts/geist.css">
 <link rel="stylesheet" href="./tokens.css">
 <style>
 /* =============================================================================
-   OUTPOST — PHASE 4 COMPONENT LIBRARY ("storybook")
+   WHIFFLE — PHASE 4 COMPONENT LIBRARY ("storybook")
    Every colour below resolves through a token. Nothing is typed.
    Three tiers: global (tokens.css) -> alias (tokens.css) -> component (this file).
 
@@ -362,7 +362,7 @@ body{
 
 <header class="hdr">
   <h1>Component library</h1>
-  <p>Cockpit (wordmark "Outpost") — the design-system building blocks, each shown in its eight
+  <p>Whiffle (wordmark "Whiffle") — the design-system building blocks, each shown in its eight
   interaction states (default · hover · focus · active · disabled · loading · error · success),
   at comfortable and compact density, in light and dark.</p>
   <span class="www"><svg fill="currentColor" viewBox="0 0 24 24"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path d="M13 15.4C13 13.3258 13 12.2887 13.659 11.6444C14.318 11 15.3787 11 17.5 11C19.6213 11 20.682 11 21.341 11.6444C22 12.2887 22 13.3258 22 15.4V17.6C22 19.6742 22 20.7113 21.341 21.3556C20.682 22 19.6213 22 17.5 22C15.3787 22 14.318 22 13.659 21.3556C13 20.7113 13 19.6742 13 17.6V15.4Z" opacity=".5"/><path d="M2 8.6C2 10.6742 2 11.7113 2.65901 12.3556C3.31802 13 4.37868 13 6.5 13C8.62132 13 9.68198 13 10.341 12.3556C11 11.7113 11 10.6742 11 8.6V6.4C11 4.32582 11 3.28873 10.341 2.64437C9.68198 2 8.62132 2 6.5 2C4.37868 2 3.31802 2 2.65901 2.64437C2 3.28873 2 4.32582 2 6.4V8.6Z"/><path d="M13 5.5C13 4.4128 13 3.8692 13.1713 3.44041C13.3996 2.86867 13.8376 2.41443 14.389 2.17761C14.8024 2 15.3266 2 16.375 2H18.625C19.6734 2 20.1976 2 20.611 2.17761C21.1624 2.41443 21.6004 2.86867 21.8287 3.44041C22 3.8692 22 4.4128 22 5.5C22 6.5872 22 7.1308 21.8287 7.55959C21.6004 8.13133 21.1624 8.58557 20.611 8.82239C20.1976 9 19.6734 9 18.625 9H16.375C15.3266 9 14.8024 9 14.389 8.82239C13.8376 8.58557 13.3996 8.13133 13.1713 7.55959C13 7.1308 13 6.5872 13 5.5Z"/><path d="M2 18.5C2 19.5872 2 20.1308 2.17127 20.5596C2.39963 21.1313 2.83765 21.5856 3.38896 21.8224C3.80245 22 4.32663 22 5.375 22H7.625C8.67337 22 9.19755 22 9.61104 21.8224C10.1624 21.5856 10.6004 21.1313 10.8287 20.5596C11 20.1308 11 19.5872 11 18.5C11 17.4128 11 16.8692 10.8287 16.4404C10.6004 15.8687 10.1624 15.4144 9.61104 15.1776C9.19755 15 8.67337 15 7.625 15H5.375C4.32663 15 3.80245 15 3.38896 15.1776C2.83765 15.4144 2.39963 15.8687 2.17127 16.4404C2 16.8692 2 17.4128 2 18.5Z" opacity=".5"/></g></svg></svg>Token-gated · Solar duotone · Geist Variable</span>
@@ -669,7 +669,7 @@ body{
         </div>
         <div class="field">
           <label for="mtok">Access token</label>
-          <div class="inp"><input id="mtok" type="password" value="outpost_a1b2c3d4" aria-label="Access token"><button type="button" class="eye" aria-label="Show token"><svg fill="currentColor" viewBox="0 0 24 24"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path d="M2 12C2 13.6394 2.42496 14.1915 3.27489 15.2957C4.97196 17.5004 7.81811 20 12 20C16.1819 20 19.028 17.5004 20.7251 15.2957C21.575 14.1915 22 13.6394 22 12C22 10.3606 21.575 9.80853 20.7251 8.70433C19.028 6.49956 16.1819 4 12 4C7.81811 4 4.97196 6.49956 3.27489 8.70433C2.42496 9.80853 2 10.3606 2 12Z" opacity=".5"/><path fill-rule="evenodd" d="M8.25 12C8.25 9.92893 9.92893 8.25 12 8.25C14.0711 8.25 15.75 9.92893 15.75 12C15.75 14.0711 14.0711 15.75 12 15.75C9.92893 15.75 8.25 14.0711 8.25 12ZM9.75 12C9.75 10.7574 10.7574 9.75 12 9.75C13.2426 9.75 14.25 10.7574 14.25 12C14.25 13.2426 13.2426 14.25 12 14.25C10.7574 14.25 9.75 13.2426 9.75 12Z" clip-rule="evenodd"/></g></svg></svg></button></div>
+          <div class="inp"><input id="mtok" type="password" value="whiffle_a1b2c3d4" aria-label="Access token"><button type="button" class="eye" aria-label="Show token"><svg fill="currentColor" viewBox="0 0 24 24"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path d="M2 12C2 13.6394 2.42496 14.1915 3.27489 15.2957C4.97196 17.5004 7.81811 20 12 20C16.1819 20 19.028 17.5004 20.7251 15.2957C21.575 14.1915 22 13.6394 22 12C22 10.3606 21.575 9.80853 20.7251 8.70433C19.028 6.49956 16.1819 4 12 4C7.81811 4 4.97196 6.49956 3.27489 8.70433C2.42496 9.80853 2 10.3606 2 12Z" opacity=".5"/><path fill-rule="evenodd" d="M8.25 12C8.25 9.92893 9.92893 8.25 12 8.25C14.0711 8.25 15.75 9.92893 15.75 12C15.75 14.0711 14.0711 15.75 12 15.75C9.92893 15.75 8.25 14.0711 8.25 12ZM9.75 12C9.75 10.7574 10.7574 9.75 12 9.75C13.2426 9.75 14.25 10.7574 14.25 12C14.25 13.2426 13.2426 14.25 12 14.25C10.7574 14.25 9.75 13.2426 9.75 12Z" clip-rule="evenodd"/></g></svg></svg></button></div>
           <span class="hint">Rotates every 30 days.</span>
         </div>
         <div class="callout"><span class="ico"><svg fill="currentColor" viewBox="0 0 24 24"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path d="M12 3C9.68925 3 8.23007 5.58716 5.31171 10.7615L4.94805 11.4063C2.52291 15.7061 1.31034 17.856 2.40626 19.428C3.50217 21 6.21356 21 11.6363 21H12.3637C17.7864 21 20.4978 21 21.5937 19.428C22.6897 17.856 21.4771 15.7061 19.0519 11.4063L18.6883 10.7615C15.7699 5.58716 14.3107 3 12 3Z" opacity=".5"/><path d="M12 7.25C12.4142 7.25 12.75 7.58579 12.75 8V13C12.75 13.4142 12.4142 13.75 12 13.75C11.5858 13.75 11.25 13.4142 11.25 13V8C11.25 7.58579 11.5858 7.25 12 7.25Z"/><path d="M12 17C12.5523 17 13 16.5523 13 16C13 15.4477 12.5523 15 12 15C11.4477 15 11 15.4477 11 16C11 16.5523 11.4477 17 12 17Z"/></g></svg></svg></span><span>This machine will be reachable from every host already on the fleet.</span></div>

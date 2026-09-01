@@ -128,12 +128,12 @@ const paletteOwnsEnter = (text: string, caret: number) => {
 };
 
 test('a path is typed and sent as text, however far it is typed', () => {
-  expect(paletteOwnsEnter('/home/cockpit', 13)).toBe(false);
+  expect(paletteOwnsEnter('/home/whiffle', 13)).toBe(false);
   expect(paletteOwnsEnter('see /tmp/x', 10)).toBe(false);
   // Passing through `/home` the token is live, but it matches no command, so
   // the palette never opens and Enter still sends.
-  expect(commandAt('/home/cockpit', 5)).toEqual({ term: 'home', start: 0 });
-  expect(paletteOwnsEnter('/home/cockpit', 5)).toBe(false);
+  expect(commandAt('/home/whiffle', 5)).toEqual({ term: 'home', start: 0 });
+  expect(paletteOwnsEnter('/home/whiffle', 5)).toBe(false);
   expect(paletteOwnsEnter('/rev', 4)).toBe(true);
 });
 

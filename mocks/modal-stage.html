@@ -1,12 +1,12 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Outpost — modal in context</title>
+<title>Whiffle — modal in context</title>
 <link rel="stylesheet" href="./fonts/geist.css">
 <link rel="stylesheet" href="./tokens.css">
 <style>
 /* =============================================================================
-   OUTPOST — PHASE 4 COMPONENT LIBRARY ("storybook")
+   WHIFFLE — PHASE 4 COMPONENT LIBRARY ("storybook")
    Every colour below resolves through a token. Nothing is typed.
    Three tiers: global (tokens.css) -> alias (tokens.css) -> component (this file).
 
@@ -389,7 +389,7 @@ body{margin:0;background:var(--surface-app);font-family:var(--font-body);color:v
 <body>
 <div class="app" aria-hidden="true">
   <aside class="side">
-    <div class="brand"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M4 4h8v16H4z" fill="currentColor"/></svg></i>Outpost</div>
+    <div class="brand"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M4 4h8v16H4z" fill="currentColor"/></svg></i>Whiffle</div>
     <div class="lbl">Fleet</div>
     <a class=""><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="4" y="4" width="16" height="16" rx="3"/></svg>Board</a>
     <a class=""><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="4" y="4" width="16" height="16" rx="3"/></svg>Sessions</a>
@@ -431,7 +431,7 @@ body{margin:0;background:var(--surface-app);font-family:var(--font-body);color:v
         </div>
         <div class="field">
           <label for="mtok">Access token</label>
-          <div class="inp"><input id="mtok" type="password" value="outpost_a1b2c3d4" aria-label="Access token"><button type="button" class="eye" aria-label="Show token"><svg fill="currentColor" viewBox="0 0 24 24"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path d="M2 12C2 13.6394 2.42496 14.1915 3.27489 15.2957C4.97196 17.5004 7.81811 20 12 20C16.1819 20 19.028 17.5004 20.7251 15.2957C21.575 14.1915 22 13.6394 22 12C22 10.3606 21.575 9.80853 20.7251 8.70433C19.028 6.49956 16.1819 4 12 4C7.81811 4 4.97196 6.49956 3.27489 8.70433C2.42496 9.80853 2 10.3606 2 12Z" opacity=".5"/><path fill-rule="evenodd" d="M8.25 12C8.25 9.92893 9.92893 8.25 12 8.25C14.0711 8.25 15.75 9.92893 15.75 12C15.75 14.0711 14.0711 15.75 12 15.75C9.92893 15.75 8.25 14.0711 8.25 12ZM9.75 12C9.75 10.7574 10.7574 9.75 12 9.75C13.2426 9.75 14.25 10.7574 14.25 12C14.25 13.2426 13.2426 14.25 12 14.25C10.7574 14.25 9.75 13.2426 9.75 12Z" clip-rule="evenodd"/></g></svg></svg></button></div>
+          <div class="inp"><input id="mtok" type="password" value="whiffle_a1b2c3d4" aria-label="Access token"><button type="button" class="eye" aria-label="Show token"><svg fill="currentColor" viewBox="0 0 24 24"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path d="M2 12C2 13.6394 2.42496 14.1915 3.27489 15.2957C4.97196 17.5004 7.81811 20 12 20C16.1819 20 19.028 17.5004 20.7251 15.2957C21.575 14.1915 22 13.6394 22 12C22 10.3606 21.575 9.80853 20.7251 8.70433C19.028 6.49956 16.1819 4 12 4C7.81811 4 4.97196 6.49956 3.27489 8.70433C2.42496 9.80853 2 10.3606 2 12Z" opacity=".5"/><path fill-rule="evenodd" d="M8.25 12C8.25 9.92893 9.92893 8.25 12 8.25C14.0711 8.25 15.75 9.92893 15.75 12C15.75 14.0711 14.0711 15.75 12 15.75C9.92893 15.75 8.25 14.0711 8.25 12ZM9.75 12C9.75 10.7574 10.7574 9.75 12 9.75C13.2426 9.75 14.25 10.7574 14.25 12C14.25 13.2426 13.2426 14.25 12 14.25C10.7574 14.25 9.75 13.2426 9.75 12Z" clip-rule="evenodd"/></g></svg></svg></button></div>
           <span class="hint">Rotates every 30 days.</span>
         </div>
         <div class="callout"><span class="ico"><svg fill="currentColor" viewBox="0 0 24 24"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path d="M12 3C9.68925 3 8.23007 5.58716 5.31171 10.7615L4.94805 11.4063C2.52291 15.7061 1.31034 17.856 2.40626 19.428C3.50217 21 6.21356 21 11.6363 21H12.3637C17.7864 21 20.4978 21 21.5937 19.428C22.6897 17.856 21.4771 15.7061 19.0519 11.4063L18.6883 10.7615C15.7699 5.58716 14.3107 3 12 3Z" opacity=".5"/><path d="M12 7.25C12.4142 7.25 12.75 7.58579 12.75 8V13C12.75 13.4142 12.4142 13.75 12 13.75C11.5858 13.75 11.25 13.4142 11.25 13V8C11.25 7.58579 11.5858 7.25 12 7.25Z"/><path d="M12 17C12.5523 17 13 16.5523 13 16C13 15.4477 12.5523 15 12 15C11.4477 15 11 15.4477 11 16C11 16.5523 11.4477 17 12 17Z"/></g></svg></svg></span><span>This machine will be reachable from every host already on the fleet.</span></div>

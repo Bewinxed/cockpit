@@ -261,7 +261,7 @@ test('a peer is no delegate report when its row has no parent, or it is no peer'
 // path must recognise it and fold it into `user.delegate_ask`.
 const ASK_INSTANCE = '506dfafb-8160-487c-9a04-649b15983176';
 const ASK_REQUEST = 'per_0062dfacd001lfuztfQIzVhRf0';
-const ASK_LABEL = 'cockpit#506dfafb';
+const ASK_LABEL = 'whiffle#506dfafb';
 const ASK_BODY = 'bash — {"command":"bun test src/lib/whiffle/ 2>&1 | tail -6"}';
 const ASK_TEXT =
   `[Delegate ask from ${ASK_LABEL}]\n\n${ASK_BODY}\n\n` +
@@ -372,7 +372,7 @@ test('a question-form ask body survives verbatim as multi-line content', () => {
 // survives storage, and only the 8-char short id — so a stored report upgrades
 // to user.peer with reportKind set, and consumers prefix-match the session.
 const REPORT_ID = '506dfafb-8160-487c-9a04-649b15983176';
-const REPORT_TEXT = `[Report from delegate cockpit#506dfafb — turn complete]\n\nAll gates green.`;
+const REPORT_TEXT = `[Report from delegate whiffle#506dfafb — turn complete]\n\nAll gates green.`;
 
 test('a stored delegate report upgrades to user.peer with the marker stripped', () => {
   const stored = mapTranscript('i1', [storedEntry(REPORT_TEXT, 'u-report')]).messages;
@@ -380,14 +380,14 @@ test('a stored delegate report upgrades to user.peer with the marker stripped', 
   expect(stored[0].type).toBe('user.peer');
   expect(stored[0].content).toBe('All gates green.');
   expect(stored[0].metadata).toEqual({
-    peerName: 'cockpit#506dfafb',
+    peerName: 'whiffle#506dfafb',
     peerSession: '506dfafb',
     reportKind: 'report',
   });
 });
 
 test('a failed report keeps its failed kind', () => {
-  const text = `[Report from delegate cockpit#506dfafb — turn failed]\n\nprovider_retry exhausted`;
+  const text = `[Report from delegate whiffle#506dfafb — turn failed]\n\nprovider_retry exhausted`;
   const stored = mapTranscript('i1', [storedEntry(text, 'u-failed')]).messages;
   expect(stored[0].metadata?.reportKind).toBe('failed');
   expect(stored[0].content).toBe('provider_retry exhausted');
@@ -423,7 +423,7 @@ test('a stored report is a delegate report for its parent, by prefix', () => {
 // stored paths classify on the unwrapped text.
 const WRAPPED_REPORT =
   'The user sent a new message while you were working:\n' +
-  '[Report from delegate cockpit#095b96ac — turn complete]\n\n' +
+  '[Report from delegate whiffle#095b96ac — turn complete]\n\n' +
   'leak-test-ok\n' +
   'Mon 17 Aug 09:08:14 +03 2026\n' +
   'This is how Claude Code surfaces messages the user sends mid-turn — within the ' +
@@ -463,7 +463,7 @@ test('a wrapped human mid-turn message with no marker still echoes the wrapper i
 
 test('unwrapMidTurn leaves ordinary text alone', () => {
   expect(unwrapMidTurn('plain old message')).toBeNull();
-  expect(unwrapMidTurn('[Report from delegate cockpit#095b96ac — turn complete]\n\nbody')).toBeNull();
+  expect(unwrapMidTurn('[Report from delegate whiffle#095b96ac — turn complete]\n\nbody')).toBeNull();
   expect(unwrapMidTurn('')).toBeNull();
 });
 
@@ -818,14 +818,14 @@ test('applyToolResult leaves a non-JSON hand-off result alone', () => {
       id: 'm2',
       instanceId: 'i1',
       type: 'tool.handoff',
-      content: 'cockpit#bd198d25',
+      content: 'whiffle#bd198d25',
       timestamp: new Date(0),
       metadata: { toolId: 't2', toolName: 'handoff', handoffKind: 'handoff' },
     },
   ];
   applyToolResult(messages, {
     toolId: 't2',
-    result: 'Handed to cockpit#bd198d25 (/home/bewinxed/cockpit on obelisk)',
+    result: 'Handed to whiffle#bd198d25 (/home/bewinxed/whiffle on obelisk)',
     isError: false,
   });
   expect(messages[0].metadata?.delegateInstanceId).toBeUndefined();

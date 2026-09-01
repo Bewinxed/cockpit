@@ -128,7 +128,7 @@ await writeFile(
       version: cliPkg.version,
       description: 'Self-hosted fleet control plane for AI coding agents',
       license: root.license ?? 'MIT',
-      repository: root.repository ?? 'https://github.com/Bewinxed/cockpit',
+      repository: root.repository ?? 'https://github.com/Bewinxed/whiffle',
       type: 'module',
       bin: { whiffle: './cli.js' },
       files: ['cli.js', 'dashboard'],

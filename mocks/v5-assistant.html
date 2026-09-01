@@ -1,13 +1,13 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Outpost — Fleet assistant (v5, Phase 9b)</title>
+<title>Whiffle — Fleet assistant (v5, Phase 9b)</title>
 <link rel="preload" href="./fonts/geist-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="./fonts/geist.css">
 <link rel="stylesheet" href="./tokens.css">
 <style>
 /* =============================================================================
-   OUTPOST — PHASE 9b  FLEET ASSISTANT, on the PRESERVED measured shell.
+   WHIFFLE — PHASE 9b  FLEET ASSISTANT, on the PRESERVED measured shell.
    The shell is LAW (DW-9b.1): panel 380x899, inset 24 right / 40 top,
    scrim rgba(0,0,0,.06)=--scrim-soft, suggestion pitch 44 (40h + 4 gap),
    radius 16, header 47. A change of job changed what the rows SAY (Phase 9a's
@@ -40,7 +40,7 @@
 
    DESIGN-DELIVERABLE — DISTINGUISHABILITY (DW-9b.3). Two AI surfaces share this
    screen: the session TRANSCRIPT ("Claude Code", inline, in the page flow) and
-   the ASSISTANT ("Outpost Assistant", a floating panel over a scrim). The
+   the ASSISTANT ("Whiffle Assistant", a floating panel over a scrim). The
    non-positional cue is the assistant's own NAME + orb mark + a persistent
    "Assistant" role tag in its header — legible wherever the reader lands, never
    position-alone.
@@ -183,7 +183,7 @@ svg{display:block}
 
 <div class="app" aria-hidden="true">
   <aside class="side">
-    <div class="brand"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M4 4h8v16H4z" fill="currentColor"/></svg></i>Outpost</div>
+    <div class="brand"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M4 4h8v16H4z" fill="currentColor"/></svg></i>Whiffle</div>
     <div class="lbl">Fleet</div>
     <a><svg viewBox="0 0 24 24" fill="currentColor"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path d="M13 15.4C13 13.3258 13 12.2887 13.659 11.6444C14.318 11 15.3787 11 17.5 11C19.6213 11 20.682 11 21.341 11.6444C22 12.2887 22 13.3258 22 15.4V17.6C22 19.6742 22 20.7113 21.341 21.3556C20.682 22 19.6213 22 17.5 22C15.3787 22 14.318 22 13.659 21.3556C13 20.7113 13 19.6742 13 17.6V15.4Z" opacity=".5"/><path d="M2 8.6C2 10.6742 2 11.7113 2.65901 12.3556C3.31802 13 4.37868 13 6.5 13C8.62132 13 9.68198 13 10.341 12.3556C11 11.7113 11 10.6742 11 8.6V6.4C11 4.32582 11 3.28873 10.341 2.64437C9.68198 2 8.62132 2 6.5 2C4.37868 2 3.31802 2 2.65901 2.64437C2 3.28873 2 4.32582 2 6.4V8.6Z"/><path d="M13 5.5C13 4.4128 13 3.8692 13.1713 3.44041C13.3996 2.86867 13.8376 2.41443 14.389 2.17761C14.8024 2 15.3266 2 16.375 2H18.625C19.6734 2 20.1976 2 20.611 2.17761C21.1624 2.41443 21.6004 2.86867 21.8287 3.44041C22 3.8692 22 4.4128 22 5.5C22 6.5872 22 7.1308 21.8287 7.55959C21.6004 8.13133 21.1624 8.58557 20.611 8.82239C20.1976 9 19.6734 9 18.625 9H16.375C15.3266 9 14.8024 9 14.389 8.82239C13.8376 8.58557 13.3996 8.13133 13.1713 7.55959C13 7.1308 13 6.5872 13 5.5Z"/><path d="M2 18.5C2 19.5872 2 20.1308 2.17127 20.5596C2.39963 21.1313 2.83765 21.5856 3.38896 21.8224C3.80245 22 4.32663 22 5.375 22H7.625C8.67337 22 9.19755 22 9.61104 21.8224C10.1624 21.5856 10.6004 21.1313 10.8287 20.5596C11 20.1308 11 19.5872 11 18.5C11 17.4128 11 16.8692 10.8287 16.4404C10.6004 15.8687 10.1624 15.4144 9.61104 15.1776C9.19755 15 8.67337 15 7.625 15H5.375C4.32663 15 3.80245 15 3.38896 15.1776C2.83765 15.4144 2.39963 15.8687 2.17127 16.4404C2 16.8692 2 17.4128 2 18.5Z" opacity=".5"/></g></svg></svg>Fleet</a>
     <a><svg viewBox="0 0 24 24" fill="currentColor"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path d="M9.25 14C10.9069 14 12.25 15.3431 12.25 17C12.25 18.6569 10.9069 20 9.25 20C7.59315 20 6.25 18.6569 6.25 17C6.25 15.3431 7.59315 14 9.25 14Z"/><path d="M14.25 4C12.5931 4 11.25 5.34315 11.25 7C11.25 8.65685 12.5931 10 14.25 10C15.9069 10 17.25 8.65685 17.25 7C17.25 5.34315 15.9069 4 14.25 4Z"/><g opacity=".5"><path d="M17.1658 7.7085C17.2208 7.48132 17.25 7.24405 17.25 6.99997C17.25 6.72602 17.2133 6.46064 17.1445 6.2085H21.75C22.1642 6.2085 22.5 6.54428 22.5 6.9585C22.5 7.37271 22.1642 7.7085 21.75 7.7085L17.1658 7.7085Z"/><path d="M11.3555 6.2085C11.2867 6.46064 11.25 6.72602 11.25 6.99997C11.25 7.24405 11.2791 7.48132 11.3342 7.7085L1.75 7.7085C1.33579 7.7085 1 7.37271 1 6.9585C1 6.54428 1.33579 6.2085 1.75 6.2085H11.3555Z"/><path d="M6.35551 16.2085H1.75C1.33579 16.2085 1 16.5443 1 16.9585C1 17.3727 1.33579 17.7085 1.75 17.7085H6.33416C6.27915 17.4813 6.25 17.2441 6.25 17C6.25 16.726 6.28672 16.4606 6.35551 16.2085Z"/><path d="M12.1658 17.7085H21.75C22.1642 17.7085 22.5 17.3727 22.5 16.9585C22.5 16.5443 22.1642 16.2085 21.75 16.2085H12.1445C12.2133 16.4606 12.25 16.726 12.25 17C12.25 17.2441 12.2209 17.4813 12.1658 17.7085Z"/></g></g></svg></svg>Tools</a>
@@ -195,7 +195,7 @@ svg{display:block}
     <header class="shead">
       <span class="mk"><svg viewBox="0 0 24 24" fill="currentColor"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path d="M2 12C2 7.28595 2 4.92893 3.46447 3.46447C4.92893 2 7.28595 2 12 2C16.714 2 19.0711 2 20.5355 3.46447C22 4.92893 22 7.28595 22 12C22 16.714 22 19.0711 20.5355 20.5355C19.0711 22 16.714 22 12 22C7.28595 22 4.92893 22 3.46447 20.5355C2 19.0711 2 16.714 2 12Z" opacity=".5"/><path d="M6.42385 9.51988C6.68903 9.20167 7.16195 9.15868 7.48016 9.42385L7.75658 9.6542L7.75661 9.65423C8.36154 10.1583 8.87654 10.5874 9.23295 10.9821C9.61151 11.4013 9.90694 11.8834 9.90694 12.5C9.90694 13.1166 9.61151 13.5987 9.23295 14.0179C8.87653 14.4126 8.36153 14.8418 7.75658 15.3458L7.48016 15.5762C7.16195 15.8414 6.68903 15.7984 6.42385 15.4802C6.15868 15.1619 6.20167 14.689 6.51988 14.4239L6.75428 14.2285C7.41285 13.6797 7.84348 13.3185 8.11968 13.0126C8.38196 12.7222 8.40694 12.586 8.40694 12.5C8.40694 12.414 8.38196 12.2779 8.11968 11.9874C7.84348 11.6815 7.41285 11.3203 6.75429 10.7715L6.51988 10.5762C6.20167 10.311 6.15868 9.83809 6.42385 9.51988Z"/><path d="M17.75 15C17.75 15.4142 17.4142 15.75 17 15.75H12C11.5858 15.75 11.25 15.4142 11.25 15C11.25 14.5858 11.5858 14.25 12 14.25H17C17.4142 14.25 17.75 14.5858 17.75 15Z"/></g></svg></svg></span>
       <h1>wire delegate row outcomes</h1>
-      <span class="path">nixbox : ~/cockpit</span>
+      <span class="path">nixbox : ~/whiffle</span>
       <span class="pill"><span class="d"></span>running</span>
     </header>
     <div class="tr">
@@ -215,10 +215,10 @@ svg{display:block}
 </div>
 
 <div class="asst-scrim"></div>
-<section class="asst" role="complementary" aria-label="Outpost Assistant" aria-live="polite">
+<section class="asst" role="complementary" aria-label="Whiffle Assistant" aria-live="polite">
   <header>
     <span class="a-logo"><svg viewBox="0 0 24 24" fill="currentColor"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill="currentColor" d="M3.845 3.845a2.883 2.883 0 0 0 0 4.077L5.432 9.51c.012-.014.555.503.568.49l4-4c.013-.013-.504-.556-.49-.568L7.922 3.845a2.883 2.883 0 0 0-4.077 0m1.288 11.462a.483.483 0 0 1 .9 0l.157.4a.48.48 0 0 0 .272.273l.398.157a.486.486 0 0 1 0 .903l-.398.158a.48.48 0 0 0-.272.273l-.157.4a.483.483 0 0 1-.9 0l-.157-.4a.48.48 0 0 0-.272-.273l-.398-.158a.486.486 0 0 1 0-.903l.398-.157a.48.48 0 0 0 .272-.274z" opacity=".5"/><path fill="currentColor" d="M19.967 9.13a.483.483 0 0 1 .9 0l.156.399c.05.125.148.224.273.273l.398.158a.486.486 0 0 1 0 .902l-.398.158a.5.5 0 0 0-.273.273l-.156.4a.483.483 0 0 1-.9 0l-.157-.4a.5.5 0 0 0-.272-.273l-.398-.158a.486.486 0 0 1 0-.902l.398-.158a.5.5 0 0 0 .272-.273z" opacity=".2"/><path fill="currentColor" d="M16.1 2.307a.483.483 0 0 1 .9 0l.43 1.095a.48.48 0 0 0 .272.274l1.091.432a.486.486 0 0 1 0 .903l-1.09.432a.5.5 0 0 0-.273.273L17 6.81a.483.483 0 0 1-.9 0l-.43-1.095a.5.5 0 0 0-.273-.273l-1.09-.432a.486.486 0 0 1 0-.903l1.09-.432a.5.5 0 0 0 .273-.274z" opacity=".7"/><path fill="currentColor" d="M10.568 6.49c-.012.014-.555-.503-.568-.49l-4 4c-.013.013.504.556.49.568l9.588 9.587a2.883 2.883 0 1 0 4.078-4.077z"/></svg></svg></span>
-    <span class="a-t"><b>Outpost</b> Assistant</span>
+    <span class="a-t"><b>Whiffle</b> Assistant</span>
     <span class="a-role">Assistant</span>
     <button class="a-x" type="button" aria-label="Close assistant"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
   </header>

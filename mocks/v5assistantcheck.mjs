@@ -97,7 +97,7 @@ console.log('== DW-9b.3: distinguishable from a session transcript, not by posit
 {
   const p = await open();
   const name = await p.evaluate(() => document.querySelector('.asst .a-t')?.textContent?.trim() || '');
-  ok(/Outpost\s*Assistant/i.test(name), `assistant carries its NAME cue "${name}"`);
+  ok(/Whiffle\s*Assistant/i.test(name), `assistant carries its NAME cue "${name}"`);
   const role = await p.evaluate(() => document.querySelector('.asst .a-role')?.textContent?.trim() || '');
   ok(/assistant/i.test(role), `persistent non-positional role tag present ("${role}")`);
   const hasOrb = await p.evaluate(() => !!document.querySelector('.asst .a-logo svg'));
