@@ -195,8 +195,14 @@
   /* The permission gate is symmetric by DESIGN.md law: Approve and Deny are
      recessed PEERS at one fill and one border — no gradient, no primary. They
      differ only in glyph and ink (grant → --ink-strong, refuse → --ink-body). */
+  /* `![background-image:none]`/`![box-shadow:none]`, same reason as the `!`
+     text colours below: the default variant's gradient + action shadow are
+     arbitrary properties tailwind-merge cannot collapse, so recolouring bg-
+     alone leaves the dark gradient painted OVER the raised fill — dark-mode
+     ink on a near-black button. Neutralize them explicitly. */
+  const flat = '![background-image:none] ![box-shadow:none] hover:brightness-100';
   const peer =
-    `${btnBase} flex-1 min-w-0 border border-[var(--border-control)] ` +
+    `${btnBase} ${flat} flex-1 min-w-0 border border-[var(--border-control)] ` +
     'bg-[var(--surface-raised)] hover:bg-[var(--surface-hover)]';
   /* `!` on the text colours, deliberately: the Button's default variant ships
      `text-primary-foreground`, and tailwind-merge does not reliably recognise
@@ -213,14 +219,14 @@
     'bg-[var(--brand-solid)] [background-image:var(--gradient-action)] ' +
     '[box-shadow:var(--shadow-action)]';
   const dismiss =
-    `${btnBase} border border-[var(--border-control)] bg-[var(--surface-raised)] ` +
+    `${btnBase} ${flat} border border-[var(--border-control)] bg-[var(--surface-raised)] ` +
     '!text-[color:var(--ink-body)] hover:bg-[var(--surface-hover)]';
 
   /* A standing grant must read as consequential — warning tint, warning ink,
      a real edge (DESIGN.md §"A standing grant must read as consequential"). */
   const widen =
-    `${btnBase} border border-[var(--status-attn-ink)] bg-[var(--status-attn-bg)] ` +
-    'text-[color:var(--status-attn-ink)]';
+    `${btnBase} ${flat} border border-[var(--status-attn-ink)] bg-[var(--status-attn-bg)] ` +
+    '!text-[color:var(--status-attn-ink)]';
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
