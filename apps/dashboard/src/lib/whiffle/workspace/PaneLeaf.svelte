@@ -17,10 +17,20 @@
    * disappears.
    */
   import { untrack } from 'svelte';
+  import { browser } from '$app/environment';
+  import { page } from '$app/state';
   import type { EffortLevel, PermissionMode } from '@whiffle/core';
   import SessionHeader, { type SettingChange } from '../transcript/SessionHeader.svelte';
+  import SessionPane from '../SessionPane.svelte';
   import PaneTabs from './PaneTabs.svelte';
-  import { whiffle, submitCommand, commandRecord, streamCapable, relaunchSession } from '../client.svelte';
+  import {
+    whiffle,
+    submitCommand,
+    commandRecord,
+    streamCapable,
+    relaunchSession,
+    type HistorySource,
+  } from '../client.svelte';
   import { workspace, contextOf, type LeafNode } from './workspace.svelte';
   import { createSwipe } from './gesture.svelte';
   import { paneDropTarget, dropHint } from './dnd.svelte';
@@ -61,7 +71,9 @@
      conversations either side are asked for ahead of time, which is what
      makes a swipe reveal something rather than nothing. */
 
-  let mounted = $state<string[]>([]);
+  // Seeded with the showing tab so the server and the first client render
+  // agree; later tabs are added by the effects below.
+  let mounted = $state<string[]>(untrack(() => (leaf.active ? [leaf.active] : [])));
 
   $effect.pre(() => {
     const id = viewId;
@@ -227,6 +239,7 @@
       {@const isActive = paneId === viewId}
       {@const offset = swipe.offsetOf(paneId, isActive)}
       {@const shown = isActive || offset !== null}
+      {@const ctx = contextOf(paneId)}
       <div
         class="pane"
         class:pane-hidden={!shown}
@@ -234,7 +247,30 @@
         style:transform={offset === null ? 'translateX(0)' : `translateX(${offset}px)`}
         style:transition={swipe.transition}
         use:slot={{ id: paneId, shown }}
-      ></div>
+      >
+        <!-- The server paints the conversation here so a reload shows it
+             before the bundle runs; on hydration this branch is dropped and
+             PaneHost mounts the live pane into the slot. -->
+        {#if !browser}
+          <SessionPane
+            viewId={paneId}
+            browsing={ctx?.machine ?? null}
+            browsingCwd={ctx?.cwd ?? ''}
+            browsingHarness={ctx?.harness ?? 'claude'}
+            serverTail={paneId === page.params.id
+              ? ((page.data as { tail?: unknown }).tail ?? null)
+              : null}
+            serverHistory={paneId === page.params.id
+              ? ((page.data as { history?: Promise<HistorySource | null> | null }).history ?? null)
+              : null}
+            visible={shown}
+            focused={false}
+            hideHeader
+            view={paneViews[paneId] ?? 'chat'}
+            onview={() => {}}
+          />
+        {/if}
+      </div>
     {/each}
   </div>
 </section>

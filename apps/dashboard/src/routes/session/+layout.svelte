@@ -30,10 +30,14 @@
   import PaneLeaf from '$lib/whiffle/workspace/PaneLeaf.svelte';
   import PaneHost from '$lib/whiffle/workspace/PaneHost.svelte';
   import { syncSubscriptions, type HistorySource } from '$lib/whiffle/client.svelte';
-  import { workspace } from '$lib/whiffle/workspace/workspace.svelte';
+  import { workspace, type WorkspaceV1 } from '$lib/whiffle/workspace/workspace.svelte';
   import { IsMobile } from '$lib/hooks/is-mobile.svelte';
 
   let { children }: { children: Snippet } = $props();
+
+  // On the server, before the groups render: the module-level store is shared
+  // across requests, so each render adopts its own cookie's tree first.
+  if (!browser) workspace.serve((page.data as { workspace?: WorkspaceV1 | null }).workspace ?? null);
 
   /** 900px is this app's desktop line, not the 768 the hook defaults to. */
   const narrow = new IsMobile(900);

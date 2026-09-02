@@ -632,11 +632,12 @@ export const workspace = {
     project(this.activeSessionId, 'replace');
   },
 
-  /** Adopt a tree the server rendered from the cookie, on first mount. */
-  hydrate(served: WorkspaceV1 | null): void {
-    if (!served || !validate(served.root)) return;
-    if (leavesOf(held.root).some((leaf) => leaf.tabs.length > 0)) return;
-    held.root = served.root;
-    held.focusedLeaf = served.focusedLeaf;
+  /** Server only: this request's tree, from its cookie. Reset every render, because the module is shared across requests. */
+  serve(served: WorkspaceV1 | null): void {
+    if (browser) return;
+    const next = served && validate(served.root) ? served : blank();
+    held.root = next.root;
+    held.focusedLeaf = next.focusedLeaf;
+    held.ctx = next.ctx ?? {};
   },
 };

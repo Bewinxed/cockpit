@@ -11,6 +11,7 @@
    * carries strong ink, so the selection survives greyscale.
    */
   import { untrack } from 'svelte';
+  import { page } from '$app/state';
   import { IconClose } from '$lib/icons';
   import { whiffle } from '../client.svelte';
   import { resolveSessionTitle } from '../links';
@@ -23,6 +24,8 @@
   import { dragSession, tabDropTarget, dropHint } from './dnd.svelte';
 
   let { leaf }: { leaf: LeafNode } = $props();
+
+  const servedNames = $derived((page.data as { names?: Record<string, string> }).names ?? {});
 
   interface Tab {
     id: string;
@@ -49,10 +52,11 @@
     return {
       id,
       href: urlFor(id),
-      // A conversation this browser has named before keeps that name until
-      // the fleet and the transcript have both answered; falling back to the
-      // folder for that moment is the flash the remembered title removes.
-      label: named ? resolved : (workingSet.titleOf(id) ?? resolved),
+      // A conversation this browser has named before keeps that name, and a
+      // name the server resolved stands in after it, until the fleet and the
+      // transcript have both answered; falling back to the folder for that
+      // moment is the flash the remembered title removes.
+      label: named ? resolved : (workingSet.titleOf(id) ?? servedNames[id] ?? resolved),
       hue: markHue(view?.cwd || row?.cwd || ctx?.cwd || id),
       harness: ctx?.harness || row?.harness || view?.harness || 'claude',
       named,
