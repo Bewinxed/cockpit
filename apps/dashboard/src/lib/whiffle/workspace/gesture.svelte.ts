@@ -180,6 +180,12 @@ export function createSwipe(leafOf: () => string | undefined = () => undefined) 
 
       const onStart = (event: TouchEvent) => {
         if (!live) return;
+        // A second finger means the deck's gesture, not this one: stand down
+        // and put the pane back before the pair is claimed.
+        if (event.touches.length > 1) {
+          if (phase === 'tracking' || phase === 'decided') reset();
+          return;
+        }
         if (phase !== 'idle' || event.touches.length !== 1) return;
         if (fenced(event.target, node)) return;
         const touch = event.touches[0];
@@ -191,6 +197,10 @@ export function createSwipe(leafOf: () => string | undefined = () => undefined) 
 
       const onMove = (event: TouchEvent) => {
         if (phase !== 'tracking' && phase !== 'decided') return;
+        if (event.touches.length !== 1) {
+          reset();
+          return;
+        }
         const touch = event.touches[0];
         const dx = touch.clientX - startX;
         const dy = touch.clientY - startY;

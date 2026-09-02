@@ -27,7 +27,7 @@
   import { browser } from '$app/environment';
   import FleetBoard from '$lib/whiffle/FleetBoard.svelte';
   import PaneGrid from '$lib/whiffle/workspace/PaneGrid.svelte';
-  import PaneLeaf from '$lib/whiffle/workspace/PaneLeaf.svelte';
+  import PaneDeck from '$lib/whiffle/workspace/PaneDeck.svelte';
   import PaneHost from '$lib/whiffle/workspace/PaneHost.svelte';
   import { syncSubscriptions, type HistorySource } from '$lib/whiffle/client.svelte';
   import { workspace, type WorkspaceV1 } from '$lib/whiffle/workspace/workspace.svelte';
@@ -43,16 +43,6 @@
   const narrow = new IsMobile(900);
 
   const onBoard = $derived(workspace.activeSessionId === null);
-
-  /**
-   * A phone gets ONE group and the swipe; the grid is a desktop arrangement.
-   * The tree still holds whatever splits were made at a desk — it is simply
-   * not drawn — so widening the window restores them rather than discarding
-   * them.
-   */
-  const soleLeaf = $derived(
-    workspace.leaves.find((leaf) => leaf.id === workspace.focusedLeafId) ?? workspace.leaves[0]
-  );
 
   /* ── The server's answer, claimed once ───────────────────────────────
      `page.data` only changes on a REAL navigation — a cold load, a deep
@@ -143,10 +133,13 @@
   </div>
 
   <div class="groups" class:hidden-surface={onBoard} inert={onBoard}>
+    <!-- A phone shows one group at a time; the grid is a desktop arrangement.
+         The tree still holds whatever splits were made at a desk, and the
+         deck makes them reachable: the groups are a vertical stack that two
+         fingers page through, so widening the window restores the grid and
+         narrowing it loses nothing. -->
     {#if narrow.current}
-      {#if soleLeaf}
-        <PaneLeaf leaf={soleLeaf} swipeable />
-      {/if}
+      <PaneDeck />
     {:else}
       <PaneGrid node={workspace.root} />
     {/if}
