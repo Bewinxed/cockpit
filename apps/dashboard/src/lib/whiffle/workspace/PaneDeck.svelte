@@ -18,7 +18,7 @@
    */
   import PaneLeaf from './PaneLeaf.svelte';
   import { workspace } from './workspace.svelte';
-  import { createDeck, GAP } from './deck.svelte';
+  import { createDeck } from './deck.svelte';
 
   const deck = createDeck(
     () => workspace.leaves,
@@ -28,14 +28,10 @@
   const focusedIndex = $derived(
     workspace.leaves.findIndex((leaf) => leaf.id === workspace.focusedLeafId)
   );
-
-  /** A card's place in the stack: the fingers' travel on top of its parking spot. */
-  const place = (delta: number, offset: number) =>
-    delta === 0
-      ? `translateY(${offset}px)`
-      : `translateY(calc(${delta * 100}% + ${delta * GAP + offset}px))`;
 </script>
 
+<!-- The card's place in the stack is its delta, and the stylesheet parks it
+     there; the deck writes the fingers' travel inline and clears it after. -->
 <div class="deck" class:lifted={deck.lifted} use:deck.action>
   {#each workspace.leaves as leaf, index (leaf.id)}
     {@const delta = index - focusedIndex}
@@ -44,7 +40,8 @@
       class="card"
       class:card-hidden={Math.abs(delta) > 1}
       inert={!focused}
-      style:transform={place(delta, deck.offset)}
+      data-leaf={leaf.id}
+      data-delta={delta}
     >
       <div class="lift">
         <div class="clip">
@@ -78,20 +75,22 @@
     touch-action: pan-x pan-y;
   }
 
-  /* The shadow sits on a pseudo-element and fades rather than tweening
-     `box-shadow`: the card is a whole transcript, and repainting one for a
-     shadow every frame would cost frames in the middle of a gesture. The
-     radius steps at the two ends rather than tweening: the corners round
-     the instant the card is picked up and square off once the set-down has
-     finished, because a tweened radius is a repaint of the clip and the
-     shadow every frame. The transforms and the opacity are the only
-     per-frame work, and they stay on the compositor. The clip is a child
-     because `overflow: hidden` on the lift would cut the shadow off.
+  /* The compositor carries every per-frame property: the translate the deck
+     writes on the card, the scale on the lift, the opacity on the shadow.
+     The radius is the one main-thread property, and it tweens — the corners
+     rounding as the card comes up is the lift — but it is confined to the
+     clip, so nothing heavy repaints for it: the shadow keeps a constant
+     radius on its own layer and only fades, and at rest it is invisible, so
+     its corners never show against the square card. Tweening `box-shadow`
+     or the shadow's radius would repaint a whole transcript every frame.
+     The clip is a child because `overflow: hidden` on the lift would cut
+     the shadow off.
 
      Two elements carry the two transforms. The outer card takes the
-     per-frame translate the fingers write inline; the inner lift owns the
-     scale and its transition. On one element the inline transform would
-     replace the scale outright every frame, and the lift would snap.
+     translate — the stylesheet's parking place at rest, the deck's inline
+     value in motion; the inner lift owns the scale and its transition. On
+     one element the inline transform would replace the scale outright
+     every frame, and the lift would snap.
 
      Two timings, one each way. The pick-up rides the entry curve, quick
      and masked by the fingers already moving; the set-down is the eye's,
@@ -107,6 +106,16 @@
     min-height: 0;
     will-change: transform;
   }
+  /* Parked by delta. The 12px is `GAP` in deck.svelte.ts; keep them equal. */
+  .card[data-delta='-1'] {
+    transform: translate3d(0, calc(-100% - 12px), 0);
+  }
+  .card[data-delta='0'] {
+    transform: translate3d(0, 0, 0);
+  }
+  .card[data-delta='1'] {
+    transform: translate3d(0, calc(100% + 12px), 0);
+  }
   .lift {
     position: relative;
     display: flex;
@@ -118,13 +127,13 @@
     will-change: transform;
     transition:
       transform var(--c-300) var(--e-toggle),
-      border-radius 0s linear var(--c-300);
+      border-radius var(--c-300) var(--e-toggle);
   }
   .lift::before {
     content: '';
     position: absolute;
     inset: 0;
-    border-radius: inherit;
+    border-radius: var(--radius-modal);
     box-shadow: var(--shadow-overlay);
     opacity: 0;
     will-change: opacity;
@@ -146,7 +155,7 @@
     border-radius: var(--radius-modal);
     transition:
       transform calc(var(--c-300) * 0.6) var(--e-in),
-      border-radius 0s;
+      border-radius calc(var(--c-300) * 0.6) var(--e-in);
   }
   .deck.lifted .lift::before {
     opacity: 1;

@@ -12,7 +12,17 @@
  * working exactly as they do. Only a touch count of exactly two is ever
  * looked at here; the one-finger machine keeps its own guard against a
  * second finger landing mid-drag.
+ *
+ * CSS owns rest, this file owns motion. The stylesheet parks every card by
+ * its distance from the focus; nothing here is rendered by a template per
+ * frame. While the fingers hold the stack the handlers write a translate
+ * straight onto the three cards in view, and at release the settle — a
+ * spring with no randomness in it — is integrated once and handed to the
+ * compositor as keyframes, so it plays at the display's rate whatever the
+ * main thread is doing. When it lands the inline transforms are cleared and
+ * the stylesheet's parking places take over again.
  */
+import { flushSync } from 'svelte';
 import { workspace, type LeafNode } from './workspace.svelte';
 
 /** Travel before the pair is taken to mean anything. */
@@ -41,8 +51,14 @@ const BOUNCE = 0;
 const MASS = 1;
 const STIFFNESS = (2 * Math.PI / SETTLE) ** 2;
 const DAMPING = (4 * Math.PI * (1 - BOUNCE)) / SETTLE;
-/** A frame that took longer than this is integrated as if it had not. */
-const MAX_DT = 1 / 30;
+/**
+ * The settle is integrated at this step, in seconds, for at most this long,
+ * and thinned to keyframes about this far apart, in ms. At 120Hz a step is
+ * already a frame on the fastest phone, so the thinning mostly keeps all.
+ */
+const STEP = 1 / 120;
+const MAX_SETTLE = 1.5;
+const KEYFRAME_MS = 8;
 /**
  * The last stretch of the spring, as a fraction of the height. Inside it and
  * slowing, the card sets down while it is still moving, so the scale-up and
@@ -54,24 +70,36 @@ const LAND = 0.06;
 const VELOCITY_WINDOW = 80;
 
 type Phase = 'idle' | 'armed' | 'claimed';
+/** One point of the integrated settle: seconds since release, px, px/s. */
+type Sample = { t: number; x: number; v: number };
+/** A card in view: its element and its distance from the focus. */
+type Card = { el: HTMLElement; delta: number };
 
 export function createDeck(getLeaves: () => LeafNode[], getFocusedId: () => string) {
-  let offset = $state(0);
   let lifted = $state(false);
   let dragging = $state(false);
 
-  // Not reactive: read only inside handlers, and writing them per touchmove
-  // would schedule a render for values nothing renders. The height is
-  // measured once, on the claim frame — the neighbours park themselves a
-  // card away in CSS, so nothing here needs it per frame.
+  // Not reactive: nothing here is rendered. The fingers write the transforms
+  // themselves, straight onto the three cards in view, and writing state per
+  // touchmove would schedule a render for values no template reads. The
+  // height is measured once, on the claim frame.
+  let root: HTMLElement | null = null;
+  let offset = 0;
   let height = 0;
   let phase: Phase = 'idle';
   let startX = 0;
   let startY = 0;
-  /** Where the focused card was when the fingers took hold — mid-spring, not 0. */
+  /** Where the focused card was when the fingers took hold — mid-settle, not 0. */
   let base = 0;
   let samples: Array<{ y: number; t: number }> = [];
-  let frame: number | null = null;
+  /** The cards in view, gathered at claim and again after a focus flip. */
+  let cards: Card[] = [];
+  /** The settle in flight: its path, the animations playing it, the set-down timer. */
+  let path: Sample[] = [];
+  let animations: Animation[] = [];
+  let landing: ReturnType<typeof setTimeout> | null = null;
+  /** The settle's velocity where a pair stopped it, until that pair moves or leaves. */
+  let held: number | null = null;
 
   const reduced = () =>
     typeof window !== 'undefined' &&
@@ -82,9 +110,73 @@ export function createDeck(getLeaves: () => LeafNode[], getFocusedId: () => stri
     y: (touches[0].clientY + touches[1].clientY) / 2,
   });
 
-  const stopSpring = () => {
-    if (frame !== null) cancelAnimationFrame(frame);
-    frame = null;
+  /** The cards the stylesheet parks a card away or in place, by their current deltas. */
+  const gather = (): Card[] => {
+    if (!root) return [];
+    const found: Card[] = [];
+    for (const el of root.querySelectorAll<HTMLElement>('[data-leaf]')) {
+      const delta = Number(el.dataset.delta);
+      if (Math.abs(delta) <= 1) found.push({ el, delta });
+    }
+    return found;
+  };
+
+  /** A card's parking place, in px: the stylesheet's calc, evaluated. */
+  const rest = (delta: number) => delta * (height + GAP);
+
+  const paint = (x: number) => {
+    for (const { el, delta } of cards) el.style.transform = `translate3d(0, ${rest(delta) + x}px, 0)`;
+  };
+
+  const clear = () => {
+    for (const { el } of cards) el.style.transform = '';
+  };
+
+  const stopSettle = () => {
+    for (const animation of animations) animation.cancel();
+    animations = [];
+    if (landing !== null) clearTimeout(landing);
+    landing = null;
+  };
+
+  /** The cards are at rest: hand them back to the stylesheet. */
+  const land = () => {
+    stopSettle();
+    clear();
+    offset = 0;
+    lifted = false;
+  };
+
+  /** Where the settle is right now, read off the focused card's clock. */
+  const progress = (): Sample | null => {
+    const animation = animations[cards.findIndex((card) => card.delta === 0)];
+    const at = animation?.currentTime;
+    if (typeof at !== 'number' || path.length === 0) return null;
+    const now = at / 1000;
+    const i = path.findIndex((sample) => sample.t >= now);
+    if (i < 0) return path[path.length - 1];
+    if (i === 0) return path[0];
+    const a = path[i - 1];
+    const b = path[i];
+    const f = (now - a.t) / (b.t - a.t);
+    return { t: now, x: a.x + (b.x - a.x) * f, v: a.v + (b.v - a.v) * f };
+  };
+
+  /** The settle, integrated from here to rest. Always at least two points, the last exactly at rest. */
+  const integrate = (x0: number, v0: number): Sample[] => {
+    const out: Sample[] = [{ t: 0, x: x0, v: v0 }];
+    let x = x0;
+    let v = v0;
+    let t = 0;
+    for (;;) {
+      const a = (-STIFFNESS * x - DAMPING * v) / MASS;
+      v += a * STEP;
+      x += v * STEP;
+      t += STEP;
+      const done = (Math.abs(x) < 0.5 && Math.abs(v) < 20) || t >= MAX_SETTLE;
+      out.push(done ? { t, x: 0, v: 0 } : { t, x, v });
+      if (done) return out;
+    }
   };
 
   /** The neighbours of the focused group: above, itself, below. */
@@ -115,32 +207,80 @@ export function createDeck(getLeaves: () => LeafNode[], getFocusedId: () => stri
     return dt > 0 ? ((last.y - first.y) / dt) * 1000 : 0;
   };
 
+  /**
+   * The settle, played by the compositor. The path is integrated here and
+   * once, then each card in view gets it as keyframes offset by its parking
+   * place, linear between points so the curve is the spring's own. The
+   * set-down is timed off the same path: the first point inside the last
+   * stretch and slowing.
+   */
   function spring(velocity: number) {
-    stopSpring();
-    let v = velocity;
-    let before = Math.abs(v);
-    let last = performance.now();
-    const step = (now: number) => {
-      const dt = Math.min((now - last) / 1000, MAX_DT);
-      last = now;
-      const x = offset;
-      const a = (-STIFFNESS * x - DAMPING * v) / MASS;
-      v += a * dt;
-      const next = x + v * dt;
-      if (Math.abs(next) < 0.5 && Math.abs(v) < 20) {
-        offset = 0;
-        lifted = false;
-        frame = null;
-        return;
-      }
-      if (lifted && Math.abs(next) < height * LAND && Math.abs(v) < Math.abs(before)) {
-        lifted = false;
-      }
-      before = v;
-      offset = next;
-      frame = requestAnimationFrame(step);
-    };
-    frame = requestAnimationFrame(step);
+    stopSettle();
+    path = integrate(offset, velocity);
+    const duration = path[path.length - 1].t;
+
+    const kept: Sample[] = [path[0]];
+    for (let i = 1; i < path.length - 1; i++) {
+      if ((path[i].t - kept[kept.length - 1].t) * 1000 >= KEYFRAME_MS) kept.push(path[i]);
+    }
+    kept.push(path[path.length - 1]);
+
+    animations = cards.map(({ el, delta }) =>
+      el.animate(
+        kept.map((sample) => ({
+          transform: `translate3d(0, ${rest(delta) + sample.x}px, 0)`,
+          offset: sample.t / duration,
+        })),
+        { duration: duration * 1000, easing: 'linear', fill: 'forwards' }
+      )
+    );
+    const focused = animations[cards.findIndex((card) => card.delta === 0)];
+    if (!focused) {
+      land();
+      return;
+    }
+    // The last keyframe is the parking place itself, so handing back to the
+    // stylesheet in one task — cancel, then clear — paints no frame that
+    // differs from the one the compositor is already holding.
+    const mine = animations;
+    focused.finished.then(
+      () => {
+        if (animations === mine) land();
+      },
+      () => {}
+    );
+
+    const touchdown =
+      path.find(
+        (sample, i) =>
+          i > 0 && Math.abs(sample.x) < height * LAND && Math.abs(sample.v) < Math.abs(path[i - 1].v)
+      ) ?? path[path.length - 1];
+    landing = setTimeout(() => {
+      lifted = false;
+      landing = null;
+    }, touchdown.t * 1000);
+  }
+
+  /** Fingers landing on a settling stack stop it where it is. */
+  function hold() {
+    if (animations.length === 0) return;
+    const at = progress();
+    stopSettle();
+    if (!at) {
+      land();
+      return;
+    }
+    offset = at.x;
+    held = at.v;
+    paint(offset);
+  }
+
+  /** The pair that stopped the settle left without moving it: let it go on. */
+  function resume() {
+    if (held === null) return;
+    const velocity = held;
+    held = null;
+    spring(velocity);
   }
 
   function release() {
@@ -155,16 +295,22 @@ export function createDeck(getLeaves: () => LeafNode[], getFocusedId: () => stri
     dragging = false;
     if (target && (far || flicked)) {
       // Focus first, then compensate in the same synchronous step: every
-      // card's resting place is derived from the focused index, so the flip
+      // card's parking place is derived from the focused index, so the flip
       // moves the outgoing card's base by a whole card and the correction
-      // leaves the picture exactly where the finger left it.
+      // leaves the picture exactly where the finger left it. The flush puts
+      // the new deltas on the cards before they are gathered again; the old
+      // set is cleared first so the card that left the view drops its
+      // inline transform with it.
       workspace.focus(target.id);
+      flushSync();
+      clear();
+      cards = gather();
       offset += up ? height + GAP : -(height + GAP);
+      paint(offset);
     }
 
     if (reduced()) {
-      offset = 0;
-      lifted = false;
+      land();
       return;
     }
     spring(velocity);
@@ -179,14 +325,6 @@ export function createDeck(getLeaves: () => LeafNode[], getFocusedId: () => stri
     },
 
     /**
-     * How far the stack has moved, in px. The focused card rides this
-     * directly; the neighbours add it to their parking place a card away.
-     */
-    get offset() {
-      return offset;
-    },
-
-    /**
      * Attaches the listeners. Both `touchstart` and `touchmove` are
      * non-passive: the move so the deck can claim the pair once it owns it,
      * and the start so the second finger's landing is refused to Safari
@@ -195,11 +333,14 @@ export function createDeck(getLeaves: () => LeafNode[], getFocusedId: () => stri
      * the transcript's scroll and the tab swipe.
      */
     action(node: HTMLElement) {
+      root = node;
+
       const onStart = (event: TouchEvent) => {
         if (event.touches.length !== 2) {
           // A third finger ends the drag rather than joining it: the pair
           // that was being tracked is gone, and the midpoint would jump.
           if (phase === 'claimed') release();
+          else if (phase === 'armed') resume();
           phase = 'idle';
           return;
         }
@@ -210,12 +351,16 @@ export function createDeck(getLeaves: () => LeafNode[], getFocusedId: () => stri
         startY = mid.y;
         samples = [{ y: mid.y, t: performance.now() }];
         phase = 'armed';
+        hold();
       };
 
       const onMove = (event: TouchEvent) => {
         if (phase === 'idle') return;
         if (event.touches.length !== 2) {
-          if (phase === 'armed') phase = 'idle';
+          if (phase === 'armed') {
+            resume();
+            phase = 'idle';
+          }
           return;
         }
         const mid = midpoint(event.touches);
@@ -227,11 +372,12 @@ export function createDeck(getLeaves: () => LeafNode[], getFocusedId: () => stri
 
         if (phase === 'armed') {
           if (Math.abs(dy) <= SLOP || Math.abs(dy) <= Math.abs(dx) * SLOPE) return;
-          // Taking hold mid-settle picks the card up where it is; the spring
-          // is dropped, not rewound.
-          stopSpring();
+          // Taking hold mid-settle picks the card up where the pair stopped
+          // it; the settle is dropped, not rewound.
+          held = null;
           base = offset;
           height = node.clientHeight;
+          cards = gather();
           lifted = true;
           dragging = true;
           phase = 'claimed';
@@ -243,10 +389,12 @@ export function createDeck(getLeaves: () => LeafNode[], getFocusedId: () => stri
         const { above, below } = neighbours();
         const open = base + dy < 0 ? below : above;
         offset = open ? base + dy : base + resist(dy);
+        paint(offset);
       };
 
       const onEnd = () => {
         if (phase === 'claimed') release();
+        else if (phase === 'armed') resume();
         phase = 'idle';
       };
 
@@ -257,7 +405,8 @@ export function createDeck(getLeaves: () => LeafNode[], getFocusedId: () => stri
 
       return {
         destroy() {
-          stopSpring();
+          stopSettle();
+          root = null;
           node.removeEventListener('touchstart', onStart);
           node.removeEventListener('touchmove', onMove);
           node.removeEventListener('touchend', onEnd);
