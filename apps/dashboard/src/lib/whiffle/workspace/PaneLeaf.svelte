@@ -56,6 +56,10 @@
   const joins = $derived(dropHint.joins(leaf.id));
 
   const viewId = $derived(leaf.active ?? '');
+  const activeIndex = $derived(leaf.tabs.indexOf(viewId));
+  /** A pane's distance from the active tab along the strip; nowhere, with no tab showing. */
+  const deltaOf = (paneId: string) =>
+    activeIndex < 0 ? NaN : leaf.tabs.indexOf(paneId) - activeIndex;
   /** Whether the reader's keyboard belongs to this group. */
   const isFocusedLeaf = $derived(workspace.focusedLeafId === leaf.id);
 
@@ -234,18 +238,22 @@
     <div class="drop-preview drop-whole" aria-hidden="true"></div>
   {/if}
 
+  <!-- Where the strip can be swiped, the two neighbours are parked either
+       side at rest — painted, and building their rows — so a swipe reveals
+       a current transcript rather than one that paints on the claim frame.
+       A pointer cannot swipe, so elsewhere only the active pane is shown. -->
   <div class="stack" use:swipe.action={swipeable} use:paneDropTarget={leaf.id}>
     {#each mounted as paneId (paneId)}
       {@const isActive = paneId === viewId}
-      {@const offset = swipe.offsetOf(paneId, isActive)}
-      {@const shown = isActive || offset !== null}
+      {@const delta = deltaOf(paneId)}
+      {@const shown = isActive || (swipeable && Math.abs(delta) <= 1)}
       {@const ctx = contextOf(paneId)}
       <div
         class="pane"
         class:pane-hidden={!shown}
         inert={!isActive}
-        style:transform={offset === null ? 'translateX(0)' : `translateX(${offset}px)`}
-        style:transition={swipe.transition}
+        data-pane={paneId}
+        data-delta={delta}
         use:slot={{ id: paneId, shown }}
       >
         <!-- The server paints the conversation here so a reload shows it
@@ -348,6 +356,21 @@
     position: absolute;
     inset: 0;
     display: flex;
+  }
+  /* Parked by delta, flush, so the seam between two panes never shows. The
+     swipe writes its travel inline over these and clears it after; only a
+     pane that can be seen is promised to the compositor. */
+  .pane:not(.pane-hidden) {
+    will-change: transform;
+  }
+  .pane[data-delta='-1'] {
+    transform: translate3d(-100%, 0, 0);
+  }
+  .pane[data-delta='0'] {
+    transform: translate3d(0, 0, 0);
+  }
+  .pane[data-delta='1'] {
+    transform: translate3d(100%, 0, 0);
   }
 
   /* `visibility`, never `display`: a hidden pane still lays out, so the

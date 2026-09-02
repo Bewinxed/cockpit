@@ -18,7 +18,15 @@
  * - Ownership is settled at touchstart and never revisited. The browser
  *   cannot be told half way through a gesture that someone else wants it,
  *   so asking later would mean asking after the answer stopped mattering.
+ *
+ * CSS owns rest, this file owns motion — the same division as the deck's.
+ * The stylesheet parks the active pane and its two neighbours by their
+ * distance in the strip; while the finger holds them the handler writes a
+ * translate straight onto the three, and at release the settle is
+ * integrated once and handed to the compositor as keyframes. When it lands
+ * the inline transforms are cleared and the parking places take over.
  */
+import { flushSync } from 'svelte';
 import { workspace } from './workspace.svelte';
 
 /** Travel before a drag is anything at all. */
@@ -29,13 +37,24 @@ const SLOPE = 0.7;
 const COMMIT = 0.3;
 /** A flick: short but fast still counts, in px/ms. */
 const FLICK = 0.3;
-/** Settle durations. An arrival is allowed to take longer than a retreat. */
-const SETTLE_COMMIT = 300;
-const SETTLE_CANCEL = 250;
-/** Release curve — a confident deceleration, matching the app's entry easing. */
-const EASE = 'cubic-bezier(0.16, 1, 0.3, 1)';
+/** How much of a drag past the last tab is shown, and the most it can show. The deck's. */
+const RESIST = 0.35;
+const RESIST_MAX = 0.25;
+/** The settle: the deck's spring, so a tab and a group arrive the same way. */
+const SETTLE = 0.4;
+const BOUNCE = 0;
+const MASS = 1;
+const STIFFNESS = (2 * Math.PI / SETTLE) ** 2;
+const DAMPING = (4 * Math.PI * (1 - BOUNCE)) / SETTLE;
+const STEP = 1 / 120;
+const MAX_SETTLE = 1.5;
+const KEYFRAME_MS = 8;
 
-type Phase = 'idle' | 'tracking' | 'decided' | 'releasing';
+type Phase = 'idle' | 'tracking' | 'decided';
+/** One point of the integrated settle: seconds since release, px, px/s. */
+type Sample = { t: number; x: number; v: number };
+/** A pane in view: its element and its distance from the active tab. */
+type Pane = { el: HTMLElement; delta: number };
 
 /**
  * Whether something under the finger wants this touch more than the page
@@ -77,94 +96,234 @@ function fenced(target: EventTarget | null, fence: HTMLElement): boolean {
  */
 export function createSwipe(leafOf: () => string | undefined = () => undefined) {
   let phase = $state<Phase>('idle');
-  let delta = $state(0);
-  let width = $state(0);
+  /** The neighbour the finger is uncovering, and whether it is past the commit point. */
   let targetId = $state<string | null>(null);
-  let direction = $state<'left' | 'right' | null>(null);
+  let past = $state(false);
 
-  // Not reactive: read only inside handlers, and writing them per touchmove
-  // would schedule a render for values nothing renders.
+  // Not reactive: the finger writes the transforms itself, straight onto the
+  // panes in view, and writing state per touchmove would schedule a render
+  // for values no template reads. Only a change of target or of side of the
+  // commit point reaches the header.
+  let root: HTMLElement | null = null;
+  let offset = 0;
+  let width = 0;
   let startX = 0;
   let startY = 0;
+  /** Where the active pane was when the finger took hold — mid-settle, not 0. */
+  let base = 0;
   let samples: Array<{ x: number; t: number }> = [];
-  let settleTimer: ReturnType<typeof setTimeout> | null = null;
+  /** The panes in view, gathered at claim and again after a tab flip. */
+  let panes: Pane[] = [];
+  /** The settle in flight: its path and the animations playing it. */
+  let path: Sample[] = [];
+  let animations: Animation[] = [];
+  /** The settle's velocity where a finger stopped it, until that finger moves or leaves. */
+  let held: number | null = null;
 
-  const reset = () => {
-    phase = 'idle';
-    delta = 0;
-    targetId = null;
-    direction = null;
+  const reduced = () =>
+    typeof window !== 'undefined' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /** The tabs either side of the active one, in strip order and without wrapping. */
+  const neighbours = () => {
+    const id = leafOf();
+    const leaf = id ? workspace.leaves.find((node) => node.id === id) : null;
+    const tabs = leaf?.tabs ?? [];
+    const at = leaf?.active ? tabs.indexOf(leaf.active) : -1;
+    return {
+      prev: at > 0 ? tabs[at - 1] : null,
+      next: at >= 0 && at < tabs.length - 1 ? tabs[at + 1] : null,
+    };
   };
 
-  function release(commit: boolean) {
-    const settled = commit ? targetId : null;
-    phase = 'releasing';
-    delta = commit ? (direction === 'left' ? -width : width) : 0;
+  const gather = (): Pane[] => {
+    if (!root) return [];
+    const found: Pane[] = [];
+    for (const el of root.querySelectorAll<HTMLElement>('[data-pane]')) {
+      const delta = Number(el.dataset.delta);
+      if (Math.abs(delta) <= 1) found.push({ el, delta });
+    }
+    return found;
+  };
 
-    const reduced =
-      typeof window !== 'undefined' &&
-      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const wait = reduced ? 0 : commit ? SETTLE_COMMIT : SETTLE_CANCEL;
+  /** A pane's parking place, in px: the stylesheet's `±100%`, evaluated. */
+  const rest = (delta: number) => delta * width;
 
-    settleTimer = setTimeout(() => {
-      settleTimer = null;
-      // The conversation changes at the END of the flight, when the pane it
-      // names is already where the eye expects it. Nothing animates as a
-      // result — the transform is removed in the same breath that the pane
-      // becomes the active one, so the two cancel.
-      if (settled) workspace.activate(settled, leafOf());
-      reset();
-    }, wait);
+  const paint = (x: number) => {
+    for (const { el, delta } of panes) el.style.transform = `translate3d(${rest(delta) + x}px, 0, 0)`;
+  };
+
+  const clear = () => {
+    for (const { el } of panes) el.style.transform = '';
+  };
+
+  const resist = (d: number) =>
+    Math.sign(d) * Math.min(Math.abs(d) * RESIST, width * RESIST_MAX);
+
+  const stopSettle = () => {
+    for (const animation of animations) animation.cancel();
+    animations = [];
+  };
+
+  /** The panes are at rest: hand them back to the stylesheet. */
+  const land = () => {
+    stopSettle();
+    clear();
+    offset = 0;
+  };
+
+  /** Where the settle is right now, read off the active pane's clock. */
+  const progress = (): Sample | null => {
+    const animation = animations[panes.findIndex((pane) => pane.delta === 0)];
+    const at = animation?.currentTime;
+    if (typeof at !== 'number' || path.length === 0) return null;
+    const now = at / 1000;
+    const i = path.findIndex((sample) => sample.t >= now);
+    if (i < 0) return path[path.length - 1];
+    if (i === 0) return path[0];
+    const a = path[i - 1];
+    const b = path[i];
+    const f = (now - a.t) / (b.t - a.t);
+    return { t: now, x: a.x + (b.x - a.x) * f, v: a.v + (b.v - a.v) * f };
+  };
+
+  /** The settle, integrated from here to rest. Always at least two points, the last exactly at rest. */
+  const integrate = (x0: number, v0: number): Sample[] => {
+    const out: Sample[] = [{ t: 0, x: x0, v: v0 }];
+    let x = x0;
+    let v = v0;
+    let t = 0;
+    for (;;) {
+      const a = (-STIFFNESS * x - DAMPING * v) / MASS;
+      v += a * STEP;
+      x += v * STEP;
+      t += STEP;
+      const done = (Math.abs(x) < 0.5 && Math.abs(v) < 20) || t >= MAX_SETTLE;
+      out.push(done ? { t, x: 0, v: 0 } : { t, x, v });
+      if (done) return out;
+    }
+  };
+
+  /** The settle, played by the compositor: the path as keyframes, one set per pane, offset by its parking place. */
+  function spring(velocity: number) {
+    stopSettle();
+    path = integrate(offset, velocity);
+    const duration = path[path.length - 1].t;
+
+    const kept: Sample[] = [path[0]];
+    for (let i = 1; i < path.length - 1; i++) {
+      if ((path[i].t - kept[kept.length - 1].t) * 1000 >= KEYFRAME_MS) kept.push(path[i]);
+    }
+    kept.push(path[path.length - 1]);
+
+    animations = panes.map(({ el, delta }) =>
+      el.animate(
+        kept.map((sample) => ({
+          transform: `translate3d(${rest(delta) + sample.x}px, 0, 0)`,
+          offset: sample.t / duration,
+        })),
+        { duration: duration * 1000, easing: 'linear', fill: 'forwards' }
+      )
+    );
+    const active = animations[panes.findIndex((pane) => pane.delta === 0)];
+    if (!active) {
+      land();
+      return;
+    }
+    // The last keyframe is the parking place itself, so handing back to the
+    // stylesheet in one task — cancel, then clear — paints no frame that
+    // differs from the one the compositor is already holding.
+    const mine = animations;
+    active.finished.then(
+      () => {
+        if (animations === mine) land();
+      },
+      () => {}
+    );
+  }
+
+  /** A finger landing on a settling pane stops it where it is. */
+  function hold() {
+    if (animations.length === 0) return;
+    const at = progress();
+    stopSettle();
+    if (!at) {
+      land();
+      return;
+    }
+    offset = at.x;
+    held = at.v;
+    paint(offset);
+  }
+
+  /** The finger that stopped the settle left without moving it: let it go on. */
+  function resume() {
+    if (held === null) return;
+    const velocity = held;
+    held = null;
+    spring(velocity);
+  }
+
+  /** Release velocity in px/ms, from the last few samples. */
+  const releaseVelocity = () => {
+    if (samples.length < 2) return 0;
+    const first = samples[0];
+    const last = samples[samples.length - 1];
+    const dt = last.t - first.t;
+    return dt > 0 ? (last.x - first.x) / dt : 0;
+  };
+
+  function release(allowed: boolean) {
+    const velocity = releaseVelocity();
+    const { prev, next } = neighbours();
+    const left = offset < 0;
+    const target = offset === 0 ? null : left ? next : prev;
+    const far = width > 0 && Math.abs(offset) / width > COMMIT;
+    const flicked = left ? velocity < -FLICK : velocity > FLICK;
+
+    phase = 'idle';
+    targetId = null;
+    past = false;
+    if (allowed && target && (far || flicked)) {
+      // Flip first, then compensate in the same synchronous step: every
+      // pane's parking place is derived from the active tab, so the flip
+      // moves the outgoing pane's base by a whole width and the correction
+      // leaves the picture exactly where the finger left it. The flush puts
+      // the new deltas on the panes before they are gathered again; the old
+      // set is cleared first so the pane that left the view drops its inline
+      // transform with it.
+      workspace.activate(target, leafOf());
+      flushSync();
+      clear();
+      panes = gather();
+      offset += left ? width : -width;
+      paint(offset);
+    }
+
+    if (reduced()) {
+      land();
+      return;
+    }
+    spring(velocity * 1000);
   }
 
   return {
     get phase() {
       return phase;
     },
-    get delta() {
-      return delta;
-    },
     get targetId() {
       return targetId;
-    },
-    get direction() {
-      return direction;
-    },
-    /** How far across, 0 → 1. What the header morph rides. */
-    get progress() {
-      return width > 0 ? Math.min(Math.abs(delta) / width, 1) : 0;
     },
     /**
      * The conversation the header should be NAMING right now — the target
      * once the drag has passed the point it would commit at, the current one
      * before that. Crossing back drags the name back with it. The threshold
      * is deliberately the same one release uses, so the header is never
-     * showing something the lift is about to contradict.
+     * showing something the settle is about to contradict.
      */
     get previewId(): string | null {
       if (phase === 'idle' || !targetId) return null;
-      const past = width > 0 && Math.abs(delta) / width > COMMIT;
       return past ? targetId : null;
-    },
-    /** The settle transition, or none while the finger is still down. */
-    get transition() {
-      return phase === 'releasing'
-        ? `transform ${delta === 0 ? SETTLE_CANCEL : SETTLE_COMMIT}ms ${EASE}`
-        : 'none';
-    },
-
-    /**
-     * Where a pane sits, in px. The active pane rides the finger; the target
-     * waits exactly one screen away in the direction travelled, so the two
-     * are flush and the seam between them never shows.
-     */
-    offsetOf(paneId: string, isActive: boolean): number | null {
-      if (phase === 'idle') return null;
-      if (paneId === targetId) {
-        return (direction === 'left' ? width : -width) + delta;
-      }
-      if (isActive) return delta;
-      return null;
     },
 
     /**
@@ -177,13 +336,21 @@ export function createSwipe(leafOf: () => string | undefined = () => undefined) 
      */
     action(node: HTMLElement, enabled: boolean = true) {
       let live = enabled;
+      root = node;
+
+      /** Stand down: whatever was under the finger goes back to its place. */
+      const standDown = () => {
+        if (phase === 'decided') release(false);
+        else if (phase === 'tracking') resume();
+        phase = 'idle';
+      };
 
       const onStart = (event: TouchEvent) => {
         if (!live) return;
         // A second finger means the deck's gesture, not this one: stand down
         // and put the pane back before the pair is claimed.
         if (event.touches.length > 1) {
-          if (phase === 'tracking' || phase === 'decided') reset();
+          standDown();
           return;
         }
         if (phase !== 'idle' || event.touches.length !== 1) return;
@@ -193,12 +360,13 @@ export function createSwipe(leafOf: () => string | undefined = () => undefined) 
         startY = touch.clientY;
         samples = [{ x: touch.clientX, t: performance.now() }];
         phase = 'tracking';
+        hold();
       };
 
       const onMove = (event: TouchEvent) => {
         if (phase !== 'tracking' && phase !== 'decided') return;
         if (event.touches.length !== 1) {
-          reset();
+          standDown();
           return;
         }
         const touch = event.touches[0];
@@ -208,76 +376,67 @@ export function createSwipe(leafOf: () => string | undefined = () => undefined) 
         samples.push({ x: touch.clientX, t: performance.now() });
         if (samples.length > 5) samples.shift();
 
+        const { prev, next } = neighbours();
         if (phase === 'tracking') {
           if (Math.abs(dx) < SLOP && Math.abs(dy) < SLOP) return;
           if (Math.abs(dy) > Math.abs(dx) * SLOPE) {
             // A scroll. Stand down for the rest of this touch.
+            resume();
             phase = 'idle';
             return;
           }
-          const dir: 'left' | 'right' = dx < 0 ? 'left' : 'right';
-          const leafId = leafOf();
-          const from = leafId ? workspace.activeOf(leafId) : workspace.activeSessionId;
-          const next = workspace.step(from, dir === 'left' ? 1 : -1, leafId);
-          if (!next) {
+          if (!prev && !next) {
             phase = 'idle';
             return;
           }
-          direction = dir;
-          targetId = next;
+          // Taking hold mid-settle picks the pane up where the finger
+          // stopped it; the settle is dropped, not rewound.
+          held = null;
+          base = offset;
           width = node.clientWidth;
+          panes = gather();
           phase = 'decided';
         }
 
         // Claimed: the page owns this gesture now, so the browser must not
         // also scroll with it.
         event.preventDefault();
-        delta =
-          direction === 'left'
-            ? Math.max(Math.min(dx, 0), -width)
-            : Math.min(Math.max(dx, 0), width);
+        const open = base + dx < 0 ? next : prev;
+        offset = open ? Math.max(-width, Math.min(width, base + dx)) : base + resist(dx);
+        paint(offset);
+        targetId = offset < 0 ? next : offset > 0 ? prev : null;
+        past = width > 0 && Math.abs(offset) / width > COMMIT;
       };
 
       const onEnd = () => {
-        if (phase === 'tracking') {
-          phase = 'idle';
-          return;
-        }
-        if (phase !== 'decided') return;
-
-        let velocity = 0;
-        if (samples.length >= 2) {
-          const first = samples[0];
-          const last = samples[samples.length - 1];
-          const dt = last.t - first.t;
-          if (dt > 0) velocity = (last.x - first.x) / dt;
-        }
-        const far = width > 0 && Math.abs(delta) / width > COMMIT;
-        const flicked = direction === 'left' ? velocity < -FLICK : velocity > FLICK;
-        release(far || flicked);
-      };
-
-      const onCancel = () => {
-        if (phase === 'decided') release(false);
-        else phase = 'idle';
+        if (phase === 'decided') release(true);
+        else if (phase === 'tracking') resume();
+        phase = 'idle';
       };
 
       node.addEventListener('touchstart', onStart, { passive: true });
       node.addEventListener('touchmove', onMove, { passive: false });
       node.addEventListener('touchend', onEnd, { passive: true });
-      node.addEventListener('touchcancel', onCancel, { passive: true });
+      node.addEventListener('touchcancel', standDown, { passive: true });
 
       return {
         update(next: boolean) {
           live = next;
-          if (!next && phase !== 'idle') reset();
+          if (!next && phase !== 'idle') {
+            phase = 'idle';
+            targetId = null;
+            past = false;
+            held = null;
+            land();
+          }
         },
         destroy() {
-          if (settleTimer) clearTimeout(settleTimer);
+          stopSettle();
+          root = null;
           node.removeEventListener('touchstart', onStart);
           node.removeEventListener('touchmove', onMove);
           node.removeEventListener('touchend', onEnd);
-          node.removeEventListener('touchcancel', onCancel);
+          node.removeEventListener('touchcancel', standDown);
         },
       };
     },
