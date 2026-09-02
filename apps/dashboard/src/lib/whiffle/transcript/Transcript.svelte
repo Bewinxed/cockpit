@@ -493,6 +493,15 @@
         followBottom();
       } else {
         scroller.scrollTop = scroller.scrollHeight;
+        // This frame is the first one painted since the landing. A tab that
+        // loaded in the background painted nothing: virtua's `scrollToIndex`
+        // waits on a measurement that never came, gives up on its timeout at
+        // an estimated offset, and when the tab is shown the rows measure
+        // around that stale write — virtua keeps its anchor as the rows above
+        // grow, the tail ends up a viewport away, and that move reads as the
+        // reader scrolling. Asking again now, with frames painting, converges
+        // on the true last row the way a foreground landing does.
+        if (instant && list) list.scrollToIndex(rows.length - 1, { align: 'end' });
       }
       settle();
     });
