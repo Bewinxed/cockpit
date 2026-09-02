@@ -11,7 +11,8 @@
   import { Virtualizer } from 'virtua/svelte';
   import type { SessionState } from '../client.svelte';
   import { rebuildScheduler } from '../workspace/scheduler.svelte';
-  import { buildRows, type Row } from './rows';
+  import { buildRowsFrom, type FoldMemo, type Row } from './rows';
+  import CatchUp from './CatchUp.svelte';
   import { describeTool } from '$lib/components/features/tool-cards/descriptors';
   import MessageRow from './MessageRow.svelte';
   import ToolGroup from './ToolGroup.svelte';
@@ -35,8 +36,9 @@
   }: {
     session: SessionState;
     /**
-     * Whether this transcript is on screen at all. Governs whether rows are
-     * built: a pane nobody can see stops reading its session entirely.
+     * Whether this transcript is on screen at all. Governs how OFTEN rows are
+     * built: a pane nobody can see reads its session only at the scheduler's
+     * slow tier, and never in the flush that brings it on screen.
      */
     visible: boolean;
     /**
@@ -90,22 +92,46 @@
    * measured and the scroll offset are all untouched and a frozen pane costs
    * nothing per frame.
    *
-   * `visible` is tracked, so flipping it back on invalidates this once: the
-   * pane catches up in a single recompute, and the tail-follow effect below
-   * re-lands it if the reader was at the tail when they left.
+   * Flipping `visible` or `focused` back on does NOT rebuild in that flush.
+   * The switch used to fold every message and re-render every row inside the
+   * same task as the tab change — the dock's `appendChild`, the scroll
+   * restore and a 256ms fold, all before the first paint — which is the
+   * delay the reader felt as the tab sticking. Now the switch paints the
+   * frozen rows as they are (`held`), and the catch-up runs after that paint
+   * as an APPEND: the fold restarts at the last turn before the old end, so
+   * every row before it keeps its identity and the keyed each touches only
+   * the rows that are actually new. The tail-follow effect below then rides
+   * to the new tail if the reader was at the tail when they left.
    *
    * The grid adds a third state between those two. A pane that is visible but
    * NOT focused still has to show what its agent is saying, but rebuilding it
    * on every frame of its own stream is what makes four panes cost four times
    * one. So it reads the session under `untrack` and depends on nothing but a
    * counter the scheduler bumps when this pane's turn comes round. The session
-   * can write as often as it likes; only the tick invalidates this.
+   * can write as often as it likes; only the tick invalidates this. A hidden
+   * pane takes the same turns at the scheduler's slow tier, so that by the
+   * time it is switched to there is usually nothing left to fold.
    */
   let frozen: Row[] = [];
+  /** What `frozen` was folded from — the incremental fold's memory. */
+  let memo: FoldMemo | null = null;
   /** Whether `frozen` holds a real build yet — the first one is unconditional. */
   let primed = false;
   /** Bumped by the scheduler. The ONLY dependency of an unfocused rebuild. */
   let rebuildTick = $state(0);
+  /**
+   * The switch flush, and the frame it paints: while this holds, the rows
+   * are the frozen ones whatever the session says. Set on the rising edge of
+   * `visible` / `focused` when there is something to catch up on, cleared
+   * once that flush has painted.
+   */
+  let held = $state(false);
+  /**
+   * From the switch until the append lands — what the tail indicator shows.
+   * Distinct from `held` because the fold itself happens after the hold is
+   * released, and the indicator should stay until it has.
+   */
+  let catching = $state(false);
   /**
    * What the session looked like when these rows were last built.
    *
@@ -133,10 +159,12 @@
     w.__transcriptBuilds[key] = (w.__transcriptBuilds[key] ?? 0) + 1;
   };
   const built = $derived.by<{ rows: Row[]; shifted: boolean }>(() => {
+    // The switch flush paints what is already there; the catch-up comes
+    // after the paint, through `held` clearing.
+    if (held) return { rows: frozen, shifted: false };
     // A pane born off screen would otherwise hold an empty transcript until it
-    // was first looked at, so the first build never consults `visible`.
-    if (!visible && primed) return { rows: frozen, shifted: false };
-    if (visible && !isFocused && primed) {
+    // was first looked at, so the first build never consults the tier.
+    if (!isFocused && primed) {
       void rebuildTick;
       return untrack(() => (printOf() === builtPrint ? { rows: frozen, shifted: false } : run()));
     }
@@ -147,6 +175,45 @@
     return run();
   });
 
+  /**
+   * The switch itself, before the DOM updates: on the rising edge of
+   * `visible` or `focused`, hold the rows for this flush and schedule the
+   * catch-up behind its paint. `$effect.pre` because the hold has to be in
+   * place before the Virtualizer reads `built` in the same flush.
+   *
+   * The delay is `requestAnimationFrame` THEN `setTimeout(0)`, not either
+   * alone. A rAF callback runs at the top of the next frame, before that
+   * frame paints, and Svelte flushes the state change it makes in a
+   * microtask right behind it — still before the paint, which is exactly the
+   * blocking this exists to avoid. `setTimeout(0)` alone is a macrotask the
+   * browser may run within the same frame interval, ahead of its rendering
+   * step. The pair pins the work to the far side of one real paint.
+   *
+   * Nothing is held when the print already matches: a pane whose rows are
+   * current simply becomes visible, with no indicator to flash.
+   */
+  let wasVisible = false;
+  let wasFocused = false;
+  $effect.pre(() => {
+    const nowVisible = visible;
+    const nowFocused = isFocused;
+    const rising = (nowVisible && !wasVisible) || (nowFocused && !wasFocused);
+    wasVisible = nowVisible;
+    wasFocused = nowFocused;
+    if (!rising || !primed) return;
+    untrack(() => {
+      if (held || printOf() === builtPrint) return;
+      held = true;
+      catching = true;
+      returning = true;
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          held = false;
+        }, 0);
+      });
+    });
+  });
+
   function run(): { rows: Row[]; shifted: boolean } {
     countBuild();
     builtPrint = printOf();
@@ -154,7 +221,9 @@
   }
 
   function build(): { rows: Row[]; shifted: boolean } {
-    const next = buildRows(session);
+    const folded = buildRowsFrom(session, memo);
+    memo = folded.memo;
+    const next = folded.rows;
     // PREPEND DETECTION for virtua's `shift` mode: an older history chunk
     // arriving puts new rows ABOVE everything on screen — without `shift`,
     // virtua keeps the scroll OFFSET and the content lurches toward the top
@@ -173,14 +242,15 @@
   }
 
   /**
-   * Take a turn in the rotation while visible but unfocused, and give it back
-   * on focus or on leaving the screen. The fingerprint is every cheap O(1)
-   * reading that means "there is something new to draw" — deliberately not a
-   * deep comparison, because the point is to skip the expensive build, not to
-   * do an expensive check first.
+   * Take a turn in the rotation while unfocused — the visible tier beside the
+   * pane being read, the slow tier when hidden behind it — and give it back
+   * on focus. The fingerprint is every cheap O(1) reading that means "there
+   * is something new to draw" — deliberately not a deep comparison, because
+   * the point is to skip the expensive build, not to do an expensive check
+   * first.
    */
   $effect(() => {
-    if (!visible || isFocused) return;
+    if (isFocused) return;
     return rebuildScheduler.join(
       session.instanceId,
       () =>
@@ -188,7 +258,8 @@
         `${session.thinkingStream.length}:${session.busy ? 1 : 0}:${session.pending.length}`,
       () => {
         rebuildTick += 1;
-      }
+      },
+      visible ? 'visible' : 'hidden'
     );
   });
 
@@ -220,6 +291,9 @@
     }
     frozen = next;
     primed = true;
+    // The append has landed: the rows on screen are the session's again, and
+    // the indicator under them has nothing left to wait for.
+    if (untrack(() => catching && !held)) catching = false;
   });
   const rows = $derived(built.rows);
 
@@ -373,19 +447,41 @@
     const gap = scroller
       ? scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop
       : 0;
-    const instant = !landed || reactivating;
-    reactivating = false;
-    const followable = !instant && !!scroller && gap <= (scroller?.clientHeight ?? 0) * 2;
+    const instant = !landed;
+    // A tab-return whose catch-up has just appended: the reader left at the
+    // tail, so the new turns ride in from where they were. A gap past the
+    // followable bound is first closed to within it in one silent write, and
+    // the loop rides the rest — the same arrival at any distance, rather than
+    // a teleport for a long absence. virtua measures the rows the ride
+    // crosses as they enter the viewport; the loop reads the live target
+    // every frame, so an estimate that firms up mid-ride is absorbed.
+    const riding = landed && returning && gap > 0;
+    // Consumed by the land that has somewhere to go: the rising edge lands
+    // once on the frozen rows (gap 0) before the append does.
+    if (gap > 0) returning = false;
+    const bound = (scroller?.clientHeight ?? 0) * 2;
+    const followable = !instant && !!scroller && (gap <= bound || riding);
     if (!followable) {
       if (list) list.scrollToIndex(rows.length - 1, { align: 'end' });
       else if (scroller) scroller.scrollTop = scroller.scrollHeight;
     }
     requestAnimationFrame(() => {
       if (!scroller) return;
-      // First landings and tab-returns teleport — there is no continuity to
-      // keep; only the live follow rides the loop.
-      if (followable) followBottom();
-      else scroller.scrollTop = scroller.scrollHeight;
+      // First landings teleport — there is no continuity to keep; the live
+      // follow and the catch-up ride the loop. The closing write sits inside
+      // the same frame as the loop's start, so the scroll event it raises
+      // carries the loop's own tag and is not read as the reader scrolling.
+      if (followable) {
+        if (riding && scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop > bound) {
+          // One pixel inside the bound: `followBottom` teleports past it,
+          // and a scrollTop the browser rounds must not land on the far side.
+          scroller.scrollTop = scroller.scrollHeight - scroller.clientHeight - bound + 1;
+          lastWrite = scroller.scrollTop;
+        }
+        followBottom();
+      } else {
+        scroller.scrollTop = scroller.scrollHeight;
+      }
       settle();
     });
     atBottom = true;
@@ -421,25 +517,20 @@
   // by the other door. Guarding first means an off-screen pane has no
   // dependency on the stream at all; and because `active` is itself tracked,
   // switching back re-runs this once, on rows that have just caught up.
-  /** Whether the CURRENT land is a tab-return. A reactivated pane seats
-   *  instantly — the ride is for watching words arrive, not for coming back
-   *  to a room; a constant-pace crawl across everything missed while away
-   *  reads as sluggish, not smooth. Plain var: consumed by the very next
-   *  land() and never rendered. */
-  let reactivating = false;
-  // svelte-ignore state_referenced_locally -- the initial value is the point:
-  // the first effect run must not read as a reactivation.
-  let prevActive = active;
+  /** Whether the CURRENT land follows a tab-return: the catch-up's append
+   *  is what changed `rows`, and a reader who left at the tail rides to the
+   *  new one rather than being teleported. Plain var: raised with the hold
+   *  when a switch has something to catch up on, consumed by the land that
+   *  follows the append, and dropped if the reader was scrolled up — they
+   *  stay where they were. */
+  let returning = false;
   $effect(() => {
-    const nowActive = active;
-    if (nowActive && !prevActive) reactivating = true;
-    prevActive = nowActive;
-    if (!nowActive) return;
+    if (!active) return;
     void rows.length;
     void session.streaming;
     if (rows.length === 0) return;
     if (!landed || atBottom) void tick().then(land);
-    else reactivating = false;
+    else returning = false;
   });
   // Composer height changes are handled entirely by CSS: `--composer-clearance`
   // on the parent adjusts `.tr`'s `padding-bottom`, the browser updates
@@ -684,6 +775,12 @@
       </div>
     {/snippet}
   </Virtualizer>
+  <!-- Under the last row, inside the scroller, from the switch until the
+       catch-up has appended: the transcript the reader left is on screen
+       already; this says the rest is on its way. -->
+  {#if catching}
+    <CatchUp />
+  {/if}
 </div>
 
 <style>

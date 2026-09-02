@@ -16,13 +16,13 @@
   <span class="spoken">Reading transcript…</span>
 
   <!-- The reader's turn: the sunken well, its raised mark, one short line. -->
-  <div class="block you" style="--i: 0">
+  <div class="block you">
     <div class="who"><span class="mark raised"></span><span class="name"></span></div>
     <div class="ln" style="width: 52%"></div>
   </div>
 
   <!-- The agent's answer: four lines of prose, ragged the way prose is. -->
-  <div class="block" style="--i: 1">
+  <div class="block">
     <div class="who"><span class="mark"></span><span class="name"></span></div>
     <div class="ln" style="width: 94%"></div>
     <div class="ln" style="width: 81%"></div>
@@ -31,14 +31,14 @@
   </div>
 
   <!-- Its tool calls, on the rail. -->
-  <div class="block tools" style="--i: 2">
+  <div class="block tools">
     <div class="trow"><span class="ic"></span><span class="tk"></span><span class="arg" style="width: 46%"></span></div>
     <div class="trow"><span class="ic"></span><span class="tk"></span><span class="arg" style="width: 31%"></span></div>
     <div class="trow"><span class="ic"></span><span class="tk"></span><span class="arg" style="width: 58%"></span></div>
   </div>
 
   <!-- And what it said about them. -->
-  <div class="block" style="--i: 3">
+  <div class="block">
     <div class="who"><span class="mark"></span><span class="name"></span></div>
     <div class="ln" style="width: 72%"></div>
     <div class="ln" style="width: 35%"></div>
@@ -55,15 +55,12 @@
     flex: 1 1 auto;
     min-height: 0;
     padding: 0 var(--space-6) var(--space-8) var(--space-7);
-    /* Our choice: each block enters --stagger after the one above it (40ms,
-       derived from --c-100 rather than a literal), so the eye reads the
-       placeholder top to bottom the way it will read the transcript. */
-    --stagger: calc(var(--c-100) * 0.4);
+    /* The placeholder enters as one thing: DESIGN.md rules out staggered
+       page-load fades, so the blocks sit still inside a single fade. */
     animation: sk-in var(--c-300) var(--e-in) both;
   }
   .block {
     margin-top: var(--space-4);
-    animation: sk-in var(--c-300) var(--e-in) calc(var(--i, 0) * var(--stagger)) both;
   }
   @keyframes sk-in {
     from {
@@ -204,8 +201,7 @@
     .skeleton::after {
       display: none;
     }
-    .skeleton,
-    .block {
+    .skeleton {
       animation: none;
       opacity: 0.6;
     }

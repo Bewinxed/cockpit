@@ -1,12 +1,12 @@
 /**
  * The rebuild scheduler: how several transcripts share one screen.
  *
- * A transcript that nobody is looking at costs nothing, because it stops
- * reading its session entirely (the freeze in `Transcript.svelte`). A
- * transcript the reader IS looking at rebuilds its rows on every streamed
- * frame, which is what makes a live turn feel live. The grid introduces a
- * third case that had no answer before: a pane that is genuinely on screen
- * but is not the one being worked in.
+ * A transcript that nobody is looking at reads its session only when its
+ * turn comes round here, at the slow tier (the freeze in `Transcript.svelte`
+ * holds between turns). A transcript the reader IS looking at rebuilds its
+ * rows on every streamed frame, which is what makes a live turn feel live.
+ * The grid introduces a third case: a pane that is genuinely on screen but is
+ * not the one being worked in.
  *
  * Rebuilding those the same way the focused pane is rebuilt does not scale.
  * The measured cost of one large transcript's rebuild is ~3.6ms — 1.09s of
@@ -44,22 +44,40 @@
  */
 const CADENCE = 250;
 
+/**
+ * How many rounds a hidden pane sits out between turns. Our choice: every
+ * fourth, so a pane nobody can see keeps up at 1Hz — enough that the switch
+ * to it usually finds nothing left to fold, and a quarter of the cost of a
+ * pane that is on screen. A hidden pane rebuilds warm rather than freezing
+ * because the switch is what used to pay for everything it missed, in the
+ * one flush that had to paint at once.
+ */
+const HIDDEN_EVERY = 4;
+
+/** How a registrant's turn comes round: on screen but unfocused, or off screen entirely. */
+export type Tier = 'visible' | 'hidden';
+
 interface Registrant {
   /** Cheap state summary; a rebuild is skipped unless this changed. */
   fingerprint: () => string;
   /** Invalidate this pane's rows, once. */
   bump: () => void;
   last: string;
+  tier: Tier;
 }
 
 const registry = new Map<string, Registrant>();
 let timer: ReturnType<typeof setInterval> | null = null;
 /** Where the round-robin got to, so one busy pane cannot starve the rest. */
 let cursor = 0;
+/** Which round this is, so the hidden tier can be considered every Nth. */
+let round = 0;
 
 function tick(): void {
   const ids = [...registry.keys()];
   if (ids.length === 0) return;
+  round += 1;
+  const hiddenToo = round % HIDDEN_EVERY === 0;
   // One pass, one rebuild: walk from where we left off and stop at the first
   // pane with something new to show. Walking the whole ring would hand every
   // dirty pane a rebuild in the same tick, which is the spike this exists to
@@ -68,6 +86,7 @@ function tick(): void {
     const id = ids[(cursor + i) % ids.length];
     const entry = registry.get(id);
     if (!entry) continue;
+    if (entry.tier === 'hidden' && !hiddenToo) continue;
     const now = entry.fingerprint();
     if (now === entry.last) continue;
     entry.last = now;
@@ -91,15 +110,16 @@ function stop(): void {
 
 export const rebuildScheduler = {
   /**
-   * Take a turn in the rotation. Called by a transcript that is visible but
-   * not focused; the returned function gives the turn back.
+   * Take a turn in the rotation. Called by a transcript that is not focused —
+   * on screen beside the one being read, or hidden behind it; the returned
+   * function gives the turn back.
    *
    * The first fingerprint is recorded rather than acted on: the pane has just
-   * built its rows to become visible, so it is up to date by definition and a
-   * rebuild on the next tick would be work for an unchanged picture.
+   * built its rows, or is about to catch up on its own account, so a rebuild
+   * on the next tick would be work for an unchanged picture.
    */
-  join(id: string, fingerprint: () => string, bump: () => void): () => void {
-    registry.set(id, { fingerprint, bump, last: fingerprint() });
+  join(id: string, fingerprint: () => string, bump: () => void, tier: Tier = 'visible'): () => void {
+    registry.set(id, { fingerprint, bump, last: fingerprint(), tier });
     start();
     return () => {
       registry.delete(id);

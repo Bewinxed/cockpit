@@ -152,22 +152,46 @@ export function foldMessages(
   messages: Message[],
   subagents: Record<string, SubagentState>
 ): Row[] {
-  const rows: Row[] = [];
+  return foldRange(messages, subagents, 0, notedTasks(messages)).rows;
+}
 
-  // One completion, one row. The SDK's `task_notification` frame (the
-  // "task done" line) and the harness's XML note are two wire forms of the
-  // SAME event; when the richer note is present its bare line yields to it,
-  // keyed by the task id both sides carry. A plain task with no note — a
-  // background Bash — keeps its line, which is the only place it reports.
+/**
+ * The task ids the harness has posted a full note about.
+ *
+ * One completion, one row. The SDK's `task_notification` frame (the "task
+ * done" line) and the harness's XML note are two wire forms of the SAME
+ * event; when the richer note is present its bare line yields to it, keyed by
+ * the task id both sides carry. A plain task with no note — a background
+ * Bash — keeps its line, which is the only place it reports.
+ */
+function notedTasks(messages: Message[]): Set<string> {
   const noted = new Set<string>();
   for (const m of messages) {
-    if (isHarnessNote(m)) {
-      const tid = parseHarnessNote(m.content).taskId;
-      if (tid) noted.add(tid);
-    }
+    const tid = notedTask(m);
+    if (tid) noted.add(tid);
   }
+  return noted;
+}
 
-  let i = 0;
+/** The task id a harness note reports on, when the message is one and names one. */
+const notedTask = (m: Message): string | undefined =>
+  isHarnessNote(m) ? parseHarnessNote(m.content).taskId : undefined;
+
+/**
+ * The grammar over `messages[from..]`. `starts` is the message index each row
+ * begins at, kept beside the rows rather than on them: it is what lets a
+ * later fold splice on at a row boundary, and no renderer needs it.
+ */
+function foldRange(
+  messages: Message[],
+  subagents: Record<string, SubagentState>,
+  from: number,
+  noted: Set<string>
+): { rows: Row[]; starts: number[] } {
+  const rows: Row[] = [];
+  const starts: number[] = [];
+
+  let i = from;
   while (i < messages.length) {
     const m = messages[i];
 
@@ -179,6 +203,7 @@ export function foldMessages(
       i++;
       continue;
     }
+    starts.push(i);
 
     // Before anything else: harness plumbing is never a turn, so it never
     // reaches the `single` row that would give it a Who header and user styling.
@@ -228,7 +253,7 @@ export function foldMessages(
     i++;
   }
 
-  return rows;
+  return { rows, starts };
 }
 
 /**
@@ -245,7 +270,135 @@ export function branchRows(branch: SubagentState): Row[] {
 }
 
 export function buildRows(session: SessionState): Row[] {
-  const rows = foldMessages(session.messages, session.subagents);
+  return [...foldMessages(session.messages, session.subagents), ...liveTail(session)];
+}
+
+/**
+ * What the last fold was folded from, so the next one can tell whether it is
+ * looking at the same transcript grown at the end or at a different one.
+ */
+export interface FoldMemo {
+  /** The settled rows — everything before the live tail — and where each begins. */
+  rows: Row[];
+  starts: number[];
+  /** How many messages those rows cover, and the first and last of them. */
+  count: number;
+  first: Message | undefined;
+  last: Message | undefined;
+  /** How many subagent branches were known: a new one can re-type an old row. */
+  branches: number;
+  noted: Set<string>;
+}
+
+/**
+ * Whether two positions hold the same message: identity, deliberately not
+ * the uuid. The store hands back the same proxy for the same entry, and a
+ * read that replaced the array with equal entries has replaced the objects
+ * the kept rows would point at — a result attached to the new copy of a
+ * call would never reach a row still holding the old one.
+ */
+const sameMessage = (a: Message | undefined, b: Message | undefined): boolean =>
+  a !== undefined && a === b;
+
+/**
+ * The message-side reading of the chunker's cut rule (`streamHistory`,
+ * client.svelte.ts): a turn opens on the reader's own message, not a
+ * delegate's, and a fold may begin there. Tool results never make it here as
+ * messages of their own — `mapTranscript` attaches them to the call — so
+ * there is no dangling pair for a cut to split.
+ */
+const opensTurn = (m: Message): boolean => m.type === 'user' && !m.parentToolUseId && !isHarnessNote(m);
+
+/**
+ * Where a fold of `messages` may restart given what `memo` was folded from,
+ * or -1 where it has to start over. The transcript must still be the memo's
+ * — same first message, same message at the old end, no new branch — with
+ * nothing new that reaches back: a note about a task whose bare line is
+ * already folded would have to unfold it. The cut is then the last turn
+ * opener at or before the old end.
+ */
+function cutFor(messages: Message[], memo: FoldMemo, branches: number): number {
+  if (
+    memo.count === 0 ||
+    messages.length < memo.count ||
+    branches !== memo.branches ||
+    !sameMessage(messages[0], memo.first) ||
+    !sameMessage(messages[memo.count - 1], memo.last)
+  ) {
+    return -1;
+  }
+  for (let i = memo.count; i < messages.length; i += 1) {
+    if (notedTask(messages[i])) return -1;
+  }
+  let cut = Math.min(memo.count, messages.length - 1);
+  while (cut > 0 && !opensTurn(messages[cut])) cut -= 1;
+  // No opener anywhere before the end is a transcript of a few lines: folded
+  // whole rather than proving the cut is safe.
+  return cut > 0 ? cut : -1;
+}
+
+/**
+ * The rows again, folding only what arrived since `memo`.
+ *
+ * Coming back to a transcript re-folded every message and re-rendered every
+ * row — markdown parsed, code highlighted — for the sake of the handful that
+ * arrived while it was away. When the transcript is the one the memo was
+ * folded from, merely longer, the fold restarts at the last turn opener
+ * before the old end: the rows before it are the same objects, so the keyed
+ * each leaves their components alone, and only that turn and the new ones
+ * are folded. The live tail is always re-derived from the session.
+ *
+ * Anything else is a full fold: a read that replaced the array, a rewind
+ * that cut it, an older chunk prepended in front, a subagent branch that
+ * has since opened (which turns a call row into a fold), or a harness note
+ * about a task whose line is already on the rail. All of those change rows
+ * BEFORE the old end, which an append cannot express.
+ */
+export function buildRowsFrom(
+  session: SessionState,
+  memo: FoldMemo | null
+): { rows: Row[]; memo: FoldMemo; appended: boolean } {
+  const messages = session.messages;
+  const branches = Object.keys(session.subagents).length;
+  const cut = memo ? cutFor(messages, memo, branches) : -1;
+
+  if (memo === null || cut < 0) {
+    const noted = notedTasks(messages);
+    const { rows, starts } = foldRange(messages, session.subagents, 0, noted);
+    return {
+      rows: [...rows, ...liveTail(session)],
+      memo: { rows, starts, count: messages.length, first: messages[0], last: messages[messages.length - 1], branches, noted },
+      appended: false,
+    };
+  }
+
+  const kept = memo;
+  // Nothing new: the settled rows are the last fold's, untouched.
+  if (messages.length === kept.count) {
+    return { rows: [...kept.rows, ...liveTail(session)], memo: kept, appended: true };
+  }
+  // The first row at or past the cut: an opener always begins a row, so the
+  // rows before it cover exactly the messages before it.
+  let keep = kept.starts.length;
+  for (let r = kept.starts.length - 1; r >= 0; r -= 1) {
+    if (kept.starts[r] < cut) break;
+    keep = r;
+  }
+  const tail = foldRange(messages, session.subagents, cut, kept.noted);
+  const rows = kept.rows.slice(0, keep).concat(tail.rows);
+  const starts = kept.starts.slice(0, keep).concat(tail.starts);
+  return {
+    rows: [...rows, ...liveTail(session)],
+    memo: { rows, starts, count: messages.length, first: messages[0], last: messages[messages.length - 1], branches, noted: kept.noted },
+    appended: true,
+  };
+}
+
+/**
+ * The rows that ride after the settled transcript, re-derived every time.
+ */
+function liveTail(session: SessionState): Row[] {
+  const rows: Row[] = [];
 
   // The live tail: only ever the main loop's, and only while nothing settled it.
   // A thinking block is shown the moment it opens, even with no delta text yet —
