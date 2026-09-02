@@ -111,6 +111,7 @@ const fakeOpenAI = Bun.serve({
 
     const body = (await req.json()) as {
       messages?: { role: string; content: string }[];
+      stream?: boolean;
     };
 
     // Record what the supervisor sent.
@@ -122,6 +123,36 @@ const fakeOpenAI = Bun.serve({
 
     if (fakeStatus !== 200) {
       return new Response('error', { status: fakeStatus });
+    }
+
+    // The streamed rules path (streamText + Output.array) asks for SSE and an
+    // ARRAY of per-rule verdicts. Script one element per rule named in the
+    // system prompt, each carrying nextVerdict's fields (ask_operator is not
+    // in the rules vocabulary; map it to escalate like production would).
+    if (body.stream) {
+      if (fakeGarbage) {
+        const sse = [
+          `data: ${JSON.stringify({ id: 'fake', object: 'chat.completion.chunk', model: 'test-model', choices: [{ index: 0, delta: { content: 'not json {{{' }, finish_reason: null }] })}`,
+          `data: ${JSON.stringify({ id: 'fake', object: 'chat.completion.chunk', model: 'test-model', choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] })}`,
+          'data: [DONE]',
+          '',
+        ].join('\n\n');
+        return new Response(sse, { headers: { 'Content-Type': 'text/event-stream' } });
+      }
+      const ruleNames = [...system.matchAll(/— Rule: (.+?) —/g)].map((m) => m[1]);
+      const verdict = nextVerdict.verdict === 'ask_operator' ? 'escalate' : nextVerdict.verdict;
+      const elements = (ruleNames.length ? ruleNames : ['unknown']).map((rule) => ({
+        rule,
+        verdict,
+        message: nextVerdict.message,
+        note: nextVerdict.note,
+      }));
+      const chunk = (content: string) =>
+        `data: ${JSON.stringify({ id: 'fake', object: 'chat.completion.chunk', model: 'test-model', choices: [{ index: 0, delta: { content }, finish_reason: null }] })}`;
+      const done =
+        `data: ${JSON.stringify({ id: 'fake', object: 'chat.completion.chunk', model: 'test-model', choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] })}`;
+      const sse = [chunk(JSON.stringify({ elements })), done, 'data: [DONE]', ''].join('\n\n');
+      return new Response(sse, { headers: { 'Content-Type': 'text/event-stream' } });
     }
 
     if (fakeGarbage) {
@@ -451,10 +482,12 @@ describe('supervisor e2e', () => {
     // Origin name confirms autopilot won, not the rule.
     expect(payload.message.origin.name).toBe('supervisor:autopilot');
 
-    // The system prompt used the autopilot's standing prompt, not the rule's.
+    // Composition: the autopilot's standing mandate leads, and the matched
+    // rule rides along as context so autopilot answers with it in view.
     const req = fakeRequests.at(-1)!;
     expect(req.system).toContain(autopilotPrompt);
-    expect(req.system).not.toContain('This prompt should NOT be used');
+    expect(req.system).toContain('This prompt should NOT be used');
+    expect(req.system).toContain('standing mandate (autopilot)');
   });
 
   test('3c: escalate verdict → no send to agent, supervisor_event on dashboard, log row exists', async () => {

@@ -16,7 +16,7 @@ import {
   WHIFFLE_ENV,
 } from '@whiffle/core';
 import type { DbShape } from './db';
-import { verdictFor } from './llm';
+import { verdictFor , verdictStream, type RuleVerdict } from './llm';
 
 // ── constants (all sourced from PLAN.md C3) ────────────────────────────
 
@@ -351,8 +351,11 @@ export class SupervisorEngine {
     };
 
     // Selection: autopilot enabled > first in-scope llm rule (createdAt asc).
-    const selection = this.#select(instanceId, row, facts, turnText);
+    const selection = this.#compose(instanceId, row, facts, turnText);
     if (!selection) return;
+    // Attribution shorthand: a single composed rule keeps its identity on the
+    // event row; a composed set is attributed in the note, not a column.
+    const soleRuleId = selection.rules.length === 1 ? selection.rules[0].id : undefined;
 
     state.inFlight = true;
     // The visible half of the evaluation: the dashboard shows the supervisor
@@ -360,7 +363,7 @@ export class SupervisorEngine {
     this.#status?.(instanceId, {
       phase: 'evaluating',
       source: selection.source,
-      ruleId: selection.ruleId ?? null,
+      ruleId: soleRuleId ?? null,
       at: Date.now(),
     });
 
@@ -370,7 +373,7 @@ export class SupervisorEngine {
       state.inFlight = false;
       const event = this.#record(instanceId, {
         source: selection.source,
-        ruleId: selection.ruleId,
+        ruleId: soleRuleId,
         verdict: 'skipped',
         note: 'semaphore queue full',
       });
@@ -379,9 +382,19 @@ export class SupervisorEngine {
     }
 
     try {
-      // Assemble the prompt.
-      const system = `${HARNESS_PREAMBLE}\n\nOperator instructions:\n${selection.prompt}`;
       const user = this.#assembleUserBlock(instanceId, row, facts, turnText, files, commands, state);
+
+      // Rules without autopilot stream: one verdict object PER RULE, each
+      // acted on the moment its element completes — no waiting for the tail
+      // (operator order 2026-09-02). Autopilot instead absorbs the rules as
+      // context and answers with one composed verdict below.
+      if (!selection.autopilot) {
+        await this.#evaluateRuleStream(instanceId, state, selection.rules, user, config, resultTimestamp);
+        return;
+      }
+
+      // Assemble the prompt.
+      const system = `${HARNESS_PREAMBLE}\n\nOperator instructions:\n${selection.instructions}`;
 
       const result = await verdictFor({
         baseUrl: config.baseUrl,
@@ -397,7 +410,7 @@ export class SupervisorEngine {
         state.inFlight = false;
         const event = this.#record(instanceId, {
           source: selection.source,
-          ruleId: selection.ruleId,
+          ruleId: soleRuleId,
           verdict: 'skipped',
           note: 'stale (newer result arrived)',
         });
@@ -409,7 +422,7 @@ export class SupervisorEngine {
         state.inFlight = false;
         const event = this.#record(instanceId, {
           source: selection.source,
-          ruleId: selection.ruleId,
+          ruleId: soleRuleId,
           verdict: 'error',
           note: result.error,
           model: config.model,
@@ -439,7 +452,7 @@ export class SupervisorEngine {
         state.inFlight = false;
         const event = this.#record(instanceId, {
           source: selection.source,
-          ruleId: selection.ruleId,
+          ruleId: soleRuleId,
           verdict: 'silent',
           note: verdict.note || null,
           model: result.model,
@@ -457,7 +470,7 @@ export class SupervisorEngine {
           state.inFlight = false;
           const event = this.#record(instanceId, {
             source: selection.source,
-            ruleId: selection.ruleId,
+            ruleId: soleRuleId,
             verdict: 'skipped',
             note: 'unreachable',
             model: result.model,
@@ -468,9 +481,7 @@ export class SupervisorEngine {
         }
 
         // Deliver: same envelope shape as RuleEngine.#fire (rules.ts:284-304).
-        const originName = selection.source === 'autopilot'
-          ? 'supervisor:autopilot'
-          : `supervisor:${selection.ruleName}`;
+        const originName = selection.originName;
 
         sender.send({
           verb: 'send',
@@ -492,18 +503,20 @@ export class SupervisorEngine {
         // Mark that we initiated the next turn.
         state.initiatedTurn = true;
 
-        // Rule bookkeeping: non-silent rule verdicts call noteRuleFire.
-        if (selection.source === 'rule' && selection.ruleId) {
-          const standing = this.#db.ruleStateFor(selection.ruleId, instanceId);
+        // Rule bookkeeping: every composed rule shares the firing — each
+        // behind its own ceiling. "Fired" means "was part of an evaluation
+        // that acted", which is the honest reading under composition.
+        for (const rule of selection.rules) {
+          const standing = this.#db.ruleStateFor(rule.id, instanceId);
           if (!standing || standing.fireCount < RULE_FIRE_CEILING) {
-            this.#db.noteRuleFire(selection.ruleId, instanceId, false);
+            this.#db.noteRuleFire(rule.id, instanceId, false);
           }
         }
 
         state.inFlight = false;
         const event = this.#record(instanceId, {
           source: selection.source,
-          ruleId: selection.ruleId,
+          ruleId: soleRuleId,
           verdict: 'reply',
           message: verdict.message,
           note: coercionNote || verdict.note || null,
@@ -518,17 +531,17 @@ export class SupervisorEngine {
       const eventVerdict = effectiveVerdict === 'ask_operator' ? 'ask' as const : 'escalate' as const;
       state.inFlight = false;
 
-      // Rule bookkeeping for non-silent rule verdicts.
-      if (selection.source === 'rule' && selection.ruleId) {
-        const standing = this.#db.ruleStateFor(selection.ruleId, instanceId);
+      // Rule bookkeeping — same sharing as the reply path.
+      for (const rule of selection.rules) {
+        const standing = this.#db.ruleStateFor(rule.id, instanceId);
         if (!standing || standing.fireCount < RULE_FIRE_CEILING) {
-          this.#db.noteRuleFire(selection.ruleId, instanceId, false);
+          this.#db.noteRuleFire(rule.id, instanceId, false);
         }
       }
 
       const event = this.#record(instanceId, {
         source: selection.source,
-        ruleId: selection.ruleId,
+        ruleId: soleRuleId,
         verdict: eventVerdict,
         message: verdict.message,
         note: coercionNote || verdict.note || null,
@@ -550,36 +563,214 @@ export class SupervisorEngine {
 
   // ── selection ──────────────────────────────────────────────────────────
 
-  #select(
+  /**
+   * The streamed rules-only evaluation: the model answers with one verdict
+   * object per rule, and each element is ACTED ON the moment it completes —
+   * the first rule's reply is in the session while the model still writes
+   * the second's. Guided decoding pins the array shape, so the explicit
+   * array contract below overrides the preamble's single-object wording.
+   */
+  async #evaluateRuleStream(
+    instanceId: string,
+    state: InstanceState,
+    rules: Array<{ id: string; name: string; prompt: string }>,
+    user: string,
+    config: { baseUrl: string; apiKey?: string; model: string },
+    resultTimestamp: number,
+  ): Promise<void> {
+    const streamStart = Date.now();
+    const sections = rules.map((r) => `— Rule: ${r.name} —\n${r.prompt}`).join('\n\n');
+    const system =
+      `${HARNESS_PREAMBLE}\n\n` +
+      `This evaluation covers ${rules.length} standing rule(s). Emit EXACTLY one verdict ` +
+      `object per rule, in the order listed, shaped ` +
+      `{"rule": "<rule name>", "verdict": "silent"|"reply"|"escalate", "message": "...", "note": "..."}. ` +
+      `Judge each rule independently; a rule with nothing to warrant gets "silent". ` +
+      `The single-object contract above does not apply here.\n\n` +
+      `Operator instructions:\n${sections}`;
+
+    // Matched by name first, order as fallback — a model that mangles a name
+    // still lands its verdict on the next unclaimed rule instead of nowhere.
+    const unclaimed = [...rules];
+    let stale = false;
+
+    const act = (verdict: RuleVerdict): void => {
+      const byName = unclaimed.findIndex((r) => r.name === verdict.rule);
+      const rule = byName >= 0 ? unclaimed.splice(byName, 1)[0] : unclaimed.shift();
+      if (!rule) return; // more elements than rules — surplus is noise, drop it
+      const latencyMs = Date.now() - streamStart;
+
+      // Staleness: a newer turn ended while this stream was running. Already-
+      // delivered elements stand; the rest are recorded, not acted on.
+      if (!stale && state.resultTimestamp > resultTimestamp) stale = true;
+      if (stale) {
+        const event = this.#record(instanceId, {
+          source: 'rule', ruleId: rule.id, verdict: 'skipped',
+          note: 'stale (newer result arrived)', model: config.model, latencyMs,
+        });
+        this.#publish(instanceId, event);
+        return;
+      }
+
+      let effective = verdict.verdict;
+      let note: string | null = verdict.note || null;
+
+      if (effective === 'reply' && state.muted) {
+        const event = this.#record(instanceId, {
+          source: 'rule', ruleId: rule.id, verdict: 'skipped',
+          note: 'muted (consecutive cap reached)', model: config.model, latencyMs,
+        });
+        this.#publish(instanceId, event);
+        return;
+      }
+      if (effective === 'reply' && state.consecutive >= SUPERVISOR_CONSECUTIVE_MAX) {
+        effective = 'escalate';
+        note = `autopilot hit its consecutive-reply limit (${SUPERVISOR_CONSECUTIVE_MAX})`;
+        state.muted = true;
+      }
+
+      if (effective === 'reply') {
+        const freshRow = this.#db.listInstances().find((r) => r.id === instanceId);
+        const sender = freshRow ? this.#agent(freshRow.machineId) : undefined;
+        if (!sender || !freshRow) {
+          const event = this.#record(instanceId, {
+            source: 'rule', ruleId: rule.id, verdict: 'skipped',
+            note: 'unreachable', model: config.model, latencyMs,
+          });
+          this.#publish(instanceId, event);
+          return;
+        }
+        sender.send({
+          verb: 'send',
+          machineId: freshRow.machineId,
+          instanceId,
+          payload: {
+            instanceId,
+            message: {
+              type: 'user',
+              message: { role: 'user', content: verdict.message },
+              parent_tool_use_id: null,
+              origin: { kind: 'system', name: `supervisor:${rule.name}` },
+              shouldQuery: true,
+            },
+            urgent: false,
+          },
+        });
+        state.initiatedTurn = true;
+      }
+
+      if (effective !== 'silent') {
+        const standing = this.#db.ruleStateFor(rule.id, instanceId);
+        if (!standing || standing.fireCount < RULE_FIRE_CEILING) {
+          this.#db.noteRuleFire(rule.id, instanceId, false);
+        }
+      }
+      if (effective === 'escalate') this.#telegram?.onSupervisor(instanceId, verdict.message);
+
+      const event = this.#record(instanceId, {
+        source: 'rule',
+        ruleId: rule.id,
+        verdict: effective === 'escalate' ? 'escalate' : effective,
+        message: effective === 'silent' ? null : verdict.message,
+        note,
+        model: config.model,
+        latencyMs,
+      });
+      this.#publish(instanceId, event);
+    };
+
+    const outcome = await verdictStream({
+      baseUrl: config.baseUrl,
+      apiKey: config.apiKey,
+      model: config.model,
+      system,
+      user,
+      timeoutMs: EVALUATION_TIMEOUT_MS,
+      // 600 per rule (PLAN C2's single-verdict budget, multiplied): each
+      // element is its own short verdict.
+      maxOutputTokens: 600 * rules.length,
+      onVerdict: act,
+    });
+
+    if ('error' in outcome) {
+      // Whatever streamed before the failure already acted; the rules the
+      // stream never reached are recorded as this one error.
+      const event = this.#record(instanceId, {
+        source: 'rule',
+        ruleId: unclaimed.length === 1 ? unclaimed[0].id : undefined,
+        verdict: 'error',
+        note: outcome.count > 0 ? `${outcome.error} (after ${outcome.count} verdicts)` : outcome.error,
+        model: config.model,
+      });
+      this.#publish(instanceId, event);
+    }
+    state.inFlight = false;
+  }
+
+  /**
+   * COMPOSITION, not selection (operator order 2026-09-02): every matched
+   * rule's instructions ride in the SAME evaluation, and when autopilot is on
+   * the matched rules are fed to IT as context — the autopilot answers with
+   * every standing rule in view. One call, one verdict, one voice into the
+   * session; no rule is silently ditched in favor of another.
+   */
+  #compose(
     instanceId: string,
     row: { autopilot?: { enabled: boolean; prompt: string; updatedAt: number } | null },
     facts: RuleFacts,
     turnText: string,
-  ): { source: 'autopilot' | 'rule'; prompt: string; ruleId?: string; ruleName?: string } | null {
-    // Autopilot takes priority.
-    if (row.autopilot?.enabled && row.autopilot.prompt) {
-      return { source: 'autopilot', prompt: row.autopilot.prompt };
-    }
+  ): {
+    source: 'autopilot' | 'rule';
+    /** The standing autopilot prompt, when the session has one armed. */
+    autopilot: string | null;
+    /** The full operator-instructions block, sections labeled by origin. */
+    instructions: string;
+    /** Every composed rule, for bookkeeping and attribution. */
+    rules: Array<{ id: string; name: string; prompt: string }>;
+    /** The transcript label this evaluation speaks under. */
+    originName: string;
+  } | null {
+    const autopilot = row.autopilot?.enabled && row.autopilot.prompt ? row.autopilot.prompt : null;
 
-    // First enabled in-scope action==='llm' rule, createdAt asc.
-    const rules = this.#db.listRules()
+    // Every enabled in-scope llm rule whose trigger matches — ALL of them.
+    const matched = this.#db.listRules()
       .filter((r): r is Rule => r.enabled && r.action === 'llm' && r.timing === 'turn')
-      .sort((a, b) => a.createdAt - b.createdAt);
+      .sort((a, b) => a.createdAt - b.createdAt)
+      .filter((rule) => {
+        if (!rule.prompt) return false;
+        if (!ruleInScope(rule.scope, facts)) return false;
+        if (rule.trigger === 'pattern') {
+          const text = turnText.length > RULE_SCAN_LIMIT
+            ? turnText.slice(-RULE_SCAN_LIMIT)
+            : turnText;
+          if (!ruleMatches(rule, text)) return false;
+        }
+        return true;
+      });
 
-    for (const rule of rules) {
-      if (!ruleInScope(rule.scope, facts)) continue;
-      // Trigger check: every-turn always matches; pattern uses core matcher.
-      if (rule.trigger === 'pattern') {
-        const text = turnText.length > RULE_SCAN_LIMIT
-          ? turnText.slice(-RULE_SCAN_LIMIT)
-          : turnText;
-        if (!ruleMatches(rule, text)) continue;
-      }
-      if (!rule.prompt) continue;
-      return { source: 'rule', prompt: rule.prompt, ruleId: rule.id, ruleName: rule.name };
+    if (!autopilot && matched.length === 0) return null;
+
+    const sections: string[] = [];
+    if (autopilot) sections.push(`— Your standing mandate (autopilot) —\n${autopilot}`);
+    for (const rule of matched) sections.push(`— Rule: ${rule.name} —\n${rule.prompt}`);
+    if (sections.length > 1) {
+      sections.push(
+        'All instructions above apply together. One short reply may address ' +
+        'several at once; in your note, name which instruction(s) drove the verdict.'
+      );
     }
 
-    return null;
+    return {
+      source: autopilot ? 'autopilot' : 'rule',
+      autopilot,
+      instructions: sections.join('\n\n'),
+      rules: matched.map((r) => ({ id: r.id, name: r.name, prompt: r.prompt ?? '' })),
+      originName: autopilot
+        ? 'supervisor:autopilot'
+        : matched.length === 1
+          ? `supervisor:${matched[0].name}`
+          : 'supervisor:rules',
+    };
   }
 
   // ── prompt assembly ────────────────────────────────────────────────────

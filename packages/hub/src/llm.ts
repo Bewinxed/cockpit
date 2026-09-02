@@ -1,5 +1,7 @@
 import {
   generateObject,
+  streamText,
+  Output,
   jsonSchema,
   APICallError,
   NoObjectGeneratedError,
@@ -55,6 +57,114 @@ const VerdictJsonSchema = jsonSchema<Verdict>(
   },
 );
 
+/**
+ * One provider construction for every caller. The SDK appends
+ * `/chat/completions` to baseURL — it wants the API root (`…/v1`) while our
+ * config stores the server root, the same value probe() takes; normalize so
+ * both share one convention. `supportsStructuredOutputs` must be declared or
+ * the provider silently strips `response_format` and the model free-texts.
+ */
+function providerFor(baseUrl: string, apiKey?: string) {
+  const root = baseUrl.replace(/\/+$/, '');
+  return createOpenAICompatible({
+    name: 'supervisor',
+    baseURL: root.endsWith('/v1') ? root : `${root}/v1`,
+    apiKey,
+    supportsStructuredOutputs: true,
+  });
+}
+
+/**
+ * One rule's verdict inside a streamed evaluation. `rule` names which rule
+ * this element answers; rules cannot ask_operator (that is autopilot's tool),
+ * so the space is silent/reply/escalate.
+ */
+export const RuleVerdictSchema = v.object({
+  rule: v.string(),
+  verdict: v.union([v.literal('silent'), v.literal('reply'), v.literal('escalate')]),
+  message: v.string(),
+  note: v.string(),
+});
+
+export type RuleVerdict = v.InferOutput<typeof RuleVerdictSchema>;
+
+const RuleVerdictJsonSchema = jsonSchema<RuleVerdict>(
+  {
+    type: 'object',
+    properties: {
+      rule: { type: 'string' },
+      verdict: { type: 'string', enum: ['silent', 'reply', 'escalate'] },
+      message: { type: 'string' },
+      note: { type: 'string' },
+    },
+    required: ['rule', 'verdict', 'message', 'note'],
+    additionalProperties: false,
+  },
+  {
+    validate: (value) => {
+      const result = v.safeParse(RuleVerdictSchema, value);
+      return result.success
+        ? { success: true, value: result.output }
+        : { success: false, error: new Error('rule verdict schema mismatch') };
+    },
+  },
+);
+
+export interface VerdictStreamRequest {
+  baseUrl: string;
+  apiKey?: string;
+  model: string;
+  system: string;
+  user: string;
+  timeoutMs: number;
+  /** Budget scales with the number of rules; the caller knows how many. */
+  maxOutputTokens: number;
+  /**
+   * Invoked per completed array element AS IT STREAMS — the whole point:
+   * the first rule's verdict acts while the model is still writing the rest.
+   */
+  onVerdict: (verdict: RuleVerdict) => void | Promise<void>;
+}
+
+export type VerdictStreamResult =
+  | { count: number; latencyMs: number; model: string }
+  | { count: number; error: string };
+
+/**
+ * The streamed, per-rule evaluation: the model emits one verdict object per
+ * rule and `elementStream` yields each element the moment it completes.
+ * Elements already delivered stay delivered when the stream later fails —
+ * the error return carries how many made it out.
+ */
+export async function verdictStream(req: VerdictStreamRequest): Promise<VerdictStreamResult> {
+  const provider = providerFor(req.baseUrl, req.apiKey);
+  const t0 = Date.now();
+  let count = 0;
+  try {
+    const result = streamText({
+      model: provider(req.model),
+      output: Output.array({ element: RuleVerdictJsonSchema }),
+      system: req.system,
+      prompt: req.user,
+      maxOutputTokens: req.maxOutputTokens,
+      temperature: 0.2,
+      maxRetries: 1,
+      abortSignal: AbortSignal.timeout(req.timeoutMs),
+    });
+    for await (const element of result.elementStream) {
+      count++;
+      await req.onVerdict(element);
+    }
+    // A garbage or truncated stream can END without ever yielding — the SDK
+    // reports the parse failure on the output promise, not the iterator.
+    // Awaiting it here turns a silent empty stream into a classified error.
+    await result.output;
+    return { count, latencyMs: Date.now() - t0, model: req.model };
+  } catch (err: unknown) {
+    return { count, error: classify(err) };
+  }
+}
+
 // ── verdictFor ──────────────────────────────────────────────────────────
 
 export interface VerdictRequest {
@@ -79,20 +189,7 @@ export type VerdictResult =
  * the hub already uses for router failures (telegram-media.ts `refusal()`).
  */
 export async function verdictFor(req: VerdictRequest): Promise<VerdictResult> {
-  // The SDK appends `/chat/completions` to baseURL — it wants the API root
-  // (`…/v1`), while our config stores the server root, the same value probe()
-  // takes. Normalize here so both share one convention; a configured URL that
-  // already ends in /v1 passes through untouched.
-  const root = req.baseUrl.replace(/\/+$/, '');
-  const provider = createOpenAICompatible({
-    name: 'supervisor',
-    baseURL: root.endsWith('/v1') ? root : `${root}/v1`,
-    apiKey: req.apiKey,
-    // Without this the provider silently strips `response_format` and the
-    // model free-texts its answer — vLLM behind the router supports guided
-    // JSON, so declare it and let generateObject send the schema.
-    supportsStructuredOutputs: true,
-  });
+  const provider = providerFor(req.baseUrl, req.apiKey);
 
   const t0 = Date.now();
   try {
