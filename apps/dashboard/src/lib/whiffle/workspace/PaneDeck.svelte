@@ -81,10 +81,10 @@
   /* The shadow sits on a pseudo-element and fades rather than tweening
      `box-shadow`: the card is a whole transcript, and repainting one for a
      shadow every frame would cost frames in the middle of a gesture. The
-     radius does tween, against the ledger's rule, and on purpose: the
-     corners squaring off in one frame at landing was the snap the operator
-     saw, and a scale already changing the outline makes the tween a repaint
-     of what is repainting anyway. The clip is a child because
+     radius tweens with the scale: the corners squaring off in one frame at
+     landing was the visible snap, and a scale already changing the outline
+     makes the tween a repaint of what is repainting anyway. The clip is a
+     child because
      `overflow: hidden` on the lift would cut the shadow off.
 
      Two elements carry the two transforms. The outer card takes the

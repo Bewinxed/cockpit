@@ -943,7 +943,7 @@ other state change is instantaneous.
   settle on a status arrival; panel and drawer entry/exit.
 - **Never:** row reflow, table sort animation, number count-ups, hover lifts on
   table rows, staggered page-load fades, bounce or elastic easing — and never a
-  transition on `border-radius`, `grid-template-*`, `width`/`height`/`padding`/`margin`/`top`/`left`/`box-shadow`.
+  transition on `grid-template-*`, `width`/`height`/`padding`/`margin`/`top`/`left`/`box-shadow`.
 - **`prefers-reduced-motion`:** all four duration tokens collapse to 0 and a global
   rule caps every animation and transition at 1ms. The breath becomes a static
   ring — the *information* survives, only the movement stops.
