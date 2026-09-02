@@ -81,11 +81,12 @@
   /* The shadow sits on a pseudo-element and fades rather than tweening
      `box-shadow`: the card is a whole transcript, and repainting one for a
      shadow every frame would cost frames in the middle of a gesture. The
-     radius tweens with the scale: the corners squaring off in one frame at
-     landing was the visible snap, and a scale already changing the outline
-     makes the tween a repaint of what is repainting anyway. The clip is a
-     child because
-     `overflow: hidden` on the lift would cut the shadow off.
+     radius steps at the two ends rather than tweening: the corners round
+     the instant the card is picked up and square off once the set-down has
+     finished, because a tweened radius is a repaint of the clip and the
+     shadow every frame. The transforms and the opacity are the only
+     per-frame work, and they stay on the compositor. The clip is a child
+     because `overflow: hidden` on the lift would cut the shadow off.
 
      Two elements carry the two transforms. The outer card takes the
      per-frame translate the fingers write inline; the inner lift owns the
@@ -114,9 +115,10 @@
     min-height: 0;
     transform: scale(1);
     border-radius: 0;
+    will-change: transform;
     transition:
       transform var(--c-300) var(--e-toggle),
-      border-radius var(--c-300) var(--e-toggle);
+      border-radius 0s linear var(--c-300);
   }
   .lift::before {
     content: '';
@@ -144,7 +146,7 @@
     border-radius: var(--radius-modal);
     transition:
       transform calc(var(--c-300) * 0.6) var(--e-in),
-      border-radius calc(var(--c-300) * 0.6) var(--e-in);
+      border-radius 0s;
   }
   .deck.lifted .lift::before {
     opacity: 1;
