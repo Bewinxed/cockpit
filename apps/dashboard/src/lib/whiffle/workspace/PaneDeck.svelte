@@ -2,37 +2,54 @@
   /**
    * The phone's groups, as a vertical stack of cards.
    *
-   * Every group is mounted and only the focused one is visible, so a split
-   * made at the desk is reachable here: two fingers drag the stack and the
-   * neighbour comes into view under them. Keeping the others mounted is
-   * cheap — a conversation is mounted once by `PaneHost` and docked into
-   * its group's slot, so a card that is put away holds nothing heavy of its
-   * own. Only the focused group takes the one-finger tab swipe, and only it
-   * prewarms its neighbouring tabs; the rest mount just their active tab.
+   * Every group is mounted, so a split made at the desk is reachable here:
+   * two fingers drag the stack and the neighbour comes into view under
+   * them. Keeping the others mounted is cheap — a conversation is mounted
+   * once by `PaneHost` and docked into its group's slot, so a card that is
+   * put away holds nothing heavy of its own. Only the focused group takes
+   * the one-finger tab swipe, and only it prewarms its neighbouring tabs;
+   * the rest mount just their active tab.
+   *
+   * The two neighbours are painted at rest, parked a card away above and
+   * below where the deck's overflow hides them. Painting them on the claim
+   * frame instead was the stutter: a whole transcript's first paint landed
+   * in the same frame as the lift, and both the transition and the first
+   * few drag frames went with it.
    */
   import PaneLeaf from './PaneLeaf.svelte';
   import { workspace } from './workspace.svelte';
-  import { createDeck } from './deck.svelte';
+  import { createDeck, GAP } from './deck.svelte';
 
   const deck = createDeck(
     () => workspace.leaves,
     () => workspace.focusedLeafId
   );
+
+  const focusedIndex = $derived(
+    workspace.leaves.findIndex((leaf) => leaf.id === workspace.focusedLeafId)
+  );
+
+  /** A card's place in the stack: the fingers' travel on top of its parking spot. */
+  const place = (delta: number, offset: number) =>
+    delta === 0
+      ? `translateY(${offset}px)`
+      : `translateY(calc(${delta * 100}% + ${delta * GAP + offset}px))`;
 </script>
 
 <div class="deck" class:lifted={deck.lifted} use:deck.action>
-  {#each workspace.leaves as leaf (leaf.id)}
-    {@const focused = leaf.id === workspace.focusedLeafId}
-    {@const offset = deck.offsetOf(leaf.id)}
-    {@const shown = focused || offset !== null}
+  {#each workspace.leaves as leaf, index (leaf.id)}
+    {@const delta = index - focusedIndex}
+    {@const focused = delta === 0}
     <div
       class="card"
-      class:card-hidden={!shown}
+      class:card-hidden={Math.abs(delta) > 1}
       inert={!focused}
-      style:transform={offset === null ? 'translateY(0)' : `translateY(${offset}px)`}
+      style:transform={place(delta, deck.offset)}
     >
-      <div class="clip">
-        <PaneLeaf {leaf} swipeable={focused} />
+      <div class="lift">
+        <div class="clip">
+          <PaneLeaf {leaf} swipeable={focused} />
+        </div>
       </div>
     </div>
   {/each}
@@ -57,6 +74,8 @@
     min-height: 0;
     overflow: hidden;
     background: var(--surface-sunken);
+    /* Pinch belongs to nobody here; two fingers are the deck's. */
+    touch-action: pan-x pan-y;
   }
 
   /* Only transform and opacity ever animate here: the card is a whole
@@ -64,7 +83,12 @@
      cost frames in the middle of a gesture. So the shadow sits on a
      pseudo-element and fades, and the radius simply appears — under a
      scale already in motion it is not seen arriving. The clip is a child
-     because `overflow: hidden` on the card would cut the shadow off. */
+     because `overflow: hidden` on the lift would cut the shadow off.
+
+     Two elements carry the two transforms. The outer card takes the
+     per-frame translate the fingers write inline; the inner lift owns the
+     scale and its transition. On one element the inline transform would
+     replace the scale outright every frame, and the lift would snap. */
   .card {
     position: absolute;
     inset: 0;
@@ -72,15 +96,24 @@
     min-width: 0;
     min-height: 0;
     will-change: transform;
-    transition: scale 180ms var(--ease-entry);
   }
-  .card::before {
+  .lift {
+    position: relative;
+    display: flex;
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    transform: scale(1);
+    transition: transform 180ms var(--ease-entry);
+  }
+  .lift::before {
     content: '';
     position: absolute;
     inset: 0;
     border-radius: inherit;
     box-shadow: var(--shadow-overlay);
     opacity: 0;
+    will-change: opacity;
     transition: opacity 180ms var(--ease-entry);
     pointer-events: none;
   }
@@ -94,11 +127,11 @@
   }
 
   /* The transition runs both ways, so the card sets down as the spring lands. */
-  .deck.lifted .card {
-    scale: 0.96;
+  .deck.lifted .lift {
+    transform: scale(0.96);
     border-radius: var(--radius-modal);
   }
-  .deck.lifted .card::before {
+  .deck.lifted .lift::before {
     opacity: 1;
   }
 
@@ -144,14 +177,14 @@
 
   /* Fewer and gentler, not none: the fades stay, the movement goes. */
   @media (prefers-reduced-motion: reduce) {
-    .card {
+    .lift {
       transition: none;
     }
     .dot {
       transition: opacity 160ms var(--ease-entry);
     }
-    .deck.lifted .card {
-      scale: 1;
+    .deck.lifted .lift {
+      transform: scale(1);
       border-radius: 0;
     }
   }

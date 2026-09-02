@@ -52,10 +52,12 @@ export function createDeck(getLeaves: () => LeafNode[], getFocusedId: () => stri
   let offset = $state(0);
   let lifted = $state(false);
   let dragging = $state(false);
-  let height = $state(0);
 
   // Not reactive: read only inside handlers, and writing them per touchmove
-  // would schedule a render for values nothing renders.
+  // would schedule a render for values nothing renders. The height is
+  // measured once, on the claim frame — the neighbours park themselves a
+  // card away in CSS, so nothing here needs it per frame.
+  let height = 0;
   let phase: Phase = 'idle';
   let startX = 0;
   let startY = 0;
@@ -165,23 +167,20 @@ export function createDeck(getLeaves: () => LeafNode[], getFocusedId: () => stri
     },
 
     /**
-     * Where a card sits, in px. The focused card rides the fingers; the
-     * neighbours wait one card away either side, and every other card stays
-     * put away.
+     * How far the stack has moved, in px. The focused card rides this
+     * directly; the neighbours add it to their parking place a card away.
      */
-    offsetOf(leafId: string): number | null {
-      if (!lifted) return null;
-      if (leafId === getFocusedId()) return offset;
-      const { above, below } = neighbours();
-      if (above && leafId === above.id) return offset - (height + GAP);
-      if (below && leafId === below.id) return offset + (height + GAP);
-      return null;
+    get offset() {
+      return offset;
     },
 
     /**
-     * Attaches the listeners. `touchmove` must be non-passive so the deck
-     * can claim the pair once it owns it — which is also what stops iOS
-     * scrolling the page, or pinching, with the same two fingers.
+     * Attaches the listeners. Both `touchstart` and `touchmove` are
+     * non-passive: the move so the deck can claim the pair once it owns it,
+     * and the start so the second finger's landing is refused to Safari
+     * before its own two-finger recognisers — pinch, and the page scroll —
+     * get a look at it. A single finger is never prevented; it belongs to
+     * the transcript's scroll and the tab swipe.
      */
     action(node: HTMLElement) {
       const onStart = (event: TouchEvent) => {
@@ -192,6 +191,7 @@ export function createDeck(getLeaves: () => LeafNode[], getFocusedId: () => stri
           phase = 'idle';
           return;
         }
+        event.preventDefault();
         if (phase === 'claimed') return;
         const mid = midpoint(event.touches);
         startX = mid.x;
@@ -238,7 +238,7 @@ export function createDeck(getLeaves: () => LeafNode[], getFocusedId: () => stri
         phase = 'idle';
       };
 
-      node.addEventListener('touchstart', onStart, { passive: true });
+      node.addEventListener('touchstart', onStart, { passive: false });
       node.addEventListener('touchmove', onMove, { passive: false });
       node.addEventListener('touchend', onEnd, { passive: true });
       node.addEventListener('touchcancel', onEnd, { passive: true });
