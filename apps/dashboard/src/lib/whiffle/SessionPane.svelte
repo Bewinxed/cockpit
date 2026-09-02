@@ -359,9 +359,15 @@
   // loop (thousands of `supportedCommands … failed` a second). Only a change in
   // whether this pane addresses a live session, or the hub becoming reachable,
   // should start a load: a first run before the socket opens is refused, and
-  // the MCP ask keeps that refusal as `[]`.
+  // the MCP ask keeps that refusal as `[]`. `isLive` is the board's notion —
+  // a sleeping row is on the board too — and a sleeping session has no process
+  // to ask, so the gate is the running list.
   $effect(() => {
-    const live = !!session && isLive && !!machineId && whiffle.status === 'connected';
+    const live =
+      !!session &&
+      whiffle.runningInstances.some((row) => row.id === viewId) &&
+      !!machineId &&
+      whiffle.status === 'connected';
     if (!live) return;
     const id = viewId;
     const mid = machineId;

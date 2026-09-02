@@ -132,6 +132,13 @@
    * released, and the indicator should stay until it has.
    */
   let catching = $state(false);
+  // The transcript opens on the latest message, not the top. virtua fires an
+  // onscroll on mount (scrollTop 0, tall content) which would flip `atBottom`
+  // false before the tail-follow effect runs, leaving the reader at the top —
+  // so the first landing is unconditional, and only then does `atBottom` govern.
+  // Declared up here because the build reads it, and the server evaluates the
+  // rows before the scroller's own state is declared.
+  let landed = $state(false);
   /**
    * What the session looked like when these rows were last built.
    *
@@ -230,9 +237,19 @@
     // (the post-SSR "jumps to the top then back" flash). A prepend is exact:
     // the tail row is unchanged and the old first row now sits deeper.
     // Returned WITH the rows so the Virtualizer reads both in the same flush.
+    //
+    // Only once LANDED. Before the first landing there is no position to
+    // keep — `land` teleports to the tail regardless — and asking for a shift
+    // then is worse than useless: virtua has not attached its scroller yet
+    // (that waits a tick after mount), so the anchoring jump stays pending
+    // until the landing's own write has already put the scroller at its
+    // maximum. Applied on top of that, the jump is clamped, fires no scroll
+    // event, and virtua's range stays latched at empty until the reader
+    // scrolls — a switched-to pane with a sized box and not one row in it.
     const oldFirst = frozen[0]?.key;
     const oldLast = frozen[frozen.length - 1]?.key;
     const shifted =
+      untrack(() => landed) &&
       frozen.length > 0 &&
       next.length > frozen.length &&
       next[next.length - 1]?.key === oldLast &&
@@ -348,11 +365,6 @@
       as rows are still being measured, which a one-shot scrollTop cannot. */
   let list = $state<{ scrollToIndex: (i: number, opts?: { align?: 'start' | 'center' | 'end' | 'nearest' }) => void } | undefined>();
   let atBottom = $state(true);
-  // The transcript opens on the latest message, not the top. virtua fires an
-  // onscroll on mount (scrollTop 0, tall content) which would flip `atBottom`
-  // false before the tail-follow effect runs, leaving the reader at the top —
-  // so the first landing is unconditional, and only then does `atBottom` govern.
-  let landed = $state(false);
 
   function onscroll(): void {
     if (!scroller || !landed) return;

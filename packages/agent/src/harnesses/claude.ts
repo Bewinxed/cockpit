@@ -1067,18 +1067,19 @@ const isWaiting = (line: { type?: unknown; subtype?: unknown }): boolean =>
 /**
  * The running answer to "is this child waiting?", one ring line at a time. An
  * idle child does not stay silent: the CLI keeps writing `system` notices
- * (`commands_changed` whenever a skills directory moves) and `control_response`
- * lines after its `result`, so the LAST line almost never says anything about
- * the turn. Those carry the previous verdict forward; every other line — a
- * `result` or `init` (waiting), an assistant/user/stream/control_request line
- * (a turn in flight) — replaces it. Non-JSON says nothing either.
+ * (`commands_changed` whenever a skills directory moves), `rate_limit_event`
+ * and `control_response` lines after its `result`, so the LAST line almost
+ * never says anything about the turn. Those carry the previous verdict
+ * forward; every other line — a `result` or `init` (waiting), an
+ * assistant/user/stream/control_request line (a turn in flight) — replaces
+ * it. Non-JSON says nothing either.
  */
 const idleVerdict = (
   line: { type?: unknown; subtype?: unknown } | undefined,
   previous: boolean | undefined
 ): boolean | undefined => {
   if (line === undefined) return previous;
-  if (line.type === 'control_response') return previous;
+  if (line.type === 'control_response' || line.type === 'rate_limit_event') return previous;
   if (line.type === 'system' && line.subtype !== 'init') return previous;
   return isWaiting(line);
 };
