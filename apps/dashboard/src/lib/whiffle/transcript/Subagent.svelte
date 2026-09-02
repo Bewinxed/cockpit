@@ -1,7 +1,8 @@
 <script lang="ts">
   /**
-   * A subagent — a delegate's own run, folded onto the parent's spine as a
-   * branch you can watch rather than a paragraph you read. The head is its
+   * A harness subagent — the run a Task call spawned in-process, folded onto
+   * the parent's spine as a branch you can watch rather than a paragraph you
+   * read. A fleet delegate is a session of its own and has its own card. The head is its
    * identity and a status pill; the live line says what it is doing at this
    * instant; the fold opens its own transcript, rendered through the same row
    * grammar as the main one (`branchRows`).
@@ -106,6 +107,7 @@
 <style>
   /* The spine: a structural 2px rail, the same indent every rail block uses. */
   .branch {
+    --glyph: calc(13px + var(--space-2));
     margin: var(--space-4) 0 0 var(--space-2);
     padding-left: var(--space-3);
     background: var(--rail) left top / 2px 100% no-repeat;
@@ -274,7 +276,7 @@
     display: flex;
     align-items: baseline;
     gap: var(--space-2);
-    margin: var(--space-1) 0 0 var(--space-5);
+    margin: var(--space-1) 0 0 var(--glyph);
     font-size: var(--text-sm);
     color: var(--ink-body);
     line-height: var(--leading-body);
@@ -303,7 +305,7 @@
      --radius-control (8px) less its --space-1 (4px) padding is the --radius-mark
      the report inside it carries, so no two nested corners share a radius. */
   .inner {
-    margin: var(--space-2) 0 0 var(--space-5);
+    margin: var(--space-2) 0 0 var(--glyph);
     padding: var(--space-1);
     border-radius: var(--radius-control);
     background: var(--surface-sunken);

@@ -17,6 +17,8 @@ export type Row =
   | { kind: 'tools'; key: string; messages: Message[] }
   | { kind: 'question'; key: string; message: Message }
   | { kind: 'subagent'; key: string; branch: SubagentState; spawn: Message }
+  /** A `delegate` / `start_session` call: the fleet session it spawned, as a fold. */
+  | { kind: 'delegate'; key: string; message: Message }
   | { kind: 'stream'; key: string; text: string }
   | { kind: 'thinking'; key: string; text: string; live: boolean }
   | { kind: 'livetool'; key: string; glance: ToolGlance }
@@ -123,6 +125,15 @@ const isToolMsg = (m: Message): boolean => m.type === 'tool.use' || m.type === '
 const isQuestionMsg = (m: Message): boolean =>
   isToolMsg(m) && m.metadata?.toolName === ASK_USER_QUESTION;
 
+/**
+ * A hand-off that spawned a session of its own. A plain `handoff` addresses a
+ * session that already exists and stays a tool row; these two open a fleet
+ * instance the card follows.
+ */
+const isDelegateMsg = (m: Message): boolean =>
+  m.type === 'tool.handoff' &&
+  (m.metadata?.handoffKind === 'delegate' || m.metadata?.handoffKind === 'start');
+
 /** The branch a tool.use spawned, when it opened one — a real subagent fold. */
 const branchOf = (m: Message, subagents: Record<string, SubagentState>): SubagentState | null => {
   const id = m.metadata?.toolId;
@@ -190,6 +201,12 @@ export function foldMessages(
       continue;
     }
 
+    if (isDelegateMsg(m)) {
+      rows.push({ kind: 'delegate', key: `d:${keyOf(m, i)}`, message: m });
+      i++;
+      continue;
+    }
+
     if (isToolMsg(m)) {
       const run: Message[] = [];
       const start = i;
@@ -197,6 +214,7 @@ export function foldMessages(
         i < messages.length &&
         isToolMsg(messages[i]) &&
         !isQuestionMsg(messages[i]) &&
+        !isDelegateMsg(messages[i]) &&
         !branchOf(messages[i], subagents)
       ) {
         run.push(messages[i]);

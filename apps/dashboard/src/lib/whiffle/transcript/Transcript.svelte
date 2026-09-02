@@ -17,6 +17,7 @@
   import ToolGroup from './ToolGroup.svelte';
   import QuestionCard from './QuestionCard.svelte';
   import Subagent from './Subagent.svelte';
+  import Delegate from './Delegate.svelte';
   import Thinking from './Thinking.svelte';
   import Queued from './Queued.svelte';
   import MessageBody from './MessageBody.svelte';
@@ -655,6 +656,8 @@
           <SystemLine harness={row.note} />
         {:else if row.kind === 'subagent'}
           <Subagent branch={row.branch} spawn={row.spawn} />
+        {:else if row.kind === 'delegate'}
+          <Delegate message={row.message} />
         {:else if row.kind === 'thinking'}
           <Thinking text={row.text} live={row.live} />
         {:else if row.kind === 'stream'}
