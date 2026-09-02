@@ -78,17 +78,26 @@
     touch-action: pan-x pan-y;
   }
 
-  /* Only transform and opacity ever animate here: the card is a whole
-     transcript, and repainting one for a shadow or a radius tween would
-     cost frames in the middle of a gesture. So the shadow sits on a
-     pseudo-element and fades, and the radius simply appears — under a
-     scale already in motion it is not seen arriving. The clip is a child
-     because `overflow: hidden` on the lift would cut the shadow off.
+  /* The shadow sits on a pseudo-element and fades rather than tweening
+     `box-shadow`: the card is a whole transcript, and repainting one for a
+     shadow every frame would cost frames in the middle of a gesture. The
+     radius does tween, against the ledger's rule, and on purpose: the
+     corners squaring off in one frame at landing was the snap the operator
+     saw, and a scale already changing the outline makes the tween a repaint
+     of what is repainting anyway. The clip is a child because
+     `overflow: hidden` on the lift would cut the shadow off.
 
      Two elements carry the two transforms. The outer card takes the
      per-frame translate the fingers write inline; the inner lift owns the
      scale and its transition. On one element the inline transform would
-     replace the scale outright every frame, and the lift would snap. */
+     replace the scale outright every frame, and the lift would snap.
+
+     Two timings, one each way. The pick-up rides the entry curve, quick
+     and masked by the fingers already moving; the set-down is the eye's,
+     so it takes the toggle curve at the base duration — symmetric, and
+     long enough that the card is seen arriving. The set-down is declared on
+     the base rule and the pick-up on the lifted one, which is how a single
+     `transition` property gets a different value in each direction. */
   .card {
     position: absolute;
     inset: 0;
@@ -104,7 +113,10 @@
     min-width: 0;
     min-height: 0;
     transform: scale(1);
-    transition: transform 180ms var(--ease-entry);
+    border-radius: 0;
+    transition:
+      transform var(--c-300) var(--ease-toggle),
+      border-radius var(--c-300) var(--ease-toggle);
   }
   .lift::before {
     content: '';
@@ -114,7 +126,7 @@
     box-shadow: var(--shadow-overlay);
     opacity: 0;
     will-change: opacity;
-    transition: opacity 180ms var(--ease-entry);
+    transition: opacity var(--c-300) var(--ease-toggle);
     pointer-events: none;
   }
   .clip {
@@ -126,13 +138,17 @@
     overflow: hidden;
   }
 
-  /* The transition runs both ways, so the card sets down as the spring lands. */
+  /* The pick-up: 180ms, derived from the base beat the way `--breath` is. */
   .deck.lifted .lift {
     transform: scale(0.96);
     border-radius: var(--radius-modal);
+    transition:
+      transform calc(var(--c-300) * 0.6) var(--ease-entry),
+      border-radius calc(var(--c-300) * 0.6) var(--ease-entry);
   }
   .deck.lifted .lift::before {
     opacity: 1;
+    transition: opacity calc(var(--c-300) * 0.6) var(--ease-entry);
   }
 
   /* `visibility`, never `display`, and only the hidden state is declared —
@@ -177,7 +193,10 @@
 
   /* Fewer and gentler, not none: the fades stay, the movement goes. */
   @media (prefers-reduced-motion: reduce) {
-    .lift {
+    .lift,
+    .lift::before,
+    .deck.lifted .lift,
+    .deck.lifted .lift::before {
       transition: none;
     }
     .dot {

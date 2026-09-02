@@ -43,6 +43,13 @@ const STIFFNESS = (2 * Math.PI / SETTLE) ** 2;
 const DAMPING = (4 * Math.PI * (1 - BOUNCE)) / SETTLE;
 /** A frame that took longer than this is integrated as if it had not. */
 const MAX_DT = 1 / 30;
+/**
+ * The last stretch of the spring, as a fraction of the height. Inside it and
+ * slowing, the card sets down while it is still moving, so the scale-up and
+ * the corners squaring off read as part of the landing, not a second event
+ * that fires after it has stopped.
+ */
+const LAND = 0.06;
 /** Velocity samples older than this say nothing about the release. */
 const VELOCITY_WINDOW = 80;
 
@@ -111,6 +118,7 @@ export function createDeck(getLeaves: () => LeafNode[], getFocusedId: () => stri
   function spring(velocity: number) {
     stopSpring();
     let v = velocity;
+    let before = Math.abs(v);
     let last = performance.now();
     const step = (now: number) => {
       const dt = Math.min((now - last) / 1000, MAX_DT);
@@ -125,6 +133,10 @@ export function createDeck(getLeaves: () => LeafNode[], getFocusedId: () => stri
         frame = null;
         return;
       }
+      if (lifted && Math.abs(next) < height * LAND && Math.abs(v) < Math.abs(before)) {
+        lifted = false;
+      }
+      before = v;
       offset = next;
       frame = requestAnimationFrame(step);
     };
