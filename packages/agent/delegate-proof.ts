@@ -57,9 +57,21 @@ check(
 
 const content =
   typeof send.message?.message?.content === 'string' ? send.message.message.content : '';
-check('send content equals the brief exactly', content === 'Do the thing.');
+check('send content ends with the brief, unaltered', content.endsWith('\n\nDo the thing.'));
+check(
+  'send content opens with the hand-off marker',
+  content.startsWith('[Hand-off from the ') && content.includes(' session — another agent, not the user]\n\n')
+);
 check('send content does NOT contain the delegate protocol', !content.includes('Delegate protocol'));
 check('send origin is peer', send.message?.origin?.kind === 'peer');
+check('spawn payload.canDelegate is false by default', (spawn as { canDelegate?: boolean }).canDelegate === false);
+
+// can_delegate: granted explicitly, the spawn says so.
+envelopes.length = 0;
+await actions.delegate('Fan the thing out.', { canDelegate: true });
+const grantedSpawn = envelopes[0]?.payload as { canDelegate?: boolean };
+check('can_delegate: exactly 2 envelopes', envelopes.length === 2);
+check('can_delegate: spawn payload.canDelegate is true when granted', grantedSpawn.canDelegate === true);
 
 // fork_of: the roster is the only network hop a fork touches, so stub fetch
 // with a fixed instances/agents response rather than reaching a real hub.

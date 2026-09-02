@@ -535,6 +535,8 @@ class ClaudeSession implements HarnessSession {
     denyTools?: string[],
     /** Fetched once by `spawn()` before this session existed; frozen from here on. */
     delegateTypes?: import('@whiffle/core').DelegateType[],
+    /** `false` on a leaf delegate: no spawning tools at all. Absent = allowed. */
+    canDelegate?: boolean,
     /**
      * The sessiond connection this session's CLI child lives under. Not
      * optional in practice — `spawn()` always supplies it, and there is no
@@ -578,7 +580,7 @@ class ClaudeSession implements HarnessSession {
         mcpServers: {
           ...((options as { mcpServers?: Record<string, unknown> } | undefined)?.mcpServers ?? {}),
           [MCP_SERVER_NAME]: handoffServer(
-            { instanceId, cwd: workdir, emit: (envelope) => ctx.emit(envelope), delegateTypes },
+            { instanceId, cwd: workdir, emit: (envelope) => ctx.emit(envelope), delegateTypes, canDelegate },
             // Keyed under BOTH the handler's text and the serialized payload:
             // CLIs before ~2.1.x forward the handler's text block, current ones
             // (verified on 2.1.233) replace it with JSON.stringify(structuredContent).
@@ -1271,7 +1273,8 @@ export class ClaudeHarness implements Harness {
     // Fetched once, before the session (and its `delegate` tool description)
     // exists — see `fetchDelegateTypes`'s own comment for why this is a plain
     // per-spawn HTTP read rather than a fleet-sync field.
-    const delegateTypes = await fetchDelegateTypes();
+    // A leaf never builds the tool that needs the list, so skip the HTTP read.
+    const delegateTypes = spec.canDelegate === false ? [] : await fetchDelegateTypes();
     // The child is spawned under sessiond, unconditionally — no flag, no
     // in-process fallback (PLAN.md C7). `procId` is the instance id: stable
     // across agent restarts, which is what lets the returning agent match a
@@ -1290,6 +1293,7 @@ export class ClaudeHarness implements Harness {
       spec.skills,
       spec.denyTools,
       delegateTypes,
+      spec.canDelegate,
       { client, procId: ctx.instanceId }
     );
   }

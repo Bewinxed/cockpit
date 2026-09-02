@@ -170,6 +170,24 @@ export interface SpawnPayload {
    */
   denyTools?: string[];
   /**
+   * Whether this session may spawn sessions of its own (`delegate` and
+   * `start_session`). Set by the `delegate` tool's `can_delegate` param; a
+   * delegate that is not granted it is a leaf: claude and pi never give it the
+   * spawning tools, and the hub refuses any spawn naming it as parent. Absent
+   * on a session nobody delegated (a mainline session may always delegate).
+   */
+  canDelegate?: boolean;
+  /**
+   * The session that asked for this spawn — provenance, not nesting. Unlike
+   * {@link parent}, it neither nests the child nor routes reports; it is what
+   * the hub checks {@link canDelegate} against, so a leaf cannot `start_session`
+   * its way around the rule. `instanceId` when the caller knows its own row;
+   * `sessionKey` (the harness's own session id, on the spawn's machine) when it
+   * only knows that — the opencode plugin — and the hub resolves it to the one
+   * live row carrying it.
+   */
+  spawnedBy?: { instanceId?: string; sessionKey?: string };
+  /**
    * Correlates the `control_result` frame the agent answers the spawn with, once
    * the session is in place.
    */
@@ -486,6 +504,13 @@ export interface InstanceRow {
    * — and what a restart has to read to hand the session back as it was.
    */
   effort?: string | null;
+  /**
+   * Whether the session may spawn delegates of its own — `false` on a leaf
+   * delegate (spawned with `can_delegate: false`, the default). Null on a
+   * session nobody delegated, or on a hub that predates the column: both read
+   * as allowed.
+   */
+  canDelegate?: boolean | null;
   /** What killed the session, on a row the agent reported as `error`. */
   lastError?: string | null;
   /** When the row last moved. */

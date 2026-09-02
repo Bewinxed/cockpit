@@ -168,6 +168,11 @@
       {#if quest}
         <Badge variant="secondary" class="shrink-0 text-micro font-normal">side quest</Badge>
       {/if}
+      <!-- A leaf delegate cannot fan out: the operator reads at a glance that
+           nothing will ever nest beneath this row. -->
+      {#if instance.canDelegate === false}
+        <Badge variant="outline" class="shrink-0 text-micro font-normal" title="Spawned with can_delegate=false — it cannot delegate or start sessions">leaf</Badge>
+      {/if}
       <!-- Where it runs, second — and beside the title rather than in a column
            of its own: on a wide track a path pinned right sits half a card away
            from the name it belongs to, and the two stop reading as one row.

@@ -151,6 +151,7 @@
                     <Badge variant="outline" class="font-mono">{row.model}</Badge>
                     {#if row.effort}<Badge variant="outline" class="capitalize">{row.effort}</Badge>{/if}
                     {#if narrowing(row)}<Badge variant="secondary">{narrowing(row)}</Badge>{/if}
+                    {#if row.canDelegate}<Badge variant="secondary">may delegate</Badge>{/if}
                   </span>
                   <span class="line servedrow">
                     <span class="served">

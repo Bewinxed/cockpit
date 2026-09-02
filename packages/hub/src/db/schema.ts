@@ -115,6 +115,13 @@ export const instances = sqliteTable('instances', {
    */
   effort: text('effort'),
   /**
+   * Whether the session may delegate or start sessions of its own. `false` on a
+   * leaf delegate — one spawned with `can_delegate: false`, which is what a
+   * `delegate` call means unless it says otherwise. Null on a session nobody
+   * delegated, or on a row predating the column; both read as allowed.
+   */
+  canDelegate: integer('can_delegate', { mode: 'boolean' }),
+  /**
    * What was last *written down* about the session — history, not liveness.
    *
    * Read this column raw and you are reading a fact that was true at the moment

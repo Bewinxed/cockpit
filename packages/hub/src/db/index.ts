@@ -204,6 +204,8 @@ export interface DbShape {
     permissionMode?: string;
     model?: string;
     effort?: string;
+    /** `false` makes the row a leaf delegate; absent leaves the column alone. */
+    canDelegate?: boolean;
   }) => void;
   /**
    * The name the session's first user message gives it, for a row nobody named.
@@ -824,7 +826,7 @@ const make = (path: string): DbShape => {
     markAllAgentsOffline: () => {
       db.update(agents).set({ status: 'offline' }).run();
     },
-    openInstance: ({ id, machineId, cwd, sessionId, harness, projectId, parentInstanceId, parentToolUseId, title, kind, permissionMode, model, effort }) => {
+    openInstance: ({ id, machineId, cwd, sessionId, harness, projectId, parentInstanceId, parentToolUseId, title, kind, permissionMode, model, effort, canDelegate }) => {
       const now = new Date();
 
       // One conversation, one live row.
@@ -861,6 +863,7 @@ const make = (path: string): DbShape => {
           permissionMode,
           model,
           effort,
+          canDelegate,
           // `starting`, not `running` — this row is written when a spawn is
           // *issued*, and issuing a spawn is not evidence that a process exists.
           // Writing `running` here is the original sin behind the 178-vs-42
@@ -881,6 +884,8 @@ const make = (path: string): DbShape => {
             ...(permissionMode ? { permissionMode } : {}),
             ...(model ? { model } : {}),
             ...(effort ? { effort } : {}),
+            // Presence, not truth: a leaf's `false` has to land.
+            ...(canDelegate !== undefined ? { canDelegate } : {}),
             // Same reasoning as the insert above: a relaunch or a restore is a
             // spawn going out, not a process coming up.
             status: 'starting',

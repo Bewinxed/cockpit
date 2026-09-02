@@ -17,6 +17,7 @@
   import { Button } from '$lib/components/ui/button';
   import { Input } from '$lib/components/ui/input';
   import { NativeSelect } from '$lib/components/ui/native-select';
+  import { Switch } from '$lib/components/ui/switch';
   import { Textarea } from '$lib/components/ui/textarea';
   import * as Alert from '$lib/components/ui/alert';
   import { confirm } from '$lib/whiffle/confirm.svelte';
@@ -40,6 +41,8 @@
   let draft = $state<DelegateType>(untrack(() => (data.type ? { ...data.type } : blank)));
   let skillsText = $state(untrack(() => (data.type?.skills ?? []).join(', ')));
   let denyToolsText = $state(untrack(() => (data.type?.denyTools ?? []).join(', ')));
+  /** A stored `undefined` reads as the leaf default the hub applies anyway. */
+  let canDelegate = $state(untrack(() => data.type?.canDelegate === true));
   let busy = $state(false);
   let deleting = $state(false);
   let failed = $state<string | undefined>(undefined);
@@ -63,6 +66,7 @@
     model: draft.model.trim(),
     skills: parsedList(skillsText),
     denyTools: parsedList(denyToolsText),
+    canDelegate,
   });
 
   const problem = $derived(delegateTypeProblem(submission));
@@ -271,6 +275,17 @@
           class="font-mono text-sm md:text-sm"
         />
       </label>
+
+      <!-- The one field here that widens rather than narrows: a delegate is a
+           leaf unless its type (or the call itself) says otherwise. -->
+      <label class="flex w-fit items-center gap-3">
+        <Switch bind:checked={canDelegate} />
+        <span class="text-caption">
+          {canDelegate
+            ? 'May delegate — it can spawn delegates and sessions of its own'
+            : 'Leaf — it does the work itself and cannot delegate further'}
+        </span>
+      </label>
     </section>
 
     <Alert.Root
@@ -286,7 +301,7 @@
     {/if}
 
     <div
-      class="sticky bottom-0 z-10 -mx-[var(--space-3)] flex flex-wrap items-center justify-between gap-3 border-t border-border/60 bg-[var(--surface-content)] px-[var(--space-3)] py-[var(--space-4)] [padding-bottom:calc(var(--space-4)+env(safe-area-inset-bottom))]"
+      class="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 border-t border-border/60 bg-[var(--surface-content)] py-[var(--space-4)] [padding-bottom:calc(var(--space-4)+env(safe-area-inset-bottom))]"
     >
       {#if name}
         <Button

@@ -1,0 +1,1 @@
+ALTER TABLE `instances` ADD `can_delegate` integer;

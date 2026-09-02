@@ -20,6 +20,13 @@ export interface DelegateType {
   effort?: DelegateEffort;
   skills?: string[];
   denyTools?: string[];
+  /**
+   * Whether a delegate of this type may itself delegate (or start sessions)
+   * when the `delegate` call did not say. `false` (and absent) means a leaf —
+   * the same default a bare `delegate` call gets; `true` makes the type a
+   * coordinator by default. An explicit `can_delegate` on the call still wins.
+   */
+  canDelegate?: boolean;
 }
 
 /** What a name may be. Mirrors a subagent's own `AGENT_NAME` — no reason to invent a second rule. */
@@ -99,5 +106,6 @@ export const DEFAULT_DELEGATE_TYPES: DelegateType[] = [
     harness: 'claude',
     model: 'sonnet',
     effort: 'medium',
+    canDelegate: true,
   },
 ];

@@ -263,6 +263,13 @@ const peek = (payload: unknown, key: string): string | undefined => {
   return typeof value === 'string' ? value : undefined;
 };
 
+/** A spawn's `canDelegate`, which `peek` cannot read: it is a boolean, not a string. */
+const peekCanDelegate = (payload: unknown): boolean | undefined => {
+  if (typeof payload !== 'object' || payload === null) return undefined;
+  const value = (payload as Record<string, unknown>).canDelegate;
+  return typeof value === 'boolean' ? value : undefined;
+};
+
 /** The last path segment — how the rail names a session. */
 const leaf = (path: string): string => path.split('/').filter(Boolean).pop() ?? path;
 
@@ -370,6 +377,49 @@ export const resolveDelegatePermissionMode = (rows: InstanceRow[], parentInstanc
   }
   return undefined;
 };
+
+/**
+ * Whether a session spawned under `parentInstanceId` may be a delegate at all.
+ * A leaf delegate — a row whose `canDelegate` is `false` — may not spawn
+ * delegates or start sessions, so its spawns are refused. No walk up the tree:
+ * the flag is per-row, granted (or withheld) by the immediate parent when it
+ * delegated. An unknown parent, or one whose column is null or true, allows.
+ * `rows` is the hub's instance table. Pure, so it is exercised directly.
+ */
+export const resolveCanDelegate = (rows: InstanceRow[], parentInstanceId: string): boolean => {
+  const parent = rows.find((row) => row.id === parentInstanceId);
+  return parent?.canDelegate !== false;
+};
+
+/**
+ * The session a spawn came FROM — `spawnedBy` when the payload carries it,
+ * `parent` otherwise. An `instanceId` names the row outright; a `sessionKey`
+ * is the harness's own session id (all the opencode plugin knows about
+ * itself), resolved here to the live row on `machineId` carrying it. Live —
+ * `running`/`starting` — because `openInstance` keeps one live row per session
+ * key, so that filter is what makes the answer unique; a row that lost the
+ * race is the newest of the rest. Undefined when nothing names a requester.
+ * Pure, so it is exercised directly.
+ */
+export const resolveRequester = (rows: InstanceRow[], machineId: string, payload: unknown): string | undefined => {
+  const spawnedBy =
+    typeof payload === 'object' && payload !== null
+      ? ((payload as { spawnedBy?: { instanceId?: unknown; sessionKey?: unknown } }).spawnedBy ?? undefined)
+      : undefined;
+  if (typeof spawnedBy?.instanceId === 'string') return spawnedBy.instanceId;
+  if (typeof spawnedBy?.sessionKey === 'string') {
+    const live = rows
+      .filter((row) => row.sessionId === spawnedBy.sessionKey && row.machineId === machineId)
+      .filter((row) => row.status === 'running' || row.status === 'starting')
+      .sort((a, b) => new Date(b.updatedAt ?? 0).getTime() - new Date(a.updatedAt ?? 0).getTime());
+    if (live[0]) return live[0].id;
+  }
+  return peekParent(payload).parentInstanceId;
+};
+
+/** What a leaf delegate hears when it tries to spawn — relayed verbatim to the model. */
+const LEAF_DELEGATE_REFUSAL =
+  'This session is a leaf delegate — it was spawned with can_delegate=false and may not delegate or start sessions. Do the work yourself, or handoff to your parent session.';
 
 /** `register`'s word on what each harness adapter on the machine can do. */
 const peekHarnesses = (payload: unknown): HarnessReport[] | undefined => {
@@ -1132,6 +1182,10 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
       ...(row.model ? { model: row.model } : {}),
       ...(row.effort ? { effort: row.effort as EffortLevel } : {}),
       ...(row.projectId ? { projectId: row.projectId } : {}),
+      // A leaf stays a leaf across a restart: the daemon builds the toolset
+      // from the payload, and a restore that dropped this would hand a leaf
+      // delegate the `delegate` tool back.
+      ...(row.canDelegate === false ? { canDelegate: false } : {}),
     };
     agent.send({ verb: 'spawn', machineId: row.machineId, instanceId: row.id, payload });
     db.openInstance({
@@ -1145,6 +1199,7 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
       permissionMode: row.permissionMode ?? undefined,
       model: row.model ?? undefined,
       effort: row.effort ?? undefined,
+      canDelegate: row.canDelegate ?? undefined,
     });
   };
 
@@ -3100,16 +3155,40 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
         if (!(Array.isArray(rec.denyTools) && rec.denyTools.length) && resolved.denyTools) {
           rec.denyTools = resolved.denyTools;
         }
+        if (rec.canDelegate === undefined && resolved.canDelegate !== undefined) {
+          rec.canDelegate = resolved.canDelegate;
+        }
       }
       // `type` is a relay-only convenience: SpawnPayload itself has no such
       // field, and it must not ride along into the envelope the daemon spawns
       // from — it already did its one job resolving harness/model/etc above.
       delete (body as Record<string, unknown>).type;
 
+      const parent = peekParent(body);
+      // A leaf delegate may not delegate OR start sessions: the check is
+      // against whoever asked (`spawnedBy`, falling back to `parent`), so
+      // `start_session` — which nests nothing — is held to the same rule. And
+      // a delegate that does not say whether its child may is spawning a leaf:
+      // the hub applies the default, so a plugin predating the field still
+      // produces leaves.
+      const requester = resolveRequester(db.listInstances(), machineId, body);
+      if (requester && !resolveCanDelegate(db.listInstances(), requester)) {
+        return status(403, LEAF_DELEGATE_REFUSAL);
+      }
+      // The plugin names its `parent` from its own roster guess (`meOf`); the
+      // hub's resolution of the same session key is the fresher word, so a
+      // delegate nests under the row the hub found, not the one the plugin did.
+      if (requester && parent.parentInstanceId && parent.parentInstanceId !== requester) {
+        (body as { parent?: { instanceId?: string } }).parent = { ...(body as { parent?: object }).parent, instanceId: requester };
+        parent.parentInstanceId = requester;
+      }
+      if (parent.parentInstanceId && peekCanDelegate(body) === undefined) {
+        (body as Record<string, unknown>).canDelegate = false;
+      }
+
       // A delegate that names no permission mode inherits the ROOT of its
       // delegate tree, so a nested delegate of a bypassing session stays
       // autonomous instead of parking tool asks nobody is watching for.
-      const parent = peekParent(body);
       if (!peek(body, 'permissionMode') && parent.parentInstanceId) {
         const mode = resolveDelegatePermissionMode(db.listInstances(), parent.parentInstanceId);
         if (mode) (body as Record<string, unknown>).permissionMode = mode;
@@ -3131,6 +3210,7 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
         permissionMode: peek(body, 'permissionMode'),
         model: peek(body, 'model'),
         effort: peek(body, 'effort'),
+        canDelegate: peekCanDelegate(body),
         ...peekParent(body),
       });
       // A conversation that starts here: its first turn is its name.
@@ -3570,6 +3650,18 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
               const mode = resolveDelegatePermissionMode(db.listInstances(), parent.parentInstanceId);
               if (mode) (message.payload as Record<string, unknown>).permissionMode = mode;
             }
+            // A leaf delegate may not delegate or start sessions (see the
+            // relay route — same rule, same requester, same default). Nothing
+            // here can answer the sender, so the spawn is dropped, neither
+            // forwarded nor given a row.
+            const requester = resolveRequester(db.listInstances(), message.machineId, message.payload);
+            if (requester && !resolveCanDelegate(db.listInstances(), requester)) {
+              console.warn(`[hub] refused spawn ${message.instanceId ?? '?'} from leaf delegate ${requester}: ${LEAF_DELEGATE_REFUSAL}`);
+              break;
+            }
+            if (parent.parentInstanceId && peekCanDelegate(message.payload) === undefined) {
+              (message.payload as Record<string, unknown>).canDelegate = false;
+            }
             if (forward(message, ws) && message.instanceId) {
               db.openInstance({
                 id: message.instanceId,
@@ -3583,6 +3675,7 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
                 permissionMode: peek(message.payload, 'permissionMode'),
                 model: peek(message.payload, 'model'),
                 effort: peek(message.payload, 'effort'),
+                canDelegate: peekCanDelegate(message.payload),
                 ...peekParent(message.payload),
               });
               // A conversation that starts here: its first turn is its name.

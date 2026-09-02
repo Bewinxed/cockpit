@@ -24,6 +24,8 @@ interface DelegateTypeRow {
   effort: string | null;
   skills: string | null;
   deny_tools: string | null;
+  /** sqlite has no boolean: 1, 0, or NULL (the column arrived after the table). */
+  can_delegate: number | null;
 }
 
 const rowToType = (row: DelegateTypeRow): DelegateType => ({
@@ -34,6 +36,7 @@ const rowToType = (row: DelegateTypeRow): DelegateType => ({
   ...(row.effort ? { effort: row.effort as DelegateType['effort'] } : {}),
   ...(row.skills ? { skills: JSON.parse(row.skills) } : {}),
   ...(row.deny_tools ? { denyTools: JSON.parse(row.deny_tools) } : {}),
+  ...(row.can_delegate === null ? {} : { canDelegate: row.can_delegate === 1 }),
 });
 
 export interface DelegateTypesShape {
@@ -62,6 +65,14 @@ export const makeDelegateTypes = (path: string = DB_PATH): DelegateTypesShape =>
       created_at INTEGER NOT NULL
     )
   `);
+  // The table is not Drizzle-managed, so a column added after the first
+  // release is grown by hand: probe the shape, ALTER when it is missing.
+  const columns = (sqlite.query('PRAGMA table_info(delegate_types)').all() as { name: string }[]).map(
+    (column) => column.name
+  );
+  if (!columns.includes('can_delegate')) {
+    sqlite.run('ALTER TABLE delegate_types ADD COLUMN can_delegate INTEGER');
+  }
   // A sentinel independent of row count: `count() === 0` also describes "the
   // operator deleted every type on purpose", and reseeding on the next hub
   // restart would silently undo that. This table holds one row once seeding
@@ -92,15 +103,16 @@ export const makeDelegateTypes = (path: string = DB_PATH): DelegateTypesShape =>
   const put = (draft: DelegateType): DelegateType => {
     sqlite
       .query(
-        `INSERT INTO delegate_types (name, description, harness, model, effort, skills, deny_tools, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO delegate_types (name, description, harness, model, effort, skills, deny_tools, can_delegate, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(name) DO UPDATE SET
            description = excluded.description,
            harness = excluded.harness,
            model = excluded.model,
            effort = excluded.effort,
            skills = excluded.skills,
-           deny_tools = excluded.deny_tools`
+           deny_tools = excluded.deny_tools,
+           can_delegate = excluded.can_delegate`
       )
       .run(
         draft.name,
@@ -110,6 +122,7 @@ export const makeDelegateTypes = (path: string = DB_PATH): DelegateTypesShape =>
         draft.effort ?? null,
         draft.skills ? JSON.stringify(draft.skills) : null,
         draft.denyTools ? JSON.stringify(draft.denyTools) : null,
+        draft.canDelegate === undefined ? null : draft.canDelegate ? 1 : 0,
         Date.now()
       );
     return draft;
@@ -149,6 +162,7 @@ export const delegateTypesRoutes = (store: DelegateTypesShape) =>
           ),
           skills: t.Optional(t.Array(t.String())),
           denyTools: t.Optional(t.Array(t.String())),
+          canDelegate: t.Optional(t.Boolean()),
         }),
       },
       ({ params, body, status }) => {

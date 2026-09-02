@@ -1,6 +1,6 @@
 import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
-import { handoffActions, type HandoffDeps } from './harnesses/handoff-shared';
+import { handoffActions, SPAWNING_TOOLS, type HandoffDeps } from './harnesses/handoff-shared';
 
 /**
  * The tools a Claude session uses to hand work to another session. The bodies
@@ -37,13 +37,13 @@ export type OnStructuredResult = (resultText: string, data: Record<string, unkno
  */
 const delegateTypeLine = (types: HandoffDeps['delegateTypes']): string =>
   types?.length
-    ? ` Available types: ${types.map((type) => `'${type.name}' (${type.description})`).join('; ')}.`
+    ? ` Available types: ${types.map((type) => `'${type.name}' (${type.description}${type.canDelegate ? '; may delegate by default' : ''})`).join('; ')}.`
     : '';
 
 /** The tools themselves, separated from the server so they can be exercised directly. */
 export function handoffTools(deps: HandoffDeps, onStructured?: OnStructuredResult) {
   const actions = handoffActions(deps);
-  return [
+  const all = [
     tool(
       'list_sessions',
       'List the other sessions running on the fleet, with the directory each is working in. ' +
@@ -175,9 +175,26 @@ export function handoffTools(deps: HandoffDeps, onStructured?: OnStructuredResul
               'untouched. Works best on the SAME model, where it also reuses the prompt cache; a ' +
               'different model still works but re-ingests the transcript at full cost.'
           ),
+        can_delegate: z
+          .boolean()
+          .optional()
+          .describe(
+            'Let the delegate spawn delegates and sessions of its own. Default false: a delegate is a ' +
+              'leaf and does the work itself, which keeps the tree one level deep and every report ' +
+              'visible here. A type marked "may delegate by default" flips that default; an explicit ' +
+              'value here wins either way. Set true only for an orchestrator-style delegate that must fan out.'
+          ),
       },
-      async ({ prompt, type, harness, model, cwd, skills, fork_of }) => {
-        const result = await actions.delegate(prompt, { cwd, harness, model, skills, forkOf: fork_of, type });
+      async ({ prompt, type, harness, model, cwd, skills, fork_of, can_delegate }) => {
+        const result = await actions.delegate(prompt, {
+          cwd,
+          harness,
+          model,
+          skills,
+          forkOf: fork_of,
+          type,
+          canDelegate: can_delegate,
+        });
         const sc = { delegateInstanceId: result.id, title: result.title };
         onStructured?.(result.text, sc);
         return {
@@ -262,6 +279,7 @@ export function handoffTools(deps: HandoffDeps, onStructured?: OnStructuredResul
       })
     ),
   ];
+  return deps.canDelegate === false ? all.filter((entry) => !SPAWNING_TOOLS.has(entry.name)) : all;
 }
 
 export function handoffServer(deps: HandoffDeps, onStructured?: OnStructuredResult) {
@@ -269,11 +287,16 @@ export function handoffServer(deps: HandoffDeps, onStructured?: OnStructuredResu
     name: MCP_SERVER_NAME,
     version: '1.0.0',
     instructions:
-      'A repository may have several sessions; the listing shows where each works, not what it ' +
-      'is doing. Hand work to an existing session only to continue work it already owns. For new ' +
-      'standalone work in another repository, spawn a delegate with cwd set there instead. ' +
-      'An idle handoff target wakes and works immediately; a busy one finishes its current ' +
-      'turn, then reads everything queued in one wake turn.',
+      deps.canDelegate === false
+        ? 'This session is a delegate spawned without permission to delegate further, so it has ' +
+          'no delegate or start_session tools: do the work yourself rather than looking for a ' +
+          'way to fan it out. handoff still reaches your parent session, or a session that ' +
+          'already owns related work, and the user sees your transcript as it happens.'
+        : 'A repository may have several sessions; the listing shows where each works, not what it ' +
+          'is doing. Hand work to an existing session only to continue work it already owns. For new ' +
+          'standalone work in another repository, spawn a delegate with cwd set there instead. ' +
+          'An idle handoff target wakes and works immediately; a busy one finishes its current ' +
+          'turn, then reads everything queued in one wake turn.',
     tools: handoffTools(deps, onStructured),
   });
 }

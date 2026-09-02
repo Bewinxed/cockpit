@@ -641,7 +641,7 @@
     <!-- Pinned, same reasoning as /rules/[id]: a Save that scrolls off is a Save
          nobody finds on a long form. -->
     <div
-      class="sticky bottom-0 z-10 -mx-[var(--space-3)] flex flex-wrap items-center justify-between gap-3 border-t border-border/60 bg-[var(--surface-content)] px-[var(--space-3)] py-[var(--space-4)] [padding-bottom:calc(var(--space-4)+env(safe-area-inset-bottom))]"
+      class="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 border-t border-border/60 bg-[var(--surface-content)] py-[var(--space-4)] [padding-bottom:calc(var(--space-4)+env(safe-area-inset-bottom))]"
     >
       {#if id}
         <Button

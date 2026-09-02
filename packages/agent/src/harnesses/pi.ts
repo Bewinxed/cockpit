@@ -23,7 +23,7 @@ import {
 } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
 import type { Model } from '@earendil-works/pi-ai/compat';
-import { fetchDelegateTypes, handoffActions, type HandoffDeps } from './handoff-shared';
+import { fetchDelegateTypes, handoffActions, SPAWNING_TOOLS, type HandoffDeps } from './handoff-shared';
 import type {
   AuthState,
   FleetConfig,
@@ -114,7 +114,7 @@ const delegateTypeLine = (types: HandoffDeps['delegateTypes']): string =>
 
 const piHandoffTools = (deps: HandoffDeps): ToolDefinition[] => {
   const actions = handoffActions(deps);
-  return [
+  const all: ToolDefinition[] = [
     defineTool({
       name: 'list_sessions',
       label: 'List sessions',
@@ -193,6 +193,15 @@ const piHandoffTools = (deps: HandoffDeps): ToolDefinition[] => {
         model: Type.Optional(Type.String()),
         cwd: Type.Optional(Type.String()),
         fork_of: Type.Optional(Type.String()),
+        can_delegate: Type.Optional(
+          Type.Boolean({
+            description:
+              'Let the delegate spawn delegates and sessions of its own. Default false: a delegate ' +
+              'is a leaf and does the work itself, which keeps the tree one level deep and every ' +
+              'report visible here. A type marked "may delegate by default" flips that default; an ' +
+              'explicit value here wins either way. Set true only for an orchestrator-style delegate that must fan out.',
+          })
+        ),
       }),
       execute: async (_id, params) => {
         const p = params as {
@@ -202,6 +211,7 @@ const piHandoffTools = (deps: HandoffDeps): ToolDefinition[] => {
           model?: string;
           cwd?: string;
           fork_of?: string;
+          can_delegate?: boolean;
         };
         const result = await actions.delegate(p.prompt, {
           cwd: p.cwd,
@@ -209,6 +219,7 @@ const piHandoffTools = (deps: HandoffDeps): ToolDefinition[] => {
           model: p.model,
           forkOf: p.fork_of,
           type: p.type,
+          canDelegate: p.can_delegate,
         });
         return answer(result.text, { delegateInstanceId: result.id, title: result.title });
       },
@@ -281,6 +292,7 @@ const piHandoffTools = (deps: HandoffDeps): ToolDefinition[] => {
         answer(await actions.acknowledgeConcern((params as { note: string }).note)),
     }),
   ];
+  return deps.canDelegate === false ? all.filter((entry) => !SPAWNING_TOOLS.has(entry.name)) : all;
 };
 
 class PiSession implements HarnessSession {
@@ -520,7 +532,8 @@ export class PiHarness implements Harness {
     const model = spec.model ? await this.#resolveModel(spec.model) : undefined;
     // Fetched once, before this session's `delegate` tool description exists —
     // see `fetchDelegateTypes`'s own comment.
-    const delegateTypes = await fetchDelegateTypes();
+    // A leaf never builds the tool that needs the list, so skip the HTTP read.
+    const delegateTypes = spec.canDelegate === false ? [] : await fetchDelegateTypes();
 
     let sessionManager: SessionManager | undefined;
     if (spec.resume?.fork) {
@@ -536,7 +549,13 @@ export class PiHarness implements Harness {
       modelRuntime: runtime,
       ...(model ? { model } : {}),
       ...(sessionManager ? { sessionManager } : { sessionManager: SessionManager.create(ctx.cwd) }),
-      customTools: piHandoffTools({ instanceId: ctx.instanceId, cwd: ctx.cwd, emit: ctx.emit, delegateTypes }),
+      customTools: piHandoffTools({
+        instanceId: ctx.instanceId,
+        cwd: ctx.cwd,
+        emit: ctx.emit,
+        delegateTypes,
+        canDelegate: spec.canDelegate,
+      }),
     });
 
     return new PiSession(ctx, session);

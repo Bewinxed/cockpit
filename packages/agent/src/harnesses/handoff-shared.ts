@@ -172,6 +172,20 @@ function resolve(peers: Peer[], target: string): Peer {
   );
 }
 
+/**
+ * The tools a leaf delegate (`canDelegate === false`) never gets: everything
+ * that spawns or steers a spawn. One set for the claude and pi toolsets (the
+ * opencode plugin refuses at call time instead, having no per-session
+ * toolset). Fixed for the session's life, so the prompt cache is unaffected.
+ */
+export const SPAWNING_TOOLS: ReadonlySet<string> = new Set([
+  'start_session',
+  'delegate',
+  'stop_delegate',
+  'interrupt_delegate',
+  'answer_delegate',
+]);
+
 export interface HandoffDeps {
   /** The session doing the handing over. */
   readonly instanceId: string;
@@ -186,6 +200,11 @@ export interface HandoffDeps {
    * resolve against and every call needs its own `harness`/`model`.
    */
   readonly delegateTypes?: DelegateType[];
+  /**
+   * Whether THIS session may spawn sessions of its own. `false` on a leaf
+   * delegate (spawned with `can_delegate: false`); absent means allowed.
+   */
+  readonly canDelegate?: boolean;
 }
 
 /** The three hand-off actions, each answering with the text the tool returns. */
@@ -208,6 +227,11 @@ export interface HandoffActions {
        * `skills` above still overrides what the type says.
        */
       type?: string;
+      /**
+       * Whether the new delegate may itself delegate/start sessions; default
+       * false — a delegate is a leaf unless granted.
+       */
+      canDelegate?: boolean;
     }
   ): Promise<HandoffResult>;
   stopDelegate(target: string): Promise<string>;
@@ -319,6 +343,9 @@ export const handoffActions = ({ instanceId, cwd, emit, delegateTypes = [] }: Ha
       cwd: workdir,
       ...(model ? { model } : {}),
       ...(sideQuest ? { scratch: { baseCwd: workdir } } : {}),
+      // Provenance only — a started session is not a delegate. The hub reads
+      // it to hold a leaf to `canDelegate` on this door as well.
+      spawnedBy: { instanceId },
     };
     emit({ verb: 'spawn', machineId: '', instanceId: id, payload });
     // The marker prefix survives SDK storage (which strips `origin`) so that
@@ -354,6 +381,7 @@ export const handoffActions = ({ instanceId, cwd, emit, delegateTypes = [] }: Ha
       skills?: string[];
       forkOf?: string;
       type?: string;
+      canDelegate?: boolean;
     }
   ): Promise<HandoffResult> {
     const id = crypto.randomUUID();
@@ -416,6 +444,7 @@ export const handoffActions = ({ instanceId, cwd, emit, delegateTypes = [] }: Ha
     }
 
     const model = opts?.model ?? resolvedType?.model;
+    const canDelegate = opts?.canDelegate ?? resolvedType?.canDelegate ?? false;
     const skills = opts?.skills?.length ? opts.skills : resolvedType?.skills;
     const payload: SpawnPayload = {
       instanceId: id,
@@ -429,6 +458,10 @@ export const handoffActions = ({ instanceId, cwd, emit, delegateTypes = [] }: Ha
       ...(resume ? { resume } : {}),
       scratch: { baseCwd: workdir },
       parent: { instanceId },
+      spawnedBy: { instanceId },
+      // Always explicit for a delegate: the call's word, else the type's
+      // default, else a leaf.
+      canDelegate,
       // A delegate is autonomous by definition: it must never sit waiting on a
       // tool-permission prompt nobody is watching for. Questions still ask.
       permissionMode: 'bypassPermissions',
@@ -457,7 +490,10 @@ export const handoffActions = ({ instanceId, cwd, emit, delegateTypes = [] }: Ha
         (resume ? ' It starts with the full conversation of the forked delegate.' : '') +
         modelNote +
         ` It runs as a temporary session nested under this one; its report arrives here automatically ` +
-        `when each of its turns completes. Guide it or send follow-ups with handoff("${id}", ...).`,
+        `when each of its turns completes. Guide it or send follow-ups with handoff("${id}", ...).` +
+        (canDelegate
+          ? ' It may spawn delegates of its own.'
+          : ' It is a leaf: it cannot delegate further.'),
     };
   },
 

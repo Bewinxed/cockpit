@@ -442,7 +442,11 @@ export const WhiffleHandoff = async () => {
           sideQuest: tool.schema.boolean().optional().describe("A detour from this session's work. Default false."),
           model: tool.schema.string().optional().describe("Model id. Omit to let the server choose."),
         },
-        async execute({ cwd, prompt, sideQuest, model }) {
+        async execute({ cwd, prompt, sideQuest, model }, context) {
+          // Fast local refusal for a leaf; the hub's own check stays
+          // authoritative. An unregistered session proceeds as before.
+          const me = meOf(await roster(), context);
+          if (me && me.row.canDelegate === false) throw new Error("This session is a leaf delegate — it was spawned with can_delegate=false and may not delegate or start sessions. Do the work yourself, or handoff to your parent session.");
           const id = crypto.randomUUID();
           await relay("spawn", {
             machineId: MACHINE,
@@ -451,6 +455,9 @@ export const WhiffleHandoff = async () => {
             harness: "opencode",
             ...(model ? { model } : {}),
             ...(sideQuest ? { scratch: { baseCwd: cwd } } : {}),
+            // Who asked, by opencode's own session id: the hub resolves it to
+            // the live row itself (see /api/relay/spawn), fresher than meOf.
+            spawnedBy: { sessionKey: context.sessionID },
           });
           await relay("send", {
             machineId: MACHINE,
@@ -487,11 +494,14 @@ export const WhiffleHandoff = async () => {
           cwd: tool.schema.string().optional().describe("Absolute directory the delegate works in. Defaults to this session's directory."),
           skills: tool.schema.array(tool.schema.string()).optional().describe("Skill names to load natively into the delegate session. Each skill is invoked via the harness's own slash-command mechanism before the prompt — the same as if the user typed /skill-name in that session. Works cross-harness. Overrides the type's skills."),
           fork_of: tool.schema.string().optional().describe("Fork an earlier delegate: pass the instanceId this tool returned for it. The new delegate starts with the full conversation of that prior delegate — the source is untouched. Works best on the SAME model, where it also reuses the prompt cache; a different model still works but re-ingests the transcript at full cost."),
+          can_delegate: tool.schema.boolean().optional().describe("Let the delegate spawn delegates and sessions of its own. Default false: a delegate is a leaf and does the work itself, which keeps the tree one level deep and every report visible here. A type marked 'may delegate by default' flips that default; an explicit value here wins either way. Set true only for an orchestrator-style delegate that must fan out."),
         },
-        async execute({ prompt, type, harness, model, cwd, skills, fork_of }, context) {
+        async execute({ prompt, type, harness, model, cwd, skills, fork_of, can_delegate }, context) {
           const peers = await roster();
           const me = meOf(peers, context);
           if (!me) throw new Error("this session is not registered on the fleet yet");
+          // Fast local refusal for a leaf; the hub's own check stays authoritative.
+          if (me.row.canDelegate === false) throw new Error("This session is a leaf delegate — it was spawned with can_delegate=false and may not delegate or start sessions. Do the work yourself, or handoff to your parent session.");
           const parentId = me.row.id;
           const id = crypto.randomUUID();
           const workdir = cwd ?? context.directory;
@@ -530,6 +540,12 @@ export const WhiffleHandoff = async () => {
             ...(resume ? { resume } : {}),
             scratch: { baseCwd: workdir },
             parent: { instanceId: parentId },
+            // The hub re-resolves the requester from this and corrects
+            // parent if meOf picked a stale row for the same session key.
+            spawnedBy: { sessionKey: context.sessionID },
+            // Left out when unsaid so the hub can fill it from the type's own
+            // default before it falls back to a leaf.
+            ...(can_delegate === undefined ? {} : { canDelegate: can_delegate }),
           });
           await relay("send", {
             machineId: MACHINE,
@@ -1971,7 +1987,7 @@ export class OpencodeHarness implements Harness {
     // read once here rather than kept live.
     const types = await fetchDelegateTypes();
     const typeLine = types.length
-      ? ` Available types: ${types.map((type) => `'${type.name}' (${type.description})`).join('; ')}.`
+      ? ` Available types: ${types.map((type) => `'${type.name}' (${type.description}${type.canDelegate ? '; may delegate by default' : ''})`).join('; ')}.`
       : '';
     const source = buildHandoffPluginSource(typeLine);
     const existing = Bun.file(OPENCODE_HANDOFF_PLUGIN);
