@@ -20,7 +20,11 @@ export interface SessionName {
  * first paint, so the very first render already carries the right name and a
  * reload morphs nothing. The transcript names a session only once it is fully
  * read: the fetch streams newest-first, so the first user message a half-read
- * transcript holds is one from the middle of the conversation.
+ * transcript holds is one from the middle of the conversation. And the
+ * transcript's name is only taken once the fleet has answered: the hub's own
+ * title arrives with the socket snapshot, later than a short transcript
+ * settles, and a name derived in that window is exactly the flash the served
+ * name exists to prevent.
  */
 export function sessionName(
   id: string,
@@ -31,11 +35,12 @@ export function sessionName(
   const view = whiffle.session(id);
   const ctx = contextOf(id);
   const title = row?.title;
-  const settled = !!view && !view.loading && !view.hydrating;
+  const settled = !!view && !view.loading && !view.hydrating && view.messages.length > 0;
   const firstMessage = settled
     ? view.messages.find((m) => m.type === 'user' && m.content.trim())?.content
     : undefined;
   const named = !!title?.trim() || !!firstMessage?.trim();
+  const answered = !!row && (!!title?.trim() || settled);
   const resolved = resolveSessionTitle({
     title,
     firstMessage,
@@ -47,7 +52,7 @@ export function sessionName(
     // name the server resolved stands in after it, until the fleet and the
     // transcript have both answered; falling back to the folder for that
     // moment is the flash the remembered title removes.
-    label: named ? resolved : (workingSet.titleOf(id) ?? served[id] ?? resolved),
+    label: answered ? resolved : (workingSet.titleOf(id) ?? served[id] ?? resolved),
     named,
   };
 }

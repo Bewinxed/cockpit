@@ -1065,6 +1065,34 @@ const isWaiting = (line: { type?: unknown; subtype?: unknown }): boolean =>
   line.type === 'result' || (line.type === 'system' && line.subtype === 'init');
 
 /**
+ * The running answer to "is this child waiting?", one ring line at a time. An
+ * idle child does not stay silent: the CLI keeps writing `system` notices
+ * (`commands_changed` whenever a skills directory moves) and `control_response`
+ * lines after its `result`, so the LAST line almost never says anything about
+ * the turn. Those carry the previous verdict forward; every other line — a
+ * `result` or `init` (waiting), an assistant/user/stream/control_request line
+ * (a turn in flight) — replaces it. Non-JSON says nothing either.
+ */
+const idleVerdict = (
+  line: { type?: unknown; subtype?: unknown } | undefined,
+  previous: boolean | undefined
+): boolean | undefined => {
+  if (line === undefined) return previous;
+  if (line.type === 'control_response') return previous;
+  if (line.type === 'system' && line.subtype !== 'init') return previous;
+  return isWaiting(line);
+};
+
+/**
+ * How many ring lines at or below the caller's cursor an adoption reads for
+ * its verdict. Our choice: the notices an idle child keeps writing
+ * (commands_changed, control_response) come in bursts of a few; 64 covers any
+ * burst and is far inside the 4096-line ring, so only a byte-overflow can
+ * refuse it.
+ */
+const PEEK_LINES = 64;
+
+/**
  * Controls that only READ the session. A dashboard asks these on every open
  * (and a looping one asked them thousands of times in seconds), and nothing
  * in the session changes when they are refused — so the refusal goes back to
@@ -1393,16 +1421,19 @@ export class ClaudeHarness implements Harness {
    * writes another one: stream-json is silent after a `result` until the next
    * user message, and custody holds every message. Left to the rule above such
    * a session stays in custody for good — turns held, controls refused. So the
-   * ring's LAST line is read before anything else (`head`, from the welcome the
-   * caller already has): a `result`, or the `system`/`init` of a fresh child
-   * that has been asked nothing yet, means the child is waiting on us, and the
-   * hand-off fires at adoption. Anything else — or nothing to read — means a
-   * turn is in flight, and the boundary is waited for as before.
+   * ring's tail is read before anything else (`head`, from the welcome the
+   * caller already has): the last {@link PEEK_LINES} lines are run through
+   * {@link idleVerdict}, and if the verdict at `head` is "waiting" — the last
+   * line that said anything about the turn was a `result`, or the `init` of a
+   * fresh child asked nothing yet — the hand-off fires at adoption. Any other
+   * verdict, or nothing to read, means a turn is in flight and the boundary is
+   * waited for as before.
    *
-   * The peek is one line of the same subscribe, not a second read: the cursor
-   * is opened one seq earlier than the caller asked for, and what comes back
-   * at or below the caller's own cursor is looked at and NOT re-emitted — the
-   * hub already has it, and `ingest` would hand it a frame it holds.
+   * The peek is the same subscribe opened earlier, not a second read: what
+   * comes back at or below the caller's own cursor is looked at and NOT
+   * re-emitted — the hub already has it, and `ingest` would hand it a frame
+   * it holds. A window sessiond refuses is not a transcript gap: the subscribe
+   * is reopened once at the caller's cursor and the turn-boundary rule stands.
    */
   async adopt(
     instanceId: string,
@@ -1435,7 +1466,11 @@ export class ClaudeHarness implements Harness {
     // peek would only muddle whose refusal it was.
     const head = options.head ?? 0;
     const boundary = options.afterSeq ?? head;
-    const peekSeq = head >= 1 && boundary <= head ? Math.min(boundary, head - 1) : undefined;
+    let peekSeq =
+      head >= 1 && boundary <= head ? Math.max(0, Math.min(boundary, head - 1) - PEEK_LINES + 1) : undefined;
+    let verdict: boolean | undefined;
+    let seen = false;
+    let reopened = false;
     // PROVENANCE (design §7). This frame came from exactly one sessiond line,
     // and this is the only place that knows which: the stamp goes one
     // statement before the ingest that emits it, because `ingest` emits
@@ -1454,52 +1489,56 @@ export class ClaudeHarness implements Harness {
         (ctx as Partial<SessiondAwareContext>).line?.(srcEpoch, seq);
       }
     };
-    client.subscribe(
-      instanceId,
-      {
-        line: (event) => {
-          // The ring's last line is the one that says whether the child is
-          // waiting. It is read the same way whether it is peeked or replayed
-          // for real: a replayed `result` hands off inside `ingest` anyway,
-          // but a replayed `init` would not, and a fresh child the hub saw
-          // nothing of is exactly that case.
-          const last = event.seq === head && head >= 1 ? parseLine(event.data) : undefined;
-          if (peekSeq !== undefined && event.seq <= boundary) {
-            // Peek-only: looked at, never emitted. The session id is the one
-            // thing taken from it — a survivor the hub never named arrives
-            // without one, and the hand-off's `resume` cannot do without it.
-            if (custody.sessionId === null && typeof last?.session_id === 'string') custody.sessionId = last.session_id;
-          } else {
-            stamp(event.seq);
-            custody.ingest(event.data);
-          }
-          // There is no backlog-complete event; the ring's last line is it.
-          if (last !== undefined && isWaiting(last)) custody.handOff();
-        },
-        // A child that dies during custody is the session ending on its own,
-        // and the supervisor's `closed` hook retires the row. After the
-        // hand-off (or a stop) its death is the EOF doing what it was sent to
-        // do — expected, and not the session ending — so only `stop`'s wait
-        // hears of it.
-        exit: () => {
-          custody.exited();
-          if (!custody.handedOff) ctx.closed?.();
-        },
-        // §6's honest refusal, surfaced rather than smoothed over — unless the
-        // refusal is of the peek alone. The caller's own cursor sits at `head`
-        // and is always replayable; only the one seq before it can be gone,
-        // and a gap nobody asked to see is not a seam in the transcript.
-        reset: (nextSeq) => {
-          if (peekSeq !== undefined && peekSeq < boundary) return;
-          ctx.frame({
-            type: 'system',
-            subtype: 'sessiond_stream_gap',
-            text: `whiffle: sessiond's replay window overflowed; this transcript resumes at line ${nextSeq}`,
-          } as unknown as NeutralMessage);
-        },
+    const listener: Parameters<SessiondClient['subscribe']>[1] = {
+      line: (event) => {
+        seen = true;
+        // Every line up to `head` feeds the verdict, peeked or really
+        // replayed: a replayed `result` hands off inside `ingest` anyway, but
+        // a replayed `init` would not, and a fresh child the hub saw nothing
+        // of is exactly that case.
+        const parsed = peekSeq !== undefined && event.seq <= head ? parseLine(event.data) : undefined;
+        if (parsed !== undefined) verdict = idleVerdict(parsed, verdict);
+        if (peekSeq !== undefined && event.seq <= boundary) {
+          // Peek-only: looked at, never emitted. The session id is the one
+          // thing taken from it — a survivor the hub never named arrives
+          // without one, and the hand-off's `resume` cannot do without it.
+          if (custody.sessionId === null && typeof parsed?.session_id === 'string') custody.sessionId = parsed.session_id;
+        } else {
+          stamp(event.seq);
+          custody.ingest(event.data);
+        }
+        // There is no backlog-complete event; the ring's last line is it.
+        if (peekSeq !== undefined && head >= 1 && event.seq === head && verdict === true) custody.handOff();
       },
-      peekSeq ?? options.afterSeq
-    );
+      // A child that dies during custody is the session ending on its own,
+      // and the supervisor's `closed` hook retires the row. After the
+      // hand-off (or a stop) its death is the EOF doing what it was sent to
+      // do — expected, and not the session ending — so only `stop`'s wait
+      // hears of it.
+      exit: () => {
+        custody.exited();
+        if (!custody.handedOff) ctx.closed?.();
+      },
+      // §6's honest refusal, surfaced rather than smoothed over — unless what
+      // was refused is the peek window, which nobody asked to see: then the
+      // subscribe is reopened once at the caller's own cursor with the peek
+      // off, and the turn-boundary rule takes over. Any reset after that, or
+      // with no peek outstanding, is a real seam in the transcript.
+      reset: (nextSeq) => {
+        if (peekSeq !== undefined && peekSeq < boundary && !seen && !reopened) {
+          reopened = true;
+          peekSeq = undefined;
+          client.subscribe(instanceId, listener, boundary);
+          return;
+        }
+        ctx.frame({
+          type: 'system',
+          subtype: 'sessiond_stream_gap',
+          text: `whiffle: sessiond's replay window overflowed; this transcript resumes at line ${nextSeq}`,
+        } as unknown as NeutralMessage);
+      },
+    };
+    client.subscribe(instanceId, listener, peekSeq ?? options.afterSeq);
     return custody;
   }
 
