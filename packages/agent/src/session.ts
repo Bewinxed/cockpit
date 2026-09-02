@@ -58,7 +58,7 @@ interface ClaudeAdoption {
     /** sessiond's per-boot epoch — what makes a stored ingest mark readable or dead (design §7). */
     epoch?: string;
     /** `cwd` is what lets a survivor the hub never named be adopted at all. */
-    procs: { procId: string; alive: boolean; cwd?: string }[];
+    procs: { procId: string; alive: boolean; cwd?: string; head?: number }[];
   }>;
   adopt(
     instanceId: string,
@@ -66,6 +66,8 @@ interface ClaudeAdoption {
     options: {
       afterSeq?: number;
       sessionId?: string | null;
+      /** The ring's last seq off the same welcome — what lets an idle child hand off at once. */
+      head?: number;
       onHandoff: (handoff: {
         instanceId: string;
         sessionId: string | null;
@@ -711,11 +713,12 @@ export class SessionSupervisor {
       return [];
     }
     const welcome = await claude.custodyCandidates();
-    const held = new Set(welcome.procs.filter((proc) => proc.alive).map((proc) => proc.procId));
+    const held = new Map(welcome.procs.filter((proc) => proc.alive).map((proc) => [proc.procId, proc]));
 
     const adopted: string[] = [];
     for (const row of rows) {
-      if (!held.has(row.instanceId)) continue;
+      const proc = held.get(row.instanceId);
+      if (!proc) continue;
       // THE HONEST-LOSS RULE (design §7). A mark under sessiond's CURRENT epoch
       // is a cursor: replay exactly the gap the hub named. Anything else — no
       // entry, or a mark minted under a sessiond that has since restarted — is
@@ -733,6 +736,7 @@ export class SessionSupervisor {
       const ctx = this.#context(row.instanceId, row.cwd, adapter, holder);
       const custody = await claude.adopt(row.instanceId, ctx, {
         ...(afterSeq === undefined ? {} : { afterSeq }),
+        ...(proc.head === undefined ? {} : { head: proc.head }),
         sessionId: row.sessionId ?? null,
         onHandoff: ({ instanceId, sessionId, held: heldTurns }) => {
           // Queued through `dispatch` so the hand-off serialises behind

@@ -6,8 +6,9 @@
  * queried and the results are merged, so the picker shows everything the fleet
  * can run. Kept in localStorage across visits.
  */
+import { untrack } from 'svelte';
 import type { InstanceRow, ModelInfo } from '@whiffle/core';
-import { whiffle, loadModels } from './client.svelte';
+import { whiffle, loadModels, isCustodyRefusal } from './client.svelte';
 import { readJson, writeJson } from './storage';
 
 /**
@@ -73,14 +74,32 @@ function liveByHarness(): InstanceRow[] {
 /** Whether any running session can answer a `supportedModels` call. */
 const hasLiveSession = () => whiffle.runningInstances.length > 0;
 
+/**
+ * Sessions already asked, for the life of the page. Plain, not `$state`: an
+ * effect that calls `ensureModels` must not depend on it. A session that
+ * refused is in here too — asking it again on every render was a tight loop,
+ * and each ask made the agent write a frame into the transcript.
+ */
+const asked = new Set<string>();
+
 async function ask(): Promise<void> {
-  const rows = liveByHarness();
-  if (rows.length === 0) throw new Error('A session has to be running to ask what models it offers.');
+  if (liveByHarness().length === 0) {
+    throw new Error('A session has to be running to ask what models it offers.');
+  }
+  const rows = liveByHarness().filter((row) => !asked.has(row.id));
+  if (rows.length === 0) return;
+  for (const row of rows) asked.add(row.id);
   store.loading = true;
   store.error = null;
+  let refused: unknown;
   try {
     const lists = await Promise.all(
-      rows.map((row) => loadModels(row.id, row.machineId).catch((): ModelInfo[] => []))
+      rows.map((row) =>
+        loadModels(row.id, row.machineId).catch((error: unknown): ModelInfo[] => {
+          if (!isCustodyRefusal(error)) refused ??= error;
+          return [];
+        })
+      )
     );
     // Merge and deduplicate by value — first occurrence wins (preserves order).
     const seen = new Set<string>();
@@ -92,6 +111,7 @@ async function ask(): Promise<void> {
         merged.push(model);
       }
     }
+    if (merged.length === 0 && refused !== undefined) throw refused;
     store.offered = merged;
     writeJson(OFFERED_KEY, merged);
   } finally {
@@ -122,17 +142,22 @@ export const models = {
 /**
  * Fills the list if this browser has never seen one. Silent about there being no
  * session to ask through: opening a picker is not the moment to complain that
- * nothing is running.
+ * nothing is running. Each session is asked once per page, whatever it answered;
+ * the reads are untracked so a caller's effect depends only on what it reads
+ * itself, not on the store this changes.
  */
 export function ensureModels(): void {
-  if (store.offered.length > 0 || store.loading || !hasLiveSession()) return;
-  void ask().catch((error: unknown) => {
-    store.error = error instanceof Error ? error.message : String(error);
+  untrack(() => {
+    if (store.offered.length > 0 || !hasLiveSession()) return;
+    void ask().catch((error: unknown) => {
+      store.error = error instanceof Error ? error.message : String(error);
+    });
   });
 }
 
 /** Asks again and replaces what was cached — the picker's "Refresh models". */
 export async function refreshModels(): Promise<void> {
+  asked.clear();
   try {
     await ask();
   } catch (error) {

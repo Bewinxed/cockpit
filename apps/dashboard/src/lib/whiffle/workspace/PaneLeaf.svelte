@@ -35,7 +35,7 @@
   import { createSwipe } from './gesture.svelte';
   import { paneDropTarget, dropHint } from './dnd.svelte';
   import { slot, paneViews } from './dock.svelte';
-  import { resolveSessionTitle } from '../links';
+  import { sessionName } from '../session-name';
   import { models, covers, ensureModels } from '../models.svelte';
   import { PERMISSION_MODES } from '../permission-modes';
   import { effortStops as getEffortStops, hasEffortScale } from '../effort-levels';
@@ -132,14 +132,8 @@
     whiffle.machines.find((m) => m.machineId === machineId)?.hostname ?? machineId
   );
 
-  const title = $derived(
-    resolveSessionTitle({
-      title: whiffle.instances.find((i) => i.id === headerId)?.title,
-      firstMessage: session?.messages.find((m) => m.type === 'user' && m.content.trim())?.content,
-      cwd: session?.cwd || headerCtx?.cwd,
-      id: headerId,
-    })
-  );
+  const servedNames = $derived((page.data as { names?: Record<string, string> }).names ?? {});
+  const title = $derived(sessionName(headerId, servedNames).label);
 
   const stats = $derived(whiffle.statsOf(headerId));
   const activity = $derived(whiffle.activityOf(headerId));
@@ -162,8 +156,11 @@
   const showEffort = $derived(harnessEffort && hasEffortScale(chosenModel));
   const effortStopsForModel = $derived(getEffortStops(chosenModel));
 
+  // One more attempt each time a session comes up, and on nothing else: the
+  // store's own reads are untracked so a failed ask cannot re-run this.
   $effect(() => {
-    ensureModels();
+    void whiffle.runningInstances.length;
+    untrack(ensureModels);
   });
 
   function onmodel(model: string): SettingChange {

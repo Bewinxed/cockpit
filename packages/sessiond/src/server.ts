@@ -476,6 +476,10 @@ export class SessiondServer {
     proc.alive = false;
     proc.exitCode = code;
     proc.signal = signal;
+    // A proc `#spawn` has already replaced under its id is nobody's session
+    // any more: its exit, announced under that id, would land on the
+    // successor's subscriber as the successor's own death.
+    if (this.#procs.get(proc.procId) !== proc) return;
     for (const conn of this.#conns) {
       this.#send(conn, { type: 'proc.exit', procId: proc.procId, exitCode: code, signal });
     }

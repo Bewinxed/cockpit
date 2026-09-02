@@ -42,7 +42,9 @@
   import { effortStops, hasEffortScale } from './effort-levels';
   import { covers, ensureModels, models } from './models.svelte';
   import { mapTranscript, routedToParent } from './frames';
-  import { delegateHandle, resolveSessionTitle } from './links';
+  import { page } from '$app/state';
+  import { delegateHandle } from './links';
+  import { sessionName } from './session-name';
   import SessionHeader, { type SettingChange } from './transcript/SessionHeader.svelte';
   import Transcript from './transcript/Transcript.svelte';
   import TranscriptSkeleton from './transcript/TranscriptSkeleton.svelte';
@@ -385,14 +387,8 @@
    * What this conversation is called. The same helper the tab strip uses, so
    * the tab and the bar under it are never naming two different sessions.
    */
-  const title = $derived(
-    resolveSessionTitle({
-      title: whiffle.instances.find((i) => i.id === viewId)?.title,
-      firstMessage: session?.messages.find((m) => m.type === 'user' && m.content.trim())?.content,
-      cwd: session?.cwd || browsingCwd,
-      id: viewId,
-    })
-  );
+  const servedNames = $derived((page.data as { names?: Record<string, string> }).names ?? {});
+  const title = $derived(sessionName(viewId, servedNames, browsingCwd).label);
 
   const stats = $derived(whiffle.statsOf(viewId));
   const activity = $derived(whiffle.activityOf(viewId));
@@ -424,9 +420,12 @@
   const effortStopsForModel = $derived(effortStops(chosenModel));
 
   // Populate the model list so the effort scale can be read even before the
-  // picker is opened; a session with nothing to ask just leaves it empty.
+  // picker is opened; a session with nothing to ask just leaves it empty. One
+  // attempt per session coming up, and on nothing else: the store's own reads
+  // are untracked so a failed ask cannot re-run this.
   $effect(() => {
-    ensureModels();
+    void whiffle.runningInstances.length;
+    untrack(ensureModels);
   });
 
   /** What `@` can name: the other conversations in the strip, and the machines. */

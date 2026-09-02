@@ -43,7 +43,11 @@ import type {
 } from '@whiffle/core';
 import {
   ASK_USER_QUESTION,
+  CONTROL_CONTEXT_USAGE,
+  CONTROL_MCP_STATUS,
   CONTROL_SET_EFFORT,
+  CONTROL_SUPPORTED_COMMANDS,
+  CONTROL_SUPPORTED_MODELS,
   INSPECT_CONFIG,
   MARKETPLACE_CATALOG,
   MESSAGE_DEQUEUED,
@@ -462,6 +466,27 @@ class Turn {
 }
 
 const SETTLE_TIMEOUT_MS = 5_000;
+
+/**
+ * How long a custody `stop` waits for the child to die after its stdin is
+ * ended, before and again after a SIGKILL. Our choice: an idle claude exits on
+ * stdin EOF within tens of milliseconds; a couple of seconds separates slow
+ * from stuck, and stuck gets SIGKILL.
+ */
+const CUSTODY_EXIT_MS = 2_000;
+
+/** Whether `promise` settled within `ms`. The timer is cleared either way. */
+const within = async (promise: Promise<unknown>, ms: number): Promise<boolean> => {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const expiry = new Promise<false>((resolve) => {
+    timer = setTimeout(() => resolve(false), ms);
+  });
+  try {
+    return await Promise.race([promise.then(() => true), expiry]);
+  } finally {
+    clearTimeout(timer);
+  }
+};
 
 /** How many consumed turns wait to be matched to their frame before the oldest is dropped. */
 const AWAITING_ECHO_LIMIT = 32;
@@ -1022,6 +1047,41 @@ export const controlError = (requestId: string, error: string): string =>
 /** The in-band notice a custody refusal writes into the transcript. */
 export const CUSTODY_DEGRADED = 'custody_degraded';
 
+/** The three fields of a ring line that adoption reads; `undefined` when it is not JSON. */
+const parseLine = (data: string): { type?: unknown; subtype?: unknown; session_id?: unknown } | undefined => {
+  try {
+    return JSON.parse(data) as { type?: unknown; subtype?: unknown; session_id?: unknown };
+  } catch {
+    return undefined;
+  }
+};
+
+/**
+ * A child whose last written line is this one is waiting for input: the CLI
+ * writes nothing after a `result` until the next user message, and a child
+ * that has been asked nothing yet writes its `init` and stops there.
+ */
+const isWaiting = (line: { type?: unknown; subtype?: unknown }): boolean =>
+  line.type === 'result' || (line.type === 'system' && line.subtype === 'init');
+
+/**
+ * Controls that only READ the session. A dashboard asks these on every open
+ * (and a looping one asked them thousands of times in seconds), and nothing
+ * in the session changes when they are refused — so the refusal goes back to
+ * the caller as the rejection alone. Writing it into the transcript as well
+ * told the operator nothing and buried the turn under notices. Everything
+ * that would have CHANGED the session keeps its in-band notice: those are the
+ * refusals the operator has to see. `accountInfo` has no core constant; it is
+ * the SDK's own method name, asked by the dashboard verbatim.
+ */
+const READ_ONLY_CONTROLS: ReadonlySet<string> = new Set([
+  CONTROL_SUPPORTED_MODELS,
+  CONTROL_SUPPORTED_COMMANDS,
+  CONTROL_MCP_STATUS,
+  CONTROL_CONTEXT_USAGE,
+  'accountInfo',
+]);
+
 /**
  * CUSTODY (design §4.1) — the session while the agent that owned it is gone.
  *
@@ -1044,7 +1104,9 @@ export const CUSTODY_DEGRADED = 'custody_degraded';
  *  - at the turn's next `result` line the child's stdin is EOF'd and the
  *    hand-off fires: the owner respawns through the full SDK with
  *    `resume: sessionId`. The in-flight turn completed and was captured; the
- *    cost is one respawn at a turn boundary.
+ *    cost is one respawn at a turn boundary. A child that was already between
+ *    turns when adopted has no next `result` coming, so {@link ClaudeHarness.adopt}
+ *    fires the same hand-off from the ring's last line instead.
  *
  * Custody is a degraded mode measured in seconds, not a second implementation
  * of the SDK. Everything it refuses, it refuses out loud.
@@ -1057,6 +1119,8 @@ export class ClaudeCustody implements HarnessSession {
   /** Turns pushed during custody; delivered by the respawned session. */
   readonly #held: { message: NeutralUserMessage; extras: Pick<SendPayload, 'attachments' | 'images' | 'urgent'> }[] = [];
   #handedOff = false;
+  /** Settled by {@link exited} when sessiond reports the child gone. */
+  readonly #exit = Promise.withResolvers<void>();
 
   constructor(
     readonly instanceId: string,
@@ -1070,9 +1134,16 @@ export class ClaudeCustody implements HarnessSession {
       sessionId: string | null;
       held: { message: NeutralUserMessage; extras: Pick<SendPayload, 'attachments' | 'images' | 'urgent'> }[];
     }) => void,
-    sessionId: string | null = null
+    sessionId: string | null = null,
+    /** Signals the child; what a `stop` falls back to when EOF alone does not end it. */
+    private readonly kill: (sig: NodeJS.Signals) => void = () => {}
   ) {
     this.sessionId = sessionId;
+  }
+
+  /** The child is gone — from the ring subscription's `exit`, whatever caused it. */
+  exited(): void {
+    this.#exit.resolve();
   }
 
   /** The asks still waiting for an answer — what a reattach re-announces. */
@@ -1179,16 +1250,22 @@ export class ClaudeCustody implements HarnessSession {
     this.#held.push({ message, extras });
   }
 
-  /** Every non-permission control fails visibly, for the reason above. */
+  /**
+   * Every non-permission control fails, for the reason above; only the ones
+   * that would have changed the session fail in the transcript too (see
+   * {@link READ_ONLY_CONTROLS}).
+   */
   control(method: string): Promise<unknown> {
     const reason = `whiffle: agent restarted; control \`${method}\` is unavailable until this session hands back (custody)`;
-    this.ctx.frame({
-      type: 'system',
-      subtype: CUSTODY_DEGRADED,
-      ...(this.sessionId ? { session_id: this.sessionId } : {}),
-      control: method,
-      text: reason,
-    } as unknown as NeutralMessage);
+    if (!READ_ONLY_CONTROLS.has(method)) {
+      this.ctx.frame({
+        type: 'system',
+        subtype: CUSTODY_DEGRADED,
+        ...(this.sessionId ? { session_id: this.sessionId } : {}),
+        control: method,
+        text: reason,
+      } as unknown as NeutralMessage);
+    }
     return Promise.reject(new Error(reason));
   }
 
@@ -1219,6 +1296,13 @@ export class ClaudeCustody implements HarnessSession {
     this.#held.length = 0;
     this.#handedOff = true;
     this.stdinEnd();
+    // Returned only once the child is actually dead. The supervisor's relaunch
+    // awaits this before spawning under the same procId, and sessiond's spawn
+    // SIGKILLs a still-alive predecessor and broadcasts its exit to whoever is
+    // subscribed under that id by then — which would be the new session.
+    if (await within(this.#exit.promise, CUSTODY_EXIT_MS)) return;
+    this.kill('SIGKILL');
+    await within(this.#exit.promise, CUSTODY_EXIT_MS);
   }
 
   async dispose(): Promise<void> {
@@ -1303,6 +1387,22 @@ export class ClaudeHarness implements Harness {
    * supplies the cursor it wants resumed from — the hub's own ingest mark when
    * it has one, `undefined` to follow from now — and the hand-off it wants at
    * the turn boundary.
+   *
+   * THE IDLE CHILD (the boundary that never comes). Custody hands back at the
+   * next `result`, and a child whose turn finished BEFORE the agent died never
+   * writes another one: stream-json is silent after a `result` until the next
+   * user message, and custody holds every message. Left to the rule above such
+   * a session stays in custody for good — turns held, controls refused. So the
+   * ring's LAST line is read before anything else (`head`, from the welcome the
+   * caller already has): a `result`, or the `system`/`init` of a fresh child
+   * that has been asked nothing yet, means the child is waiting on us, and the
+   * hand-off fires at adoption. Anything else — or nothing to read — means a
+   * turn is in flight, and the boundary is waited for as before.
+   *
+   * The peek is one line of the same subscribe, not a second read: the cursor
+   * is opened one seq earlier than the caller asked for, and what comes back
+   * at or below the caller's own cursor is looked at and NOT re-emitted — the
+   * hub already has it, and `ingest` would hand it a frame it holds.
    */
   async adopt(
     instanceId: string,
@@ -1310,6 +1410,8 @@ export class ClaudeHarness implements Harness {
     options: {
       afterSeq?: number;
       sessionId?: string | null;
+      /** The ring's last seq as the welcome reported it; absent means no peek. */
+      head?: number;
       onHandoff: (handoff: {
         instanceId: string;
         sessionId: string | null;
@@ -1324,44 +1426,79 @@ export class ClaudeHarness implements Harness {
       (data) => void client.write(instanceId, data).catch(() => {}),
       () => void client.stdinEnd(instanceId).catch(() => {}),
       options.onHandoff,
-      options.sessionId ?? null
+      options.sessionId ?? null,
+      (sig) => void client.signal(instanceId, sig).catch(() => {})
     );
+    // Everything at or below `boundary` the hub has already seen; everything
+    // above it is the replay the caller asked for. A cursor past `head` names
+    // lines the ring never assigned — sessiond's refusal covers that, and a
+    // peek would only muddle whose refusal it was.
+    const head = options.head ?? 0;
+    const boundary = options.afterSeq ?? head;
+    const peekSeq = head >= 1 && boundary <= head ? Math.min(boundary, head - 1) : undefined;
+    // PROVENANCE (design §7). This frame came from exactly one sessiond line,
+    // and this is the only place that knows which: the stamp goes one
+    // statement before the ingest that emits it, because `ingest` emits
+    // synchronously and so the stamp lands on that frame and no other.
+    // Without it the hub has nothing to dedupe a replayed or re-sent line by.
+    //
+    // `client.epoch` is read here rather than asserted once at adopt time: it
+    // is only defined after sessiond's welcome, and reading it per line keeps
+    // the stamp truthful if a client ever re-welcomes under a new epoch.
+    // Undefined means no stamp at all — an unstamped frame is the pre-ledger
+    // behaviour the honest-loss rule already covers, which is strictly better
+    // than a frame stamped with an epoch nobody minted.
+    const stamp = (seq: number): void => {
+      const srcEpoch = client.epoch;
+      if (srcEpoch !== undefined) {
+        (ctx as Partial<SessiondAwareContext>).line?.(srcEpoch, seq);
+      }
+    };
     client.subscribe(
       instanceId,
       {
         line: (event) => {
-          // PROVENANCE (design §7). This frame came from exactly one sessiond
-          // line, and this is the only place that knows which: the stamp goes
-          // one statement before the ingest that emits it, because `ingest`
-          // emits synchronously and so the stamp lands on that frame and no
-          // other. Without it the hub has nothing to dedupe a replayed or
-          // re-sent line by.
-          //
-          // `client.epoch` is read here rather than asserted once at adopt
-          // time: it is only defined after sessiond's welcome, and reading it
-          // per line keeps the stamp truthful if a client ever re-welcomes
-          // under a new epoch. Undefined means no stamp at all — an unstamped
-          // frame is the pre-ledger behaviour the honest-loss rule already
-          // covers, which is strictly better than a frame stamped with an
-          // epoch nobody minted.
-          const srcEpoch = client.epoch;
-          if (srcEpoch !== undefined) {
-            (ctx as Partial<SessiondAwareContext>).line?.(srcEpoch, event.seq);
+          // The ring's last line is the one that says whether the child is
+          // waiting. It is read the same way whether it is peeked or replayed
+          // for real: a replayed `result` hands off inside `ingest` anyway,
+          // but a replayed `init` would not, and a fresh child the hub saw
+          // nothing of is exactly that case.
+          const last = event.seq === head && head >= 1 ? parseLine(event.data) : undefined;
+          if (peekSeq !== undefined && event.seq <= boundary) {
+            // Peek-only: looked at, never emitted. The session id is the one
+            // thing taken from it — a survivor the hub never named arrives
+            // without one, and the hand-off's `resume` cannot do without it.
+            if (custody.sessionId === null && typeof last?.session_id === 'string') custody.sessionId = last.session_id;
+          } else {
+            stamp(event.seq);
+            custody.ingest(event.data);
           }
-          custody.ingest(event.data);
+          // There is no backlog-complete event; the ring's last line is it.
+          if (last !== undefined && isWaiting(last)) custody.handOff();
         },
-        // An exited child during custody is the session ending on its own; the
-        // supervisor's `closed` hook retires the row.
-        exit: () => ctx.closed?.(),
-        // §6's honest refusal, surfaced rather than smoothed over.
-        reset: (nextSeq) =>
+        // A child that dies during custody is the session ending on its own,
+        // and the supervisor's `closed` hook retires the row. After the
+        // hand-off (or a stop) its death is the EOF doing what it was sent to
+        // do — expected, and not the session ending — so only `stop`'s wait
+        // hears of it.
+        exit: () => {
+          custody.exited();
+          if (!custody.handedOff) ctx.closed?.();
+        },
+        // §6's honest refusal, surfaced rather than smoothed over — unless the
+        // refusal is of the peek alone. The caller's own cursor sits at `head`
+        // and is always replayable; only the one seq before it can be gone,
+        // and a gap nobody asked to see is not a seam in the transcript.
+        reset: (nextSeq) => {
+          if (peekSeq !== undefined && peekSeq < boundary) return;
           ctx.frame({
             type: 'system',
             subtype: 'sessiond_stream_gap',
             text: `whiffle: sessiond's replay window overflowed; this transcript resumes at line ${nextSeq}`,
-          } as unknown as NeutralMessage),
+          } as unknown as NeutralMessage);
+        },
       },
-      options.afterSeq
+      peekSeq ?? options.afterSeq
     );
     return custody;
   }

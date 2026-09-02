@@ -14,7 +14,7 @@
   import { page } from '$app/state';
   import { IconClose } from '$lib/icons';
   import { whiffle } from '../client.svelte';
-  import { resolveSessionTitle } from '../links';
+  import { sessionName } from '../session-name';
   import { markHue } from '../mark';
   import HarnessGlyph from '../HarnessGlyph.svelte';
   import * as ContextMenu from '$lib/components/ui/context-menu';
@@ -40,23 +40,11 @@
     const row = whiffle.instances.find((instance) => instance.id === id);
     const view = whiffle.session(id);
     const ctx = contextOf(id);
-    const title = row?.title;
-    const firstMessage = view?.messages.find((m) => m.type === 'user' && m.content.trim())?.content;
-    const named = !!title?.trim() || !!firstMessage?.trim();
-    const resolved = resolveSessionTitle({
-      title,
-      firstMessage,
-      cwd: view?.cwd || row?.cwd || ctx?.cwd,
-      id,
-    });
+    const { label, named } = sessionName(id, servedNames);
     return {
       id,
       href: urlFor(id),
-      // A conversation this browser has named before keeps that name, and a
-      // name the server resolved stands in after it, until the fleet and the
-      // transcript have both answered; falling back to the folder for that
-      // moment is the flash the remembered title removes.
-      label: named ? resolved : (workingSet.titleOf(id) ?? servedNames[id] ?? resolved),
+      label,
       hue: markHue(view?.cwd || row?.cwd || ctx?.cwd || id),
       harness: ctx?.harness || row?.harness || view?.harness || 'claude',
       named,

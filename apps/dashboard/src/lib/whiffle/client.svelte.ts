@@ -3530,6 +3530,14 @@ export async function loadModels(instanceId: string, machineId: string): Promise
   );
 }
 
+/**
+ * A refusal because the session is in custody — being handed back after an
+ * agent restart. Expected for a moment, and the next ask gets through, so it
+ * is not an error to log or to show.
+ */
+export const isCustodyRefusal = (error: unknown): boolean =>
+  error instanceof Error && error.message.includes('(custody)');
+
 /** A `SlashCommand[]` answer as the lookup the menu reads its prose from. */
 const detailsOf = (commands: SlashCommand[]): Map<string, SlashCommand> =>
   new Map(commands.map((command) => [command.name, command]));
@@ -3559,7 +3567,9 @@ export async function loadCommands(instanceId: string, machineId: string): Promi
   } catch (error) {
     // The menu is still every name the init frame listed, undescribed, and the
     // next opening asks again — nothing the reader needs to act on.
-    console.error(`[whiffle] supportedCommands on ${instanceId} failed:`, error);
+    if (!isCustodyRefusal(error)) {
+      console.error(`[whiffle] supportedCommands on ${instanceId} failed:`, error);
+    }
   } finally {
     target.commandsPending = false;
   }
@@ -3588,7 +3598,9 @@ export async function loadMcpServers(instanceId: string, machineId: string): Pro
   try {
     target.mcp = await askMcp(instanceId, machineId);
   } catch (error) {
-    console.error(`[whiffle] mcpServerStatus on ${instanceId} failed:`, error);
+    if (!isCustodyRefusal(error)) {
+      console.error(`[whiffle] mcpServerStatus on ${instanceId} failed:`, error);
+    }
     target.mcp = [];
   } finally {
     target.mcpPending = false;
@@ -3606,7 +3618,9 @@ export async function refreshMcpServers(instanceId: string, machineId: string): 
   } catch (error) {
     // A failed refresh keeps the stale list: blanking chips that were fine is a
     // worse answer than showing the reading from a moment ago.
-    console.error(`[whiffle] mcpServerStatus on ${instanceId} failed:`, error);
+    if (!isCustodyRefusal(error)) {
+      console.error(`[whiffle] mcpServerStatus on ${instanceId} failed:`, error);
+    }
   } finally {
     target.mcpPending = false;
   }

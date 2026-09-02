@@ -532,6 +532,31 @@
     if (!landed || atBottom) void tick().then(land);
     else returning = false;
   });
+
+  // A landing is not the last word on the tail's height: virtua measures rows
+  // as they mount, and the list grows a little after `land` has written its
+  // pixel, leaving the last row under the composer with nothing to re-seat it.
+  // So while the reader is pinned at the tail and no ride owns the scroll, any
+  // change in the scroller's or the list's size pins it again. The write is
+  // tagged the way the loop's are, so `onscroll` does not read it as the
+  // reader leaving. Re-armed whenever the scroller's children change — the
+  // note, the empty state and the catch-up line come and go around the list.
+  $effect(() => {
+    if (!active || !scroller) return;
+    void compacting;
+    void catching;
+    void (rows.length === 0);
+    const box = scroller;
+    const observer = new ResizeObserver(() => {
+      if (!landed || !atBottom || following !== null) return;
+      if (box.scrollTop >= box.scrollHeight - box.clientHeight) return;
+      box.scrollTop = box.scrollHeight;
+      lastWrite = box.scrollTop;
+    });
+    observer.observe(box);
+    for (const child of box.children) observer.observe(child);
+    return () => observer.disconnect();
+  });
   // Composer height changes are handled entirely by CSS: `--composer-clearance`
   // on the parent adjusts `.tr`'s `padding-bottom`, the browser updates
   // `scrollHeight`, and the existing follow loop (which watches `rows.length`

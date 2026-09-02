@@ -408,8 +408,8 @@ export const sessiondBridge = (
 
   const stdout = new Readable({ read() {} });
   // The highest sequence this wrapper has handed to the SDK. It subscribes at
-  // 0 before the child exists, so the first line it expects is seq 1, and this
-  // is what separates a benign reset from a lost window.
+  // 0 against the child's own fresh ring, so the first line it expects is seq
+  // 1, and this is what separates a benign reset from a lost window.
   let consumed = 0;
   const stdin = new Writable({
     write(chunk: Buffer | string, _encoding, callback) {
@@ -428,41 +428,43 @@ export const sessiondBridge = (
     },
   });
 
-  client.subscribe(
-    procId,
-    {
-      // Lines lost their terminator on the way into the ring; the SDK's own
-      // reader frames on newlines, so it goes back on.
-      line: (event) => {
-        consumed = event.seq;
-        stdout.push(`${event.data}\n`);
-      },
-      exit: (code, sig) => {
-        exitCode = code;
-        signalCode = sig;
-        stdout.push(null);
-        events.emit('exit', code, sig);
-      },
-      // An overflowed ring is an honest refusal, not a silent splice: the SDK
-      // is told the stream broke rather than handed a transcript with a hole.
-      //
-      // A reset that resumes exactly where this wrapper stands skipped no
-      // line, so it is not that. It is what attaching before the spawn lands
-      // announces, and turning it into an SDK error failed every spawn on
-      // this path. Only an announcement that jumps past the next sequence
-      // this wrapper expects is a real hole, and that one still throws.
-      reset: (nextSeq) => {
-        if (nextSeq <= consumed + 1) return;
-        events.emit(
-          'error',
-          new Error(
-            `[sessiond] ${procId}: replay window lost, stream resumes at ${nextSeq} (consumed ${consumed})`
-          )
-        );
-      },
+  // The listener is built here but attached only once the spawn is acked (see
+  // `started`). A relaunch or a custody hand-off reuses the procId, and until
+  // the ack lands sessiond's table still holds the OLD child under it: a
+  // subscribe at 0 sent before the ack replayed that child's entire ring into
+  // this SDK's stdout — or, if its ring had overflowed, announced a reset that
+  // failed the spawn — and if it was still alive, its death arrived here as
+  // this process's own. After the ack the table holds the new child, and
+  // cursor 0 names exactly its first line.
+  const listener: ProcListener = {
+    // Lines lost their terminator on the way into the ring; the SDK's own
+    // reader frames on newlines, so it goes back on.
+    line: (event) => {
+      consumed = event.seq;
+      stdout.push(`${event.data}\n`);
     },
-    0
-  );
+    exit: (code, sig) => {
+      exitCode = code;
+      signalCode = sig;
+      stdout.push(null);
+      events.emit('exit', code, sig);
+    },
+    // An overflowed ring is an honest refusal, not a silent splice: the SDK
+    // is told the stream broke rather than handed a transcript with a hole.
+    //
+    // A reset that resumes exactly where this wrapper stands skipped no
+    // line, so it is not that. Only an announcement that jumps past the next
+    // sequence this wrapper expects is a real hole, and that one throws.
+    reset: (nextSeq) => {
+      if (nextSeq <= consumed + 1) return;
+      events.emit(
+        'error',
+        new Error(
+          `[sessiond] ${procId}: replay window lost, stream resumes at ${nextSeq} (consumed ${consumed})`
+        )
+      );
+    },
+  };
 
   // Env entries the SDK left undefined are absent, not empty: `ProcSpec.env`
   // is a string map, and sessiond merges it over its own `process.env`.
@@ -476,6 +478,7 @@ export const sessiondBridge = (
       ...(options.cwd ? { cwd: options.cwd } : {}),
       env,
     })
+    .then(() => client.subscribe(procId, listener, 0))
     .catch((error: unknown) => {
       events.emit('error', error instanceof Error ? error : new Error(String(error)));
     });
