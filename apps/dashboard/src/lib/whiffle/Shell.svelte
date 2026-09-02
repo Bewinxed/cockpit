@@ -496,7 +496,7 @@
      transitions, and it is suppressed for reduced-motion. */
   .icobtn,
   .burger {
-    transition: background var(--motion-fast) var(--ease-toggle);
+    transition: background var(--motion-fast) var(--e-toggle);
   }
   .icobtn:active,
   .burger:active {
@@ -562,7 +562,7 @@
     height: 100%;
     border-radius: var(--radius-pill);
     background: var(--data-ok);
-    transition: width var(--motion-fast) var(--ease-toggle);
+    transition: width var(--motion-fast) var(--e-toggle);
   }
   .desk-budget-fill.warn {
     background: var(--data-warn);

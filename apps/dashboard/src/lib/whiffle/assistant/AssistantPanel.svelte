@@ -378,7 +378,7 @@
     display: grid;
     place-items: center;
     cursor: pointer;
-    transition: background var(--motion-fast) var(--ease-toggle);
+    transition: background var(--motion-fast) var(--e-toggle);
   }
   .a-x svg {
     width: 14px;

@@ -115,8 +115,8 @@
     transform: scale(1);
     border-radius: 0;
     transition:
-      transform var(--c-300) var(--ease-toggle),
-      border-radius var(--c-300) var(--ease-toggle);
+      transform var(--c-300) var(--e-toggle),
+      border-radius var(--c-300) var(--e-toggle);
   }
   .lift::before {
     content: '';
@@ -126,7 +126,7 @@
     box-shadow: var(--shadow-overlay);
     opacity: 0;
     will-change: opacity;
-    transition: opacity var(--c-300) var(--ease-toggle);
+    transition: opacity var(--c-300) var(--e-toggle);
     pointer-events: none;
   }
   .clip {
@@ -143,12 +143,12 @@
     transform: scale(0.96);
     border-radius: var(--radius-modal);
     transition:
-      transform calc(var(--c-300) * 0.6) var(--ease-entry),
-      border-radius calc(var(--c-300) * 0.6) var(--ease-entry);
+      transform calc(var(--c-300) * 0.6) var(--e-in),
+      border-radius calc(var(--c-300) * 0.6) var(--e-in);
   }
   .deck.lifted .lift::before {
     opacity: 1;
-    transition: opacity calc(var(--c-300) * 0.6) var(--ease-entry);
+    transition: opacity calc(var(--c-300) * 0.6) var(--e-in);
   }
 
   /* `visibility`, never `display`, and only the hidden state is declared —
@@ -168,7 +168,7 @@
     flex-direction: column;
     gap: 6px;
     opacity: 0;
-    transition: opacity 160ms var(--ease-entry);
+    transition: opacity 160ms var(--e-in);
     pointer-events: none;
     z-index: 5;
   }
@@ -182,8 +182,8 @@
     background: var(--ink-muted);
     opacity: 0.5;
     transition:
-      height 160ms var(--ease-entry),
-      opacity 160ms var(--ease-entry);
+      height 160ms var(--e-in),
+      opacity 160ms var(--e-in);
   }
   .dot-on {
     height: 18px;
@@ -200,7 +200,7 @@
       transition: none;
     }
     .dot {
-      transition: opacity 160ms var(--ease-entry);
+      transition: opacity 160ms var(--e-in);
     }
     .deck.lifted .lift {
       transform: scale(1);

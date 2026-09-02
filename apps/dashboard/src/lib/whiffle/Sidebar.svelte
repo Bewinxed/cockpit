@@ -603,7 +603,7 @@
     font-size: var(--text-base);
     font-weight: var(--weight-medium);
     /* Only the surface transitions, and it stays interruptible. */
-    transition: background var(--motion-fast) var(--ease-toggle);
+    transition: background var(--motion-fast) var(--e-toggle);
   }
   .folder-h .nm {
     flex: 1 1 auto;
@@ -625,7 +625,7 @@
     color: var(--ink-muted);
     /* The static cue for open/closed is the direction the chevron points; the
        rotation is only the transition between those two static states. */
-    transition: transform var(--motion-fast) var(--ease-toggle);
+    transition: transform var(--motion-fast) var(--e-toggle);
   }
   .tw.open {
     transform: rotate(90deg);
