@@ -30,7 +30,7 @@
       from: null,
       ctx: () => ({ machine: machineId, cwd: info.cwd ?? '', harness: info.harness ?? 'claude' }),
     }}
-    href={transcriptHref(machineId, info)}
+    href={transcriptHref(info)}
     class="flex min-h-9 items-center rounded-[var(--radius-control)] px-4 py-1.5
       transition-colors duration-150 ease-out hover:bg-accent hover:text-accent-foreground"
   >

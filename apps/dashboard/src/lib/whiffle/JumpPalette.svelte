@@ -80,7 +80,7 @@
           group: 'Recent sessions',
           label: sessionTitle(info),
           detail: `${machine.hostname} · ${info.cwd ?? ''}`,
-          href: transcriptHref(machine.machineId, info),
+          href: transcriptHref(info),
         });
       }
     }

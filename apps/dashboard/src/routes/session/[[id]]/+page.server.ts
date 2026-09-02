@@ -15,6 +15,8 @@ interface HistorySource {
   cwd: string;
   harness: string;
   live: boolean;
+  /** The location came from the URL's own query and is sent to the hub as an override. */
+  override?: boolean;
 }
 
 /** Beyond this many entries the tail read gives up looking for a clean cut. */
@@ -43,9 +45,18 @@ function contentBlocks(entry: SessionMessage): { type?: string; id?: string; too
 async function readTail(
   fetch: typeof globalThis.fetch,
   url: string
-): Promise<SessionMessage[]> {
+): Promise<{ messages: SessionMessage[]; found: Partial<HistorySource> }> {
   const response = await fetch(url);
-  if (!response.ok || !response.body) return [];
+  if (!response.ok || !response.body) return { messages: [], found: {} };
+  // Where the hub found it — the one thing a bare id does not say, and the
+  // pane names the machine in its header from the first paint.
+  const found: Partial<HistorySource> = {};
+  const machineId = response.headers.get('x-whiffle-machine');
+  if (machineId) found.machineId = machineId;
+  const cwd = response.headers.get('x-whiffle-cwd');
+  if (cwd) found.cwd = decodeURIComponent(cwd);
+  const harness = response.headers.get('x-whiffle-harness');
+  if (harness) found.harness = harness;
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   /** Newest first, as the hub sends it. */
@@ -93,18 +104,22 @@ async function readTail(
   }
 
   // Newest-first off the wire, oldest-first on screen.
-  return buffered.reverse();
+  return { messages: buffered.reverse(), found };
 }
 
-/** The read URL, addressed exactly as `streamHistory` addresses it. */
+/**
+ * The read URL, addressed exactly as `streamHistory` addresses it: the view's
+ * id alone — the hub maps a live instance to its SDK key and locates any other
+ * — unless the URL that brought the reader here spelled the location out.
+ */
 function messagesUrl(source: HistorySource): string {
-  return source.live
-    ? `/api/instances/${encodeURIComponent(source.viewId)}/messages`
-    : `/api/instances/${encodeURIComponent(source.sessionId)}/messages?${new URLSearchParams({
-        machine: source.machineId,
-        harness: source.harness,
-        ...(source.cwd && { cwd: source.cwd }),
-      })}`;
+  const path = `/api/instances/${encodeURIComponent(source.viewId)}/messages`;
+  if (!source.override) return path;
+  return `${path}?${new URLSearchParams({
+    machine: source.machineId,
+    harness: source.harness,
+    ...(source.cwd && { cwd: source.cwd }),
+  })}`;
 }
 
 /**
@@ -136,6 +151,9 @@ export const load: PageServerLoad = async ({ params, url, fetch, untrack, isData
 
   if (!viewId) return { history: null, tail: null };
 
+  // A link minted while stored transcripts still carried their location. It
+  // is honoured as an override rather than resolved, so an old bookmark reads
+  // exactly what it always read.
   const machine = untrack(() => url.searchParams.get('machine'));
   if (machine) {
     const source: HistorySource = {
@@ -145,6 +163,7 @@ export const load: PageServerLoad = async ({ params, url, fetch, untrack, isData
       cwd: untrack(() => url.searchParams.get('cwd')) ?? '',
       harness: untrack(() => url.searchParams.get('harness')) ?? 'claude',
       live: false,
+      override: true,
     };
     return {
       history: Promise.resolve(source),
@@ -152,41 +171,44 @@ export const load: PageServerLoad = async ({ params, url, fetch, untrack, isData
     };
   }
 
-  let source: HistorySource | null = null;
+  // Otherwise the id is the whole address. The hub's rows say whether it is a
+  // running session — which decides how the client reconciles live frames
+  // behind the read — and name it ahead of the transcript; a session the hub
+  // does not hold is read by the same id and located on the way.
+  let row: InstanceRow | undefined;
   try {
     const response = await fetch('/api/instances');
     if (response.ok) {
       const rows = (await response.json()) as InstanceRow[];
-      const row = rows.find((instance) => instance.id === viewId);
-      if (row) {
-        source = {
-          viewId,
-          machineId: row.machineId,
-          sessionId: row.sessionId ?? viewId,
-          cwd: row.cwd ?? '',
-          harness: row.harness ?? 'claude',
-          live: true,
-        };
-      }
+      row = rows.find((instance) => instance.id === viewId);
     }
   } catch {
-    source = null;
+    row = undefined;
   }
+  const source: HistorySource = {
+    viewId,
+    machineId: row?.machineId ?? '',
+    sessionId: row?.sessionId ?? viewId,
+    cwd: row?.cwd ?? '',
+    harness: row?.harness ?? 'claude',
+    live: row !== undefined,
+  };
 
   return {
     history: Promise.resolve(source),
-    tail: source && !isDataRequest ? await tailFor(fetch, source) : null,
+    tail: isDataRequest ? null : await tailFor(fetch, source),
   };
 };
 
 /** The tail plus the identity the pane needs to name it before the store exists. */
 async function tailFor(fetch: typeof globalThis.fetch, source: HistorySource) {
+  const { messages, found } = await readTail(fetch, messagesUrl(source));
   return {
     viewId: source.viewId,
-    machineId: source.machineId,
+    machineId: source.machineId || (found.machineId ?? ''),
     sessionId: source.sessionId,
-    cwd: source.cwd,
-    harness: source.harness,
-    messages: await readTail(fetch, messagesUrl(source)),
+    cwd: source.cwd || (found.cwd ?? ''),
+    harness: found.harness ?? source.harness,
+    messages,
   };
 }

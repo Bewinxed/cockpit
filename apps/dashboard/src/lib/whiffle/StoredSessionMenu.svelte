@@ -29,7 +29,7 @@
     children,
   }: { machineId: string; info: SDKSessionInfo; children: Snippet } = $props();
 
-  const href = $derived(transcriptHref(machineId, info));
+  const href = $derived(transcriptHref(info));
   /** Every mutation names the directory the session was recorded under. */
   const where = $derived({ dir: info.cwd || undefined });
 

@@ -26,8 +26,7 @@
     streamCapable,
     submitCommand,
     openSession,
-    openTranscript,
-    backfillSession,
+    clearReadFault,
     streamHistory,
     type HistorySource,
     ensureAlive,
@@ -39,7 +38,6 @@
     type SendExtras,
     type SessionState,
   } from './client.svelte';
-  import { locate } from './workspace/workspace.svelte';
   import { PERMISSION_MODES } from './permission-modes';
   import { effortStops, hasEffortScale } from './effort-levels';
   import { covers, ensureModels, models } from './models.svelte';
@@ -47,6 +45,7 @@
   import { delegateHandle, resolveSessionTitle } from './links';
   import SessionHeader, { type SettingChange } from './transcript/SessionHeader.svelte';
   import Transcript from './transcript/Transcript.svelte';
+  import TranscriptSkeleton from './transcript/TranscriptSkeleton.svelte';
   // StaticTail removed — virtua's ssrCount renders the tail directly.
   import Composer, { type Mention } from './transcript/Composer.svelte';
   import AutopilotToggle from './AutopilotToggle.svelte';
@@ -110,8 +109,22 @@
 
   /** Why this pane has nothing to show, when it has nothing to show. */
   let failure = $state<{ reason: 'offline' | 'failed'; message: string } | null>(null);
+  /** The hub answered 404: no row, no stored file, no machine that knows the id. */
+  let missing = $state(false);
+  /** The read finished, cleanly, with nothing in it — a transcript with no turns yet. */
+  let empty = $state(false);
   /** Bumped by Retry: the one thing that re-runs the read after it has failed. */
   let attempt = $state(0);
+
+  /**
+   * Whether the hub holds this id as a running session. This, not the tab's
+   * remembered context, is what decides the tense of the read: a live session
+   * is subscribed to and its frames reconciled behind the history; a stored one
+   * is only read. The old `browsing === null` test stood in for it and was
+   * wrong for every live session opened from the sidebar, which arrived with a
+   * context and so was never opened at all.
+   */
+  const isLive = $derived(whiffle.instances.some((row) => row.id === viewId));
 
   /**
    * Where the server said this conversation's transcript can be read from —
@@ -122,108 +135,89 @@
   const history = $derived<Promise<HistorySource | null> | null>(serverHistory);
 
   /**
-   * Reads a conversation's history over HTTP, falling back to the socket. The
-   * HTTP read answers on a page that has only just loaded; the socket read is
-   * what answers when the hub's REST side cannot (an old hub, a proxy in the
-   * way), so neither path is given up.
+   * Reads a conversation's history: one read, addressed by the id alone.
+   *
+   * The hub resolves the id — a live row to its SDK key, anything else to
+   * whichever machine holds the file — so there is no stored read to try
+   * first and no live read to fall back to. What used to be two reads and a
+   * fleet-wide locate was also two chances to end with nothing in flight and
+   * nothing on screen; now every way this ends is a named state.
+   *
+   * `source` is the server's descriptor when this pane is the one the URL
+   * loaded, and carries the only thing the id does not say: a location
+   * spelled out by an old link, sent to the hub as an override.
    */
   async function readHistory(
     id: string,
     source: Promise<HistorySource | null> | null,
-    stored: { machineId: string; cwd: string; harness: string } | null
+    hint: { machineId: string; cwd: string; harness: string } | null,
+    running: boolean
   ): Promise<void> {
     const named = await source;
-    if (named && named.viewId === id) {
-      const outcome = await streamHistory(named);
-      // A read that SUCCEEDED and returned nothing is not a read that
-      // worked. The stored path answers 200 with an empty body when it
-      // cannot find a transcript where the machine and folder say it should
-      // be — which is what happens to a conversation the hub knows as a live
-      // instance but whose harness files it somewhere else. Taking that as
-      // an answer left the pane on its loading state forever: no transcript,
-      // no failure, nothing to retry. Measured on one such session: the
-      // stored read returned 0 lines and the live read returned 1051.
-      if (outcome.ok && (whiffle.session(id)?.messages.length ?? 0) > 0) return;
-      // Offline is the fleet's own state, not a fault in the read: say it
-      // rather than asking a machine that is asleep a second time.
-      if (!outcome.ok && outcome.reason === 'offline') {
-        failure = { reason: outcome.reason, message: outcome.message };
-        return;
-      }
-      // Empty from a stored read, but the hub may hold it as an instance —
-      // ask again by id alone, which is the address the live read wants.
-      // Deliberately `streamHistory` and not `backfillSession`: the latter
-      // asks the machine over the socket, and it is the HUB that has this
-      // conversation. Same session, two addresses, and only one of them
-      // answers.
-      if (outcome.ok) {
-        const live = await streamHistory({
-          viewId: id,
-          machineId: named.machineId,
-          sessionId: id,
-          cwd: named.cwd,
-          harness: named.harness,
-          live: true,
-        });
-        if (!live.ok && live.reason !== 'offline') void backfillSession(id);
-        return;
-      }
-    }
-    if (!stored) {
-      // Nothing local knows where this conversation lives — not the hub's
-      // instances, not any machine's catalogue, not what we were told when
-      // the tab was opened. Ask the fleet directly before giving up: a
-      // transcript older than a catalogue's cut-off is not a transcript that
-      // has stopped existing.
-      const found = await locate(id);
-      if (found?.machine) {
-        const outcome = await openTranscript({
-          viewId: id,
-          machineId: found.machine,
-          sessionId: id,
-          cwd: found.cwd,
-          harness: found.harness as never,
-        });
-        if (outcome.ok) return;
-        failure = { reason: outcome.reason, message: outcome.message };
-        return;
-      }
-      void backfillSession(id);
+    const outcome = await streamHistory(
+      named && named.viewId === id
+        ? { ...named, live: named.live || running }
+        : {
+            viewId: id,
+            machineId: hint?.machineId ?? '',
+            sessionId: id,
+            cwd: hint?.cwd ?? '',
+            harness: hint?.harness as never,
+            live: running,
+          }
+    );
+    if (!outcome.ok) {
+      // 404 is an answer, not a fault: nothing the hub or any machine holds
+      // goes by this id. Retrying would ask the same question.
+      if (outcome.status === 404) missing = true;
+      else failure = { reason: outcome.reason, message: outcome.message };
       return;
     }
-    const outcome = await openTranscript({
-      viewId: id,
-      machineId: stored.machineId,
-      sessionId: id,
-      cwd: stored.cwd,
-      harness: stored.harness as never,
-    });
-    if (!outcome.ok) failure = { reason: outcome.reason, message: outcome.message };
+    // Skipped means another read already holds this view; its outcome is the
+    // one that counts, and this one has nothing to say about emptiness.
+    if (outcome.skipped) return;
+    // A clean read of nothing. For a running session that is a conversation
+    // that has not started, and the stream will say so when it does; for a
+    // stored one it is the whole answer, and the skeleton would otherwise
+    // wait for turns that are never coming.
+    if (!running && (whiffle.session(id)?.messages.length ?? 0) === 0) empty = true;
   }
 
   // Bring the conversation into being: a stored session reads its transcript
-  // back, a live one is opened (subscribed) and backfilled with what it said
+  // back, a live one is opened (subscribed) and read back to what it said
   // before this tab joined.
   //
   // Deliberately untracked around the store. Both calls read AND write the
   // session's own `messages` / `loading`, so a plainly-tracked effect re-runs
   // itself on the transcript it just published; the URL this pane was opened
-  // with, plus an explicit retry, are the only things that should start a read.
+  // with, whether the hub holds it live, plus an explicit retry, are the only
+  // things that should start a read.
   $effect(() => {
     const id = viewId;
-    const machineId = browsing;
     const cwd = browsingCwd;
     const harness = browsingHarness;
+    const hint = browsing ? { machineId: browsing, cwd, harness } : null;
+    const running = isLive;
     void attempt;
     if (!id) return;
     // Retry the read once the hub can actually answer. On a reload the effect
     // first runs while the socket is still reconnecting — a live session's
-    // machineId isn't known yet (backfill bails) and a stored read can't reach
-    // the socket. Tracking the connection and the live session's machineId
-    // (neither written by the read below) re-runs this the moment it becomes
-    // answerable, so the transcript backfills instead of staying empty.
+    // machineId isn't known yet and a stored read can't reach the socket.
+    // Tracking the connection and the live session's machineId (neither
+    // written by the read below) re-runs this the moment it becomes
+    // answerable, so the transcript reads back instead of staying empty.
     void whiffle.status;
     void whiffle.session(id)?.machineId;
+    untrack(() => {
+      failure = null;
+      missing = false;
+      empty = false;
+      // A running session is opened — hydrated from its row and subscribed to
+      // — on every pass, and ahead of the guard below: the guard skips a pane
+      // whose read landed before the hub's rows arrived, and that pane would
+      // otherwise never subscribe. Opening is idempotent; reading is not.
+      if (running || !hint) openSession(id);
+    });
     // A pane the reader RETURNS to needs no re-read: the store kept ingesting
     // while the tab was hidden (only the transcript's row-building froze), so
     // re-reading replaced a full transcript with the tail chunk — content
@@ -234,24 +228,11 @@
     const held = whiffle.session(id);
     if (held?.initialized && held.messages.length > 0 && streamCapable()) return;
     // The server's answer for whichever conversation the URL names; a pane the
-    // reader left open in another tab was never part of this navigation, and
-    // says for itself where its stored transcript lives.
-    const named =
-      history ??
-      (machineId
-        ? Promise.resolve<HistorySource>({
-            viewId: id,
-            machineId,
-            sessionId: id,
-            cwd,
-            harness: harness as never,
-            live: false,
-          })
-        : null);
+    // reader left open in another tab was never part of this navigation and
+    // is read by its id like any other.
+    const named = history;
     untrack(() => {
-      failure = null;
-      if (!machineId) openSession(id);
-      void readHistory(id, named, machineId ? { machineId, cwd, harness } : null);
+      void readHistory(id, named, hint, running);
     });
   });
 
@@ -330,32 +311,40 @@
   // nodes that hydrate in place.
 
   /**
-   * A live session addressed by id alone that the hub has never heard of. There
-   * is nothing to subscribe to and nothing to read back — without the machine
-   * and stored-session id a transcript link carries, this pane can only sit
-   * empty, so it says so instead.
+   * A session the hub could not find anywhere: not in its rows, not in its
+   * store, not on any machine it asked. There is nothing to subscribe to and
+   * nothing to read back, so the pane says so instead of sitting empty. This
+   * used to be inferred from a blank `machineId` once the rows had arrived,
+   * which mistook every stored session still being located for a lost one;
+   * now it is the hub's own 404.
    */
-  const unaddressable = $derived(
-    !browsing &&
-      !!session &&
-      !session.machineId &&
-      // Only once the hub has answered. Before that every id is unknown, and
-      // saying so would flash an error over a session that is merely loading.
-      whiffle.hub === 'connected' &&
-      whiffle.instances.length > 0
-  );
+  const unaddressable = $derived(missing);
 
   /**
    * A stored transcript with no machine behind it: readable, not writable.
    *
-   * `unaddressable` used to require an EMPTY transcript, which meant a pane
-   * that had hydrated its history but had no `machineId` rendered a live
+   * A pane that had its history but no `machineId` used to render a live
    * composer — one that took keystrokes, refused them at the `!machineId`
-   * guard, and said nothing. The conjunct is gone; what is left is which of
-   * the two unaddressable shapes this is, because a transcript with words in
-   * it should still be read.
+   * guard, and said nothing. A transcript with words in it should still be
+   * read; it just cannot be written to.
    */
-  const readOnly = $derived(unaddressable && (session?.messages.length ?? 0) > 0);
+  const readOnly = $derived(
+    !isLive && !!session && !session.machineId && session.messages.length > 0
+  );
+
+  /**
+   * What stopped the transcript arriving, from whichever side saw it. The
+   * pane's own read reports through `failure`; a read the store started for
+   * itself — a socket backfill, a peek — reports through the session's
+   * `readFault`. Either one is a card with a button, never a skeleton.
+   */
+  const fault = $derived(failure ?? session?.readFault ?? null);
+
+  /** Try again: forget what was said about the last read, then read. */
+  function retry(): void {
+    clearReadFault(viewId);
+    attempt += 1;
+  }
 
   // The header's MCP count wants a reading, and the composer's `/` menu wants
   // the descriptions; only a live session answers either.
@@ -366,9 +355,11 @@
   // the instant the call it just fired flips them — on a session that can't
   // answer, the rejection clears the guard and the effect re-fires in a tight
   // loop (thousands of `supportedCommands … failed` a second). Only a change in
-  // whether this pane addresses a live session should start a load.
+  // whether this pane addresses a live session, or the hub becoming reachable,
+  // should start a load: a first run before the socket opens is refused, and
+  // the MCP ask keeps that refusal as `[]`.
   $effect(() => {
-    const live = !!session && !browsing && !!machineId;
+    const live = !!session && isLive && !!machineId && whiffle.status === 'connected';
     if (!live) return;
     const id = viewId;
     const mid = machineId;
@@ -693,35 +684,33 @@
            pane above this one, so nothing here animates on a switch — this is
            the surface a swipe carries, not the thing that carries it. -->
       <div class="transcript-slide">
-        {#if failure}
+        {#if fault}
           <div class="stateful">
             <h2>
-              {failure.reason === 'offline'
+              {fault.reason === 'offline'
                 ? 'This machine is offline'
                 : "This transcript couldn't be read"}
             </h2>
-            <p>{failure.message}</p>
-            <button type="button" onclick={() => (attempt += 1)}>Try again</button>
+            <p>{fault.message}</p>
+            <button type="button" onclick={retry}>Try again</button>
           </div>
-        {:else if unaddressable && !readOnly}
+        {:else if unaddressable}
           <div class="stateful">
             <h2>This session isn't reachable from here</h2>
             <p>
-              The hub has no record of <code>{viewId}</code>, and there is no stored transcript to
-              show. Open it from its machine's stored sessions, and the link will carry the machine
-              and folder its transcript is filed under.
+              The hub has no record of <code>{viewId}</code>, and no machine it can reach has a
+              transcript filed under it. It may live on a machine that is offline, or it may have
+              been deleted.
             </p>
             <a href="/session">Back to the fleet</a>
           </div>
-        {:else if !session.initialized && session.messages.length === 0}
-          <!-- Skeleton: session exists but transcript hasn't arrived yet -->
-          <div class="loading-skeleton">
-            <div class="sk-block sk-wide" style="--sk-delay: 0ms"></div>
-            <div class="sk-block sk-narrow" style="--sk-delay: 60ms"></div>
-            <div class="sk-block sk-wide" style="--sk-delay: 120ms"></div>
-            <div class="sk-block sk-medium" style="--sk-delay: 180ms"></div>
-            <div class="sk-block sk-narrow" style="--sk-delay: 240ms"></div>
+        {:else if empty && session.messages.length === 0}
+          <div class="stateful">
+            <h2>Nothing has been said here yet</h2>
+            <p>The transcript was found, and it has no turns in it.</p>
           </div>
+        {:else if !session.initialized && session.messages.length === 0}
+          <TranscriptSkeleton />
         {:else if view === 'flow'}
           <FlowView
             instanceId={viewId}
@@ -743,11 +732,11 @@
       </div>
 
       <!-- Composer stays outside the slide — it's shared structure. -->
-      {#if !failure && unaddressable}
+      {#if !fault && (unaddressable || readOnly)}
         <p class="readonly">
           This transcript is stored; the session isn't reachable from here.
         </p>
-      {:else if !failure}
+      {:else if !fault}
         <Composer
           bind:this={composer}
           bind:value={draft}
@@ -776,15 +765,9 @@
       <p class="announce" aria-live="polite" role="status">{sendFailure}</p>
     </div>
   {:else}
-    <!-- Skeleton loading state — placeholder lines that shimmer while
-         the session store is being populated. -->
-    <div class="loading-skeleton">
-      <div class="sk-block sk-wide" style="--sk-delay: 0ms"></div>
-      <div class="sk-block sk-narrow" style="--sk-delay: 60ms"></div>
-      <div class="sk-block sk-wide" style="--sk-delay: 120ms"></div>
-      <div class="sk-block sk-medium" style="--sk-delay: 180ms"></div>
-      <div class="sk-block sk-narrow" style="--sk-delay: 240ms"></div>
-    </div>
+    <!-- No session in the store yet: the same placeholder the transcript
+         area shows, so the two loading moments look like one. -->
+    <TranscriptSkeleton />
   {/if}
 </div>
 
@@ -839,50 +822,6 @@
     flex: 1 1 auto;
     min-height: 0;
     overflow: hidden;
-  }
-
-  /* ── Loading skeleton ──────────────────────────────────────────────
-     Placeholder lines that pulse while the session populates. Each line
-     fades in staggered via animation-delay so the eye reads them top to
-     bottom rather than all at once. The shimmer travels along the
-     gradient so the skeleton feels alive, not stuck. */
-  .loading-skeleton {
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-    padding: var(--space-6) var(--space-7);
-    flex: 1 1 auto;
-  }
-  .sk-block {
-    height: 14px;
-    border-radius: 7px;
-    background: linear-gradient(
-      90deg,
-      var(--surface-hover) 25%,
-      var(--border-hairline) 50%,
-      var(--surface-hover) 75%
-    );
-    background-size: 200% 100%;
-    animation:
-      sk-appear 300ms var(--sk-delay, 0ms) cubic-bezier(0.16, 1, 0.3, 1) both,
-      sk-shimmer 1.6s ease-in-out infinite;
-  }
-  .sk-wide   { width: 72%; }
-  .sk-medium { width: 55%; }
-  .sk-narrow { width: 38%; }
-  @keyframes sk-appear {
-    from { opacity: 0; transform: translateY(4px); }
-    to   { opacity: 1; transform: translateY(0); }
-  }
-  @keyframes sk-shimmer {
-    0%   { background-position: 200% 0; }
-    100% { background-position: -200% 0; }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .sk-block {
-      animation: none;
-      opacity: 0.5;
-    }
   }
 
   /**

@@ -364,12 +364,16 @@ export function locate(sessionId: string): Promise<SessionContext | null> {
   return ask;
 }
 
+/**
+ * The URL a conversation is addressed by: its id, bare. The machine and folder
+ * used to ride along as a query string so a stored transcript could be found
+ * again, but the hub locates an id across the fleet now — see
+ * `/api/instances/:id/location` — so a URL that carries them is only a cache
+ * that can go stale.
+ */
 export function urlFor(sessionId: string | null): string {
   if (!sessionId) return '/session';
-  const ctx = contextOf(sessionId);
-  if (!ctx) return `/session/${sessionId}`;
-  const q = new URLSearchParams({ machine: ctx.machine, cwd: ctx.cwd, harness: ctx.harness });
-  return `/session/${sessionId}?${q}`;
+  return `/session/${sessionId}`;
 }
 
 /** The session id a URL names, or `null` for the board. */
@@ -468,9 +472,9 @@ export const workspace = {
 
   /**
    * Open a conversation, adding it to the focused group if it is not already
-   * held somewhere. `ctx` carries the machine/folder a STORED session needs
-   * to be addressed by — without it the tab rebuilds a bare `/session/{id}`,
-   * which resolves to a different conversation that happens to share an id.
+   * held somewhere. `ctx` is the machine/folder a STORED session is known to
+   * live on — a hint that names the pane before the transcript answers, not
+   * an address: the URL is the bare id either way, and the hub resolves it.
    */
   open(
     sessionId: string,

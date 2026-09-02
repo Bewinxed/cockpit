@@ -153,7 +153,7 @@
             contextPct: null,
             cost: null,
             at: info.lastModified,
-            href: transcriptHref(machine.machineId, info),
+            href: transcriptHref(info),
             instance: null,
             stored: info,
             cwd: info.cwd ?? '',

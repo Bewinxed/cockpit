@@ -46,6 +46,7 @@ import {
   deriveTitleFromFirstMessage,
   FLEET_STATUS,
   FLEET_SYNC,
+  HARNESSES,
   HOOK_TEMPLATES,
   hookProblem,
   identifyBlocks,
@@ -136,6 +137,19 @@ const UPDATE_TIMEOUT_MS = 10 * 60_000;
 
 /** Reading one file off a machine: it answers about as fast as a disk does. */
 const READ_TIMEOUT_MS = 10_000;
+
+/**
+ * Where a conversation lives, resolved from its id alone. `sessionId` is the
+ * key the machine stores the transcript under — the SDK's, which for a session
+ * the hub spawned is not the instance id the reader addressed it by.
+ */
+interface SessionLocation {
+  id: string;
+  machineId: string;
+  sessionId: string;
+  cwd: string;
+  harness: HarnessKind;
+}
 
 /**
  * How many conversations one naming request may ask about. A reader's open tabs
@@ -1104,10 +1118,7 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
    * joins, because a machine arriving is precisely the event that can turn a
    * `null` into an answer.
    */
-  const locations = new Map<
-    string,
-    { id: string; machineId: string; cwd: string; harness: string } | null
-  >();
+  const locations = new Map<string, SessionLocation | null>();
 
   /**
    * Asks a machine something and waits for the frame that answers it. A machine
@@ -1138,6 +1149,98 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
         resolve(frame);
       });
     });
+  };
+
+  /**
+   * WHERE a conversation lives: which machine, which folder, which harness.
+   *
+   * A session id is a uuid and does not collide, so it identifies a
+   * conversation completely — but it does not LOCATE one, and the two got
+   * conflated. Every link carried the machine and folder around as query
+   * parameters, and every client kept its own copy in a capped
+   * most-recently-used record. Both were caches of a fact the fleet already
+   * knew, and when a cache was lost or evicted the conversation became
+   * unreachable: not missing, just unaddressed.
+   *
+   * So the fleet answers instead. The hub's own row first, which covers
+   * everything it ever spawned or adopted. Failing that, ask the connected
+   * machines whether they hold a transcript under that id — the harnesses
+   * already answer exactly this question, and asking one id is a lookup
+   * rather than the fleet-wide directory sweep a catalogue read would be
+   * (898 files and 1.1GB on one machine here, which is why the catalogue is
+   * capped and why a capped catalogue was never the thing to resolve
+   * against). Each harness the machine reports is asked, because the control
+   * goes to ONE adapter and only the one that wrote the transcript can find
+   * it; a daemon that predates harness reporting is asked about every kind.
+   *
+   * The answer is kept, so a conversation is located once per hub lifetime
+   * and every reader after the first is a map lookup. Deliberately in
+   * memory: this is a cache of something the machines can always be asked
+   * again, and a stale row on disk claiming a transcript lives somewhere it
+   * no longer does would be worse than the question being asked twice.
+   */
+  const locateSession = async (id: string): Promise<SessionLocation | null> => {
+    const known = locations.get(id);
+    if (known !== undefined) return known;
+
+    const row = db.getInstancesByIds([id])[0];
+    if (row?.machineId) {
+      const found: SessionLocation = {
+        id,
+        machineId: row.machineId,
+        sessionId: row.sessionId ?? id,
+        cwd: row.cwd ?? '',
+        harness: (row.harness as HarnessKind | undefined) ?? 'claude',
+      };
+      locations.set(id, found);
+      return found;
+    }
+
+    // Nobody spawned it here, so it is a transcript somebody left on a disk.
+    // Ask the machines that are actually reachable, newest contact first.
+    for (const agent of db.listAgents()) {
+      if (!registry.agent(agent.machineId)) continue;
+      const kinds =
+        agent.harnesses && agent.harnesses.length > 0
+          ? agent.harnesses.map((report) => report.harness)
+          : HARNESSES;
+      // One machine, every adapter at once: the asks are independent reads and
+      // the machine answers them concurrently, so the wait is the slowest one
+      // rather than their sum.
+      const answers = await Promise.all(
+        kinds.map(async (harness) => {
+          const answer = await callAgent(
+            agent.machineId,
+            CONTROL_GET_SESSION_INFO,
+            [id],
+            READ_TIMEOUT_MS,
+            harness
+          );
+          if (answer === 'offline' || answer === 'timeout' || !answer.ok) return null;
+          const info = answer.result as
+            | { sessionId?: string; cwd?: string; harness?: string }
+            | undefined
+            | null;
+          return info?.sessionId ? { harness, info } : null;
+        })
+      );
+      const hit = answers.find((answer) => answer !== null);
+      if (!hit) continue;
+      const found: SessionLocation = {
+        id,
+        machineId: agent.machineId,
+        sessionId: hit.info.sessionId ?? id,
+        cwd: hit.info.cwd ?? '',
+        harness: (hit.info.harness as HarnessKind | undefined) ?? hit.harness,
+      };
+      locations.set(id, found);
+      return found;
+    }
+
+    // Remembered as unknown too, so a bad id cannot make every render sweep
+    // the fleet. A machine coming online clears this (see `locations`).
+    locations.set(id, null);
+    return null;
   };
 
   /** Relays a dashboard envelope to its machine; reports back if nobody is home. */
@@ -2087,79 +2190,12 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
         );
       }
     )
-    // WHERE a conversation lives: which machine, which folder, which harness.
-    //
-    // A session id is a uuid and does not collide, so it identifies a
-    // conversation completely — but it does not LOCATE one, and the two got
-    // conflated. Every link carried the machine and folder around as query
-    // parameters, and every client kept its own copy in a capped
-    // most-recently-used record. Both were caches of a fact the fleet already
-    // knew, and when a cache was lost or evicted the conversation became
-    // unreachable: not missing, just unaddressed.
-    //
-    // So the fleet answers instead. The hub's own row first, which covers
-    // everything it ever spawned or adopted. Failing that, ask the connected
-    // machines whether they hold a transcript under that id — the harnesses
-    // already answer exactly this question, and asking one id is a lookup
-    // rather than the fleet-wide directory sweep a catalogue read would be
-    // (898 files and 1.1GB on one machine here, which is why the catalogue is
-    // capped and why a capped catalogue was never the thing to resolve
-    // against).
-    //
-    // The answer is kept, so a conversation is located once per hub lifetime
-    // and every reader after the first is a map lookup. Deliberately in
-    // memory: this is a cache of something the machines can always be asked
-    // again, and a stale row on disk claiming a transcript lives somewhere it
-    // no longer does would be worse than the question being asked twice.
+    // Where a conversation lives, for a client that wants the answer without
+    // the transcript — see `locateSession` for the resolution order.
     .get('/api/instances/:id/location', async ({ params }) => {
       const id = params.id;
       if (!id) return null;
-
-      const known = locations.get(id);
-      if (known !== undefined) return known;
-
-      const row = db.getInstancesByIds([id])[0];
-      if (row?.machineId) {
-        const found = {
-          id,
-          machineId: row.machineId,
-          cwd: row.cwd ?? '',
-          harness: row.harness ?? 'claude',
-        };
-        locations.set(id, found);
-        return found;
-      }
-
-      // Nobody spawned it here, so it is a transcript somebody left on a disk.
-      // Ask the machines that are actually reachable, newest contact first.
-      for (const agent of db.listAgents()) {
-        if (!registry.agent(agent.machineId)) continue;
-        const answer = await callAgent(
-          agent.machineId,
-          CONTROL_GET_SESSION_INFO,
-          [id],
-          READ_TIMEOUT_MS
-        );
-        if (answer === 'offline' || answer === 'timeout' || !answer.ok) continue;
-        const info = answer.result as
-          | { sessionId?: string; cwd?: string; harness?: string }
-          | undefined
-          | null;
-        if (!info?.sessionId) continue;
-        const found = {
-          id,
-          machineId: agent.machineId,
-          cwd: info.cwd ?? '',
-          harness: info.harness ?? 'claude',
-        };
-        locations.set(id, found);
-        return found;
-      }
-
-      // Remembered as unknown too, so a bad id cannot make every render sweep
-      // the fleet. A machine coming online clears this (see `locations`).
-      locations.set(id, null);
-      return null;
+      return locateSession(id);
     })
     // A session's stored transcript over HTTP, which is the only way a page can
     // have one before its socket is up. The dashboard used to read history with
@@ -2168,9 +2204,16 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
     // the same control from here, against the machine's agent socket, and
     // streams the answer back newest-entry-first as NDJSON.
     //
-    // `machine`/`cwd`/`harness` come from a stored-transcript link. A live
-    // session carries none of them, so its own row answers for it — including
-    // the SDK session key, which is what the machine stores the transcript under.
+    // Addressed by id alone. The hub's own row answers for a session it holds —
+    // including the SDK session key, which is what the machine stores the
+    // transcript under — and anything else is located the way `/location` is.
+    // `machine`/`cwd`/`harness` are an explicit override, kept for the links
+    // and bookmarks minted while a stored transcript still carried them; a
+    // client that knows better than the resolver may still say so.
+    //
+    // Where the transcript was found rides back in headers, so a reader that
+    // addressed a session by id alone learns which machine can act on it
+    // without a second round trip.
     .get(
       '/api/instances/:id/messages',
       {
@@ -2182,11 +2225,18 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
       },
       async ({ params, query, status }) => {
         const row = query.machine ? undefined : db.listInstances().find((r) => r.id === params.id);
-        const machineId = query.machine ?? row?.machineId;
-        if (!machineId) return status(404, `no session ${params.id}`);
-        const sessionKey = query.machine ? params.id : (row?.sessionId ?? params.id);
-        const cwd = query.cwd || row?.cwd || undefined;
-        const harness = (query.harness || row?.harness || undefined) as HarnessKind | undefined;
+        let machineId = query.machine ?? row?.machineId;
+        let sessionKey = query.machine ? params.id : (row?.sessionId ?? params.id);
+        let cwd = query.cwd || row?.cwd || undefined;
+        let harness = (query.harness || row?.harness || undefined) as HarnessKind | undefined;
+        if (!machineId) {
+          const where = await locateSession(params.id);
+          if (!where) return status(404, `no session ${params.id}`);
+          machineId = where.machineId;
+          sessionKey = where.sessionId;
+          cwd = where.cwd || undefined;
+          harness = where.harness;
+        }
 
         const answer = await callAgent(
           machineId,
@@ -2214,8 +2264,17 @@ export const createServer = ({ registry, db, pending, telegram }: HubServices) =
           if (first) nameFromFirstTurn(machineId, row.id, first);
         }
 
+        // URI-encoded because a header is Latin-1 on the wire and a folder
+        // path is not.
         return new Response(ndjsonNewestFirst(transcript), {
-          headers: { 'Content-Type': 'application/x-ndjson', 'Cache-Control': 'no-store' },
+          headers: {
+            'Content-Type': 'application/x-ndjson',
+            'Cache-Control': 'no-store',
+            'X-Whiffle-Machine': machineId,
+            'X-Whiffle-Session': encodeURIComponent(sessionKey),
+            'X-Whiffle-Cwd': encodeURIComponent(cwd ?? ''),
+            'X-Whiffle-Harness': harness ?? 'claude',
+          },
         });
       }
     )

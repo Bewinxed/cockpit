@@ -221,6 +221,16 @@ export interface CommandState {
   detailed: Map<string, SlashCommand> | null;
 }
 
+/**
+ * Why a transcript read ended with nothing to show. `offline` is the fleet's
+ * own state — the machine is asleep — where `failed` is a fault in the read;
+ * the pane says a different sentence for each.
+ */
+export interface ReadFault {
+  reason: 'offline' | 'failed';
+  message: string;
+}
+
 export interface SessionState {
   /** The id this view lives at: a spawned instance, or the SDK session browsed. */
   instanceId: string;
@@ -287,6 +297,14 @@ export interface SessionState {
   loading: boolean;
   /** The older chunks of a long transcript are still being prepended. */
   hydrating: boolean;
+  /**
+   * How the last transcript read ended, when it ended with nothing on screen.
+   * Every read path sets this on a terminal failure and clears it when a read
+   * starts, so a pane always has something to show for an empty transcript: a
+   * hover-peek's backfill that timed out used to fail into `console.error`
+   * and leave the pane on its loading state for the life of the tab.
+   */
+  readFault: ReadFault | null;
   /** The `system.init` banner is re-emitted every turn; render it once. */
   initialized: boolean;
   /**
@@ -530,6 +548,7 @@ export function blankSession(instanceId: string): SessionState {
     lastActivityAt: null,
     loading: false,
     hydrating: false,
+    readFault: null,
     initialized: false,
     permissionMode: null,
     model: null,
@@ -2944,8 +2963,20 @@ function claimTranscript(viewId: string): number {
  * unreachable machine.
  */
 export type TranscriptOutcome =
-  | { ok: true }
-  | { ok: false; reason: 'offline' | 'failed'; message: string };
+  /**
+   * `skipped` marks an `ok` that read nothing because a read was already in
+   * hand — in flight, or landed — so a caller looking at an empty view knows
+   * the emptiness is not this read's answer.
+   */
+  | { ok: true; skipped?: boolean }
+  /** `status` is the hub's HTTP answer where there was one: 404 is "no such session", not a fault. */
+  | { ok: false; reason: 'offline' | 'failed'; message: string; status?: number };
+
+/** Puts a session back to "nothing has been said about the read" — Try again's first move. */
+export function clearReadFault(instanceId: string): void {
+  const held = state.sessions[instanceId];
+  if (held) held.readFault = null;
+}
 
 /** Loads a stored session's transcript into the view it is being browsed under. */
 export async function openTranscript({
@@ -2971,22 +3002,23 @@ export async function openTranscript({
   refreshTasks(viewId);
   // Re-opening what is already read — or still hydrating, which has published
   // its newest turns by now — must not start a second read over the top of it.
-  if (target.messages.length > 0 || target.loading) return { ok: true };
+  if (target.messages.length > 0 || target.loading) return { ok: true, skipped: true };
 
   // Asked before the call rather than inferred from its failure: a machine the
   // hub has not heard from cannot answer, and "offline" is a different sentence
   // from "the read failed" — the first is a state, the second is a fault.
   const machine = state.machines.find((row) => row.machineId === machineId);
   if (machine && machine.status !== 'online') {
-    return {
-      ok: false,
+    target.readFault = {
       reason: 'offline',
       message: `${machine.hostname || machineId} is offline — its stored transcript can't be read right now.`,
     };
+    return { ok: false, ...target.readFault };
   }
 
   const epoch = claimTranscript(viewId);
   target.loading = true;
+  target.readFault = null;
   try {
     const transcript = await machineControl<SessionMessage[]>(
       machineId,
@@ -3008,6 +3040,7 @@ export async function openTranscript({
       target.messages = [errorMessage(viewId, `could not read transcript: ${message}`), ...target.messages];
       return { ok: true };
     }
+    target.readFault = { reason: 'failed', message };
     return { ok: false, reason: 'failed', message };
   } finally {
     target.loading = false;
@@ -3021,8 +3054,12 @@ export async function openTranscript({
  * until what it has already said is read back out of SDK session storage.
  */
 export async function backfillSession(instanceId: string): Promise<void> {
-  if (backfilled.has(instanceId) || backfilling.has(instanceId)) return;
+  if (backfilling.has(instanceId)) return;
   const target = session(instanceId);
+  // A latch with nothing behind it does not hold — the same rule
+  // `streamHistory` reads by, so the two paths agree on what "already read"
+  // means.
+  if (backfilled.has(instanceId) && target.messages.length > 0) return;
   // Deliberately not "it already has messages, so it is loaded".
   //
   // This browser watches every session, not just the one on screen, so a
@@ -3044,6 +3081,7 @@ export async function backfillSession(instanceId: string): Promise<void> {
   const live = target.messages.slice();
   const epoch = claimTranscript(instanceId);
   target.loading = true;
+  target.readFault = null;
   try {
     const transcript = await machineControl<SessionMessage[]>(
       machineId,
@@ -3062,7 +3100,14 @@ export async function backfillSession(instanceId: string): Promise<void> {
       replayHeld(instanceId, seeded);
     });
   } catch (error) {
+    // The latch is undone, exactly as `streamHistory` undoes its own: this is
+    // fired from a hover-peek and a delegate card as much as from the pane,
+    // and a latch left set by a read that never landed made every later open
+    // of the same id short-circuit into a skeleton nothing would resolve.
+    backfilled.delete(instanceId);
     replayHeld(instanceId, new Set());
+    const message = error instanceof Error ? error.message : String(error);
+    if (target.messages.length === 0) target.readFault = { reason: 'failed', message };
     console.error(`[whiffle] backfilling ${instanceId} failed:`, error);
   } finally {
     target.loading = false;
@@ -3079,6 +3124,11 @@ function contentBlocks(entry: SessionMessage): { type?: string; id?: string; too
 /** What a streamed history read carries, and how the URL that names it is built. */
 export interface HistorySource {
   viewId: string;
+  /**
+   * Where the transcript is believed to live. A hint for naming the session
+   * before the read answers, not an address: the hub resolves the id itself
+   * and its answer is what the view ends up carrying.
+   */
   machineId: string;
   /** The key the transcript is stored under: the SDK session id, not the view. */
   sessionId: string;
@@ -3086,6 +3136,28 @@ export interface HistorySource {
   harness?: HarnessKind;
   /** A running session, whose live frames have to be held and reconciled behind the read. */
   live?: boolean;
+  /**
+   * The machine/folder/harness above came from the URL itself — a link minted
+   * while stored transcripts still carried them — and are sent to the hub as
+   * an override rather than left to its resolver.
+   */
+  override?: boolean;
+}
+
+/**
+ * Where a session's transcript is read from. The view's id alone, in both
+ * tenses: the hub maps a live instance to its SDK key and locates any other,
+ * so the same address works before this browser knows anything about the
+ * conversation. Only an explicit override still spells the location out.
+ */
+export function messagesUrl(source: HistorySource): string {
+  const path = `/api/instances/${encodeURIComponent(source.viewId)}/messages`;
+  if (!source.override || !source.machineId) return path;
+  return `${path}?${new URLSearchParams({
+    machine: source.machineId,
+    harness: source.harness ?? 'claude',
+    ...(source.cwd && { cwd: source.cwd }),
+  })}`;
 }
 
 /**
@@ -3109,6 +3181,7 @@ export async function streamHistory({
   cwd,
   harness,
   live,
+  override,
 }: HistorySource): Promise<TranscriptOutcome> {
   const target = session(viewId);
   if (machineId) target.machineId = machineId;
@@ -3119,16 +3192,21 @@ export async function streamHistory({
   // arrive to say so — opening it is the only moment there is to ask.
   refreshTasks(viewId);
 
+  // A read in hand, on either tense, is the one that answers: a second read
+  // over the top of it would replace what it is publishing.
+  if (backfilling.has(viewId) || target.loading) return { ok: true, skipped: true };
   if (live) {
     // The same latch the socket backfill takes, taken here: whichever path
-    // reads this session's history first is the only one that reads it.
-    if (backfilled.has(viewId) || backfilling.has(viewId) || target.loading) return { ok: true };
+    // reads this session's history first is the only one that reads it. But
+    // only a latch with a transcript behind it holds — one left set by a read
+    // that landed empty, or never landed, is read past, because the
+    // alternative was a skeleton nothing would ever resolve.
+    if (backfilled.has(viewId) && target.messages.length > 0) return { ok: true, skipped: true };
     backfilled.add(viewId);
     backfilling.set(viewId, []);
-  } else if (target.messages.length > 0 || target.loading) {
-    // Re-opening what is already read — or still hydrating, which has published
-    // its newest turns by now — must not start a second read over the top of it.
-    return { ok: true };
+  } else if (target.messages.length > 0) {
+    // Re-opening what is already read must not start a second read over it.
+    return { ok: true, skipped: true };
   }
 
   /** Undoes the latch, so a failed read leaves the socket path free to try. */
@@ -3138,15 +3216,13 @@ export async function streamHistory({
     if (backfilling.has(viewId)) replayHeld(viewId, new Set());
   };
 
-  // A live session carries neither the stored key nor the cwd in its URL; its
-  // own row on the hub answers for it. A stored one is addressed outright.
-  const url = live
-    ? `/api/instances/${encodeURIComponent(viewId)}/messages`
-    : `/api/instances/${encodeURIComponent(sessionId)}/messages?${new URLSearchParams({
-        machine: machineId,
-        harness: harness ?? 'claude',
-        ...(cwd && { cwd }),
-      })}`;
+  /** A failure with nothing on screen, said where the pane can read it. */
+  const fail = (fault: ReadFault, status?: number): TranscriptOutcome => {
+    target.readFault = fault;
+    return { ok: false, ...fault, status };
+  };
+
+  const url = messagesUrl({ viewId, machineId, sessionId, cwd, harness, live, override });
 
   const epoch = claimTranscript(viewId);
   // Whatever this session said while the reader was elsewhere. The transcript
@@ -3155,6 +3231,7 @@ export async function streamHistory({
   // frames that land *during* the read.
   const seenLive = target.messages.slice();
   target.loading = true;
+  target.readFault = null;
 
   /** Entries buffered newest-first, waiting for a cut a chunk can start at. */
   let buffered: SessionMessage[] = [];
@@ -3217,14 +3294,30 @@ export async function streamHistory({
       // fleet, not a fault in the read, and a different sentence to say.
       if (response.status === 503) {
         const machine = state.machines.find((row) => row.machineId === machineId);
-        return {
-          ok: false,
-          reason: 'offline',
-          message: `${machine?.hostname || machineId} is offline — its stored transcript can't be read right now.`,
-        };
+        return fail(
+          {
+            reason: 'offline',
+            message: `${machine?.hostname || machineId} is offline — its stored transcript can't be read right now.`,
+          },
+          response.status
+        );
       }
-      return { ok: false, reason: 'failed', message: detail };
+      return fail({ reason: 'failed', message: detail }, response.status);
     }
+
+    // Where the hub found it. A session addressed by id alone arrives here
+    // knowing nothing about itself, and the composer, the header and the
+    // machine's tools all want the machine — this is the one round trip that
+    // learns it. The hub's word fills blanks only: a live row's own values
+    // are already in place and are not walked back.
+    const found = response.headers.get('x-whiffle-machine');
+    if (found && !target.machineId) target.machineId = found;
+    const foundCwd = response.headers.get('x-whiffle-cwd');
+    if (foundCwd && !target.cwd) target.cwd = decodeURIComponent(foundCwd);
+    const foundKey = response.headers.get('x-whiffle-session');
+    if (foundKey && !target.sessionId) target.sessionId = decodeURIComponent(foundKey);
+    const foundHarness = response.headers.get('x-whiffle-harness');
+    if (foundHarness && !harness) target.harness = foundHarness as HarnessKind;
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
@@ -3257,7 +3350,7 @@ export async function streamHistory({
       // is somebody else's transcript now.
       if (hydrations.get(viewId) !== epoch) {
         await reader.cancel();
-        return { ok: true };
+        return { ok: true, skipped: true };
       }
       carry += decoder.decode(value, { stream: true });
       for (let newline = carry.indexOf('\n'); newline >= 0; newline = carry.indexOf('\n')) {
@@ -3268,7 +3361,7 @@ export async function streamHistory({
     }
     carry += decoder.decode();
     if (carry.trim()) await consume(JSON.parse(carry) as SessionMessage);
-    if (hydrations.get(viewId) !== epoch) return { ok: true };
+    if (hydrations.get(viewId) !== epoch) return { ok: true, skipped: true };
     // The head of a transcript is always somewhere a chunk can start, and an
     // empty one still has to publish: it is what says the session is empty.
     if (buffered.length > 0 || chunks === 0) publish(buffered.reverse());
@@ -3284,7 +3377,7 @@ export async function streamHistory({
       target.messages = [errorMessage(viewId, `could not read transcript: ${message}`), ...target.messages];
       return { ok: true };
     }
-    return { ok: false, reason: 'failed', message };
+    return fail({ reason: 'failed', message });
   } finally {
     target.loading = false;
     target.hydrating = false;

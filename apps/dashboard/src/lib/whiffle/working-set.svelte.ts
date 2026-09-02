@@ -21,11 +21,12 @@ export interface Visit {
   /** Only eviction reads this: the tab that goes is the coldest one. */
   at: number;
   /**
-   * The browsing context a STORED session addresses itself with. Without it the
-   * tab link falls to `/session/{id}` with no machine, which resolves to a
-   * different (live, or another machine's) session that happens to share the id
-   * — so clicking the tab opened an unrelated conversation. Live sessions leave
-   * these undefined; their id alone addresses them.
+   * Where a STORED session was last known to live. Not part of its address —
+   * a tab link is the bare `/session/{id}`, and the hub locates the id across
+   * the fleet — but what names the pane (machine, folder, harness) before the
+   * transcript has answered, and what `contextOf` falls back to when neither
+   * the hub's instances nor a machine's catalogue list the id. Live sessions
+   * leave these undefined; their row on the hub says all of this.
    */
   machine?: string | null;
   cwd?: string;
@@ -41,7 +42,7 @@ export interface Visit {
   title?: string;
 }
 
-/** The query a stored session's tab needs to rebuild the URL that opened it. */
+/** The last-known machine, folder and harness of a stored session's tab. */
 export interface VisitContext {
   machine: string;
   cwd: string;
@@ -86,16 +87,16 @@ export const workingSet = {
     return visits.map((visit) => visit.id);
   },
 
-  /** The browsing context a stored session's tab needs to rebuild its URL, or
-      null for a live session addressed by id alone. */
+  /** Where a stored session's tab last knew it to live, or null for a live
+      session, whose row on the hub answers instead. */
   contextOf(id: string): VisitContext | null {
     const visit = visits.find((v) => v.id === id);
     if (!visit || !visit.machine) return null;
     return { machine: visit.machine, cwd: visit.cwd ?? '', harness: visit.harness ?? 'claude' };
   },
 
-  /** Notes that a conversation is on screen, keeping the browsing context a
-      stored session needs to be reopened from its tab. */
+  /** Notes that a conversation is on screen, keeping where a stored session
+      was last known to live so its tab can be named before the fleet answers. */
   visit(id: string, ctx?: { machine?: string | null; cwd?: string; harness?: string }): void {
     if (!id) return;
     const at = Date.now();

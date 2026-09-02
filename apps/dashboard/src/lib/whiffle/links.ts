@@ -1,15 +1,14 @@
 /**
- * How a stored session addresses itself in the URL bar. The route id is the SDK
- * `sessionId` and the machine it lives on rides in the query, so a transcript
- * link is shareable and survives a reload with nothing cached.
+ * How a stored session addresses itself in the URL bar: by its SDK `sessionId`
+ * and nothing else. The machine and folder it lives on used to ride in the
+ * query, but they were a cache of a fact the hub can be asked for (it locates
+ * an id across the fleet), and a link that carried them went stale the moment
+ * the transcript moved. A bare id is shareable, bookmarkable, and never wrong.
  */
 import { deriveTitleFromFirstMessage, type SDKSessionInfo } from '@whiffle/core';
 
-export function transcriptHref(machineId: string, info: SDKSessionInfo): string {
-  const query = new URLSearchParams({ machine: machineId });
-  if (info.cwd) query.set('cwd', info.cwd);
-  query.set('harness', info.harness);
-  return `/session/${info.sessionId}?${query}`;
+export function transcriptHref(info: Pick<SDKSessionInfo, 'sessionId'>): string {
+  return `/session/${info.sessionId}`;
 }
 
 /**
