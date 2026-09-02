@@ -40,7 +40,18 @@
   if (!browser) workspace.serve((page.data as { workspace?: WorkspaceV1 | null }).workspace ?? null);
 
   /** 900px is this app's desktop line, not the 768 the hook defaults to. */
-  const narrow = new IsMobile(900);
+  const mobile = new IsMobile(900);
+  /**
+   * The media query cannot run on the server, so its answer there is the
+   * `whiffle-narrow` cookie this browser wrote last time (or, on a first
+   * visit, what its headers suggest). On the client the query is right
+   * synchronously, so hydration on a phone finds the deck already painted.
+   */
+  const narrow = $derived(browser ? mobile.current : (page.data.narrow as boolean));
+
+  $effect(() => {
+    document.cookie = `whiffle-narrow=${mobile.current ? 1 : 0};path=/;max-age=31536000;samesite=lax`;
+  });
 
   const onBoard = $derived(workspace.activeSessionId === null);
 
@@ -138,7 +149,7 @@
          deck makes them reachable: the groups are a vertical stack that two
          fingers page through, so widening the window restores the grid and
          narrowing it loses nothing. -->
-    {#if narrow.current}
+    {#if narrow}
       <PaneDeck />
     {:else}
       <PaneGrid node={workspace.root} />

@@ -20,6 +20,25 @@ const RAIL_DEFAULT = 340;
  */
 const WORKSPACE_KEY = 'whiffle-workspace';
 
+/**
+ * Whether this browser is a phone, for the session surface's first paint.
+ * The deck-or-grid decision is a media query on the client, which the server
+ * cannot run, so SSR drew the grid and the phone flipped to the deck once the
+ * bundle ran. The client mirrors the query into this cookie; on the very first
+ * visit, before any cookie, the client hints and the user agent stand in. The
+ * cookie is primary because an iPad in desktop mode reports a Macintosh UA.
+ */
+const NARROW_KEY = 'whiffle-narrow';
+const PHONE_UA = /iPhone|iPod|Android.*Mobile|Windows Phone/i;
+
+function narrowOf(cookie: string | undefined, headers: Headers): boolean {
+  if (cookie === '1') return true;
+  if (cookie === '0') return false;
+  const hint = headers.get('sec-ch-ua-mobile');
+  if (hint) return hint.trim() === '?1';
+  return PHONE_UA.test(headers.get('user-agent') ?? '');
+}
+
 interface LeafNode {
   t: 'l';
   id: string;
@@ -93,7 +112,8 @@ function currentId(pathname: string): string {
   return match ? decodeURIComponent(match[1]) : '';
 }
 
-export const load: LayoutServerLoad = async ({ cookies, fetch, url, untrack }) => {
+export const load: LayoutServerLoad = async ({ cookies, fetch, request, url, untrack }) => {
+  const narrow = narrowOf(cookies.get(NARROW_KEY), request.headers);
   const stored = Number(cookies.get(RAIL_KEY));
   const railWidth =
     Number.isFinite(stored) && stored > 0
@@ -134,10 +154,10 @@ export const load: LayoutServerLoad = async ({ cookies, fetch, url, untrack }) =
   }
 
   const names: Record<string, string> = {};
-  if (!workspace) return { railWidth, workspace, names };
+  if (!workspace) return { railWidth, narrow, workspace, names };
 
   const open = leavesOf(workspace.root).flatMap((leaf) => leaf.tabs);
-  if (open.length === 0) return { railWidth, workspace, names };
+  if (open.length === 0) return { railWidth, narrow, workspace, names };
 
   // What the fleet calls these conversations. A machine that cannot answer just
   // leaves every tab named by its folder, which is what the strip falls back to
@@ -184,5 +204,5 @@ export const load: LayoutServerLoad = async ({ cookies, fetch, url, untrack }) =
     }
   }
 
-  return { railWidth, workspace, names };
+  return { railWidth, narrow, workspace, names };
 };
