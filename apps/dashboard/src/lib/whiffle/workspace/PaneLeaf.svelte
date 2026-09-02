@@ -1,11 +1,14 @@
 <script lang="ts">
   /**
    * One group: a strip of tabs, the identity bar for whichever is showing,
-   * and the conversations themselves stacked behind it.
+   * and a slot per conversation stacked behind it.
    *
    * This is the unit the grid splits. Everything that used to be "the session
    * layout" lives here now, once per group rather than once per app, which is
-   * what lets two conversations be worked in side by side.
+   * what lets two conversations be worked in side by side. The conversations
+   * themselves are not this group's to mount: `PaneHost` keeps each one
+   * alive once and docks it into the slot here, so a split, a move or a
+   * change of grid rearranges the DOM without rebuilding a transcript.
    *
    * The header stays ONE instance per group on purpose. Because there is one
    * of it and its text comes from synchronous state, torph morphs the title
@@ -15,21 +18,13 @@
    */
   import { untrack } from 'svelte';
   import type { EffortLevel, PermissionMode } from '@whiffle/core';
-  import SessionPane from '../SessionPane.svelte';
   import SessionHeader, { type SettingChange } from '../transcript/SessionHeader.svelte';
   import PaneTabs from './PaneTabs.svelte';
-  import {
-    whiffle,
-    submitCommand,
-    commandRecord,
-    streamCapable,
-    relaunchSession,
-    type HistorySource,
-  } from '../client.svelte';
+  import { whiffle, submitCommand, commandRecord, streamCapable, relaunchSession } from '../client.svelte';
   import { workspace, contextOf, type LeafNode } from './workspace.svelte';
   import { createSwipe } from './gesture.svelte';
   import { paneDropTarget, dropHint } from './dnd.svelte';
-  import { workingSet } from '../working-set.svelte';
+  import { slot, paneViews } from './dock.svelte';
   import { resolveSessionTitle } from '../links';
   import { models, covers, ensureModels } from '../models.svelte';
   import { PERMISSION_MODES } from '../permission-modes';
@@ -37,32 +32,14 @@
 
   let {
     leaf,
-    entryId = '',
-    entryTail = null,
-    entryHistory = null,
     swipeable = false,
-    showTabs = undefined,
   }: {
     leaf: LeafNode;
-    /** Which conversation this page's server data belongs to, if any. */
-    entryId?: string;
-    entryTail?: unknown;
-    entryHistory?: Promise<HistorySource | null> | null;
     /** Only the phone's single group takes the swipe. */
     swipeable?: boolean;
-    /**
-     * Whether this group draws its own strip. Left unset it decides for
-     * itself: a lone group has no need of one, because the app strip above
-     * it already lists exactly the same conversations. Two rows of tabs
-     * saying the same thing is chrome, not information.
-     */
-    showTabs?: boolean;
   } = $props();
 
   const swipe = createSwipe(() => leaf.id);
-
-  /** A lone group defers to the app strip; a split group owns its tabs. */
-  const stripVisible = $derived(showTabs ?? workspace.leaves.length > 1);
 
   /** What a drop hovering this group would do, if anything. */
   const splitEdge = $derived(dropHint.splits(leaf.id));
@@ -79,10 +56,10 @@
    */
   const headerId = $derived(swipe.previewId ?? viewId);
 
-  /* ── Panes ─────────────────────────────────────────────────────────
-     Mounted on first sight and kept, so returning to a tab is free. The
-     conversations either side are mounted ahead of being asked for, which
-     is what makes a swipe reveal something rather than nothing. */
+  /* ── Slots ─────────────────────────────────────────────────────────
+     Opened on first sight and kept, so returning to a tab is free. The
+     conversations either side are asked for ahead of time, which is what
+     makes a swipe reveal something rather than nothing. */
 
   let mounted = $state<string[]>([]);
 
@@ -128,10 +105,6 @@
       if (keep.length !== mounted.length) mounted = keep;
     });
   });
-
-  /* ── Per-tab view state (chat / flow) ───────────────────────────── */
-
-  let views = $state<Record<string, 'chat' | 'flow'>>({});
 
   /* ── The header's data ──────────────────────────────────────────── */
 
@@ -206,9 +179,7 @@
        typing here" must not compete with it. -->
   <span class="rail" aria-hidden="true"></span>
 
-  {#if stripVisible}
-    <PaneTabs {leaf} />
-  {/if}
+  <PaneTabs {leaf} />
 
   {#if viewId}
     <SessionHeader
@@ -226,8 +197,8 @@
       totalTokens={stats.totalTokens}
       maxTokens={stats.maxTokens}
       cost={stats.cost}
-      view={views[headerId] ?? 'chat'}
-      onview={(v) => (views[headerId] = v)}
+      view={paneViews[headerId] ?? 'chat'}
+      onview={(v) => (paneViews[headerId] = v)}
       {offeredModes}
       effortStops={effortStopsForModel}
       {showEffort}
@@ -256,28 +227,14 @@
       {@const isActive = paneId === viewId}
       {@const offset = swipe.offsetOf(paneId, isActive)}
       {@const shown = isActive || offset !== null}
-      {@const ctx = contextOf(paneId)}
       <div
         class="pane"
         class:pane-hidden={!shown}
         inert={!isActive}
         style:transform={offset === null ? 'translateX(0)' : `translateX(${offset}px)`}
         style:transition={swipe.transition}
-      >
-        <SessionPane
-          viewId={paneId}
-          browsing={ctx?.machine ?? null}
-          browsingCwd={ctx?.cwd ?? ''}
-          browsingHarness={ctx?.harness ?? 'claude'}
-          serverTail={paneId === entryId ? entryTail : null}
-          serverHistory={paneId === entryId ? entryHistory : null}
-          visible={shown}
-          focused={isActive && isFocusedLeaf}
-          hideHeader
-          view={views[paneId] ?? 'chat'}
-          onview={(v) => (views[paneId] = v)}
-        />
-      </div>
+        use:slot={{ id: paneId, shown }}
+      ></div>
     {/each}
   </div>
 </section>

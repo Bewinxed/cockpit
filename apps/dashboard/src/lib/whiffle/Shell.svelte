@@ -21,7 +21,6 @@
   import JumpPalette from './JumpPalette.svelte';
   import ConfirmDialog from './ConfirmDialog.svelte';
   import Sidebar from './Sidebar.svelte';
-  import SessionTabs from './SessionTabs.svelte';
   import { workspace } from './workspace/workspace.svelte';
   import UsageMeter from './UsageMeter.svelte';
   import AssistantOrb from './assistant/AssistantOrb.svelte';
@@ -144,23 +143,6 @@
 
   const limits = $derived(whiffle.usageLimitsAny());
   const onSession = $derived(page.url.pathname.startsWith('/session'));
-
-  /**
-   * The app strip is the LONE group's strip — and the board's only one.
-   *
-   * Once the workspace is split each group draws its own, and keeping this
-   * one as well would put two rows of tabs on screen listing the same
-   * conversations, one of which could not say which half it meant. But the
-   * per-group strips live inside the surface the fleet board covers, so
-   * hiding this on the board as well left nothing to click: a split reader
-   * who went to Fleet could not get back to a conversation at all.
-   *
-   * So it follows what is on screen rather than what the tree holds: the
-   * board always has a strip, and a split session view does not need one.
-   */
-  const appStrip = $derived(
-    onSession && (workspace.activeSessionId === null || workspace.leaves.length < 2)
-  );
 
   /** Which section the bar names, for the readers who arrived by URL. */
   const crumb = $derived.by(() => {
@@ -357,10 +339,6 @@
           <Button variant="outline" size="sm" onclick={reconnectNow}>Retry</Button>
         {/if}
       </div>
-    {/if}
-
-    {#if appStrip}
-      <SessionTabs />
     {/if}
 
     <!-- The old thumb bar is gone, so this region reclaims its height. On a

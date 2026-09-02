@@ -16,9 +16,6 @@ const KEY = WORKING_SET_KEY;
 /** Beyond this it stops being a working set and becomes history again. */
 const LIMIT = 10;
 
-/** A year: the set is a habit, not a session. */
-const COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
-
 export interface Visit {
   id: string;
   /** Only eviction reads this: the tab that goes is the coldest one. */
@@ -34,12 +31,12 @@ export interface Visit {
   cwd?: string;
   harness?: string;
   /**
-   * What this conversation resolved to being CALLED, last time the strip
-   * resolved it. Kept because the server renders the strip from this record and
-   * has no transcript to derive a name from — without it a tab was drawn as its
-   * folder and renamed itself to the real title the moment the page hydrated.
-   * Only ever a name derived from what the session IS (a given title, or what
-   * it was first asked), never the folder or id placeholder.
+   * What this conversation resolved to being CALLED, last time a strip
+   * resolved it. A tab is drawn before the fleet and the transcript have
+   * answered; without this it was drawn as its folder and renamed itself the
+   * moment they did. Only ever a name derived from what the session IS (a
+   * given title, or what it was first asked), never the folder or id
+   * placeholder.
    */
   title?: string;
 }
@@ -63,63 +60,25 @@ const parse = (raw: string | null | undefined): Visit[] => {
   }
 };
 
-/** The cookie copy, which is what the server rendered the strip from. */
-const fromCookie = (): string | null => {
-  if (typeof document === 'undefined') return null;
-  const match = new RegExp(`(?:^|;\\s*)${KEY}=([^;]*)`).exec(document.cookie);
-  if (!match) return null;
-  try {
-    return decodeURIComponent(match[1]);
-  } catch {
-    return null;
-  }
-};
-
-/**
- * localStorage first, the cookie behind it. The cookie is the copy the SERVER
- * drew the tab strip from, so falling back to it is what stops the strip
- * shrinking on mount when the two have come apart — a cleared localStorage, a
- * cookie restored from a profile sync.
- */
 const load = (): Visit[] => {
-  let stored: string | null = null;
   try {
-    if (typeof localStorage !== 'undefined') stored = localStorage.getItem(KEY);
+    if (typeof localStorage !== 'undefined') return parse(localStorage.getItem(KEY));
   } catch {
-    // A browser that will not read storage still has the cookie.
+    // A browser that will not read storage starts the set over.
   }
-  const held = parse(stored);
-  return held.length > 0 ? held : parse(fromCookie());
+  return [];
 };
 
 const visits = $state<Visit[]>(load());
 
 const save = () => {
-  const payload = JSON.stringify(visits);
-  if (typeof localStorage !== 'undefined') {
-    try {
-      localStorage.setItem(KEY, payload);
-    } catch {
-      // A browser that will not store just starts the set over next time.
-    }
-  }
-  // Mirrored to a cookie, because the SERVER renders the tab strip. localStorage
-  // is unreachable at render time, so without this the first paint could only
-  // ever show Fleet plus whatever the URL names — and the real strip popped in
-  // on mount. The cookie is written on every mutation, so it is never a stale
-  // second copy: what the server draws is what the client is about to hold.
-  if (typeof document !== 'undefined') {
-    try {
-      document.cookie = `${KEY}=${encodeURIComponent(payload)}; path=/; max-age=${COOKIE_MAX_AGE}; samesite=lax`;
-    } catch {
-      // Cookies refused: SSR falls back to Fleet + the open conversation.
-    }
+  if (typeof localStorage === 'undefined') return;
+  try {
+    localStorage.setItem(KEY, JSON.stringify(visits));
+  } catch {
+    // A browser that will not store just starts the set over next time.
   }
 };
-
-// A reader who already had a working set has it only in localStorage; seed the
-// cookie from it once so their next reload paints the strip they actually hold.
-if (typeof document !== 'undefined' && visits.length > 0) save();
 
 export const workingSet = {
   /** Left to right, oldest tab first. The strip, and what stepping walks. */
@@ -166,8 +125,8 @@ export const workingSet = {
   },
 
   /**
-   * Remembers what a conversation is called, so the next server render names it
-   * the same. Written only when the name actually changed — this is called from
+   * Remembers what a conversation is called, so the next load names it the
+   * same. Written only when the name actually changed — this is called from
    * a render effect, and a write every pass would be a write every frame.
    */
   setTitle(id: string, title: string): void {

@@ -17,23 +17,12 @@
   import PaneLeaf from './PaneLeaf.svelte';
   import Self from './PaneGrid.svelte';
   import { workspace, type PaneNode } from './workspace.svelte';
-  import type { HistorySource } from '../client.svelte';
 
-  let {
-    node,
-    entryId = '',
-    entryTail = null,
-    entryHistory = null,
-  }: {
-    node: PaneNode;
-    entryId?: string;
-    entryTail?: unknown;
-    entryHistory?: Promise<HistorySource | null> | null;
-  } = $props();
+  let { node }: { node: PaneNode } = $props();
 </script>
 
 {#if node.t === 'l'}
-  <PaneLeaf leaf={node} {entryId} {entryTail} {entryHistory} />
+  <PaneLeaf leaf={node} />
 {:else}
   <Resizable.PaneGroup
     direction={node.dir === 'h' ? 'horizontal' : 'vertical'}
@@ -49,7 +38,7 @@
         defaultSize={node.sizes[i] ?? 100 / node.kids.length}
         minSize={12}
       >
-        <Self node={kid} {entryId} {entryTail} {entryHistory} />
+        <Self node={kid} />
       </Resizable.Pane>
     {/each}
   </Resizable.PaneGroup>

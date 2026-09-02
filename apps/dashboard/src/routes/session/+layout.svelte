@@ -7,9 +7,10 @@
    * the workspace, holds the server's answer for whichever conversation the
    * page was entered with, and decides whether the reader gets a grid or a
    * single group. Everything about a group — its tabs, its identity bar, its
-   * panes, its swipe — belongs to `PaneLeaf`, once per group rather than once
-   * per app. That is what makes a split two workstations instead of one view
-   * showing two things.
+   * swipe — belongs to `PaneLeaf`, once per group rather than once per app.
+   * That is what makes a split two workstations instead of one view showing
+   * two things. The conversations themselves belong to `PaneHost`, mounted
+   * once each and docked into whichever group holds them.
    *
    * The active conversation is `workspace.activeSessionId`, a plain piece of
    * state, not `page.params.id`. Showing one assigns it and re-renders in the
@@ -27,6 +28,7 @@
   import FleetBoard from '$lib/whiffle/FleetBoard.svelte';
   import PaneGrid from '$lib/whiffle/workspace/PaneGrid.svelte';
   import PaneLeaf from '$lib/whiffle/workspace/PaneLeaf.svelte';
+  import PaneHost from '$lib/whiffle/workspace/PaneHost.svelte';
   import { syncSubscriptions, type HistorySource } from '$lib/whiffle/client.svelte';
   import { workspace } from '$lib/whiffle/workspace/workspace.svelte';
   import { IsMobile } from '$lib/hooks/is-mobile.svelte';
@@ -139,23 +141,14 @@
   <div class="groups" class:hidden-surface={onBoard} inert={onBoard}>
     {#if narrow.current}
       {#if soleLeaf}
-        <PaneLeaf
-          leaf={soleLeaf}
-          entryId={entry.id}
-          entryTail={entry.tail}
-          entryHistory={entry.history}
-          swipeable
-          showTabs={false}
-        />
+        <PaneLeaf leaf={soleLeaf} swipeable />
       {/if}
     {:else}
-      <PaneGrid
-        node={workspace.root}
-        entryId={entry.id}
-        entryTail={entry.tail}
-        entryHistory={entry.history}
-      />
+      <PaneGrid node={workspace.root} />
     {/if}
+    <!-- After the groups on purpose: their slots register first, so a pane
+         is born straight into the group that asked for it. -->
+    <PaneHost entryId={entry.id} entryTail={entry.tail} entryHistory={entry.history} />
   </div>
 
   {@render children()}

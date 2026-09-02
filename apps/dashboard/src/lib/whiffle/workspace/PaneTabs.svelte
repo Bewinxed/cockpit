@@ -61,9 +61,9 @@
 
   const tabs = $derived(leaf.tabs.map(resolve));
 
-  // Remember every name the strip works out, so the SERVER can draw the strip
-  // with it next time — a title is mostly derived from the transcript, which a
-  // render has no access to.
+  // Remember every name the strip works out, so a tab on a conversation the
+  // board no longer lists is called by its name and not eight characters of
+  // its id until its transcript arrives.
   $effect(() => {
     const named = tabs.filter((tab) => tab.named).map((tab) => [tab.id, tab.label] as const);
     untrack(() => {
@@ -166,30 +166,53 @@
 </div>
 
 <style>
+  /* The strip shares the identity bar's inset, so the first tab and the
+     session mark below it sit on one line. */
   .tabstrip {
     display: flex;
     align-items: stretch;
     gap: 2px;
     flex-shrink: 0;
-    padding: 5px var(--space-3);
+    padding: 6px var(--space-6) 6px var(--space-7);
     border-bottom: 1px solid var(--border-hairline);
     background: var(--surface-raised);
     overflow-x: auto;
-    scrollbar-width: none;
+    scrollbar-width: thin;
   }
-  .tabstrip::-webkit-scrollbar {
-    display: none;
+  @container leaf (max-width: 620px) {
+    .tabstrip {
+      padding-left: var(--space-4);
+      padding-right: var(--space-4);
+    }
   }
 
   .tab {
     position: relative;
     display: flex;
     align-items: center;
-    flex-shrink: 0;
+    gap: 6px;
+    flex: 0 0 auto;
     min-width: 0;
-    max-width: 190px;
+    max-width: 200px;
+    height: 38px;
+    padding: 0 8px 0 10px;
+    border: 1px solid transparent;
+    /* Concentric: the tab's own radius, less its 6px inset, is the radius of
+       the mark and the close target seated inside it. */
     border-radius: var(--radius-control);
-    color: var(--ink-muted);
+    background: var(--surface-field);
+    color: var(--ink-body);
+    font-size: var(--text-base);
+    font-weight: var(--weight-medium);
+    white-space: nowrap;
+    transition:
+      background-color var(--c-100) var(--e-in),
+      color var(--c-100) var(--e-in);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .tab:hover:not(.on) {
+      background: var(--surface-hover);
+    }
   }
   /* Where it would land. A 2px rule against the gap between tabs, so the
      answer is unambiguous about WHICH side without moving anything. */
@@ -215,35 +238,53 @@
     opacity: 0.4;
   }
 
+  /* Raised surface, hairline and weight say "this one" — colour is never the
+     only channel. */
   .tab.on {
-    background: var(--surface-field);
-    box-shadow: var(--shadow-tile);
+    background: var(--surface-raised);
     color: var(--ink-strong);
+    font-weight: var(--weight-strong);
+    border-color: var(--border-hairline);
+    box-shadow: var(--shadow-tile);
   }
 
   .tl {
     display: flex;
     align-items: center;
-    gap: var(--space-2);
+    align-self: stretch;
+    gap: 8px;
     min-width: 0;
-    padding: 4px var(--space-2) 4px var(--space-3);
-    font-size: var(--text-sm);
-    font-weight: var(--weight-medium);
     color: inherit;
     text-decoration: none;
   }
 
+  /* The 17px item mark at 14px, the same recipe the sidebar rows carry. */
   .tm {
     display: grid;
     place-items: center;
-    flex-shrink: 0;
-    width: 15px;
-    height: 15px;
+    flex: 0 0 auto;
+    width: 14px;
+    height: 14px;
     border-radius: var(--radius-mark);
-    color: var(--ink-strong);
+    background-image: var(--mark-overlay);
+    background-color: var(--mark-1);
   }
+  .tm :global(svg) {
+    width: 10px;
+    height: 10px;
+    display: block;
+    color: var(--mark-glyph);
+  }
+  .tm.m2 { background-color: var(--mark-2); }
+  .tm.m3 { background-color: var(--mark-3); }
+  .tm.m4 { background-color: var(--mark-4); }
+  .tm.m5 { background-color: var(--mark-5); }
+  .tm.m6 { background-color: var(--mark-6); }
+  .tm.m7 { background-color: var(--mark-7); }
+  .tm.m8 { background-color: var(--mark-8); }
 
   .nm {
+    min-width: 0;
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
@@ -252,24 +293,57 @@
   .tclose {
     display: grid;
     place-items: center;
-    flex-shrink: 0;
+    flex: 0 0 auto;
     width: 18px;
     height: 18px;
-    margin-right: 4px;
+    border: 0;
+    padding: 0;
+    background: none;
     border-radius: var(--radius-mark);
-    color: var(--ink-label);
+    color: var(--ink-muted);
     cursor: pointer;
+    transition:
+      background-color var(--c-100) var(--e-in),
+      color var(--c-100) var(--e-in),
+      transform var(--c-100) var(--e-in);
+  }
+  .tclose :global(svg) {
+    width: 11px;
+    height: 11px;
+    display: block;
   }
   @media (hover: hover) and (pointer: fine) {
     .tclose:hover {
-      background: var(--surface-hover);
+      background: var(--surface-active);
       color: var(--ink-strong);
     }
   }
+  .tclose:active {
+    transform: scale(0.9);
+  }
+
+  .tl:focus-visible,
+  .tclose:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+  }
+
   @media (pointer: coarse) {
+    .tab {
+      height: 44px;
+    }
     .tclose {
-      width: 26px;
-      height: 26px;
+      width: 28px;
+      height: 28px;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .tab,
+    .tclose {
+      transition: none;
+    }
+    .tclose:active {
+      transform: none;
     }
   }
 </style>
