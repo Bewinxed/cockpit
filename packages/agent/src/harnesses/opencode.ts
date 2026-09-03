@@ -126,6 +126,24 @@ export const SERVER_ANNOUNCE_TIMEOUT_MS = 30_000;
 export const STALLED_TURN_MS = 3 * 60_000;
 
 /**
+ * What an opencode session id looks like — the server's own shape (verified
+ * live: it answers `Expected a string starting with "ses"` to anything else).
+ * Every server call keyed by a caller-supplied session key is guarded by
+ * {@link assertOpencodeKey}, so a whiffle instance id handed over as a key is
+ * refused here, loudly, and never sent: two sessions once went unrevivable
+ * because the hub resumed them under their instance uuids.
+ */
+const OPENCODE_SESSION_ID = /^ses_/;
+
+const assertOpencodeKey = (key: string, what: string): void => {
+  if (!OPENCODE_SESSION_ID.test(key)) {
+    throw new Error(
+      `${what}: "${key}" is not an opencode session id (they start with "ses_") — this looks like a whiffle instance id`
+    );
+  }
+};
+
+/**
  * The port announcement, parsed agent-side. sessiond parses nothing — it hands
  * back the child's stdout lines opaque, and the meaning is decided here.
  *
@@ -1311,35 +1329,9 @@ export class OpencodeSession implements HarnessSession {
         if (sid !== this.sessionId) {
           return;
         }
-        const status = p.status as {
-          type?: string;
-          message?: string;
-          next?: number;
-        };
-        // A retrying turn is still a turn in flight — and the provider's own
-        // words go straight to the transcript. A quota notice that only ever
-        // lived in this event once hid as a silent hang for an hour.
-        this.#busy = status.type === "busy" || status.type === "retry";
-        // biome-ignore lint/suspicious/noUnnecessaryConditions: #busy was just assigned a live boolean; biome's field-declaration inference doesn't see it
-        if (this.#busy) {
-          this.#turnOpen = true;
-        }
-        if (status.type === "retry" && status.message) {
-          const wait = status.next
-            ? ` — next attempt in ${Math.max(0, Math.round((status.next - Date.now()) / 1000))}s`
-            : "";
-          const note = `${status.message}${wait}`;
-          if (note !== this.#lastRetryNote) {
-            this.#lastRetryNote = note;
-            this.#ctx.frame({
-              type: "system",
-              subtype: "provider_retry",
-              session_id: this.sessionId ?? undefined,
-              content: note,
-            });
-          }
-        }
-        this.#ctx.busy(this.#busy);
+        this.#applyStatus(
+          p.status as { type?: string; message?: string; next?: number }
+        );
         break;
       }
       case "session.idle": {
@@ -1842,6 +1834,78 @@ export class OpencodeSession implements HarnessSession {
     }
     this.#turnOpen = false;
     this.#clearStallTimer();
+  }
+
+  /**
+   * The server's word on whether this session is mid-turn, whether it arrived
+   * as a `session.status` event or was read back on a resume.
+   */
+  #applyStatus(status: {
+    type?: string;
+    message?: string;
+    next?: number;
+  }): void {
+    // A retrying turn is still a turn in flight — and the provider's own
+    // words go straight to the transcript. A quota notice that only ever
+    // lived in this event once hid as a silent hang for an hour.
+    this.#busy = status.type === "busy" || status.type === "retry";
+    // biome-ignore lint/suspicious/noUnnecessaryConditions: #busy was just assigned a live boolean; biome's field-declaration inference doesn't see it
+    if (this.#busy) {
+      this.#turnOpen = true;
+    }
+    if (status.type === "retry" && status.message) {
+      const wait = status.next
+        ? ` — next attempt in ${Math.max(0, Math.round((status.next - Date.now()) / 1000))}s`
+        : "";
+      const note = `${status.message}${wait}`;
+      if (note !== this.#lastRetryNote) {
+        this.#lastRetryNote = note;
+        this.#ctx.frame({
+          type: "system",
+          subtype: "provider_retry",
+          session_id: this.sessionId ?? undefined,
+          content: note,
+        });
+      }
+    }
+    this.#ctx.busy(this.#busy);
+  }
+
+  /**
+   * A session reattached while its turn was already open on the server. That
+   * turn was started by a process that no longer exists, so no `session.status`
+   * event will ever open it here, nothing arms the stall notice, and the
+   * operator's sends queue silently behind it — for hours, once. Ask the server
+   * once: a busy or retrying answer opens the turn exactly as the event would,
+   * arms the stall notice, and says so in the transcript. Fails soft: a status
+   * read that errors leaves the session as it is; the spawn already succeeded.
+   */
+  async watchResumedTurn(): Promise<void> {
+    if (this.sessionId === null) {
+      return;
+    }
+    try {
+      const result = await this.#client.session.status({
+        query: { directory: this.#directory },
+      });
+      const status = result.data?.[this.sessionId];
+      if (!status || (status.type !== "busy" && status.type !== "retry")) {
+        return;
+      }
+      this.#applyStatus(status);
+      this.#noteServerActivity();
+      this.#ctx.frame({
+        type: "system",
+        subtype: "resumed_mid_turn",
+        session_id: this.sessionId,
+        content:
+          "Resumed mid-turn: the provider was still working when this session was reattached. If nothing arrives, interrupt and retry.",
+      });
+    } catch (error) {
+      console.warn(
+        `[opencode] could not read the status of resumed session ${this.sessionId}: ${errorText(error)}`
+      );
+    }
   }
 
   /** Any server event is progress: re-arm the stall notice while a turn is open. */
@@ -2623,6 +2687,7 @@ export class OpencodeHarness implements Harness {
     let sessionId: string;
 
     if (spec.resume?.fork) {
+      assertOpencodeKey(spec.resume.sessionKey, "fork");
       const fork = await client.session.fork({
         path: { id: spec.resume.sessionKey },
         query: { directory: ctx.cwd },
@@ -2639,6 +2704,7 @@ export class OpencodeHarness implements Harness {
       // blindly: a blind address becomes a live handle whose every prompt
       // fails, plus an init frame that cements the bogus key into the hub row
       // (noteInstanceSession trusts it), poisoning the session permanently.
+      assertOpencodeKey(spec.resume.sessionKey, "resume");
       const held = await client.session.get({
         path: { id: spec.resume.sessionKey },
         query: { directory: ctx.cwd },
@@ -2650,6 +2716,7 @@ export class OpencodeHarness implements Harness {
       }
       sessionId = spec.resume.sessionKey;
       if (spec.resume.atMessage) {
+        assertOpencodeKey(spec.resume.sessionKey, "revert");
         const reverted = await client.session.revert({
           path: { id: spec.resume.sessionKey },
           query: { directory: ctx.cwd },
@@ -2702,6 +2769,12 @@ export class OpencodeHarness implements Harness {
       ...(spec.model ? { model: spec.model } : {}),
       ...(spec.permissionMode ? { permissionMode: spec.permissionMode } : {}),
     });
+
+    // A resumed session may already be mid-turn on the server; nothing else
+    // would ever tell this process so. See `watchResumedTurn`.
+    if (spec.resume) {
+      await session.watchResumedTurn();
+    }
 
     // Load skills natively: send each as a /command before the first prompt.
     // The opencode server queues them in order, so skills load before work.
@@ -2783,6 +2856,11 @@ export class OpencodeHarness implements Harness {
     if (resolveBin("opencode") === undefined) {
       return undefined;
     }
+    // A read-only lookup: a key that cannot be an opencode session answers
+    // "not held" rather than being sent, keeping this method's contract.
+    if (!OPENCODE_SESSION_ID.test(sessionKey)) {
+      return undefined;
+    }
     const client = await this.#ensure();
     const result = await client.session.get({
       path: { id: sessionKey },
@@ -2803,6 +2881,7 @@ export class OpencodeHarness implements Harness {
     if (resolveBin("opencode") === undefined) {
       return [];
     }
+    assertOpencodeKey(sessionKey, "getSessionMessages");
     const client = await this.#ensure();
     const result = await client.session.messages({
       path: { id: sessionKey },
@@ -2886,6 +2965,7 @@ export class OpencodeHarness implements Harness {
     if (resolveBin("opencode") === undefined) {
       return Promise.resolve(undefined);
     }
+    assertOpencodeKey(sessionKey, "renameSession");
     return this.#ensure()
       .then((client) =>
         client.session.update({
@@ -2902,6 +2982,7 @@ export class OpencodeHarness implements Harness {
     tag: string | null,
     _dir?: string
   ): Promise<void> {
+    assertOpencodeKey(sessionKey, "tagSession");
     await writeTag(sessionKey, tag);
   }
 
@@ -2909,6 +2990,7 @@ export class OpencodeHarness implements Harness {
     if (resolveBin("opencode") === undefined) {
       return Promise.resolve(undefined);
     }
+    assertOpencodeKey(sessionKey, "deleteSession");
     return this.#ensure()
       .then((client) =>
         client.session.delete({
@@ -2922,6 +3004,7 @@ export class OpencodeHarness implements Harness {
   async machine(method: string, args: unknown[]): Promise<unknown> {
     switch (method) {
       case CONTROL_GET_TODOS: {
+        assertOpencodeKey(args[0] as string, CONTROL_GET_TODOS);
         const client = await this.#ensure();
         const result = await client.session.todo({
           path: { id: args[0] as string },

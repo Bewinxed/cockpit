@@ -708,6 +708,10 @@ export class SessionSupervisor {
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      // The journal too: the row's `error` and the control result both leave
+      // this process, and a diagnosis on the machine itself was once blind to
+      // why a resume died.
+      warn(`spawn ${instanceId} failed: ${message}`);
       if (ack) {
         this.sink({
           kind: "control_result",

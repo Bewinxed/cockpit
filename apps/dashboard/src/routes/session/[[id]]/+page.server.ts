@@ -15,7 +15,8 @@ interface HistorySource {
   machineId: string;
   /** The location came from the URL's own query and is sent to the hub as an override. */
   override?: boolean;
-  sessionId: string;
+  /** The harness session key, as the hub holds it — absent until the hub has said. */
+  sessionId?: string;
   viewId: string;
 }
 
@@ -69,6 +70,10 @@ async function readTail(
   const harness = response.headers.get("x-whiffle-harness");
   if (harness) {
     found.harness = harness;
+  }
+  const sessionId = response.headers.get("x-whiffle-session");
+  if (sessionId) {
+    found.sessionId = decodeURIComponent(sessionId);
   }
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
@@ -203,7 +208,6 @@ export const load: PageServerLoad = async ({
     const source: HistorySource = {
       viewId,
       machineId: machine,
-      sessionId: viewId,
       cwd: untrack(() => url.searchParams.get("cwd")) ?? "",
       harness: untrack(() => url.searchParams.get("harness")) ?? "claude",
       live: false,
@@ -232,7 +236,7 @@ export const load: PageServerLoad = async ({
   const source: HistorySource = {
     viewId,
     machineId: row?.machineId ?? "",
-    sessionId: row?.sessionId ?? viewId,
+    sessionId: row?.sessionId ?? undefined,
     cwd: row?.cwd ?? "",
     harness: row?.harness ?? "claude",
     live: row !== undefined,
@@ -250,7 +254,7 @@ async function tailFor(fetch: typeof globalThis.fetch, source: HistorySource) {
   return {
     viewId: source.viewId,
     machineId: source.machineId || (found.machineId ?? ""),
-    sessionId: source.sessionId,
+    sessionId: found.sessionId ?? source.sessionId,
     cwd: source.cwd || (found.cwd ?? ""),
     harness: found.harness ?? source.harness,
     messages,

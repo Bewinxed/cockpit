@@ -626,12 +626,17 @@ function hydrate(target: SessionState): void {
     return;
   }
   adoptSettings(target, known);
+  // The row is the authority on the key, whatever the view holds: a key that
+  // arrives after the view opened — the usual case on a reload right after a
+  // hub restart — has to reach the store, or the next resume goes out without.
+  if (known.sessionId) {
+    target.sessionId = known.sessionId;
+  }
   if (target.machineId) {
     return;
   }
   target.machineId = known.machineId;
   target.cwd = known.cwd;
-  target.sessionId = known.sessionId;
   // biome-ignore lint/suspicious/noUnnecessaryConditions: the cast doesn't make the field non-nullish at runtime — older rows really can lack a harness
   target.harness = (known.harness as HarnessKind) ?? "claude";
   target.scratch = known.kind === "scratch";
@@ -3050,6 +3055,24 @@ function noteSendSubmitted(
  * crash — and the reader should not have to know which of their actions
  * happens to revive it. Returns once the session can take work again.
  */
+/**
+ * The harness key a spawn resumes an instance under. The hub row is the one
+ * authority: it holds what the daemon recorded when the session named itself,
+ * and a view id — a Whiffle instance id — is never a key, whatever shape it
+ * has. A row without a key has nothing to resume by, and this says so rather
+ * than guessing: two opencode sessions were lost to a resume that sent the
+ * instance id in the key's place. Only an id the hub does not hold at all — a
+ * stored transcript browsed under its own key — answers from the store, which
+ * by then carries what the transcript read's header or the catalog entry named.
+ */
+function resumeKeyFor(instanceId: string): string | null {
+  const row = state.instances.find((candidate) => candidate.id === instanceId);
+  if (row) {
+    return row.sessionId ?? null;
+  }
+  return state.sessions[instanceId]?.sessionId ?? null;
+}
+
 export async function ensureAlive(
   instanceId: string,
   machineId: string
@@ -3061,13 +3084,21 @@ export async function ensureAlive(
     (row.status === "error" ||
       row.status === "stopped" ||
       row.status === "sleeping");
-  if (dead && target.sessionId) {
+  if (dead) {
+    // A dead row with no key on record cannot come back, and a spawn sent
+    // anyway would carry a guessed one — the refusal is the honest answer.
+    const sessionKey = resumeKeyFor(instanceId);
+    if (!sessionKey) {
+      throw new Error(
+        `no session key on record for ${instanceId}; cannot resume`
+      );
+    }
     const requestId = newId();
     const payload: SpawnPayload = {
       instanceId,
       cwd: target.cwd,
       harness: target.harness,
-      resume: { sessionKey: target.sessionId },
+      resume: { sessionKey },
       scratch: target.scratch ? {} : undefined,
       // The new process answers the way the old one did: a revive nobody asked
       // for is not the moment to hand the session back on other settings.
@@ -3511,14 +3542,20 @@ export async function openTranscript({
 }: {
   viewId: string;
   machineId: string;
-  sessionId: string;
+  /**
+   * The key the transcript is read under: the hub row's own, or the catalog
+   * entry's the reader chose. Never the view id — and absent, there is no read.
+   */
+  sessionId?: string;
   cwd: string;
   harness?: HarnessKind;
 }): Promise<TranscriptOutcome> {
   const target = session(viewId);
   target.machineId = machineId;
   target.cwd = cwd;
-  target.sessionId = sessionId;
+  if (sessionId) {
+    target.sessionId = sessionId;
+  }
   target.harness = harness;
   // A stored session's plan is still on its machine, and no frame will ever
   // arrive to say so — opening it is the only moment there is to ask.
@@ -3527,6 +3564,15 @@ export async function openTranscript({
   // its newest turns by now — must not start a second read over the top of it.
   if (target.messages.length > 0 || target.loading) {
     return { ok: true, skipped: true };
+  }
+  // Nothing names the transcript, and the view id is not a name for it: a
+  // read sent under one comes back empty or wrong, so this is refused outright.
+  if (!sessionId) {
+    target.readFault = {
+      reason: "failed",
+      message: `no session key on record for ${viewId}; cannot read`,
+    };
+    return { ok: false, ...target.readFault };
   }
 
   // Asked before the call rather than inferred from its failure: a machine the
@@ -3681,8 +3727,12 @@ export interface HistorySource {
    * an override rather than left to its resolver.
    */
   override?: boolean;
-  /** The key the transcript is stored under: the SDK session id, not the view. */
-  sessionId: string;
+  /**
+   * The key the transcript is stored under: the SDK session id, never the
+   * view. Only a hub row's own key belongs here; absent, the read's header
+   * names it.
+   */
+  sessionId?: string;
   viewId: string;
 }
 
@@ -3735,7 +3785,10 @@ export async function streamHistory({
   if (cwd) {
     target.cwd = cwd;
   }
-  if (sessionId) {
+  // Only a key the hub row named is taken ahead of the read. A view id in the
+  // key's place is a caller standing in for one it did not have — and the
+  // read's own header names the real key, so nothing is lost by waiting.
+  if (sessionId && sessionId !== viewId) {
     target.sessionId = sessionId;
   }
   if (harness) {
@@ -3885,8 +3938,8 @@ export async function streamHistory({
     // Where the hub found it. A session addressed by id alone arrives here
     // knowing nothing about itself, and the composer, the header and the
     // machine's tools all want the machine — this is the one round trip that
-    // learns it. The hub's word fills blanks only: a live row's own values
-    // are already in place and are not walked back.
+    // learns it. The hub's word on machine and folder fills blanks only: a
+    // live row's own values are already in place and are not walked back.
     const found = response.headers.get("x-whiffle-machine");
     if (found && !target.machineId) {
       target.machineId = found;
@@ -3895,8 +3948,11 @@ export async function streamHistory({
     if (foundCwd && !target.cwd) {
       target.cwd = decodeURIComponent(foundCwd);
     }
+    // The key is different: the hub resolved the id to it, and it is the one
+    // thing here a later resume is sent under. It overwrites whatever the view
+    // holds — a stored transcript opened by its id has nothing until now.
     const foundKey = response.headers.get("x-whiffle-session");
-    if (foundKey && !target.sessionId) {
+    if (foundKey) {
       target.sessionId = decodeURIComponent(foundKey);
     }
     const foundHarness = response.headers.get("x-whiffle-harness");
@@ -4447,9 +4503,10 @@ export async function relaunchSession(
   permissionMode: PermissionMode
 ): Promise<void> {
   const target = session(instanceId);
-  if (!target.sessionId) {
+  const sessionKey = resumeKeyFor(instanceId);
+  if (!sessionKey) {
     throw new Error(
-      "This session has not named itself yet. Try again in a moment."
+      `no session key on record for ${instanceId}; cannot resume`
     );
   }
 
@@ -4458,7 +4515,7 @@ export async function relaunchSession(
     instanceId,
     cwd: target.cwd,
     harness: target.harness,
-    resume: { sessionKey: target.sessionId },
+    resume: { sessionKey },
     // A relaunch is a spawn like any other, so it has to say what it is: a quest
     // that stayed silent about it would come back as mainline work, untagged.
     scratch: target.scratch ? {} : undefined,
@@ -4591,9 +4648,15 @@ export async function editAndResend(
 ): Promise<void> {
   const target = session(instanceId);
   const { machineId } = target;
-  if (!(target.sessionId && machineId)) {
+  if (!machineId) {
     throw new Error(
       "This session has not named itself yet. Try again in a moment."
+    );
+  }
+  const sessionKey = resumeKeyFor(instanceId);
+  if (!sessionKey) {
+    throw new Error(
+      `no session key on record for ${instanceId}; cannot resume`
     );
   }
   const point = rewindPoint(target, sdkUuid);
@@ -4608,7 +4671,7 @@ export async function editAndResend(
     instanceId,
     cwd: target.cwd,
     harness: target.harness,
-    resume: { sessionKey: target.sessionId, atMessage: point.at },
+    resume: { sessionKey, atMessage: point.at },
     // The same four a relaunch carries: a rewind changes what the session has
     // said, not what it is.
     scratch: target.scratch ? {} : undefined,

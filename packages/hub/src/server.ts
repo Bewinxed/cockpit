@@ -369,6 +369,40 @@ const peekResume = (payload: unknown): string | undefined => {
   return typeof key === "string" ? key : undefined;
 };
 
+/**
+ * The hub row is the single authority for an instance's session key. A spawn
+ * addressed to an existing row resumes under the row's key, whatever the
+ * client sent: the dashboard once resumed two opencode sessions under their
+ * whiffle instance ids, the harness rejected both, and the rows went `error`.
+ * A row that never reported a key has nothing to resume, and a key the
+ * client made up for it is refused rather than tried. Mutates `payload` in
+ * place; returns the reason the spawn must be refused, or `undefined` when
+ * it may go out.
+ */
+const enforceRowSessionKey = (
+  row: InstanceRow | undefined,
+  payload: unknown
+): string | undefined => {
+  if (!row) {
+    return undefined;
+  }
+  const asked = peekResume(payload);
+  if (asked === undefined) {
+    return undefined;
+  }
+  if (!row.sessionId) {
+    return `instance ${row.id} has no session key on record; refusing to resume it under "${asked}"`;
+  }
+  if (asked !== row.sessionId) {
+    console.warn(
+      `[hub] spawn ${row.id} asked to resume "${asked}"; using the row's session key "${row.sessionId}"`
+    );
+    (payload as { resume: { sessionKey: string } }).resume.sessionKey =
+      row.sessionId;
+  }
+  return undefined;
+};
+
 /** A spawn asking for scratch isolation, or for a session that is never stored. */
 const peekKind = (payload: unknown): InstanceKind => {
   if (typeof payload !== "object" || payload === null) {
@@ -1504,11 +1538,17 @@ export const createServer = ({
     }
 
     const [row] = db.getInstancesByIds([id]);
-    if (row?.machineId) {
+    if (row) {
+      // The row is the single authority for its session: a row that never
+      // reported a key holds nothing locatable, and no machine is asked under
+      // a guessed one. Not cached, so the key it reports later is found.
+      if (!row.sessionId) {
+        return null;
+      }
       const found: SessionLocation = {
         id,
         machineId: row.machineId,
-        sessionId: row.sessionId ?? id,
+        sessionId: row.sessionId,
         cwd: row.cwd ?? "",
         harness: (row.harness as HarnessKind | undefined) ?? "claude",
       };
@@ -1546,7 +1586,9 @@ export const createServer = ({
             | { sessionId?: string; cwd?: string; harness?: string }
             | undefined
             | null;
-          return info?.sessionId ? { harness, info } : null;
+          return info?.sessionId
+            ? { harness, sessionId: info.sessionId, info }
+            : null;
         })
       );
       const hit = answers.find((answer) => answer !== null);
@@ -1556,7 +1598,7 @@ export const createServer = ({
       const found: SessionLocation = {
         id,
         machineId: agent.machineId,
-        sessionId: hit.info.sessionId ?? id,
+        sessionId: hit.sessionId,
         cwd: hit.info.cwd ?? "",
         harness: (hit.info.harness as HarnessKind | undefined) ?? hit.harness,
       };
@@ -2769,7 +2811,30 @@ export const createServer = ({
               // Never named, so ask the machine that stores the conversation. A
               // machine that is not connected leaves the tab to its fallback:
               // nothing here can invent a name nobody has ever written down.
-              const machineId = ask.machine ?? row?.machineId;
+              //
+              // Two mutually exclusive cases, never mixed: a hub row is the
+              // single authority for its session's key, machine, folder and
+              // harness (a row without a key has nothing stored to name); an
+              // id without a row is a stored session key, and the ask says
+              // where it lives.
+              let machineId: string | undefined;
+              let sessionKey: string;
+              let cwd: string | undefined;
+              let harness: HarnessKind | undefined;
+              if (row) {
+                if (!row.sessionId) {
+                  return { id: ask.id, title: null };
+                }
+                ({ machineId } = row);
+                sessionKey = row.sessionId;
+                cwd = row.cwd || undefined;
+                harness = (row.harness || undefined) as HarnessKind | undefined;
+              } else {
+                machineId = ask.machine;
+                sessionKey = ask.id;
+                cwd = ask.cwd || undefined;
+                harness = (ask.harness || undefined) as HarnessKind | undefined;
+              }
               if (!(machineId && registry.agent(machineId))) {
                 return { id: ask.id, title: null };
               }
@@ -2777,14 +2842,9 @@ export const createServer = ({
               const answer = await callAgent(
                 machineId,
                 CONTROL_GET_SESSION_MESSAGES,
-                [
-                  ask.machine ? ask.id : (row?.sessionId ?? ask.id),
-                  { dir: ask.cwd || row?.cwd || undefined },
-                ],
+                [sessionKey, { dir: cwd }],
                 READ_TIMEOUT_MS,
-                (ask.harness || row?.harness || undefined) as
-                  | HarnessKind
-                  | undefined
+                harness
               );
               if (answer === "offline" || answer === "timeout" || !answer.ok) {
                 return { id: ask.id, title: null };
@@ -2824,10 +2884,11 @@ export const createServer = ({
       //
       // Addressed by id alone. The hub's own row answers for a session it holds —
       // including the SDK session key, which is what the machine stores the
-      // transcript under — and anything else is located the way `/location` is.
-      // `machine`/`cwd`/`harness` are an explicit override, kept for the links
-      // and bookmarks minted while a stored transcript still carried them; a
-      // client that knows better than the resolver may still say so.
+      // transcript under — and no query hint can override it. An id with no row
+      // is a stored session key: `machine`/`cwd`/`harness` say where it lives
+      // (kept for the links and bookmarks minted while a stored transcript
+      // still carried them), and without them it is located the way
+      // `/location` is.
       //
       // Where the transcript was found rides back in headers, so a reader that
       // addressed a session by id alone learns which machine can act on it
@@ -2843,26 +2904,51 @@ export const createServer = ({
         },
         // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: resolves the session's machine/cwd/harness from the query, the row, or a live locate in one place; splitting it would scatter the fallback order this route depends on.
         async ({ params, query, status }) => {
-          const row = query.machine
-            ? undefined
-            : db.listInstances().find((r) => r.id === params.id);
-          let machineId = query.machine ?? row?.machineId;
-          let sessionKey = query.machine
-            ? params.id
-            : (row?.sessionId ?? params.id);
-          let cwd = query.cwd || row?.cwd || undefined;
-          let harness = (query.harness || row?.harness || undefined) as
-            | HarnessKind
-            | undefined;
-          if (!machineId) {
+          // Two mutually exclusive cases, never mixed. A hub row for this id is
+          // the single authority for the session it holds: its key, machine,
+          // folder and harness — a `machine`/`cwd`/`harness` hint from the
+          // client cannot override any of them. (An opencode session resumed
+          // under its whiffle instance id instead of its `ses_…` key is how
+          // two rows went unrevivable after a hub restart.) Without a row, the
+          // id is by definition a stored session key, and the hint says where.
+          const [row] = db.getInstancesByIds([params.id]);
+          let machineId: string;
+          let sessionKey: string;
+          let cwd: string | undefined;
+          let harness: HarnessKind | undefined;
+          if (row) {
+            if (!row.sessionId) {
+              // Never reported a session key, so nothing is stored under this
+              // id anywhere; asking a machine with the whiffle id as the key
+              // would only make the harness reject it.
+              return new Response(ndjsonNewestFirst([]), {
+                headers: {
+                  "Content-Type": "application/x-ndjson",
+                  "Cache-Control": "no-store",
+                  "X-Whiffle-Machine": row.machineId,
+                  "X-Whiffle-Session": "",
+                  "X-Whiffle-Cwd": encodeURIComponent(row.cwd || ""),
+                  "X-Whiffle-Harness": row.harness || "claude",
+                },
+              });
+            }
+            ({ machineId } = row);
+            sessionKey = row.sessionId;
+            cwd = row.cwd || undefined;
+            harness = (row.harness || undefined) as HarnessKind | undefined;
+          } else if (query.machine) {
+            machineId = query.machine;
+            sessionKey = params.id;
+            cwd = query.cwd || undefined;
+            harness = (query.harness || undefined) as HarnessKind | undefined;
+          } else {
             const where = await locateSession(params.id);
             if (!where) {
               return status(404, `no session ${params.id}`);
             }
-            ({ machineId } = where);
+            ({ machineId, harness } = where);
             sessionKey = where.sessionId;
             cwd = where.cwd || undefined;
-            ({ harness } = where);
           }
 
           const answer = await callAgent(
@@ -4211,6 +4297,14 @@ export const createServer = ({
           }
         }
 
+        const refusal = enforceRowSessionKey(
+          rows.find((row) => row.id === instanceId),
+          body
+        );
+        if (refusal) {
+          return status(409, refusal);
+        }
+
         const agent = registry.agent(machineId);
         if (!agent) {
           return status(404, `machine ${machineId} is not connected`);
@@ -4813,6 +4907,19 @@ export const createServer = ({
                 (message.payload as Record<string, unknown>).canDelegate =
                   false;
               }
+              // The row's key, not the client's — see `enforceRowSessionKey`.
+              // Nothing here can answer the sender, so a refused resume is
+              // dropped, the same way a leaf's spawn is.
+              const refusal = enforceRowSessionKey(
+                message.instanceId
+                  ? db.getInstancesByIds([message.instanceId])[0]
+                  : undefined,
+                message.payload
+              );
+              if (refusal) {
+                console.warn(`[hub] refused spawn: ${refusal}`);
+                break;
+              }
               if (forward(message, ws) && message.instanceId) {
                 db.openInstance({
                   id: message.instanceId,
@@ -5263,7 +5370,19 @@ export const createServer = ({
           }
 
           switch (message.verb) {
-            case "spawn":
+            case "spawn": {
+              // The row's key, not the client's — see `enforceRowSessionKey`.
+              const refusal = enforceRowSessionKey(
+                message.instanceId
+                  ? db.getInstancesByIds([message.instanceId])[0]
+                  : undefined,
+                message.payload
+              );
+              if (refusal) {
+                console.warn(`[hub] refused spawn: ${refusal}`);
+                ws.send(failure(message, refusal));
+                break;
+              }
               if (forward(message, ws) && message.instanceId) {
                 // A relaunch replaces the process — questions the old one had
                 // open are settled by its teardown and must not replay.
@@ -5289,6 +5408,7 @@ export const createServer = ({
                 publishInstances(message.machineId);
               }
               break;
+            }
             case "send":
               relaySend(message as Envelope<SendPayload>, ws);
               break;

@@ -101,7 +101,16 @@
         void openTranscript({
           viewId: next.viewId,
           machineId: next.browsing.machineId,
-          sessionId: next.viewId,
+          // The row's key when the hub holds this id, else the catalog
+          // entry's the reader picked. The view id itself is never handed
+          // over as one: an instance id in the key's place is what made two
+          // sessions unrevivable.
+          sessionId:
+            whiffle.instances.find((instance) => instance.id === next.viewId)
+              ?.sessionId ??
+            whiffle
+              .catalogOf(next.browsing.machineId)
+              .find((entry) => entry.sessionId === next.viewId)?.sessionId,
           cwd: next.browsing.cwd,
           harness: whiffle.session(next.viewId)?.harness ?? "claude",
         });
@@ -158,20 +167,25 @@
   });
   const tool = $derived(target ? whiffle.currentToolOf(target.viewId) : null);
 
-  /** What the session is about, from the SDK's own title for its transcript. */
-  const title = $derived.by(() => {
+  /**
+   * The catalog entry this peek shows: the stored one the reader picked, or
+   * the live session's own transcript. The entry, not the view id, is what
+   * names the key — a browsing peek's id only says which entry to look up.
+   */
+  const info = $derived.by(() => {
     const machineId = session?.machineId || target?.browsing?.machineId;
     const sessionId = target?.browsing
       ? target.viewId
       : (session?.sessionId ?? null);
-    const info =
-      sessionId && machineId
-        ? whiffle
-            .catalogOf(machineId)
-            .find((entry) => entry.sessionId === sessionId)
-        : undefined;
-    return info ? sessionTitle(info) : "untitled session";
+    return sessionId && machineId
+      ? whiffle
+          .catalogOf(machineId)
+          .find((entry) => entry.sessionId === sessionId)
+      : undefined;
   });
+
+  /** What the session is about, from the SDK's own title for its transcript. */
+  const title = $derived(info ? sessionTitle(info) : "untitled session");
 
   const machine = $derived.by(() => {
     const machineId = session?.machineId || target?.browsing?.machineId || "";
@@ -188,9 +202,9 @@
 
   const cwd = $derived(session?.cwd || target?.browsing?.cwd || "");
 
-  /** The SDK session a fork branches from: the stored one, or the live one's. */
+  /** The SDK session a fork branches from: the stored entry's key, or the live one's. */
   const forkable = $derived(
-    target?.browsing ? target.viewId : (session?.sessionId ?? null)
+    target?.browsing ? (info?.sessionId ?? null) : (session?.sessionId ?? null)
   );
 
   async function fork() {

@@ -170,13 +170,16 @@
             viewId: id,
             machineId: hint?.machineId ?? "",
             // The rail row's real SDK key when it has one — never the view id
-            // itself. The store adopts this sessionId, and any later
+            // itself, and nothing at all when the row has not named one yet.
+            // The store adopts this sessionId, and any later
             // revive/relaunch/rewind re-sends it as the resume key; an
             // instance id there becomes a bogus handle the hub then cements
-            // into the row permanently. The id tail stays for the read, which
-            // the hub resolves on its own.
+            // into the row permanently. The read's own header names the key
+            // when this is blank; the id tail stays for the read, which the
+            // hub resolves on its own.
             sessionId:
-              whiffle.instances.find((row) => row.id === id)?.sessionId ?? id,
+              whiffle.instances.find((row) => row.id === id)?.sessionId ??
+              undefined,
             cwd: hint?.cwd ?? "",
             harness: hint?.harness as never,
             live: running,
@@ -298,7 +301,7 @@
     const mapped = mapTranscript(viewId, tail.messages);
     blank.machineId = tail.machineId;
     blank.cwd = tail.cwd;
-    blank.sessionId = tail.sessionId;
+    blank.sessionId = tail.sessionId ?? null;
     blank.harness = tail.harness as HarnessKind;
     blank.messages = mapped.messages;
     blank.subagents = mapped.subagents;
