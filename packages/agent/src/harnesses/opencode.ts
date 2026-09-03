@@ -2661,23 +2661,31 @@ export class OpencodeHarness implements Harness {
         .map((session) => sessionToInfo(session, tags[session.id]));
     }
 
-    // Machine catalog: every project's sessions, merged and deduped by id. The
-    // unscoped `session.list` only covers the server's current project, so ask
-    // per project worktree.
+    // Machine catalog: every session on the server, merged and deduped by id.
+    // Asked per project worktree AND once unscoped: a scoped list only matches
+    // its exact directory, so a session living directly under a parent dir
+    // (e.g. /home/o with only / as a project worktree) appears in neither —
+    // verified live at 1.18.19, where `?directory=/` answers []. The unscoped
+    // list covers those; the per-worktree queries stay so an opencode whose
+    // unscoped list is project-scoped still reports the whole machine.
     const projects = await client.project.list();
     if (projects.error || !projects.data) {
       return [];
     }
-    const lists = await Promise.all(
-      (projects.data as Project[]).map((project) =>
+    const lists = await Promise.all([
+      client.session
+        .list()
+        .then((res) => (res.error || !res.data ? [] : (res.data as Session[])))
+        .catch(() => [] as Session[]),
+      ...(projects.data as Project[]).map((project) =>
         client.session
           .list({ query: { directory: project.worktree } })
           .then((res) =>
             res.error || !res.data ? [] : (res.data as Session[])
           )
           .catch(() => [] as Session[])
-      )
-    );
+      ),
+    ]);
     const seen = new Set<string>();
     const merged: Session[] = [];
     for (const list of lists) {
