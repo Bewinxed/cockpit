@@ -12,6 +12,7 @@
    */
   import { untrack } from "svelte";
   import { page } from "$app/state";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as ContextMenu from "$lib/components/ui/context-menu";
   import { IconClose } from "$lib/icons";
   import { whiffle } from "../client.svelte";
@@ -164,7 +165,11 @@
         <ContextMenu.Item
           disabled={leaf.tabs.length < 2}
           onSelect={() => {
-            for (const id of [...leaf.tabs]) if (id !== tab.id) workspace.close(id);
+            for (const id of [...leaf.tabs]) {
+              if (id !== tab.id) {
+                workspace.close(id);
+              }
+            }
           }}
         >
           Close others

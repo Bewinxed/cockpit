@@ -2,9 +2,9 @@
   /** One agent in the strip, flattened from a branch or a delegate alike. */
   export interface SwarmMark {
     key: string;
-    state: "working" | "idle" | "blocked" | "failed" | "sleeping";
-    model: string | null;
     label: string;
+    model: string | null;
+    state: "working" | "idle" | "blocked" | "failed" | "sleeping";
   }
 </script>
 

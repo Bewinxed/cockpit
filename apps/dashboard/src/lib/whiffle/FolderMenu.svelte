@@ -7,7 +7,9 @@
    */
   import type { Snippet } from "svelte";
   import { goto } from "$app/navigation";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as AlertDialog from "$lib/components/ui/alert-dialog";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as ContextMenu from "$lib/components/ui/context-menu";
   import {
     IconAlignLeft,
@@ -166,7 +168,9 @@
     {#if project}
       <ContextMenu.Separator />
       <ContextMenu.Item
-        onSelect={() => (confirmingForget = true)}
+        onSelect={() => {
+          confirmingForget = true;
+        }}
         variant="destructive"
       >
         <IconTrash />

@@ -81,6 +81,9 @@ const GHOST_PROBE_TEXT = `insecure-origin smoke: undeliverable probe ${Date.now(
  */
 const UNREACHABLE_SESSION = process.env.SMOKE_UNREACHABLE_SESSION ?? null;
 
+/** Matches `startFrontProxy`'s ws/api split; no g/y flag, so a shared instance is safe. */
+const PROXY_API_PATH_RE = /^\/(ws|api)(\/|$)/;
+
 /**
  * playwright-core is a root devDependency (`^1.62.1`) — verified against
  * `package.json` before this script was written. If resolution ever fails
@@ -117,6 +120,7 @@ async function waitForServer(url, timeoutMs = 30_000) {
   let lastErr;
   while (Date.now() < deadline) {
     try {
+      // biome-ignore lint/performance/noAwaitInLoops: polls until the server answers or the deadline passes; each attempt depends on the previous one having failed
       const res = await fetch(url);
       if (res.ok || res.status < 500) {
         return;
@@ -173,7 +177,7 @@ function startFrontProxy({ port, previewPort, hub }) {
   // The browser still sees `insecure.whiffle.test`, which is the only thing
   // the origin's security state is computed from.
   const to = (req) =>
-    /^\/(ws|api)(\/|$)/.test(req.url ?? "")
+    PROXY_API_PATH_RE.test(req.url ?? "")
       ? { host: hub.hostname, port: hub.port || 80, hostHeader: hub.host }
       : {
           host: "127.0.0.1",
@@ -201,6 +205,7 @@ function startFrontProxy({ port, previewPort, hub }) {
   // The upgrade is replayed by hand for the same reason the dev server does it
   // by hand: a generic proxy loses the 101 under this toolchain.
   server.on("upgrade", (req, socket, head) => {
+    // biome-ignore lint/suspicious/noEmptyBlockStatements: a client disconnecting mid-handshake is expected; nothing to do beyond not crashing the proxy
     socket.on("error", () => {});
     const target = to(req);
     const proxied = http.request(forward(req, target));
@@ -248,8 +253,12 @@ try {
     }
   );
   let previewOutput = "";
-  previewProc.stdout.on("data", (d) => (previewOutput += d));
-  previewProc.stderr.on("data", (d) => (previewOutput += d));
+  previewProc.stdout.on("data", (d) => {
+    previewOutput += d;
+  });
+  previewProc.stderr.on("data", (d) => {
+    previewOutput += d;
+  });
   previewProc.on("exit", (code, signal) => {
     if (code !== null && code !== 0) {
       console.error(
@@ -365,6 +374,7 @@ try {
               document.body.innerText
             ).slice(0, 400),
           }))
+          // biome-ignore lint/suspicious/noNestedPromises: this diagnostic read is itself inside a .catch() retry handler; flattening it would lose the outer failure it's explaining
           .catch(() => null);
         throw new Error(
           `no composer mounted on /session/${sessionId} within 20s — the pane showed ` +
@@ -379,6 +389,7 @@ try {
     // something to paper over with a longer timeout.
     let filled = false;
     for (let attempt = 0; attempt < 5 && !filled; attempt += 1) {
+      // biome-ignore lint/performance/noAwaitInLoops: retries in place until the composer holds still; each attempt must see the previous one's result
       filled = await field
         .fill(GHOST_PROBE_TEXT, { timeout: 5000 })
         .then(() => true)
@@ -423,6 +434,7 @@ try {
             }),
             GHOST_PROBE_TEXT
           )
+          // biome-ignore lint/suspicious/noNestedPromises: this diagnostic read is itself inside a .catch() retry handler; flattening it would lose the outer failure it's explaining
           .catch(() => null);
         throw new Error(
           "an undeliverable send left NO failed ghost on the transcript — the message the operator " +
@@ -495,6 +507,7 @@ try {
   console.error(`[insecure-origin-smoke] FAIL — ${err.message}`);
   exitCode = 1;
 } finally {
+  // biome-ignore lint/suspicious/noEmptyBlockStatements: cleanup on the way out; a close failure here is not worth reporting over whatever the run already decided
   await browser?.close().catch(() => {});
   frontProxy?.close();
   if (previewProc && !previewProc.killed) {

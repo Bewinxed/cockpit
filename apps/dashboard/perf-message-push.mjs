@@ -38,6 +38,7 @@ let msgId = 0;
 const pending = new Map();
 ws.addEventListener("message", (ev) => {
   const msg = JSON.parse(ev.data);
+  // biome-ignore lint/suspicious/noEqualsToNull: must catch both null and undefined msg.id (CDP notifications omit id)
   if (msg.id != null && pending.has(msg.id)) {
     pending.get(msg.id)(msg);
     pending.delete(msg.id);
@@ -45,7 +46,8 @@ ws.addEventListener("message", (ev) => {
 });
 function cdp(method, params = {}) {
   return new Promise((resolve, reject) => {
-    const id = ++msgId;
+    msgId += 1;
+    const id = msgId;
     pending.set(id, (msg) =>
       msg.error ? reject(msg.error) : resolve(msg.result)
     );
@@ -101,7 +103,7 @@ const sessions = await evaluate(`(() => {
     .sort((a, b) => b.msgs - a.msgs);
 })()`);
 
-const chosen = sessions[0];
+const [chosen] = sessions;
 if (!chosen) {
   console.log("No running sessions found");
   ws.close();
@@ -126,7 +128,8 @@ await new Promise((r) => {
 });
 // Poll for transcript to appear (backfill can take several seconds)
 let transcriptCheck;
-for (let attempt = 0; attempt < 15; attempt++) {
+for (let attempt = 0; attempt < 15; attempt += 1) {
+  // biome-ignore lint/performance/noAwaitInLoops: polls until the transcript backfills; each attempt must wait for the previous sleep+check
   await sleep(2000);
   transcriptCheck = await evaluate(`(() => {
     const transcript = document.querySelector('[data-transcript-content]');
@@ -180,8 +183,9 @@ console.log("\n── MESSAGE PUSH (10 messages, traced individually) ──");
 
 const pushResults = [];
 
-for (let i = 0; i < 10; i++) {
+for (let i = 0; i < 10; i += 1) {
   // Take a snapshot before
+  // biome-ignore lint/performance/noAwaitInLoops: each iteration traces and measures one message push before moving to the next
   const before = await getMetrics();
 
   // Start tracing

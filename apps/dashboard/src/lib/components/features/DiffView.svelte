@@ -12,11 +12,12 @@
   }
 
   let { filePath, oldContent, newContent }: Props = $props();
-  let container: HTMLDivElement;
+  // biome-ignore lint/suspicious/noUnassignedVariables: bind:this assigns this before onMount runs; Svelte's standard element-ref pattern
+  let container: HTMLDivElement | undefined;
   let diffInstance: FileDiff | null = null;
   let showModal = $state(false);
   let loading = $state(true);
-  let error = $state<string | null>(null);
+  let diffError = $state<string | null>(null);
 
   // Get file extension for syntax highlighting
   function getLanguageFromPath(path: string): string | undefined {
@@ -64,7 +65,7 @@
     return path.split("/").pop() || path;
   }
 
-  onMount(async () => {
+  onMount(() => {
     if (!container) {
       return;
     }
@@ -101,7 +102,7 @@
       loading = false;
     } catch (e) {
       console.error("[DiffView] Failed to render diff:", e);
-      error = e instanceof Error ? e.message : "Failed to render diff";
+      diffError = e instanceof Error ? e.message : "Failed to render diff";
       loading = false;
     }
   });
@@ -131,7 +132,7 @@
     <span class="break-all flex-1 min-w-0">{filePath}</span>
     <Button
       class="h-6 w-6 ml-2 shrink-0"
-      disabled={loading || !!error}
+      disabled={loading || !!diffError}
       onclick={openModal}
       size="icon-sm"
       title="Expand diff (full view)"
@@ -148,17 +149,17 @@
       <IconSpinner class="w-5 h-5 animate-spin" />
       <span>Loading diff...</span>
     </div>
-  {:else if error}
+  {:else if diffError}
     <div class="flex items-center justify-center gap-2 p-8 text-sm text-error">
       <IconAlert class="w-5 h-5" />
-      <span>{error}</span>
+      <span>{diffError}</span>
     </div>
   {/if}
 
   <div
     class="diff-content overflow-x-auto max-h-[400px]"
     bind:this={container}
-    class:hidden={loading || !!error}
+    class:hidden={loading || !!diffError}
   ></div>
 </div>
 

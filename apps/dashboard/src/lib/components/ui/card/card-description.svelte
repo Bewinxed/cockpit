@@ -11,7 +11,7 @@
 </script>
 
 <p
-  class={cn("text-sm text-muted-foreground", className)}
+  class={cn("text-muted-foreground text-sm", className)}
   data-slot="card-description"
   bind:this={ref}
   {...restProps}

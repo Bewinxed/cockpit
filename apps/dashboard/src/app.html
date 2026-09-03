@@ -65,11 +65,14 @@
     <script>
       "use strict";
       try {
-        var w = Number.parseInt(localStorage.getItem("whiffle-rail-width"), 10);
+        const w = Number.parseInt(
+          localStorage.getItem("whiffle-rail-width"),
+          10
+        );
         if (w >= 216 && w <= 520) {
           document.documentElement.style.setProperty("--rail-w", `${w}px`);
         }
-      } catch (_e) {
+      } catch {
         /* No storage, or a value that is not a width: the cookie default stands. */
       }
     </script>

@@ -36,6 +36,7 @@
   } = $props();
 </script>
 
+<!-- biome-ignore lint/a11y/useSemanticElements: fieldset would add a default border and legend semantics that don't apply to a toolbar-style button grouping -->
 <div
   class={cn(buttonGroupVariants({ orientation }), className)}
   data-orientation={orientation}

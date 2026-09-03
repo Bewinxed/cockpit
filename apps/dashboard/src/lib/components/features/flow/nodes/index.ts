@@ -6,6 +6,13 @@ import SystemMessageNode from "./SystemMessageNode.svelte";
 import ToolNode from "./ToolNode.svelte";
 import UserMessageNode from "./UserMessageNode.svelte";
 
+// biome-ignore lint/performance/noBarrelFile: public entry point for the flow node component group, consumed as a unit alongside the nodeTypes map above
+export { default as AssistantMessageNode } from "./AssistantMessageNode.svelte";
+export { default as SubagentNode } from "./SubagentNode.svelte";
+export { default as SystemMessageNode } from "./SystemMessageNode.svelte";
+export { default as ToolNode } from "./ToolNode.svelte";
+export { default as UserMessageNode } from "./UserMessageNode.svelte";
+
 // Node type identifiers
 export const NODE_TYPES = {
   USER: "user",
@@ -27,13 +34,4 @@ export const nodeTypes: NodeTypes = {
   [NODE_TYPES.TOOL]: ToolNode,
   [NODE_TYPES.SUBAGENT]: SubagentNode,
   [NODE_TYPES.SYSTEM]: SystemMessageNode,
-};
-
-// Re-export individual components
-export {
-  AssistantMessageNode,
-  SubagentNode,
-  SystemMessageNode,
-  ToolNode,
-  UserMessageNode,
 };

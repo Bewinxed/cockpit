@@ -100,7 +100,7 @@ export const workingSet = {
       session, whose row on the hub answers instead. */
   contextOf(id: string): VisitContext | null {
     const visit = visits.find((v) => v.id === id);
-    if (!(visit && visit.machine)) {
+    if (!visit?.machine) {
       return null;
     }
     return {
@@ -132,7 +132,7 @@ export const workingSet = {
     // The coldest tab makes room; everything else keeps the place it had.
     if (visits.length > LIMIT) {
       let coldest = 0;
-      for (let i = 1; i < visits.length; i++) {
+      for (let i = 1; i < visits.length; i += 1) {
         if (visits[i].at < visits[coldest].at) {
           coldest = i;
         }

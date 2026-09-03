@@ -60,7 +60,7 @@ get along, so we shut typescript up by casting `value` to `never`.
 -->
 <ToggleGroupPrimitive.Root
   class={cn(
-		"data-[spacing=0]:data-[variant=outline]:rounded-[var(--radius-control)] group/toggle-group flex w-fit flex-row items-center gap-[--spacing(var(--gap))] data-vertical:flex-col data-vertical:items-stretch",
+		"group/toggle-group flex w-fit flex-row items-center gap-[--spacing(var(--gap))] data-[spacing=0]:data-[variant=outline]:rounded-[var(--radius-control)] data-vertical:flex-col data-vertical:items-stretch",
 		className
 	)}
   data-size={size}

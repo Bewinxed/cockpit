@@ -60,6 +60,7 @@ const captor = () => {
   const installed: ServiceSpec[] = [];
   return {
     installed,
+    // biome-ignore lint/suspicious/useAwait: matches DeployInitOptions["install"]'s Promise<void> signature; this stub has nothing to await
     install: async (specs: readonly ServiceSpec[]) => {
       installed.push(...specs);
     },
@@ -108,8 +109,8 @@ beforeAll(async () => {
     dbPath: join(scratch, "data", "whiffle.db"),
     legacyDb: join(scratch, "nonexistent", "whiffle.db"),
   });
-  steps = runner.steps;
-  installed = capture.installed;
+  ({ steps } = runner);
+  ({ installed } = capture);
 });
 
 describe("the clone it builds (G1)", () => {
@@ -238,7 +239,9 @@ describe("what it refuses", () => {
       deployInit({
         root: occupied,
         origin,
-        note: () => {},
+        note: () => {
+          // this test only checks the refusal, not what it narrates
+        },
         run: recorder().run,
         install: capture.install,
         dbPath: join(scratch, "data", "whiffle.db"),
@@ -256,7 +259,9 @@ describe("what it refuses", () => {
       root,
       origin,
       ids: ["agent"],
-      note: () => {},
+      note: () => {
+        // this test only checks the ff-only steps, not what it narrates
+      },
       run: runner.run,
       install: capture.install,
     });
@@ -301,18 +306,20 @@ describe("the database it rescues", () => {
     const checkout = join(scratch, "devtree", "packages", "hub");
     mkdirSync(checkout, { recursive: true });
     const legacy = join(checkout, "whiffle.db");
-    for (const suffix of ["", "-wal", "-shm"]) {
-      await Bun.write(`${legacy}${suffix}`, `the fleet's memory${suffix}`);
-    }
+    await Promise.all(
+      ["", "-wal", "-shm"].map((suffix) =>
+        Bun.write(`${legacy}${suffix}`, `the fleet's memory${suffix}`)
+      )
+    );
     const target = join(scratch, "rescued", "whiffle.db");
 
-    const notes: string[] = [];
+    const moveNotes: string[] = [];
     const capture = captor();
     await deployInit({
       root: join(scratch, "home2", ".whiffle", "app"),
       origin,
       ids: ["hub"],
-      note: (line) => notes.push(line),
+      note: (line) => moveNotes.push(line),
       run: recorder().run,
       install: capture.install,
       dbPath: target,
@@ -325,7 +332,7 @@ describe("the database it rescues", () => {
     // Gone from the tree, so a `git clean -fdx` can never take it.
     expect(existsSync(legacy)).toBe(false);
     expect(
-      notes.some((line) =>
+      moveNotes.some((line) =>
         line.includes("moved the database out of the checkout")
       )
     ).toBe(true);
@@ -344,7 +351,9 @@ describe("the database it rescues", () => {
       root: join(scratch, "home3", ".whiffle", "app"),
       origin,
       ids: ["hub"],
-      note: () => {},
+      note: () => {
+        // this test only checks that the existing target file survives
+      },
       run: recorder().run,
       install: capture.install,
       dbPath: target,

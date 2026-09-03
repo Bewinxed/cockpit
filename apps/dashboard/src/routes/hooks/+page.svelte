@@ -3,11 +3,14 @@
   import { untrack } from "svelte";
   import { toast } from "svelte-sonner";
   import { goto } from "$app/navigation";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Alert from "$lib/components/ui/alert";
   import { Badge } from "$lib/components/ui/badge";
   import { Button } from "$lib/components/ui/button";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Card from "$lib/components/ui/card";
   import { Toggle } from "$lib/components/ui/toggle";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Tooltip from "$lib/components/ui/tooltip";
   import { IconAlert, IconHook, IconPlus, IconTrash } from "$lib/icons";
   import { whiffle } from "$lib/whiffle/client.svelte";
@@ -59,7 +62,7 @@
       return;
     }
     latch = data;
-    hooks = data.hooks;
+    ({ hooks } = data);
   });
 
   const enabledTotal = $derived(hooks.filter((hook) => hook.enabled).length);

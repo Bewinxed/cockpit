@@ -25,7 +25,7 @@ export const openDbPath = async (): Promise<string | null> => {
     return primary;
   }
 
-  let entries;
+  let entries: string[];
   try {
     entries = await readdir(dir);
   } catch {
@@ -71,6 +71,7 @@ const projectOf = (
 export const scanOpencode = (
   dbPath: string,
   maxTimeCreated: number
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one pass filtering the four ways a row can be skipped, then shaping the record
 ): OpencodeScanResult => {
   const db = new Database(dbPath, { readonly: true });
   try {
@@ -118,8 +119,7 @@ export const scanOpencode = (
       if (!model) {
         continue;
       }
-      const id = row.id;
-      const sessionId = row.session_id;
+      const { id, session_id: sessionId } = row;
       if (!(id && sessionId)) {
         continue;
       }

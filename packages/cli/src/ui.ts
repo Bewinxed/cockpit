@@ -1,5 +1,7 @@
 import { spawn } from "bun";
 
+const HTTP_PREFIX = /^http/;
+
 /**
  * Serves the dashboard on this machine, whichever machine that is.
  *
@@ -55,13 +57,16 @@ export async function serveUi({
   const deadline = Date.now() + 15_000;
   for (;;) {
     try {
+      // biome-ignore lint/performance/noAwaitInLoops: a retry poll — each attempt must see whether the previous one succeeded before deciding to try again.
       await fetch(`http://127.0.0.1:${renderPort}/health`, {
         signal: AbortSignal.timeout(1000),
       });
       break;
-    } catch {
+    } catch (error) {
       if (Date.now() > deadline) {
-        throw new Error("the dashboard renderer did not start");
+        throw new Error("the dashboard renderer did not start", {
+          cause: error,
+        });
       }
       await Bun.sleep(200);
     }
@@ -138,7 +143,7 @@ export async function serveUi({
 
     websocket: {
       open(browser) {
-        const wsOrigin = hub.origin.replace(/^http/, "ws");
+        const wsOrigin = hub.origin.replace(HTTP_PREFIX, "ws");
         const upstream = new WebSocket(`${wsOrigin}/ws/dashboard`);
         browser.data.hub = upstream;
 

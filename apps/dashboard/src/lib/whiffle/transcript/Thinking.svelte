@@ -21,8 +21,14 @@
   /* Only a trace that is actually cut off earns a toggle — measured, because
      four lines of wrapped prose is not a character count. */
   $effect(() => {
+    // Read, not used: these three are this effect's reactive dependencies —
+    // any of them changing means the clamp may have changed and overflow must
+    // be re-measured. Dropping the reads would drop the re-run.
+    // biome-ignore lint/complexity/noVoid: see comment above — a bare reference would look unused and get "cleaned up".
     void text;
+    // biome-ignore lint/complexity/noVoid: see comment above — a bare reference would look unused and get "cleaned up".
     void expanded;
+    // biome-ignore lint/complexity/noVoid: see comment above — a bare reference would look unused and get "cleaned up".
     void live;
     const el = bodyEl;
     if (!el) {
@@ -47,7 +53,9 @@
     <button
       aria-expanded={expanded}
       class="more"
-      onclick={() => (expanded = !expanded)}
+      onclick={() => {
+        expanded = !expanded;
+      }}
       type="button"
     >
       <span class="chev" class:open={expanded}><IconChevronRight /></span>

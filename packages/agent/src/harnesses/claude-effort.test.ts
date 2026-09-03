@@ -23,14 +23,18 @@ const flags: unknown[] = [];
 
 /** A `Query` that answers nothing and ends, so the adapter's pump settles. */
 const handle = {
-  async *[Symbol.asyncIterator]() {},
+  async *[Symbol.asyncIterator]() {
+    // Nothing to yield: the stand-in ends the stream immediately.
+  },
   applyFlagSettings: (settings: unknown) => {
     flags.push(settings);
     return Promise.resolve();
   },
   setModel: (model: string) => Promise.resolve(model),
   interrupt: () => Promise.resolve(),
-  close: () => {},
+  close: () => {
+    // Nothing to release: the stand-in never opened anything real.
+  },
 };
 
 mock.module("@anthropic-ai/claude-agent-sdk", () => ({
@@ -85,12 +89,26 @@ const { ClaudeHarness } = await import("./claude");
 const ctx = (): HarnessContext => ({
   instanceId: "inst",
   cwd: "/tmp",
-  frame: (_message: NeutralMessage) => {},
-  permission: () => {},
-  busy: () => {},
-  session: () => {},
-  failed: () => {},
-  emit: (_envelope: Envelope) => {},
+  // None of these callbacks matter to this test: only the options `query()`
+  // was spawned with, and the effort flag applied mid-session, are asserted.
+  frame: (_message: NeutralMessage) => {
+    // noop
+  },
+  permission: () => {
+    // noop
+  },
+  busy: () => {
+    // noop
+  },
+  session: () => {
+    // noop
+  },
+  failed: () => {
+    // noop
+  },
+  emit: (_envelope: Envelope) => {
+    // noop
+  },
 });
 
 const spawn = (spec: Partial<SpawnPayload>) =>

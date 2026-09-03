@@ -11,7 +11,7 @@
 </script>
 
 <div
-  class={cn("gap-2 p-4 mt-auto flex flex-col", className)}
+  class={cn("mt-auto flex flex-col gap-2 p-4", className)}
   data-slot="drawer-footer"
   bind:this={ref}
   {...restProps}

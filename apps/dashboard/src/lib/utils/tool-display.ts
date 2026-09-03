@@ -56,7 +56,7 @@ export function getResultGlimpse(result: unknown, maxLength = 60): string {
   }
 
   const str = typeof result === "string" ? result : JSON.stringify(result);
-  const firstLine = str.split("\n")[0];
+  const [firstLine] = str.split("\n");
 
   if (firstLine.length > maxLength) {
     return `${firstLine.slice(0, maxLength)}...`;

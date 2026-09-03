@@ -26,9 +26,12 @@ const db = makeDb(DB_FILE);
 
 afterAll(async () => {
   for (const suffix of ["", "-shm", "-wal"]) {
+    // biome-ignore lint/performance/noAwaitInLoops: three fixed cleanup paths, sequential for simplicity in a teardown that runs once.
     await Bun.file(`${DB_FILE}${suffix}`)
       .delete()
-      .catch(() => {});
+      .catch(() => {
+        // best effort: the file may never have been created (e.g. no -wal)
+      });
   }
 });
 
@@ -43,7 +46,11 @@ const engineFor = (): InstanceType<typeof RuleEngine> =>
     db,
     agent: (machineId) =>
       machineId === MACHINE
-        ? { send: (envelope) => void sent.push(envelope) }
+        ? {
+            send: (envelope) => {
+              sent.push(envelope);
+            },
+          }
         : undefined,
   });
 
@@ -92,7 +99,7 @@ function turn(engine: InstanceType<typeof RuleEngine>, text: string) {
 }
 
 const body = (envelope: Envelope<SendPayload>): string => {
-  const content = envelope.payload.message.message.content;
+  const { content } = envelope.payload.message.message;
   return typeof content === "string" ? content : "";
 };
 
@@ -127,13 +134,16 @@ test("a turn rule fires when the turn ends, and wakes the session", () => {
   );
 
   expect(sent).toHaveLength(1);
-  const message = sent[0]!.payload.message;
+  // biome-ignore lint/style/noNonNullAssertion: toHaveLength(1) above guarantees sent[0] exists; `?.` would silently pass `undefined` through the assertions below instead of failing loudly on the real defect.
+  const { message } = sent[0]!.payload;
   // The reply, verbatim and alone. Nothing names whiffle, the rule, or a tool.
+  // biome-ignore lint/style/noNonNullAssertion: toHaveLength(1) above guarantees sent[0] exists.
   expect(body(sent[0]!)).toBe(rule.reply);
   // `shouldQuery` is the whole point of the `turn` timing: the session is idle,
   // and a queued append it never reads changes nothing.
   expect(message.shouldQuery).toBe(true);
   expect(message.origin?.kind).toBe("system");
+  // biome-ignore lint/style/noNonNullAssertion: toHaveLength(1) above guarantees sent[0] exists.
   expect(sent[0]!.payload.urgent).toBeFalsy();
 });
 
@@ -146,6 +156,7 @@ test("nothing in what the session reads betrays that a rule sent it", () => {
 
   turn(engine, "One honest caveat: the error path is untested.");
 
+  // biome-ignore lint/style/noNonNullAssertion: the default pattern "honest caveat" is in the turn above, so the rule fired and sent[0] exists.
   const text = body(sent[0]!).toLowerCase();
   // A session that can see the detector games the phrase rather than the habit,
   // so none of the machinery may appear in the message it reads.
@@ -158,6 +169,7 @@ test("nothing in what the session reads betrays that a rule sent it", () => {
   ]) {
     expect(text).not.toContain(tell.toLowerCase());
   }
+  // biome-ignore lint/style/noNonNullAssertion: the default pattern "honest caveat" is in the turn above, so the rule fired and sent[0] exists.
   expect(body(sent[0]!)).toBe(rule.reply);
 });
 
@@ -268,7 +280,9 @@ test("an immediate rule that interrupts is sent urgently, mid-message", () => {
   });
 
   expect(sent).toHaveLength(1);
+  // biome-ignore lint/style/noNonNullAssertion: toHaveLength(1) above guarantees sent[0] exists.
   expect(sent[0]!.payload.urgent).toBe(true);
+  // biome-ignore lint/style/noNonNullAssertion: toHaveLength(1) above guarantees sent[0] exists.
   expect(sent[0]!.payload.message.shouldQuery).toBe(false);
 });
 
@@ -296,7 +310,9 @@ test("a message rule fires on the message, without waking the session", () => {
   engine.observe(INSTANCE, says("one honest caveat"));
 
   expect(sent).toHaveLength(1);
+  // biome-ignore lint/style/noNonNullAssertion: toHaveLength(1) above guarantees sent[0] exists.
   expect(sent[0]!.payload.message.shouldQuery).toBe(false);
+  // biome-ignore lint/style/noNonNullAssertion: toHaveLength(1) above guarantees sent[0] exists.
   expect(sent[0]!.payload.urgent).toBeFalsy();
 });
 

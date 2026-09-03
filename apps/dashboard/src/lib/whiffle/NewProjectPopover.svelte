@@ -8,22 +8,27 @@
   import DirectoryPicker from "$lib/components/features/DirectoryPicker.svelte";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Popover from "$lib/components/ui/popover";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Select from "$lib/components/ui/select";
   import { IconPlus, IconSpinner } from "$lib/icons";
   import { createProject, whiffle } from "./client.svelte";
 
   const leaf = (path: string) => path.split("/").filter(Boolean).pop() ?? path;
 
+  /** Trailing slashes on a typed directory, past the one that could be root. */
+  const TRAILING_SLASHES = /(?!^)\/+$/;
+
   /** Typed directories arrive with trailing slashes; the leaf assumes none. */
-  const trim = (path: string) => path.trim().replace(/(?!^)\/+$/, "");
+  const trim = (path: string) => path.trim().replace(TRAILING_SLASHES, "");
 
   let open = $state(false);
   let name = $state("");
   let machineId = $state("");
   let cwd = $state("");
   let saving = $state(false);
-  let error = $state<string | null>(null);
+  let formError = $state<string | null>(null);
 
   let nameInput = $state<HTMLInputElement | null>(null);
 
@@ -41,22 +46,23 @@
     machineId = whiffle.onlineMachines[0]?.machineId ?? "";
     cwd = "";
     saving = false;
-    error = null;
+    formError = null;
+    // biome-ignore lint/complexity/noVoid: focusing the name field after open is fire-and-forget — nothing awaits it
     void tick().then(() => nameInput?.focus());
   }
 
   async function create(event: SubmitEvent) {
     event.preventDefault();
     if (!machineId) {
-      error = "Choose the machine this directory is on.";
+      formError = "Choose the machine this directory is on.";
       return;
     }
     if (!dir) {
-      error = "Enter the directory this project lives in.";
+      formError = "Enter the directory this project lives in.";
       return;
     }
     saving = true;
-    error = null;
+    formError = null;
     try {
       // `createProject` refreshes the registry, so the folder is already there.
       await createProject({
@@ -66,7 +72,7 @@
       });
       open = false;
     } catch (err) {
-      error = err instanceof Error ? err.message : String(err);
+      formError = err instanceof Error ? err.message : String(err);
     } finally {
       saving = false;
     }
@@ -107,7 +113,9 @@
         <Input
           autocomplete="off"
           id="project-name"
-          oninput={() => (error = null)}
+          oninput={() => {
+            formError = null;
+          }}
           placeholder={dir ? leaf(dir) : 'What you call it'}
           spellcheck="false"
           bind:ref={nameInput}
@@ -153,7 +161,9 @@
           autocomplete="off"
           class="font-mono"
           id="project-cwd"
-          oninput={() => (error = null)}
+          oninput={() => {
+            formError = null;
+          }}
           placeholder="/home/you/project"
           spellcheck="false"
           bind:value={cwd}
@@ -164,7 +174,7 @@
         {machineId}
         onSelect={(path) => {
           cwd = path;
-          error = null;
+          formError = null;
         }}
         value={cwd}
       />
@@ -176,8 +186,8 @@
           {/if}
           Create
         </Button>
-        {#if error}
-          <span class="text-micro text-error" role="alert">{error}</span>
+        {#if formError}
+          <span class="text-micro text-error" role="alert">{formError}</span>
         {/if}
       </div>
     </form>

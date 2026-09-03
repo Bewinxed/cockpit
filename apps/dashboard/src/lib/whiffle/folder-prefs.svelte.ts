@@ -24,6 +24,7 @@ const KEY = "whiffle-folder-prefs";
 
 function read(): Record<string, FolderPref> {
   const stored = readJson<unknown>(KEY, {});
+  // biome-ignore lint/suspicious/noUnnecessaryConditions: `stored` is unknown at runtime — localStorage can hold a corrupted or non-object JSON value
   return stored && typeof stored === "object"
     ? (stored as Record<string, FolderPref>)
     : {};

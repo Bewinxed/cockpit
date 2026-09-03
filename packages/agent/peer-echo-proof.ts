@@ -47,13 +47,21 @@ const ctx: HarnessContext = {
       session?.resolvePermission(request.requestId, { behavior: "allow" });
     }, 100);
   },
-  busy: () => {},
-  session: () => {},
+  busy: () => {
+    // no-op: this proof doesn't assert on busy transitions
+  },
+  session: () => {
+    // no-op: this proof doesn't assert on the session callback
+  },
   failed: (error) => {
     failures.push(`failed(): ${String(error)}`);
   },
-  emit: () => {},
-  closed: () => {},
+  emit: () => {
+    // no-op: this proof doesn't assert on raw frame emission
+  },
+  closed: () => {
+    // no-op: this proof doesn't assert on close
+  },
 };
 
 const PEER = {
@@ -79,20 +87,22 @@ function peerText(m: NeutralMessage): string | null {
   if (m.type !== "user") {
     return null;
   }
-  const origin = (m as { origin?: { kind?: string } }).origin;
+  const { origin } = m as { origin?: { kind?: string } };
   if (origin?.kind !== "peer") {
     return null;
   }
-  const content = m.message.content;
-  const text =
-    typeof content === "string"
-      ? content
-      : Array.isArray(content)
-        ? content
-            .filter((b) => (b as { type?: string }).type === "text")
-            .map((b) => String((b as { text?: unknown }).text ?? ""))
-            .join("\n")
-        : "";
+  const { content } = m.message;
+  let text: string;
+  if (typeof content === "string") {
+    text = content;
+  } else if (Array.isArray(content)) {
+    text = content
+      .filter((b) => (b as { type?: string }).type === "text")
+      .map((b) => String((b as { text?: unknown }).text ?? ""))
+      .join("\n");
+  } else {
+    text = "";
+  }
   return text.trim() ? text : null;
 }
 
@@ -290,13 +300,15 @@ const counts: Record<string, number> = {};
   // The queued append is silent on the SDK side; wait briefly for any echo frame.
   const echoed = await waitForFrame(
     startQ,
-    (slice) => peerFrames(startQ).length > 0,
+    (_slice) => peerFrames(startQ).length > 0,
     10_000
   );
   console.log(`DIAG D: queued echo observed = ${echoed}`);
   dumpAll("D", startQ);
   counts.D = diag("D-queued-busy", startQ);
-  await session.interrupt().catch(() => {});
+  await session.interrupt().catch(() => {
+    // best effort: the test proceeds either way
+  });
   await waitForResult(startQ, 60_000);
 }
 
@@ -326,7 +338,9 @@ assertCount("D", 1);
 // C is reported, not gated: its expectation follows from the A2 measurement.
 console.log(`DIAG ${JSON.stringify({ urgentCount: counts.C })}`);
 
-await session.stop().catch(() => {});
+await session.stop().catch(() => {
+  // best effort: the process exits either way
+});
 
 if (failures.length) {
   console.log(`peer-echo-proof: FAIL ${failures.join("; ")}`);

@@ -2,6 +2,7 @@
   import type { FleetSkillMeta } from "@whiffle/core";
   import { toast } from "svelte-sonner";
   import { Button } from "$lib/components/ui/button";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Dialog from "$lib/components/ui/dialog";
   import { Input } from "$lib/components/ui/input";
   import {
@@ -24,14 +25,14 @@
   } = $props();
 
   let typed = $state("");
-  let name = $state("");
+  let skillName = $state("");
   let busy = $state(false);
   let failed = $state<string | undefined>(undefined);
   let choices = $state<string[]>([]);
   let named = $state(false);
 
   const source = $derived(normalizeSkillSource(typed));
-  const nameProblem = $derived(skillNameProblem(name, taken));
+  const nameProblem = $derived(skillNameProblem(skillName, taken));
   const ready = $derived(source !== "" && nameProblem === undefined);
 
   async function fetchIt(from: string) {
@@ -41,10 +42,13 @@
     busy = true;
     failed = undefined;
     try {
-      const row = await saveSkill(name.trim(), { source: from, enabled: true });
+      const row = await saveSkill(skillName.trim(), {
+        source: from,
+        enabled: true,
+      });
       onsaved(row);
       if (row.choices && row.choices.length > 0) {
-        choices = row.choices;
+        ({ choices } = row);
         return;
       }
       open = false;
@@ -67,17 +71,28 @@
     if (!ready) {
       return;
     }
+    // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — fetchIt tracks its own busy/failed state for the form
     void fetchIt(source);
   }
   function choose(choice: string) {
     typed = pickSkill(source, choice);
     choices = [];
+    // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — fetchIt tracks its own busy/failed state for the form
     void fetchIt(typed);
   }
 </script>
 
 <Dialog.Root
-  onOpenChange={(next) => { if (next) return; typed = ''; name = ''; named = false; failed = undefined; choices = []; }}
+  onOpenChange={(next) => {
+    if (next) {
+      return;
+    }
+    typed = '';
+    skillName = '';
+    named = false;
+    failed = undefined;
+    choices = [];
+  }}
   bind:open
 >
   <Dialog.Content class="rounded-[var(--radius-shell)] shadow-xl sm:max-w-lg">
@@ -90,12 +105,17 @@
       >
     </Dialog.Header>
     <form class="flex flex-col gap-3" onsubmit={submit}>
-      <label class="flex flex-col gap-1.5 text-caption"
+      <label class="flex flex-col gap-1.5 text-caption" for="skill-source"
         >Source
         <Input
           autocomplete="off"
           class="font-mono text-sm md:text-sm"
-          oninput={() => !named && (name = suggestSkillName(normalizeSkillSource(typed)))}
+          id="skill-source"
+          oninput={() => {
+            if (!named) {
+              skillName = suggestSkillName(normalizeSkillSource(typed));
+            }
+          }}
           placeholder="bunx skills add pbakaus/impeccable"
           spellcheck="false"
           bind:value={typed}
@@ -105,31 +125,39 @@
             Reads as <span class="font-mono text-foreground">{source}</span>
           {:else}
             The install command, an
-            <span class="font-mono">owner/repo</span> slug, or a
+            <span class="font-mono">owner/repo</span>
+            slug, or a
             <span class="font-mono">skills:</span>,
             <span class="font-mono">github:</span>,
-            <span class="font-mono">npm:</span> or
-            <span class="font-mono">https://</span> source.
+            <span class="font-mono">npm:</span>
+            or
+            <span class="font-mono">https://</span>
+            source.
           {/if}
         </span>
       </label>
-      <label class="flex flex-col gap-1.5 text-caption"
+      <label class="flex flex-col gap-1.5 text-caption" for="skill-name"
         >Name
         <Input
-          aria-invalid={name !== '' && nameProblem ? 'true' : undefined}
+          aria-invalid={skillName !== '' && nameProblem ? 'true' : undefined}
           autocomplete="off"
           class="font-mono text-sm md:text-sm"
-          oninput={() => (named = true)}
+          id="skill-name"
+          oninput={() => {
+            named = true;
+          }}
           placeholder="impeccable"
           spellcheck="false"
-          bind:value={name}
+          bind:value={skillName}
         />
         <span class="text-micro">
-          {#if name !== '' && nameProblem}
+          {#if skillName !== '' && nameProblem}
             <span class="text-destructive">{nameProblem}</span>
           {:else}
             The directory it lands in —
-            <span class="font-mono">~/.claude/skills/{name || 'name'}</span>
+            <span class="font-mono"
+              >~/.claude/skills/{skillName || 'name'}</span
+            >
           {/if}
         </span>
       </label>
@@ -162,7 +190,10 @@
       <div class="flex justify-end gap-2 pt-1">
         <Button
           disabled={busy}
-          onclick={() => (open = false)}
+          onclick={() => {
+            // biome-ignore lint/suspicious/noGlobalAssign: `open` is the component's own $bindable prop, not window.open — renaming it would break every `bind:open` caller
+            open = false;
+          }}
           type="button"
           variant="outline"
           >Cancel</Button

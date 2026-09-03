@@ -1,17 +1,14 @@
-<script lang="ts">
-  /**
-   * What the transcript looks like before it has arrived.
-   *
-   * Drawn in the transcript's own geometry — the ledger's 25/21 gutters, the
-   * reader's sunken well bleeding out by its --space-4, the 18px role mark,
-   * the tool rail's 2px hairline and 26px rows — so the real rows land into
-   * the same shape and the swap moves nothing. The blocks are static fills;
-   * the only thing that moves is one band of light crossing the whole
-   * placeholder on `--breath`, on the compositor, rather than a shimmer
-   * painted into every bar.
-   */
-</script>
+<!--
+  What the transcript looks like before it has arrived.
 
+  Drawn in the transcript's own geometry — the ledger's 25/21 gutters, the
+  reader's sunken well bleeding out by its --space-4, the 18px role mark,
+  the tool rail's 2px hairline and 26px rows — so the real rows land into
+  the same shape and the swap moves nothing. The blocks are static fills;
+  the only thing that moves is one band of light crossing the whole
+  placeholder on `--breath`, on the compositor, rather than a shimmer
+  painted into every bar.
+-->
 <div aria-busy="true" class="skeleton" role="status">
   <span class="spoken">Reading transcript…</span>
 
@@ -132,6 +129,7 @@
     background: var(--surface-raised);
     border: 1px solid var(--border-control);
   }
+  /* biome-ignore lint/style/noDescendingSpecificity: cascade order is load-bearing — .name's base fill must lose to .block.you .name above it. */
   .name {
     width: 64px;
     height: 12px;
@@ -141,6 +139,7 @@
 
   /* A line of body copy: --text-md at --leading-body is a 21px line box, so
      an 11px bar with 5px above and below keeps the prose pitch exactly. */
+  /* biome-ignore lint/style/noDescendingSpecificity: cascade order is load-bearing — .ln's base fill must lose to .block.you .ln above it. */
   .ln {
     height: 11px;
     margin-block: 5px;

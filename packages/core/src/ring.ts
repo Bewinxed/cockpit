@@ -65,7 +65,8 @@ export class SessionRing {
   }
 
   record(sessionId: string, frame: unknown): SessionStreamEvent {
-    const event: SessionStreamEvent = { seq: ++this.#head, sessionId, frame };
+    this.#head += 1;
+    const event: SessionStreamEvent = { seq: this.#head, sessionId, frame };
     this.#events[(event.seq - 1) % this.#size] = event;
     this.#at = Date.now();
     return event;
@@ -105,7 +106,7 @@ export class SessionRing {
   /** The contiguous ascending run `afterSeq + 1 .. head`. Empty when caught up. */
   since(afterSeq: number): SessionStreamEvent[] {
     const events: SessionStreamEvent[] = [];
-    for (let seq = afterSeq + 1; seq <= this.#head; seq++) {
+    for (let seq = afterSeq + 1; seq <= this.#head; seq += 1) {
       const event = this.#events[(seq - 1) % this.#size];
       // Unreachable while `canReplay` guards the call — asserted rather than
       // skipped, because a hole silently dropped here is the one bug this

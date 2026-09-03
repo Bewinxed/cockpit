@@ -36,7 +36,9 @@ import { createStreamHub, type StreamPorts } from "./stream";
 const INSTANCE = "inst-ledger";
 
 const ports: StreamPorts = {
-  setLegacySubscriptions: () => {},
+  setLegacySubscriptions: () => {
+    // not exercised by this suite: the sweep never touches legacy subscriptions
+  },
   isMachineConnected: () => true,
   relaySend: () => true,
   relayControl: () => true,
@@ -79,8 +81,9 @@ const bootSessiond = (): Sessiond => ({
 
 /** The child speaks; the ring fills whether or not an agent is listening. */
 const speak = (daemon: Sessiond, lines: number): void => {
-  for (let n = 0; n < lines; n++) {
-    daemon.ring.record(INSTANCE, { n: ++daemon.written });
+  for (let n = 0; n < lines; n += 1) {
+    daemon.written += 1;
+    daemon.ring.record(INSTANCE, { n: daemon.written });
   }
 };
 
@@ -174,8 +177,9 @@ const agentLife = (
 
   // Live: every line from here on, in order, through the same path.
   const live: { seq: number; frame: unknown }[] = [];
-  for (let n = 0; n < liveLines; n++) {
-    daemon.ring.record(INSTANCE, { n: ++daemon.written });
+  for (let n = 0; n < liveLines; n += 1) {
+    daemon.written += 1;
+    daemon.ring.record(INSTANCE, { n: daemon.written });
     const line = { seq: daemon.ring.head, frame: { n: daemon.written } };
     live.push(line);
     forward(line);
@@ -259,7 +263,7 @@ for (const scenario of CASES) {
       4
     );
 
-    for (let life = 0; life < scenario.agentRestarts; life++) {
+    for (let life = 0; life < scenario.agentRestarts; life += 1) {
       // THE ABSENCE. The child keeps talking to nobody.
       speak(daemon, scenario.absence);
       if (scenario.sessiondRestart && life === 0) {
@@ -301,9 +305,12 @@ for (const scenario of CASES) {
     // are contiguous unless something announced the discontinuity: the
     // `sessiond_stream_gap` frame, or a fresh hub whose own seq restarts at 1
     // (which resets every follower's cursor by protocol).
-    for (let i = 1; i < transcript.length; i++) {
-      const previous = transcript[i - 1]!;
-      const current = transcript[i]!;
+    for (let i = 1; i < transcript.length; i += 1) {
+      const previous = transcript[i - 1];
+      const current = transcript[i];
+      if (!(previous && current)) {
+        continue; // unreachable: i ranges over transcript's own valid indices
+      }
       if (current.epoch !== previous.epoch) {
         continue; // a new epoch is its own announcement
       }
@@ -335,10 +342,18 @@ test("an overflow during the absence is announced in the stream, never spliced o
 
   const gap = transcript.find((entry) => entry.gap);
   expect(gap).toBeDefined();
+  if (!gap) {
+    throw new Error("unreachable: gap was just asserted defined");
+  }
   // The seam is where the seam is: nothing between the mark and the ring's
   // surviving head was invented to cover it.
-  const beforeGap = transcript[transcript.indexOf(gap!) - 1]!;
-  expect(gap!.srcSeq).toBeGreaterThan(beforeGap.srcSeq + 1);
+  const beforeGap = transcript[transcript.indexOf(gap) - 1];
+  if (!beforeGap) {
+    throw new Error(
+      "unreachable: agentLife always logs a line before any gap it announces"
+    );
+  }
+  expect(gap.srcSeq).toBeGreaterThan(beforeGap.srcSeq + 1);
 });
 
 // ---------------------------------------------------------------------------
@@ -438,7 +453,9 @@ const registry: RegistryShape = (() => {
   >();
   const requesters = new Map<string, HubSocket>();
   return {
-    registerAgent: () => {},
+    registerAgent: () => {
+      // not exercised by this suite: no machine connects through this registry
+    },
     dropAgent: () => undefined,
     agent: () => undefined,
     machineIds: () => [MACHINE],
@@ -463,7 +480,9 @@ const registry: RegistryShape = (() => {
         entry.subscriptions = new Set(instanceIds);
       }
     },
-    noteDashboardOrigin: () => {},
+    noteDashboardOrigin: () => {
+      // not exercised by this suite: no dashboard ever connects
+    },
     dashboardOrigin: () => undefined,
     rememberRequester: (requestId, socket) => requesters.set(requestId, socket),
     takeRequester: (requestId) => {
@@ -475,10 +494,16 @@ const registry: RegistryShape = (() => {
 })();
 
 const pending: PendingShape = {
-  remember: () => {},
+  remember: () => {
+    // not exercised by this suite: nothing goes pending
+  },
   get: () => undefined,
-  resolve: () => {},
-  forget: () => {},
+  resolve: () => {
+    // not exercised by this suite: nothing goes pending
+  },
+  forget: () => {
+    // not exercised by this suite: nothing goes pending
+  },
   list: () => [],
 };
 
@@ -490,20 +515,24 @@ afterAll(async () => {
     hub.stop();
   }
   app.stop();
-  for (const suffix of ["", "-shm", "-wal"]) {
-    await Bun.file(`${DB_FILE}${suffix}`)
-      .delete()
-      .catch(() => {});
-  }
+  await Promise.all(
+    ["", "-shm", "-wal"].map((suffix) =>
+      Bun.file(`${DB_FILE}${suffix}`)
+        .delete()
+        .catch(() => {
+          // best effort: a suffix may never have existed (no -wal/-shm if nothing was written)
+        })
+    )
+  );
 });
 
 interface Wire {
-  close(): void;
-  next(
+  close: () => void;
+  next: (
     match: (message: Record<string, unknown>) => boolean,
     label: string
-  ): Promise<Record<string, unknown>>;
-  send(message: unknown): void;
+  ) => Promise<Record<string, unknown>>;
+  send: (message: unknown) => void;
 }
 
 const openSocket = async (path: string): Promise<Wire> => {
@@ -523,11 +552,12 @@ const openSocket = async (path: string): Promise<Wire> => {
   return {
     send: (message) => socket.send(JSON.stringify(message)),
     next: async (match, why) => {
-      for (let waited = 0; waited < 400; waited++) {
+      for (let waited = 0; waited < 400; waited += 1) {
         const found = inbox.find(match);
         if (found) {
           return found;
         }
+        // biome-ignore lint/performance/noAwaitInLoops: polling loop — each wait must see the effect of the previous one before deciding whether to keep polling.
         await Bun.sleep(5);
       }
       throw new Error(
@@ -808,11 +838,14 @@ test("a returning daemon that names nothing is still handed the ledger for the s
   // cursor names — the gap the hub named, exactly.
   const cursor = resumeCursor(epoch, readIngested(ack.payload)?.[instanceId]);
   expect(cursor).toBe(2);
+  if (cursor === undefined) {
+    throw new Error("unreachable: cursor was just asserted to be 2");
+  }
   // sessiond hands back 3, 4, 5 (`since(2)`), which the reattached agent
   // forwards; only they are news, and the ones already ingested stay refused.
   for (const srcSeq of [1, 2, 3, 4, 5]) {
     if (
-      alreadyIngested({ epoch, srcSeq: cursor! }, { srcEpoch: epoch, srcSeq })
+      alreadyIngested({ epoch, srcSeq: cursor }, { srcEpoch: epoch, srcSeq })
     ) {
       continue;
     }

@@ -3,8 +3,8 @@
  *
  * The catalog is data and the agent's executor is generic — adding a tool is
  * adding one {@link ToolSpec} here and nothing anywhere else. The hub decides
- * *whether* a machine should have a tool (its policy table); the agent decides
- * *how* to get it there (the first eligible method for its platform); the
+ * whether a machine should have a tool (its policy table); the agent decides
+ * how to get it there (the first eligible method for its platform); the
  * dashboard only renders {@link ToolStatus} rows it is handed.
  */
 

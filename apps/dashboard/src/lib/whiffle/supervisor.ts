@@ -87,6 +87,7 @@ export const loadSupervisorEvents = (opts?: {
   if (opts?.instanceId) {
     params.set("instanceId", opts.instanceId);
   }
+  // biome-ignore lint/suspicious/noEqualsToNull: != null also excludes undefined here (limit is optional); !== null would let an unset limit through as the string "undefined".
   if (opts?.limit != null) {
     params.set("limit", String(opts.limit));
   }

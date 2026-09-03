@@ -18,6 +18,7 @@
  * ```
  */
 
+// biome-ignore lint/performance/noBarrelFile: this is the package's public entrypoint; consumers import "@whiffle/auth" and expect one surface
 export {
   deleteCredentials,
   getCredentialsPath,

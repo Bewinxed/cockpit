@@ -64,7 +64,9 @@ const makeTestRegistry = (): RegistryShape => {
         entry.subscriptions = new Set(instanceIds);
       }
     },
-    noteDashboardOrigin: () => {},
+    noteDashboardOrigin: () => {
+      // not exercised by this suite: no dashboard ever connects
+    },
     dashboardOrigin: () => undefined,
     rememberRequester: (requestId, socket) => requesters.set(requestId, socket),
     takeRequester: (requestId) => {
@@ -76,10 +78,16 @@ const makeTestRegistry = (): RegistryShape => {
 };
 
 const pending: PendingShape = {
-  remember: () => {},
+  remember: () => {
+    // not exercised by this suite: nothing goes pending
+  },
   get: () => undefined,
-  resolve: () => {},
-  forget: () => {},
+  resolve: () => {
+    // not exercised by this suite: nothing goes pending
+  },
+  forget: () => {
+    // not exercised by this suite: nothing goes pending
+  },
   list: () => [],
 };
 
@@ -122,11 +130,12 @@ const until = async <T>(
   read: () => T | undefined,
   what: string
 ): Promise<T> => {
-  for (let waited = 0; waited < 400; waited++) {
+  for (let waited = 0; waited < 400; waited += 1) {
     const value = read();
     if (value !== undefined) {
       return value;
     }
+    // biome-ignore lint/performance/noAwaitInLoops: polling loop — each wait must see the effect of the previous one before deciding whether to keep polling.
     await Bun.sleep(5);
   }
   throw new Error(`timed out waiting for ${what}`);
@@ -239,7 +248,7 @@ test("the beat carries a state change, and republishes the board when it does", 
         ),
     "the instances frame the deploy change publishes"
   );
-  const agents = (frame.payload as { agents: AgentRow[] }).agents;
+  const { agents } = frame.payload as { agents: AgentRow[] };
   expect(agents.find((row) => row.machineId === MACHINE)?.deploy?.kind).toBe(
     "behind"
   );
@@ -264,12 +273,15 @@ test("the verdict does not outlive the socket that asserted it", async () => {
     ...IDENTITY,
     deploy: { kind: "ahead", detail: "1 local commit origin does not have" },
   });
-  expect(await agentRow().then((row) => row.deploy?.kind)).toBe("ahead");
+  expect(await agentRow().then((current) => current.deploy?.kind)).toBe(
+    "ahead"
+  );
   peer.close();
   // Polled rather than `until`ed: the read is async, and a promise is never
   // `undefined`, so a naive until() would pass without ever checking anything.
   let row = await agentRow();
-  for (let waited = 0; waited < 400 && row.deploy !== undefined; waited++) {
+  for (let waited = 0; waited < 400 && row.deploy !== undefined; waited += 1) {
+    // biome-ignore lint/performance/noAwaitInLoops: polling loop — each wait must see the effect of the previous one before deciding whether to keep polling.
     await Bun.sleep(5);
     row = await agentRow();
   }

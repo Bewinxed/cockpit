@@ -70,6 +70,7 @@ export interface HarnessNote {
 
 /** The inner text of the first `<tag>…</tag>`, or undefined. */
 const inner = (tag: string, text: string): string | undefined =>
+  // biome-ignore lint/suspicious/noUnnecessaryConditions: RegExp#exec returns RegExpExecArray | null — a tag absent from text hits the null case, which the optional chain is here for.
   new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`).exec(text)?.[1];
 
 const isReminder = (trimmed: string): boolean =>
@@ -222,7 +223,7 @@ function foldRange(
       m.metadata?.taskId &&
       noted.has(m.metadata.taskId)
     ) {
-      i++;
+      i += 1;
       continue;
     }
     starts.push(i);
@@ -235,26 +236,26 @@ function foldRange(
         key: `hn:${keyOf(m, i)}`,
         note: parseHarnessNote(m.content),
       });
-      i++;
+      i += 1;
       continue;
     }
 
     const branch = isToolMsg(m) ? branchOf(m, subagents) : null;
     if (branch) {
       rows.push({ kind: "subagent", key: keyOf(m, i), branch, spawn: m });
-      i++;
+      i += 1;
       continue;
     }
 
     if (isQuestionMsg(m)) {
       rows.push({ kind: "question", key: `q:${keyOf(m, i)}`, message: m });
-      i++;
+      i += 1;
       continue;
     }
 
     if (isDelegateMsg(m)) {
       rows.push({ kind: "delegate", key: `d:${keyOf(m, i)}`, message: m });
-      i++;
+      i += 1;
       continue;
     }
 
@@ -269,7 +270,7 @@ function foldRange(
         !branchOf(messages[i], subagents)
       ) {
         run.push(messages[i]);
-        i++;
+        i += 1;
       }
       rows.push({
         kind: "tools",
@@ -280,7 +281,7 @@ function foldRange(
     }
 
     rows.push({ kind: "single", key: keyOf(m, i), message: m });
-    i++;
+    i += 1;
   }
 
   return { rows, starts };
@@ -396,7 +397,7 @@ export function buildRowsFrom(
   session: SessionState,
   memo: FoldMemo | null
 ): { rows: Row[]; memo: FoldMemo; appended: boolean } {
-  const messages = session.messages;
+  const { messages } = session;
   const branches = Object.keys(session.subagents).length;
   const cut = memo ? cutFor(messages, memo, branches) : -1;
 
@@ -410,7 +411,7 @@ export function buildRowsFrom(
         starts,
         count: messages.length,
         first: messages[0],
-        last: messages[messages.length - 1],
+        last: messages.at(-1),
         branches,
         noted,
       },
@@ -446,7 +447,7 @@ export function buildRowsFrom(
       starts,
       count: messages.length,
       first: messages[0],
-      last: messages[messages.length - 1],
+      last: messages.at(-1),
       branches,
       noted: kept.noted,
     },
@@ -492,6 +493,7 @@ function liveTail(session: SessionState): Row[] {
   // element would ask the transcript to morph a placeholder into a fact.
   // Read defensively: a session shape built before this field existed — a
   // server render's stand-in, a stub — must fold to a transcript, not throw.
+  // biome-ignore lint/suspicious/noUnnecessaryConditions: the type says queued is always an array, but a session built before this field existed (a server stand-in, a stub) can hand one that omits it — see the comment above.
   for (const queued of session.queued ?? []) {
     rows.push({ kind: "queued", key: `qd:${queued.queueId}`, queued });
   }

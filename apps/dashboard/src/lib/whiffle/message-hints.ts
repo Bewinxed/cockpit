@@ -32,6 +32,9 @@ export interface MessageHints {
   suppressedAsTaskEcho: boolean;
 }
 
+/** The instance id a stored transcript keeps at the end of a `#`-suffixed label. */
+const TRAILING_INSTANCE_ID = /#([0-9a-f]{8,})$/;
+
 const EMPTY: MessageHints = {
   suppressedAsDelegateTraffic: false,
   followUpLabel: null,
@@ -47,23 +50,24 @@ const EMPTY: MessageHints = {
  * `message.id` — the caller looks up each group's message and passes the
  * hints object as a prop.
  */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one linear pass over every hint kind a message can carry, computed once for the whole transcript — see the module doc for why it isn't per-derivation
 export function computeMessageHints(
   messages: Message[],
   instanceId: string,
-  instances: ReadonlyArray<HintRow>,
+  instances: readonly HintRow[],
   subagents: Record<string, unknown>
 ): Map<string, MessageHints> {
   const map = new Map<string, MessageHints>();
 
-  for (let i = 0; i < messages.length; i++) {
+  for (let i = 0; i < messages.length; i += 1) {
     const msg = messages[i];
-    const id = msg.id;
-    if (!id) {
+    const { id: messageId } = msg;
+    if (!messageId) {
       continue;
     }
 
     // Fast path: most message types don't need any hint at all.
-    const type = msg.type;
+    const { type } = msg;
     if (
       type !== "user.peer" &&
       type !== "user.delegate_ask" &&
@@ -71,7 +75,7 @@ export function computeMessageHints(
       type !== "ui.system_note" &&
       type !== "assistant"
     ) {
-      map.set(id, EMPTY);
+      map.set(messageId, EMPTY);
       continue;
     }
 
@@ -95,6 +99,7 @@ export function computeMessageHints(
           suppressedAsDelegateTraffic = messages.some(
             (m) =>
               (m.type === "tool.handoff" || m.type === "tool.use") &&
+              // biome-ignore lint/suspicious/noEqualsToNull: `!==` alone would let `undefined` (no metadata at all) through — this must reject both null and missing
               m.metadata?.delegateInstanceId != null &&
               matchesSession(peerSession, m.metadata.delegateInstanceId)
           );
@@ -169,20 +174,24 @@ export function computeMessageHints(
     // keeps only the short id, so it resolves against the fleet's live rows.
     if (type === "user.peer") {
       const sender = msg.metadata?.peerSession ?? msg.metadata?.peerFrom;
-      const id = resolveInstanceId(sender, instances);
-      sessionHref = id ? `/session/${id}` : null;
+      const resolved = resolveInstanceId(sender, instances);
+      sessionHref = resolved ? `/session/${resolved}` : null;
     } else if (type === "tool.handoff") {
       const full = msg.metadata?.delegateInstanceId;
       if (typeof full === "string") {
         sessionHref = `/session/${full}`;
       } else {
-        const short = /#([0-9a-f]{8,})$/.exec(String(msg.content ?? "").trim());
-        const id = short ? resolveInstanceId(short[1], instances) : undefined;
-        sessionHref = id ? `/session/${id}` : null;
+        const short = TRAILING_INSTANCE_ID.exec(
+          String(msg.content ?? "").trim()
+        );
+        const resolved = short
+          ? resolveInstanceId(short[1], instances)
+          : undefined;
+        sessionHref = resolved ? `/session/${resolved}` : null;
       }
     }
 
-    map.set(id, {
+    map.set(messageId, {
       suppressedAsDelegateTraffic,
       followUpLabel,
       briefParent,

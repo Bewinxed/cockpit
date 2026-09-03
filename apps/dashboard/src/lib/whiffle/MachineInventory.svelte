@@ -197,7 +197,7 @@
                           >
                         {/if}
                       </span>
-                      {#if !row.managed && !taken.includes(row.name)}
+                      {#if !(row.managed || taken.includes(row.name))}
                         <Button
                           class="shrink-0"
                           disabled={busy[key] === true}
@@ -227,8 +227,8 @@
   {#if asleep.length > 0}
     <p class="text-micro text-muted-foreground">
       {asleep.map((machine) => machineLabel(machine.hostname)).join(', ')}
-      {asleep.length === 1 ? 'is' : 'are'} offline — only a machine that is up
-      can say what it has.
+      {asleep.length === 1 ? 'is' : 'are'}
+      offline — only a machine that is up can say what it has.
     </p>
   {/if}
 </section>

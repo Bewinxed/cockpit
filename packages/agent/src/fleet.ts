@@ -292,13 +292,19 @@ const mcpServersOf = (root: ClaudeJson): Record<string, unknown> => ({
  * dropped, because the entry is still what the user asked for and it starts
  * working the moment the runner arrives.
  */
+/** A command that already names a path rather than something to resolve on PATH. */
+const PATH_LIKE = /[\\/]/;
+
+/** A `.cmd`/`.bat` shim: a script, and a spawn with no shell cannot run one. */
+const WINDOWS_SHIM = /\.(cmd|bat)$/i;
+
 const forThisMachine = (
   config: FleetMcpConfig
 ): { config: FleetMcpConfig; detail?: string } => {
   if ("url" in config) {
     return { config };
   }
-  if (/[\\/]/.test(config.command)) {
+  if (PATH_LIKE.test(config.command)) {
     return { config };
   }
 
@@ -310,7 +316,7 @@ const forThisMachine = (
     };
   }
   // A `.cmd` shim is a script, and a spawn with no shell cannot run one.
-  if (platform() === "win32" && /\.(cmd|bat)$/i.test(resolved)) {
+  if (platform() === "win32" && WINDOWS_SHIM.test(resolved)) {
     return {
       config: {
         ...config,
@@ -455,6 +461,7 @@ export const claudeInstalls = async (used?: string): Promise<CliInstall[]> => {
   const seen = new Set<string>();
   const found: string[] = [];
   for (const path of candidates) {
+    // biome-ignore lint/performance/noAwaitInLoops: candidates are in PATH order; found must keep that order so the first real install on PATH is reported first
     if (!(await Bun.file(path).exists())) {
       continue;
     }
@@ -601,15 +608,21 @@ const linkedMarketplaces = async (): Promise<
  * can all name the same link. Compared on the part that identifies it, so the
  * spelling whiffle stores still matches whatever the CLI wrote down.
  */
+const GIT_PLUS_PREFIX = /^git\+/;
+const GIT_SSH_HOST = /^git@github\.com:/;
+const GIT_URL_HOST = /^(https?|ssh):\/\/([^@]*@)?(www\.)?github\.com\//;
+const GIT_SUFFIX = /\.git$/;
+const TRAILING_SLASHES = /\/+$/;
+
 const sourceKey = (source: string): string =>
   source
     .trim()
     .toLowerCase()
-    .replace(/^git\+/, "")
-    .replace(/^git@github\.com:/, "")
-    .replace(/^(https?|ssh):\/\/([^@]*@)?(www\.)?github\.com\//, "")
-    .replace(/\.git$/, "")
-    .replace(/\/+$/, "");
+    .replace(GIT_PLUS_PREFIX, "")
+    .replace(GIT_SSH_HOST, "")
+    .replace(GIT_URL_HOST, "")
+    .replace(GIT_SUFFIX, "")
+    .replace(TRAILING_SLASHES, "");
 
 const sourceKeysOf = (entry: KnownMarketplace): string[] =>
   [entry.source?.repo, entry.source?.url, entry.source?.path]
@@ -693,6 +706,7 @@ const syncPlugins = async (
   config: FleetConfig,
   managed: Sidecar,
   report: FleetSyncReport
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: links every marketplace and installs every plugin the config wants, reporting each one's outcome
 ): Promise<Pick<Sidecar, "marketplaces" | "plugins" | "vendoredPlugins">> => {
   const wantedPlugins = config.plugins.filter((plugin) => plugin.enabled);
   const bin = await claudeBin();
@@ -716,6 +730,7 @@ const syncPlugins = async (
   const marketplaces: ManagedMarketplace[] = [];
 
   for (const { name, source } of config.marketplaces) {
+    // biome-ignore lint/performance/noAwaitInLoops: each `claude plugin marketplace add` mutates the CLI's shared known_marketplaces.json; concurrent runs would race
     const already = await linkedNameFor(name, source);
     if (already) {
       marketplaces.push({ name, linkedAs: already });
@@ -743,6 +758,7 @@ const syncPlugins = async (
     marketplaces,
     config
   )) {
+    // biome-ignore lint/performance/noAwaitInLoops: `claude plugin marketplace remove` mutates the CLI's shared known_marketplaces.json; concurrent runs would race
     const ran = await runClaude(bin, [
       "plugin",
       "marketplace",
@@ -782,6 +798,7 @@ const syncPlugins = async (
       };
       continue;
     }
+    // biome-ignore lint/performance/noAwaitInLoops: `claude plugin install` mutates the CLI's shared installed_plugins.json; concurrent runs would race
     if (await isInstalled(id)) {
       report.plugins[id] = { state: "applied" };
       continue;
@@ -806,6 +823,7 @@ const syncPlugins = async (
     // A vendored plugin is uninstalled under the name it was installed with;
     // `syncVendoredPlugins` has already done that one.
     if (!carried.has(pluginNameOf(id))) {
+      // biome-ignore lint/performance/noAwaitInLoops: `claude plugin uninstall` mutates the CLI's shared installed_plugins.json; concurrent runs would race
       await runClaude(bin, [
         "plugin",
         "uninstall",
@@ -846,6 +864,7 @@ const writeSkill = async (skill: FleetSkillPayload): Promise<void> => {
   const dir = join(SKILLS_DIR, skill.name);
   await rm(dir, { recursive: true, force: true });
   for (const file of skill.files ?? []) {
+    // biome-ignore lint/performance/noAwaitInLoops: writes must land after the directory removal above; a failed write partway through still has to leave whatever files it got to
     await Bun.write(
       join(dir, file.path),
       Buffer.from(file.contentBase64, "base64")
@@ -877,6 +896,7 @@ export const writeVendoredMarketplace = async (
       continue;
     }
     const dir = join(into, "plugins", plugin.name);
+    // biome-ignore lint/performance/noAwaitInLoops: each plugin's directory is torn down before its own files are written; parallel plugins could interleave a rm with another plugin's write to a stale dir handle
     await rm(dir, { recursive: true, force: true });
     for (const file of plugin.files) {
       // The same refusal a skill's files get: a path out of the directory is a
@@ -884,6 +904,7 @@ export const writeVendoredMarketplace = async (
       if (!isSafeSkillPath(file.path)) {
         throw new Error(`unsafe path ${file.path}`);
       }
+      // biome-ignore lint/performance/noAwaitInLoops: must run after this plugin's own rm above completes
       await Bun.write(
         join(dir, file.path),
         Buffer.from(file.contentBase64, "base64")
@@ -898,6 +919,7 @@ export const writeVendoredMarketplace = async (
   );
   for (const name of present) {
     if (!wanted.has(name)) {
+      // biome-ignore lint/performance/noAwaitInLoops: removals are independent, but this pass mirrors the write loop above rather than adding a second concurrency strategy for the same directory
       await rm(join(into, "plugins", name), { recursive: true, force: true });
     }
   }
@@ -965,6 +987,7 @@ const syncVendoredPlugins = async (
     const vendoredId = `${name}@${VENDOR_NAME}`;
 
     const already =
+      // biome-ignore lint/performance/noAwaitInLoops: the install this loop runs mutates the CLI's shared installed_plugins.json; concurrent plugins would race
       managed[name] === plugin.hash && (await isInstalled(vendoredId));
     const ran = already
       ? undefined
@@ -1009,6 +1032,7 @@ const syncVendoredPlugins = async (
     if (byName.has(name)) {
       continue;
     }
+    // biome-ignore lint/performance/noAwaitInLoops: `claude plugin uninstall` mutates the CLI's shared installed_plugins.json; concurrent runs would race
     await runClaude(bin, [
       "plugin",
       "uninstall",
@@ -1070,6 +1094,7 @@ const syncSkillFiles = async (
     }
 
     try {
+      // biome-ignore lint/performance/noAwaitInLoops: each skill's directory write must finish before its hash is recorded, or a crash mid-loop would claim an unwritten skill
       await writeSkill(skill);
       written[skill.name] = skill.hash;
       report[skill.name] = { state: "applied" };
@@ -1087,6 +1112,7 @@ const syncSkillFiles = async (
     if (wanted.has(name)) {
       continue;
     }
+    // biome-ignore lint/performance/noAwaitInLoops: removals are independent, but mirror the write loop above rather than adding a second concurrency strategy for the same directory
     await rm(join(SKILLS_DIR, name), { recursive: true, force: true });
     report[name] = { state: "removed" };
   }
@@ -1202,17 +1228,21 @@ const memoryDocPaths = async (
   prefix = ""
 ): Promise<string[]> => {
   const entries = await readdir(root, { withFileTypes: true }).catch(() => []);
-  const paths: string[] = [];
-  for (const entry of entries) {
-    const relative = `${prefix}${entry.name}`;
-    if (entry.isDirectory()) {
-      paths.push(
-        ...(await memoryDocPaths(join(root, entry.name), `${relative}/`))
-      );
-    } else if (entry.isFile() && entry.name.endsWith(".md")) {
-      paths.push(relative);
-    }
-  }
+  // Sibling directories are independent reads, and the result is sorted below
+  // regardless of what order they land in.
+  const nested = await Promise.all(
+    entries
+      .filter((entry) => entry.isDirectory())
+      .map((entry) =>
+        memoryDocPaths(join(root, entry.name), `${prefix}${entry.name}/`)
+      )
+  );
+  const paths = [
+    ...nested.flat(),
+    ...entries
+      .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
+      .map((entry) => `${prefix}${entry.name}`),
+  ];
   return paths.sort();
 };
 
@@ -1224,24 +1254,32 @@ const memoryDocPaths = async (
 const pruneEmptyDirs = async (): Promise<void> => {
   const dirs = new Set<string>();
   const walk = async (root: string, prefix: string): Promise<void> => {
-    for (const entry of await readdir(root, { withFileTypes: true }).catch(
+    const entries = await readdir(root, { withFileTypes: true }).catch(
       () => []
-    )) {
-      if (!entry.isDirectory()) {
-        continue;
-      }
-      dirs.add(`${prefix}${entry.name}`);
-      await walk(join(root, entry.name), `${prefix}${entry.name}/`);
-    }
+    );
+    // Sibling directories are independent reads; `dirs` is an unordered set.
+    await Promise.all(
+      entries
+        .filter((entry) => entry.isDirectory())
+        .map(async (entry) => {
+          dirs.add(`${prefix}${entry.name}`);
+          await walk(join(root, entry.name), `${prefix}${entry.name}/`);
+        })
+    );
   };
   await walk(MEMORIES_DIR, "");
 
-  // Deepest first, so a parent is only tried once its children are gone.
+  // Deepest first, so a parent is only tried once its children are gone —
+  // sequential on purpose: rmdir-ing a child before its now-empty parent is
+  // attempted is the ordering this loop exists to guarantee.
   for (const relative of [...dirs].sort(
     (a, b) => b.split("/").length - a.split("/").length
   )) {
+    // biome-ignore lint/performance/noAwaitInLoops: deepest-first order matters — a parent must not be tried until its children are gone
+    // biome-ignore lint/suspicious/noEmptyBlockStatements: best effort — a directory that still holds something of the user's, or is already gone, is left alone
     await rmdir(join(MEMORIES_DIR, relative)).catch(() => {});
   }
+  // biome-ignore lint/suspicious/noEmptyBlockStatements: best effort — the root may still hold something of the user's, or be already gone
   await rmdir(MEMORIES_DIR).catch(() => {});
 };
 
@@ -1310,12 +1348,15 @@ const syncMemoryDocs = async (
   }
 
   const onDisk: Record<string, string | null> = {};
-  for (const path of new Set([
-    ...safe.map((doc) => doc.path),
-    ...Object.keys(managed),
-  ])) {
-    onDisk[path] = await fileHashAt(join(MEMORIES_DIR, path));
-  }
+  // Each path's hash is an independent read; nothing here shares state or
+  // depends on another path's result.
+  await Promise.all(
+    [...new Set([...safe.map((doc) => doc.path), ...Object.keys(managed)])].map(
+      async (path) => {
+        onDisk[path] = await fileHashAt(join(MEMORIES_DIR, path));
+      }
+    )
+  );
 
   const plans = memorySetPlan(safe, onDisk, managed);
   const wanted = new Map(safe.map((doc) => [doc.path, doc]));
@@ -1325,6 +1366,7 @@ const syncMemoryDocs = async (
     const doc = wanted.get(path);
     if (!doc) {
       if (plan === "remove") {
+        // biome-ignore lint/performance/noAwaitInLoops: `removed` gates a single pruneEmptyDirs() after the loop; concurrent removes would still need that to run after every one lands, which sequential awaiting already guarantees
         await rm(join(MEMORIES_DIR, path), { force: true });
         report[path] = { state: "removed" };
         removed = true;
@@ -1507,13 +1549,14 @@ const syncMemoryHook = async (
   if (next.length > 0) {
     hooks.SessionStart = next;
   } else {
+    // biome-ignore lint/performance/noDelete: an undefined-valued key would still count in the Object.keys(hooks) check just below
     delete hooks.SessionStart;
   }
   const settings = { ...root };
   if (Object.keys(hooks).length > 0) {
     settings.hooks = hooks;
   } else {
-    delete settings.hooks;
+    settings.hooks = undefined;
   }
 
   try {
@@ -1589,6 +1632,7 @@ const syncHooks = async (
   desired: FleetHook[],
   managed: Record<string, ManagedHook>,
   report: Record<string, FleetItemState>
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: writes every enabled hook's script and registers it per settings.json scope, then removes what a disabled/deleted/invalid hook used to have
 ): Promise<Record<string, ManagedHook>> => {
   const written: Record<string, ManagedHook> = {};
   const keep = (id: string): void => {
@@ -1637,6 +1681,7 @@ const syncHooks = async (
     const path = hookScriptPath(hook.id);
     const plan = memoryPlan(
       { hash: hook.hash, force: hook.force },
+      // biome-ignore lint/performance/noAwaitInLoops: the write two branches below depends on this hook's own drift check; scripts are written one hook at a time
       await fileHashAt(path),
       managed[hook.id]?.hash
     );
@@ -1678,6 +1723,7 @@ const syncHooks = async (
   }
 
   for (const [path, hooks] of bySettings) {
+    // biome-ignore lint/performance/noAwaitInLoops: each iteration is a read-modify-write of its own settings.json; kept one file at a time like the rest of this sync rather than fanning writes out across every settings.json on the machine at once
     const stored = await readJson<Record<string, unknown>>(path);
     // Nothing is written over a file that cannot be read: the rest of it is the
     // user's own permissions and plugins, and a rewrite from an empty root
@@ -1739,7 +1785,7 @@ const syncHooks = async (
     if (Object.keys(settingsHooks).length > 0) {
       settings.hooks = settingsHooks;
     } else {
-      delete settings.hooks;
+      settings.hooks = undefined;
     }
 
     if (JSON.stringify(settings) !== JSON.stringify(root)) {
@@ -1772,6 +1818,7 @@ const syncHooks = async (
       continue;
     }
     if (record.command.startsWith(HOOKS_DIR)) {
+      // biome-ignore lint/performance/noAwaitInLoops: removals are independent, but this mirrors the sequential style of the rest of this sync rather than fanning out filesystem writes
       await rm(record.command, { force: true });
     }
     report[id] = { state: "removed" };
@@ -1855,6 +1902,7 @@ export const syncFleetConfig = (
     () => converge(config),
     () => converge(config)
   );
+  // biome-ignore lint/suspicious/noEmptyBlockStatements: the caller of syncFleetConfig already gets this rejection from `next`; the queue only needs to know a sync finished, not how
   queue = next.catch(() => {});
   return next;
 };
@@ -1864,6 +1912,7 @@ export const syncFleetConfig = (
  * it. The sidecar is the question — a server or a plugin nobody here manages is
  * not this report's business.
  */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: checks every category the sidecar manages against what is really on disk, one report row per item
 export const fleetStatus = async (): Promise<FleetSyncReport> => {
   const managed = await readSidecar();
   const skills: Record<string, FleetItemState> = {};
@@ -1894,6 +1943,7 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
         };
   }
   for (const { name, linkedAs } of managed.marketplaces) {
+    // biome-ignore lint/performance/noAwaitInLoops: a read-only status check; kept sequential like the rest of this report rather than fanning out parallel file reads
     report.marketplaces[name] = (await isLinked(linkedAs))
       ? { state: "applied" }
       : {
@@ -1902,11 +1952,13 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
         };
   }
   for (const id of managed.plugins) {
+    // biome-ignore lint/performance/noAwaitInLoops: a read-only status check; kept sequential like the rest of this report rather than fanning out parallel file reads
     report.plugins[id] = (await isInstalled(id))
       ? { state: "applied" }
       : { state: "failed", detail: "not in installed_plugins.json" };
   }
   for (const name of Object.keys(managed.skills)) {
+    // biome-ignore lint/performance/noAwaitInLoops: a read-only status check; kept sequential like the rest of this report rather than fanning out parallel file reads
     skills[name] = (await dirExists(join(SKILLS_DIR, name)))
       ? { state: "applied" }
       : { state: "failed", detail: "not on disk" };
@@ -1922,6 +1974,7 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
           };
   }
   for (const [path, hash] of Object.entries(managed.memoryDocs)) {
+    // biome-ignore lint/performance/noAwaitInLoops: a read-only status check; kept sequential like the rest of this report rather than fanning out parallel file reads
     const fileHash = await fileHashAt(join(MEMORIES_DIR, path));
     memoryDocs[path] =
       fileHash === hash
@@ -1938,6 +1991,7 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
   }
   for (const [id, record] of Object.entries(managed.hooks)) {
     if (record.command.startsWith(HOOKS_DIR)) {
+      // biome-ignore lint/performance/noAwaitInLoops: a read-only status check; kept sequential like the rest of this report rather than fanning out parallel file reads
       const fileHash = await fileHashAt(record.command);
       hooks[id] =
         fileHash === record.hash
@@ -1986,7 +2040,10 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
 export const readMemoryFile = async (): Promise<MachineMemorySet | null> => {
   const file = Bun.file(MEMORY_PATH);
   const docs: MachineMemoryDoc[] = [];
+  // Each document is an independent read, but the reads are few and this is
+  // a plain discovery call, not a hot path worth a concurrency strategy.
   for (const path of await memoryDocPaths()) {
+    // biome-ignore lint/performance/noAwaitInLoops: independent reads, kept sequential for a call this infrequent
     const content = await Bun.file(join(MEMORIES_DIR, path)).text();
     docs.push({ path, content, hash: hashText(content) });
   }
@@ -2048,6 +2105,12 @@ export function mergeMcp(
  * text indented under it), which a read of the key's own line answers with the
  * marker instead of a sentence.
  */
+/** A YAML block-scalar marker (`>`, `|`, with an optional `-`/`+` chomp indicator). */
+const YAML_BLOCK_SCALAR = /^[|>][-+]?$/;
+
+/** A line that continues a YAML block scalar: indented, or blank. */
+const YAML_CONTINUATION = /^\s/;
+
 export function skillDescription(source: string): string | undefined {
   if (!source.startsWith("---")) {
     return undefined;
@@ -2060,13 +2123,13 @@ export function skillDescription(source: string): string | undefined {
   }
 
   const value = front[at].slice("description:".length).trim();
-  if (!/^[|>][-+]?$/.test(value)) {
+  if (!YAML_BLOCK_SCALAR.test(value)) {
     return value.replace(/^["']|["']$/g, "") || undefined;
   }
 
   const block: string[] = [];
   for (const row of front.slice(at + 1)) {
-    if (row.trim() !== "" && !/^\s/.test(row)) {
+    if (row.trim() !== "" && !YAML_CONTINUATION.test(row)) {
       break;
     }
     block.push(row.trim());
@@ -2120,6 +2183,7 @@ export async function skillsIn(
     }
     const path = join(root, entry.name);
     const file = Bun.file(join(path, "SKILL.md"));
+    // biome-ignore lint/performance/noAwaitInLoops: `found` is built in directory-listing order, which the dashboard's skill list preserves
     if (await file.exists()) {
       const description = skillDescription(await file.text());
       found.push({
@@ -2176,6 +2240,7 @@ export const inspectConfig = async (
   const root = file.ok ? file.root : {};
 
   const projects =
+    // biome-ignore lint/suspicious/noUnnecessaryConditions: the cast asserts a shape, not that the key exists — a ~/.claude.json with no "projects" at all is the common case
     (root.projects as Record<
       string,
       { mcpServers?: Record<string, unknown> }
@@ -2198,6 +2263,7 @@ export const inspectConfig = async (
   const docs: NonNullable<ConfigInspection["memory"]>["docs"] = [];
   for (const path of await memoryDocPaths()) {
     const doc = Bun.file(join(MEMORIES_DIR, path));
+    // biome-ignore lint/performance/noAwaitInLoops: independent reads, kept sequential for a call this infrequent
     const hash = hashText(await doc.text());
     docs.push({
       path,
@@ -2244,6 +2310,7 @@ const filesUnder = async (root: string, prefix = ""): Promise<string[]> => {
   for (const entry of entries) {
     const relative = `${prefix}${entry.name}`;
     if (entry.isDirectory()) {
+      // biome-ignore lint/performance/noAwaitInLoops: `paths` is built in directory-listing order, which readSkillFiles relies on for a stable file order
       paths.push(...(await filesUnder(join(root, entry.name), `${relative}/`)));
     } else if (entry.isFile()) {
       paths.push(relative);
@@ -2272,6 +2339,7 @@ export const readSkillFiles = async (
   let bytes = 0;
   for (const path of await filesUnder(skill.path)) {
     const content = new Uint8Array(
+      // biome-ignore lint/performance/noAwaitInLoops: `bytes` must hit the cap in file order so the error names the file that pushed it over, not whichever read happened to land last
       await Bun.file(join(skill.path, path)).arrayBuffer()
     );
     bytes += content.byteLength;

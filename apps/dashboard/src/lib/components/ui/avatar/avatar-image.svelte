@@ -10,7 +10,7 @@
 </script>
 
 <AvatarPrimitive.Image
-  class={cn("rounded-full aspect-square size-full object-cover", className)}
+  class={cn("aspect-square size-full rounded-full object-cover", className)}
   data-slot="avatar-image"
   bind:ref
   {...restProps}

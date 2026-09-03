@@ -29,6 +29,7 @@
    * being written.
    */
   import type { Snippet } from "svelte";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Command from "$lib/components/ui/command";
   import { IconClose, IconPlus, IconSend, IconStop } from "$lib/icons";
   import type { SendExtras } from "../client.svelte";
@@ -80,15 +81,15 @@
   } = $props();
 
   interface PendingImage {
-    mediaType: string;
     data: string;
-    name: string 
-}
+    mediaType: string;
+    name: string;
+  }
   interface PendingText {
+    content: string;
     kind: "text";
     name: string;
-    content: string 
-}
+  }
 
   let images = $state<PendingImage[]>([]);
   let texts = $state<PendingText[]>([]);
@@ -97,6 +98,9 @@
 
   /** A paste longer than this rides as a named attachment, not inline text. */
   const LARGE_PASTE = 1200;
+
+  /** A `/` or `@` token stops being typed as one the moment it holds whitespace. */
+  const TOKEN_WHITESPACE = /\s/;
 
   const hasContent = $derived(
     value.trim().length > 0 || images.length > 0 || texts.length > 0
@@ -228,13 +232,13 @@
       if (word.length === 0) {
         return null;
       }
-      const sigil = word[0];
+      const [sigil] = word;
       if (sigil !== "/" && sigil !== "@") {
         return null;
       }
       const query = word.slice(1);
       // A token with whitespace in it is no longer being typed as one.
-      if (/\s/.test(query)) {
+      if (TOKEN_WHITESPACE.test(query)) {
         return null;
       }
       return { sigil, query, from: start };
@@ -510,6 +514,7 @@
   async function addFiles(files: Iterable<File>): Promise<void> {
     for (const file of files) {
       if (file.type.startsWith("image/")) {
+        // biome-ignore lint/performance/noAwaitInLoops: sequential by intent — each attachment must append in the order it was picked, not the order its read happens to settle.
         images = [...images, await readImage(file)];
       } else {
         texts = [
@@ -523,6 +528,7 @@
   function onpick(event: Event): void {
     const input = event.currentTarget as HTMLInputElement;
     if (input.files?.length) {
+      // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — the file input clears synchronously below, independent of the read.
       void addFiles(input.files);
     }
     input.value = "";
@@ -539,6 +545,7 @@
       .filter((file): file is File => !!file);
     if (files.length) {
       event.preventDefault();
+      // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — the paste handler returns synchronously, independent of the read.
       void addFiles(files);
       return;
     }
@@ -556,9 +563,12 @@
     }
   }
 
-  const removeImage = (i: number) =>
-    (images = images.filter((_, n) => n !== i));
-  const removeText = (i: number) => (texts = texts.filter((_, n) => n !== i));
+  const removeImage = (i: number) => {
+    images = images.filter((_, n) => n !== i);
+  };
+  const removeText = (i: number) => {
+    texts = texts.filter((_, n) => n !== i);
+  };
 </script>
 
 <div class="fade"></div>
@@ -615,6 +625,7 @@
            while its next word is being chosen. -->
       <!-- Focus never leaves the textarea: the menu swallows the mousedown that
            would blur it, so a clicked row lands on the message being written. -->
+      <!-- biome-ignore lint/a11y/noStaticElementInteractions: role="presentation" is deliberate — this wrapper is never meant to be announced; the mousedown handler only preventDefaults so focus stays on the textarea, it is not a user interaction target. -->
       <div
         class="menu"
         id="composer-menu"
@@ -650,7 +661,9 @@
       aria-controls="composer-menu"
       aria-expanded={menuOpen}
       aria-label="Message the agent"
-      onblur={() => (dismissed = true)}
+      onblur={() => {
+        dismissed = true;
+      }}
       onclick={noteCaret}
       oninput={noteCaret}
       {onkeydown}
@@ -677,7 +690,7 @@
         aria-disabled={!busy && sending ? 'true' : undefined}
         aria-label={busy ? 'Stop the agent' : 'Send message'}
         class="stop"
-        disabled={!busy && !hasContent}
+        disabled={!(busy || hasContent)}
         onclick={onaction}
         type="button"
       >

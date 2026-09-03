@@ -196,6 +196,7 @@
 
               <div class="flex items-center gap-2">
                 <!-- Diff style toggle -->
+                <!-- biome-ignore lint/a11y/useSemanticElements: a <fieldset> here would bring browser-default border/padding into this toggle group; it isn't a form control -->
                 <div
                   aria-label="Diff layout"
                   class="flex items-center bg-muted rounded-[var(--radius-control)] p-0.5 border border-border"
@@ -206,7 +207,9 @@
                     class="h-7 rounded-[14px] text-xs {diffStyle === 'unified'
                       ? 'bg-background border-border shadow-sm'
                       : ''}"
-                    onclick={() => diffStyle = 'unified'}
+                    onclick={() => {
+                      diffStyle = 'unified';
+                    }}
                     size="sm"
                     title="Unified view"
                     variant={diffStyle === 'unified' ? 'outline' : 'ghost'}
@@ -219,7 +222,9 @@
                     class="h-7 rounded-[14px] text-xs {diffStyle === 'split'
                       ? 'bg-background border-border shadow-sm'
                       : ''}"
-                    onclick={() => diffStyle = 'split'}
+                    onclick={() => {
+                      diffStyle = 'split';
+                    }}
                     size="sm"
                     title="Split view"
                     variant={diffStyle === 'split' ? 'outline' : 'ghost'}
@@ -232,7 +237,10 @@
                 <!-- Close button -->
                 <Button
                   aria-label="Close diff modal"
-                  onclick={() => (open = false)}
+                  onclick={() => {
+                    // biome-ignore lint/suspicious/noGlobalAssign: `open` is the component's own $state prop (bound via `bind:open`), not window.open — Biome's Svelte scope resolution doesn't see the local declaration here
+                    open = false;
+                  }}
                   size="icon-sm"
                   title="Close (Esc)"
                   variant="ghost"

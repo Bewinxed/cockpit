@@ -1,5 +1,5 @@
 <script lang="ts">
-  import * as FormPrimitive from "formsnap";
+  import { Label as FormPrimitiveLabel, type LabelProps } from "formsnap";
   import { Label } from "$lib/components/ui/label/index.js";
   import { cn, type WithoutChild } from "$lib/utils.js";
 
@@ -8,10 +8,10 @@
     children,
     class: className,
     ...restProps
-  }: WithoutChild<FormPrimitive.LabelProps> = $props();
+  }: WithoutChild<LabelProps> = $props();
 </script>
 
-<FormPrimitive.Label {...restProps} bind:ref>
+<FormPrimitiveLabel {...restProps} bind:ref>
   {#snippet child({ props })}
     <Label
       {...props}
@@ -21,4 +21,4 @@
       {@render children?.()}
     </Label>
   {/snippet}
-</FormPrimitive.Label>
+</FormPrimitiveLabel>

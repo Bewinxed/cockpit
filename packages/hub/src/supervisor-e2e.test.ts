@@ -76,15 +76,19 @@ const makeRegistry = (): RegistryShape => {
       requesters.delete(requestId);
       return socket;
     },
+    // biome-ignore lint/suspicious/noEmptyBlockStatements: this test registry doesn't track dashboard origins
     noteDashboardOrigin: () => {},
     dashboardOrigin: () => undefined,
   };
 };
 
 const pending: PendingShape = {
+  // biome-ignore lint/suspicious/noEmptyBlockStatements: this test pipeline never awaits a permission ask, so remembering one is a no-op
   remember: () => {},
   get: () => undefined,
+  // biome-ignore lint/suspicious/noEmptyBlockStatements: this test pipeline never awaits a permission ask, so resolving one is a no-op
   resolve: () => {},
+  // biome-ignore lint/suspicious/noEmptyBlockStatements: this test pipeline never awaits a permission ask, so forgetting one is a no-op
   forget: () => {},
   list: () => [],
 };
@@ -251,6 +255,7 @@ const until = async (
     if (holds()) {
       return;
     }
+    // biome-ignore lint/performance/noAwaitInLoops: polls until the condition holds or the budget expires; each check depends on the previous sleep
     await Bun.sleep(5);
   }
   throw new Error(`timed out waiting for ${label}`);
@@ -281,9 +286,9 @@ const openWebSocket = (
 const MACHINE = "sv-e2e-machine";
 
 interface Daemon {
-  close(): void;
+  close: () => void;
   readonly received: Envelope[];
-  sendFrame(instanceId: string, message: Record<string, unknown>): void;
+  sendFrame: (instanceId: string, message: Record<string, unknown>) => void;
 }
 
 /** Opens a daemon socket, registers the machine, and waits for the registration to land. */
@@ -324,16 +329,16 @@ const openDaemon = async (machineId: string): Promise<Daemon> => {
 
 /** Sends an assistant frame with the given text, then a result frame to end the turn. */
 const completeTurn = (
-  daemon: Daemon,
+  agentDaemon: Daemon,
   instanceId: string,
   text: string
 ): void => {
-  daemon.sendFrame(instanceId, {
+  agentDaemon.sendFrame(instanceId, {
     type: "assistant",
     message: { role: "assistant", content: [{ type: "text", text }] },
     parent_tool_use_id: null,
   });
-  daemon.sendFrame(instanceId, {
+  agentDaemon.sendFrame(instanceId, {
     type: "result",
     subtype: "success",
   });
@@ -390,6 +395,7 @@ let daemon: Daemon;
 
 beforeAll(async () => {
   const server = app.listen(0);
+  // biome-ignore lint/style/noNonNullAssertion: app.listen(0) always returns a server with a bound port; ?. would silently produce NaN instead
   hubPort = Number(server.server!.port);
 
   // Configure the supervisor to point at our fake OpenAI server.
@@ -417,8 +423,10 @@ afterAll(async () => {
   app.stop();
   fakeOpenAI.stop();
   for (const suffix of ["", "-shm", "-wal"]) {
+    // biome-ignore lint/performance/noAwaitInLoops: teardown of a handful of scratch files; order doesn't matter but each delete is best-effort
     await Bun.file(`${DB_FILE}${suffix}`)
       .delete()
+      // biome-ignore lint/suspicious/noEmptyBlockStatements: a missing scratch file (e.g. no -wal ever created) is not worth reporting during teardown
       .catch(() => {});
   }
 });
@@ -480,6 +488,7 @@ describe("supervisor e2e", () => {
       "send envelope on agent socket"
     );
 
+    // biome-ignore lint/style/noNonNullAssertion: the until() above already waited for this exact envelope to exist
     const sendEnvelope = daemon.received.find(
       (e) => e.verb === "send" && e.instanceId === instanceId
     )!;
@@ -505,7 +514,7 @@ describe("supervisor e2e", () => {
 
     // Verify the fake OpenAI received the call with correct prompt assembly.
     expect(fakeRequests.length).toBeGreaterThanOrEqual(1);
-    const req = fakeRequests[0];
+    const [req] = fakeRequests;
     // System prompt contains the operator instructions from the rule.
     expect(req.system).toContain(
       "Watch for false done claims and demand proof."
@@ -567,6 +576,7 @@ describe("supervisor e2e", () => {
       "autopilot send envelope"
     );
 
+    // biome-ignore lint/style/noNonNullAssertion: the until() above already waited for this exact envelope to exist
     const sendEnvelope = daemon.received.find(
       (e) => e.verb === "send" && e.instanceId === instanceId
     )!;
@@ -579,6 +589,7 @@ describe("supervisor e2e", () => {
 
     // Composition: the autopilot's standing mandate leads, and the matched
     // rule rides along as context so autopilot answers with it in view.
+    // biome-ignore lint/style/noNonNullAssertion: fakeRequests was just populated by the completeTurn() awaited above
     const req = fakeRequests.at(-1)!;
     expect(req.system).toContain(autopilotPrompt);
     expect(req.system).toContain("This prompt should NOT be used");
@@ -628,7 +639,7 @@ describe("supervisor e2e", () => {
     await until(
       () =>
         dashboard.inbox.some((m) => {
-          const payload = (m as { payload?: { kind?: string } }).payload;
+          const { payload } = m as { payload?: { kind?: string } };
           return payload?.kind === "supervisor_event";
         }),
       "supervisor_event frame on dashboard"
@@ -643,9 +654,9 @@ describe("supervisor e2e", () => {
 
     // The dashboard received the supervisor_event.
     const eventFrame = dashboard.inbox.find((m) => {
-      const payload = (
-        m as { payload?: { kind?: string; instanceId?: string } }
-      ).payload;
+      const { payload } = m as {
+        payload?: { kind?: string; instanceId?: string };
+      };
       return (
         payload?.kind === "supervisor_event" &&
         payload?.instanceId === instanceId
@@ -661,6 +672,7 @@ describe("supervisor e2e", () => {
     const events = (await eventsRes.json()) as SupervisorEvent[];
     const escalation = events.find((e) => e.verdict === "escalate");
     expect(escalation).toBeDefined();
+    // biome-ignore lint/style/noNonNullAssertion: toBeDefined() above already asserts escalation is not undefined
     expect(escalation!.message).toBe("Needs human review.");
 
     dashboard.close();
@@ -869,6 +881,7 @@ describe("supervisor e2e", () => {
     // the hub's relay, which notes the human touch (noteHumanSend).
     const { socket: opSocket, ready: opReady } = openWebSocket(
       "/ws/dashboard",
+      // biome-ignore lint/suspicious/noEmptyBlockStatements: this socket only sends the operator's own message below; it never needs to read anything back
       () => {}
     );
     await opReady;

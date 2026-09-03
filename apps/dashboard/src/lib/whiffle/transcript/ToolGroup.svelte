@@ -5,6 +5,7 @@
     type ToolStatus,
   } from "$lib/components/features/tool-cards/descriptors";
   import { Badge } from "$lib/components/ui/badge";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Collapsible from "$lib/components/ui/collapsible";
   import { IconChevronRight } from "$lib/icons";
   /**
@@ -90,17 +91,18 @@
      what green means: added. Whitespace is kept as its own token so the fact
      reads exactly as the descriptor wrote it. */
   interface FactPart {
-    text: string;
     add: boolean;
-    del: boolean 
-}
+    del: boolean;
+    text: string;
+  }
 
   const ADDED = /^\+\d[\d,._]*$/;
   const REMOVED = /^[−-]\d[\d,._]*$/;
+  const WHITESPACE_TOKEN = /(\s+)/;
 
   const factParts = (fact: string): FactPart[] =>
     fact
-      .split(/(\s+)/)
+      .split(WHITESPACE_TOKEN)
       .filter((token) => token !== "")
       .map((token) => ({
         text: token,

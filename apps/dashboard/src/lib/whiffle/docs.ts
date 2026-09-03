@@ -8,11 +8,13 @@ import { machineFs } from "./client.svelte";
 /** Conventional doc directories, listed after the root's own markdown. */
 const DOC_DIRS = ["docs", "doc"];
 
+const MARKDOWN_EXT = /\.mdx?$/i;
+
 const isMarkdown = (entry: FsEntry): boolean =>
-  entry.kind === "file" && /\.mdx?$/i.test(entry.name);
+  entry.kind === "file" && MARKDOWN_EXT.test(entry.name);
 
 const stemOf = (name: string): string =>
-  name.replace(/\.mdx?$/i, "").toUpperCase();
+  name.replace(MARKDOWN_EXT, "").toUpperCase();
 
 /** What a repo is, then what it plans, then how to work in it — the reading order. */
 function rank(name: string): number {

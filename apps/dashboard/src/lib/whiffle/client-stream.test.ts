@@ -42,6 +42,11 @@ import {
 
 const SESSION = "inst-1";
 
+/** The pre-streaming callback commands still carry; these tests exercise the streamed path only. */
+const NO_OP_LEGACY = (): undefined => {
+  // intentionally unused by these tests
+};
+
 /** A frame that is only ever itself, so a double-apply is visible as a repeat. */
 const frameAt = (seq: number, kind = "frame"): unknown => ({
   kind,
@@ -97,24 +102,24 @@ interface Harness {
    * event: the whole point of the tests that use it is that a tab which
    * receives nothing at all still settles what it sent.
    */
-  advance(ms: number): void;
+  advance: (ms: number) => void;
   /** Every frame that reached the chokepoint, in order. */
   applied: { sessionId: string; seq: number }[];
   /** How many timers are armed right now — one, or none, and never more. */
-  armed(): number;
+  armed: () => number;
   /** The scripted clock, so a timeout is a fact rather than a wait. */
   clock: { now: number };
   /** Every record the host was told had failed, in order, as `id:reason`. */
   failures: string[];
   host: StreamHost;
   /** Feeds one message in as if it had come off the socket. */
-  receive(message: unknown): boolean;
+  receive: (message: unknown) => boolean;
   /** Sessions whose history the store asked to re-read. */
   rereads: string[];
   /** Everything the client put on the wire. */
   sent: StreamClientMessage[];
   state: StreamState;
-  subscribes(): StreamSubscribe[];
+  subscribes: () => StreamSubscribe[];
   warnings: string[];
 }
 
@@ -143,7 +148,9 @@ function harness(
 
   const host: StreamHost = {
     applyFrame: (sessionId, frame) => {
-      const uuid = (frame as { message: { uuid: string } }).message.uuid;
+      const {
+        message: { uuid },
+      } = frame as { message: { uuid: string } };
       applied.push({ sessionId, seq: Number(uuid.slice(1)) });
     },
     rereadHistory: (sessionId) => rereads.push(sessionId),
@@ -166,7 +173,8 @@ function harness(
     ...(options.timers
       ? {
           setTimer: (delayMs: number, run: () => void) => {
-            const handle = nextHandle++;
+            const handle = nextHandle;
+            nextHandle += 1;
             timers.set(handle, { at: clock.now + delayMs, run });
             return handle;
           },
@@ -229,7 +237,7 @@ function harness(
 test("ordered delivery of 500 events applies each exactly once, with no dupes and no holes", () => {
   const h = harness({ capable: true });
 
-  for (let seq = 1; seq <= 500; seq++) {
+  for (let seq = 1; seq <= 500; seq += 1) {
     h.receive(delta(seq));
   }
 
@@ -286,7 +294,7 @@ test("a burst of deltas past one gap sends exactly one resubscribe, and buffers 
   const h = harness({ capable: true });
 
   h.receive(delta(1));
-  for (let seq = 5; seq <= 40; seq++) {
+  for (let seq = 5; seq <= 40; seq += 1) {
     h.receive(delta(seq));
   }
 
@@ -342,7 +350,7 @@ test("a ring that cannot heal the gap escalates to a history re-read instead of 
   const h = harness({ capable: true });
 
   h.receive(delta(1));
-  for (let attempt = 0; attempt < MAX_RESYNC_ATTEMPTS; attempt++) {
+  for (let attempt = 0; attempt < MAX_RESYNC_ATTEMPTS; attempt += 1) {
     h.receive(delta(9 + attempt));
     h.receive(backlog([eventAt(2), eventAt(8)]));
   }
@@ -552,7 +560,7 @@ const settleStageOf = (kind: CommandKind): SettleStage =>
 const submit = (
   h: Harness,
   kind: "send" | "set-model" = "send",
-  legacy = () => {}
+  legacy = NO_OP_LEGACY
 ): string =>
   submitCommand(h.state, h.host, {
     commandId: `cmd-${Object.keys(h.state.commands).length + 1}`,
@@ -626,7 +634,7 @@ test("against a legacy hub the command runs today call, and its promise is the s
   let ran = 0;
 
   const sync = submit(h, "send", () => {
-    ran++;
+    ran += 1;
   });
   expect(h.sent).toHaveLength(0);
   expect(ran).toBe(1);
@@ -719,7 +727,7 @@ test("a command nobody ever acknowledged is called off rather than spun forever"
 test("the tracker is capped: settled commands age out, the newest stay readable", () => {
   const h = harness({ capable: true });
 
-  for (let index = 0; index < SETTLED_COMMAND_LIMIT + 20; index++) {
+  for (let index = 0; index < SETTLED_COMMAND_LIMIT + 20; index += 1) {
     h.clock.now += 1;
     const commandId = submitCommand(h.state, h.host, {
       commandId: `cmd-${index}`,
@@ -728,7 +736,7 @@ test("the tracker is capped: settled commands age out, the newest stay readable"
       kind: "send",
       settlesAt: settleStageOf("send"),
       payload: {},
-      legacy: () => {},
+      legacy: NO_OP_LEGACY,
     });
     h.receive(ack(commandId, "applied"));
   }
@@ -787,7 +795,7 @@ test("the stream dialect runs a command's local effects: submitted at dispatch, 
 
 test("a refused command settles its effects with failed and the reason the row will show", () => {
   const h = harness({ capable: true });
-  const settled: Array<[string, string | undefined]> = [];
+  const settled: [string, string | undefined][] = [];
   const commandId = submitCommand(h.state, h.host, {
     commandId: "fx-2",
     sessionId: SESSION,
@@ -795,7 +803,7 @@ test("a refused command settles its effects with failed and the reason the row w
     kind: "set-model",
     settlesAt: settleStageOf("set-model"),
     payload: { instanceId: SESSION },
-    legacy: () => {},
+    legacy: NO_OP_LEGACY,
     streamEffects: {
       settled: (stage, reason) => settled.push([stage, reason]),
     },
@@ -814,7 +822,7 @@ test("a dying socket settles outstanding effects with failed — the optimistic 
     kind: "set-effort",
     settlesAt: settleStageOf("set-effort"),
     payload: { instanceId: SESSION },
-    legacy: () => {},
+    legacy: NO_OP_LEGACY,
     streamEffects: {
       submitted: () => calls.push("submitted"),
       settled: (stage) => calls.push(`settled:${stage}`),
@@ -854,7 +862,7 @@ test("a result.error inside the shadow of this client's own interrupt command is
     kind: "interrupt",
     settlesAt: settleStageOf("interrupt"),
     payload: { instanceId: SESSION },
-    legacy: () => {},
+    legacy: NO_OP_LEGACY,
   });
   const submittedAt = h.state.commands["int-1"].at;
   expect(interruptedRecently(h.state, SESSION, submittedAt + 5000)).toBe(true);
@@ -939,7 +947,7 @@ test("a send's local half settles exactly once, at accepted, and a later ack can
     kind: "send",
     settlesAt: settleStageOf("send"),
     payload: { instanceId: SESSION },
-    legacy: () => {},
+    legacy: NO_OP_LEGACY,
     streamEffects: {
       submitted: () => calls.push("submitted"),
       settled: (stage) => calls.push(`settled:${stage}`),
@@ -967,7 +975,7 @@ test("a legacy fire-and-forget command is finished when it returns, not retro-fa
     // what lowers its last word to `accepted`, not the call site guessing.
     settlesAt: settleStageOf("interrupt"),
     payload: {},
-    legacy: () => {},
+    legacy: NO_OP_LEGACY,
   });
   expect(h.state.commands[commandId].stage).toBe("accepted");
 
@@ -1329,7 +1337,7 @@ test("a failure is reported before submitCommand returns, on both dialects — s
     kind: "permission.answer",
     settlesAt: "applied",
     payload: {},
-    legacy: () => {},
+    legacy: NO_OP_LEGACY,
   });
   expect(stream.failures).toHaveLength(1);
   expect(stream.state.commands[streamId].stage).toBe("failed");

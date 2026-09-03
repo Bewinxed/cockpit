@@ -1,12 +1,13 @@
-import Root from "./native-select.svelte";
-import OptGroup from "./native-select-opt-group.svelte";
-import Option from "./native-select-option.svelte";
-
+// biome-ignore lint/performance/noBarrelFile: shadcn-svelte component barrel — this re-export surface is the public import path consumers use across the app
 export {
-  OptGroup,
-  OptGroup as NativeSelectOptGroup,
-  Option,
-  Option as NativeSelectOption,
-  Root,
-  Root as NativeSelect,
-};
+  default as Root,
+  default as NativeSelect,
+} from "./native-select.svelte";
+export {
+  default as OptGroup,
+  default as NativeSelectOptGroup,
+} from "./native-select-opt-group.svelte";
+export {
+  default as Option,
+  default as NativeSelectOption,
+} from "./native-select-option.svelte";

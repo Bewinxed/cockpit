@@ -26,7 +26,7 @@
 
 import { chromium } from "playwright-core";
 
-const id = process.argv[2];
+const [, , id] = process.argv;
 if (!id) {
   console.error("usage: node scripts/measure-append-jerk.mjs <session-id>");
   process.exit(1);
@@ -102,7 +102,7 @@ try {
   // inside a 5-frame window — no double counting.
   let reversals = 0;
   let maxSingleFrameDelta = 0;
-  for (let i = 1; i < trace.length; i++) {
+  for (let i = 1; i < trace.length; i += 1) {
     const a = trace[i - 1].scrollTop;
     const b = trace[i].scrollTop;
     const delta = Math.abs(b - a);
@@ -114,7 +114,7 @@ try {
       const dPrev = trace[i - 1].scrollTop - trace[i - 2].scrollTop;
       const dCur = b - a;
       if (dPrev !== 0 && dCur !== 0 && Math.sign(dPrev) !== Math.sign(dCur)) {
-        reversals++;
+        reversals += 1;
       }
     }
   }

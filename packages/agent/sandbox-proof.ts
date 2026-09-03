@@ -36,23 +36,31 @@ const ctx: HarnessContext = {
       session?.resolvePermission(request.requestId, { behavior: "allow" });
     }, 100);
   },
-  busy: () => {},
-  session: () => {},
+  busy: () => {
+    // no-op: this proof doesn't assert on busy transitions
+  },
+  session: () => {
+    // no-op: this proof doesn't assert on the session callback
+  },
   failed: (error) => {
     failures.push(`failed(): ${String(error)}`);
   },
-  emit: () => {},
-  closed: () => {},
+  emit: () => {
+    // no-op: this proof doesn't assert on raw frame emission
+  },
+  closed: () => {
+    // no-op: this proof doesn't assert on close
+  },
 };
 
 let assertions = 0;
 let failuresCount = 0;
 const record = (name: string, pass: boolean, detail?: string) => {
-  assertions++;
+  assertions += 1;
   if (pass) {
     console.log(`PASS ${name}`);
   } else {
-    failuresCount++;
+    failuresCount += 1;
     console.log(`FAIL ${name}${detail ? `: ${detail}` : ""}`);
   }
 };
@@ -130,13 +138,10 @@ for (const f of slice) {
     console.log(
       `DIAG tool_use: ${JSON.stringify({
         name: tu.name ?? null,
-        dangerouslyDisableSandbox:
-          (tu.input ?? {}).dangerouslyDisableSandbox ?? null,
-        command: (tu.input ?? {}).command ?? null,
+        dangerouslyDisableSandbox: tu.input?.dangerouslyDisableSandbox ?? null,
+        command: tu.input?.command ?? null,
       })}`
     );
-  }
-  if (f.type === "user") {
   }
 }
 for (const f of slice) {
@@ -148,6 +153,7 @@ for (const f of slice) {
   if (typeof content === "string") {
     continue;
   }
+  // biome-ignore lint/suspicious/noUnnecessaryConditions: content is cast, not narrowed — the field is genuinely optional at runtime
   for (const block of (content as unknown[]) ?? []) {
     if ((block as { type?: string }).type !== "tool_result") {
       continue;
@@ -183,6 +189,7 @@ const erroredResult = slice
   .flatMap((f) => {
     const content = (f as unknown as { message?: { content?: unknown } })
       .message?.content;
+    // biome-ignore lint/suspicious/noUnnecessaryConditions: content is cast, not narrowed — the field is genuinely optional at runtime
     return typeof content === "string" ? [] : ((content as unknown[]) ?? []);
   })
   .filter((block) => (block as { type?: string }).type === "tool_result")
@@ -193,7 +200,9 @@ if (failures.length) {
   console.log(`DIAG failed(): ${failures.join(" | ")}`);
 }
 
-await session.stop().catch(() => {});
+await session.stop().catch(() => {
+  // best effort: the process exits either way
+});
 
 console.log(
   `sandbox-proof: ${assertions - failuresCount}/${assertions} assertions passed`

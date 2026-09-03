@@ -33,6 +33,7 @@ import {
   type FrameProvenance,
   type IngestMark,
   RESOLVE_PERMISSION,
+  // biome-ignore lint/style/noExportedImports: `export … from` here trips noBarrelFile instead; re-exporting the import is the lesser of the two diagnostics for this one re-exported constant.
   RING_SIZE,
   type SendPayload,
   SessionRing,
@@ -255,7 +256,7 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
         continue;
       }
       ring.forget();
-      emptied++;
+      emptied += 1;
     }
     return emptied;
   };
@@ -355,7 +356,7 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
    * duplicate, never a gap, without a buffer-and-splice dance.
    */
   const subscribe = (socket: HubSocket, message: StreamSubscribe): void => {
-    const sessionId = message.sessionId;
+    const { sessionId } = message;
     const entry = entryFor(socket);
     entry.sessions.add(sessionId);
     const perSession = followers.get(sessionId) ?? new Set<string>();
@@ -378,7 +379,7 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
       return;
     }
 
-    const afterSeq = message.afterSeq;
+    const { afterSeq } = message;
     const reset = (): void => {
       const refusal: StreamReset = {
         type: "stream.reset",
@@ -388,7 +389,8 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
       deliver(socket, refusal);
     };
     if (!ring.canReplay(typeof afterSeq === "number" ? afterSeq : Number.NaN)) {
-      return reset();
+      reset();
+      return;
     }
 
     let events: SessionStreamEvent[];
@@ -399,7 +401,8 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
       // broken invariant — and still a reset rather than a partial replay,
       // because the client's alternative to a resync is a plausible lie.
       console.error(`[hub] stream replay failed for ${sessionId}:`, error);
-      return reset();
+      reset();
+      return;
     }
 
     const backlog: StreamBacklog = {
@@ -419,6 +422,7 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
    * takes, so without a method check a `set-effort` envelope would be a
    * general-purpose remote call. A kind may only ever become its own method.
    */
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: dispatches every command kind (send vs. each control method) through one shared validate-then-relay pipeline; splitting it would scatter the ordering guarantees documented above across several functions.
   const command = (socket: HubSocket, message: CommandEnvelope): void => {
     const { commandId, kind, sessionId, machineId } = message;
     // Known by id from here on, and with the newest handle: an `applied` ack
@@ -427,23 +431,28 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
     entryFor(socket);
 
     if (!nonEmpty(sessionId)) {
-      return fail(socket, commandId, "the command names no session");
+      fail(socket, commandId, "the command names no session");
+      return;
     }
     if (!nonEmpty(machineId)) {
-      return fail(socket, commandId, "the command names no machine");
+      fail(socket, commandId, "the command names no machine");
+      return;
     }
     if (!ports.isMachineConnected(machineId)) {
-      return fail(socket, commandId, `machine ${machineId} is not connected`);
+      fail(socket, commandId, `machine ${machineId} is not connected`);
+      return;
     }
 
     const payload = isRecord(message.payload) ? message.payload : undefined;
     if (!payload) {
-      return fail(socket, commandId, `a ${kind} command carries no payload`);
+      fail(socket, commandId, `a ${kind} command carries no payload`);
+      return;
     }
 
     if (kind === "send") {
       if (!isRecord(payload.message)) {
-        return fail(socket, commandId, "a send command carries no message");
+        fail(socket, commandId, "a send command carries no message");
+        return;
       }
       const sent = ports.relaySend(
         {
@@ -460,28 +469,32 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
         socket
       );
       if (!sent) {
-        return fail(socket, commandId, `machine ${machineId} is not connected`);
+        fail(socket, commandId, `machine ${machineId} is not connected`);
+        return;
       }
       // No confirmation exists to wait for: the daemon's `send` answers with
       // the turn itself. `accepted` is the last honest word the hub has, and
       // the sequenced frames that follow are the proof of application.
-      return ackTo(socket, {
+      ackTo(socket, {
         type: "command.ack",
         commandId,
         stage: "accepted",
       });
+      return;
     }
 
     const method = CONTROL_METHOD[kind];
     if (nonEmpty(payload.method) && payload.method !== method) {
-      return fail(
+      fail(
         socket,
         commandId,
         `a ${kind} command may not call ${payload.method}`
       );
+      return;
     }
     if (payload.args !== undefined && !Array.isArray(payload.args)) {
-      return fail(socket, commandId, `a ${kind} command's args are not a list`);
+      fail(socket, commandId, `a ${kind} command's args are not a list`);
+      return;
     }
 
     // An answer names the permission it settles — the request id IS the
@@ -490,18 +503,21 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
     // unforgeable from the dashboard side.
     const requestId =
       kind === "permission.answer"
-        ? nonEmpty(payload.requestId)
+        ? // biome-ignore lint/style/noNestedTernary: an answer's request id must come from the client verbatim (or be absent), while every other control mints its own; the two branches are not a simplifiable condition.
+          nonEmpty(payload.requestId)
           ? payload.requestId
           : undefined
         : crypto.randomUUID();
     if (!requestId) {
-      return fail(socket, commandId, "a permission answer names no request");
+      fail(socket, commandId, "a permission answer names no request");
+      return;
     }
     // A double-click, or two devices answering the same card. The first answer
     // is already in flight and owns the reply; a second dispatch would settle
     // the parked ask twice and orphan the first command at `accepted` forever.
     if (awaiting.has(requestId)) {
-      return fail(socket, commandId, "that request is already being answered");
+      fail(socket, commandId, "that request is already being answered");
+      return;
     }
 
     const control: ControlPayload = {
@@ -528,7 +544,8 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
     );
     if (!relayed) {
       awaiting.delete(requestId);
-      return fail(socket, commandId, `machine ${machineId} is not connected`);
+      fail(socket, commandId, `machine ${machineId} is not connected`);
+      return;
     }
     ackTo(socket, { type: "command.ack", commandId, stage: "accepted" });
   };

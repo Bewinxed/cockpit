@@ -67,8 +67,12 @@ export const totalTokensOf = (r: {
 /** The three limit bands, identical to ContextMeter and UsageMeter. */
 export type Band = "calm" | "warn" | "critical";
 
-export const band = (pct: number): Band =>
-  pct >= 90 ? "critical" : pct >= 70 ? "warn" : "calm";
+export const band = (pct: number): Band => {
+  if (pct >= 90) {
+    return "critical";
+  }
+  return pct >= 70 ? "warn" : "calm";
+};
 
 /** A countdown to a reset, minute-granular — "2h 14m", "14m", "resetting now". */
 export const resetsIn = (resetsAt: string | null, now: number): string => {

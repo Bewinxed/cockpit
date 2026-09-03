@@ -155,7 +155,8 @@ export const RULE_SCAN_LIMIT = 200_000;
 export const RULE_FIRE_CEILING = 10;
 
 const RESERVED = /[.*+?^${}()|[\]\\]/g;
-const escape = (text: string): string => text.replace(RESERVED, "\\$&");
+const INVALID_REGEX_PREFIX = /^Invalid regular expression:\s*/;
+const escapeForRegex = (text: string): string => text.replace(RESERVED, "\\$&");
 
 /**
  * The matcher, shared deliberately: the hub decides with it and the editor's
@@ -167,12 +168,14 @@ export function ruleRegex(
   rule: Pick<Rule, "pattern" | "matchKind" | "caseSensitive" | "wholeWord">
 ): RegExp | undefined {
   const flags = rule.caseSensitive ? "g" : "gi";
-  const body =
-    rule.matchKind === "regex"
-      ? rule.pattern
-      : rule.wholeWord
-        ? `\\b${escape(rule.pattern)}\\b`
-        : escape(rule.pattern);
+  let body: string;
+  if (rule.matchKind === "regex") {
+    body = rule.pattern;
+  } else if (rule.wholeWord) {
+    body = `\\b${escapeForRegex(rule.pattern)}\\b`;
+  } else {
+    body = escapeForRegex(rule.pattern);
+  }
   try {
     return new RegExp(body, flags);
   } catch {
@@ -235,6 +238,7 @@ const MIN_LLM_PROMPT = 10;
  * Everything wrong with a draft, as whole sentences the form can print under
  * the field that caused it. Empty means it is safe to save.
  */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: validates a draft against every trigger/action/matchKind combination the form allows — the hub's own gate before a rule starts firing on live sessions.
 export function ruleProblem(draft: Partial<RuleDraft>): Record<string, string> {
   const wrong: Record<string, string> = {};
   if (!draft.name?.trim()) {
@@ -265,7 +269,7 @@ export function ruleProblem(draft: Partial<RuleDraft>): Record<string, string> {
       } catch (error) {
         wrong.pattern = `That is not a valid regular expression — ${
           error instanceof Error
-            ? error.message.replace(/^Invalid regular expression:\s*/, "")
+            ? error.message.replace(INVALID_REGEX_PREFIX, "")
             : "it will not compile"
         }.`;
       }
@@ -327,12 +331,14 @@ export function ruleSentence(rule: Partial<RuleDraft>): string {
     return `At the end of every turn, ask the supervisor to judge it and reply as it decides.${scope}`;
   }
 
-  const where =
-    rule.watch === "thinking"
-      ? "thinks"
-      : rule.watch === "both"
-        ? "says or thinks"
-        : "says";
+  let where: string;
+  if (rule.watch === "thinking") {
+    where = "thinks";
+  } else if (rule.watch === "both") {
+    where = "says or thinks";
+  } else {
+    where = "says";
+  }
   const what =
     rule.matchKind === "regex"
       ? // Quoted like a phrase is: an expression set loose in the middle of a
@@ -346,14 +352,16 @@ export function ruleSentence(rule: Partial<RuleDraft>): string {
     return `When a session ${where} ${what}, wait for the turn to end, then ask the supervisor to judge it and reply as it decides.${scope}`;
   }
 
-  const when =
-    rule.timing === "immediate"
-      ? rule.interrupt
-        ? "interrupt it straight away and send"
-        : "send, without waiting for the message to finish"
-      : rule.timing === "message"
-        ? "wait for that message to finish, then send"
-        : "wait for the turn to end, then wake it with";
+  let when: string;
+  if (rule.timing === "immediate") {
+    when = rule.interrupt
+      ? "interrupt it straight away and send"
+      : "send, without waiting for the message to finish";
+  } else if (rule.timing === "message") {
+    when = "wait for that message to finish, then send";
+  } else {
+    when = "wait for the turn to end, then wake it with";
+  }
   const nag = rule.requireAck
     ? " It keeps firing until the session acknowledges it."
     : " It fires once per session.";
@@ -453,12 +461,13 @@ export function ruleInScope(scope: RuleScope, facts: RuleFacts): boolean {
   if (scope.harness && scope.harness !== facts.harness) {
     return false;
   }
-  if (scope.model) {
-    // Substring, so `opus` covers every dated build of it and the user does
-    // not have to keep the filter in step with model releases.
-    if (!facts.model?.toLowerCase().includes(scope.model.toLowerCase())) {
-      return false;
-    }
+  // Substring, so `opus` covers every dated build of it and the user does
+  // not have to keep the filter in step with model releases.
+  if (
+    scope.model &&
+    !facts.model?.toLowerCase().includes(scope.model.toLowerCase())
+  ) {
+    return false;
   }
   return true;
 }

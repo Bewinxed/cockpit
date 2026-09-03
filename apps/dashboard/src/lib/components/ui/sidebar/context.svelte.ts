@@ -52,10 +52,13 @@ class SidebarState {
     this.openMobile = value;
   };
 
-  toggle = () =>
-    this.#isMobile.current
-      ? (this.openMobile = !this.openMobile)
-      : this.setOpen(!this.open);
+  toggle = () => {
+    if (this.#isMobile.current) {
+      this.openMobile = !this.openMobile;
+    } else {
+      this.setOpen(!this.open);
+    }
+  };
 }
 
 const SYMBOL_KEY = "scn-sidebar";

@@ -10,7 +10,7 @@
 </script>
 
 <SheetPrimitive.Description
-  class={cn("text-sm text-muted-foreground", className)}
+  class={cn("text-muted-foreground text-sm", className)}
   data-slot="sheet-description"
   bind:ref
   {...restProps}

@@ -1,37 +1,42 @@
-import Root from "./drawer.svelte";
-import Close from "./drawer-close.svelte";
-import Content from "./drawer-content.svelte";
-import Description from "./drawer-description.svelte";
-import Footer from "./drawer-footer.svelte";
-import Header from "./drawer-header.svelte";
-import NestedRoot from "./drawer-nested.svelte";
-import Overlay from "./drawer-overlay.svelte";
-import Portal from "./drawer-portal.svelte";
-import Title from "./drawer-title.svelte";
-import Trigger from "./drawer-trigger.svelte";
-
+// biome-ignore lint/performance/noBarrelFile: this is the shadcn-svelte component group's public re-export surface, not an accidental barrel
+export { default as Root, default as Drawer } from "./drawer.svelte";
 export {
-  Close,
-  Close as DrawerClose,
-  Content,
-  Content as DrawerContent,
-  Description,
-  Description as DrawerDescription,
-  Footer,
-  Footer as DrawerFooter,
-  Header,
-  Header as DrawerHeader,
-  NestedRoot,
-  NestedRoot as DrawerNestedRoot,
-  Overlay,
-  Overlay as DrawerOverlay,
-  Portal,
-  Portal as DrawerPortal,
-  Root,
-  //
-  Root as Drawer,
-  Title,
-  Title as DrawerTitle,
-  Trigger,
-  Trigger as DrawerTrigger,
-};
+  default as Close,
+  default as DrawerClose,
+} from "./drawer-close.svelte";
+export {
+  default as Content,
+  default as DrawerContent,
+} from "./drawer-content.svelte";
+export {
+  default as Description,
+  default as DrawerDescription,
+} from "./drawer-description.svelte";
+export {
+  default as Footer,
+  default as DrawerFooter,
+} from "./drawer-footer.svelte";
+export {
+  default as Header,
+  default as DrawerHeader,
+} from "./drawer-header.svelte";
+export {
+  default as NestedRoot,
+  default as DrawerNestedRoot,
+} from "./drawer-nested.svelte";
+export {
+  default as Overlay,
+  default as DrawerOverlay,
+} from "./drawer-overlay.svelte";
+export {
+  default as Portal,
+  default as DrawerPortal,
+} from "./drawer-portal.svelte";
+export {
+  default as Title,
+  default as DrawerTitle,
+} from "./drawer-title.svelte";
+export {
+  default as Trigger,
+  default as DrawerTrigger,
+} from "./drawer-trigger.svelte";

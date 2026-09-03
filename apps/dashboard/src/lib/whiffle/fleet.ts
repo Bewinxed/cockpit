@@ -80,6 +80,9 @@ export interface SkillWriteResult extends FleetSkillMeta {
 /** The charset MCP server names are held to, on the hub and here. */
 const NAME_PATTERN = /^[A-Za-z0-9_-]+$/;
 
+/** Splits an args field, or an installer command line, on runs of whitespace. */
+const WHITESPACE_PATTERN = /\s+/;
+
 /**
  * Names Claude Code keeps for its own servers. The hub turns these away, so the
  * form does too — a refusal you can read before you click beats one after.
@@ -142,7 +145,7 @@ export const describeMcp = (config: FleetMcpConfig): string =>
  * shipping a shell parser nobody asked for.
  */
 export const splitArgs = (line: string): string[] =>
-  line.trim().split(/\s+/).filter(Boolean);
+  line.trim().split(WHITESPACE_PATTERN).filter(Boolean);
 
 /** Drops the blank rows a key/value editor always ends up carrying. */
 export function pairsToRecord(
@@ -171,6 +174,12 @@ const SKILL_NAME_PATTERN = /^[A-Za-z0-9._-]+$/;
 
 /** The source forms the hub's resolver takes as they are. */
 const SKILL_SCHEME = /^(?:skills:|github:|npm:|https?:\/\/)/;
+
+/** The scheme prefix a skill source names itself with, when it has one. */
+const SKILL_SOURCE_SCHEME_PATTERN = /^(skills|github|npm):/;
+
+/** Splits a skill source's path into segments, at either kind of separator. */
+const SKILL_PATH_SPLIT_PATTERN = /[/?]/;
 
 /**
  * The words an installer command line is built out of — the runner, its
@@ -223,7 +232,7 @@ export function normalizeSkillSource(input: string): string {
     return trimmed;
   }
   const slug = trimmed
-    .split(/\s+/)
+    .split(WHITESPACE_PATTERN)
     .filter((word) => word !== "" && !word.startsWith("-"))
     .find((word) => !WRAPPERS.has(word.toLowerCase()));
   if (!slug) {
@@ -238,8 +247,8 @@ export function normalizeSkillSource(input: string): string {
  * fills stays editable.
  */
 export function suggestSkillName(source: string): string {
-  const scheme = /^(skills|github|npm):/.exec(source)?.[1];
-  const body = source.slice(scheme ? scheme.length + 1 : 0).split("#")[0];
+  const scheme = SKILL_SOURCE_SCHEME_PATTERN.exec(source)?.[1];
+  const [body] = source.slice(scheme ? scheme.length + 1 : 0).split("#");
   const at = body.lastIndexOf("@");
   // `@` names the skill in a `skills:` slug, and a ref or a version elsewhere.
   const filter =
@@ -247,7 +256,7 @@ export function suggestSkillName(source: string): string {
       ? body.slice(at + 1)
       : "";
   const segments = (at > 0 ? body.slice(0, at) : body)
-    .split(/[/?]/)
+    .split(SKILL_PATH_SPLIT_PATTERN)
     .filter(Boolean);
   // A plain URL points at the skill's own file; the directory holds its name.
   if (segments.at(-1)?.toLowerCase() === "skill.md") {
@@ -553,6 +562,7 @@ export async function discoverAgents(
     .map((entry) => `${root}/${entry.name}`);
   for (const dir of entries.filter((entry) => entry.kind === "dir")) {
     try {
+      // biome-ignore lint/performance/noAwaitInLoops: one control call in flight per machine socket at a time
       const nested = await machineFs<FsEntry[]>(
         machineId,
         "list",

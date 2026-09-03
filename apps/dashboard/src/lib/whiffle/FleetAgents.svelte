@@ -11,11 +11,14 @@
    * adopting it is how it reaches the rest.
    */
   import { toast } from "svelte-sonner";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Alert from "$lib/components/ui/alert";
   import { Badge } from "$lib/components/ui/badge";
   import { Button } from "$lib/components/ui/button";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Card from "$lib/components/ui/card";
   import { Skeleton } from "$lib/components/ui/skeleton";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Tooltip from "$lib/components/ui/tooltip";
   import {
     IconPlus,
@@ -40,7 +43,7 @@
     agents,
     machines,
     settling,
-    error,
+    error: loadError,
   }: {
     agents: FleetAgent[];
     machines: Machine[];
@@ -70,8 +73,8 @@
   let found = $state<Record<string, DiscoveredAgent[]>>({});
   let reading = $state<Record<string, boolean>>({});
 
-  const message = (error: unknown) =>
-    error instanceof Error ? error.message : String(error);
+  const message = (caught: unknown) =>
+    caught instanceof Error ? caught.message : String(caught);
 
   // Quiet Ledger surfaces (DESIGN.md · mocks/v5-components.html .panel / .callout):
   // a raised panel is --surface-raised at --radius-panel under --shadow-lifted;
@@ -94,8 +97,11 @@
         continue;
       }
       reading[machine.machineId] = true;
+      // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — the effect re-runs per machine, not per promise
       void discoverAgents(machine.machineId)
-        .then((rows) => (found[machine.machineId] = rows))
+        .then((rows) => {
+          found[machine.machineId] = rows;
+        })
         .finally(() => delete reading[machine.machineId]);
     }
   });
@@ -129,8 +135,8 @@
         agents.findIndex((other) => other.name === row.name),
         1
       );
-    } catch (error) {
-      toast.error(message(error));
+    } catch (caught) {
+      toast.error(message(caught));
     } finally {
       delete busy[row.name];
     }
@@ -142,8 +148,8 @@
     try {
       landed(await saveAgent(row.name, row.content));
       toast.success(`${row.name} is the fleet's now — every machine gets it.`);
-    } catch (error) {
-      toast.error(message(error));
+    } catch (caught) {
+      toast.error(message(caught));
     } finally {
       delete busy[key];
     }
@@ -152,7 +158,7 @@
   async function push() {
     pushing = true;
     try {
-      unpushable = (await pushAgents()).unpushable;
+      ({ unpushable } = await pushAgents());
       const skipped = Object.keys(unpushable).length;
       if (skipped === 0) {
         toast.success("Written to every machine that is online.");
@@ -161,8 +167,8 @@
           `${skipped} machine${skipped === 1 ? "" : "s"} could not be written to.`
         );
       }
-    } catch (error) {
-      toast.error(message(error));
+    } catch (caught) {
+      toast.error(message(caught));
     } finally {
       pushing = false;
     }
@@ -173,8 +179,8 @@
   <p class="max-w-prose text-caption">
     A subagent is a markdown file: front matter, then a body that becomes its
     system prompt. Write one here and it lands in
-    <span class="font-mono">~/.claude/agents</span> on every machine, which
-    Claude Code re-reads within seconds.
+    <span class="font-mono">~/.claude/agents</span>
+    on every machine, which Claude Code re-reads within seconds.
   </p>
   <div class="flex shrink-0 items-center gap-2">
     <Button
@@ -192,11 +198,11 @@
   </div>
 </div>
 
-{#if error}
+{#if loadError}
   <Alert.Root class={warnAlert}>
     <IconWarningTriangle />
     <Alert.Description class="text-caption text-[var(--warning-11)]"
-      >{error}</Alert.Description
+      >{loadError}</Alert.Description
     >
   </Alert.Root>
 {:else}

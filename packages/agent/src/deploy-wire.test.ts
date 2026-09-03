@@ -37,6 +37,7 @@ writeFileSync(
 /** `HEAD...origin/main` counted as `ahead\tbehind` — the one line that decides the kind. */
 const fakeGit =
   (range: string): GitRunner =>
+  // biome-ignore lint/suspicious/useAwait: GitRunner's type requires Promise<Ran>; this stub just records the call
   async (_root, args) => {
     if (args[0] === "rev-parse") {
       return {
@@ -119,10 +120,11 @@ describe("the box the daemon reads", () => {
     const watcher = new DeployWatcher({
       root: scratch,
       git: fakeGit("2\t3"),
+      // biome-ignore lint/suspicious/useAwait: update's type requires a promise; this stub just throws
       update: async () => {
         throw new Error("a diverged clone must never reach the update flow");
       },
-      report: (tick) => seen.push(tick.state.kind),
+      report: (t) => seen.push(t.state.kind),
     });
     const tick = await watcher.tick();
     expect(tick.state.kind).toBe("diverged");
@@ -136,12 +138,15 @@ describe("the box the daemon reads", () => {
     const asked: string[] = [];
     const watcher = new DeployWatcher({
       root: bare,
+      // biome-ignore lint/suspicious/useAwait: GitRunner's type requires Promise<Ran>; this stub just records the call
       git: async (_root, args) => {
         asked.push(args.join(" "));
         return { ok: false, out: "", err: "never" };
       },
       update: async () => undefined,
-      report: () => {},
+      report: () => {
+        // no-op: this test doesn't assert on report
+      },
     });
     await watcher.tick();
     expect(asked).toEqual([]);

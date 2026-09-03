@@ -13,6 +13,7 @@
   }: PaginationPrimitive.RootProps = $props();
 </script>
 
+<!-- biome-ignore lint/a11y/useSemanticElements: PaginationPrimitive.Root renders bits-ui's internal <div>, not a real DOM tag we control — role="navigation" is the correct substitute here -->
 <PaginationPrimitive.Root
   aria-label="pagination"
   class={cn("cn-pagination mx-auto flex w-full justify-center", className)}

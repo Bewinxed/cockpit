@@ -28,9 +28,9 @@
       <select {...props} {onchange} {value}>
         {#each monthItems as monthItem (monthItem.value)}
           <option
-            selected={value !== undefined
-							? monthItem.value === value
-							: monthItem.value === selectedMonthItem.value}
+            selected={value === undefined
+							? monthItem.value === selectedMonthItem.value
+							: monthItem.value === value}
             value={monthItem.value}
           >
             {monthItem.label}

@@ -24,13 +24,15 @@
 
   const clipboard = new UseClipboard();
 
-  const label = $derived(
-    clipboard.status === "success"
-      ? "Copied"
-      : clipboard.status === "failure"
-        ? "Failed to copy"
-        : "Copy"
-  );
+  const label = $derived.by(() => {
+    if (clipboard.status === "success") {
+      return "Copied";
+    }
+    if (clipboard.status === "failure") {
+      return "Failed to copy";
+    }
+    return "Copy";
+  });
 </script>
 
 <Button

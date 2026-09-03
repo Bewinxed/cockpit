@@ -99,6 +99,7 @@ export function layoutNodes(
  *
  * IMPORTANT: When moving a node, we must also move all its descendants to maintain branch integrity
  */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: fork/merge alignment walks the graph in several coordinated passes; splitting it obscures the shared node/edge maps
 function alignForkAndMergePoints(nodes: Node[], edges: Edge[]): Node[] {
   // Build maps for fork/merge detection and parent-child relationships
   const sourceToTargets = new Map<string, string[]>();

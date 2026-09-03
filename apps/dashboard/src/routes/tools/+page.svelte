@@ -9,8 +9,11 @@
    */
   import { onMount, untrack } from "svelte";
   import { page } from "$app/state";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Card from "$lib/components/ui/card";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Tabs from "$lib/components/ui/tabs";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Tooltip from "$lib/components/ui/tooltip";
   import {
     IconBoltDuo,
@@ -60,18 +63,15 @@
   $effect(() => {
     if (data.config !== seeded) {
       seeded = data.config;
-      config = data.config;
-      skills = data.skills;
-      agents = data.agents;
-      memory = data.memory;
-      memoryDocs = data.memoryDocs;
-      hooks = data.hooks;
+      ({ config, skills, agents, memory, memoryDocs, hooks } = data);
     }
   });
 
   let settling = $state(true);
   onMount(() => {
-    const timer = setTimeout(() => (settling = false), 600);
+    const timer = setTimeout(() => {
+      settling = false;
+    }, 600);
     return () => clearTimeout(timer);
   });
 

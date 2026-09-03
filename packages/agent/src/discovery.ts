@@ -29,6 +29,8 @@ export const MDNS_BROWSE_MS = 2000;
 export const PROBE_TIMEOUT_MS = 1500;
 
 const IPV4 = /^\d{1,3}(\.\d{1,3}){3}$/;
+const SCHEME_PREFIX = /^[a-z][a-z0-9+.-]*:\/\//i;
+const HTTP_PREFIX = /^http/;
 
 /**
  * Accepts either end of the pair — a daemon's `ws://host:port/ws`, a plain
@@ -36,9 +38,7 @@ const IPV4 = /^\d{1,3}(\.\d{1,3}){3}$/;
  */
 export const toHttpBase = (raw: string): string | undefined => {
   const text = raw.trim();
-  const url = URL.parse(
-    /^[a-z][a-z0-9+.-]*:\/\//i.test(text) ? text : `http://${text}`
-  );
+  const url = URL.parse(SCHEME_PREFIX.test(text) ? text : `http://${text}`);
   if (!url) {
     return undefined;
   }
@@ -50,7 +50,7 @@ export const toHttpBase = (raw: string): string | undefined => {
 };
 
 export const toWsUrl = (httpBase: string): string =>
-  `${httpBase.replace(/^http/, "ws")}/ws`;
+  `${httpBase.replace(HTTP_PREFIX, "ws")}/ws`;
 
 /**
  * What tells a whiffle hub apart from whatever else is listening on the port:
@@ -68,12 +68,12 @@ export const probeHub = async (httpUrl: string): Promise<boolean> => {
 };
 
 /** Probes every candidate at once and takes whichever answers first. */
-export const firstToAnswer = async (
+export const firstToAnswer = (
   candidates: string[],
   probe: (httpUrl: string) => Promise<boolean> = probeHub
 ): Promise<string | undefined> => {
   if (candidates.length === 0) {
-    return undefined;
+    return Promise.resolve(undefined);
   }
   return Promise.any(
     candidates.map(async (url) => {
@@ -248,7 +248,11 @@ export interface RediscoverProbes {
 export const rediscoverHub = async (
   probes: RediscoverProbes = {}
 ): Promise<string | undefined> => {
-  const note = probes.log ?? ((): void => {});
+  const note =
+    probes.log ??
+    ((): void => {
+      // no-op: a caller that doesn't want narration doesn't get any
+    });
   const probe = probes.probe ?? probeHub;
   const findMdns = probes.browseMdns ?? browseMdns;
   const findTailscale = probes.tailscaleCandidates ?? tailscaleCandidates;

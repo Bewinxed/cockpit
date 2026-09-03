@@ -33,6 +33,7 @@
   import { mergeProps } from "bits-ui";
   import type { ComponentProps, Snippet } from "svelte";
   import type { HTMLAttributes } from "svelte/elements";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for importing a component group
   import * as Tooltip from "$lib/components/ui/tooltip/index.js";
   import {
     cn,
@@ -80,7 +81,7 @@
   {#if child}
     {@render child({ props: mergedProps })}
   {:else}
-    <button bind:this={ref} {...mergedProps}>
+    <button type="button" bind:this={ref} {...mergedProps}>
       {@render children?.()}
     </button>
   {/if}

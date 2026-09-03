@@ -2,11 +2,14 @@
   import { hookSentence } from "@whiffle/core";
   import { toast } from "svelte-sonner";
   import { goto } from "$app/navigation";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Alert from "$lib/components/ui/alert";
   import { Button } from "$lib/components/ui/button";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Card from "$lib/components/ui/card";
   import { Skeleton } from "$lib/components/ui/skeleton";
   import { Toggle } from "$lib/components/ui/toggle";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Tooltip from "$lib/components/ui/tooltip";
   import {
     IconHook,
@@ -36,7 +39,7 @@
     hooks,
     machines,
     settling,
-    error,
+    error: loadError,
   }: {
     hooks: FleetHook[];
     machines: Machine[];
@@ -108,11 +111,11 @@
   </Button>
 </div>
 
-{#if error}
+{#if loadError}
   <Alert.Root class={warnAlert}>
     <IconWarningTriangle />
     <Alert.Description class="text-caption text-[var(--warning-11)]"
-      >{error}</Alert.Description
+      >{loadError}</Alert.Description
     >
   </Alert.Root>
 {:else if hooks.length === 0}

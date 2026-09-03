@@ -24,6 +24,7 @@ const scratch = (): string =>
 const cleanups: Array<() => Promise<void> | void> = [];
 afterEach(async () => {
   for (const cleanup of cleanups.splice(0).reverse()) {
+    // biome-ignore lint/performance/noAwaitInLoops: cleanups must unwind in reverse-registration order (server.close() before the dir it lives in is gone)
     await cleanup();
   }
 });
@@ -45,8 +46,10 @@ const startServer = async (): Promise<{
 /** A minimal agent: NDJSON in, NDJSON out, everything received kept. */
 class Client {
   readonly received: SessiondServerMessage[] = [];
+  readonly socket: Socket;
   #buffer = "";
-  constructor(readonly socket: Socket) {
+  constructor(socket: Socket) {
+    this.socket = socket;
     socket.setEncoding("utf8");
     socket.on("data", (chunk: string) => {
       this.#buffer += chunk;
@@ -80,6 +83,7 @@ class Client {
           `timed out waiting for ${label}; saw ${JSON.stringify(this.received)}`
         );
       }
+      // biome-ignore lint/performance/noAwaitInLoops: polls until the awaited message arrives or the deadline passes; each check depends on the previous sleep
       await Bun.sleep(10);
     }
   }
@@ -99,10 +103,14 @@ const connect = async (endpoint: string): Promise<Client> => {
     socket.once("error", reject);
   });
   const client = new Client(socket);
-  cleanups.push(() => void socket.destroy());
+  cleanups.push(() => {
+    socket.destroy();
+  });
   await client.waitFor((message) => message.type === "welcome", "welcome");
   return client;
 };
+
+const ALREADY_LISTENING_RE = /already listening/;
 
 const catSpec = { command: "cat", args: [] };
 const emitSpec = (count: number) => ({
@@ -267,9 +275,11 @@ describe("sessiond verbs", () => {
       (m) => m.type === "ack" && m.commandId === "dup"
     );
     expect(acks).toHaveLength(2);
+    // biome-ignore lint/style/noNonNullAssertion: the toHaveLength(2) above already guarantees acks[0] exists
     expect(acks[1]).toEqual(acks[0]!);
     // Child count stays 1, and it is the SAME child — not a kill-and-replace.
     expect(server.procs()).toHaveLength(1);
+    // biome-ignore lint/style/noNonNullAssertion: firstPid was read right after a successful spawn ack, so it is known to be defined here
     expect(server.procs()[0]?.pid).toBe(firstPid!);
     expect(server.procs()[0]?.alive).toBe(true);
 
@@ -322,6 +332,7 @@ describe("sessiond verbs", () => {
     first.socket.destroy();
     await Bun.sleep(100);
     expect(server.procs()[0]?.alive).toBe(true);
+    // biome-ignore lint/style/noNonNullAssertion: pid was read right after the child was confirmed running, so it is known to be defined here
     expect(server.procs()[0]?.pid).toBe(pid!);
 
     // A fresh agent attaches, and the child is simply still there.
@@ -394,7 +405,9 @@ describe("sessiond verbs", () => {
 describe("sessiond socket and drain", () => {
   test("the socket is 0600 inside a 0700 directory", async () => {
     const { endpoint } = await startServer();
+    // biome-ignore lint/suspicious/noBitwiseOperators: masking the permission bits off stat's mode, not a typo'd &&
     expect(statSync(endpoint).mode & 0o777).toBe(0o600);
+    // biome-ignore lint/suspicious/noBitwiseOperators: masking the permission bits off stat's mode, not a typo'd &&
     expect(statSync(join(endpoint, "..")).mode & 0o777).toBe(0o700);
   });
 
@@ -418,7 +431,7 @@ describe("sessiond socket and drain", () => {
     const { endpoint } = await startServer();
     const intruder = new SessiondServer();
     await expect(intruder.listen(endpoint)).rejects.toThrow(
-      /already listening/
+      ALREADY_LISTENING_RE
     );
   });
 

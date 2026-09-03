@@ -1,4 +1,5 @@
 <script lang="ts">
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Dialog from "$lib/components/ui/dialog";
   import { Kbd } from "$lib/components/ui/kbd";
   import { isTyping } from "$lib/utils/typing";

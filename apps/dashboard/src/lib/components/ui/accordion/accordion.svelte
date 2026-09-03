@@ -11,7 +11,7 @@
 </script>
 
 <AccordionPrimitive.Root
-  class={cn("overflow-hidden rounded-[var(--radius-card)] border flex w-full flex-col", className)}
+  class={cn("flex w-full flex-col overflow-hidden rounded-[var(--radius-card)] border", className)}
   data-slot="accordion"
   bind:ref
   bind:value={value as never}

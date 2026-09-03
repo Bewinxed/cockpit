@@ -15,7 +15,7 @@
 
 <span
   aria-hidden="true"
-  class={cn("size-9 items-center justify-center [&_svg:not([class*='size-'])]:size-4 flex items-center justify-center", className)}
+  class={cn("flex size-9 items-center items-center justify-center justify-center [&_svg:not([class*='size-'])]:size-4", className)}
   data-slot="pagination-ellipsis"
   bind:this={ref}
   {...restProps}

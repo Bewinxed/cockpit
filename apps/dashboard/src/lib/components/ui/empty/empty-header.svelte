@@ -11,7 +11,7 @@
 </script>
 
 <div
-  class={cn("gap-2 flex max-w-sm flex-col items-center", className)}
+  class={cn("flex max-w-sm flex-col items-center gap-2", className)}
   data-slot="empty-header"
   bind:this={ref}
   {...restProps}

@@ -1,16 +1,18 @@
-import Root from "./accordion.svelte";
-import Content from "./accordion-content.svelte";
-import Item from "./accordion-item.svelte";
-import Trigger from "./accordion-trigger.svelte";
-
+// biome-ignore lint/performance/noBarrelFile: public entry point for the accordion component group, consumed as a unit under the shadcn-svelte convention
 export {
-  Content,
-  Content as AccordionContent,
-  Item,
-  Item as AccordionItem,
-  Root,
+  default as Root,
   //
-  Root as Accordion,
-  Trigger,
-  Trigger as AccordionTrigger,
-};
+  default as Accordion,
+} from "./accordion.svelte";
+export {
+  default as Content,
+  default as AccordionContent,
+} from "./accordion-content.svelte";
+export {
+  default as Item,
+  default as AccordionItem,
+} from "./accordion-item.svelte";
+export {
+  default as Trigger,
+  default as AccordionTrigger,
+} from "./accordion-trigger.svelte";

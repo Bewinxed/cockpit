@@ -151,6 +151,7 @@ interface Args {
 
 class UsageError extends Error {}
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one switch over every flag and positional this CLI accepts
 const parseArgs = (argv: string[]): Args => {
   const args: Args = {
     rest: [],
@@ -163,29 +164,34 @@ const parseArgs = (argv: string[]): Args => {
     help: false,
     version: false,
   };
+  // biome-ignore lint/style/useForOf: the loop advances `index` an extra step inside the body to consume each flag's value argument
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index] as string;
     switch (arg) {
       case "--hub":
-        args.hub = argv[++index];
+        index += 1;
+        args.hub = argv[index];
         if (!args.hub) {
           throw new UsageError("--hub needs a URL");
         }
         break;
       case "--token":
-        args.token = argv[++index];
+        index += 1;
+        args.token = argv[index];
         if (!args.token) {
           throw new UsageError("--token needs a token");
         }
         break;
       case "--origin":
-        args.origin = argv[++index];
+        index += 1;
+        args.origin = argv[index];
         if (!args.origin) {
           throw new UsageError("--origin needs a git URL");
         }
         break;
       case "--to":
-        args.to = argv[++index];
+        index += 1;
+        args.to = argv[index];
         if (!args.to) {
           throw new UsageError("--to needs a version");
         }
@@ -252,6 +258,13 @@ const seen = (at: AgentRow["lastSeenAt"]): string => {
   return `${Math.round(seconds / 3600)}h ago`;
 };
 
+const signedInLabel = (auth: AgentRow["auth"]): string => {
+  if (auth === "authenticated") {
+    return "yes";
+  }
+  return auth === "unknown" ? "?" : "NO";
+};
+
 const printFleet = (agents: AgentRow[]): void => {
   if (agents.length === 0) {
     console.log("\nfleet    empty — nothing has registered yet");
@@ -260,11 +273,7 @@ const printFleet = (agents: AgentRow[]): void => {
   const rows = agents.map((agent) => [
     agent.hostname,
     agent.status,
-    agent.auth === "authenticated"
-      ? "yes"
-      : agent.auth === "unknown"
-        ? "?"
-        : "NO",
+    signedInLabel(agent.auth),
     agent.os,
     seen(agent.lastSeenAt),
     agent.machineId,
@@ -367,6 +376,7 @@ anyway; the fleet will show this machine as needing sign-in.`);
     return state;
   }
 
+  // biome-ignore lint/suspicious/noAlert: this is a terminal CLI; Bun's global prompt() reads a line from stdin, not a browser dialog
   const answer = prompt("\nRun `claude setup-token` now to fix it? [Y/n]")
     ?.trim()
     .toLowerCase();
@@ -488,7 +498,7 @@ const runUpdate = async (args: Args): Promise<number> => {
   const report = await registryUpdate({
     installed: state.installed,
     ...(wanted ? { to: wanted } : {}),
-    force: args.force ?? false,
+    force: args.force,
   });
   console.log(`installed ${report.to}`);
   if (report.restarted.length > 0) {

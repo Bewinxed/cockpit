@@ -7,9 +7,12 @@
    */
   import type { Snippet } from "svelte";
   import { goto } from "$app/navigation";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as AlertDialog from "$lib/components/ui/alert-dialog";
   import { Button } from "$lib/components/ui/button";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as ContextMenu from "$lib/components/ui/context-menu";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Dialog from "$lib/components/ui/dialog";
   import { Input } from "$lib/components/ui/input";
   import {
@@ -135,7 +138,9 @@
     <ContextMenu.Separator />
 
     <ContextMenu.Item
-      onSelect={() => (confirmingDelete = true)}
+      onSelect={() => {
+        confirmingDelete = true;
+      }}
       variant="destructive"
     >
       <IconTrash />
@@ -158,7 +163,9 @@
       <Input aria-label="Session title" autocomplete="off" bind:value={title} />
       <Dialog.Footer>
         <Button
-          onclick={() => (renaming = false)}
+          onclick={() => {
+            renaming = false;
+          }}
           type="button"
           variant="outline"
           >Cancel</Button

@@ -85,10 +85,12 @@ beforeAll(async () => {
     stdio: "ignore",
   });
   const deadline = Date.now() + 10_000;
+  // biome-ignore lint/performance/noAwaitInLoops: polling for the daemon to bind; must retry sequentially until the deadline
   while (Date.now() < deadline && !(await probeEndpoint(endpoint, 200))) {
     await Bun.sleep(25);
   }
   client = await SessiondClient.connect(endpoint);
+  // biome-ignore lint/style/noNonNullAssertion: invariant: connect() above always assigns an epoch for a freshly-bound daemon
   epoch = client.epoch!;
   expect(epoch).toBeTruthy();
 });
@@ -96,6 +98,8 @@ beforeAll(async () => {
 afterAll(async () => {
   // Children first, so nothing is orphaned onto a machine full of real work.
   for (const procId of spawned) {
+    // biome-ignore lint/performance/noAwaitInLoops: each kill is best-effort and independent, but the loop must finish before the 50ms grace sleep below
+    // biome-ignore lint/suspicious/noEmptyBlockStatements: best-effort kill; a process already gone is not an error
     await client.signal(procId, "SIGKILL").catch(() => {});
   }
   await Bun.sleep(50);
@@ -115,10 +119,11 @@ const waitFor = async (
   predicate: () => boolean,
   why: string
 ): Promise<void> => {
-  for (let waited = 0; waited < 400; waited++) {
+  for (let waited = 0; waited < 400; waited += 1) {
     if (predicate()) {
       return;
     }
+    // biome-ignore lint/performance/noAwaitInLoops: polling for the predicate; must retry sequentially until it is true or the loop times out
     await Bun.sleep(10);
   }
   throw new Error(`timed out waiting for ${why}`);
@@ -156,7 +161,7 @@ const hub = () => {
       if (frame.kind !== "frame") {
         return;
       }
-      const instanceId = frame.instanceId;
+      const { instanceId } = frame;
       const provenance = readProvenance(frame);
       if (!provenance) {
         ledger.delete(instanceId);
@@ -261,6 +266,7 @@ test("a line replayed after an agent restart is admitted exactly once", async ()
   // 1. Every frame carried provenance — the stamp this leaf wired.
   expect(stamps.every((stamp) => stamp?.srcEpoch === epoch)).toBe(true);
   // 2. No (epoch, srcSeq) was ingested twice, and they only ever went up.
+  // biome-ignore lint/style/noNonNullAssertion: invariant: the expect() just above confirmed every stamp is defined
   const seqs = stamps.map((stamp) => stamp!.srcSeq);
   expect(seqs).toEqual([4, 5, 6, 7, 8, 9]);
   // 3. No line the child wrote became two frames.

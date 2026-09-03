@@ -13,6 +13,7 @@
   const emblaCtx = getEmblaContext("<Carousel.Item/>");
 </script>
 
+<!-- biome-ignore lint/a11y/useSemanticElements: fieldset would add unwanted default border/legend semantics to a carousel slide -->
 <div
   aria-roledescription="slide"
   class={cn(

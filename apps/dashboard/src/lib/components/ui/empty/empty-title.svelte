@@ -11,7 +11,7 @@
 </script>
 
 <div
-  class={cn("text-lg font-medium tracking-tight", className)}
+  class={cn("font-medium text-lg tracking-tight", className)}
   data-slot="empty-title"
   bind:this={ref}
   {...restProps}

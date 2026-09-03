@@ -84,9 +84,15 @@ const SKIP = ["node_modules", ".git", "dist", "build", "__pycache__"];
 const said = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
+const URL_SOURCE_RE = /^https?:\/\//i;
+const ZIP_NAME_RE = /\.zip$/i;
+const MD_PATH_RE = /\.md$/i;
+const ARCHIVE_PATH_RE = /\.(zip|tgz|tar\.gz)$/i;
+
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: parses the four source shapes (url, npm:, github:, bare owner/repo) whiffle accepts; each branch is a distinct grammar, not incidental complexity.
 export const parseSkillSource = (source: string): SkillSource | undefined => {
   const trimmed = source.trim();
-  if (/^https?:\/\//i.test(trimmed)) {
+  if (URL_SOURCE_RE.test(trimmed)) {
     return { kind: "url", url: trimmed };
   }
 
@@ -170,7 +176,7 @@ export const unpack = async (
   await Bun.write(archive, response);
   const into = join(work, "src");
   await mkdir(into, { recursive: true });
-  if (/\.zip$/i.test(name)) {
+  if (ZIP_NAME_RE.test(name)) {
     await $`unzip -q ${archive} -d ${into}`.quiet();
   } else {
     await $`tar -xzf ${archive} -C ${into}`.quiet();
@@ -194,6 +200,7 @@ const repoRoot = async (
   const refs = source.ref ? [source.ref] : REFS;
   for (const ref of refs) {
     const url = `https://codeload.github.com/${source.owner}/${source.repo}/tar.gz/${ref}`;
+    // biome-ignore lint/performance/noAwaitInLoops: refs are tried in order and the loop stops at the first that resolves; a later ref is only fetched once an earlier one has answered not-ok.
     const response = await get(url);
     if (response.ok) {
       return await unpack(response, work, "archive.tar.gz");
@@ -222,6 +229,7 @@ export const downloadRepo = async (
 ): Promise<string> => {
   for (const candidate of ref ? [ref] : REFS) {
     const url = `https://codeload.github.com/${owner}/${repo}/tar.gz/${candidate}`;
+    // biome-ignore lint/performance/noAwaitInLoops: candidates are tried in order and the loop stops at the first that resolves; a later ref is only fetched once an earlier one has answered not-ok.
     const response = await get(url);
     if (response.ok) {
       return await unpack(response, work, "archive.tar.gz");
@@ -254,14 +262,14 @@ export const readTree = async (
       `${what} is ${bytes} bytes; whiffle carries at most ${MAX_BYTES}`
     );
   }
-  const files: SkillFile[] = [];
-  for (const file of found) {
-    const content = await Bun.file(file.path).bytes();
-    files.push({
+  const files: SkillFile[] = await Promise.all(
+    found.map(async (file) => ({
       path: file.rel,
-      contentBase64: Buffer.from(content).toString("base64"),
-    });
-  }
+      contentBase64: Buffer.from(await Bun.file(file.path).bytes()).toString(
+        "base64"
+      ),
+    }))
+  );
   return { files, hash: hashFiles(files), bytes };
 };
 
@@ -311,6 +319,7 @@ const discover = async (container: string, depth = 1): Promise<string[]> => {
       continue;
     }
     const dir = join(container, entry.name);
+    // biome-ignore lint/performance/noAwaitInLoops: each entry may recurse into `discover` to accumulate its own subtree before the next entry is checked; the entries are directories on local disk, not a rate concern.
     if (await Bun.file(join(dir, "SKILL.md")).exists()) {
       found.push(dir);
     } else if (depth < MAX_DEPTH) {
@@ -330,6 +339,7 @@ const skillDirs = async (root: string): Promise<string[]> => {
     return [root];
   }
   for (const container of CONTAINERS) {
+    // biome-ignore lint/performance/noAwaitInLoops: containers are tried in the documented priority order and the loop stops at the first that holds a skill; a later container is only checked once an earlier one came up empty.
     const found = await discover(join(root, container));
     if (found.length > 0) {
       return found.sort();
@@ -408,6 +418,7 @@ const walk = async (dir: string, prefix = ""): Promise<Found[]> => {
       continue;
     }
 
+    // biome-ignore lint/performance/noAwaitInLoops: each entry may recurse via `walk` to read its own subtree before the next entry is stat'd; entries are local-disk directory contents, not a rate concern.
     const stats = await lstat(path);
     if (stats.isSymbolicLink()) {
       continue;
@@ -447,7 +458,7 @@ const fetchUrl = async (
   }
 
   const path = new URL(url).pathname;
-  if (/\.md$/i.test(path)) {
+  if (MD_PATH_RE.test(path)) {
     const content = Buffer.from(await response.arrayBuffer());
     const files: SkillFile[] = [
       { path: "SKILL.md", contentBase64: content.toString("base64") },
@@ -460,7 +471,7 @@ const fetchUrl = async (
       files,
     };
   }
-  if (!/\.(zip|tgz|tar\.gz)$/i.test(path)) {
+  if (!ARCHIVE_PATH_RE.test(path)) {
     await response.body?.cancel();
     throw new Error(`${url} is neither a SKILL.md nor an archive`);
   }

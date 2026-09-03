@@ -106,6 +106,14 @@
    * record (swept) reads as ambiguous, which is the cautious side to be on.
    */
   const undelivered = $derived(record?.undelivered === true);
+  const whoNote = $derived.by(() => {
+    if (ghost) {
+      return "sending…";
+    }
+    if (failed) {
+      return "not sent";
+    }
+  });
 
   function retry(): void {
     if (message.metadata?.sentAs) {
@@ -134,7 +142,7 @@
   >
     <Who
       name="You"
-      note={ghost ? 'sending…' : failed ? 'not sent' : undefined}
+      note={whoNote}
       timestamp={ghost || failed ? undefined : message.timestamp}
       you
     />
@@ -150,7 +158,7 @@
         {#each message.metadata.images ?? [] as img, i (img.dataUri ?? `${img.mediaType}-${i}`)}
           {#if img.dataUri}
             <img
-              alt="Image {i + 1} sent with this message"
+              alt="Attachment {i + 1} sent with this message"
               class="shot"
               src={img.dataUri}
             >

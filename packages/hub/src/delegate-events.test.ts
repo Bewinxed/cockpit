@@ -14,11 +14,15 @@ const DB_FILE = `/tmp/whiffle-delegate-events-${crypto.randomUUID()}.db`;
 const db = makeDb(DB_FILE);
 
 afterAll(async () => {
-  for (const suffix of ["", "-shm", "-wal"]) {
-    await Bun.file(`${DB_FILE}${suffix}`)
-      .delete()
-      .catch(() => {});
-  }
+  await Promise.all(
+    ["", "-shm", "-wal"].map((suffix) =>
+      Bun.file(`${DB_FILE}${suffix}`)
+        .delete()
+        .catch(() => {
+          // best effort: a suffix may never have existed (no -wal/-shm if nothing was written)
+        })
+    )
+  );
 });
 
 const PARENT = "parent-1";

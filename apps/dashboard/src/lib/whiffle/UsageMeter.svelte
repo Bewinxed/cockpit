@@ -13,11 +13,16 @@
    */
   import { onMount } from "svelte";
   import { Badge } from "$lib/components/ui/badge";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Popover from "$lib/components/ui/popover";
   import IconClock from "~icons/solar/clock-circle-linear";
   import IconDollar from "~icons/solar/dollar-linear";
   import IconHourglass from "~icons/solar/hourglass-line-duotone";
   import { whiffle } from "./client.svelte";
+
+  const DEFAULT_CLAUDE_TIER_PREFIX = /^default_claude_/;
+  const UNDERSCORE = /_/g;
+  const WORD_START = /\b\w/g;
 
   interface Props {
     /**
@@ -46,8 +51,12 @@
     warn: "text-warning",
     critical: "text-destructive",
   };
-  const band = (pct: number): "calm" | "warn" | "critical" =>
-    pct >= 90 ? "critical" : pct >= 70 ? "warn" : "calm";
+  const band = (pct: number): "calm" | "warn" | "critical" => {
+    if (pct >= 90) {
+      return "critical";
+    }
+    return pct >= 70 ? "warn" : "calm";
+  };
 
   const windows = $derived(limits?.windows ?? []);
   /** The 5-hour hairline: the session window. */
@@ -128,7 +137,9 @@
   /** A live clock for the countdowns; minute granularity is all they show. */
   let now = $state(Date.now());
   onMount(() => {
-    const timer = setInterval(() => (now = Date.now()), 30_000);
+    const timer = setInterval(() => {
+      now = Date.now();
+    }, 30_000);
     return () => clearInterval(timer);
   });
 
@@ -167,9 +178,9 @@
       return null;
     }
     return tier
-      .replace(/^default_claude_/, "")
-      .replace(/_/g, " ")
-      .replace(/\b\w/g, (c) => c.toUpperCase());
+      .replace(DEFAULT_CLAUDE_TIER_PREFIX, "")
+      .replace(UNDERSCORE, " ")
+      .replace(WORD_START, (c) => c.toUpperCase());
   };
 
   const usd = (n: number): string => `$${n.toFixed(2)}`;
@@ -205,7 +216,10 @@
 
 <Popover.Root
   onOpenChange={(open) => {
-    if (open) void refreshSpend();
+    if (open) {
+      // biome-ignore lint/complexity/noVoid: fire-and-forget — refreshSpend() manages its own loading/error state
+      void refreshSpend();
+    }
   }}
 >
   <Popover.Trigger

@@ -167,7 +167,8 @@ export class SessiondServer {
       }
       if (await probe(endpoint)) {
         throw new Error(
-          `[sessiond] another sessiond is already listening on ${endpoint}`
+          `[sessiond] another sessiond is already listening on ${endpoint}`,
+          { cause: error }
         );
       }
       await unlink(endpoint);
@@ -255,7 +256,9 @@ export class SessiondServer {
    */
   handle(conn: Conn, message: unknown): void {
     const msg = message as Record<string, unknown>;
+    // biome-ignore lint/suspicious/noUnnecessaryConditions: `message` is `unknown` off the wire — TS's cast doesn't rule out a runtime null/undefined (e.g. `JSON.parse("null")`)
     const type = typeof msg?.type === "string" ? msg.type : "";
+    // biome-ignore lint/suspicious/noUnnecessaryConditions: same as above — msg can be null/undefined at runtime despite the cast
     const commandId = typeof msg?.commandId === "string" ? msg.commandId : "";
 
     if (type === "subscribe") {
@@ -366,6 +369,7 @@ export class SessiondServer {
       existing.child.kill("SIGKILL");
     }
 
+    // biome-ignore lint/suspicious/noUnnecessaryConditions: spec is agent-side and opaque (§3.2) — the ProcSpec type promises args, the wire does not
     const child = spawn(spec.command, spec.args ?? [], {
       cwd: spec.cwd,
       // The spec is built entirely agent-side and handed over opaque (§3.2):
@@ -576,6 +580,7 @@ export class SessiondServer {
     }
     const deadline = Date.now() + graceMs;
     while (Date.now() < deadline && alive.some((proc) => proc.alive)) {
+      // biome-ignore lint/performance/noAwaitInLoops: polls until every child exits or the grace window closes; each check depends on the previous sleep
       await new Promise((resolve) => setTimeout(resolve, 25));
     }
     for (const proc of alive) {

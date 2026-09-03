@@ -8,6 +8,7 @@ import { Context, Effect, Layer } from "effect";
  */
 export interface HubSocket {
   readonly id: string;
+  // biome-ignore lint/style/useConsistentMethodSignatures: HubSocket is implemented by Elysia's ws handle across server.ts and stream.ts; a property signature would narrow the callback's variance against those real implementations.
   send(data: unknown): unknown;
 }
 

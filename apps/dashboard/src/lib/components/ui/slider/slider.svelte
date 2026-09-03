@@ -17,7 +17,7 @@ get along, so we shut typescript up by casting `value` to `never`.
 -->
 <SliderPrimitive.Root
   class={cn(
-		"data-vertical:min-h-40 relative flex w-full touch-none items-center select-none data-disabled:opacity-50 data-vertical:h-full data-vertical:w-auto data-vertical:flex-col",
+		"relative flex w-full touch-none select-none items-center data-vertical:h-full data-vertical:min-h-40 data-vertical:w-auto data-vertical:flex-col data-disabled:opacity-50",
 		className
 	)}
   data-slot="slider"
@@ -29,14 +29,14 @@ get along, so we shut typescript up by casting `value` to `never`.
   {#snippet children({ thumbItems })}
     <span
       class={cn(
-				"rounded-[var(--radius-pill)] bg-muted data-horizontal:h-3 data-horizontal:w-full data-vertical:h-full data-vertical:w-3 relative grow overflow-hidden bg-muted data-horizontal:w-full data-vertical:h-full"
+				"relative grow overflow-hidden rounded-[var(--radius-pill)] bg-muted bg-muted data-horizontal:h-3 data-vertical:h-full data-vertical:h-full data-horizontal:w-full data-horizontal:w-full data-vertical:w-3"
 			)}
       data-orientation={orientation}
       data-slot="slider-track"
     >
       <SliderPrimitive.Range
         class={cn(
-					"bg-primary absolute select-none data-horizontal:h-full data-vertical:w-full"
+					"absolute select-none bg-primary data-horizontal:h-full data-vertical:w-full"
 				)}
         data-slot="slider-range"
       />

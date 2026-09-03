@@ -10,7 +10,7 @@
 </script>
 
 <MenubarPrimitive.Root
-  class={cn("h-9 rounded-[var(--radius-control)] border p-1 flex items-center", className)}
+  class={cn("flex h-9 items-center rounded-[var(--radius-control)] border p-1", className)}
   data-slot="menubar"
   bind:ref
   {...restProps}

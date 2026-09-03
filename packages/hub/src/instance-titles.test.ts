@@ -17,11 +17,15 @@ const DB_FILE = `/tmp/whiffle-instance-titles-${crypto.randomUUID()}.db`;
 const db = makeDb(DB_FILE);
 
 afterAll(async () => {
-  for (const suffix of ["", "-shm", "-wal"]) {
-    await Bun.file(`${DB_FILE}${suffix}`)
-      .delete()
-      .catch(() => {});
-  }
+  await Promise.all(
+    ["", "-shm", "-wal"].map((suffix) =>
+      Bun.file(`${DB_FILE}${suffix}`)
+        .delete()
+        .catch(() => {
+          // best effort: a suffix may never have existed (no -wal/-shm if nothing was written)
+        })
+    )
+  );
 });
 
 const MACHINE = "machine-1";
@@ -142,26 +146,48 @@ test("a row with no stored conversation is not something a catalog could name", 
 
 /** No machine is connected, so nothing can be read off one. */
 const registry: RegistryShape = {
-  registerAgent: () => {},
+  registerAgent: () => {
+    // not exercised by this suite: no machine ever connects
+  },
   dropAgent: () => undefined,
   agent: () => undefined as HubSocket | undefined,
   machineIds: () => [],
-  addDashboard: () => {},
-  dropDashboard: () => {},
-  broadcast: (_: Envelope) => {},
-  broadcastFrame: () => {},
-  setSubscriptions: () => {},
-  noteDashboardOrigin: () => {},
+  addDashboard: () => {
+    // not exercised by this suite: no dashboard ever connects
+  },
+  dropDashboard: () => {
+    // not exercised by this suite: no dashboard ever connects
+  },
+  broadcast: (_: Envelope) => {
+    // not exercised by this suite: nothing broadcasts
+  },
+  broadcastFrame: () => {
+    // not exercised by this suite: nothing broadcasts
+  },
+  setSubscriptions: () => {
+    // not exercised by this suite: no dashboard ever subscribes
+  },
+  noteDashboardOrigin: () => {
+    // not exercised by this suite: no dashboard ever connects
+  },
   dashboardOrigin: () => undefined,
-  rememberRequester: () => {},
+  rememberRequester: () => {
+    // not exercised by this suite: nothing requests a permission
+  },
   takeRequester: () => undefined,
 };
 
 const pending: PendingShape = {
-  remember: () => {},
+  remember: () => {
+    // not exercised by this suite: nothing goes pending
+  },
   get: () => undefined,
-  resolve: () => {},
-  forget: () => {},
+  resolve: () => {
+    // not exercised by this suite: nothing goes pending
+  },
+  forget: () => {
+    // not exercised by this suite: nothing goes pending
+  },
   list: () => [],
 };
 

@@ -8,6 +8,7 @@
    * one check the count first, so there is no empty state to write.
    */
   import { SvelteSet } from "svelte/reactivity";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Collapsible from "$lib/components/ui/collapsible";
   import {
     blockerOf,
@@ -36,6 +37,16 @@
     if (!opened.delete(id)) {
       opened.add(id);
     }
+  };
+
+  const subjectClass = (task: SessionTask): string => {
+    if (task.status === "in_progress") {
+      return "font-medium";
+    }
+    if (task.status === "completed") {
+      return "text-muted-foreground";
+    }
+    return "";
   };
 </script>
 
@@ -72,12 +83,7 @@
      that has nothing to open — say the same thing rather than nearly. -->
 {#snippet line(task: SessionTask, blocker: string | null)}
   {@render glyph(task)}
-  <span
-    class="min-w-0 truncate text-[13px] {task.status === 'in_progress'
-      ? 'font-medium'
-      : task.status === 'completed'
-        ? 'text-muted-foreground'
-        : ''}"
+  <span class="min-w-0 truncate text-[13px] {subjectClass(task)}"
     >{task.subject}</span
   >
   {#if task.owner}

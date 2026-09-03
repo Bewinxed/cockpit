@@ -16,7 +16,7 @@ import {
  * `shouldQuery: false` appends it without starting a turn.
  */
 
-export type { HandoffDeps };
+export type { HandoffDeps } from "./harnesses/handoff-shared";
 
 /**
  * The name the SDK injects this server under, and so the prefix of every tool

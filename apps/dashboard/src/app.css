@@ -742,7 +742,6 @@
 
   /* Browser surfaces carry the design too. */
   ::selection {
-    background: var(--accent-9) / 0.22;
     background: color-mix(in oklab, var(--accent-9) 22%, transparent);
   }
   .dark ::selection {
@@ -1002,9 +1001,13 @@
 }
 
 /* Sidebar and topbar stay rock-still during every transition. */
+/* biome-ignore lint/correctness/noUnknownTypeSelector: view-transition-old/new take the named view-transition-name as their argument, not an HTML type selector — Biome's CSS grammar doesn't yet know the View Transitions pseudo-element syntax */
 ::view-transition-old(sidebar),
+/* biome-ignore lint/correctness/noUnknownTypeSelector: view-transition-old/new take the named view-transition-name as their argument, not an HTML type selector — Biome's CSS grammar doesn't yet know the View Transitions pseudo-element syntax */
 ::view-transition-new(sidebar),
+/* biome-ignore lint/correctness/noUnknownTypeSelector: view-transition-old/new take the named view-transition-name as their argument, not an HTML type selector — Biome's CSS grammar doesn't yet know the View Transitions pseudo-element syntax */
 ::view-transition-old(topbar),
+/* biome-ignore lint/correctness/noUnknownTypeSelector: view-transition-old/new take the named view-transition-name as their argument, not an HTML type selector — Biome's CSS grammar doesn't yet know the View Transitions pseudo-element syntax */
 ::view-transition-new(topbar) {
   animation: none;
 }
@@ -1054,7 +1057,11 @@
 }
 
 /* Card -> header morphs share one soft curve. */
+/* biome-ignore lint/correctness/noUnknownPseudoElement: view-transition-old with a wildcard view-transition-name argument; Biome's CSS parser doesn't support this View Transitions syntax (pre-existing parse error, see brief) */
+/* biome-ignore lint/correctness/noUnknownTypeSelector: same wildcard view-transition-name argument, not an HTML type selector; pre-existing parse error, see brief */
 ::view-transition-old(instance-*),
+/* biome-ignore lint/correctness/noUnknownPseudoElement: view-transition-new with a wildcard view-transition-name argument; Biome's CSS parser doesn't support this View Transitions syntax (pre-existing parse error, see brief) */
+/* biome-ignore lint/correctness/noUnknownTypeSelector: same wildcard view-transition-name argument, not an HTML type selector; pre-existing parse error, see brief */
 ::view-transition-new(instance-*) {
   animation-duration: 180ms;
   animation-timing-function: var(--e-toggle);
@@ -1078,6 +1085,7 @@
 
   /* Ensure all tappable elements meet the 44px minimum */
   button,
+  /* biome-ignore lint/style/noDescendingSpecificity: cascade order is deliberate — this touch-target rule must lose to .prose a's font-weight only where they'd conflict, but they set disjoint properties */
   a,
   [role="button"],
   [role="tab"],
@@ -1085,6 +1093,7 @@
   input:not([type="hidden"]),
   select,
   textarea,
+  /* biome-ignore lint/style/noDescendingSpecificity: cascade order is deliberate — this touch-target rule must stay after .prose summary's font-weight rule */
   summary {
     min-height: 44px;
     min-width: 44px;
@@ -1092,8 +1101,11 @@
 
   /* Except inline links inside prose — those flow with text */
   .prose a,
+  /* biome-ignore lint/style/noDescendingSpecificity: must come after .prose a and the button/a touch-target rule above to win the cascade for plain-text links */
   p a,
+  /* biome-ignore lint/style/noDescendingSpecificity: must come after .prose a and the button/a touch-target rule above to win the cascade for plain-text links */
   li a,
+  /* biome-ignore lint/style/noDescendingSpecificity: must come after .prose a and the button/a touch-target rule above to win the cascade for plain-text links */
   span a {
     min-height: unset;
     min-width: unset;

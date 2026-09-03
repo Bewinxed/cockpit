@@ -116,6 +116,7 @@ const textOf = (content: unknown): string => {
 };
 
 /** A pi `Model` is resolved by its `id`, which is what the dashboard sends. */
+// biome-ignore lint/suspicious/noExplicitAny: Model<T>'s config shape varies per provider; only `id` is read here, across every provider
 const modelIdOf = (model: Model<any>): string =>
   String((model as { id?: unknown }).id ?? "");
 
@@ -374,6 +375,7 @@ class PiSession implements HarnessSession {
     });
   }
 
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: routes every pi AgentSessionEvent kind into neutral frames; not refactored in this pass
   #handle(event: AgentSessionEvent): void {
     switch (event.type) {
       case "message_update": {
@@ -437,7 +439,7 @@ class PiSession implements HarnessSession {
         break;
       }
       case "tool_execution_end": {
-        const { toolCallId, toolName, result, isError } = event as unknown as {
+        const { toolCallId, result, isError } = event as unknown as {
           toolCallId: string;
           toolName: string;
           result:
@@ -450,7 +452,8 @@ class PiSession implements HarnessSession {
         };
         const content = Array.isArray(result)
           ? ""
-          : textOf((result as { content?: unknown })?.content) || "";
+          : // biome-ignore lint/suspicious/noUnnecessaryConditions: `as` is an unchecked cast; result can still be undefined at runtime even though the cast type says otherwise
+            textOf((result as { content?: unknown })?.content) || "";
         const details = (result as { details?: Record<string, unknown> } | null)
           ?.details;
         const structuredContent =
@@ -477,8 +480,7 @@ class PiSession implements HarnessSession {
         // the closing frame replaces the buffer with the real blocks (and carries
         // any thinking the stream did not surface as text).
         const blocks: NeutralAssistantBlock[] = [];
-        const message = (event as { message?: { content?: unknown[] } })
-          .message;
+        const { message } = event as { message?: { content?: unknown[] } };
         for (const block of message?.content ?? []) {
           const b = block as {
             type?: string;
@@ -493,11 +495,13 @@ class PiSession implements HarnessSession {
         }
         if (blocks.length) {
           this.#ctx.frame({ type: "assistant", message: { content: blocks } });
+          // biome-ignore lint/suspicious/noUnnecessaryConditions: #streamedText is reassigned elsewhere in the class; biome's per-method inference doesn't see that
         } else if (this.#streamedText) {
           this.#ctx.frame({
             type: "assistant",
             message: { content: [{ type: "text", text: this.#streamedText }] },
           });
+          // biome-ignore lint/suspicious/noUnnecessaryConditions: #streamedThinking is reassigned elsewhere in the class; biome's per-method inference doesn't see that
         } else if (this.#streamedThinking) {
           this.#ctx.frame({
             type: "assistant",
@@ -553,21 +557,23 @@ class PiSession implements HarnessSession {
 
     if (extras.urgent && this.#busy) {
       const prompt = `[Urgent — your previous turn was interrupted to deliver this]\n\n${text}${attachments}`;
+      // biome-ignore lint/complexity/noVoid: fire-and-forget: send() itself is not awaited by its callers
       void this.#session
         .abort()
+        // biome-ignore lint/suspicious/noEmptyBlockStatements: an urgent abort racing the turn's own close is expected; nothing to report
         .catch(() => {})
         .then(() => {
           this.#ctx.busy(true);
           this.#busy = true;
-          void this.#session
-            .prompt(prompt, { images: images as never })
-            .catch((error) => this.#ctx.failed(error));
-        });
+          return this.#session.prompt(prompt, { images: images as never });
+        })
+        .catch((error) => this.#ctx.failed(error));
       return;
     }
 
     this.#ctx.busy(true);
     this.#busy = true;
+    // biome-ignore lint/complexity/noVoid: fire-and-forget: send() itself is not awaited by its callers
     void this.#session
       .prompt(text + attachments, { images: images as never })
       .catch((error) => this.#ctx.failed(error));
@@ -590,6 +596,7 @@ class PiSession implements HarnessSession {
         const last = [...this.#session.messages]
           .reverse()
           .find((m) => (m as { usage?: unknown }).usage);
+        // biome-ignore lint/suspicious/noUnnecessaryConditions: `as` is an unchecked cast; last is undefined when #session.messages is empty even though the cast type says otherwise
         const usage = (last as { usage?: { totalTokens?: number } })?.usage;
         const total = usage?.totalTokens ?? 0;
         return {
@@ -608,6 +615,7 @@ class PiSession implements HarnessSession {
     }
   }
 
+  // biome-ignore lint/suspicious/noExplicitAny: Model<T>'s config shape varies per provider; getAvailable() returns models across every provider
   async #resolveModel(id: string): Promise<Model<any> | undefined> {
     const runtime = await PiHarness.runtime();
     return (await runtime.getAvailable()).find(
@@ -615,17 +623,22 @@ class PiSession implements HarnessSession {
     );
   }
 
-  resolvePermission(_requestId: string, _result: PermissionResult): void {}
+  resolvePermission(_requestId: string, _result: PermissionResult): void {
+    /* pi has no parked-permission concept: it prompts and answers inline */
+  }
 
   async interrupt(): Promise<void> {
     await this.#session.abort();
   }
 
   async stop(): Promise<void> {
+    // biome-ignore lint/suspicious/noEmptyBlockStatements: stop() is tearing down regardless; the abort's own failure is not actionable
     await this.#session.abort().catch(() => {});
+    // biome-ignore lint/suspicious/noEmptyBlockStatements: stop() is tearing down regardless; waitForIdle's own failure is not actionable
     await this.#session.waitForIdle().catch(() => {});
   }
 
+  // biome-ignore lint/suspicious/useAwait: implements Harness.dispose's Promise<void> contract; this session's teardown is synchronous
   async dispose(): Promise<void> {
     this.#session.dispose();
   }
@@ -650,6 +663,7 @@ export class PiHarness implements Harness {
     return runtimePromise;
   }
 
+  // biome-ignore lint/suspicious/useAwait: implements Harness.detect's Promise<HarnessReport> contract; the bin probe is synchronous
   async detect(): Promise<HarnessReport> {
     const installed = resolveBin("pi") !== undefined;
     return {
@@ -660,6 +674,7 @@ export class PiHarness implements Harness {
     };
   }
 
+  // biome-ignore lint/suspicious/noExplicitAny: Model<T>'s config shape varies per provider; getAvailable() returns models across every provider
   async #resolveModel(modelId: string): Promise<Model<any> | undefined> {
     const runtime = await PiHarness.runtime();
     return (await runtime.getAvailable()).find(
@@ -772,7 +787,7 @@ export class PiHarness implements Harness {
       if (!message) {
         continue;
       }
-      const role = message.role;
+      const { role } = message;
       if (role === "user") {
         entries.push({
           type: "user",
@@ -834,6 +849,7 @@ export class PiHarness implements Harness {
     }
   }
 
+  // biome-ignore lint/suspicious/useAwait: implements Harness.dispose's Promise<void> contract; this teardown is synchronous
   async dispose(): Promise<void> {
     runtimePromise = null;
   }
@@ -854,6 +870,7 @@ export class PiHarness implements Harness {
       PI_SKILLS,
       config.skills ?? [],
       sidecar.skills,
+      // biome-ignore lint/style/noNonNullAssertion: invariant: report.skills is initialized to {} a few lines above; TS drops the narrowing across the earlier await
       report.skills!
     );
     const memory = await syncMemory(
@@ -884,6 +901,8 @@ export class PiHarness implements Harness {
 
     for (const name of Object.keys(sidecar.skills)) {
       const file = Bun.file(join(PI_SKILLS, name, "SKILL.md"));
+      // biome-ignore lint/performance/noAwaitInLoops: each skill file's presence is checked in turn; the count is small and order doesn't matter but the report is built incrementally
+      // biome-ignore lint/style/noNonNullAssertion: invariant: report.skills is initialized to {} above; TS drops the narrowing across each loop iteration's await
       report.skills![name] = (await file.exists())
         ? { state: "applied" }
         : { state: "failed", detail: "not on disk" };

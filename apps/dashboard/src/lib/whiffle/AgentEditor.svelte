@@ -14,6 +14,7 @@
   import { toast } from "svelte-sonner";
   import { Badge } from "$lib/components/ui/badge";
   import { Button } from "$lib/components/ui/button";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for importing a component group
   import * as Dialog from "$lib/components/ui/dialog";
   import { Textarea } from "$lib/components/ui/textarea";
   import { saveAgent } from "./fleet";
@@ -79,6 +80,10 @@ You are a <role>, working in one repository at a time.
       saving = false;
     }
   }
+
+  function cancelEdit() {
+    open = false;
+  }
 </script>
 
 <Dialog.Root bind:open>
@@ -139,7 +144,7 @@ You are a <role>, working in one repository at a time.
     {/if}
 
     <div class="flex justify-end gap-2">
-      <Button disabled={saving} onclick={() => (open = false)} variant="outline"
+      <Button disabled={saving} onclick={cancelEdit} variant="outline"
         >Cancel</Button
       >
       <Button disabled={saving || !target || !dirty} onclick={commit}>

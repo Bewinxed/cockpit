@@ -39,6 +39,7 @@ export interface LoginChallenge {
 }
 
 /** Starts a login and hands back the URL to authorise it. */
+// biome-ignore lint/suspicious/useAwait: kept async so callers can uniformly await it alongside completeLogin/probeAuth
 export const beginLogin = async (): Promise<LoginChallenge> => {
   const verifier = generateCodeVerifier();
   const challenge = generateCodeChallenge(verifier);
@@ -154,6 +155,7 @@ export const importCredentials = async (
   credentials: Record<string, unknown>
 ): Promise<AuthState> => {
   if (
+    // biome-ignore lint/suspicious/noUnnecessaryConditions: credentials arrives over the wire from the dashboard/hub; its declared type is not a runtime guarantee
     !credentials ||
     typeof credentials !== "object" ||
     !credentials.claudeAiOauth
@@ -163,7 +165,8 @@ export const importCredentials = async (
   // Merged, not replaced: the file also carries MCP OAuth entries.
   const file = Bun.file(CREDENTIALS_FILE);
   const existing = (await file.exists())
-    ? ((JSON.parse(await file.text()) as Record<string, unknown>) ?? {})
+    ? // biome-ignore lint/suspicious/noUnnecessaryConditions: `as` is an unchecked cast; JSON.parse returns null for a file literally containing "null" even though the cast type says otherwise
+      ((JSON.parse(await file.text()) as Record<string, unknown>) ?? {})
     : {};
   await Bun.write(
     CREDENTIALS_FILE,
@@ -185,7 +188,7 @@ export const clearCredentials = async (): Promise<AuthState> => {
   const file = Bun.file(CREDENTIALS_FILE);
   if (await file.exists()) {
     const parsed = JSON.parse(await file.text()) as Record<string, unknown>;
-    delete parsed.claudeAiOauth;
+    parsed.claudeAiOauth = undefined;
     await Bun.write(CREDENTIALS_FILE, JSON.stringify(parsed));
   }
   if (platform() === "darwin") {

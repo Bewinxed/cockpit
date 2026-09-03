@@ -63,7 +63,7 @@ export interface SupervisorEngineDeps {
   publish: (instanceId: string, event: SupervisorEvent) => void;
   /** Optional transient broadcast: the dashboard's "thinking" indicator. */
   status?: (instanceId: string, status: SupervisorStatusSignal) => void;
-  telegram?: { onSupervisor(instanceId: string, text: string): void };
+  telegram?: { onSupervisor: (instanceId: string, text: string) => void };
 }
 
 // ── per-instance state ─────────────────────────────────────────────────
@@ -112,9 +112,10 @@ class Semaphore {
   }
 
   /** Returns true if a slot is available (possibly after waiting), false if the queue overflowed. */
+  // biome-ignore lint/suspicious/useAwait: the declared Promise return type is what callers await; the synchronous branches return plain booleans by design
   async acquire(): Promise<boolean> {
     if (this.#active < this.#max) {
-      this.#active++;
+      this.#active += 1;
       return true;
     }
     if (this.#queue.length >= this.#queueCap) {
@@ -122,7 +123,7 @@ class Semaphore {
     }
     return new Promise<boolean>((resolve) => {
       this.#queue.push(() => {
-        this.#active++;
+        this.#active += 1;
         resolve(true);
       });
     });
@@ -133,7 +134,7 @@ class Semaphore {
     if (next) {
       next();
     } else {
-      this.#active--;
+      this.#active -= 1;
     }
   }
 }
@@ -148,6 +149,20 @@ const spoken = (message: NeutralAssistantMessage): string =>
     )
     .map((block) => block.text)
     .join("");
+
+/** The transcript label `#compose`'s evaluation speaks under. */
+const composeOriginName = (
+  autopilot: string | null,
+  matched: Array<{ name: string }>
+): string => {
+  if (autopilot) {
+    return "supervisor:autopilot";
+  }
+  if (matched.length === 1) {
+    return `supervisor:${matched[0].name}`;
+  }
+  return "supervisor:rules";
+};
 
 /**
  * The fixed adversarial harness preamble (PLAN.md C2 "Prompt assembly").
@@ -190,7 +205,9 @@ Return a JSON object with fields: verdict, message, note.`;
 export class SupervisorEngine {
   readonly #db: DbShape;
   readonly #agent: (machineId: string) => SupervisorSender | undefined;
-  readonly #telegram?: { onSupervisor(instanceId: string, text: string): void };
+  readonly #telegram?: {
+    onSupervisor: (instanceId: string, text: string) => void;
+  };
   readonly #publish: (instanceId: string, event: SupervisorEvent) => void;
   readonly #status?: (
     instanceId: string,
@@ -281,7 +298,7 @@ export class SupervisorEngine {
       state.commands = [];
       // Attribution: consume the initiatedTurn flag.
       if (state.initiatedTurn) {
-        state.consecutive++;
+        state.consecutive += 1;
         state.initiatedTurn = false;
       } else {
         // A non-supervisor turn resets the streak, but NOT the mute: rules
@@ -291,7 +308,9 @@ export class SupervisorEngine {
         // relay points) takes the mute off.
         state.consecutive = 0;
       }
+      // biome-ignore lint/complexity/noVoid: fire-and-forget; the caller (a frame handler) has nowhere to route this promise
       void this.#evaluate(instanceId, turnText, files, commands, now).catch(
+        // biome-ignore lint/suspicious/noEmptyBlockStatements: #evaluate already reports its own failures (see its body); this is only the last-resort guard against an unhandled rejection
         () => {}
       );
     }
@@ -328,6 +347,7 @@ export class SupervisorEngine {
 
   // ── evaluation ─────────────────────────────────────────────────────────
 
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: runs one full evaluation — builds facts, calls the LLM, applies mute/consecutive/timeout policy, and publishes the verdict
   async #evaluate(
     instanceId: string,
     turnText: string,
@@ -533,7 +553,7 @@ export class SupervisorEngine {
         }
 
         // Deliver: same envelope shape as RuleEngine.#fire (rules.ts:284-304).
-        const originName = selection.originName;
+        const { originName } = selection;
 
         sender.send({
           verb: "send",
@@ -652,6 +672,7 @@ export class SupervisorEngine {
     const unclaimed = [...rules];
     let stale = false;
 
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: claims one streamed verdict against the matched-rule set, applies it, and updates the composite/stale bookkeeping in one pass
     const act = (verdict: RuleVerdict): void => {
       const byName = unclaimed.findIndex((r) => r.name === verdict.rule);
       const rule =
@@ -800,7 +821,7 @@ export class SupervisorEngine {
    * session; no rule is silently ditched in favor of another.
    */
   #compose(
-    instanceId: string,
+    _instanceId: string,
     row: {
       autopilot?: {
         enabled: boolean;
@@ -879,11 +900,7 @@ export class SupervisorEngine {
         name: r.name,
         prompt: r.prompt ?? "",
       })),
-      originName: autopilot
-        ? "supervisor:autopilot"
-        : matched.length === 1
-          ? `supervisor:${matched[0].name}`
-          : "supervisor:rules",
+      originName: composeOriginName(autopilot, matched),
     };
   }
 

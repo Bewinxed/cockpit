@@ -8,12 +8,15 @@
   import { goto } from "$app/navigation";
   import MemoryCard from "$lib/components/features/MemoryCard.svelte";
   import { Alert, AlertDescription } from "$lib/components/ui/alert";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as AlertDialog from "$lib/components/ui/alert-dialog";
   import { Button } from "$lib/components/ui/button";
   import { Card } from "$lib/components/ui/card";
   import { Input } from "$lib/components/ui/input";
   import { Markdown } from "$lib/components/ui/markdown";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Popover from "$lib/components/ui/popover";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Select from "$lib/components/ui/select";
   import { Textarea } from "$lib/components/ui/textarea";
   import type { ProjectRow } from "$lib/whiffle/client.svelte";
@@ -76,7 +79,9 @@
     }
     loadedFor = current.id;
     untrack(() => {
+      // biome-ignore lint/complexity/noVoid: fire-and-forget — each load manages its own state, independent of the other
       void loadDocs(current);
+      // biome-ignore lint/complexity/noVoid: fire-and-forget — each load manages its own state, independent of the other
       void loadClaude(current);
     });
   });
@@ -174,7 +179,9 @@
   // markdown paints, because its height is the whole question.
   $effect(() => {
     const element = docBody;
+    // biome-ignore lint/complexity/noVoid: read-for-tracking — content and expanded are the reactive dependencies that rerun this effect, their values are unused by design
     void content;
+    // biome-ignore lint/complexity/noVoid: read-for-tracking — content and expanded are the reactive dependencies that rerun this effect, their values are unused by design
     void expanded;
     clipped = element ? element.scrollHeight > element.clientHeight + 4 : false;
   });
@@ -207,6 +214,7 @@
     rememberSpawn({ model: mod, permissionMode: perm, effort: level });
     spawnPrompt = "";
     spawnOpen = false;
+    // biome-ignore lint/complexity/noVoid: fire-and-forget navigation after the spawn already succeeded
     void goto(`/session/${instanceId}`);
   }
 
@@ -227,6 +235,7 @@
     if (event.key === "ArrowDown") {
       event.preventDefault();
       const next = Math.min(idx + 1, docs.length - 1);
+      // biome-ignore lint/complexity/noVoid: fire-and-forget — openDoc manages its own loading state
       void openDoc(docs[next]);
       (event.currentTarget as HTMLElement)
         .querySelectorAll("button")
@@ -234,6 +243,7 @@
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
       const prev = Math.max(idx - 1, 0);
+      // biome-ignore lint/complexity/noVoid: fire-and-forget — openDoc manages its own loading state
       void openDoc(docs[prev]);
       (event.currentTarget as HTMLElement)
         .querySelectorAll("button")
@@ -286,6 +296,7 @@
               class="flex flex-col gap-3 p-4"
               onsubmit={(e) => { e.preventDefault(); startSession(false); }}
             >
+              <!-- biome-ignore lint/a11y/noLabelWithoutControl: the <Input> component renders a native input as its only child; Biome can't see through the component boundary -->
               <label class="flex flex-col gap-1 text-caption">
                 First prompt (optional)
                 <Input
@@ -370,7 +381,10 @@
               <Select.Root
                 onValueChange={(val) => {
                   const doc = docs.find((d) => d.path === val);
-                  if (doc) void openDoc(doc);
+                  if (doc) {
+                    // biome-ignore lint/complexity/noVoid: fire-and-forget — openDoc manages its own loading state
+                    void openDoc(doc);
+                  }
                 }}
                 type="single"
                 value={open?.path ?? ''}
@@ -472,7 +486,9 @@
                     {#if draft === null}
                       <Button
                         class="ml-auto shrink-0"
-                        onclick={() => (draft = content)}
+                        onclick={() => {
+                          draft = content;
+                        }}
                         size="sm"
                         variant="outline"
                       >
@@ -481,7 +497,9 @@
                     {:else}
                       <Button
                         class="ml-auto shrink-0"
-                        onclick={() => (draft = null)}
+                        onclick={() => {
+                          draft = null;
+                        }}
                         size="sm"
                         variant="ghost"
                       >
@@ -524,7 +542,9 @@
                       <button
                         class="flex min-h-9 w-full items-center justify-center rounded-b-[var(--radius-panel)] text-caption
                           transition-colors hover:bg-accent hover:text-accent-foreground"
-                        onclick={() => (expanded = !expanded)}
+                        onclick={() => {
+                          expanded = !expanded;
+                        }}
                         type="button"
                       >
                         {expanded ? 'Show less' : 'Read more'}
@@ -576,7 +596,9 @@
             {#if stored.length > 8 && !showMore}
               <Button
                 class="self-start text-muted-foreground"
-                onclick={() => (showMore = true)}
+                onclick={() => {
+                  showMore = true;
+                }}
                 size="sm"
                 variant="ghost"
               >

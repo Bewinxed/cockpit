@@ -13,6 +13,7 @@
    * would keep sizes under a key of its own that survives a tree mutation
    * which reshapes the group, and then apply the old numbers to new children.
    */
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Resizable from "$lib/components/ui/resizable";
   import Self from "./PaneGrid.svelte";
   import PaneLeaf from "./PaneLeaf.svelte";

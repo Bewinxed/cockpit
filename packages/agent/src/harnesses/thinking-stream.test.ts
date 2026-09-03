@@ -98,12 +98,24 @@ const build = () => {
     frame: (message) => {
       frames.push(message);
     },
-    permission: () => {},
-    busy: () => {},
-    session: () => {},
-    failed: () => {},
-    emit: () => {},
-    closed: () => {},
+    permission: () => {
+      /* unused by these tests */
+    },
+    busy: () => {
+      /* unused by these tests */
+    },
+    session: () => {
+      /* unused by these tests */
+    },
+    failed: () => {
+      /* unused by these tests */
+    },
+    emit: () => {
+      /* unused by these tests */
+    },
+    closed: () => {
+      /* unused by these tests */
+    },
   };
   const session = new OpencodeSession(
     "thinking",
@@ -115,8 +127,12 @@ const build = () => {
     undefined,
     undefined,
     "http://127.0.0.1:0",
-    () => {},
-    () => {}
+    () => {
+      /* registerChild unused by these tests */
+    },
+    () => {
+      /* onRelease unused by these tests */
+    }
   );
   return { session, frames };
 };

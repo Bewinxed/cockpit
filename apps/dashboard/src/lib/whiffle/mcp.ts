@@ -6,7 +6,7 @@ import type { McpServerStatus } from "@whiffle/core";
  * none. Null is "no favicon to try" — the chip falls back to a letter.
  */
 export function mcpHost(server: McpServerStatus): string | null {
-  const config = server.config;
+  const { config } = server;
   if (!(config && "url" in config) || typeof config.url !== "string") {
     return null;
   }

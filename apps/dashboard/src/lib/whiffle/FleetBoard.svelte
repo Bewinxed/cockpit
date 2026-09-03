@@ -17,11 +17,16 @@
   import { page } from "$app/state";
   import { Badge } from "$lib/components/ui/badge";
   import { Button } from "$lib/components/ui/button";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Card from "$lib/components/ui/card";
   import { Input } from "$lib/components/ui/input";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Pagination from "$lib/components/ui/pagination";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Select from "$lib/components/ui/select";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Table from "$lib/components/ui/table";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Tooltip from "$lib/components/ui/tooltip";
   import {
     IconDownload,
@@ -279,6 +284,7 @@
       cwd: page.url.searchParams.get("cwd") ?? undefined,
     };
     spawnOpen = true;
+    // biome-ignore lint/complexity/noVoid: fire-and-forget — the panel is already open, the URL cleanup is a courtesy
     void goto("/session", { replaceState: true });
   });
 
@@ -298,6 +304,7 @@
       sessionId,
       harness: row.harness as never,
     });
+    // biome-ignore lint/complexity/noVoid: fire-and-forget — the session is already resuming, navigation doesn't need to be awaited
     void goto(`/session/${id}`);
   }
 
@@ -338,8 +345,15 @@
 
   /* ---- cells --------------------------------------------------------- */
 
-  const contextClass = (pct: number | null) =>
-    pct === null ? "" : pct >= 90 ? "bad" : pct >= 70 ? "warn" : "";
+  const contextClass = (pct: number | null): string => {
+    if (pct === null) {
+      return "";
+    }
+    if (pct >= 90) {
+      return "bad";
+    }
+    return pct >= 70 ? "warn" : "";
+  };
 
   // The machine-convergence list, dressed the same as every other fleet panel's
   // raised list (FleetAgents.svelte / FleetMemory.svelte's own `panelList`):
@@ -456,7 +470,9 @@
         {#if !showAllNotRunning && notRunning.length > CAP}
           <button
             class="show-all"
-            onclick={() => (showAllNotRunning = true)}
+            onclick={() => {
+              showAllNotRunning = true;
+            }}
             type="button"
           >
             Show all {notRunning.length} sessions
@@ -500,14 +516,19 @@
             <Input
               aria-label="Search sessions"
               class="search-input"
-              oninput={() => (pageNo = 1)}
+              oninput={() => {
+                pageNo = 1;
+              }}
               placeholder="Search sessions…"
               bind:value={search}
             />
           </div>
 
           <Select.Root
-            onValueChange={(v) => ((machineFilter = v === 'all' ? '' : v), (pageNo = 1))}
+            onValueChange={(v) => {
+              machineFilter = v === 'all' ? '' : v;
+              pageNo = 1;
+            }}
             type="single"
             value={machineFilter || 'all'}
           >
@@ -528,9 +549,10 @@
           </Select.Root>
 
           <Select.Root
-            onValueChange={(v) => (
-              (stateFilter = (v === 'all' ? '' : v) as PillStatus | ''), (pageNo = 1)
-            )}
+            onValueChange={(v) => {
+              stateFilter = (v === 'all' ? '' : v) as PillStatus | '';
+              pageNo = 1;
+            }}
             type="single"
             value={stateFilter || 'all'}
           >
@@ -545,7 +567,9 @@
           </Select.Root>
 
           <Select.Root
-            onValueChange={(v) => (sortBy = v as 'recent' | 'name')}
+            onValueChange={(v) => {
+              sortBy = v as 'recent' | 'name';
+            }}
             type="single"
             value={sortBy}
           >
@@ -622,9 +646,10 @@
                         <IconExternal />
                       </Button>
                       {#if row.instance}
+                        {@const instance = row.instance}
                         <Button
                           aria-label="Peek {row.title}"
-                          onclick={() => setPeeked(row.instance!.id)}
+                          onclick={() => setPeeked(instance.id)}
                           size="icon-sm"
                           variant="outline"
                         >
@@ -693,7 +718,9 @@
 </div>
 
 <SpawnPanel
-  onclose={() => (spawnOpen = false)}
+  onclose={() => {
+    spawnOpen = false;
+  }}
   open={spawnOpen}
   prefill={spawnPrefill}
 />
@@ -922,6 +949,7 @@
     background-image: var(--mark-overlay);
     background-color: var(--mark-1);
   }
+  /* biome-ignore lint/style/noDescendingSpecificity: never matches the same element as .search .lead :global(svg) — different subtree */
   .mark :global(svg) {
     width: var(--c-mark-glyph);
     height: var(--c-mark-glyph);
@@ -974,6 +1002,7 @@
     color: var(--ink-muted);
     white-space: nowrap;
   }
+  /* biome-ignore lint/style/noDescendingSpecificity: never matches the same element as .search .lead :global(svg) — different subtree */
   .when :global(svg) {
     width: 13px;
     height: 13px;

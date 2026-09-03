@@ -1,19 +1,22 @@
-import Root from "./carousel.svelte";
-import Content from "./carousel-content.svelte";
-import Item from "./carousel-item.svelte";
-import Next from "./carousel-next.svelte";
-import Previous from "./carousel-previous.svelte";
-
+// biome-ignore lint/performance/noBarrelFile: this is the component's public API surface, re-exporting its parts under the shadcn-svelte convention
 export {
-  Content,
-  Content as CarouselContent,
-  Item,
-  Item as CarouselItem,
-  Next,
-  Next as CarouselNext,
-  Previous,
-  Previous as CarouselPrevious,
-  Root,
+  default as Root,
   //
-  Root as Carousel,
-};
+  default as Carousel,
+} from "./carousel.svelte";
+export {
+  default as Content,
+  default as CarouselContent,
+} from "./carousel-content.svelte";
+export {
+  default as Item,
+  default as CarouselItem,
+} from "./carousel-item.svelte";
+export {
+  default as Next,
+  default as CarouselNext,
+} from "./carousel-next.svelte";
+export {
+  default as Previous,
+  default as CarouselPrevious,
+} from "./carousel-previous.svelte";

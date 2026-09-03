@@ -19,6 +19,7 @@
   } from "$lib/components/ui/native-select";
   import { Switch } from "$lib/components/ui/switch";
   import { Textarea } from "$lib/components/ui/textarea";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as ToggleGroup from "$lib/components/ui/toggle-group";
   import { IconArrowRight, IconTrash } from "$lib/icons";
   import { whiffle } from "$lib/whiffle/client.svelte";
@@ -36,6 +37,8 @@
   } from "$lib/whiffle/hooks";
   import { newId } from "$lib/whiffle/id";
   import type { PageData } from "./$types";
+
+  const WHITESPACE = /\s+/;
 
   /**
    * The hook editor.
@@ -116,21 +119,22 @@
     }
     const { if: cond, timeout, statusMessage } = draft.handler;
     const shared = { if: cond, timeout, statusMessage };
-    draft.handler =
-      next === "command"
-        ? { type: "command", ...shared }
-        : next === "http"
-          ? { type: "http", url: "", ...shared }
-          : next === "mcp_tool"
-            ? {
-                type: "mcp_tool",
-                mcp_server_name: "",
-                tool_name: "",
-                ...shared,
-              }
-            : next === "prompt"
-              ? { type: "prompt", prompt: "", ...shared }
-              : { type: "agent", prompt: "", ...shared };
+    if (next === "command") {
+      draft.handler = { type: "command", ...shared };
+    } else if (next === "http") {
+      draft.handler = { type: "http", url: "", ...shared };
+    } else if (next === "mcp_tool") {
+      draft.handler = {
+        type: "mcp_tool",
+        mcp_server_name: "",
+        tool_name: "",
+        ...shared,
+      };
+    } else if (next === "prompt") {
+      draft.handler = { type: "prompt", prompt: "", ...shared };
+    } else {
+      draft.handler = { type: "agent", prompt: "", ...shared };
+    }
   }
 
   /** The command handler's `args` as one line — kept local since the array is
@@ -146,7 +150,7 @@
     if (draft.handler.type !== "command") {
       return;
     }
-    const parts = commandArgs.trim().split(/\s+/).filter(Boolean);
+    const parts = commandArgs.trim().split(WHITESPACE).filter(Boolean);
     draft.handler.args = parts.length > 0 ? parts : undefined;
   });
 
@@ -307,7 +311,9 @@
           aria-invalid={shown('name') || duplicate ? 'true' : undefined}
           autocomplete="off"
           class="w-full border-0 bg-transparent p-0 text-display text-foreground caret-primary outline-none placeholder:text-faint"
-          onblur={() => (touched.name = true)}
+          onblur={() => {
+            touched.name = true;
+          }}
           placeholder="Name this hook"
           spellcheck="false"
           bind:value={draft.name}
@@ -327,6 +333,7 @@
         {hookSentence(draft)}
       </p>
 
+      <!-- biome-ignore lint/a11y/noLabelWithoutControl: the <Switch> component renders a native form control as its child; Biome can't see through the component boundary -->
       <label class="flex w-fit items-center gap-3">
         <Switch bind:checked={draft.enabled} />
         <span class="text-caption">
@@ -346,6 +353,7 @@
         </p>
       </div>
 
+      <!-- biome-ignore lint/a11y/noLabelWithoutControl: the <NativeSelect> component renders a native form control as its child; Biome can't see through the component boundary -->
       <label class="flex flex-col gap-1.5 text-caption">
         Event
         <NativeSelect
@@ -374,13 +382,16 @@
       </label>
 
       {#if hookTakesMatcher(draft.event)}
+        <!-- biome-ignore lint/a11y/noLabelWithoutControl: the <Input> component renders a native form control as its child; Biome can't see through the component boundary -->
         <label class="flex flex-col gap-1.5 text-caption">
           Matcher — {eventInfo?.filters}
           <Input
             aria-invalid={shown('matcher') ? 'true' : undefined}
             autocomplete="off"
             class="font-mono text-sm md:text-sm"
-            onblur={() => (touched.matcher = true)}
+            onblur={() => {
+              touched.matcher = true;
+            }}
             placeholder={eventInfo?.suggests?.[0] ?? '*'}
             spellcheck="false"
             bind:value={draft.matcher}
@@ -430,12 +441,15 @@
       </ToggleGroup.Root>
 
       {#if draft.handler.type === 'command'}
+        <!-- biome-ignore lint/a11y/noLabelWithoutControl: the <Textarea> component renders a native form control as its child; Biome can't see through the component boundary -->
         <label class="flex flex-col gap-1.5 text-caption">
           Script
           <Textarea
             aria-invalid={shown('script') ? 'true' : undefined}
             class="resize-y font-mono text-sm md:text-sm"
-            onblur={() => (touched.script = true)}
+            onblur={() => {
+              touched.script = true;
+            }}
             placeholder={'#!/bin/bash\nset -euo pipefail\n\n# The event JSON arrives on stdin.'}
             rows={10}
             spellcheck="false"
@@ -451,6 +465,7 @@
           {/if}
         </label>
 
+        <!-- biome-ignore lint/a11y/noLabelWithoutControl: the <Input> component renders a native form control as its child; Biome can't see through the component boundary -->
         <label class="flex flex-col gap-1.5 text-caption">
           Arguments (optional)
           <Input
@@ -463,11 +478,14 @@
         </label>
 
         <div class="flex flex-wrap items-center justify-between gap-3">
+          <!-- biome-ignore lint/a11y/noLabelWithoutControl: the <Switch> component renders a native form control as its child; Biome can't see through the component boundary -->
           <label class="flex items-center gap-3">
             <Switch
               checked={draft.handler.async === true}
               onCheckedChange={(next) => {
-                if (draft.handler.type === 'command') draft.handler.async = next;
+                if (draft.handler.type === 'command') {
+                  draft.handler.async = next;
+                }
               }}
             />
             <span class="flex flex-col gap-0.5">
@@ -480,7 +498,9 @@
 
           <ToggleGroup.Root
             onValueChange={(next) => {
-              if (draft.handler.type !== 'command' || !next) return;
+              if (draft.handler.type !== 'command' || !next) {
+                return;
+              }
               draft.handler.shell = next === 'bash' ? undefined : (next as 'powershell');
             }}
             size="sm"
@@ -497,13 +517,16 @@
           </ToggleGroup.Root>
         </div>
       {:else if draft.handler.type === 'http'}
+        <!-- biome-ignore lint/a11y/noLabelWithoutControl: the <Input> component renders a native form control as its child; Biome can't see through the component boundary -->
         <label class="flex flex-col gap-1.5 text-caption">
           URL
           <Input
             aria-invalid={shown('url') ? 'true' : undefined}
             autocomplete="off"
             class="font-mono text-sm md:text-sm"
-            onblur={() => (touched.url = true)}
+            onblur={() => {
+              touched.url = true;
+            }}
             placeholder="https://example.com/hooks/whiffle"
             spellcheck="false"
             bind:value={draft.handler.url}
@@ -519,13 +542,16 @@
         </label>
       {:else if draft.handler.type === 'mcp_tool'}
         <div class="grid gap-4 sm:grid-cols-2">
+          <!-- biome-ignore lint/a11y/noLabelWithoutControl: the <Input> component renders a native form control as its child; Biome can't see through the component boundary -->
           <label class="flex flex-col gap-1.5 text-caption">
             MCP server
             <Input
               aria-invalid={shown('mcp_server_name') ? 'true' : undefined}
               autocomplete="off"
               class="font-mono text-sm md:text-sm"
-              onblur={() => (touched.mcp_server_name = true)}
+              onblur={() => {
+                touched.mcp_server_name = true;
+              }}
               placeholder="filesystem"
               spellcheck="false"
               bind:value={draft.handler.mcp_server_name}
@@ -536,13 +562,16 @@
               >
             {/if}
           </label>
+          <!-- biome-ignore lint/a11y/noLabelWithoutControl: the <Input> component renders a native form control as its child; Biome can't see through the component boundary -->
           <label class="flex flex-col gap-1.5 text-caption">
             Tool
             <Input
               aria-invalid={shown('tool_name') ? 'true' : undefined}
               autocomplete="off"
               class="font-mono text-sm md:text-sm"
-              onblur={() => (touched.tool_name = true)}
+              onblur={() => {
+                touched.tool_name = true;
+              }}
               placeholder="read_file"
               spellcheck="false"
               bind:value={draft.handler.tool_name}
@@ -553,12 +582,15 @@
           </label>
         </div>
       {:else}
+        <!-- biome-ignore lint/a11y/noLabelWithoutControl: the <Textarea> component renders a native form control as its child; Biome can't see through the component boundary -->
         <label class="flex flex-col gap-1.5 text-caption">
           Prompt
           <Textarea
             aria-invalid={shown('prompt') ? 'true' : undefined}
             class="resize-y text-sm md:text-sm"
-            onblur={() => (touched.prompt = true)}
+            onblur={() => {
+              touched.prompt = true;
+            }}
             placeholder="Decide whether this change needs a changelog entry, and say why."
             rows={4}
             bind:value={draft.handler.prompt}
@@ -568,6 +600,7 @@
           {/if}
         </label>
         {#if draft.handler.type === 'agent'}
+          <!-- biome-ignore lint/a11y/noLabelWithoutControl: the <Input> component renders a native form control as its child; Biome can't see through the component boundary -->
           <label class="flex flex-col gap-1.5 text-caption">
             Subagent (optional)
             <Input
@@ -589,14 +622,19 @@
         <h2 class="text-body font-medium">Common fields</h2>
       </div>
 
+      <!-- biome-ignore lint/a11y/noLabelWithoutControl: the <Input> component renders a native form control as its child; Biome can't see through the component boundary -->
       <label class="flex flex-col gap-1.5 text-caption">
         Condition (optional)
         <Input
           aria-invalid={shown('if') ? 'true' : undefined}
           autocomplete="off"
           class="font-mono text-sm md:text-sm"
-          onblur={() => (touched.if = true)}
-          oninput={(event) => (draft.handler.if = event.currentTarget.value || undefined)}
+          onblur={() => {
+            touched.if = true;
+          }}
+          oninput={(event) => {
+            draft.handler.if = event.currentTarget.value || undefined;
+          }}
           placeholder="Bash(git *)"
           spellcheck="false"
           value={draft.handler.if ?? ''}
@@ -612,6 +650,7 @@
       </label>
 
       <div class="grid gap-4 sm:grid-cols-2">
+        <!-- biome-ignore lint/a11y/noLabelWithoutControl: the <Input> component renders a native form control as its child; Biome can't see through the component boundary -->
         <label class="flex flex-col gap-1.5 text-caption">
           Timeout, seconds (optional)
           <Input
@@ -631,12 +670,15 @@
             <span class="text-micro text-destructive">{wrong.timeout}</span>
           {/if}
         </label>
+        <!-- biome-ignore lint/a11y/noLabelWithoutControl: the <Input> component renders a native form control as its child; Biome can't see through the component boundary -->
         <label class="flex flex-col gap-1.5 text-caption">
           Status message (optional)
           <Input
             autocomplete="off"
             class="text-sm md:text-sm"
-            oninput={(event) => (draft.handler.statusMessage = event.currentTarget.value || undefined)}
+            oninput={(event) => {
+              draft.handler.statusMessage = event.currentTarget.value || undefined;
+            }}
             placeholder="Formatting…"
             spellcheck="false"
             value={draft.handler.statusMessage ?? ''}
@@ -655,6 +697,7 @@
         </p>
       </div>
 
+      <!-- biome-ignore lint/a11y/noLabelWithoutControl: the <NativeSelect> component renders a native form control as its child; Biome can't see through the component boundary -->
       <label class="flex flex-col gap-1.5 text-caption">
         Scope
         <NativeSelect
@@ -758,7 +801,13 @@
           Cancel
         </Button>
         <Button disabled={busy || deleting} type="submit">
-          {busy ? 'Saving…' : data.composing ? 'Create hook' : 'Save changes'}
+          {#if busy}
+            Saving…
+          {:else if data.composing}
+            Create hook
+          {:else}
+            Save changes
+          {/if}
         </Button>
       </div>
     </div>

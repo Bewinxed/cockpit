@@ -1,4 +1,5 @@
 <script lang="ts">
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Collapsible from "$lib/components/ui/collapsible";
   import CollapsibleLazy from "$lib/components/ui/collapsible/collapsible-lazy.svelte";
   import { IconChevronRight, IconExternal } from "$lib/icons";
@@ -69,13 +70,16 @@
       : {};
   });
 
-  const label = $derived(
-    row
-      ? delegateHandle(row)
-      : id
-        ? `${message.content.split("/").filter(Boolean).pop() ?? "session"}#${id.slice(0, 8)}`
-        : (message.content.split("/").filter(Boolean).pop() ?? "delegate")
-  );
+  const label = $derived.by(() => {
+    if (row) {
+      return delegateHandle(row);
+    }
+    const stub = message.content.split("/").filter(Boolean).pop();
+    if (id) {
+      return `${stub ?? "session"}#${id.slice(0, 8)}`;
+    }
+    return stub ?? "delegate";
+  });
   const type = $derived(
     typeof toolInput.type === "string" ? toolInput.type : ""
   );
@@ -102,8 +106,8 @@
       count: number;
       at: number | undefined;
     } | null => {
-      if (reportEvents.length > 0) {
-        const last = reportEvents[reportEvents.length - 1];
+      const last = reportEvents.at(-1);
+      if (last) {
         return {
           body: last.payload.body,
           failed: last.payload.failed,
@@ -118,7 +122,7 @@
         (m) =>
           m.type === "user.peer" && matchesSession(m.metadata?.peerSession, id)
       );
-      const latest = peers[peers.length - 1];
+      const latest = peers.at(-1);
       if (!latest) {
         return null;
       }
@@ -212,35 +216,40 @@
     | "sleeping"
     | "stopped"
     | "failed";
-  const phase = $derived<Phase>(
-    spawnFailed || row?.status === "error"
-      ? "failed"
-      : id
-        ? pendingAsks > 0 || activity === "blocked"
-          ? "blocked"
-          : live && activity === "working"
-            ? "working"
-            : row?.status === "sleeping"
-              ? "sleeping"
-              : row?.status === "stopped"
-                ? "stopped"
-                : report
-                  ? "reported"
-                  : "idle"
-        : "spawning"
-  );
+  const phase = $derived.by((): Phase => {
+    if (spawnFailed || row?.status === "error") {
+      return "failed";
+    }
+    if (!id) {
+      return "spawning";
+    }
+    if (pendingAsks > 0 || activity === "blocked") {
+      return "blocked";
+    }
+    if (live && activity === "working") {
+      return "working";
+    }
+    if (row?.status === "sleeping") {
+      return "sleeping";
+    }
+    if (row?.status === "stopped") {
+      return "stopped";
+    }
+    return report ? "reported" : "idle";
+  });
   const inFlight = $derived(phase === "spawning" || phase === "working");
-  const tone = $derived(
-    phase === "failed"
-      ? "fail"
-      : phase === "blocked"
-        ? "attn"
-        : inFlight
-          ? "live"
-          : phase === "reported"
-            ? "done"
-            : "idle"
-  );
+  const tone = $derived.by(() => {
+    if (phase === "failed") {
+      return "fail";
+    }
+    if (phase === "blocked") {
+      return "attn";
+    }
+    if (inFlight) {
+      return "live";
+    }
+    return phase === "reported" ? "done" : "idle";
+  });
   const phaseWord = $derived(phase === "blocked" ? "needs an answer" : phase);
 
   // Elapsed is a clock: while it runs the card re-reads it on its own, and once
@@ -250,7 +259,9 @@
     if (!inFlight) {
       return;
     }
-    const tick = setInterval(() => (now = Date.now()), 1000);
+    const tick = setInterval(() => {
+      now = Date.now();
+    }, 1000);
     return () => clearInterval(tick);
   });
   const startedAt = $derived(message.timestamp?.getTime());
@@ -288,6 +299,7 @@
     }
     if (next) {
       watchDelegate(id);
+      // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — onToggle is a sync callback, nothing here awaits the backfill.
       void backfillSession(id);
     } else {
       unwatchDelegate(id);
@@ -565,6 +577,7 @@
     background-color: var(--mark-8);
   }
 
+  /* biome-ignore lint/style/noDescendingSpecificity: cascade order is load-bearing — .tk's base color must lose to the :hover rule above it. */
   .tk {
     font-family: var(--font-mono);
     color: var(--ink-strong);
@@ -814,8 +827,11 @@
   @media (prefers-reduced-motion: reduce) {
     :global(.delegate .bhead),
     .chev,
-    .tk,
     .jump {
+      transition: none;
+    }
+    /* biome-ignore lint/style/noDescendingSpecificity: cascade order is load-bearing — .tk's base transition must lose to the :hover rule above it. */
+    .tk {
       transition: none;
     }
     :global(.delegate [data-slot="collapsible-content"][data-state="open"]),

@@ -62,7 +62,9 @@
       {#each info.suggests as suggestion (suggestion)}
         <button
           class="rounded-[var(--radius-pill)] border border-border px-2 py-0.5 font-mono text-micro text-foreground transition-colors hover:bg-accent"
-          onclick={() => (matcher = suggestion)}
+          onclick={() => {
+            matcher = suggestion;
+          }}
           type="button"
         >
           {suggestion}
@@ -71,6 +73,7 @@
     </div>
   {/if}
 
+  <!-- biome-ignore lint/a11y/noLabelWithoutControl: the `Input` component (shadcn-svelte) renders a native <input> as its only child -->
   <label class="flex flex-col gap-1.5 text-caption">
     Try it — {info?.filters ?? 'the value this event carries'}
     <Input

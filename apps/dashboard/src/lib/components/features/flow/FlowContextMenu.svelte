@@ -76,6 +76,7 @@
       class="flex w-full items-center gap-2 rounded-[var(--radius-card)] px-2 py-1.5 text-sm text-popover-foreground hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       onclick={() => onAction(item.id)}
       role="menuitem"
+      type="button"
     >
       <item.icon aria-hidden="true" class="h-4 w-4" />
       <span>{item.label}</span>

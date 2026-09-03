@@ -24,15 +24,15 @@
       : undefined
   );
 
-  const label = $derived(
-    isRule
-      ? (meta.ruleName ?? "rule")
-      : isReport
-        ? failed
-          ? "report — failed"
-          : "report"
-        : (meta.peerName ?? meta.peerFrom ?? "peer")
-  );
+  const label = $derived.by(() => {
+    if (isRule) {
+      return meta.ruleName ?? "rule";
+    }
+    if (isReport) {
+      return failed ? "report — failed" : "report";
+    }
+    return meta.peerName ?? meta.peerFrom ?? "peer";
+  });
 </script>
 
 <div class="peer" class:err={failed}>

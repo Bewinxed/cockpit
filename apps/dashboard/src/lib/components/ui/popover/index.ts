@@ -1,28 +1,30 @@
-import Root from "./popover.svelte";
-import Close from "./popover-close.svelte";
-import Content from "./popover-content.svelte";
-import Description from "./popover-description.svelte";
-import Header from "./popover-header.svelte";
-import Portal from "./popover-portal.svelte";
-import Title from "./popover-title.svelte";
-import Trigger from "./popover-trigger.svelte";
-
+// biome-ignore lint/performance/noBarrelFile: shadcn-svelte component barrel — this re-export surface is the public import path consumers use across the app
+export { default as Root, default as Popover } from "./popover.svelte";
 export {
-  Close,
-  Close as PopoverClose,
-  Content,
-  Content as PopoverContent,
-  Description,
-  Description as PopoverDescription,
-  Header,
-  Header as PopoverHeader,
-  Portal,
-  Portal as PopoverPortal,
-  Root,
-  //
-  Root as Popover,
-  Title,
-  Title as PopoverTitle,
-  Trigger,
-  Trigger as PopoverTrigger,
-};
+  default as Close,
+  default as PopoverClose,
+} from "./popover-close.svelte";
+export {
+  default as Content,
+  default as PopoverContent,
+} from "./popover-content.svelte";
+export {
+  default as Description,
+  default as PopoverDescription,
+} from "./popover-description.svelte";
+export {
+  default as Header,
+  default as PopoverHeader,
+} from "./popover-header.svelte";
+export {
+  default as Portal,
+  default as PopoverPortal,
+} from "./popover-portal.svelte";
+export {
+  default as Title,
+  default as PopoverTitle,
+} from "./popover-title.svelte";
+export {
+  default as Trigger,
+  default as PopoverTrigger,
+} from "./popover-trigger.svelte";

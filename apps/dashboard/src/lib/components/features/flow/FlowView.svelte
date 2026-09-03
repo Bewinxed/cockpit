@@ -141,12 +141,15 @@
       case "copy": {
         const node = nodes.find((n) => n.id === nodeId);
         if (node?.data?.content) {
+          // biome-ignore lint/complexity/noVoid: fire-and-forget clipboard write, no result to await here
           void copyToClipboard("Message", String(node.data.content));
         }
         break;
       }
       case "jump":
         onJump?.(nodeId);
+        break;
+      default:
         break;
     }
     closeContextMenu();
@@ -257,7 +260,9 @@
   <!-- Context menu -->
   {#if contextMenu}
     <FlowContextMenu
-      onAction={(action) => handleContextAction(action as ContextMenuAction, contextMenu!.nodeId)}
+      onAction={(action) =>
+        // biome-ignore lint/style/noNonNullAssertion: inside {#if contextMenu}, so it's non-null; this callback closes over the same reactive binding
+        handleContextAction(action as ContextMenuAction, contextMenu!.nodeId)}
       onClose={closeContextMenu}
       x={contextMenu.x}
       y={contextMenu.y}

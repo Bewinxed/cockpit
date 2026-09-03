@@ -6,7 +6,9 @@
    * writes go through `PUT /api/autopilot/:id` via autopilot.ts.
    */
   import type { InstanceRow } from "@whiffle/core";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for importing a component group
   import * as Drawer from "$lib/components/ui/drawer";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for importing a component group
   import * as Popover from "$lib/components/ui/popover";
   import Switch from "$lib/components/ui/switch/switch.svelte";
   import { IsMobile } from "$lib/hooks/is-mobile.svelte";
@@ -26,7 +28,7 @@
 
   let open = $state(false);
   let saving = $state(false);
-  let error = $state<string | null>(null);
+  let refused = $state<string | null>(null);
 
   /** Local draft — seeded from the instance row each time the popover opens. */
   let draft = $state("");
@@ -43,7 +45,8 @@
    */
   let activityTick = $state(0);
   const activity = $derived.by(() => {
-    void activityTick; // re-read after the pulse window closes
+    // biome-ignore lint/complexity/noVoid: fire-and-forget read to force re-evaluation after the pulse window closes
+    void activityTick;
     return whiffle.supervisorActivityOf(instanceId);
   });
   $effect(() => {
@@ -51,40 +54,50 @@
       return;
     }
     const remaining = Math.max(100, 2600 - (Date.now() - activity.at));
-    const timer = setTimeout(() => activityTick++, remaining + 50);
+    const timer = setTimeout(() => {
+      activityTick += 1;
+    }, remaining + 50);
     return () => clearTimeout(timer);
   });
   const evaluating = $derived(activity?.phase === "evaluating");
   const settled = $derived(
     activity?.phase === "settled" ? activity.verdict : null
   );
-  const verdictInk = $derived(
-    settled === "reply"
-      ? "var(--accent-solid)"
-      : settled === "escalate" || settled === "ask"
-        ? "var(--status-attn-ink)"
-        : settled === "error"
-          ? "var(--error-11)"
-          : "var(--ink-muted)"
-  );
-  const presence = $derived(
-    evaluating
-      ? "The supervisor is reading this turn…"
-      : settled === "silent"
-        ? "Supervisor: let it pass"
-        : settled === "reply"
-          ? "Supervisor: replied"
-          : settled === "escalate" || settled === "ask"
-            ? "Supervisor: escalated to you"
-            : settled === "error"
-              ? "Supervisor: errored"
-              : null
-  );
+  const verdictInk = $derived.by(() => {
+    if (settled === "reply") {
+      return "var(--accent-solid)";
+    }
+    if (settled === "escalate" || settled === "ask") {
+      return "var(--status-attn-ink)";
+    }
+    if (settled === "error") {
+      return "var(--error-11)";
+    }
+    return "var(--ink-muted)";
+  });
+  const presence = $derived.by(() => {
+    if (evaluating) {
+      return "The supervisor is reading this turn…";
+    }
+    if (settled === "silent") {
+      return "Supervisor: let it pass";
+    }
+    if (settled === "reply") {
+      return "Supervisor: replied";
+    }
+    if (settled === "escalate" || settled === "ask") {
+      return "Supervisor: escalated to you";
+    }
+    if (settled === "error") {
+      return "Supervisor: errored";
+    }
+    return null;
+  });
 
   function seed() {
     draft = instance?.autopilot?.prompt ?? "";
     enabled = instance?.autopilot?.enabled ?? false;
-    error = null;
+    refused = null;
   }
 
   function onOpenChange(next: boolean) {
@@ -99,16 +112,16 @@
       return;
     }
     if (enabled && draft.trim().length < 10) {
-      error = "The standing prompt needs at least 10 characters.";
+      refused = "The standing prompt needs at least 10 characters.";
       return;
     }
     saving = true;
-    error = null;
+    refused = null;
     try {
       await setAutopilot(instanceId, { enabled, prompt: draft.trim() });
       open = false;
     } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
+      refused = e instanceof Error ? e.message : String(e);
     } finally {
       saving = false;
     }
@@ -117,6 +130,7 @@
 
 {#snippet body()}
   <div class="ap-body">
+    <!-- biome-ignore lint/a11y/noLabelWithoutControl: Switch renders a native <button>, a labelable element the linter can't see through -->
     <label class="ap-row">
       <span class="ap-label">Autopilot</span>
       <Switch size="sm" bind:checked={enabled} />
@@ -130,8 +144,8 @@
       bind:value={draft}
     ></textarea>
 
-    {#if error}
-      <p class="ap-error">{error}</p>
+    {#if refused}
+      <p class="ap-error">{refused}</p>
     {/if}
 
     <button class="ap-save" disabled={saving} onclick={save} type="button">

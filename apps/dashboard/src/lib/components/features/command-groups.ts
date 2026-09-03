@@ -14,6 +14,10 @@ export interface CommandGroup {
   start: number;
 }
 
+const WHITESPACE = /\s/;
+const LEADING_WHITESPACE = /^\s/;
+const LEADING_SLASH = /^\//;
+
 /** MCP prompts are the only commands whose namespace is a server, not a plugin. */
 const isMcpGroup = (commands: AvailableCommand[]) =>
   commands.every((cmd) => cmd.type === "mcp");
@@ -79,12 +83,12 @@ export function commandAt(
     return null;
   }
   // Opening a word: start of input, or preceded by whitespace.
-  if (slash > 0 && !/\s/.test(before[slash - 1])) {
+  if (slash > 0 && !WHITESPACE.test(before[slash - 1])) {
     return null;
   }
   const term = before.slice(slash + 1);
   // Still one word — a space ends the token.
-  if (/\s/.test(term)) {
+  if (WHITESPACE.test(term)) {
     return null;
   }
   return { term, start: slash };
@@ -107,7 +111,7 @@ export function insertCommand(
   // `commandAt` return null. It is not written when the text after the caret
   // already starts with one, or picking a command mid-sentence leaves a gap.
   const rest = text.slice(caret);
-  const insert = /^\s/.test(rest) ? `/${name}` : `/${name} `;
+  const insert = LEADING_WHITESPACE.test(rest) ? `/${name}` : `/${name} `;
   return {
     text: text.slice(0, token.start) + insert + rest,
     caret: token.start + insert.length,
@@ -119,7 +123,7 @@ export function filterCommands(
   commands: AvailableCommand[],
   filter: string
 ): AvailableCommand[] {
-  const searchTerm = filter.toLowerCase().replace(/^\//, "");
+  const searchTerm = filter.toLowerCase().replace(LEADING_SLASH, "");
   return orderCommands(
     commands.filter(
       (cmd) =>
@@ -133,7 +137,7 @@ export function filterCommands(
 export function groupCommands(ordered: AvailableCommand[]): CommandGroup[] {
   const groups: CommandGroup[] = [];
   ordered.forEach((command, index) => {
-    const run = groups[groups.length - 1];
+    const run = groups.at(-1);
     if (run && run.source === command.source) {
       run.commands.push(command);
     } else {

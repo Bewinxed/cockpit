@@ -3,8 +3,8 @@
  * Uses manual code paste flow (standard for 3rd party OAuth)
  */
 
-import { randomBytes } from "crypto";
-import * as readline from "readline";
+import { randomBytes } from "node:crypto";
+import { createInterface } from "node:readline";
 import {
   deleteCredentials,
   isAuthenticated,
@@ -38,8 +38,8 @@ export interface LoginResult {
 /**
  * Prompt user to paste authorization code
  */
-async function promptForCode(): Promise<string> {
-  const rl = readline.createInterface({
+function promptForCode(): Promise<string> {
+  const rl = createInterface({
     input: process.stdin,
     output: process.stdout,
   });

@@ -4,6 +4,7 @@
 </script>
 
 <script lang="ts">
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as ToggleGroup from "$lib/components/ui/toggle-group";
   import ActivityDot from "./ActivityDot.svelte";
   /**

@@ -123,7 +123,9 @@
   <Input
     aria-label="Find in session"
     class="h-auto w-56 border-0 bg-transparent p-0 text-sm shadow-none focus-visible:ring-0"
-    oninput={() => (current = 0)}
+    oninput={() => {
+      current = 0;
+    }}
     onkeydown={handleKeydown}
     placeholder="Find in session"
     bind:ref={input}

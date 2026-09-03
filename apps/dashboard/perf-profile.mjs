@@ -49,6 +49,7 @@ const pending = new Map();
 
 ws.addEventListener("message", (ev) => {
   const msg = JSON.parse(ev.data);
+  // biome-ignore lint/suspicious/noEqualsToNull: must catch both null and undefined msg.id (CDP notifications omit id)
   if (msg.id != null && pending.has(msg.id)) {
     pending.get(msg.id)(msg);
     pending.delete(msg.id);
@@ -57,7 +58,8 @@ ws.addEventListener("message", (ev) => {
 
 function cdp(method, params = {}) {
   return new Promise((resolve, reject) => {
-    const id = ++msgId;
+    msgId += 1;
+    const id = msgId;
     pending.set(id, (msg) =>
       msg.error ? reject(msg.error) : resolve(msg.result)
     );
@@ -259,7 +261,7 @@ const otherTabs = domStats.tabs.filter(
   (t) => t.dataTab !== "none" && t.selected !== "true"
 );
 if (otherTabs.length > 0) {
-  const target = otherTabs[0];
+  const [target] = otherTabs;
   console.log(`  Switching to "${target.label}"...`);
 
   // Reset perf counters

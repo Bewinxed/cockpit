@@ -10,6 +10,8 @@
   }: WithElementRef<HTMLAttributes<HTMLSpanElement>> = $props();
 </script>
 
+<!-- biome-ignore lint/a11y/useFocusableInteractive: this is the current page, deliberately non-interactive and unfocusable despite the link-like role -->
+<!-- biome-ignore lint/a11y/useSemanticElements: not a real link — it has no href and must not be navigable, since it represents the current page -->
 <span
   aria-current="page"
   aria-disabled="true"

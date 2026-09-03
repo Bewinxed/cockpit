@@ -69,6 +69,14 @@
     return Array.isArray(value) ? value.length > 0 : !!value;
   };
 
+  /** Every multi-select branch reads one answer as a list, whatever shape it arrived in. */
+  const asList = (value: string | string[] | undefined): string[] => {
+    if (Array.isArray(value)) {
+      return value;
+    }
+    return value ? [value] : [];
+  };
+
   const allAnswered = $derived(!!questions && questions.every(isAnswered));
 
   /**
@@ -106,7 +114,7 @@
       return;
     }
     const value = answers[q.question];
-    const list = Array.isArray(value) ? value : value ? [value] : [];
+    const list = asList(value);
     answers = {
       ...answers,
       [q.question]: list.includes(label)
@@ -137,13 +145,14 @@
   let commandId = $state<string | null>(null);
   const record = $derived(commandId ? commandRecord(commandId) : null);
   /** What the answer was refused with, once the tracker has called it off. */
-  const refused = $derived(
-    record?.stage === "failed"
-      ? record.reason
-        ? `Couldn't send that answer. ${record.reason}`
-        : "Couldn't send that answer."
-      : null
-  );
+  const refused = $derived.by(() => {
+    if (record?.stage !== "failed") {
+      return null;
+    }
+    return record.reason
+      ? `Couldn't send that answer. ${record.reason}`
+      : "Couldn't send that answer.";
+  });
 
   function answer(kind: "allow" | "deny" | "always"): void {
     if (!answerable) {
@@ -292,7 +301,7 @@
     <div class="qact">
       <Button
         class={primary}
-        disabled={!allAnswered || !answerable}
+        disabled={!(allAnswered && answerable)}
         onclick={submitQuestion}
       >
         <IconCheck />Answer
@@ -365,7 +374,8 @@
       <div class="widen">
         <p>
           This would allow <span class="mono">{rule.full}</span> for
-          {rule.scope} — a wider grant than the request above.
+          {rule.scope}
+          — a wider grant than the request above.
         </p>
         <Button
           class={widen}
@@ -601,6 +611,7 @@
   .qopts button:not(.sel) .kc.dim {
     opacity: 0.45;
   }
+  /* biome-ignore lint/style/noDescendingSpecificity: cascade order is load-bearing — .kc's own base rules must lose to .qopts button.sel .kc above them. */
   .kc {
     display: inline-grid;
     place-items: center;

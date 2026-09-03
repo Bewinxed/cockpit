@@ -37,6 +37,7 @@ let msgId = 0;
 const pending = new Map();
 ws.addEventListener("message", (ev) => {
   const msg = JSON.parse(ev.data);
+  // biome-ignore lint/suspicious/noEqualsToNull: must catch both null and undefined msg.id (CDP notifications omit id)
   if (msg.id != null && pending.has(msg.id)) {
     pending.get(msg.id)(msg);
     pending.delete(msg.id);
@@ -44,7 +45,8 @@ ws.addEventListener("message", (ev) => {
 });
 function cdp(method, params = {}) {
   return new Promise((resolve, reject) => {
-    const id = ++msgId;
+    msgId += 1;
+    const id = msgId;
     pending.set(id, (msg) =>
       msg.error ? reject(msg.error) : resolve(msg.result)
     );
@@ -106,7 +108,7 @@ if (sessionIds.length === 0) {
 }
 
 // Open first session
-const first = sessionIds[0];
+const [first] = sessionIds;
 console.log(`\n── 1. OPEN FIRST SESSION: ${first.slice(0, 8)} ──`);
 await cdp("Page.navigate", { url: `${TARGET}/session/${first}` });
 await new Promise((r) => {
@@ -147,7 +149,7 @@ console.log(`  Heap: ${Math.round(heap1 / 1024 / 1024)}MB`);
 
 // Open a second session if available
 if (sessionIds.length >= 2) {
-  const second = sessionIds[1];
+  const [, second] = sessionIds;
   console.log(`\n── 2. OPEN SECOND SESSION TAB: ${second.slice(0, 8)} ──`);
 
   // Click in sidebar or navigate directly
@@ -275,7 +277,7 @@ console.log("\n── 4. SIMULATED STREAMING (rapid DOM growth) ──");
 await cdp("Performance.disable");
 await cdp("Performance.enable");
 
-const activeSession = sessionIds[0];
+const [activeSession] = sessionIds;
 
 // Measure FPS during simulated streaming
 const streamFps = await evaluate(`(() => {

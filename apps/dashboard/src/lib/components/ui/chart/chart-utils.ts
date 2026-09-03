@@ -22,7 +22,7 @@ export function getPayloadConfigFromPayload(
   config: ChartConfig,
   payload: TooltipPayload,
   key: string,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // biome-ignore lint/suspicious/noExplicitAny: caller-supplied raw data record can hold values of any shape
   data?: Record<string, any> | null
 ) {
   if (typeof payload !== "object" || payload === null) {
@@ -53,6 +53,7 @@ export function getPayloadConfigFromPayload(
     typeof payloadConfig[key as keyof typeof payloadConfig] === "string"
   ) {
     configLabelKey = payloadConfig[key as keyof typeof payloadConfig] as string;
+    // biome-ignore lint/suspicious/noEqualsToNull: data is optional and nullable; must catch both null and undefined
   } else if (data != null && key in data && typeof data[key] === "string") {
     configLabelKey = data[key] as string;
   }

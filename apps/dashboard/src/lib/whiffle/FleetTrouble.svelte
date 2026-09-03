@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { FleetPlugin, FleetSkillMeta } from "@whiffle/core";
   import { invalidate } from "$app/navigation";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Card from "$lib/components/ui/card";
   import { Skeleton } from "$lib/components/ui/skeleton";
   /**
@@ -55,8 +56,9 @@
   );
   const lastSync = $derived(
     machines
-      .filter((machine) => machine.fleet !== undefined)
-      .map((machine) => ({ machine, at: machine.fleet!.at }))
+      .flatMap((machine) =>
+        machine.fleet === undefined ? [] : [{ machine, at: machine.fleet.at }]
+      )
       .sort((a, b) => a.at - b.at)
   );
 
@@ -93,6 +95,7 @@
               onresolved={() => {
             // Scoped: only re-run the tools/fleet loads, not the root layout
             // (which would needlessly refetch /api/instances + /api/instances/titles).
+            // biome-ignore lint/complexity/noVoid: fire-and-forget invalidate; the fault list re-renders on its own next tick
             void invalidate((url: URL) =>
               url.pathname.startsWith('/api/tools') || url.pathname.startsWith('/api/fleet'));
           }}

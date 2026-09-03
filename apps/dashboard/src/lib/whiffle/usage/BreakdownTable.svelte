@@ -8,8 +8,11 @@
    * pair is fetched once and cached, so switching back costs no request.
    */
   import { page } from "$app/state";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Dialog from "$lib/components/ui/dialog";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Table from "$lib/components/ui/table";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Tabs from "$lib/components/ui/tabs";
   import {
     compactNumber,
@@ -39,7 +42,7 @@
   const cache = new Map<string, UsageSummary>();
   let summary = $state<UsageSummary | null>(null);
   let loading = $state(true);
-  let error = $state<string | null>(null);
+  let loadError = $state<string | null>(null);
 
   async function fetchTab(): Promise<void> {
     const key = `${tab}:${harness}`;
@@ -50,7 +53,7 @@
       return;
     }
     loading = true;
-    error = null;
+    loadError = null;
     try {
       const response = await fetch(
         `/api/usage/summary?groupBy=${tab}&harness=${harness}`
@@ -62,7 +65,7 @@
       cache.set(key, data);
       summary = data;
     } catch (cause) {
-      error = cause instanceof Error ? cause.message : String(cause);
+      loadError = cause instanceof Error ? cause.message : String(cause);
       summary = null;
     } finally {
       loading = false;
@@ -70,10 +73,12 @@
   }
 
   $effect(() => {
+    // biome-ignore lint/complexity/noVoid: fire-and-forget — the effect reruns on tab/harness, fetchTab() manages its own loading/error state
     void fetchTab();
   });
 
   function switchTab(next: string): void {
+    // biome-ignore lint/complexity/noVoid: fire-and-forget navigation — the URL param drives the $derived tab, not this promise
     void goto(`/usage?tab=${next}`, { noScroll: true, replaceState: true });
   }
 
@@ -147,6 +152,7 @@
       <h2 class="text-title">Breakdown</h2>
       <p class="text-caption">Tokens and cost by {tab}.</p>
     </div>
+    <!-- biome-ignore lint/a11y/useSemanticElements: a fieldset's default border/padding and legend semantics don't fit this toolbar; role="group" already conveys it to AT -->
     <div
       aria-label="Harness"
       class="flex gap-1 rounded-[var(--radius-control)] bg-muted p-0.5"
@@ -158,7 +164,10 @@
                {harness === 'claude'
           ? 'bg-card text-foreground shadow-sm'
           : 'text-muted-foreground hover:text-foreground'}"
-        onclick={() => (harness = 'claude')}
+        onclick={() => {
+          harness = 'claude';
+        }}
+        type="button"
       >
         Claude
       </button>
@@ -168,7 +177,10 @@
                {harness === 'opencode'
           ? 'bg-card text-foreground shadow-sm'
           : 'text-muted-foreground hover:text-foreground'}"
-        onclick={() => (harness = 'opencode')}
+        onclick={() => {
+          harness = 'opencode';
+        }}
+        type="button"
       >
         opencode
       </button>
@@ -183,8 +195,8 @@
     </Tabs.List>
   </Tabs.Root>
 
-  {#if error}
-    <p class="text-caption text-error" role="alert">{error}</p>
+  {#if loadError}
+    <p class="text-caption text-error" role="alert">{loadError}</p>
   {:else if loading}
     <div class="h-40 w-full rounded-[var(--radius-card)] bg-muted/40"></div>
   {:else}
@@ -198,6 +210,7 @@
                 aria-pressed={sortBy === column.key}
                 class="sortbtn"
                 onclick={() => sort(column.key)}
+                type="button"
               >
                 {column.label}
                 {#if sortBy === column.key}
@@ -254,7 +267,11 @@
 </div>
 
 <Dialog.Root
-  onOpenChange={(open) => !open && (selected = null)}
+  onOpenChange={(open) => {
+    if (!open) {
+      selected = null;
+    }
+  }}
   bind:open={dialogOpen}
 >
   <Dialog.Content class="max-w-md">

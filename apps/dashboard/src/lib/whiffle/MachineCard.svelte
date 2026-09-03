@@ -10,6 +10,7 @@
    */
   import type { BuildInfo } from "@whiffle/core";
   import { Badge } from "$lib/components/ui/badge";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Tooltip from "$lib/components/ui/tooltip";
   import { IconCheck, IconWarningTriangle } from "$lib/icons";
   import { formatDistanceToNow } from "$lib/utils/time";
@@ -63,7 +64,7 @@
   const commitOf = (info: BuildInfo | undefined) => info?.commit ?? "?";
 </script>
 
-<li class="row" role="listitem">
+<li class="row">
   <span class="who">
     <OsMark class="size-4 shrink-0" os={machine.os} />
     <span class="nm">{machineLabel(machine.hostname)}</span>
@@ -165,8 +166,8 @@
             {#if syncAge !== undefined}
               <span class="text-micro opacity-80">
                 Last synced
-                {formatDistanceToNow(new Date(Date.now() - syncAge))} — resolve
-                on Tools.
+                {formatDistanceToNow(new Date(Date.now() - syncAge))}
+                — resolve on Tools.
               </span>
             {/if}
           </div>

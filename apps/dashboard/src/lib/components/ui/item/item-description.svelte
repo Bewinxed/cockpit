@@ -12,7 +12,7 @@
 
 <p
   class={cn(
-		"text-left text-sm text-muted-foreground line-clamp-2 font-normal [&>a]:underline [&>a]:underline-offset-4 [&>a:hover]:text-primary",
+		"line-clamp-2 text-left font-normal text-muted-foreground text-sm [&>a:hover]:text-primary [&>a]:underline [&>a]:underline-offset-4",
 		className
 	)}
   data-slot="item-description"

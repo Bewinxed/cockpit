@@ -53,8 +53,10 @@
     {monthFormat}
     {months}
     onchange={(e) => {
-			if (!placeholder) return;
-			const v = Number.parseInt(e.currentTarget.value);
+			if (!placeholder) {
+				return;
+			}
+			const v = Number.parseInt(e.currentTarget.value, 10);
 			const newPlaceholder = placeholder.set({ month: v });
 			placeholder = newPlaceholder.subtract({ months: monthIndex });
 		}}

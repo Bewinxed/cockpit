@@ -93,7 +93,9 @@ export const serviceManaged = (
  * whole fix.
  */
 export class SessiondUnavailableError extends Error {
-  constructor(readonly endpoint: string) {
+  readonly endpoint: string;
+
+  constructor(endpoint: string) {
     super(
       `[sessiond] nothing is listening on ${endpoint}, and this agent is service-managed — ` +
         "refusing to ad-hoc spawn one (its children would land in the agent cgroup and die " +
@@ -101,6 +103,7 @@ export class SessiondUnavailableError extends Error {
         "then `systemctl --user start whiffle-sessiond`."
     );
     this.name = "SessiondUnavailableError";
+    this.endpoint = endpoint;
   }
 }
 
@@ -170,6 +173,7 @@ export const ensureSessiond = async (
 
   const deadline = Date.now() + ADHOC_START_TIMEOUT_MS;
   while (Date.now() < deadline) {
+    // biome-ignore lint/performance/noAwaitInLoops: polls the freshly spawned daemon at a fixed interval until it binds or the deadline passes
     if (await probeEndpoint(endpoint, 250)) {
       return;
     }
@@ -188,8 +192,8 @@ export interface SessiondWelcomeInfo {
 }
 
 interface ProcListener {
-  line?: (event: SessiondLine) => void;
   exit?: (exitCode: number | null, signal: NodeJS.Signals | null) => void;
+  line?: (event: SessiondLine) => void;
   reset?: (nextSeq: number) => void;
 }
 
@@ -262,7 +266,9 @@ export class SessiondClient {
     });
   }
 
-  #onWelcome: (welcome: SessiondWelcomeInfo) => void = () => {};
+  #onWelcome: (welcome: SessiondWelcomeInfo) => void = () => {
+    // replaced by connect()/list() before any welcome can arrive
+  };
 
   get epoch(): string | undefined {
     return this.#welcome?.epoch;
@@ -330,10 +336,13 @@ export class SessiondClient {
           .get(message.procId)
           ?.exit?.(message.exitCode, message.signal);
         return;
+      default:
+        return;
     }
   }
 
   #send(message: SessiondClientMessage): void {
+    // biome-ignore lint/suspicious/noUnnecessaryConditions: #closed does become true at runtime (close()/the socket "close" handler) even though biome's inference sees only the field's initializer
     if (this.#closed) {
       throw new Error("[sessiond] connection is closed");
     }
@@ -479,7 +488,11 @@ export const sessiondBridge = (
   let exitCode: number | null = null;
   let signalCode: NodeJS.Signals | null = null;
 
-  const stdout = new Readable({ read() {} });
+  const stdout = new Readable({
+    read() {
+      // pushes arrive from the sessiond subscription, not on demand
+    },
+  });
   // The highest sequence this wrapper has handed to the SDK. It subscribes at
   // 0 against the child's own fresh ring, so the first line it expects is seq
   // 1, and this is what separates a benign reset from a lost window.
@@ -570,7 +583,14 @@ export const sessiondBridge = (
 
   const kill = (sig: NodeJS.Signals): boolean => {
     killed = true;
-    void started.then(() => client.signal(procId, sig).catch(() => {}));
+    // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — kill() itself is synchronous, and the SDK does not await the signal reaching the child
+    void started.then(async () => {
+      try {
+        await client.signal(procId, sig);
+      } catch {
+        // a child that already died cannot be signaled; the exit event is the truth
+      }
+    });
     return true;
   };
   options.signal?.addEventListener("abort", () => kill("SIGTERM"), {
@@ -590,14 +610,14 @@ export const sessiondBridge = (
       return signalCode;
     },
     kill,
-    on: (event: "exit" | "error", listener: (...args: never[]) => void) => {
-      events.on(event, listener as (...args: unknown[]) => void);
+    on: (event: "exit" | "error", handler: (...args: never[]) => void) => {
+      events.on(event, handler as (...args: unknown[]) => void);
     },
-    once: (event: "exit" | "error", listener: (...args: never[]) => void) => {
-      events.once(event, listener as (...args: unknown[]) => void);
+    once: (event: "exit" | "error", handler: (...args: never[]) => void) => {
+      events.once(event, handler as (...args: unknown[]) => void);
     },
-    off: (event: "exit" | "error", listener: (...args: never[]) => void) => {
-      events.off(event, listener as (...args: unknown[]) => void);
+    off: (event: "exit" | "error", handler: (...args: never[]) => void) => {
+      events.off(event, handler as (...args: unknown[]) => void);
     },
   } as import("@anthropic-ai/claude-agent-sdk").SpawnedProcess;
 };

@@ -196,7 +196,7 @@ export type SessiondServerMessage =
  *   darwin, so a long `XDG_RUNTIME_DIR`-style path is a real risk; a fixed,
  *   short home-relative path avoids it.
  * - win32 : `\\.\pipe\whiffle-sessiond-<user>` — a name reservation. Windows
- *   *implementation* is out of scope for this leaf; only the string is fixed
+ *   implementation is out of scope for this leaf; only the string is fixed
  *   so nothing downstream has to change when it lands.
  */
 export const sessiondEndpoint = (): string => {

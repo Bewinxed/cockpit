@@ -55,7 +55,7 @@ test("randomUUID is preferred when the source has one", () => {
 test("ids are unique across many draws", () => {
   const source = insecureCrypto();
   const ids = new Set<string>();
-  for (let i = 0; i < 1000; i++) {
+  for (let i = 0; i < 1000; i += 1) {
     ids.add(newId(source));
   }
   expect(ids.size).toBe(1000);

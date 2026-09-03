@@ -16,7 +16,9 @@
   import { fly, slide } from "svelte/transition";
   import { toast } from "svelte-sonner";
   import { Button } from "$lib/components/ui/button";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as ContextMenu from "$lib/components/ui/context-menu";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Popover from "$lib/components/ui/popover";
   import { restartMcpServer, setMcpServerEnabled } from "./client.svelte";
   import McpServerDetail from "./McpServerDetail.svelte";
@@ -94,6 +96,7 @@
 </script>
 
 {#if !folded}
+  <!-- biome-ignore lint/a11y/useAriaPropsSupportedByRole: labels the chip row for assistive tech; a <fieldset>/<legend> would misdescribe a row of buttons as a form group -->
   <span
     aria-label="MCP servers"
     class="hidden shrink-0 items-center gap-1 sm:flex"
@@ -112,7 +115,9 @@
         <ContextMenu.Root>
           <ContextMenu.Trigger class="contents">
             <Popover.Root
-              onOpenChange={(open) => (detailsFor = open ? server.name : null)}
+              onOpenChange={(next) => {
+                detailsFor = next ? server.name : null;
+              }}
               open={detailsFor === server.name}
             >
               <!-- The kit's outline button, like every other control in this
@@ -135,6 +140,7 @@
                     <!-- The favicon IS the button: it fills the circle edge to
                          edge, cropped round — no inset, no framed-square look. -->
                     {#if step < candidates.length}
+                      <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: onerror/onload are image-load lifecycle events, not user interaction — the click target is the wrapping Button -->
                       <img
                         alt={server.name}
                         class="size-full rounded-full object-cover transition-opacity duration-300 {loaded[
@@ -143,8 +149,12 @@
                           ? 'opacity-100'
                           : 'opacity-0'}"
                         loading="lazy"
-                        onerror={() => (attempt[server.name] = step + 1)}
-                        onload={() => (loaded[server.name] = true)}
+                        onerror={() => {
+                          attempt[server.name] = step + 1;
+                        }}
+                        onload={() => {
+                          loaded[server.name] = true;
+                        }}
                         src={candidates[step]}
                       >
                     {:else}
@@ -177,7 +187,11 @@
           </ContextMenu.Trigger>
 
           <ContextMenu.Content>
-            <ContextMenu.Item onSelect={() => (detailsFor = server.name)}>
+            <ContextMenu.Item
+              onSelect={() => {
+                detailsFor = server.name;
+              }}
+            >
               Status & errors
             </ContextMenu.Item>
             <ContextMenu.Item
@@ -241,22 +255,25 @@
   >
     <ul class="flex max-h-[60vh] flex-col overflow-y-auto">
       {#each servers as server (server.name)}
-        {@const open = foldedDetail === server.name}
+        {@const expanded = foldedDetail === server.name}
         {@const host = mcpHost(server)}
         {@const candidates = host ? faviconCandidates(host) : []}
         {@const step = attempt[server.name] ?? 0}
         <li class="flex flex-col">
           <button
-            aria-expanded={open}
+            aria-expanded={expanded}
             class="flex min-h-9 items-center gap-2.5 rounded-[var(--radius-control)] px-2 text-left transition-colors
                    hover:bg-accent hover:text-accent-foreground"
-            onclick={() => (foldedDetail = open ? null : server.name)}
+            onclick={() => {
+              foldedDetail = expanded ? null : server.name;
+            }}
             type="button"
           >
             <!-- Same favicon + ringed status dot as the unfolded chips, at row
                  scale — the fold hid the row, not the identity. -->
             <span class="relative size-5 shrink-0">
               {#if step < candidates.length}
+                <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: onerror/onload are image-load lifecycle events, not user interaction — the click target is the wrapping button -->
                 <img
                   alt=""
                   class="size-full rounded-full object-cover transition-opacity duration-300 {loaded[
@@ -265,8 +282,12 @@
                     ? 'opacity-100'
                     : 'opacity-0'}"
                   loading="lazy"
-                  onerror={() => (attempt[server.name] = step + 1)}
-                  onload={() => (loaded[server.name] = true)}
+                  onerror={() => {
+                    attempt[server.name] = step + 1;
+                  }}
+                  onload={() => {
+                    loaded[server.name] = true;
+                  }}
                   src={candidates[step]}
                 >
               {:else}
@@ -290,7 +311,7 @@
               >{server.status}</span
             >
           </button>
-          {#if open}
+          {#if expanded}
             <div
               class="px-2 pt-1 pb-2"
               transition:slide={{ duration: 160, easing: quintOut }}

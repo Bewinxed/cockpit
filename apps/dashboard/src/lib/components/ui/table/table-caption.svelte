@@ -11,7 +11,7 @@
 </script>
 
 <caption
-  class={cn("mt-4 text-sm text-muted-foreground", className)}
+  class={cn("mt-4 text-muted-foreground text-sm", className)}
   data-slot="table-caption"
   bind:this={ref}
   {...restProps}

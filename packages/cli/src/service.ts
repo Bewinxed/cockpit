@@ -289,7 +289,11 @@ const probeSessiond = async (): Promise<string | undefined> => {
   }
   const socket = await Bun.connect({
     unix: endpoint,
-    socket: { data: () => {} },
+    socket: {
+      data: () => {
+        // unread: this connect is only a liveness probe, nothing is sent back
+      },
+    },
   }).catch(() => undefined);
   if (!socket) {
     return `stale socket at ${endpoint} — nothing is listening`;
@@ -337,7 +341,7 @@ export interface ServiceSpec {
 
 const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
   const {
-    root: ROOT,
+    root: LAYOUT_ROOT,
     hubEntry: HUB_ENTRY,
     sessiondEntry: SESSIOND_ENTRY,
     dashboardEntry: DASHBOARD_ENTRY,
@@ -363,7 +367,7 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
         // in-tree database there the first time it finds one.
         [WHIFFLE_ENV.dbPath]: DEFAULT_DB_PATH, // ~/.local/share/whiffle or ~/Library/Application Support/whiffle
       },
-      workingDirectory: ROOT,
+      workingDirectory: LAYOUT_ROOT,
       after: ["network-online.target"],
       wants: [],
       restartOnSuccess: true,
@@ -371,7 +375,7 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
       check: (): undefined => {
         if (!existsSync(HUB_ENTRY)) {
           throw new ServiceError(
-            `no hub at ${HUB_ENTRY} — is ${ROOT} a whiffle checkout?`
+            `no hub at ${HUB_ENTRY} — is ${LAYOUT_ROOT} a whiffle checkout?`
           );
         }
       },
@@ -384,7 +388,7 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
       description: "Whiffle dashboard",
       command: [process.execPath, DASHBOARD_ENTRY],
       environment: { PORT: DASHBOARD_PORT, HOST: DASHBOARD_HOST },
-      workingDirectory: ROOT,
+      workingDirectory: LAYOUT_ROOT,
       after: [unitName("hub")],
       wants: [unitName("hub")],
       restartOnSuccess: true,
@@ -440,7 +444,7 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
       check: (): undefined => {
         if (!existsSync(SESSIOND_ENTRY)) {
           throw new ServiceError(
-            `no sessiond at ${SESSIOND_ENTRY} — is ${ROOT} a whiffle checkout?`
+            `no sessiond at ${SESSIOND_ENTRY} — is ${LAYOUT_ROOT} a whiffle checkout?`
           );
         }
       },
@@ -587,11 +591,13 @@ const xml = (value: string): string =>
  * before sessiond finds the answer written down where they are already looking.
  * It is documentation in the artefact, never enforcement.
  */
+const WHIFFLE_SIBLING_SERVICE = /^whiffle-(.+)\.service$/;
+
 const orderingComment = (spec: ServiceSpec): string => {
   // Only sibling whiffle services mean anything under launchd; systemd targets
   // like `network-online.target` have no launchd counterpart to name.
   const siblings = spec.after
-    .map((target) => /^whiffle-(.+)\.service$/.exec(target)?.[1])
+    .map((target) => WHIFFLE_SIBLING_SERVICE.exec(target)?.[1])
     .filter((id): id is string => id !== undefined && isServiceId(id))
     .map((id) => label(id as ServiceId));
   if (siblings.length === 0) {
@@ -753,6 +759,7 @@ const installLaunchAgents = async (
       note("");
     }
     const path = launchAgentPath(spec.id);
+    // biome-ignore lint/performance/noAwaitInLoops: services install one at a time so each one's notes print in its own order and a failure is attributable to the service that caused it.
     await writeUnit(path, plist(spec));
     note(`wrote ${path}`);
 
@@ -776,13 +783,16 @@ const uninstallLaunchAgents = async (
   for (const spec of specs) {
     const path = launchAgentPath(spec.id);
     if (bootstrap) {
+      // biome-ignore lint/performance/noAwaitInLoops: services uninstall one at a time so each one's notes print in its own order and a failure is attributable to the service that caused it.
       await run(["launchctl", "bootout", `${guiDomain()}/${label(spec.id)}`]);
     } else {
       await run(["launchctl", "unload", "-w", path]);
     }
     await Bun.file(path)
       .delete()
-      .catch(() => {});
+      .catch(() => {
+        // best effort: the plist may already be gone
+      });
     note(`removed ${path}`);
   }
 };
@@ -810,6 +820,7 @@ const installSystemdUnits = async (
   note: (line: string) => void
 ): Promise<void> => {
   for (const spec of specs) {
+    // biome-ignore lint/performance/noAwaitInLoops: units write one at a time so each one's note prints in its own order and a failure is attributable to the unit that caused it.
     await writeUnit(systemdPath(spec.id), unit(spec));
     note(`wrote ${systemdPath(spec.id)}`);
   }
@@ -822,6 +833,7 @@ const installSystemdUnits = async (
   }
 
   for (const spec of specs) {
+    // biome-ignore lint/performance/noAwaitInLoops: units enable one at a time so each one's notes print in its own order and a failure is attributable to the unit that caused it.
     const enabled = await run([
       "systemctl",
       "--user",
@@ -844,10 +856,13 @@ const uninstallSystemdUnits = async (
   note: (line: string) => void
 ): Promise<void> => {
   for (const spec of specs) {
+    // biome-ignore lint/performance/noAwaitInLoops: units uninstall one at a time so each one's notes print in its own order and a failure is attributable to the unit that caused it.
     await run(["systemctl", "--user", "disable", "--now", unitName(spec.id)]);
     await Bun.file(systemdPath(spec.id))
       .delete()
-      .catch(() => {});
+      .catch(() => {
+        // best effort: the unit file may already be gone
+      });
     note(`removed ${systemdPath(spec.id)}`);
   }
   await run(["systemctl", "--user", "daemon-reload"]);
@@ -966,6 +981,7 @@ const waitForIdle = async (
   try {
     for (;;) {
       waiting(`waiting for ${sessions(outstanding)} to finish…`);
+      // biome-ignore lint/performance/noAwaitInLoops: a retry poll — each wait must see the effect of the previous one before deciding whether to keep polling.
       await Bun.sleep(IDLE_POLL_MS);
       const now = await agentBusy();
       // The hub going away mid-wait is the same not-knowing as never reaching it.
@@ -1028,6 +1044,8 @@ const clearToRestart = async (
       throw new ServiceError(decision.reason);
     case "wait":
       return waitForIdle(decision.busy, note);
+    default:
+      throw new ServiceError("unreachable: unknown restart decision kind");
   }
 };
 
@@ -1102,17 +1120,25 @@ const modeLine = async (spec: ServiceSpec, path: string): Promise<string> => {
   return watches(spec.id) ? "dev (watching)" : "dev (never watched)";
 };
 
+const LAUNCHCTL_PID = /"PID"\s*=\s*(\d+)/;
+
 const launchAgentStatus = async (
   spec: ServiceSpec,
   note: (line: string) => void
 ): Promise<void> => {
   const listed = await run(["launchctl", "list", label(spec.id)]);
-  const pid = /"PID"\s*=\s*(\d+)/.exec(listed.stdout.toString())?.[1];
+  const pid = LAUNCHCTL_PID.exec(listed.stdout.toString())?.[1];
   note(`service  ${spec.id} (${label(spec.id)})`);
   note(`unit     ${launchAgentPath(spec.id)}`);
-  note(
-    `state    ${listed.exitCode === 0 ? (pid ? `running (pid ${pid})` : "loaded, not running") : "not loaded"}`
-  );
+  let state: string;
+  if (listed.exitCode !== 0) {
+    state = "not loaded";
+  } else if (pid) {
+    state = `running (pid ${pid})`;
+  } else {
+    state = "loaded, not running";
+  }
+  note(`state    ${state}`);
   note(`mode     ${await modeLine(spec, launchAgentPath(spec.id))}`);
   const live = await spec.probe();
   if (live) {
@@ -1206,6 +1232,7 @@ export interface ServiceOptions {
 export const service = async (
   action: ServiceAction,
   { ids, mode, follow, whenIdle, force, note }: ServiceOptions
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one branch per service verb (install/uninstall/restart/status/logs), each already delegating its own logic to a named helper.
 ): Promise<void> => {
   const host = platform();
   if (host !== "darwin" && host !== "linux") {
@@ -1244,6 +1271,7 @@ export const service = async (
         }
         // Asked per service and not up front, so the two that are safe to bounce
         // are already back up by the time the daemon's question is answered.
+        // biome-ignore lint/performance/noAwaitInLoops: services restart one at a time so each one's notes print in its own order and a failure is attributable to the service that caused it.
         await clearToRestart(spec, { whenIdle, force }, note);
         await (mac
           ? restartLaunchAgent(spec, note)
@@ -1255,6 +1283,7 @@ export const service = async (
         if (index > 0) {
           note("");
         }
+        // biome-ignore lint/performance/noAwaitInLoops: services are checked one at a time so each one's status prints in its own order.
         await (mac ? launchAgentStatus(spec, note) : systemdStatus(spec, note));
       }
       return;
@@ -1267,6 +1296,8 @@ export const service = async (
       }
       return mac ? launchAgentLogs(spec, follow) : systemdLogs(spec, follow);
     }
+    default:
+      throw new ServiceError("unreachable: unknown service action");
   }
 };
 
@@ -1348,6 +1379,8 @@ export const writeSessiondLedger = async (
  * spaces and `)`. Everything up to the *last* `)` is therefore dropped first,
  * after which field 3 is token 0 and field 22 is token 19.
  */
+const PROC_STAT_FIELD_SEP = /\s+/;
+
 export const parseProcStartTicks = (stat: string): string | undefined => {
   const close = stat.lastIndexOf(")");
   if (close < 0) {
@@ -1356,7 +1389,7 @@ export const parseProcStartTicks = (stat: string): string | undefined => {
   const fields = stat
     .slice(close + 1)
     .trim()
-    .split(/\s+/);
+    .split(PROC_STAT_FIELD_SEP);
   return fields[19];
 };
 
@@ -1393,13 +1426,8 @@ export const liveOrphans = async (
   entries: readonly LedgerEntry[],
   marker: (pid: number) => Promise<string | undefined> = processStartMarker
 ): Promise<LedgerEntry[]> => {
-  const alive: LedgerEntry[] = [];
-  for (const entry of entries) {
-    if ((await marker(entry.pid)) === entry.startTicks) {
-      alive.push(entry);
-    }
-  }
-  return alive;
+  const markers = await Promise.all(entries.map((entry) => marker(entry.pid)));
+  return entries.filter((entry, index) => markers[index] === entry.startTicks);
 };
 
 /**
@@ -1454,7 +1482,9 @@ export const sweepSessiondOrphans = async (
   }
   await Bun.file(path)
     .delete()
-    .catch(() => {});
+    .catch(() => {
+      // best effort: the ledger file may already be gone
+    });
   return orphans;
 };
 

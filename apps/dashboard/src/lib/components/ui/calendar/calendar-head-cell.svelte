@@ -11,7 +11,7 @@
 
 <CalendarPrimitive.HeadCell
   class={cn(
-		"w-(--cell-size) rounded-[var(--radius-tile)] text-[0.8rem] font-normal text-muted-foreground",
+		"w-(--cell-size) rounded-[var(--radius-tile)] font-normal text-[0.8rem] text-muted-foreground",
 		className
 	)}
   bind:ref

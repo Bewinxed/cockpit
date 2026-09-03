@@ -13,7 +13,7 @@
 
 <Label
   class={cn(
-		"gap-2 leading-snug group-data-[disabled=true]/field:opacity-50 has-data-checked:border-primary/30 has-data-checked:bg-primary/5 has-[>[data-slot=field]]:rounded-[var(--radius-card)] has-[>[data-slot=field]]:border *:data-[slot=field]:p-4 dark:has-data-checked:border-primary/20 dark:has-data-checked:bg-primary/10 group/field-label peer/field-label flex w-fit leading-snug",
+		"group/field-label peer/field-label flex w-fit gap-2 leading-snug leading-snug has-[>[data-slot=field]]:rounded-[var(--radius-card)] has-[>[data-slot=field]]:border has-data-checked:border-primary/30 has-data-checked:bg-primary/5 *:data-[slot=field]:p-4 group-data-[disabled=true]/field:opacity-50 dark:has-data-checked:border-primary/20 dark:has-data-checked:bg-primary/10",
 		"has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col",
 		className
 	)}

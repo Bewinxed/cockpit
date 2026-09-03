@@ -1,7 +1,6 @@
-import Root from "./switch.svelte";
-
+// biome-ignore lint/performance/noBarrelFile: shadcn-svelte component barrel — every consumer imports the group from this index
 export {
-  Root,
+  default as Root,
   //
-  Root as Switch,
-};
+  default as Switch,
+} from "./switch.svelte";

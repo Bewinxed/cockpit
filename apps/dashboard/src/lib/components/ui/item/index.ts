@@ -1,34 +1,23 @@
-import Root from "./item.svelte";
-import Actions from "./item-actions.svelte";
-import Content from "./item-content.svelte";
-import Description from "./item-description.svelte";
-import Footer from "./item-footer.svelte";
-import Group from "./item-group.svelte";
-import Header from "./item-header.svelte";
-import Media from "./item-media.svelte";
-import Separator from "./item-separator.svelte";
-import Title from "./item-title.svelte";
-
+// biome-ignore lint/performance/noBarrelFile: this is the shadcn-svelte component group's public re-export surface, not an accidental barrel
+export { default as Root, default as Item } from "./item.svelte";
 export {
-  Actions,
-  Actions as ItemActions,
-  Content,
-  Content as ItemContent,
-  Description,
-  Description as ItemDescription,
-  Footer,
-  Footer as ItemFooter,
-  Group,
-  Group as ItemGroup,
-  Header,
-  Header as ItemHeader,
-  Media,
-  Media as ItemMedia,
-  Root,
-  //
-  Root as Item,
-  Separator,
-  Separator as ItemSeparator,
-  Title,
-  Title as ItemTitle,
-};
+  default as Actions,
+  default as ItemActions,
+} from "./item-actions.svelte";
+export {
+  default as Content,
+  default as ItemContent,
+} from "./item-content.svelte";
+export {
+  default as Description,
+  default as ItemDescription,
+} from "./item-description.svelte";
+export { default as Footer, default as ItemFooter } from "./item-footer.svelte";
+export { default as Group, default as ItemGroup } from "./item-group.svelte";
+export { default as Header, default as ItemHeader } from "./item-header.svelte";
+export { default as Media, default as ItemMedia } from "./item-media.svelte";
+export {
+  default as Separator,
+  default as ItemSeparator,
+} from "./item-separator.svelte";
+export { default as Title, default as ItemTitle } from "./item-title.svelte";

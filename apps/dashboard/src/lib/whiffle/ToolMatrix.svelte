@@ -5,10 +5,13 @@
   import { Badge } from "$lib/components/ui/badge";
   import { Button } from "$lib/components/ui/button";
   import { Card } from "$lib/components/ui/card";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Popover from "$lib/components/ui/popover";
   import { Skeleton } from "$lib/components/ui/skeleton";
   import { Switch } from "$lib/components/ui/switch";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Table from "$lib/components/ui/table";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Tooltip from "$lib/components/ui/tooltip";
   import { IconCheck, IconExternal, IconSpinner } from "$lib/icons";
   import type { Machine } from "./client.svelte";
@@ -21,7 +24,7 @@
     settling,
     catalog,
     policies,
-    error,
+    error: loadError,
   }: {
     machines: Machine[];
     settling: boolean;
@@ -43,8 +46,8 @@
     machines.filter(
       (machine) => machine.tools?.[spec.id]?.state === "installed"
     ).length;
-  const message = (error: unknown) =>
-    error instanceof Error ? error.message : String(error);
+  const message = (err: unknown) =>
+    err instanceof Error ? err.message : String(err);
 
   async function install(machine: Machine, spec: ToolSpec) {
     const key = cellKey(machine.machineId, spec.id);
@@ -55,9 +58,9 @@
         spec.id,
         policyOf(spec).pinnedVersion
       );
-    } catch (error) {
+    } catch (err) {
       toast.error(
-        `${spec.name} on ${machineLabel(machine.hostname)}: ${message(error)}`
+        `${spec.name} on ${machineLabel(machine.hostname)}: ${message(err)}`
       );
     } finally {
       delete asked[key];
@@ -68,8 +71,8 @@
     saving[spec.id] = true;
     try {
       written[spec.id] = await setPolicy(spec.id, { required });
-    } catch (error) {
-      toast.error(message(error));
+    } catch (err) {
+      toast.error(message(err));
     } finally {
       delete saving[spec.id];
     }
@@ -77,15 +80,15 @@
 </script>
 
 {#snippet cell(machine: Machine, spec: ToolSpec, online: boolean)}
-  {@const status = machine.tools?.[spec.id]}
+  {@const toolStatus = machine.tools?.[spec.id]}
   {@const pending = asked[cellKey(machine.machineId, spec.id)] === true}
-  {@const shown = pending ? 'installing' : (status?.state ?? 'unknown')}
+  {@const shown = pending ? 'installing' : (toolStatus?.state ?? 'unknown')}
 
   {#if shown === 'installed'}
     <span class="flex items-center gap-[var(--space-1)]">
       <Badge class="{CHIP} text-success" variant="ghost">
         <IconCheck class="size-3.5 shrink-0" />
-        <span class="font-mono tabular-nums">{status?.version ?? '—'}</span>
+        <span class="font-mono tabular-nums">{toolStatus?.version ?? '—'}</span>
       </Badge>
       <span
         class="transition-opacity group-focus-within/cell:opacity-100 group-hover/cell:opacity-100 md:opacity-0"
@@ -141,16 +144,16 @@
               >{spec.name}
               did not install</span
             >
-            {#if status?.method}
+            {#if toolStatus?.method}
               <span
                 class="ml-auto shrink-0 font-mono text-micro text-muted-foreground"
-                >{status.method}</span
+                >{toolStatus.method}</span
               >
             {/if}
           </header>
           <pre
             class="max-h-56 overflow-auto px-[var(--space-3)] py-[var(--space-2)] font-mono text-micro whitespace-pre-wrap"
-          >{status?.detail ?? 'The machine did not say why.'}</pre>
+          >{toolStatus?.detail ?? 'The machine did not say why.'}</pre>
           <footer
             class="border-t border-border px-[var(--space-3)] py-[var(--space-2)]"
           >
@@ -192,7 +195,7 @@
         class="w-80 rounded-[var(--radius-panel)] shadow-xl"
       >
         <p class="font-mono text-micro">
-          {status?.detail ?? 'no install method for this platform'}
+          {toolStatus?.detail ?? 'no install method for this platform'}
         </p>
       </Popover.Content>
     </Popover.Root>
@@ -226,9 +229,9 @@
   they come back.
 </p>
 
-{#if error}
+{#if loadError}
   <Alert class="border-warning/40 bg-warning/10 text-warning">
-    <AlertDescription class="text-warning">{error}</AlertDescription>
+    <AlertDescription class="text-warning">{loadError}</AlertDescription>
   </Alert>
 {:else if columns.length === 0}
   <Card class="rounded-[var(--radius-panel)] p-[var(--space-6)] shadow-md">
@@ -273,17 +276,21 @@
     <Table.Root class="border-collapse text-left">
       <Table.Header>
         <Table.Row class="align-top hover:bg-transparent">
+          <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
           <Table.Head
             class="sticky left-0 z-10 h-auto bg-card px-[var(--space-4)] py-[var(--space-3)] text-micro font-medium tracking-wider text-muted-foreground uppercase"
             scope="col"
             >Machine</Table.Head
           >
+          <!-- biome-ignore-end lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
           {#each columns as spec (spec.id)}
             {@const policy = policyOf(spec)}
+            <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
             <Table.Head
               class="h-auto min-w-56 border-l border-border px-[var(--space-4)] py-[var(--space-3)] font-normal whitespace-normal"
               scope="col"
             >
+              <!-- biome-ignore-end lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
               <div class="flex flex-col items-start gap-[var(--space-2)]">
                 <span class="flex items-center gap-1.5">
                   <span class="text-caption font-medium text-foreground"
@@ -304,6 +311,7 @@
                   >{installedOn(spec)}/{machines.length}
                   installed</span
                 >
+                <!-- biome-ignore lint/a11y/noLabelWithoutControl: the Switch is a bits-ui button[role=switch], which the label-click passthrough this markup relies on already recognizes as labelable — swapping to a `for`/id pairing would drop nothing biome can see but would change nothing real either. -->
                 <label
                   class="flex items-center gap-[var(--space-2)] text-micro text-muted-foreground"
                 >
@@ -325,10 +333,12 @@
           {@const os = machineOs(machine.os)}
           {@const online = machine.status === 'online'}
           <Table.Row class={online ? '' : 'opacity-50'}>
+            <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
             <Table.Head
               class="sticky left-0 z-10 h-auto bg-card px-[var(--space-4)] py-[var(--space-2)] font-normal"
               scope="row"
             >
+              <!-- biome-ignore-end lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
               <span class="flex items-center gap-[var(--space-2)]">
                 <OsMark
                   class="size-4 shrink-0 text-muted-foreground"

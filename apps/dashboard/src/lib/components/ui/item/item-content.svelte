@@ -12,7 +12,7 @@
 
 <div
   class={cn(
-		"gap-1 group-data-[size=xs]/item:gap-0.5 flex flex-1 flex-col [&+[data-slot=item-content]]:flex-none",
+		"flex flex-1 flex-col gap-1 group-data-[size=xs]/item:gap-0.5 [&+[data-slot=item-content]]:flex-none",
 		className
 	)}
   data-slot="item-content"

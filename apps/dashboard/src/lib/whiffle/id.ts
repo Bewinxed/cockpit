@@ -26,7 +26,9 @@ export function newId(source: Crypto = globalThis.crypto): string {
   const bytes = new Uint8Array(16);
   source.getRandomValues(bytes);
   // Version 4, variant 1 — the two fields a v4 UUID pins rather than randomises.
+  // biome-ignore lint/suspicious/noBitwiseOperators: masking and setting specific bits per RFC 4122, not booleans
   bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  // biome-ignore lint/suspicious/noBitwiseOperators: masking and setting specific bits per RFC 4122, not booleans
   bytes[8] = (bytes[8] & 0x3f) | 0x80;
 
   const hex: string[] = [];

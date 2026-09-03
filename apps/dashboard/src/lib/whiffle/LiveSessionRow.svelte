@@ -8,11 +8,16 @@
   let ticker: ReturnType<typeof setInterval> | undefined;
 
   function watchClock(): () => void {
-    if (watchers++ === 0) {
-      ticker = setInterval(() => (now = Date.now()), 1000);
+    const first = watchers === 0;
+    watchers += 1;
+    if (first) {
+      ticker = setInterval(() => {
+        now = Date.now();
+      }, 1000);
     }
     return () => {
-      if (--watchers === 0) {
+      watchers -= 1;
+      if (watchers === 0) {
         clearInterval(ticker);
       }
     };
@@ -73,15 +78,18 @@
 
   /** The Quiet Ledger status the row's state pill wears: fail red, needs-you
    *  amber, working blue-live, everything else at rest bare-idle. */
-  const pillStatus = $derived(
-    failed
-      ? "fail"
-      : activity === "blocked"
-        ? "attn"
-        : activity === "working"
-          ? "live"
-          : "idle"
-  );
+  const pillStatus = $derived.by(() => {
+    if (failed) {
+      return "fail";
+    }
+    if (activity === "blocked") {
+      return "attn";
+    }
+    if (activity === "working") {
+      return "live";
+    }
+    return "idle";
+  });
 
   /** StatusPill ported to ui/badge, token-dressed to the Quiet Ledger pill
    *  recipe: a tint carries live/attn/done/fail, idle carries NO fill (bare
@@ -158,7 +166,20 @@
   // The label swaps only when the session's state actually changes — a row that
   // simply appears with the page has nothing to announce.
   let painted = $state(false);
-  onMount(() => void (painted = true));
+  onMount(() => {
+    painted = true;
+  });
+
+  /** `title` on the row's link: sleeping and stale each explain themselves,
+   *  and neither ever applies at once. */
+  const rowHint = $derived.by(() => {
+    if (sleeping) {
+      return SLEEPING_HINT;
+    }
+    if (stale) {
+      return UNKNOWN_HINT;
+    }
+  });
 </script>
 
 <LiveSessionMenu {instance}>
@@ -167,7 +188,7 @@
       transition-colors duration-150 ease-out hover:bg-accent hover:text-accent-foreground
       {failed || activity === 'blocked' ? 'bg-error/10' : ''}"
     href="/session/{instance.id}"
-    title={sleeping ? SLEEPING_HINT : stale ? UNKNOWN_HINT : undefined}
+    title={rowHint}
     use:dragSession={{ sessionId: instance.id, from: null }}
   >
     <!-- The row's band is the card's full width, so the whole strip is the

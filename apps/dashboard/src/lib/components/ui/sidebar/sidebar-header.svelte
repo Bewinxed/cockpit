@@ -11,7 +11,7 @@
 </script>
 
 <div
-  class={cn("gap-2 p-2 flex flex-col", className)}
+  class={cn("flex flex-col gap-2 p-2", className)}
   data-sidebar="header"
   data-slot="sidebar-header"
   bind:this={ref}

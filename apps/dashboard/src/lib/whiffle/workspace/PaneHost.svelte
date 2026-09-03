@@ -60,7 +60,9 @@
         browsingHarness={ctx?.harness ?? 'claude'}
         focused={isActive && leaf?.id === workspace.focusedLeafId}
         hideHeader
-        onview={(v) => (paneViews[id] = v)}
+        onview={(v) => {
+          paneViews[id] = v;
+        }}
         serverHistory={id === entryId ? entryHistory : null}
         serverTail={id === entryId ? entryTail : null}
         view={paneViews[id] ?? 'chat'}

@@ -123,7 +123,9 @@
     return new Promise((resolve) => {
       const transition = document.startViewTransition(async () => {
         resolve();
-        await navigation.complete.catch(() => {});
+        await navigation.complete.catch(() => {
+          /* the transition still finishes on a cancelled navigation */
+        });
       });
       const clear = () => {
         delete el.dataset.nav;

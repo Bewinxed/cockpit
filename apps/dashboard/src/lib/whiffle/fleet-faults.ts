@@ -191,6 +191,17 @@ export const CAUSE: Record<FaultCause, CauseCopy> = {
  */
 const SSH_REFUSED =
   /Permission denied \(publickey\)|Could not read from remote repository|Host key verification failed/i;
+const CLI_TOO_OLD = /unknown option|unknown argument|unknown command/i;
+const CLI_MISSING = /claude CLI not found/i;
+const MARKETPLACE_UNLINKED = /marketplace .+ is not linked/i;
+const DRIFTED = /edited on this machine/i;
+const MISSING_BYTES = /the hub sent no files/i;
+const UNSAFE_PATH = /^unsafe path/i;
+const NO_CHECKOUT = /no checkout|has no checkout for/i;
+const TIMED_OUT = /timed out after/i;
+const UNPARSABLE = /could not parse/i;
+const UNWRITABLE = /could not write/i;
+const ABSENT = /^not in |^not on disk|is not in known_marketplaces/i;
 
 /** What a machine or the hub said, read as a cause. Order matters: the specific first. */
 export function causeOf(
@@ -201,40 +212,40 @@ export function causeOf(
   if (said === "") {
     return origin === "hub" ? "unfetchable" : "unknown";
   }
-  if (/unknown option|unknown argument|unknown command/i.test(said)) {
+  if (CLI_TOO_OLD.test(said)) {
     return "cli-too-old";
   }
-  if (/claude CLI not found/i.test(said)) {
+  if (CLI_MISSING.test(said)) {
     return "cli-missing";
   }
   if (SSH_REFUSED.test(said)) {
     return "ssh-refused";
   }
-  if (/marketplace .+ is not linked/i.test(said)) {
+  if (MARKETPLACE_UNLINKED.test(said)) {
     return "marketplace-unlinked";
   }
-  if (/edited on this machine/i.test(said)) {
+  if (DRIFTED.test(said)) {
     return "drifted";
   }
-  if (/the hub sent no files/i.test(said)) {
+  if (MISSING_BYTES.test(said)) {
     return "missing-bytes";
   }
-  if (/^unsafe path/i.test(said)) {
+  if (UNSAFE_PATH.test(said)) {
     return "unsafe-path";
   }
-  if (/no checkout|has no checkout for/i.test(said)) {
+  if (NO_CHECKOUT.test(said)) {
     return "no-checkout";
   }
-  if (/timed out after/i.test(said)) {
+  if (TIMED_OUT.test(said)) {
     return "timed-out";
   }
-  if (/could not parse/i.test(said)) {
+  if (UNPARSABLE.test(said)) {
     return "unparsable";
   }
-  if (/could not write/i.test(said)) {
+  if (UNWRITABLE.test(said)) {
     return "unwritable";
   }
-  if (/^not in |^not on disk|is not in known_marketplaces/i.test(said)) {
+  if (ABSENT.test(said)) {
     return "absent";
   }
   // Hub refusals have no shared prefix, so origin is what names them: anything
@@ -402,13 +413,12 @@ export function groupFaults(faults: readonly Fault[]): FaultGroup[] {
   }
   // Hub faults first: they are the ones no machine can be asked to fix, and a
   // machine-side failure downstream of one is not worth chasing until it is gone.
-  return [...groups.values()].sort((a, b) =>
-    a.origin === b.origin
-      ? b.faults.length - a.faults.length
-      : a.origin === "hub"
-        ? -1
-        : 1
-  );
+  return [...groups.values()].sort((a, b) => {
+    if (a.origin !== b.origin) {
+      return a.origin === "hub" ? -1 : 1;
+    }
+    return b.faults.length - a.faults.length;
+  });
 }
 
 /**
@@ -424,9 +434,11 @@ export interface ToolchainReading {
   used?: { path: string; version?: string };
 }
 
+const SEMVER = /(\d+)\.(\d+)\.(\d+)/;
+
 /** `1.2.3` as comparable numbers; anything unparsable sorts as nothing at all. */
 const parts = (version: string | undefined): number[] | undefined => {
-  const match = /(\d+)\.(\d+)\.(\d+)/.exec(version ?? "");
+  const match = SEMVER.exec(version ?? "");
   return match
     ? [Number(match[1]), Number(match[2]), Number(match[3])]
     : undefined;

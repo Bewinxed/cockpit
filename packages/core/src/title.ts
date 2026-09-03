@@ -11,6 +11,11 @@
 /** How long a title derived from a first message runs before it is cut. */
 export const TITLE_LIMIT = 80;
 
+const COMMAND_ECHO =
+  /<command-(?:message|name)>([\s\S]*?)<\/command-(?:message|name)>/;
+const ANY_TAG = /<[^>]+>/g;
+const WHITESPACE_RUN = /\s+/g;
+
 /**
  * A session's first message as a title. A slash command's first message is the
  * harness echo, which wraps the invocation in `<command-message>` /
@@ -18,12 +23,9 @@ export const TITLE_LIMIT = 80;
  * markup stripped and is folded onto one line.
  */
 export function deriveTitleFromFirstMessage(raw: string): string {
-  const command =
-    /<command-(?:message|name)>([\s\S]*?)<\/command-(?:message|name)>/
-      .exec(raw)?.[1]
-      ?.trim();
-  const cleaned = (command ?? raw.replace(/<[^>]+>/g, " "))
-    .replace(/\s+/g, " ")
+  const command = COMMAND_ECHO.exec(raw)?.[1]?.trim();
+  const cleaned = (command ?? raw.replace(ANY_TAG, " "))
+    .replace(WHITESPACE_RUN, " ")
     .trim();
   return cleaned.slice(0, TITLE_LIMIT);
 }

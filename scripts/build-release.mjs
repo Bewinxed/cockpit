@@ -35,6 +35,7 @@ const externals = async () => {
     if (!existsSync(path)) {
       continue;
     }
+    // biome-ignore lint/performance/noAwaitInLoops: packages are few and this only runs once per release build
     const json = JSON.parse(await readFile(path, "utf8"));
     for (const dep of Object.keys(json.dependencies ?? {})) {
       if (!dep.startsWith("@whiffle/")) {
@@ -106,8 +107,10 @@ await cp(
  * apart would get different libraries underneath it. The published manifest
  * pins what this build was actually tested against.
  */
+const PINNED_VERSION_RE = /^[\^~]?\d/;
+
 const resolved = async (name, asked) => {
-  if (/^[\^~]?\d/.test(asked)) {
+  if (PINNED_VERSION_RE.test(asked)) {
     return asked;
   }
   // Asked of the resolver rather than looked for on disk, because a bun store
@@ -123,6 +126,7 @@ const resolved = async (name, asked) => {
         if (!existsSync(manifest)) {
           continue;
         }
+        // biome-ignore lint/performance/noAwaitInLoops: walks up from the resolved entry looking for the first matching manifest; must stop at the first hit
         const json = JSON.parse(await readFile(manifest, "utf8"));
         if (json.name === name && typeof json.version === "string") {
           return json.version;
@@ -146,9 +150,11 @@ for (const pkg of ["cli", "agent", "hub", "core", "auth", "sessiond"]) {
   if (!existsSync(path)) {
     continue;
   }
+  // biome-ignore lint/performance/noAwaitInLoops: packages are few and this only runs once per release build
   const json = JSON.parse(await readFile(path, "utf8"));
   for (const [name, range] of Object.entries(json.dependencies ?? {})) {
     if (!name.startsWith("@whiffle/")) {
+      // biome-ignore lint/performance/noAwaitInLoops: resolved() logs a WARNING per unresolved dep; running in order keeps those warnings in a predictable sequence
       deps[name] = await resolved(name, range);
     }
   }

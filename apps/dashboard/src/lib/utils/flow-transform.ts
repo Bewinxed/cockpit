@@ -61,6 +61,7 @@ export function filterChatMessages(messages: Message[]): Message[] {
  * Group consecutive tool messages for compact display
  * Task tools get grouped together for parallel display
  */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: walks messages once, branching on task/tool/single grouping — splitting it would spread the shared index across functions
 export function groupMessages(messages: Message[]): MessageGroup[] {
   const chatMessages = filterChatMessages(messages);
   const groups: MessageGroup[] = [];
@@ -73,12 +74,12 @@ export function groupMessages(messages: Message[]): MessageGroup[] {
     if (isTaskToolUse(msg)) {
       const subagentMessages: Message[] = [msg];
       const startIndex = i;
-      i++;
+      i += 1;
 
       // Collect consecutive Task tools (parallel agents)
       while (i < chatMessages.length && isTaskToolUse(chatMessages[i])) {
         subagentMessages.push(chatMessages[i]);
-        i++;
+        i += 1;
       }
 
       groups.push({
@@ -91,7 +92,7 @@ export function groupMessages(messages: Message[]): MessageGroup[] {
     else if (msg.type === "tool.use" || msg.type === "tool.result") {
       const toolMessages: Message[] = [msg];
       const startIndex = i;
-      i++;
+      i += 1;
 
       while (i < chatMessages.length) {
         const nextMsg = chatMessages[i];
@@ -101,7 +102,7 @@ export function groupMessages(messages: Message[]): MessageGroup[] {
           !isTaskOutputTool(nextMsg)
         ) {
           toolMessages.push(nextMsg);
-          i++;
+          i += 1;
         } else {
           break;
         }
@@ -110,7 +111,7 @@ export function groupMessages(messages: Message[]): MessageGroup[] {
       groups.push({ type: "tool_group", messages: toolMessages, startIndex });
     } else {
       groups.push({ type: "single", message: msg, index: i });
-      i++;
+      i += 1;
     }
   }
 
@@ -159,7 +160,7 @@ function getGroupId(group: MessageGroup): string {
   if (group.type === "single") {
     return group.message.sdkUuid || group.message.id || `msg-${group.index}`;
   }
-  const firstMsg = group.messages[0];
+  const [firstMsg] = group.messages;
   return (
     firstMsg.sdkUuid ||
     firstMsg.id ||
@@ -188,13 +189,13 @@ function groupSubagentMessages(messages: Message[]): MessageGroup[] {
     if (msg.type === "tool.use" || msg.type === "tool.result") {
       const toolMessages: Message[] = [msg];
       const startIndex = i;
-      i++;
+      i += 1;
 
       while (i < messages.length) {
         const nextMsg = messages[i];
         if (nextMsg.type === "tool.use" || nextMsg.type === "tool.result") {
           toolMessages.push(nextMsg);
-          i++;
+          i += 1;
         } else {
           break;
         }
@@ -203,7 +204,7 @@ function groupSubagentMessages(messages: Message[]): MessageGroup[] {
       groups.push({ type: "tool_group", messages: toolMessages, startIndex });
     } else {
       groups.push({ type: "single", message: msg, index: i });
-      i++;
+      i += 1;
     }
   }
 
@@ -222,6 +223,7 @@ function groupSubagentMessages(messages: Message[]): MessageGroup[] {
  * - Each subagent has its own branch of tool call nodes
  * - Merge: ALL branches connect back to the next node
  */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: builds the whole fork/merge node+edge graph in one coordinated pass over groups, subagents, and their tool branches
 export function messagesToFlow(
   groups: MessageGroup[],
   instanceId: string,
@@ -232,14 +234,14 @@ export function messagesToFlow(
 
   let prevNodeIds: string[] = [];
 
-  for (let groupIdx = 0; groupIdx < groups.length; groupIdx++) {
+  for (let groupIdx = 0; groupIdx < groups.length; groupIdx += 1) {
     const group = groups[groupIdx];
 
     // Handle subagent_group specially - create individual nodes with branches
     if (group.type === "subagent_group" && group.messages.length > 0) {
       const branchEndNodeIds: string[] = [];
 
-      for (let subIdx = 0; subIdx < group.messages.length; subIdx++) {
+      for (let subIdx = 0; subIdx < group.messages.length; subIdx += 1) {
         const msg = group.messages[subIdx];
         const toolId = msg.metadata?.toolId;
         const subagentNodeId =
@@ -281,7 +283,7 @@ export function messagesToFlow(
         if (subagentState?.messages && subagentState.messages.length > 0) {
           const subagentGroups = groupSubagentMessages(subagentState.messages);
 
-          for (let sgIdx = 0; sgIdx < subagentGroups.length; sgIdx++) {
+          for (let sgIdx = 0; sgIdx < subagentGroups.length; sgIdx += 1) {
             const sg = subagentGroups[sgIdx];
 
             if (sg.type === "tool_group") {
@@ -368,7 +370,7 @@ export function messagesToFlow(
     const nodeId = getGroupId(group);
     const nodeType = getNodeType(group);
     const messages = getGroupMessages(group);
-    const firstMsg = messages[0];
+    const [firstMsg] = messages;
 
     // Build typed node data
     let data: UserNodeData | AssistantNodeData | ToolNodeData | SystemNodeData;

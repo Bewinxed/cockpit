@@ -182,7 +182,8 @@
   );
   const chosenModel = $derived(
     session?.model
-      ? (models.offered.find((row) => covers(row, session.model!)) ?? null)
+      ? // biome-ignore lint/style/noNonNullAssertion: TS can't narrow session.model across the closure boundary; the outer ternary already guards it
+        (models.offered.find((row) => covers(row, session.model!)) ?? null)
       : null
   );
   const harnessEffort = $derived(harnessReport?.capabilities.effort !== false);
@@ -192,6 +193,7 @@
   // One more attempt each time a session comes up, and on nothing else: the
   // store's own reads are untracked so a failed ask cannot re-run this.
   $effect(() => {
+    // biome-ignore lint/complexity/noVoid: read-for-tracking — this is the reactive dependency that reruns the effect, its value is unused by design
     void whiffle.runningInstances.length;
     untrack(ensureModels);
   });
@@ -252,7 +254,9 @@
       {oneffort}
       {onmodel}
       {onpermission}
-      onview={(v) => (paneViews[headerId] = v)}
+      onview={(v) => {
+        paneViews[headerId] = v;
+      }}
       permissionMode={session?.permissionMode ?? null}
       seed={session?.cwd || headerCtx?.cwd || headerId}
       {showEffort}
@@ -304,7 +308,9 @@
             browsingHarness={ctx?.harness ?? 'claude'}
             focused={false}
             hideHeader
-            onview={() => {}}
+            onview={() => {
+              /* SSR-only pane, dropped on hydration: no view state to track */
+            }}
             serverHistory={paneId === page.params.id
               ? ((page.data as { history?: Promise<HistorySource | null> | null }).history ?? null)
               : null}

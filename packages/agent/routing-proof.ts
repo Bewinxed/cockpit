@@ -55,6 +55,7 @@ const waitFor = async <T>(
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     try {
+      // biome-ignore lint/performance/noAwaitInLoops: polls in order until the probe settles, no concurrent work to parallelize
       const value = await probe();
       if (value !== undefined) {
         return value;
@@ -192,9 +193,8 @@ try {
 
   const waitForInstance = (id: string): Promise<boolean> =>
     waitFor(async () => {
-      const rows = (await fetch(`${BASE}/api/instances`).then((r) =>
-        r.json()
-      )) as {
+      const response = await fetch(`${BASE}/api/instances`);
+      const rows = (await response.json()) as {
         id: string;
         parentInstanceId?: string | null;
       }[];
@@ -423,7 +423,9 @@ try {
   dashboard.close();
 } finally {
   hub.kill();
-  await hub.exited.catch(() => {});
+  await hub.exited.catch(() => {
+    // best effort: the process exits either way
+  });
 }
 
 if (failures.length > 0) {

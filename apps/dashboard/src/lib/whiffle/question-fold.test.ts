@@ -88,7 +88,7 @@ test("an unanswered question carries no outcome, and is pending rather than faul
   // case: the renderer draws "waiting" off `toolStatus`, and drawing the red
   // fault chip here would cry broken at every question while it is being read.
   const mapping = mapFrame("i1", use("q-3"));
-  const message = mapping.messages[0];
+  const [message] = mapping.messages;
 
   expect(message.metadata?.toolUseResult).toBeUndefined();
   expect(message.metadata?.toolStatus).toBe("pending");

@@ -11,7 +11,9 @@
     ref = $bindable(null),
     opts = {},
     plugins = [],
-    setApi = () => {},
+    setApi = () => {
+      // no-op default: caller didn't provide a setApi callback
+    },
     orientation = "horizontal",
     class: className,
     children,
@@ -82,6 +84,7 @@
   });
 </script>
 
+<!-- biome-ignore lint/a11y/useSemanticElements: ref and restProps are typed against HTMLDivElement across this component's public API; swapping to <section> would be a type-breaking change -->
 <div
   aria-roledescription="carousel"
   class={cn("relative", className)}

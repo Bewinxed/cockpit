@@ -11,7 +11,7 @@
 </script>
 
 <div
-  class={cn("gap-2 flex basis-full items-center justify-between", className)}
+  class={cn("flex basis-full items-center justify-between gap-2", className)}
   data-slot="item-footer"
   bind:this={ref}
   {...restProps}

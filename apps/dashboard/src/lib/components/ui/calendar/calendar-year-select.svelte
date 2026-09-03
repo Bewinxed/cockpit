@@ -27,9 +27,9 @@
       <select {...props} {value}>
         {#each yearItems as yearItem (yearItem.value)}
           <option
-            selected={value !== undefined
-							? yearItem.value === value
-							: yearItem.value === selectedYearItem.value}
+            selected={value === undefined
+							? yearItem.value === selectedYearItem.value
+							: yearItem.value === value}
             value={yearItem.value}
           >
             {yearItem.label}

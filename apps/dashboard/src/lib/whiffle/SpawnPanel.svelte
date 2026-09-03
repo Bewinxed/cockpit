@@ -25,10 +25,14 @@
   import { Button } from "$lib/components/ui/button";
   import { Checkbox } from "$lib/components/ui/checkbox";
   import { Input } from "$lib/components/ui/input";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Popover from "$lib/components/ui/popover";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Select from "$lib/components/ui/select";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Sheet from "$lib/components/ui/sheet";
   import { Textarea } from "$lib/components/ui/textarea";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as ToggleGroup from "$lib/components/ui/toggle-group";
   import { IsMobile } from "$lib/hooks/is-mobile.svelte";
   import {
@@ -95,7 +99,7 @@
   let saveAsProject = $state(false);
   let projectName = $state("");
   let submitting = $state(false);
-  let error = $state<string | null>(null);
+  let formError = $state<string | null>(null);
 
   /** The project this form is tied to — picked, prefilled, or neither. */
   let projectId = $state<string | null>(null);
@@ -106,6 +110,9 @@
   let editingPrefill = $state(false);
 
   const leaf = (path: string) => path.split("/").filter(Boolean).pop() ?? path;
+
+  /** Trailing slashes on a directory, past the one that could be root. */
+  const TRAILING_SLASHES = /(?!^)\/+$/;
 
   const hasPrefill = $derived(
     Boolean(prefill && (prefill.machineId || prefill.cwd || prefill.projectId))
@@ -213,7 +220,7 @@
 
   function clearInvalid() {
     invalid = null;
-    error = null;
+    formError = null;
   }
 
   /** A field that decided the project changed by hand no longer names it. */
@@ -247,7 +254,7 @@
     if (!name) {
       return "";
     }
-    return `${(cwd.trim() || "~").replace(/(?!^)\/+$/, "")}/${name}`;
+    return `${(cwd.trim() || "~").replace(TRAILING_SLASHES, "")}/${name}`;
   });
 
   /** The directory the session will run in, whichever way it was arrived at. */
@@ -342,8 +349,7 @@
 
   function chooseProject(project: ProjectRow) {
     projectId = project.id;
-    machineId = project.machineId;
-    cwd = project.cwd;
+    ({ machineId, cwd } = project);
     projectQuery = project.name;
     projectOpen = false;
     clearInvalid();
@@ -386,8 +392,9 @@
   function inspectFolder() {
     clearTimeout(settling);
     const id = machineId;
-    const dir = cwd.trim().replace(/(?!^)\/+$/, "");
-    const epoch = ++asked;
+    const dir = cwd.trim().replace(TRAILING_SLASHES, "");
+    asked += 1;
+    const epoch = asked;
     inspecting = false;
     inspection = null;
     // A clone's directory is not there to be read until the clone has landed.
@@ -408,6 +415,7 @@
       pending = readFolder(id, dir).catch(() => null);
       reading.set(key, pending);
     }
+    // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — the epoch check above discards any answer to a folder no longer in the field
     void pending.then((found) => {
       reading.delete(key);
       if (found) {
@@ -444,6 +452,20 @@
     title?: string;
   }
 
+  /** An MCP server chip's dim/title, from where the server comes from. */
+  function serverChipFlags(server: ConfigInspection["mcp"][number]) {
+    if (server.shadowedBy) {
+      return {
+        title: `shadowed by nearer ${server.shadowedBy} scope`,
+        dim: "opacity-60",
+      };
+    }
+    if (server.managed) {
+      return {};
+    }
+    return { title: "machine-local, not fleet-managed", dim: "opacity-80" };
+  }
+
   const chips = $derived.by((): FolderChip[] => {
     const found = inspection;
     if (!found) {
@@ -452,14 +474,7 @@
     const row: FolderChip[] = found.mcp.map((server) => ({
       key: `mcp:${server.scope}:${server.name}`,
       label: server.name,
-      ...(server.shadowedBy
-        ? {
-            title: `shadowed by nearer ${server.shadowedBy} scope`,
-            dim: "opacity-60",
-          }
-        : server.managed
-          ? {}
-          : { title: "machine-local, not fleet-managed", dim: "opacity-80" }),
+      ...serverChipFlags(server),
     }));
     if (found.skills.length > 0) {
       row.push({
@@ -504,15 +519,14 @@
     cwd = prefill?.cwd || seededProject?.cwd || "";
     repo = "";
     prompt = "";
-    permissionMode = spawnPrefs.permissionMode;
+    ({ permissionMode, effort } = spawnPrefs);
     model = spawnPrefs.model || MODEL_DEFAULT;
-    effort = spawnPrefs.effort;
     sideQuest = false;
     worktree = false;
     saveAsProject = false;
     projectName = "";
     submitting = false;
-    error = null;
+    formError = null;
     invalid = null;
     editingPrefill = false;
     projectOpen = false;
@@ -531,6 +545,7 @@
     if (isOpen && !wasOpen) {
       resetForm();
       if (hasPrefill) {
+        // biome-ignore lint/complexity/noVoid: focusing the prompt field is fire-and-forget — nothing awaits it
         void tick().then(() => promptField?.focus());
       }
     }
@@ -543,22 +558,22 @@
 
   async function start(event: SubmitEvent) {
     event.preventDefault();
-    error = null;
+    formError = null;
     // The button stays live and says what is missing — a dead button explains nothing.
     if (!machineId) {
-      error = "Choose a machine to run this session on.";
+      formError = "Choose a machine to run this session on.";
       await flag("machine");
       machineTrigger?.focus();
       return;
     }
     if (source === "repo" && !repo.trim()) {
-      error = "Choose a repository, or paste the URL of one.";
+      formError = "Choose a repository, or paste the URL of one.";
       await flag("repo");
       repoInput?.focus();
       return;
     }
     if (!cwd.trim()) {
-      error =
+      formError =
         source === "repo"
           ? "Enter the directory to clone into."
           : "Enter the directory this session should work in.";
@@ -599,7 +614,7 @@
       onclose();
       await goto(`/session/${instanceId}`);
     } catch (err) {
-      error = err instanceof Error ? err.message : String(err);
+      formError = err instanceof Error ? err.message : String(err);
       submitting = false;
     }
   }
@@ -628,7 +643,9 @@
     </div>
     <button
       class="shrink-0 text-micro text-muted-foreground transition-colors duration-[240ms] ease-[var(--e-in)] hover:text-foreground"
-      onclick={() => (editingPrefill = true)}
+      onclick={() => {
+        editingPrefill = true;
+      }}
       type="button"
     >
       Edit
@@ -681,14 +698,20 @@
     <Input
       autocomplete="off"
       id="spawn-project"
-      onblur={() => (projectOpen = false)}
+      onblur={() => {
+        projectOpen = false;
+      }}
       onfocus={openProjects}
       oninput={() => {
         projectOpen = true;
-        if (projectId) projectId = null;
+        if (projectId) {
+          projectId = null;
+        }
       }}
       onkeydown={(event) => {
-        if (event.key === 'Escape') projectOpen = false;
+        if (event.key === 'Escape') {
+          projectOpen = false;
+        }
       }}
       placeholder="Search projects…"
       spellcheck="false"
@@ -757,14 +780,18 @@
         autocomplete="off"
         class="font-mono motion-reduce:animate-none {invalid === 'repo' ? 'animate-shake border-error' : ''}"
         id="spawn-repo"
-        onblur={() => (repoOpen = false)}
+        onblur={() => {
+          repoOpen = false;
+        }}
         onfocus={openRepos}
         oninput={() => {
           repoOpen = true;
           clearInvalid();
         }}
         onkeydown={(event) => {
-          if (event.key === 'Escape') repoOpen = false;
+          if (event.key === 'Escape') {
+            repoOpen = false;
+          }
         }}
         placeholder="owner/name, or a clone URL"
         spellcheck="false"
@@ -927,7 +954,9 @@
           >Harness</span
         >
         <Select.Root
-          onValueChange={(value) => (harness = value as HarnessKind)}
+          onValueChange={(value) => {
+            harness = value as HarnessKind;
+          }}
           type="single"
           value={harness}
         >
@@ -970,7 +999,9 @@
           >Permissions</span
         >
         <Select.Root
-          onValueChange={(value) => (permissionMode = value as PermissionMode)}
+          onValueChange={(value) => {
+            permissionMode = value as PermissionMode;
+          }}
           type="single"
           value={permissionMode}
         >
@@ -1005,7 +1036,9 @@
       <div transition:slide={{ duration: 160 }}>
         <EffortSlider
           modelName={modelLabel(model)}
-          onchange={(level) => (effort = level)}
+          onchange={(level) => {
+            effort = level;
+          }}
           stops={effortStopsForModel}
           value={effort}
         />
@@ -1068,10 +1101,15 @@
         {#if saveAsProject}
           <label
             class="flex flex-col gap-1 text-micro text-muted-foreground"
+            for="spawn-project-name"
             transition:slide={{ duration: 160 }}
           >
             Project name
-            <Input placeholder={leaf(workdir)} bind:value={projectName} />
+            <Input
+              id="spawn-project-name"
+              placeholder={leaf(workdir)}
+              bind:value={projectName}
+            />
           </label>
         {/if}
       </div>
@@ -1086,8 +1124,8 @@
         {/if}
         Start session
       </Button>
-      {#if error}
-        <span class="text-caption text-error" role="alert">{error}</span>
+      {#if formError}
+        <span class="text-caption text-error" role="alert">{formError}</span>
       {/if}
     </div>
   </form>

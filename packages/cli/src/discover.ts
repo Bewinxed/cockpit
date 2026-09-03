@@ -53,8 +53,13 @@ export interface DiscoverOptions {
 export const discoverHub = async ({
   hub,
   log,
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: walks the five discovery rungs (flag/env, cached config, mDNS, tailscale, localhost) in order, narrating each
 }: DiscoverOptions = {}): Promise<Hub | undefined> => {
-  const note = log ?? ((): void => {});
+  const note =
+    log ??
+    ((): void => {
+      // --verbose narration is opt-in; silently drop it when no logger was given.
+    });
   const port = Number(readEnv(WHIFFLE_ENV.hubPort) ?? WHIFFLE_HUB_PORT);
 
   const settle = async (httpUrl: string, source: HubSource): Promise<Hub> => {

@@ -21,15 +21,18 @@
   let { os, class: className }: Props = $props();
 
   const platform = $derived(os.trim().toLowerCase().split("-")[0]);
-  const shape = $derived(
-    platform === "darwin"
-      ? "apple"
-      : platform === "linux"
-        ? "tux"
-        : platform === "win32" || platform === "windows"
-          ? "windows"
-          : "unknown"
-  );
+  const shape = $derived.by(() => {
+    if (platform === "darwin") {
+      return "apple";
+    }
+    if (platform === "linux") {
+      return "tux";
+    }
+    if (platform === "win32" || platform === "windows") {
+      return "windows";
+    }
+    return "unknown";
+  });
 </script>
 
 {#if shape === 'unknown'}

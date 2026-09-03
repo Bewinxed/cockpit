@@ -11,7 +11,7 @@
 </script>
 
 <div
-  class={cn("gap-1.5 p-6 flex flex-col", className)}
+  class={cn("flex flex-col gap-1.5 p-6", className)}
   data-slot="sheet-header"
   bind:this={ref}
   {...restProps}

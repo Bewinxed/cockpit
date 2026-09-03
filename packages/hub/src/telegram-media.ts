@@ -29,6 +29,9 @@ const TEXT_EXT = new Set([
   "svelte",
 ]);
 
+/** Strips a trailing slash (or several) off a configured router URL. */
+const TRAILING_SLASH_RE = /\/+$/;
+
 /** Which model transcribes, when the environment names no other. */
 const DEFAULT_MODEL = "transcribe";
 /** How long a handle's resolution to an exact model name is trusted. */
@@ -239,6 +242,7 @@ export const createMediaIntake = ({
     name: string
   ): Promise<string | undefined> => {
     let refused: string | undefined;
+    // biome-ignore lint/complexity/noVoid: watched, not awaited — the poll loop below is what actually reports readiness
     void fetch(`${url}/manager/start/${encodeURIComponent(name)}`, {
       method: "POST",
       signal: AbortSignal.timeout(WARM_LIMIT_MS),
@@ -255,6 +259,7 @@ export const createMediaIntake = ({
       if (refused) {
         return refused;
       }
+      // biome-ignore lint/performance/noAwaitInLoops: polls until the model loads or the deadline passes; each check depends on the previous sleep
       const status = await fetch(`${url}/manager/status`, {
         signal: AbortSignal.timeout(ROUTER_TIMEOUT_MS),
       })
@@ -282,7 +287,10 @@ export const createMediaIntake = ({
     bytes: Uint8Array,
     filename: string
   ): Promise<Intake> => {
-    const url = readEnv(WHIFFLE_ENV.telegramAsrUrl)?.replace(/\/+$/, "");
+    const url = readEnv(WHIFFLE_ENV.telegramAsrUrl)?.replace(
+      TRAILING_SLASH_RE,
+      ""
+    );
     if (!url) {
       return { kind: "refused", reason: "Transcription isn't configured yet." };
     }
@@ -380,6 +388,7 @@ export const createMediaIntake = ({
 
   const intake = async (
     message: TelegramMedia
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: dispatches an incoming Telegram message across voice/audio/video-note, photo, and document (image/pdf/other) intake paths
   ): Promise<Intake | undefined> => {
     const caption = message.caption?.trim();
 
@@ -410,7 +419,7 @@ export const createMediaIntake = ({
       };
     }
 
-    const document = message.document;
+    const { document } = message;
     if (!document) {
       return undefined;
     }

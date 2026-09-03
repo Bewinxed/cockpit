@@ -46,6 +46,7 @@ function contentBlocks(
  * problem, and reading it here would put the whole transcript in front of the
  * first byte.
  */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: reads a streamed transcript tail off the wire, tracking a clean-cut boundary and dangling tool_result/tool_use pairs
 async function readTail(
   fetch: typeof globalThis.fetch,
   url: string
@@ -99,6 +100,8 @@ async function readTail(
 
   try {
     for (;;) {
+      // Chunks must be read in order: each read continues where the last left off.
+      // biome-ignore lint/performance/noAwaitInLoops: the reader is a single stream; each read depends on the previous one completing
       const { done, value } = await reader.read();
       if (done) {
         break;
@@ -129,7 +132,9 @@ async function readTail(
   } catch {
     // A half-read tail is still a tail; whatever arrived whole is rendered.
   } finally {
-    await reader.cancel().catch(() => {});
+    await reader.cancel().catch(() => {
+      // best effort: the response is already done with, a failed cancel changes nothing
+    });
   }
 
   // Newest-first off the wire, oldest-first on screen.

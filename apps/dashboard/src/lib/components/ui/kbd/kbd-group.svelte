@@ -11,7 +11,7 @@
 </script>
 
 <kbd
-  class={cn("gap-1 inline-flex items-center", className)}
+  class={cn("inline-flex items-center gap-1", className)}
   data-slot="kbd-group"
   bind:this={ref}
   {...restProps}

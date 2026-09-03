@@ -10,7 +10,7 @@
 </script>
 
 <MenubarPrimitive.Trigger
-  class={cn("rounded-[var(--radius-control)] px-2 py-0.75 text-sm font-medium hover:bg-muted aria-expanded:bg-muted flex items-center outline-hidden select-none", className)}
+  class={cn("flex select-none items-center rounded-[var(--radius-control)] px-2 py-0.75 font-medium text-sm outline-hidden hover:bg-muted aria-expanded:bg-muted", className)}
   data-slot="menubar-trigger"
   bind:ref
   {...restProps}

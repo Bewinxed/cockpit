@@ -1,12 +1,15 @@
 <script lang="ts">
   import type { FleetMcpServer } from "@whiffle/core";
   import { toast } from "svelte-sonner";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Alert from "$lib/components/ui/alert";
   import { Badge } from "$lib/components/ui/badge";
   import { Button } from "$lib/components/ui/button";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Card from "$lib/components/ui/card";
   import { Skeleton } from "$lib/components/ui/skeleton";
   import { Toggle } from "$lib/components/ui/toggle";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Tooltip from "$lib/components/ui/tooltip";
   import {
     IconPen,
@@ -32,7 +35,7 @@
     servers,
     machines,
     settling,
-    error,
+    error: loadError,
   }: {
     servers: FleetMcpServer[];
     machines: Machine[];
@@ -45,8 +48,8 @@
   let syncing = $state(false);
   let busy = $state<Record<string, boolean>>({});
 
-  const message = (error: unknown) =>
-    error instanceof Error ? error.message : String(error);
+  const message = (caught: unknown) =>
+    caught instanceof Error ? caught.message : String(caught);
 
   // Quiet Ledger surfaces (DESIGN.md · mocks/v5-components.html .panel / .callout).
   const panelList =
@@ -79,8 +82,8 @@
     busy[row.name] = true;
     try {
       saved(await saveMcpServer(row.name, row.config, enabled));
-    } catch (error) {
-      toast.error(message(error));
+    } catch (caught) {
+      toast.error(message(caught));
     } finally {
       delete busy[row.name];
     }
@@ -108,8 +111,8 @@
         servers.findIndex((other) => other.name === row.name),
         1
       );
-    } catch (error) {
-      toast.error(message(error));
+    } catch (caught) {
+      toast.error(message(caught));
     } finally {
       delete busy[row.name];
     }
@@ -120,8 +123,8 @@
     try {
       await syncFleet();
       toast.success("Every machine that is online is syncing.");
-    } catch (error) {
-      toast.error(message(error));
+    } catch (caught) {
+      toast.error(message(caught));
     } finally {
       syncing = false;
     }
@@ -151,11 +154,11 @@
   with — relaunch a session to change it.
 </p>
 
-{#if error}
+{#if loadError}
   <Alert.Root class={warnAlert}>
     <IconWarningTriangle />
     <Alert.Description class="text-caption text-[var(--warning-11)]"
-      >{error}</Alert.Description
+      >{loadError}</Alert.Description
     >
   </Alert.Root>
 {:else if servers.length === 0}
@@ -258,7 +261,7 @@
   </Card.Root>
 {/if}
 
-{#if !error}
+{#if !loadError}
   <MachineInventory
     kind="mcp"
     {machines}

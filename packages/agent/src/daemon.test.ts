@@ -26,7 +26,9 @@ const fakeAttempts = (options: {
   let clock = 0;
   let calls = 0;
   const urls: string[] = [];
-  let resolve: () => void = () => {};
+  let resolve: () => void = () => {
+    // no-op: replaced below before the promise settles
+  };
   const drained = new Promise<void>((r) => {
     resolve = r;
   });
@@ -34,7 +36,8 @@ const fakeAttempts = (options: {
     _markLive: () => void
   ): Effect.Effect<never, { readonly reason: string }> =>
     Effect.suspend(() => {
-      const attempt = ++calls;
+      calls += 1;
+      const attempt = calls;
       urls.push(options.url());
       if (attempt > options.failures) {
         resolve();
@@ -101,13 +104,16 @@ const fakeHub = (options: {
 }) => {
   let clock = 0;
   let calls = 0;
-  let resolve: () => void = () => {};
+  let resolve: () => void = () => {
+    // no-op: replaced below before the promise settles
+  };
   const drained = new Promise<void>((r) => {
     resolve = r;
   });
   const session = (markLive: () => void): Effect.Effect<never, Drop> =>
     Effect.suspend(() => {
-      const attempt = ++calls;
+      calls += 1;
+      const attempt = calls;
       // Past the script the connection simply holds: the loop is infinite by
       // design, and a stand-in that kept failing would spin the fiber hard
       // enough to starve the promise the test is waiting on.
@@ -234,8 +240,15 @@ describe("reconnecting", () => {
 
     const daemon = Effect.gen(function* () {
       yield* Effect.acquireRelease(
-        Effect.sync(() => ++built),
-        () => Effect.sync(() => ++drains)
+        Effect.sync(() => {
+          built += 1;
+          return built;
+        }),
+        () =>
+          Effect.sync(() => {
+            drains += 1;
+            return drains;
+          })
       );
       return yield* reconnecting(hub.session, {
         healthyAfter: HEALTHY_CONNECTION,
@@ -265,8 +278,11 @@ describe("the reconnect schedule", () => {
     // Jitter is 0.8×–1.2× of the nominal delay (Schedule.jittered).
     const within = (millis: number, nominal: number) =>
       millis >= nominal * 0.8 && millis <= nominal * 1.2;
+    // biome-ignore lint/style/noNonNullAssertion: 12 uptimes guarantee at least 3 recorded delays
     expect(within(delays[0]!, 1000)).toBe(true);
+    // biome-ignore lint/style/noNonNullAssertion: 12 uptimes guarantee at least 3 recorded delays
     expect(within(delays[1]!, 2000)).toBe(true);
+    // biome-ignore lint/style/noNonNullAssertion: 12 uptimes guarantee at least 3 recorded delays
     expect(within(delays[2]!, 4000)).toBe(true);
     // Past saturation every delay is the cap, jitter and all — never more.
     for (const delay of delays.slice(7, 12)) {
@@ -307,10 +323,10 @@ describe("reconnecting: re-discovery on a sustained failure", () => {
 
     expect(triggers).toBe(1);
     expect(hub.urls.slice(0, 5)).toEqual(
-      Array(5).fill("ws://old-host:3456/ws")
+      new Array(5).fill("ws://old-host:3456/ws")
     );
     expect(hub.urls.slice(5, 7)).toEqual(
-      Array(2).fill("ws://new-host:3456/ws")
+      new Array(2).fill("ws://new-host:3456/ws")
     );
   });
 

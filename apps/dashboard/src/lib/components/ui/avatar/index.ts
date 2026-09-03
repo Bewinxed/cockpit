@@ -1,22 +1,26 @@
-import Root from "./avatar.svelte";
-import Badge from "./avatar-badge.svelte";
-import Fallback from "./avatar-fallback.svelte";
-import Group from "./avatar-group.svelte";
-import GroupCount from "./avatar-group-count.svelte";
-import Image from "./avatar-image.svelte";
-
+// biome-ignore lint/performance/noBarrelFile: public entry point for the avatar component group, consumed as a unit under the shadcn-svelte convention
 export {
-  Badge,
-  Badge as AvatarBadge,
-  Fallback,
-  Fallback as AvatarFallback,
-  Group,
-  Group as AvatarGroup,
-  GroupCount,
-  GroupCount as AvatarGroupCount,
-  Image,
-  Image as AvatarImage,
-  Root,
+  default as Root,
   //
-  Root as Avatar,
-};
+  default as Avatar,
+} from "./avatar.svelte";
+export {
+  default as Badge,
+  default as AvatarBadge,
+} from "./avatar-badge.svelte";
+export {
+  default as Fallback,
+  default as AvatarFallback,
+} from "./avatar-fallback.svelte";
+export {
+  default as Group,
+  default as AvatarGroup,
+} from "./avatar-group.svelte";
+export {
+  default as GroupCount,
+  default as AvatarGroupCount,
+} from "./avatar-group-count.svelte";
+export {
+  default as Image,
+  default as AvatarImage,
+} from "./avatar-image.svelte";

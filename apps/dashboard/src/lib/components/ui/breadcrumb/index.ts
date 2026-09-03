@@ -1,25 +1,30 @@
-import Root from "./breadcrumb.svelte";
-import Ellipsis from "./breadcrumb-ellipsis.svelte";
-import Item from "./breadcrumb-item.svelte";
-import Link from "./breadcrumb-link.svelte";
-import List from "./breadcrumb-list.svelte";
-import Page from "./breadcrumb-page.svelte";
-import Separator from "./breadcrumb-separator.svelte";
-
+// biome-ignore lint/performance/noBarrelFile: this is the component's public API surface, re-exporting its parts under the shadcn-svelte convention
 export {
-  Ellipsis,
-  Ellipsis as BreadcrumbEllipsis,
-  Item,
-  Item as BreadcrumbItem,
-  Link,
-  Link as BreadcrumbLink,
-  List,
-  List as BreadcrumbList,
-  Page,
-  Page as BreadcrumbPage,
-  Root,
+  default as Root,
   //
-  Root as Breadcrumb,
-  Separator,
-  Separator as BreadcrumbSeparator,
-};
+  default as Breadcrumb,
+} from "./breadcrumb.svelte";
+export {
+  default as Ellipsis,
+  default as BreadcrumbEllipsis,
+} from "./breadcrumb-ellipsis.svelte";
+export {
+  default as Item,
+  default as BreadcrumbItem,
+} from "./breadcrumb-item.svelte";
+export {
+  default as Link,
+  default as BreadcrumbLink,
+} from "./breadcrumb-link.svelte";
+export {
+  default as List,
+  default as BreadcrumbList,
+} from "./breadcrumb-list.svelte";
+export {
+  default as Page,
+  default as BreadcrumbPage,
+} from "./breadcrumb-page.svelte";
+export {
+  default as Separator,
+  default as BreadcrumbSeparator,
+} from "./breadcrumb-separator.svelte";

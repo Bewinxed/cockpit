@@ -11,6 +11,7 @@
    */
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for importing a component group
   import * as Drawer from "$lib/components/ui/drawer";
   import { IconAssistant } from "$lib/icons";
   import { whiffle } from "../client.svelte";
@@ -20,6 +21,8 @@
     type SupervisorStatus,
   } from "../supervisor";
   import { workspace } from "../workspace/workspace.svelte";
+
+  const TRAILING_SLASH_RE = /\/$/;
 
   let {
     open = $bindable(false),
@@ -133,8 +136,8 @@
 
   /** The cwd's last path segment — the session's label in this log. */
   function cwdLeaf(cwd: string): string {
-    const parts = cwd.replace(/\/$/, "").split("/");
-    return parts[parts.length - 1] || cwd;
+    const parts = cwd.replace(TRAILING_SLASH_RE, "").split("/");
+    return parts.at(-1) || cwd;
   }
 
   function navigateToSession(instanceId: string) {
@@ -173,6 +176,7 @@
   </Drawer.Root>
 {:else if open}
   <!-- DESKTOP: floating pane per mock shell law -->
+  <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: WAI-ARIA dialog pattern — the dialog container owns Escape/focus-trap keydown handling -->
   <div
     aria-label="Whiffle Assistant"
     class="panel"
@@ -319,7 +323,7 @@
               <span class="log-verdict {tone}">{ev.verdict}</span>
               {#if ev.message}
                 <span class="log-msg" title={ev.message}>
-                  {ev.message.length > 80 ? ev.message.slice(0, 77) + '...' : ev.message}
+                  {ev.message.length > 80 ? `${ev.message.slice(0, 77)}...` : ev.message}
                 </span>
               {/if}
             </li>

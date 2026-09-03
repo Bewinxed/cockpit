@@ -189,8 +189,7 @@ export const readProvenance = (
     if (!source) {
       continue;
     }
-    const srcEpoch = source.srcEpoch;
-    const srcSeq = source.srcSeq;
+    const { srcEpoch, srcSeq } = source;
     if (typeof srcEpoch !== "string" || srcEpoch.length === 0) {
       continue;
     }

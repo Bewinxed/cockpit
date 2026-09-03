@@ -60,6 +60,7 @@ let lastFailure: {
   value: ClaudeLimits;
 } | null = null;
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: reads OAuth creds, resolves the plan, and folds three limit sources (5h, 7d, opus) into one shape — the fallbacks are what read as branches.
 export async function fetchClaudeLimits(opts?: {
   configDir?: string;
 }): Promise<ClaudeLimits> {

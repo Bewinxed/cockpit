@@ -1,5 +1,4 @@
-import type { Rule, RuleDraft, RuleRow } from "@whiffle/core";
-import { RULE_TEMPLATES } from "@whiffle/core";
+import type { RULE_TEMPLATES, Rule, RuleDraft, RuleRow } from "@whiffle/core";
 
 /**
  * The dashboard's side of rules. Fetch wrappers in the shape `fleet.ts`
@@ -11,8 +10,9 @@ import { RULE_TEMPLATES } from "@whiffle/core";
  * fires, and the form's refusals must be the hub's own words.
  */
 
-export type { Rule, RuleDraft, RuleRow };
-export { RULE_TEMPLATES };
+export type { Rule, RuleDraft, RuleRow } from "@whiffle/core";
+// biome-ignore lint/performance/noBarrelFile: re-exports the shared rule types/constant that this dashboard module and the hub engine must agree on, not a module-graph barrel
+export { RULE_TEMPLATES } from "@whiffle/core";
 
 /** What `GET /api/rules` answers with. */
 export interface RulesPayload {

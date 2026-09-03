@@ -31,8 +31,8 @@
     onend: (() => void) | null;
     onerror: ((event: RecognitionErrorEvent) => void) | null;
     onresult: ((event: RecognitionEvent) => void) | null;
-    start(): void;
-    stop(): void;
+    start: () => void;
+    stop: () => void;
   }
 
   type RecognizerCtor = new () => Recognizer;

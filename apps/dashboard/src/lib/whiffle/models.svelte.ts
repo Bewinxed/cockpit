@@ -170,6 +170,7 @@ export function ensureModels(): void {
     if (store.offered.length > 0 || !hasLiveSession()) {
       return;
     }
+    // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — ensureModels itself is synchronous, and the catch below already reports a refusal via store.error
     void ask().catch((error: unknown) => {
       store.error = error instanceof Error ? error.message : String(error);
     });
@@ -212,6 +213,7 @@ export function modelLabel(model: string): string {
  * Pure string work, so it lives in a plain module — `models.svelte.ts` is full
  * of Svelte runes and `$app/*` imports, which no plain `bun test` can load.
  */
+// biome-ignore lint/performance/noBarrelFile: re-exports the one pure helper that both this store and non-Svelte test code need, not a module-graph barrel
 export { providerOf } from "./provider";
 
 /**

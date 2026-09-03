@@ -159,6 +159,7 @@ interface Ran {
 
 /** How long a git call gets before it has plainly hung — a fetch to a dead remote. */
 const GIT_TIMEOUT_MS = 60_000;
+const WHITESPACE = /\s+/;
 
 export type GitRunner = (root: string, args: readonly string[]) => Promise<Ran>;
 
@@ -197,7 +198,7 @@ export interface DeployCheckOptions {
 const countRange = (
   output: string
 ): { ahead: number; behind: number } | undefined => {
-  const [ahead, behind] = output.trim().split(/\s+/).map(Number);
+  const [ahead, behind] = output.trim().split(WHITESPACE).map(Number);
   if (
     ahead === undefined ||
     behind === undefined ||
@@ -303,6 +304,9 @@ export const describeDeploy = (state: DeployState): string => {
       return `${state.root} has ${state.ahead} local commit(s) origin does not, so there is nothing to pull (head ${state.head})`;
     case "diverged":
       return `${state.root} has DIVERGED from origin — ${state.ahead} local commit(s) and ${state.behind} upstream, head ${state.head} vs ${state.target}. Refusing to update: a reset here would destroy work nobody has a copy of. Resolve it by hand.`;
+    default:
+      // Exhaustive over DeployState["kind"]; TypeScript enforces every case above.
+      return state;
   }
 };
 
@@ -422,6 +426,7 @@ export class DeployWatcher {
   }
 
   async tick(): Promise<DeployTick> {
+    // biome-ignore lint/suspicious/noUnnecessaryConditions: #busy is reassigned true/false further down; Biome doesn't track private field mutation across the class
     if (this.#busy) {
       // Not a state read: an install-and-build can outlast several intervals,
       // and re-entering it would run two `bun install`s over one node_modules.
@@ -475,7 +480,7 @@ export class DeployWatcher {
 }
 
 export interface DeployPoller {
-  stop(): void;
+  stop: () => void;
   readonly watcher: DeployWatcher;
 }
 
@@ -488,6 +493,7 @@ export const startDeployPoller = (
 ): DeployPoller => {
   const watcher = new DeployWatcher(options);
   const timer = setInterval(() => {
+    // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — the interval callback doesn't await its own tick
     void watcher.tick();
   }, options.intervalMs ?? DEPLOY_POLL_MS);
   timer.unref?.();

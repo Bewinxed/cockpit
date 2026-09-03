@@ -121,7 +121,7 @@ export type HubState = "connected" | "connecting" | "unreachable";
 export type Machine = AgentRow;
 
 /** A session the hub knows about (`GET /api/instances`, and `instances` frames). */
-export type { InstanceRow };
+export type { InstanceRow } from "@whiffle/core";
 
 /** A project the hub knows about (`GET /api/projects`). */
 export interface ProjectRow {
@@ -632,6 +632,7 @@ function hydrate(target: SessionState): void {
   target.machineId = known.machineId;
   target.cwd = known.cwd;
   target.sessionId = known.sessionId;
+  // biome-ignore lint/suspicious/noUnnecessaryConditions: the cast doesn't make the field non-nullish at runtime — older rows really can lack a harness
   target.harness = (known.harness as HarnessKind) ?? "claude";
   target.scratch = known.kind === "scratch";
 }
@@ -717,6 +718,7 @@ async function persistSettings(
 /** Opens a session's view state — the route's half of arriving at `/session/[id]`. */
 export function openSession(instanceId: string): void {
   hydrate(session(instanceId));
+  // biome-ignore lint/complexity/noVoid: fire-and-forget — the view is already hydrated, delegate events fill in when they land
   void loadDelegateEvents(instanceId);
   // Opening a view is the moment its frames become this browser's to render.
   // (The working-set effect in the route layout already names it; this makes
@@ -877,9 +879,10 @@ async function refresh(): Promise<void> {
 }
 
 /** Every online machine's stored sessions — the sidebar's contents on arrival. */
-async function refreshCatalogs(): Promise<void> {
+function refreshCatalogs(): void {
   for (const machine of state.machines) {
     if (machine.status === "online") {
+      // biome-ignore lint/complexity/noVoid: fire-and-forget — every machine's catalog loads independently, none block the others
       void loadCatalog(machine.machineId);
     }
   }
@@ -913,7 +916,7 @@ function delegateEventOf(frame: FramePayload): DelegateEvent | null {
   if (candidate.kind !== "delegate_event") {
     return null;
   }
-  const event = candidate.event;
+  const { event } = candidate;
   if (typeof event !== "object" || event === null) {
     return null;
   }
@@ -935,7 +938,7 @@ function supervisorEventOf(frame: FramePayload): SupervisorEvent | null {
   if (candidate.kind !== "supervisor_event") {
     return null;
   }
-  const event = candidate.event;
+  const { event } = candidate;
   if (typeof event !== "object" || event === null) {
     return null;
   }
@@ -951,7 +954,7 @@ function supervisorStatusOf(
   if (candidate.kind !== "supervisor_status") {
     return null;
   }
-  const status = candidate.status;
+  const { status } = candidate;
   if (typeof status !== "object" || status === null) {
     return null;
   }
@@ -1004,6 +1007,7 @@ function announceSupervisorEvent(event: SupervisorEvent): void {
     "a session";
   const open = {
     label: "Open",
+    // biome-ignore lint/complexity/noVoid: fire-and-forget — the toast dismisses on click, navigation doesn't need to be awaited
     onClick: () => void goto(`/session/${event.instanceId}`),
   };
   if (event.verdict === "error") {
@@ -1054,6 +1058,7 @@ const nameOfCall = (messages: Message[], toolId: string): string =>
   messages.findLast((message) => message.metadata?.toolId === toolId)?.metadata
     ?.toolName ?? "";
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: dispatches every FramePayload kind the socket can deliver; splitting it would scatter one state machine across files
 function handleFrame(frame: FramePayload): void {
   if (frame.kind === "instances") {
     // The machines ride along so a daemon registering — the moment its auth
@@ -1233,6 +1238,7 @@ function handleFrame(frame: FramePayload): void {
           target.model = message.metadata?.model ?? target.model;
           target.permissionMode =
             message.metadata?.permissionMode ?? target.permissionMode;
+          // biome-ignore lint/complexity/noVoid: fire-and-forget — the local state is already updated, this just persists it
           void persistSettings(frame.instanceId, {
             permissionMode: message.metadata?.permissionMode,
             model: message.metadata?.model,
@@ -1277,6 +1283,7 @@ function handleFrame(frame: FramePayload): void {
             trigger: message.metadata?.trigger === "manual" ? "manual" : "auto",
           };
           if (target.machineId) {
+            // biome-ignore lint/complexity/noVoid: fire-and-forget — the compaction is already recorded, this just refreshes the reading
             void refreshContext(frame.instanceId, target.machineId);
           }
         }
@@ -1285,6 +1292,7 @@ function handleFrame(frame: FramePayload): void {
         // instead rather than going on claiming a model that is not answering.
         if (message.type === "system.model_fallback") {
           target.model = message.metadata?.model ?? target.model;
+          // biome-ignore lint/complexity/noVoid: fire-and-forget — the local state is already updated, this just persists it
           void persistSettings(frame.instanceId, {
             model: message.metadata?.model,
           });
@@ -1409,6 +1417,7 @@ function handleFrame(frame: FramePayload): void {
           error: mapping.compaction.error,
         };
         if (target.machineId) {
+          // biome-ignore lint/complexity/noVoid: fire-and-forget — the compaction result is already recorded, this just refreshes the reading
           void refreshContext(frame.instanceId, target.machineId);
         }
       }
@@ -1495,6 +1504,7 @@ function handleFrame(frame: FramePayload): void {
         clearTurnPhase(target);
         // The turn just changed how full the window is; ask rather than guess.
         if (target.machineId) {
+          // biome-ignore lint/complexity/noVoid: fire-and-forget — the turn already ended, this just refreshes the context reading
           void refreshContext(frame.instanceId, target.machineId);
         }
       } else if (
@@ -1517,7 +1527,7 @@ function handleFrame(frame: FramePayload): void {
     }
 
     case "permission_request": {
-      const routedTo = (frame as { routedTo?: "parent" }).routedTo;
+      const { routedTo } = frame as { routedTo?: "parent" };
       const existing = target.pending.find(
         (p) => p.requestId === frame.requestId
       );
@@ -1538,6 +1548,11 @@ function handleFrame(frame: FramePayload): void {
       });
       break;
     }
+
+    default:
+      // Every other FramePayload kind (instances, usage, delegate/supervisor
+      // events, …) is handled above, before this switch is reached.
+      break;
   }
 
   trackWorking(target);
@@ -1601,6 +1616,7 @@ const streamHost: StreamHost = {
    */
   rereadHistory: (sessionId) => {
     backfilled.delete(sessionId);
+    // biome-ignore lint/complexity/noVoid: fire-and-forget — the latch is already released, the reread fills in when it lands
     void backfillSession(sessionId);
   },
   sendToHub: (message) => {
@@ -1840,7 +1856,7 @@ function wirePayload<K extends CommandKind>(
   commandId: string,
   intent: CommandIntents[K]
 ): SendPayload | ControlPayload {
-  const control = (method: string, args: unknown[]): ControlPayload => ({
+  const controlPayload = (method: string, args: unknown[]): ControlPayload => ({
     instanceId,
     requestId: commandId,
     method,
@@ -1862,17 +1878,17 @@ function wirePayload<K extends CommandKind>(
       };
     }
     case "interrupt":
-      return control("interrupt", []);
+      return controlPayload("interrupt", []);
     case "set-model":
-      return control("setModel", [
+      return controlPayload("setModel", [
         (intent as CommandIntents["set-model"]).model,
       ]);
     case "set-permission-mode":
-      return control("setPermissionMode", [
+      return controlPayload("setPermissionMode", [
         (intent as CommandIntents["set-permission-mode"]).mode,
       ]);
     case "set-effort":
-      return control("setEffort", [
+      return controlPayload("setEffort", [
         (intent as CommandIntents["set-effort"]).effort,
       ]);
     default:
@@ -1889,21 +1905,27 @@ function legacyCall<K extends CommandKind>(
   machineId: string,
   intent: CommandIntents[K],
   commandId: string
-): () => void | Promise<unknown> {
+): () => Promise<unknown> | undefined {
   switch (kind) {
     case "send": {
       const { text, extras } = intent as CommandIntents["send"];
       // The id travels into the echo on this dialect too, so a legacy-hub
       // failure lands on the same row a stream-hub failure would.
-      return () => sendText(instanceId, machineId, text, extras, commandId);
+      return (): undefined => {
+        sendText(instanceId, machineId, text, extras, commandId);
+      };
     }
     case "permission.answer": {
       const { requestId, result } =
         intent as CommandIntents["permission.answer"];
-      return () => resolvePermission(instanceId, machineId, requestId, result);
+      return (): undefined => {
+        resolvePermission(instanceId, machineId, requestId, result);
+      };
     }
     case "interrupt":
-      return () => interrupt(instanceId, machineId);
+      return (): undefined => {
+        interrupt(instanceId, machineId);
+      };
     case "set-model":
       return () =>
         setModel(
@@ -1988,7 +2010,7 @@ export function submitCommand<K extends CommandKind>(
   }
 
   let payload: object;
-  let legacy: () => void | Promise<unknown>;
+  let legacy: () => Promise<unknown> | undefined;
   let effects: StreamEffects | undefined;
   try {
     // `provenance` rides inside the payload rather than as a new envelope field —
@@ -2363,6 +2385,7 @@ function streamEffectsFor<K extends CommandKind>(
           if (stage === "failed") {
             target.model = previous;
           } else {
+            // biome-ignore lint/complexity/noVoid: fire-and-forget — the local state already switched, this just persists it
             void persistSettings(instanceId, { model });
           }
         },
@@ -2379,6 +2402,7 @@ function streamEffectsFor<K extends CommandKind>(
           if (stage === "failed") {
             target.permissionMode = previous;
           } else {
+            // biome-ignore lint/complexity/noVoid: fire-and-forget — the local state already switched, this just persists it
             void persistSettings(instanceId, { permissionMode: mode });
           }
         },
@@ -2395,6 +2419,7 @@ function streamEffectsFor<K extends CommandKind>(
           if (stage === "failed") {
             target.effort = previous;
           } else {
+            // biome-ignore lint/complexity/noVoid: fire-and-forget — the local state already switched, this just persists it
             void persistSettings(instanceId, { effort });
           }
         },
@@ -2516,7 +2541,7 @@ function scheduleReconnect(): void {
   );
   state.retryAt = Date.now() + delay;
   globalThis.__whiffleReconnectTimeout = setTimeout(() => {
-    globalThis.__whiffleReconnectAttempts++;
+    globalThis.__whiffleReconnectAttempts += 1;
     connect();
   }, delay);
 }
@@ -2576,6 +2601,7 @@ function connect(): void {
     state.retryAt = null;
     state.failed = false;
     globalThis.__whiffleReconnectAttempts = 0;
+    // biome-ignore lint/complexity/noVoid: fire-and-forget — the socket is already marked connected, the fleet state fills in when it lands
     void refresh().then(refreshCatalogs);
     // Re-state the subscription on every (re)connect — the hub's registry forgot
     // this dashboard the moment the socket dropped.
@@ -2672,6 +2698,7 @@ export function ensureConnected(): void {
     if (socket.readyState === WebSocket.OPEN) {
       state.status = "connected";
       state.retryAt = null;
+      // biome-ignore lint/complexity/noVoid: fire-and-forget — the socket is already marked connected, the fleet state fills in when it lands
       void refresh().then(refreshCatalogs);
       lastSubscriptionKey = "";
       syncSubscriptions();
@@ -2832,6 +2859,7 @@ export function spawnSession({
   if (prompt?.trim()) {
     sendText(created.instanceId, machineId, prompt.trim());
   }
+  // biome-ignore lint/complexity/noVoid: fire-and-forget — the session already started locally, this just resyncs the fleet list
   void refresh();
   return created.instanceId;
 }
@@ -2866,23 +2894,25 @@ export function resumeSession({
     );
     // A true duplicate — same machine, same cwd, same session — is settled by
     // picking whichever row moved most recently, not by minting a third one.
-    live =
-      narrowed.length === 1
-        ? narrowed[0]
-        : narrowed.length > 1
-          ? narrowed.reduce((newest, row) =>
-              new Date(row.updatedAt ?? 0).getTime() >
-              new Date(newest.updatedAt ?? 0).getTime()
-                ? row
-                : newest
-            )
-          : undefined;
+    if (narrowed.length === 1) {
+      [live] = narrowed;
+    } else if (narrowed.length > 1) {
+      live = narrowed.reduce((newest, row) =>
+        new Date(row.updatedAt ?? 0).getTime() >
+        new Date(newest.updatedAt ?? 0).getTime()
+          ? row
+          : newest
+      );
+    } else {
+      live = undefined;
+    }
   }
   if (live) {
     const existing = session(live.id);
     existing.machineId ||= live.machineId;
     existing.cwd ||= live.cwd;
     existing.sessionId = sessionId;
+    // biome-ignore lint/suspicious/noUnnecessaryConditions: the cast doesn't make the field non-nullish at runtime — older rows really can lack a harness
     existing.harness = (live.harness as HarnessKind) ?? harness;
     return live.id;
   }
@@ -2898,6 +2928,7 @@ export function resumeSession({
     ...message,
     instanceId: created.instanceId,
   }));
+  // biome-ignore lint/complexity/noVoid: fire-and-forget — the session already started locally, this just resyncs the fleet list
   void refresh();
   return created.instanceId;
 }
@@ -2935,6 +2966,7 @@ export function forkSession({
     ...message,
     instanceId: created.instanceId,
   }));
+  // biome-ignore lint/complexity/noVoid: fire-and-forget — the session already started locally, this just resyncs the fleet list
   void refresh();
   return created.instanceId;
 }
@@ -3061,6 +3093,7 @@ export async function ensureAlive(
     } finally {
       target.relaunching = false;
     }
+    // biome-ignore lint/complexity/noVoid: fire-and-forget — the revive already landed, this just resyncs the fleet list
     void refresh();
   }
 }
@@ -3114,6 +3147,7 @@ export function stopSession(instanceId: string, machineId: string): void {
   send({ verb: "stop", machineId, instanceId, payload });
 
   settleStopped(instanceId);
+  // biome-ignore lint/complexity/noVoid: fire-and-forget — the stop already landed, this just resyncs the fleet list
   void refresh();
 }
 
@@ -3350,7 +3384,7 @@ export async function loadCatalog(machineId: string): Promise<void> {
  * newest one in what was just mapped is the session's own word for it.
  */
 function harvestCommands(target: SessionState, messages: Message[]): void {
-  for (let i = messages.length - 1; i >= 0; i--) {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
     const init = messages[i];
     if (init.type !== "system.init") {
       continue;
@@ -3393,6 +3427,7 @@ async function ingestTranscript(
   const bounds = turnBoundaries(transcript, TRANSCRIPT_CHUNK_SIZE);
   const newest = mapTranscript(
     viewId,
+    // biome-ignore lint/style/useAtIndex: bounds is guaranteed non-empty here (transcript already exceeded the chunk threshold); .at(-1) would silently widen to undefined and change the slice
     transcript.slice(bounds[bounds.length - 1])
   );
   target.messages = newest.messages;
@@ -3402,9 +3437,10 @@ async function ingestTranscript(
   target.loading = false;
   onPublished?.();
 
-  for (let i = bounds.length - 2; i >= 0; i--) {
+  for (let i = bounds.length - 2; i >= 0; i -= 1) {
     // Mapping a chunk is the blocking work, so the loop hands the event loop
     // back between them — this is what the reader scrolls and types through.
+    // biome-ignore lint/performance/noAwaitInLoops: chunks must yield to the event loop in order, oldest last, so the reader's scroll and typing stay responsive
     await new Promise((resolve) => setTimeout(resolve, 0));
     if (hydrations.get(viewId) !== epoch) {
       return;
@@ -3682,6 +3718,7 @@ export function messagesUrl(source: HistorySource): string {
  * prepend behind them, exactly as a socket-read transcript hydrates. Time to
  * the first message is one flush, not the whole file.
  */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: streams, parses and republishes turn-aligned chunks in one pass; splitting the state machine would scatter it across functions
 export async function streamHistory({
   viewId,
   machineId,
@@ -3818,7 +3855,7 @@ export async function streamHistory({
         }
       }
     }
-    chunks++;
+    chunks += 1;
   };
 
   try {
@@ -3900,6 +3937,7 @@ export async function streamHistory({
     };
 
     for (;;) {
+      // biome-ignore lint/performance/noAwaitInLoops: a stream reads sequentially by definition — each chunk depends on the last read landing first
       const { done, value } = await reader.read();
       if (done) {
         break;
@@ -3919,6 +3957,7 @@ export async function streamHistory({
         const line = carry.slice(0, newline);
         carry = carry.slice(newline + 1);
         if (line) {
+          // biome-ignore lint/performance/noAwaitInLoops: entries land newest-first — the transcript would be scrambled if two consumes raced
           await consume(JSON.parse(line) as SessionMessage);
         }
       }
@@ -4066,6 +4105,7 @@ export async function setPermissionMode(
     throw error;
   }
   // Only once the daemon has taken it: a refused switch never reaches the row.
+  // biome-ignore lint/complexity/noVoid: fire-and-forget — the daemon already took it, this just persists it
   void persistSettings(instanceId, { permissionMode: mode });
 }
 
@@ -4125,6 +4165,7 @@ export async function refreshContext(
  * either way, so `models.svelte.ts` asks once through whoever is running and
  * keeps it for the whole app.
  */
+// biome-ignore lint/suspicious/useAwait: async is kept intentionally so the returned promise settles on its own microtask, matching every other ask()-wrapping export here
 export async function loadModels(
   instanceId: string,
   machineId: string
@@ -4352,6 +4393,7 @@ export async function setModel(
     throw error;
   }
   // Only once the daemon has taken it: a refused switch never reaches the row.
+  // biome-ignore lint/complexity/noVoid: fire-and-forget — the daemon already took it, this just persists it
   void persistSettings(instanceId, { model });
 }
 
@@ -4388,6 +4430,7 @@ export async function setEffort(
     target.effort = previous;
     throw error;
   }
+  // biome-ignore lint/complexity/noVoid: fire-and-forget — the daemon already took it, this just persists it
   void persistSettings(instanceId, { effort });
 }
 
@@ -4452,6 +4495,7 @@ export async function relaunchSession(
     throw error;
   } finally {
     target.relaunching = false;
+    // biome-ignore lint/complexity/noVoid: fire-and-forget — the relaunch already landed, this just resyncs the fleet list
     void refresh();
   }
 }
@@ -4477,7 +4521,7 @@ function rewindPoint(
     return null;
   }
   const calls = toolFrames(target.messages);
-  for (let index = edited - 1; index >= 0; index--) {
+  for (let index = edited - 1; index >= 0; index -= 1) {
     const { type, sdkUuid: uuid } = target.messages[index];
     if (type !== "assistant" || !uuid || calls.has(uuid)) {
       continue;
@@ -4486,7 +4530,7 @@ function rewindPoint(
     // the anchor belongs to stays, because the SDK keeps all of it too.
     let cut = index + 1;
     while (cut < edited && target.messages[cut].sdkUuid === uuid) {
-      cut++;
+      cut += 1;
     }
     return { at: uuid, cut };
   }
@@ -4546,7 +4590,7 @@ export async function editAndResend(
   content: string
 ): Promise<void> {
   const target = session(instanceId);
-  const machineId = target.machineId;
+  const { machineId } = target;
   if (!(target.sessionId && machineId)) {
     throw new Error(
       "This session has not named itself yet. Try again in a moment."
@@ -4608,6 +4652,7 @@ export async function editAndResend(
     throw error;
   } finally {
     target.relaunching = false;
+    // biome-ignore lint/complexity/noVoid: fire-and-forget — the relaunch already landed, this just resyncs the fleet list
     void refresh();
   }
 }
@@ -4944,11 +4989,11 @@ export const whiffle = {
   /** The ask a permission requestId belongs to, whichever delegate raised it. */
   delegateAskOf: (requestId: string): DelegateAskEvent | null => {
     for (const events of Object.values(state.delegateEvents)) {
-      const ask = events.find(
+      const found = events.find(
         (event) => event.kind === "ask" && event.requestId === requestId
       );
-      if (ask?.kind === "ask") {
-        return ask;
+      if (found?.kind === "ask") {
+        return found;
       }
     }
     return null;

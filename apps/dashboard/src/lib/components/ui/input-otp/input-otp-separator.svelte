@@ -13,13 +13,19 @@
   }: WithElementRef<HTMLAttributes<HTMLDivElement>> = $props();
 </script>
 
+<!-- biome-ignore-start lint/a11y/useFocusableInteractive: decorative divider between OTP groups, not an interactive splitter -->
+<!-- biome-ignore-start lint/a11y/useSemanticElements: same -->
+<!-- biome-ignore-start lint/a11y/useAriaPropsForRole: same -->
 <div
-  class={cn("[&_svg:not([class*='size-'])]:size-4 flex items-center", className)}
+  class={cn("flex items-center [&_svg:not([class*='size-'])]:size-4", className)}
   data-slot="input-otp-separator"
   role="separator"
   bind:this={ref}
   {...restProps}
 >
+  <!-- biome-ignore-end lint/a11y/useFocusableInteractive: same -->
+  <!-- biome-ignore-end lint/a11y/useSemanticElements: same -->
+  <!-- biome-ignore-end lint/a11y/useAriaPropsForRole: same -->
   {#if children}
     {@render children?.()}
   {:else}

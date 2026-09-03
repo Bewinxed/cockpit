@@ -31,9 +31,11 @@ import { restartStack, run } from "./update";
  */
 export const PACKAGE_NAME = "whiffle";
 
+const TRAILING_SLASH_RE = /\/$/;
+
 /** The registry, overridable for a private mirror or an air-gapped fleet. */
 export const registryUrl = (): string =>
-  readEnv(WHIFFLE_ENV.registry)?.replace(/\/$/, "") ||
+  readEnv(WHIFFLE_ENV.registry)?.replace(TRAILING_SLASH_RE, "") ||
   "https://registry.npmjs.org";
 
 /** Long enough for a slow mirror, short enough not to wedge a poll. */
@@ -58,12 +60,18 @@ export interface VersionCheck {
  * machine must never fail to report its state because a version string was
  * shaped oddly.
  */
+const LEADING_V_RE = /^v/;
+const VERSION_SEPARATOR_RE = /[.\-+]/;
+const DIGITS_ONLY_RE = /^\d+$/;
+
 export const isNewer = (candidate: string, current: string): boolean => {
   const parts = (value: string): number[] =>
     value
-      .replace(/^v/, "")
-      .split(/[.\-+]/)
-      .map((piece) => (/^\d+$/.test(piece) ? Number(piece) : Number.NaN));
+      .replace(LEADING_V_RE, "")
+      .split(VERSION_SEPARATOR_RE)
+      .map((piece) =>
+        DIGITS_ONLY_RE.test(piece) ? Number(piece) : Number.NaN
+      );
   const a = parts(candidate);
   const b = parts(current);
   for (let i = 0; i < Math.max(a.length, b.length); i += 1) {

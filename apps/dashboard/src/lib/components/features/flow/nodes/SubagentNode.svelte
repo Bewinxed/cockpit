@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Handle, Position, useStore, useSvelteFlow } from "@xyflow/svelte";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for importing a component group
   import * as Collapsible from "$lib/components/ui/collapsible";
   import {
     IconChevronDown,
@@ -45,13 +46,16 @@
   let expandedSet = $state(new Set<string>());
 
   // Semantic zoom levels
-  const zoomLevel = $derived(
-    zoom < ZOOM_THRESHOLD_OVERVIEW
-      ? "overview"
-      : zoom < ZOOM_THRESHOLD_SUMMARY
-        ? "summary"
-        : "detail"
-  );
+  function zoomLevelFor(z: number): "overview" | "summary" | "detail" {
+    if (z < ZOOM_THRESHOLD_OVERVIEW) {
+      return "overview";
+    }
+    if (z < ZOOM_THRESHOLD_SUMMARY) {
+      return "summary";
+    }
+    return "detail";
+  }
+  const zoomLevel = $derived(zoomLevelFor(zoom));
 
   // Use subagents array if available, otherwise wrap single subagent
   const allSubagents = $derived.by(() => {
@@ -127,6 +131,17 @@
       default:
         return "text-muted-foreground";
     }
+  }
+
+  function getStatusDotColor(status: string): string {
+    const color = getStatusColor(status);
+    if (color === "text-success") {
+      return "bg-success";
+    }
+    if (color === "text-error") {
+      return "bg-error";
+    }
+    return "bg-info";
   }
 
   function _getBorderClass(status: string): string {
@@ -258,7 +273,7 @@
     if (hasRunning && !intervalId) {
       // Start interval if running and not already started
       intervalId = setInterval(() => {
-        tick = tick + 1;
+        tick += 1;
       }, ELAPSED_TIME_UPDATE_INTERVAL);
     } else if (!hasRunning && intervalId) {
       // Clear interval if no longer running
@@ -303,11 +318,7 @@
         <IconSkill class="h-4 w-4" style="color: {branchColor}" />
       </div>
       <div
-        class="w-2 h-2 rounded-full {getStatusColor(groupStatus) === 'text-success'
-          ? 'bg-success'
-          : getStatusColor(groupStatus) === 'text-error'
-            ? 'bg-error'
-            : 'bg-info'}"
+        class="w-2 h-2 rounded-full {getStatusDotColor(groupStatus)}"
         title={statusLabel(groupStatus)}
       ></div>
     </div>

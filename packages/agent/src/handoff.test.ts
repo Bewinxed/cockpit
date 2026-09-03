@@ -80,7 +80,7 @@ test("a hand-off emits a send addressed at the target and its machine", async ()
   );
 
   expect(sent).toHaveLength(1);
-  const envelope = sent[0];
+  const [envelope] = sent;
   expect(envelope.verb).toBe("send");
   // Routed at the *target's* machine, which is how it crosses machines at all.
   expect(envelope.machineId).toBe("m2");
@@ -120,6 +120,7 @@ test("the message is marked as a peer and does not start a turn", async () => {
 test("an @ prefix and a partial name both resolve", async () => {
   for (const target of ["@keeboard", "keeb", "KEEBOARD"]) {
     const { handoff, sent } = build();
+    // biome-ignore lint/performance/noAwaitInLoops: each form gets its own stand-in hub; sequential keeps a failure's output pointing at one target
     await handoff({ target, message: "x" }, {});
     expect(sent[0].instanceId).toBe("kee-1");
   }
@@ -131,11 +132,14 @@ test("an id resolves directly", async () => {
   expect(sent[0].instanceId).toBe("router");
 });
 
+const UNKNOWN_TARGET_ERROR = /keeboard/;
+const AMBIGUOUS_TARGET_ERROR = /matches 2 sessions/;
+
 test("an unknown target is refused, and says what is running", async () => {
   const { handoff, sent } = build();
-  expect(handoff({ target: "nowhere", message: "x" }, {})).rejects.toThrow(
-    /keeboard/
-  );
+  await expect(
+    handoff({ target: "nowhere", message: "x" }, {})
+  ).rejects.toThrow(UNKNOWN_TARGET_ERROR);
   expect(sent).toHaveLength(0);
 });
 
@@ -143,8 +147,8 @@ test("an ambiguous name is refused rather than guessed", async () => {
   const { handoff, sent } = build();
   // Two sessions are both called "twins" — sending to either silently is how a
   // hand-off lands somewhere nobody looks again.
-  expect(handoff({ target: "twins", message: "x" }, {})).rejects.toThrow(
-    /matches 2 sessions/
+  await expect(handoff({ target: "twins", message: "x" }, {})).rejects.toThrow(
+    AMBIGUOUS_TARGET_ERROR
   );
   expect(sent).toHaveLength(0);
 });
@@ -167,8 +171,7 @@ test("starting a session spawns it and gives it its opening turn", async () => {
 
   // The opening instruction *should* run — this is the one peer message that
   // is not queued, because the session exists to answer it.
-  const message = (opening.payload as { message: Record<string, unknown> })
-    .message;
+  const { message } = opening.payload as { message: Record<string, unknown> };
   expect(message.shouldQuery).toBeUndefined();
   expect((message.origin as { kind: string }).kind).toBe("peer");
 });
@@ -179,9 +182,9 @@ test("a side quest is spawned as scratch, with its worktree flag", async () => {
     { cwd: "/home/o/center.ai", prompt: "try it", sideQuest: true } as never,
     {}
   );
-  const scratch = (
-    sent[0].payload as { scratch?: { worktree?: boolean; baseCwd?: string } }
-  ).scratch;
+  const { scratch } = sent[0].payload as {
+    scratch?: { worktree?: boolean; baseCwd?: string };
+  };
   // No worktree: the quest works in the checkout, nested under its parent.
   expect(scratch).toEqual({ baseCwd: "/home/o/center.ai" });
 });
@@ -197,7 +200,7 @@ test("a user message goes up as a frames envelope with no target and no ask", as
   const text = textOf(await sendToUser({ message: "the build passed" }, {}));
 
   expect(sent).toHaveLength(1);
-  const envelope = sent[0];
+  const [envelope] = sent;
   // Frames travel session → hub, so the hub routes them on `kind`, not a verb
   // like `send`. No machine and no peer: this is the session's own word.
   expect(envelope.verb).toBe("frames");

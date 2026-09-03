@@ -1,28 +1,22 @@
-import Root from "./table.svelte";
-import Body from "./table-body.svelte";
-import Caption from "./table-caption.svelte";
-import Cell from "./table-cell.svelte";
-import Footer from "./table-footer.svelte";
-import Head from "./table-head.svelte";
-import Header from "./table-header.svelte";
-import Row from "./table-row.svelte";
-
+// biome-ignore lint/performance/noBarrelFile: shadcn-svelte component barrel — every consumer imports the group from this index
 export {
-  Body,
-  Body as TableBody,
-  Caption,
-  Caption as TableCaption,
-  Cell,
-  Cell as TableCell,
-  Footer,
-  Footer as TableFooter,
-  Head,
-  Head as TableHead,
-  Header,
-  Header as TableHeader,
-  Root,
+  default as Root,
   //
-  Root as Table,
-  Row,
-  Row as TableRow,
-};
+  default as Table,
+} from "./table.svelte";
+export { default as Body, default as TableBody } from "./table-body.svelte";
+export {
+  default as Caption,
+  default as TableCaption,
+} from "./table-caption.svelte";
+export { default as Cell, default as TableCell } from "./table-cell.svelte";
+export {
+  default as Footer,
+  default as TableFooter,
+} from "./table-footer.svelte";
+export { default as Head, default as TableHead } from "./table-head.svelte";
+export {
+  default as Header,
+  default as TableHeader,
+} from "./table-header.svelte";
+export { default as Row, default as TableRow } from "./table-row.svelte";

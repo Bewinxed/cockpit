@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { HTMLAttributes } from "svelte/elements";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for importing a component group
   import * as Tooltip from "$lib/components/ui/tooltip/index.js";
   import { cn, type WithElementRef } from "$lib/utils.js";
   import {
@@ -13,7 +14,9 @@
   let {
     ref = $bindable(null),
     open = $bindable(true),
-    onOpenChange = () => {},
+    onOpenChange = () => {
+      // no-op default: callers that don't need to observe open state omit this
+    },
     class: className,
     style,
     children,
@@ -30,6 +33,7 @@
       onOpenChange(value);
 
       // This sets the cookie to keep the sidebar state.
+      // biome-ignore lint/suspicious/noDocumentCookie: Cookie Store API is async and unsupported in Safari; this write must stay synchronous
       document.cookie = `${SIDEBAR_COOKIE_NAME}=${open}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`;
     },
   });

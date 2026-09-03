@@ -10,6 +10,7 @@
  * with its `raw` self attached and nothing lost.
  */
 
+import type { Dirent } from "node:fs";
 import { access, readdir, readFile, realpath } from "node:fs/promises";
 import { join } from "node:path";
 import {
@@ -100,14 +101,12 @@ export const toNeutral = (sdk: SDKMessage): NeutralMessage => {
     // The SDK's own usage carries cache_creation/cache_read counts; re-tag them
     // under the harness-neutral `cache` shape the opencode adapter's result
     // frame also populates.
-    const usage = (
-      sdk as {
-        usage?: {
-          cache_creation_input_tokens?: number;
-          cache_read_input_tokens?: number;
-        };
-      }
-    ).usage;
+    const { usage } = sdk as {
+      usage?: {
+        cache_creation_input_tokens?: number;
+        cache_read_input_tokens?: number;
+      };
+    };
     return {
       ...sdk,
       raw: sdk,
@@ -193,6 +192,7 @@ function normalizeQuestionResult(raw: unknown): UserQuestionResult | null {
  * answered payload and by the tool's own input, which is all a dismissal has
  * left to say what was asked. `null` when the array is not questions at all.
  */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: validates every field of a raw AskUserQuestion array shape before trusting any of it
 function normalizeQuestions(raw: unknown): UserQuestion[] | null {
   if (!Array.isArray(raw)) {
     return null;
@@ -248,7 +248,7 @@ function attachQuestionResult(
   if (typeof message !== "object" || message === null) {
     return message;
   }
-  const content = (message as { content?: unknown }).content;
+  const { content } = message as { content?: unknown };
   if (!Array.isArray(content)) {
     return message;
   }
@@ -339,6 +339,7 @@ async function claudeSessionFile(
     for (const projectsDir of projects) {
       const candidate = join(projectsDir, slug, fileName);
       try {
+        // biome-ignore lint/performance/noAwaitInLoops: the first config dir that has the file wins; a match short-circuits the search
         await access(candidate);
         return candidate;
       } catch {
@@ -347,8 +348,9 @@ async function claudeSessionFile(
     }
   }
   for (const projectsDir of projects) {
-    let entries;
+    let entries: Dirent[];
     try {
+      // biome-ignore lint/performance/noAwaitInLoops: the first config dir that has the file wins; a match short-circuits the search
       entries = await readdir(projectsDir, { withFileTypes: true });
     } catch {
       continue;
@@ -359,6 +361,7 @@ async function claudeSessionFile(
       }
       const candidate = join(projectsDir, entry.name, fileName);
       try {
+        // biome-ignore lint/performance/noAwaitInLoops: the first project dir that has the file wins; a match short-circuits the search
         await access(candidate);
         return candidate;
       } catch {
@@ -427,8 +430,8 @@ function withExtras(
     typeof message.message.content === "string" ? message.message.content : "";
   const pasted = (attachments ?? [])
     .map(
-      ({ name, content }) =>
-        `\n\n<pasted-text name="${name}">\n${content}\n</pasted-text>`
+      ({ name, content: body }) =>
+        `\n\n<pasted-text name="${name}">\n${body}\n</pasted-text>`
     )
     .join("");
 
@@ -461,11 +464,16 @@ export class InputStream implements AsyncIterable<SDKUserMessage> {
   readonly #queue: { message: SDKUserMessage; queueId?: string }[] = [];
   #waiting: ((result: IteratorResult<SDKUserMessage>) => void) | null = null;
   #ended = false;
-
   /** Called with the id of a tagged message at the moment the model pulls it. */
+  readonly #onConsume: (queueId: string) => void;
+
   constructor(
-    private readonly onConsume: (queueId: string) => void = () => {}
-  ) {}
+    onConsume: (queueId: string) => void = () => {
+      // No listener by default: not every caller cares when a queued message lands.
+    }
+  ) {
+    this.#onConsume = onConsume;
+  }
 
   /**
    * Hands one turn to the model, or holds it until the running one is done.
@@ -494,10 +502,11 @@ export class InputStream implements AsyncIterable<SDKUserMessage> {
         const queued = this.#queue.shift();
         if (queued) {
           if (queued.queueId) {
-            this.onConsume(queued.queueId);
+            this.#onConsume(queued.queueId);
           }
           return Promise.resolve({ done: false, value: queued.message });
         }
+        // biome-ignore lint/suspicious/noUnnecessaryConditions: #ended is set true by end() elsewhere in this class; the checker doesn't see that cross-method mutation
         if (this.#ended) {
           return Promise.resolve({ done: true, value: undefined });
         }
@@ -516,7 +525,7 @@ export class InputStream implements AsyncIterable<SDKUserMessage> {
  * replaces the client's guess without doubling the message on screen.
  */
 export const queuedText = (message: NeutralUserMessage): string => {
-  const content = message.message.content;
+  const { content } = message.message;
   if (typeof content === "string") {
     return content;
   }
@@ -569,6 +578,7 @@ class Turn {
   }
 
   async settle(ms: number): Promise<void> {
+    // biome-ignore lint/suspicious/noUnnecessaryConditions: busy is set true by start() elsewhere in this class; the checker doesn't see that cross-method mutation
     if (!this.busy) {
       return;
     }
@@ -663,9 +673,10 @@ class ClaudeSession implements HarnessSession {
    * {@link #pumpMessages} tags the frame before it leaves the daemon.
    */
   readonly #awaitingEcho: { queueId: string; text: string }[] = [];
+  readonly instanceId: string;
 
   constructor(
-    readonly instanceId: string,
+    instanceId: string,
     ctx: HarnessContext,
     workdir: string,
     options: unknown,
@@ -687,6 +698,7 @@ class ClaudeSession implements HarnessSession {
      */
     sessiond?: { client: SessiondClient; procId: string }
   ) {
+    this.instanceId = instanceId;
     this.#ctx = ctx;
     // The model just pulled a held turn: retire the queue entry, and remember
     // the text so the frame that echoes it can be tagged with the same id.
@@ -865,8 +877,8 @@ class ClaudeSession implements HarnessSession {
     if (at === -1) {
       return;
     }
-    const [entry] = this.#queued.splice(at, 1);
-    this.#awaitingEcho.push({ queueId, text: entry.text });
+    const [dequeued] = this.#queued.splice(at, 1);
+    this.#awaitingEcho.push({ queueId, text: dequeued.text });
     // A turn nothing ever echoed would otherwise sit here for the session's
     // life. The tag is a nicety — `message_dequeued` already retired the row —
     // so the oldest unmatched entries are simply dropped.
@@ -907,10 +919,11 @@ class ClaudeSession implements HarnessSession {
     if (at === -1) {
       return;
     }
-    const [entry] = this.#awaitingEcho.splice(at, 1);
-    neutral.queueId = entry.queueId;
+    const [matched] = this.#awaitingEcho.splice(at, 1);
+    neutral.queueId = matched.queueId;
   }
 
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the session's whole live-frame pipeline — echo tagging, question dismissal, structured-result folding, busy/failed reporting — one pass per SDK message
   async #pumpMessages(
     ctx: HarnessContext,
     handle: Query,
@@ -941,7 +954,7 @@ class ClaudeSession implements HarnessSession {
         // A dismissed question has no sidecar to normalise — the denial was
         // recorded when it was made, and this is the block it belongs to.
         if (neutral.type === "user" && this.#dismissedQuestions.size > 0) {
-          const content = neutral.message.content;
+          const { content } = neutral.message;
           if (Array.isArray(content)) {
             for (const block of content) {
               if (block.type !== "tool_result") {
@@ -961,21 +974,23 @@ class ClaudeSession implements HarnessSession {
         // structured data in #pendingStructured keyed by result text; inject it
         // back onto the matching block so downstream consumers see it.
         if (neutral.type === "user" && this.#pendingStructured.size > 0) {
-          const content = neutral.message.content;
+          const { content } = neutral.message;
           if (Array.isArray(content)) {
             for (const block of content) {
               if (block.type !== "tool_result") {
                 continue;
               }
-              const text =
-                typeof block.content === "string"
-                  ? block.content
-                  : Array.isArray(block.content)
-                    ? (block.content as { text?: string }[])
-                        .map((b) => b.text ?? "")
-                        .filter(Boolean)
-                        .join("\n")
-                    : "";
+              let text: string;
+              if (typeof block.content === "string") {
+                text = block.content;
+              } else if (Array.isArray(block.content)) {
+                text = (block.content as { text?: string }[])
+                  .map((b) => b.text ?? "")
+                  .filter(Boolean)
+                  .join("\n");
+              } else {
+                text = "";
+              }
               const sc = this.#pendingStructured.get(text);
               if (sc) {
                 (block as Record<string, unknown>).structuredContent = sc;
@@ -1027,9 +1042,11 @@ class ClaudeSession implements HarnessSession {
     // losing work. If the stream is gone, fall back to queueing it.
     if (extras.urgent && this.#turn.busy) {
       const outgoing = withExtras(sdk, extras.attachments, extras.images);
+      // biome-ignore lint/suspicious/useAwait: must stay an async generator — streamInput's signature requires AsyncGenerator<SDKUserMessage>, not the plain Generator a non-async function* would produce
       const stream = (async function* (): AsyncGenerator<SDKUserMessage> {
         yield outgoing;
       })();
+      // biome-ignore lint/complexity/noVoid: fire-and-forget by intent; the rejection is already handled by the .catch() right here, which falls back to the normal queue
       void this.#handle.streamInput(stream).catch(() => {
         this.#input.push(outgoing);
       });
@@ -1060,8 +1077,10 @@ class ClaudeSession implements HarnessSession {
     // message) is already echoed as a real user frame at the bottom of this
     // method — announcing it here would draw the same message twice, once
     // waiting and once said.
+    // biome-ignore lint/suspicious/noUnnecessaryConditions: Turn.busy is mutated by Turn.start()/.end() elsewhere; the checker doesn't see that cross-class mutation
     const holding = this.#turn.busy && !isInjected(message.origin);
     this.#turn.start();
+    // biome-ignore lint/suspicious/noUnnecessaryConditions: holding is a real boolean at runtime; the checker mis-narrows it from the condition above
     const queueId = holding ? crypto.randomUUID() : undefined;
     const waiting = this.#input.push(
       withExtras(outgoing, extras.attachments, extras.images),
@@ -1117,7 +1136,8 @@ class ClaudeSession implements HarnessSession {
     this.#permissions.delete(requestId);
     const question = this.#openQuestions.get(requestId);
     if (!question) {
-      return resolve(result);
+      resolve(result);
+      return;
     }
 
     this.#openQuestions.delete(requestId);
@@ -1139,6 +1159,7 @@ class ClaudeSession implements HarnessSession {
   }
 
   async interrupt(): Promise<void> {
+    // biome-ignore lint/suspicious/noEmptyBlockStatements: best effort — a stream that already ended has nothing left to interrupt
     await this.#handle.interrupt().catch(() => {});
   }
 
@@ -1157,12 +1178,15 @@ class ClaudeSession implements HarnessSession {
     // Not dismissals: the session is going away, and no `tool_result` will
     // arrive for these to be folded onto.
     this.#openQuestions.clear();
+    // biome-ignore lint/suspicious/noEmptyBlockStatements: best effort — the child may already be gone
     await this.#handle.interrupt().catch(() => {});
     await this.#turn.settle(SETTLE_TIMEOUT_MS);
     this.#handle.close();
+    // biome-ignore lint/suspicious/noEmptyBlockStatements: best effort — stop() already tore everything down; only a pump that was still mid-await needs waiting for
     await this.#pump.catch(() => {});
   }
 
+  // biome-ignore lint/suspicious/useAwait: HarnessSession.dispose returns Promise<void>; dropping async would need an explicit Promise.resolve() wrapper instead
   async dispose(): Promise<void> {
     this.#input.end();
     this.#handle.close();
@@ -1372,15 +1396,29 @@ export class ClaudeCustody implements HarnessSession {
   #handedOff = false;
   /** Settled by {@link exited} when sessiond reports the child gone. */
   readonly #exit = Promise.withResolvers<void>();
+  readonly instanceId: string;
+  readonly #ctx: HarnessContext;
+  readonly #write: (data: string) => void;
+  /** Ends the child's stdin — the graceful half of the boundary hand-off. */
+  readonly #stdinEnd: () => void;
+  /** Fired at the turn boundary; the owner respawns with `resume: sessionId`. */
+  readonly #onHandoff: (handoff: {
+    instanceId: string;
+    sessionId: string | null;
+    held: {
+      message: NeutralUserMessage;
+      extras: Pick<SendPayload, "attachments" | "images" | "urgent">;
+    }[];
+  }) => void;
+  /** Signals the child; what a `stop` falls back to when EOF alone does not end it. */
+  readonly #kill: (sig: NodeJS.Signals) => void;
 
   constructor(
-    readonly instanceId: string,
-    private readonly ctx: HarnessContext,
-    private readonly write: (data: string) => void,
-    /** Ends the child's stdin — the graceful half of the boundary hand-off. */
-    private readonly stdinEnd: () => void,
-    /** Fired at the turn boundary; the owner respawns with `resume: sessionId`. */
-    private readonly onHandoff: (handoff: {
+    instanceId: string,
+    ctx: HarnessContext,
+    write: (data: string) => void,
+    stdinEnd: () => void,
+    onHandoff: (handoff: {
       instanceId: string;
       sessionId: string | null;
       held: {
@@ -1389,10 +1427,17 @@ export class ClaudeCustody implements HarnessSession {
       }[];
     }) => void,
     sessionId: string | null = null,
-    /** Signals the child; what a `stop` falls back to when EOF alone does not end it. */
-    private readonly kill: (sig: NodeJS.Signals) => void = () => {}
+    kill: (sig: NodeJS.Signals) => void = () => {
+      // Not supplied in every test rig: a `stop` that falls back to this is a no-op there.
+    }
   ) {
+    this.instanceId = instanceId;
+    this.#ctx = ctx;
+    this.#write = write;
+    this.#stdinEnd = stdinEnd;
+    this.#onHandoff = onHandoff;
     this.sessionId = sessionId;
+    this.#kill = kill;
   }
 
   /** The child is gone — from the ring subscription's `exit`, whatever caused it. */
@@ -1446,11 +1491,11 @@ export class ClaudeCustody implements HarnessSession {
       (sdk as { subtype?: string }).subtype === "init"
     ) {
       this.sessionId = sdk.session_id;
-      this.ctx.session(sdk.session_id);
+      this.#ctx.session(sdk.session_id);
     }
-    this.ctx.frame(toNeutral(sdk));
+    this.#ctx.frame(toNeutral(sdk));
     if (sdk.type === "result") {
-      this.ctx.busy(false);
+      this.#ctx.busy(false);
       // THE BOUNDARY. The turn that was in flight when the agent died has now
       // completed and been captured; this is the one moment at which handing
       // the session back to a full `Query` costs nothing but a respawn.
@@ -1471,7 +1516,7 @@ export class ClaudeCustody implements HarnessSession {
         input?: Record<string, unknown>;
         permission_suggestions?: unknown;
       };
-      this.ctx.permission({
+      this.#ctx.permission({
         requestId,
         toolName: inner.tool_name ?? "unknown",
         input: inner.input ?? {},
@@ -1492,8 +1537,8 @@ export class ClaudeCustody implements HarnessSession {
     // reader can see it rather than hanging on a promise nobody holds.
     const subtype = request.request?.subtype ?? "unknown";
     const reason = `whiffle: agent restarted; \`${subtype}\` cannot be served during custody`;
-    this.write(controlError(requestId, reason));
-    this.ctx.frame({
+    this.#write(controlError(requestId, reason));
+    this.#ctx.frame({
       type: "system",
       subtype: CUSTODY_DEGRADED,
       ...(this.sessionId ? { session_id: this.sessionId } : {}),
@@ -1513,7 +1558,7 @@ export class ClaudeCustody implements HarnessSession {
     if (!this.#parked.delete(requestId)) {
       throw new Error(`no permission request ${requestId}`);
     }
-    this.write(controlSuccess(requestId, result));
+    this.#write(controlSuccess(requestId, result));
   }
 
   /**
@@ -1538,7 +1583,7 @@ export class ClaudeCustody implements HarnessSession {
   control(method: string): Promise<unknown> {
     const reason = `whiffle: agent restarted; control \`${method}\` is unavailable until this session hands back (custody)`;
     if (!READ_ONLY_CONTROLS.has(method)) {
-      this.ctx.frame({
+      this.#ctx.frame({
         type: "system",
         subtype: CUSTODY_DEGRADED,
         ...(this.sessionId ? { session_id: this.sessionId } : {}),
@@ -1554,21 +1599,23 @@ export class ClaudeCustody implements HarnessSession {
    * one — so it is written as the raw control_request the `Query` would have
    * sent, and the hand-off follows on the `result` the interrupt produces.
    */
+  // biome-ignore lint/suspicious/useAwait: HarnessSession.interrupt returns Promise<void>; dropping async would need an explicit Promise.resolve() wrapper instead
   async interrupt(): Promise<void> {
     const requestId = crypto.randomUUID();
-    this.write(
+    this.#write(
       `${JSON.stringify({ type: "control_request", request_id: requestId, request: { subtype: "interrupt" } })}\n`
     );
   }
 
   /** stdin EOF + the hand-off, once. */
   handOff(): void {
+    // biome-ignore lint/suspicious/noUnnecessaryConditions: #handedOff is set true elsewhere in this class once a hand-off fires; the checker doesn't see that cross-method mutation
     if (this.#handedOff) {
       return;
     }
     this.#handedOff = true;
-    this.stdinEnd();
-    this.onHandoff({
+    this.#stdinEnd();
+    this.#onHandoff({
       instanceId: this.instanceId,
       sessionId: this.sessionId,
       held: [...this.#held],
@@ -1580,12 +1627,12 @@ export class ClaudeCustody implements HarnessSession {
     // A stop during custody is the operator ending the session, not a
     // hand-off: nothing is parked afterwards and nothing is respawned.
     for (const requestId of this.#parked) {
-      this.write(controlError(requestId, "whiffle: session stopped"));
+      this.#write(controlError(requestId, "whiffle: session stopped"));
     }
     this.#parked.clear();
     this.#held.length = 0;
     this.#handedOff = true;
-    this.stdinEnd();
+    this.#stdinEnd();
     // Returned only once the child is actually dead. The supervisor's relaunch
     // awaits this before spawning under the same procId, and sessiond's spawn
     // SIGKILLs a still-alive predecessor and broadcasts its exit to whoever is
@@ -1593,10 +1640,11 @@ export class ClaudeCustody implements HarnessSession {
     if (await within(this.#exit.promise, CUSTODY_EXIT_MS)) {
       return;
     }
-    this.kill("SIGKILL");
+    this.#kill("SIGKILL");
     await within(this.#exit.promise, CUSTODY_EXIT_MS);
   }
 
+  // biome-ignore lint/suspicious/useAwait: HarnessSession.dispose returns Promise<void>; dropping async would need an explicit Promise.resolve() wrapper instead
   async dispose(): Promise<void> {
     this.#parked.clear();
     this.#held.length = 0;
@@ -1728,10 +1776,16 @@ export class ClaudeHarness implements Harness {
     const custody = new ClaudeCustody(
       instanceId,
       ctx,
+      // biome-ignore lint/complexity/noVoid: fire-and-forget by intent; sessiond write failures are not this session's to surface, best effort only
+      // biome-ignore lint/suspicious/noEmptyBlockStatements: best effort — nothing here can act on a write failure to a gone child
       (data) => void client.write(instanceId, data).catch(() => {}),
+      // biome-ignore lint/complexity/noVoid: fire-and-forget by intent; sessiond stdin-end failures are not this session's to surface, best effort only
+      // biome-ignore lint/suspicious/noEmptyBlockStatements: best effort — nothing here can act on a stdin-end failure to a gone child
       () => void client.stdinEnd(instanceId).catch(() => {}),
       options.onHandoff,
       options.sessionId ?? null,
+      // biome-ignore lint/complexity/noVoid: fire-and-forget by intent; sessiond signal failures are not this session's to surface, best effort only
+      // biome-ignore lint/suspicious/noEmptyBlockStatements: best effort — nothing here can act on a signal failure to a gone child
       (sig) => void client.signal(instanceId, sig).catch(() => {})
     );
     // Everything at or below `boundary` the hub has already seen; everything
@@ -1916,6 +1970,7 @@ export class ClaudeHarness implements Harness {
     return deleteSession(sessionKey, { ...(dir ? { dir } : {}) });
   }
 
+  // biome-ignore lint/suspicious/useAwait: Harness.machine returns Promise<unknown>; the `default` branch returns bare undefined, which needs async's implicit wrap
   async machine(method: string, args: unknown[]): Promise<unknown> {
     switch (method) {
       case "updateClaudeCode":

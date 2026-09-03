@@ -39,6 +39,9 @@
   } = $props();
 </script>
 
+<!-- biome-ignore lint/a11y/useKeyWithClickEvents: click only forwards focus to the sibling input, which stays independently keyboard-reachable — no keyboard equivalent needed -->
+<!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: click only forwards focus to the sibling input; the addon itself exposes no control of its own -->
+<!-- biome-ignore lint/a11y/useSemanticElements: <fieldset> carries browser-default border/padding this design resets everywhere it's used; keeping the div avoids a visual regression -->
 <div
   class={cn(inputGroupAddonVariants({ align }), className)}
   data-align={align}

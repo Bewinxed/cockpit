@@ -67,7 +67,9 @@
     serverHistory = null,
     hideHeader = false,
     view = "chat" as "chat" | "flow",
-    onview = (() => {}) as (v: "chat" | "flow") => void,
+    onview = (() => {
+      // No parent listening — chat/flow toggling is a no-op until one binds.
+    }) as (v: "chat" | "flow") => void,
   }: {
     viewId: string;
     browsing: string | null;
@@ -212,6 +214,7 @@
     const harness = browsingHarness;
     const hint = browsing ? { machineId: browsing, cwd, harness } : null;
     const running = isLive;
+    // biome-ignore lint/complexity/noVoid: read-only dependency — Retry bumps `attempt` purely to re-run this effect
     void attempt;
     if (!id) {
       return;
@@ -222,7 +225,9 @@
     // Tracking the connection and the live session's machineId (neither
     // written by the read below) re-runs this the moment it becomes
     // answerable, so the transcript reads back instead of staying empty.
+    // biome-ignore lint/complexity/noVoid: read-only dependency — re-runs this effect once the hub or the session's machineId become known, per the comment above
     void whiffle.status;
+    // biome-ignore lint/complexity/noVoid: read-only dependency — re-runs this effect once the hub or the session's machineId become known, per the comment above
     void whiffle.session(id)?.machineId;
     untrack(() => {
       failure = null;
@@ -252,6 +257,7 @@
     // is read by its id like any other.
     const named = history;
     untrack(() => {
+      // biome-ignore lint/complexity/noVoid: fire-and-forget inside untrack — readHistory reports its outcome through the store fields this effect reads
       void readHistory(id, named, hint, running);
     });
   });
@@ -387,18 +393,20 @@
   // a sleeping row is on the board too — and a sleeping session has no process
   // to ask, so the gate is the running list.
   $effect(() => {
-    const live =
+    const liveForCommands =
       !!session &&
       whiffle.runningInstances.some((row) => row.id === viewId) &&
       !!machineId &&
       whiffle.status === "connected";
-    if (!live) {
+    if (!liveForCommands) {
       return;
     }
     const id = viewId;
     const mid = machineId;
     untrack(() => {
+      // biome-ignore lint/complexity/noVoid: fire-and-forget inside untrack — each loader tracks its own pending guard
       void loadMcpServers(id, mid);
+      // biome-ignore lint/complexity/noVoid: fire-and-forget inside untrack — each loader tracks its own pending guard
       void loadCommands(id, mid);
     });
   });
@@ -451,11 +459,13 @@
       : PERMISSION_MODES
   );
   /** The offered row for the model in force, which is what carries its scale. */
-  const chosenModel = $derived(
-    session?.model
-      ? (models.offered.find((row) => covers(row, session.model!)) ?? null)
-      : null
-  );
+  const chosenModel = $derived.by(() => {
+    const model = session?.model;
+    if (!model) {
+      return null;
+    }
+    return models.offered.find((row) => covers(row, model)) ?? null;
+  });
   /** Whether the harness runs at an effort at all — the row is named either way. */
   const harnessEffort = $derived(harnessReport?.capabilities.effort !== false);
   /** Only drawn when the harness and the model both report an effort scale. */
@@ -467,6 +477,7 @@
   // attempt per session coming up, and on nothing else: the store's own reads
   // are untracked so a failed ask cannot re-run this.
   $effect(() => {
+    // biome-ignore lint/complexity/noVoid: read-only dependency — re-runs once per change in how many sessions are running
     void whiffle.runningInstances.length;
     untrack(ensureModels);
   });
@@ -626,9 +637,12 @@
     // to catch here, and why the `.catch(() => {})` that used to sit on this
     // chain (and ate every send made from a plain-http origin) is gone.
     const submit = () => submitCommand(viewId, mid, "send", { text, extras });
+    // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — the command tracker (submit) is the report, per the comment above
     void ensureAlive(viewId, mid)
       .then(submit, submit)
-      .finally(() => (reviving = false));
+      .finally(() => {
+        reviving = false;
+      });
   }
 
   /**

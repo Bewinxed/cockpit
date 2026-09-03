@@ -22,7 +22,7 @@
   let hasInitialized = $state(false);
 
   function isValidNumber(n: unknown): n is number {
-    return typeof n === "number" && !isNaN(n) && isFinite(n);
+    return typeof n === "number" && !Number.isNaN(n) && Number.isFinite(n);
   }
 
   function isNodeVisible(node: Node): boolean {
@@ -102,7 +102,7 @@
     if (nodes.length === 0) {
       return false;
     }
-    const lastNode = nodes[nodes.length - 1];
+    const lastNode = nodes.at(-1);
     if (!lastNode) {
       return false;
     }
@@ -132,10 +132,10 @@
     const retryDelay = 50;
 
     function tryCenter() {
-      attempts++;
+      attempts += 1;
 
-      if (hasValidPositions()) {
-        const lastNode = nodes[nodes.length - 1];
+      const lastNode = nodes.at(-1);
+      if (hasValidPositions() && lastNode) {
         // INSTANT - no animation for initial view
         centerOnNode(lastNode, false);
         hasInitialized = true;
@@ -158,7 +158,7 @@
     }
 
     if (nodeCount > prevCount && nodeCount > 0) {
-      const lastNode = nodes[nodes.length - 1];
+      const lastNode = nodes.at(-1);
       if (
         lastNode &&
         isValidNumber(lastNode.position.x) &&

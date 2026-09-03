@@ -130,11 +130,13 @@ export const SERVER_ANNOUNCE_TIMEOUT_MS = 30_000;
  *
  * — hence a per-line scan rather than a read of the first line.
  */
+const SERVER_ANNOUNCEMENT_URL_PATTERN = /on\s+(https?:\/\/[^\s]+)/;
+
 export const parseServerAnnouncement = (line: string): string | undefined => {
   if (!line.startsWith("opencode server listening")) {
     return undefined;
   }
-  return line.match(/on\s+(https?:\/\/[^\s]+)/)?.[1];
+  return line.match(SERVER_ANNOUNCEMENT_URL_PATTERN)?.[1];
 };
 
 /**
@@ -1064,9 +1066,10 @@ export class OpencodeSession implements HarnessSession {
   readonly #serverUrl: string;
   readonly #registerChild: (childId: string, callID: string) => void;
   readonly #onRelease: () => void;
+  readonly instanceId: string;
 
   constructor(
-    readonly instanceId: string,
+    instanceId: string,
     ctx: HarnessContext,
     client: OpencodeClient,
     sessionId: string,
@@ -1077,6 +1080,7 @@ export class OpencodeSession implements HarnessSession {
     registerChild: (childId: string, callID: string) => void,
     onRelease: () => void
   ) {
+    this.instanceId = instanceId;
     this.#ctx = ctx;
     this.#client = client;
     this.sessionId = sessionId;
@@ -1089,6 +1093,7 @@ export class OpencodeSession implements HarnessSession {
   }
 
   /** Routes one opencode event into neutral frames for this session. */
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the opencode event union's per-type routing switch; not refactored in this pass
   handle(event: Event): void {
     const p = event.properties as Record<string, unknown> & {
       sessionID?: string;
@@ -1103,7 +1108,7 @@ export class OpencodeSession implements HarnessSession {
     const type = event.type as string;
     switch (type) {
       case "message.updated": {
-        const info = (p as { info?: Message }).info;
+        const { info } = p as { info?: Message };
         if (!info) {
           return;
         }
@@ -1115,11 +1120,11 @@ export class OpencodeSession implements HarnessSession {
         break;
       }
       case "message.part.updated": {
-        const part = (p as { part?: Part }).part;
+        const { part } = p as { part?: Part };
         if (!part) {
           return;
         }
-        const messageID = part.messageID;
+        const { messageID } = part;
         if (
           messageID !== undefined &&
           part.sessionID !== undefined &&
@@ -1304,6 +1309,7 @@ export class OpencodeSession implements HarnessSession {
         // words go straight to the transcript. A quota notice that only ever
         // lived in this event once hid as a silent hang for an hour.
         this.#busy = status.type === "busy" || status.type === "retry";
+        // biome-ignore lint/suspicious/noUnnecessaryConditions: #busy was just assigned a live boolean; biome's field-declaration inference doesn't see it
         if (this.#busy) {
           this.#turnOpen = true;
         }
@@ -1342,6 +1348,7 @@ export class OpencodeSession implements HarnessSession {
         }
         const error = p.error as { name?: string; data?: { message?: string } };
         this.#ctx.busy(false);
+        // biome-ignore lint/suspicious/noUnnecessaryConditions: `as` is an unchecked cast; p.error can still be undefined at runtime even though the cast type says otherwise
         if (error?.name === "MessageAbortedError") {
           this.#flushResult({ subtype: "aborted", is_error: false });
         } else {
@@ -1358,6 +1365,7 @@ export class OpencodeSession implements HarnessSession {
     }
   }
 
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: routes every opencode part kind (text, tool, reasoning, …) into neutral frames; not refactored in this pass
   #part(part: Part): void {
     const role = this.#roles.get(part.messageID);
     switch (part.type) {
@@ -1428,7 +1436,7 @@ export class OpencodeSession implements HarnessSession {
             );
           }
         }
-        const status = part.state.status;
+        const { status } = part.state;
         const emitted = this.#toolsEmitted.get(part.callID);
         // One tool_use per call, on the first part that carries usable input.
         if (
@@ -1561,7 +1569,7 @@ export class OpencodeSession implements HarnessSession {
     const p = event.properties as Record<string, unknown>;
     switch (type) {
       case "message.updated": {
-        const info = (p as { info?: Message }).info;
+        const { info } = p as { info?: Message };
         if (!info) {
           return;
         }
@@ -1569,7 +1577,7 @@ export class OpencodeSession implements HarnessSession {
         break;
       }
       case "message.part.updated": {
-        const part = (p as { part?: Part }).part;
+        const { part } = p as { part?: Part };
         if (!part) {
           return;
         }
@@ -1631,6 +1639,7 @@ export class OpencodeSession implements HarnessSession {
     return pending;
   }
 
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: routes a subagent's part kinds into the parent session's neutral frames; not refactored in this pass
   #partChild(
     state: ChildState,
     part: Part,
@@ -1673,7 +1682,7 @@ export class OpencodeSession implements HarnessSession {
         });
         break;
       case "tool": {
-        const status = part.state.status;
+        const { status } = part.state;
         const emitted = state.toolsEmitted.get(part.callID);
         if (
           !emitted &&
@@ -1790,6 +1799,7 @@ export class OpencodeSession implements HarnessSession {
     // A ghost idle (e.g. the idle that trails an abort) has no open turn and must
     // not emit a result frame; only a real turn close or an explicit abort/error
     // does. Assistant-block replay above is unaffected.
+    // biome-ignore lint/suspicious/noUnnecessaryConditions: #turnOpen is reassigned elsewhere in the class; biome's per-method inference doesn't see that
     if (!(this.#turnOpen || result)) {
       return;
     }
@@ -1818,6 +1828,7 @@ export class OpencodeSession implements HarnessSession {
     this.#turnOpen = false;
   }
 
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: routes a send between urgent-abort, hand-back-queue, and command/prompt branches; not refactored in this pass
   send(
     message: NeutralUserMessage,
     extras: {
@@ -1826,7 +1837,7 @@ export class OpencodeSession implements HarnessSession {
       urgent?: boolean;
     }
   ): void {
-    const content = message.message.content;
+    const { content } = message.message;
     let text =
       typeof content === "string"
         ? content
@@ -1872,11 +1883,14 @@ export class OpencodeSession implements HarnessSession {
     const model = this.#model ? splitModel(this.#model) : undefined;
 
     if (urgent) {
+      // biome-ignore lint/complexity/noVoid: fire-and-forget: send() itself is not awaited by its callers
       void this.#client.session
         .abort({
+          // biome-ignore lint/style/noNonNullAssertion: invariant: sessionId is set once in the constructor and never nulled; the interface types it nullable for other harnesses
           path: { id: this.sessionId! },
           query: { directory: this.#directory },
         })
+        // biome-ignore lint/suspicious/noEmptyBlockStatements: the abort's own failure is not actionable; the prompt below runs regardless
         .catch(() => {})
         .then(() => this.#prompt(parts, model));
     } else if ((message as { shouldQuery?: boolean }).shouldQuery === false) {
@@ -1884,6 +1898,7 @@ export class OpencodeSession implements HarnessSession {
       // IDLE session is the turn that wakes it. Silent appends left sessions
       // holding unread briefs forever — delivered work must run. While busy it
       // queues, and the idle drain delivers everything as ONE wake turn.
+      // biome-ignore lint/suspicious/noUnnecessaryConditions: #busy is reassigned elsewhere in the class; biome's per-method inference doesn't see that
       if (this.#busy) {
         this.#queue.push({ parts, ...(model ? { model } : {}) });
       } else {
@@ -1894,6 +1909,7 @@ export class OpencodeSession implements HarnessSession {
       this.#ctx.busy(true);
       const command = parseCommand(text);
       if (command) {
+        // biome-ignore lint/complexity/noVoid: fire-and-forget: send() itself is not awaited by its callers
         void this.#commandOrPrompt(command.name, command.args, parts, model);
       } else {
         this.#prompt(parts, model);
@@ -1913,14 +1929,16 @@ export class OpencodeSession implements HarnessSession {
     model?: { providerID?: string; modelID?: string }
   ): void {
     this.#turnOpen = true;
+    // biome-ignore lint/complexity/noVoid: fire-and-forget: #prompt itself is not awaited by its callers
     void this.#client.session
       .promptAsync({
+        // biome-ignore lint/style/noNonNullAssertion: invariant: sessionId is set once in the constructor and never nulled; the interface types it nullable for other harnesses
         path: { id: this.sessionId! },
         query: { directory: this.#directory },
         body: {
           parts: parts as never,
           // A bare model id (no provider) is left to opencode's default; never send `providerID: ''`.
-          ...(model && model.providerID && model.modelID
+          ...(model?.providerID && model.modelID
             ? {
                 model: { providerID: model.providerID, modelID: model.modelID },
               }
@@ -1983,8 +2001,10 @@ export class OpencodeSession implements HarnessSession {
       return;
     }
     this.#turnOpen = true;
+    // biome-ignore lint/complexity/noVoid: fire-and-forget: #commandOrPrompt itself is not awaited by its callers
     void this.#client.session
       .command({
+        // biome-ignore lint/style/noNonNullAssertion: invariant: sessionId is set once in the constructor and never nulled; the interface types it nullable for other harnesses
         path: { id: this.sessionId! },
         query: { directory: this.#directory },
         body: {
@@ -2030,6 +2050,7 @@ export class OpencodeSession implements HarnessSession {
     switch (method) {
       case CONTROL_INTERRUPT:
         await this.#client.session.abort({
+          // biome-ignore lint/style/noNonNullAssertion: invariant: sessionId is set once in the constructor and never nulled; the interface types it nullable for other harnesses
           path: { id: this.sessionId! },
           query: { directory: this.#directory },
         });
@@ -2165,6 +2186,7 @@ export class OpencodeSession implements HarnessSession {
       // drew the answer twice, once under the request id and once under the
       // tool's own call id.
       if (result.behavior === "deny") {
+        // biome-ignore lint/complexity/noVoid: fire-and-forget: resolvePermission itself is not awaited by its callers
         void this.#rejectQuestion(requestId);
         return;
       }
@@ -2185,17 +2207,19 @@ export class OpencodeSession implements HarnessSession {
         }
         return [] as string[];
       });
+      // biome-ignore lint/complexity/noVoid: fire-and-forget: resolvePermission itself is not awaited by its callers
       void this.#replyQuestion(requestId, answers);
       return;
     }
-    this.#replyPermission(
-      requestId,
-      result.behavior === "deny"
-        ? "reject"
-        : result.remember
-          ? "always"
-          : "once"
-    );
+    let response: "once" | "always" | "reject";
+    if (result.behavior === "deny") {
+      response = "reject";
+    } else if (result.remember) {
+      response = "always";
+    } else {
+      response = "once";
+    }
+    this.#replyPermission(requestId, response);
   }
 
   /** The one answer path for a tool permission — the auto-allow shares it. */
@@ -2203,7 +2227,9 @@ export class OpencodeSession implements HarnessSession {
     requestId: string,
     response: "once" | "always" | "reject"
   ): void {
+    // biome-ignore lint/complexity/noVoid: fire-and-forget: #replyPermission itself is not awaited by its callers
     void this.#client.postSessionIdPermissionsPermissionId({
+      // biome-ignore lint/style/noNonNullAssertion: invariant: sessionId is set once in the constructor and never nulled; the interface types it nullable for other harnesses
       path: { id: this.sessionId!, permissionID: requestId },
       query: { directory: this.#directory },
       body: { response },
@@ -2211,43 +2237,50 @@ export class OpencodeSession implements HarnessSession {
   }
 
   #replyQuestion(id: string, answers: string[][]): Promise<void> {
-    return fetch(
-      `${this.#serverUrl}/question/${id}/reply?directory=${encodeURIComponent(this.#directory)}`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ answers }),
-      }
-    )
-      .then((res) => {
-        if (!res.ok) {
-          this.#ctx.failed(
-            new Error(`opencode question reply failed: ${res.status}`)
-          );
+    return (
+      fetch(
+        `${this.#serverUrl}/question/${id}/reply?directory=${encodeURIComponent(this.#directory)}`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ answers }),
         }
-      })
-      .catch(() => {});
+      )
+        .then((res) => {
+          if (!res.ok) {
+            this.#ctx.failed(
+              new Error(`opencode question reply failed: ${res.status}`)
+            );
+          }
+        })
+        // biome-ignore lint/suspicious/noEmptyBlockStatements: the fetch's own network failure already left #ctx.failed uncalled; nothing further to report here
+        .catch(() => {})
+    );
   }
 
   #rejectQuestion(id: string): Promise<void> {
-    return fetch(
-      `${this.#serverUrl}/question/${id}/reject?directory=${encodeURIComponent(this.#directory)}`,
-      {
-        method: "POST",
-      }
-    )
-      .then((res) => {
-        if (!res.ok) {
-          this.#ctx.failed(
-            new Error(`opencode question reject failed: ${res.status}`)
-          );
+    return (
+      fetch(
+        `${this.#serverUrl}/question/${id}/reject?directory=${encodeURIComponent(this.#directory)}`,
+        {
+          method: "POST",
         }
-      })
-      .catch(() => {});
+      )
+        .then((res) => {
+          if (!res.ok) {
+            this.#ctx.failed(
+              new Error(`opencode question reject failed: ${res.status}`)
+            );
+          }
+        })
+        // biome-ignore lint/suspicious/noEmptyBlockStatements: the fetch's own network failure already left #ctx.failed uncalled; nothing further to report here
+        .catch(() => {})
+    );
   }
 
   async interrupt(): Promise<void> {
     await this.#client.session.abort({
+      // biome-ignore lint/style/noNonNullAssertion: invariant: sessionId is set once in the constructor and never nulled; the interface types it nullable for other harnesses
       path: { id: this.sessionId! },
       query: { directory: this.#directory },
     });
@@ -2257,12 +2290,15 @@ export class OpencodeSession implements HarnessSession {
     this.#onRelease();
     await this.#client.session
       .abort({
+        // biome-ignore lint/style/noNonNullAssertion: invariant: sessionId is set once in the constructor and never nulled; the interface types it nullable for other harnesses
         path: { id: this.sessionId! },
         query: { directory: this.#directory },
       })
+      // biome-ignore lint/suspicious/noEmptyBlockStatements: stop() is tearing down regardless; the abort's own failure is not actionable
       .catch(() => {});
   }
 
+  // biome-ignore lint/suspicious/useAwait: implements Harness.dispose's Promise<void> contract; this session's teardown is synchronous
   async dispose(): Promise<void> {
     this.#onRelease();
   }
@@ -2285,7 +2321,10 @@ export class OpencodeHarness implements Harness {
   // Event routing, which only has opencode's own id off the wire, falls back
   // to {@link OpencodeHarness.#sessionForSid}.
   readonly #sessions = new Map<string, OpencodeSession>();
-  readonly #children = new Map<string, { parent: OpencodeSession; callID: string }>();
+  readonly #children = new Map<
+    string,
+    { parent: OpencodeSession; callID: string }
+  >();
   #disposed = false;
   readonly #pumpDirs = new Set<string>();
 
@@ -2416,22 +2455,29 @@ export class OpencodeHarness implements Harness {
 
   /** Starts the directory-scoped subscription for a directory, once per unique cwd. */
   #ensurePump(client: OpencodeClient, directory: string): void {
+    // biome-ignore lint/suspicious/noUnnecessaryConditions: #disposed is set true by dispose(), a different method biome's per-method inference doesn't see
     if (this.#disposed || this.#pumpDirs.has(directory)) {
       return;
     }
     this.#pumpDirs.add(directory);
+    // biome-ignore lint/complexity/noVoid: fire-and-forget pump loop; #ensurePump must not block waiting for it
+    // biome-ignore lint/suspicious/noEmptyBlockStatements: reconnection is handled inside the loop; a final rejection here is not actionable
     void this.#pumpDirectory(client, directory).catch(() => {});
   }
 
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: routes every subscribed event to its owning session or child; not refactored in this pass
   async #pumpDirectory(
     client: OpencodeClient,
     directory: string
   ): Promise<void> {
     let delay = 1000;
+    // biome-ignore lint/suspicious/noUnnecessaryConditions: #disposed is set true by dispose(), a different method biome's per-method inference doesn't see
     while (!this.#disposed) {
       try {
-        const stream = (await client.event.subscribe({ query: { directory } }))
-          .stream;
+        // biome-ignore lint/performance/noAwaitInLoops: reconnects the SSE stream after a drop; must retry sequentially with backoff
+        const { stream } = await client.event.subscribe({
+          query: { directory },
+        });
         for await (const event of stream) {
           delay = 1000;
           if (event.type === "session.created") {
@@ -2452,6 +2498,7 @@ export class OpencodeHarness implements Harness {
       } catch {
         // The stream ended or dropped; reconnect below unless disposed.
       }
+      // biome-ignore lint/suspicious/noUnnecessaryConditions: #disposed is set true by dispose(), a different method biome's per-method inference doesn't see
       if (this.#disposed) {
         break;
       }
@@ -2505,6 +2552,7 @@ export class OpencodeHarness implements Harness {
     return found;
   }
 
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: creates/resumes/forks a session across three branches, then wires the session up; not refactored in this pass
   async spawn(
     spec: SpawnPayload,
     ctx: HarnessContext
@@ -2557,6 +2605,7 @@ export class OpencodeHarness implements Harness {
       ctx.cwd,
       spec.model,
       spec.permissionMode,
+      // biome-ignore lint/style/noNonNullAssertion: invariant: #ensure() above resolves only once attachOpencodeServer has set #serverUrl
       this.#serverUrl!,
       (childId, callID) =>
         this.#children.set(childId, { parent: session, callID }),
@@ -2585,6 +2634,7 @@ export class OpencodeHarness implements Harness {
     // The opencode server queues them in order, so skills load before work.
     if (spec.skills?.length) {
       for (const skill of spec.skills) {
+        // biome-ignore lint/performance/noAwaitInLoops: skills must load in order, before the first prompt
         await client.session.command({
           path: { id: sessionId },
           query: { directory: ctx.cwd },
@@ -2664,6 +2714,7 @@ export class OpencodeHarness implements Harness {
     return sessionToInfo(result.data as Session, tags[sessionKey]);
   }
 
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: reads the session, its revert point, and its subagent children in one pass; not refactored in this pass
   async getSessionMessages(
     sessionKey: string,
     dir?: string
@@ -2725,6 +2776,7 @@ export class OpencodeHarness implements Harness {
       if (!callID) {
         continue;
       }
+      // biome-ignore lint/performance/noAwaitInLoops: children are appended to the transcript in this order; parallel fetches would reorder subagents
       const childRes = await client.session.messages({
         path: { id: child.id },
         query: { directory: dir },
@@ -2767,7 +2819,7 @@ export class OpencodeHarness implements Harness {
   async tagSession(
     sessionKey: string,
     tag: string | null,
-    dir?: string
+    _dir?: string
   ): Promise<void> {
     await writeTag(sessionKey, tag);
   }
@@ -2823,11 +2875,14 @@ export class OpencodeHarness implements Harness {
    * re-reads the announced port from the ring, and the per-directory SSE pumps
    * re-subscribe against the same still-running server.
    */
+  // biome-ignore lint/suspicious/useAwait: implements Harness.dispose's Promise<void> contract; this teardown is synchronous
   async dispose(): Promise<void> {
     this.#disposed = true;
     this.#pumpDirs.clear();
     // The socket, not the child: a closed sessiond connection is re-dialled by
     // `sessiond()` and the held server never notices.
+    // biome-ignore lint/complexity/noVoid: fire-and-forget close; dispose() must not block on the socket teardown
+    // biome-ignore lint/suspicious/noEmptyBlockStatements: best-effort close, a failed close here is not actionable
     void this.#sessiond?.then((client) => client.close()).catch(() => {});
     this.#sessiond = undefined;
     this.#client = null;
@@ -2853,6 +2908,7 @@ export class OpencodeHarness implements Harness {
     // Remove the skills/memory the pre-2026-08-14 sync wrote; opencode reads
     // ~/.claude/skills/ and its own memory file, so whiffle no longer owns these.
     if (Object.keys(sidecar.skills).length > 0) {
+      // biome-ignore lint/style/noNonNullAssertion: invariant: report.skills is initialized to {} a few lines above; TS drops the narrowing across the earlier await
       await syncSkillFiles(OPENCODE_SKILLS, [], sidecar.skills, report.skills!);
     }
     if (sidecar.memory !== undefined) {
@@ -2890,6 +2946,7 @@ export class OpencodeHarness implements Harness {
  * a reopened transcript is, so it is the one place a reload's fidelity can be
  * checked against parts a real server stored.
  */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: replays every part kind opencode stores; not refactored in this pass
 export function toTranscript(
   sessionKey: string,
   rows: { info: Message; parts: Part[] }[]

@@ -46,6 +46,7 @@ const toCleanState = async (): Promise<void> => {
 
 function mockFetch(response: () => Response): void {
   fetchCalls = 0;
+  // biome-ignore lint/suspicious/useAwait: must stay async to match `typeof fetch`'s Promise<Response> return type
   globalThis.fetch = (async () => {
     fetchCalls += 1;
     return response();

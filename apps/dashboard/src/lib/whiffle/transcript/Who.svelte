@@ -30,10 +30,10 @@
 
   /** A transcript may arrive with its timestamp already serialised to a string. */
   const at = $derived(timestamp ? new Date(timestamp) : null);
-  const valid = $derived(at !== null && !Number.isNaN(at.getTime()));
+  const validAt = $derived(at && !Number.isNaN(at.getTime()) ? at : null);
   const clock = $derived(
-    valid
-      ? at!.toLocaleTimeString(undefined, {
+    validAt
+      ? validAt.toLocaleTimeString(undefined, {
           hour: "2-digit",
           minute: "2-digit",
           hour12: false,
@@ -51,8 +51,8 @@
     {/if}
   </span>
   <span class="role">{name}</span>
-  {#if valid}
-    <time class="when" datetime={at!.toISOString()}>{clock}</time>
+  {#if validAt}
+    <time class="when" datetime={validAt.toISOString()}>{clock}</time>
   {:else if note}
     <span class="note">{note}</span>
   {/if}

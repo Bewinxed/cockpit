@@ -1,18 +1,16 @@
-import Root, {
-  type ButtonGroupOrientation,
-  buttonGroupVariants,
-} from "./button-group.svelte";
-import Separator from "./button-group-separator.svelte";
-import Text from "./button-group-text.svelte";
-
+// biome-ignore lint/performance/noBarrelFile: this is the component's public API surface, re-exporting its parts under the shadcn-svelte convention
 export {
   type ButtonGroupOrientation,
   buttonGroupVariants,
-  Root,
+  default as Root,
   //
-  Root as ButtonGroup,
-  Separator,
-  Separator as ButtonGroupSeparator,
-  Text,
-  Text as ButtonGroupText,
-};
+  default as ButtonGroup,
+} from "./button-group.svelte";
+export {
+  default as Separator,
+  default as ButtonGroupSeparator,
+} from "./button-group-separator.svelte";
+export {
+  default as Text,
+  default as ButtonGroupText,
+} from "./button-group-text.svelte";

@@ -70,9 +70,9 @@ export const loadIndex = async (): Promise<UsageIndex | null> => {
   )) {
     const w = wm as Partial<ClaudeFileWatermark>;
     if (
-      typeof w?.mtimeMs !== "number" ||
-      typeof w?.size !== "number" ||
-      typeof w?.offset !== "number"
+      typeof w.mtimeMs !== "number" ||
+      typeof w.size !== "number" ||
+      typeof w.offset !== "number"
     ) {
       return null;
     }

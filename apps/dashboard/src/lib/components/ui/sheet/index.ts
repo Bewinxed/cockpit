@@ -1,34 +1,32 @@
-import Root from "./sheet.svelte";
-import Close from "./sheet-close.svelte";
-import Content from "./sheet-content.svelte";
-import Description from "./sheet-description.svelte";
-import Footer from "./sheet-footer.svelte";
-import Header from "./sheet-header.svelte";
-import Overlay from "./sheet-overlay.svelte";
-import Portal from "./sheet-portal.svelte";
-import Title from "./sheet-title.svelte";
-import Trigger from "./sheet-trigger.svelte";
-
+// biome-ignore lint/performance/noBarrelFile: shadcn-svelte component barrel — this re-export surface is the public import path consumers use across the app
+export { default as Root, default as Sheet } from "./sheet.svelte";
+export { default as Close, default as SheetClose } from "./sheet-close.svelte";
 export {
-  Close,
-  Close as SheetClose,
-  Content,
-  Content as SheetContent,
-  Description,
-  Description as SheetDescription,
-  Footer,
-  Footer as SheetFooter,
-  Header,
-  Header as SheetHeader,
-  Overlay,
-  Overlay as SheetOverlay,
-  Portal,
-  Portal as SheetPortal,
-  Root,
-  //
-  Root as Sheet,
-  Title,
-  Title as SheetTitle,
-  Trigger,
-  Trigger as SheetTrigger,
-};
+  default as Content,
+  default as SheetContent,
+} from "./sheet-content.svelte";
+export {
+  default as Description,
+  default as SheetDescription,
+} from "./sheet-description.svelte";
+export {
+  default as Footer,
+  default as SheetFooter,
+} from "./sheet-footer.svelte";
+export {
+  default as Header,
+  default as SheetHeader,
+} from "./sheet-header.svelte";
+export {
+  default as Overlay,
+  default as SheetOverlay,
+} from "./sheet-overlay.svelte";
+export {
+  default as Portal,
+  default as SheetPortal,
+} from "./sheet-portal.svelte";
+export { default as Title, default as SheetTitle } from "./sheet-title.svelte";
+export {
+  default as Trigger,
+  default as SheetTrigger,
+} from "./sheet-trigger.svelte";

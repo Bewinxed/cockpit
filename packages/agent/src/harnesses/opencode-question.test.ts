@@ -61,12 +61,24 @@ const drive = (): { session: OpencodeSession; frames: Frames } => {
         }
       }
     },
-    permission: () => {},
-    busy: () => {},
-    session: () => {},
-    failed: () => {},
-    emit: () => {},
-    closed: () => {},
+    permission: () => {
+      /* unused by these tests */
+    },
+    busy: () => {
+      /* unused by these tests */
+    },
+    session: () => {
+      /* unused by these tests */
+    },
+    failed: () => {
+      /* unused by these tests */
+    },
+    emit: () => {
+      /* unused by these tests */
+    },
+    closed: () => {
+      /* unused by these tests */
+    },
   } as unknown as HarnessContext;
 
   const session = new OpencodeSession(
@@ -78,8 +90,12 @@ const drive = (): { session: OpencodeSession; frames: Frames } => {
     undefined,
     undefined,
     "http://127.0.0.1:0",
-    () => {},
-    () => {}
+    () => {
+      /* registerChild unused by these tests */
+    },
+    () => {
+      /* onRelease unused by these tests */
+    }
   );
   return { session, frames };
 };
@@ -128,7 +144,7 @@ test("a completed question part carries the answers, whoever answered it", () =>
   );
 
   expect(frames.toolResult).toHaveLength(1);
-  const result = frames.toolResult[0];
+  const [result] = frames.toolResult;
   expect(result.tool_use_id).toBe(CALL);
   expect(result.questionResult?.outcome).toBe("answered");
   const answered = result.questionResult as Extract<

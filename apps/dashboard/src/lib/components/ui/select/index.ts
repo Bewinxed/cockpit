@@ -1,37 +1,39 @@
-import Root from "./select.svelte";
-import Content from "./select-content.svelte";
-import Group from "./select-group.svelte";
-import GroupHeading from "./select-group-heading.svelte";
-import Item from "./select-item.svelte";
-import Label from "./select-label.svelte";
-import Portal from "./select-portal.svelte";
-import ScrollDownButton from "./select-scroll-down-button.svelte";
-import ScrollUpButton from "./select-scroll-up-button.svelte";
-import Separator from "./select-separator.svelte";
-import Trigger from "./select-trigger.svelte";
-
+// biome-ignore lint/performance/noBarrelFile: shadcn-svelte component barrel — this re-export surface is the public import path consumers use across the app
+export { default as Root, default as Select } from "./select.svelte";
 export {
-  Content,
-  Content as SelectContent,
-  Group,
-  Group as SelectGroup,
-  GroupHeading,
-  GroupHeading as SelectGroupHeading,
-  Item,
-  Item as SelectItem,
-  Label,
-  Label as SelectLabel,
-  Portal,
-  Portal as SelectPortal,
-  Root,
-  //
-  Root as Select,
-  ScrollDownButton,
-  ScrollDownButton as SelectScrollDownButton,
-  ScrollUpButton,
-  ScrollUpButton as SelectScrollUpButton,
-  Separator,
-  Separator as SelectSeparator,
-  Trigger,
-  Trigger as SelectTrigger,
-};
+  default as Content,
+  default as SelectContent,
+} from "./select-content.svelte";
+export {
+  default as Group,
+  default as SelectGroup,
+} from "./select-group.svelte";
+export {
+  default as GroupHeading,
+  default as SelectGroupHeading,
+} from "./select-group-heading.svelte";
+export { default as Item, default as SelectItem } from "./select-item.svelte";
+export {
+  default as Label,
+  default as SelectLabel,
+} from "./select-label.svelte";
+export {
+  default as Portal,
+  default as SelectPortal,
+} from "./select-portal.svelte";
+export {
+  default as ScrollDownButton,
+  default as SelectScrollDownButton,
+} from "./select-scroll-down-button.svelte";
+export {
+  default as ScrollUpButton,
+  default as SelectScrollUpButton,
+} from "./select-scroll-up-button.svelte";
+export {
+  default as Separator,
+  default as SelectSeparator,
+} from "./select-separator.svelte";
+export {
+  default as Trigger,
+  default as SelectTrigger,
+} from "./select-trigger.svelte";

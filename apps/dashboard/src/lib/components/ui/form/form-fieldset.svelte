@@ -2,7 +2,7 @@
   generics="T extends Record<string, unknown>, U extends FormPath<T>"
   lang="ts"
 >
-  import * as FormPrimitive from "formsnap";
+  import { Fieldset, type FieldsetProps } from "formsnap";
   import type { FormPath } from "sveltekit-superforms";
   import { cn, type WithoutChild } from "$lib/utils.js";
 
@@ -12,10 +12,10 @@
     form,
     name,
     ...restProps
-  }: WithoutChild<FormPrimitive.FieldsetProps<T, U>> = $props();
+  }: WithoutChild<FieldsetProps<T, U>> = $props();
 </script>
 
-<FormPrimitive.Fieldset
+<Fieldset
   class={cn("space-y-2", className)}
   {form}
   {name}

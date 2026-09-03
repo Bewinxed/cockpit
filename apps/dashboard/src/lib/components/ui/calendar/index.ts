@@ -1,40 +1,19 @@
-import Root from "./calendar.svelte";
-import Caption from "./calendar-caption.svelte";
-import Cell from "./calendar-cell.svelte";
-import Day from "./calendar-day.svelte";
-import Grid from "./calendar-grid.svelte";
-import GridBody from "./calendar-grid-body.svelte";
-import GridHead from "./calendar-grid-head.svelte";
-import GridRow from "./calendar-grid-row.svelte";
-import HeadCell from "./calendar-head-cell.svelte";
-import Header from "./calendar-header.svelte";
-import Heading from "./calendar-heading.svelte";
-import Month from "./calendar-month.svelte";
-import MonthSelect from "./calendar-month-select.svelte";
-import Months from "./calendar-months.svelte";
-import Nav from "./calendar-nav.svelte";
-import NextButton from "./calendar-next-button.svelte";
-import PrevButton from "./calendar-prev-button.svelte";
-import YearSelect from "./calendar-year-select.svelte";
-
-export {
-  Caption,
-  Cell,
-  Day,
-  Grid,
-  GridBody,
-  GridHead,
-  GridRow,
-  HeadCell,
-  Header,
-  Heading,
-  Month,
-  MonthSelect,
-  Months,
-  Nav,
-  NextButton,
-  PrevButton,
-  //
-  Root as Calendar,
-  YearSelect,
-};
+// biome-ignore lint/performance/noBarrelFile: this is the component's public API surface, re-exporting its parts under the shadcn-svelte convention
+export { default as Calendar } from "./calendar.svelte";
+export { default as Caption } from "./calendar-caption.svelte";
+export { default as Cell } from "./calendar-cell.svelte";
+export { default as Day } from "./calendar-day.svelte";
+export { default as Grid } from "./calendar-grid.svelte";
+export { default as GridBody } from "./calendar-grid-body.svelte";
+export { default as GridHead } from "./calendar-grid-head.svelte";
+export { default as GridRow } from "./calendar-grid-row.svelte";
+export { default as HeadCell } from "./calendar-head-cell.svelte";
+export { default as Header } from "./calendar-header.svelte";
+export { default as Heading } from "./calendar-heading.svelte";
+export { default as Month } from "./calendar-month.svelte";
+export { default as MonthSelect } from "./calendar-month-select.svelte";
+export { default as Months } from "./calendar-months.svelte";
+export { default as Nav } from "./calendar-nav.svelte";
+export { default as NextButton } from "./calendar-next-button.svelte";
+export { default as PrevButton } from "./calendar-prev-button.svelte";
+export { default as YearSelect } from "./calendar-year-select.svelte";

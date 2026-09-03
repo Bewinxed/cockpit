@@ -347,7 +347,9 @@ const attach = (
    * that vanishes during the register's probes never marks it, and so is
    * correctly treated as a flap.
    */
-  markLive: () => void = () => {}
+  markLive: () => void = () => {
+    // no-op: the caller only wants the promotion when it cares to observe it
+  }
 ) =>
   Effect.gen(function* () {
     const socket = yield* connection(url);
@@ -375,15 +377,16 @@ const attach = (
       if (socket.readyState !== WebSocket.OPEN) {
         return;
       }
+      // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — reannounce doesn't await its own send
       void Promise.all(harnesses().map((adapter) => adapter.detect())).then(
-        (harnesses) => {
+        (detected) => {
           send(socket, {
             verb: "register",
             machineId: identity.machineId,
             payload: {
               ...identity,
-              auth: harnesses[0]?.auth ?? identity.auth,
-              harnesses,
+              auth: detected[0]?.auth ?? identity.auth,
+              harnesses: detected,
               instances: supervisor.instanceIds,
             },
           });
@@ -449,6 +452,7 @@ const attach = (
       const named = spawns.map((envelope) =>
         custodyRow(envelope.payload as SpawnPayload)
       );
+      // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — takeCustody doesn't await its own reattach
       void supervisor
         // Whatever sessiond is still holding that the hub did NOT name is still
         // this machine's to carry. The hub decides what to restore from its own
@@ -700,6 +704,7 @@ export const runDaemon = (auth?: AuthState): void => {
     // `EventEmitter` directly reaches the generic signature `process.off`
     // itself no longer offers.
     (process as NodeJS.EventEmitter).off(signal, drain);
+    // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — the signal handler doesn't await its own exit
     void Effect.runPromise(Fiber.interrupt(daemon)).then(() => process.exit(0));
   };
   process.on("SIGINT", drain).on("SIGTERM", drain);

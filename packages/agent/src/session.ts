@@ -55,6 +55,7 @@ import { type UpdateOptions, updateCheckout } from "./update";
  * satisfy this shape (design §4.2, §4.3 — opencode and pi deliberately do not).
  */
 interface ClaudeAdoption {
+  // biome-ignore lint/style/useConsistentMethodSignatures: a property signature changes parameter variance here and would break the claude adapter's implementation
   adopt(
     instanceId: string,
     ctx: HarnessContext,
@@ -73,6 +74,7 @@ interface ClaudeAdoption {
       }) => void;
     }
   ): Promise<HarnessSession>;
+  // biome-ignore lint/style/useConsistentMethodSignatures: a property signature changes parameter variance here and would break the claude adapter's implementation
   custodyCandidates(): Promise<{
     /** sessiond's per-boot epoch — what makes a stored ingest mark readable or dead (design §7). */
     epoch?: string;
@@ -107,6 +109,7 @@ interface ClaudeAdoption {
  * the honest-loss rule already covers.
  */
 export interface SessiondAwareContext extends HarnessContext {
+  // biome-ignore lint/style/useConsistentMethodSignatures: a property signature changes parameter variance here and would break the claude adapter's implementation
   line(srcEpoch: string, srcSeq: number): void;
 }
 
@@ -229,10 +232,14 @@ const repoIdentity = (repo: string): string => repoPath(repo).toLowerCase();
 const repoLeaf = (repo: string): string =>
   repoPath(repo).split("/").pop() ?? "";
 
+const URL_SCHEME_RE = /^[a-z][a-z0-9+.-]*:\/\//i;
+const SCP_LIKE_RE = /^[^/]+@[^:]+:/;
+/** Trailing slashes, but never the one that alone makes the path `/`. */
+const TRAILING_SLASHES_RE = /(?!^)\/+$/;
+
 /** A reference git can clone on its own, without `gh` resolving it first. */
 const isRepoUrl = (repo: string): boolean =>
-  /^[a-z][a-z0-9+.-]*:\/\//i.test(repo.trim()) ||
-  /^[^/]+@[^:]+:/.test(repo.trim());
+  URL_SCHEME_RE.test(repo.trim()) || SCP_LIKE_RE.test(repo.trim());
 
 /** The machine-scoped session-catalog controls, routed to a harness. */
 const CATALOG_METHODS = new Set([
@@ -255,7 +262,7 @@ const dirOf = (arg: unknown): string | undefined => {
     return arg;
   }
   if (typeof arg === "object" && arg !== null) {
-    const dir = (arg as { dir?: unknown }).dir;
+    const { dir } = arg as { dir?: unknown };
     if (typeof dir === "string") {
       return dir;
     }
@@ -360,11 +367,17 @@ export class SessionSupervisor {
    * dropped; the hub replays what a session is still blocked on by calling
    * `control reinitialize` after it reconnects.
    */
-  sink: FrameSink = () => {};
+  sink: FrameSink = () => {
+    // replaced once the daemon has a hub connection to sink into
+  };
   /** Puts an arbitrary envelope on the daemon's hub socket (hand-offs). */
-  emit: (envelope: Envelope) => void = () => {};
+  emit: (envelope: Envelope) => void = () => {
+    // replaced once the daemon has a hub connection to emit onto
+  };
   /** Re-registers this machine, so a changed auth state reaches the fleet. */
-  reannounce: () => void = () => {};
+  reannounce: () => void = () => {
+    // replaced once the daemon has a hub connection to reannounce onto
+  };
 
   /**
    * Every permission ask still waiting for an answer, by requestId — the frame
@@ -391,6 +404,7 @@ export class SessionSupervisor {
         warn(`${envelope.verb} failed: ${error}`);
       });
     this.#queues.set(key, queue);
+    // biome-ignore lint/complexity/noVoid: fire-and-forget cleanup; dispatch() itself is synchronous and does not wait on the queue draining
     void queue.then(() => {
       if (this.#queues.get(key) === queue) {
         this.#queues.delete(key);
@@ -408,10 +422,16 @@ export class SessionSupervisor {
     const blocked = (this.#pulseBlocked.get(instanceId) ?? 0) > 0;
     const busy = this.#busy.has(instanceId);
     const running = this.#pulseSubagents.get(instanceId)?.size ?? 0;
+    const activity = ((): SessionPulse["activity"] => {
+      if (blocked) {
+        return "blocked";
+      }
+      return busy || running > 0 ? "working" : "idle";
+    })();
     return {
       instanceId,
       busy,
-      activity: blocked ? "blocked" : busy || running > 0 ? "working" : "idle",
+      activity,
       currentTool: this.#pulseTool.get(instanceId) ?? null,
       runningSubagents: running,
       at: Date.now(),
@@ -488,6 +508,7 @@ export class SessionSupervisor {
    * frames move the tool; a subagent's carry `parent_tool_use_id` and belong to
    * the subagent count, not the rail's tool line.
    */
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: folds every neutral frame shape (assistant tool_use, user tool_result, …) into the pulse in one pass
   #foldPulse(instanceId: string, message: NeutralMessage): void {
     const main = !(
       "parent_tool_use_id" in message && message.parent_tool_use_id
@@ -507,7 +528,7 @@ export class SessionSupervisor {
       return;
     }
     if (message.type === "user" && main) {
-      const content = message.message.content;
+      const { content } = message.message;
       if (!Array.isArray(content)) {
         return;
       }
@@ -889,6 +910,7 @@ export class SessionSupervisor {
       const afterSeq = cursor ?? row.afterSeq;
       const holder: { session: HarnessSession | null } = { session: null };
       const ctx = this.#context(row.instanceId, row.cwd, adapter, holder);
+      // biome-ignore lint/performance/noAwaitInLoops: each row mutates the shared #ingested map before the next is reattached
       const custody = await claude.adopt(row.instanceId, ctx, {
         ...(afterSeq === undefined ? {} : { afterSeq }),
         ...(proc.head === undefined ? {} : { head: proc.head }),
@@ -971,6 +993,7 @@ export class SessionSupervisor {
     }
     const { sessionId, dir } = quest;
     quest.tagged = true;
+    // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — #tagQuest itself is synchronous and does not wait on the tag landing
     void adapter
       .tagSession(sessionId, WHIFFLE_SCRATCH_TAG, dir)
       .catch((error: unknown) => {
@@ -998,6 +1021,7 @@ export class SessionSupervisor {
     });
   }
 
+  // biome-ignore lint/suspicious/useAwait: must stay async to match #route()'s Promise<void>-returning verb handlers
   async #send({
     instanceId,
     message,
@@ -1045,7 +1069,7 @@ export class SessionSupervisor {
     repo,
     baseDir,
   }: NonNullable<SpawnPayload["bootstrap"]>): Promise<string> {
-    const parent = expandHome(baseDir).replace(/(?!^)\/+$/, "");
+    const parent = expandHome(baseDir).replace(TRAILING_SLASHES_RE, "");
     const target = `${parent}/${repoLeaf(repo)}`;
 
     if (await isDirectory(target)) {
@@ -1193,6 +1217,7 @@ export class SessionSupervisor {
     const all: NeutralSessionInfo[] = [];
     for (const adapter of harnesses()) {
       try {
+        // biome-ignore lint/performance/noAwaitInLoops: each harness's sessions are appended to the shared `all` array in a stable order
         all.push(...(await adapter.listSessions(options.dir)));
       } catch (error) {
         warn(`listSessions on ${adapter.kind} failed: ${error}`);
@@ -1203,6 +1228,7 @@ export class SessionSupervisor {
   }
 
   /** Converges the fleet across every harness that has a profile, merged into one report. */
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: merges every FleetSyncReport field across harnesses field-by-field, on purpose (see the comments below on why nothing is dropped)
   async #syncFleet(
     config: FleetConfig | undefined,
     which: "syncFleet" | "fleetStatus"
@@ -1244,8 +1270,11 @@ export class SessionSupervisor {
       try {
         const report =
           which === "syncFleet"
-            ? await adapter.syncFleet!(config as FleetConfig)
-            : await adapter.fleetStatus!();
+            ? // biome-ignore lint/performance/noAwaitInLoops: each harness's report is merged into the shared accumulators before the next runs
+              // biome-ignore lint/style/noNonNullAssertion: `apply` was checked truthy above, and it is exactly `adapter.syncFleet` on this branch
+              await adapter.syncFleet!(config as FleetConfig)
+            : // biome-ignore lint/style/noNonNullAssertion: `apply` was checked truthy above, and it is exactly `adapter.fleetStatus` on this branch
+              await adapter.fleetStatus!();
         Object.assign(mcp, report.mcp);
         Object.assign(marketplaces, report.marketplaces);
         Object.assign(plugins, report.plugins);
@@ -1259,10 +1288,10 @@ export class SessionSupervisor {
           pluginClaims.push(report.have.plugins);
         }
         if (report.memory) {
-          memory = report.memory;
+          ({ memory } = report);
         }
         if (report.memoryHook) {
-          memoryHook = report.memoryHook;
+          ({ memoryHook } = report);
         }
         if (report.toolchain) {
           toolchain = { ...toolchain, ...report.toolchain };
@@ -1289,6 +1318,7 @@ export class SessionSupervisor {
     };
   }
 
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: dispatches to whichever catalog/harness/daemon method the control names, each a distinct branch
   async #call(
     instanceId: string | undefined,
     kind: HarnessKind | undefined,
@@ -1349,6 +1379,7 @@ export class SessionSupervisor {
           case "tagSession":
             await adapter.tagSession(
               args[0] as string,
+              // biome-ignore lint/suspicious/noUnnecessaryConditions: `args` is `unknown[]` off the wire; the cast tells TS args[1] is a string, but at runtime it can genuinely be absent
               (args[1] as string) ?? null,
               dirOf(args[2])
             );
@@ -1359,6 +1390,8 @@ export class SessionSupervisor {
               args[0] as string,
               dirOf(args[1])
             );
+          default:
+            break;
         }
       }
 
@@ -1375,6 +1408,7 @@ export class SessionSupervisor {
       }
       for (const adapter of harnesses()) {
         if (adapter.machine) {
+          // biome-ignore lint/performance/noAwaitInLoops: harnesses are tried in order and the loop returns on the first that claims the control
           const answer = await adapter.machine(method, args);
           if (answer !== undefined) {
             return answer;

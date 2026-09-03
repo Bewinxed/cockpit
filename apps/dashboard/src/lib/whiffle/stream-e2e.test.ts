@@ -132,16 +132,24 @@ const makeRegistry = (): RegistryShape => {
     // has no use for it, but the server calls it on every dashboard connect —
     // and an absent method throws there, which reads from here as every client
     // timing out on capability rather than as a missing stub.
-    noteDashboardOrigin: () => {},
+    noteDashboardOrigin: () => {
+      /* not exercised by these tests */
+    },
     dashboardOrigin: () => undefined,
   };
 };
 
 const pending: PendingShape = {
-  remember: () => {},
+  remember: () => {
+    /* not exercised by these tests */
+  },
   get: () => undefined,
-  resolve: () => {},
-  forget: () => {},
+  resolve: () => {
+    /* not exercised by these tests */
+  },
+  forget: () => {
+    /* not exercised by these tests */
+  },
   list: () => [],
 };
 
@@ -163,11 +171,16 @@ afterAll(async () => {
     }
   }
   app.stop();
-  for (const suffix of ["", "-shm", "-wal"]) {
-    await Bun.file(`${DB_FILE}${suffix}`)
-      .delete()
-      .catch(() => {});
-  }
+  // Three independent files, no shared state and no ordering between them.
+  await Promise.all(
+    ["", "-shm", "-wal"].map((suffix) =>
+      Bun.file(`${DB_FILE}${suffix}`)
+        .delete()
+        .catch(() => {
+          /* already gone */
+        })
+    )
+  );
 });
 
 /* ------------------------------------------------------------------ *
@@ -185,6 +198,7 @@ const until = async (
     if (holds()) {
       return;
     }
+    // biome-ignore lint/performance/noAwaitInLoops: sequential by intent — a poll must re-check `holds()` between each wait, not fire every wait at once.
     await Bun.sleep(2);
   }
   throw new Error(`timed out waiting for ${label}`);
@@ -229,10 +243,14 @@ const openWebSocket = (
 
 interface Daemon {
   /** The reply that settles a control command. */
+  // biome-ignore lint/style/useConsistentMethodSignatures: property-style signatures check contravariantly; openDaemon below returns an object literal implementing this port and a switch could reject that assignment.
   answerControl(requestId: string, ok: boolean, error?: string): void;
+  // biome-ignore lint/style/useConsistentMethodSignatures: property-style signatures check contravariantly; openDaemon below returns an object literal implementing this port and a switch could reject that assignment.
   close(): void;
   /** Emits one sequenced transcript frame for a session; returns its ordinal. */
+  // biome-ignore lint/style/useConsistentMethodSignatures: property-style signatures check contravariantly; openDaemon below returns an object literal implementing this port and a switch could reject that assignment.
   emit(sessionId: string, ordinal: number): void;
+  // biome-ignore lint/style/useConsistentMethodSignatures: property-style signatures check contravariantly; openDaemon below returns an object literal implementing this port and a switch could reject that assignment.
   raw(envelope: unknown): void;
   readonly received: Envelope[];
 }
@@ -329,23 +347,29 @@ interface Applied {
 interface Client {
   /** Every frame that reached the chokepoint, in order. */
   readonly applied: Applied[];
+  // biome-ignore lint/style/useConsistentMethodSignatures: property-style signatures check contravariantly; makeClient below returns an object literal implementing this port and a switch could reject that assignment.
   connect(): Promise<void>;
   /** Closes the socket and runs the store's disconnect bookkeeping. */
+  // biome-ignore lint/style/useConsistentMethodSignatures: property-style signatures check contravariantly; makeClient below returns an object literal implementing this port and a switch could reject that assignment.
   disconnect(): Promise<void>;
   /** Every command the ledger announced as failed, through `StreamHost.noteFailure`. */
   readonly failures: CommandRecord[];
   readonly host: StreamHost;
   /** Every inbound socket message, parsed — for asserting on the wire itself. */
   readonly inbox: Record<string, unknown>[];
+  // biome-ignore lint/style/useConsistentMethodSignatures: property-style signatures check contravariantly; makeClient below returns an object literal implementing this port and a switch could reject that assignment.
   isOpen(): boolean;
   /** Every message the STORE put on the wire — how "one resume per gap" is counted. */
   readonly outbox: Record<string, unknown>[];
   readonly rereads: string[];
+  // biome-ignore lint/style/useConsistentMethodSignatures: property-style signatures check contravariantly; makeClient below returns an object literal implementing this port and a switch could reject that assignment.
   send(message: unknown): void;
   readonly state: StreamState;
   /** The ordered transcript this client believes for a session. */
+  // biome-ignore lint/style/useConsistentMethodSignatures: property-style signatures check contravariantly; makeClient below returns an object literal implementing this port and a switch could reject that assignment.
   transcript(sessionId: string): number[];
   readonly warnings: { message: string; detail: unknown }[];
+  // biome-ignore lint/style/useConsistentMethodSignatures: property-style signatures check contravariantly; makeClient below returns an object literal implementing this port and a switch could reject that assignment.
   watch(sessionIds: string[]): void;
   /** The sessions this dashboard is watching; drives both dialects, as the real one does. */
   watched: string[];
@@ -409,7 +433,7 @@ const makeClient = (): Client => {
       // The client's failure port, replicated: `client.svelte.ts` builds one on
       // its `streamHost`, so a harness without it would be testing a quieter
       // dashboard than the one that ships.
-      noteFailure: (record) => failures.push(record),
+      noteFailure: (failedRecord) => failures.push(failedRecord),
     },
     isOpen: () => socket?.readyState === WebSocket.OPEN,
     send: (message) => socket?.send(JSON.stringify(message)),
@@ -454,7 +478,7 @@ const makeClient = (): Client => {
       });
       // Assigned before the first message can be routed: `sendToHub` reads it,
       // and a `stream.subscribe` that never left is a client that never follows.
-      socket = opened.socket;
+      ({ socket } = opened);
       await opened.ready;
       // `onopen` re-declares the subscription set on every connection.
       if (client.watched.length > 0) {
@@ -491,11 +515,12 @@ const emitRun = async (
   count: number,
   witness?: () => number
 ): Promise<number> => {
-  for (let index = 0; index < count; index++) {
+  for (let index = 0; index < count; index += 1) {
     daemon.emit(sessionId, from + index);
     // The socket is not a firehose: yielding keeps 500 frames from queueing
     // behind one another and lets the hub sequence as they arrive.
     if (index % 64 === 63) {
+      // biome-ignore lint/performance/noAwaitInLoops: sequential by intent — this yield is what paces emission; batching it away would re-introduce the queueing this loop exists to avoid.
       await Bun.sleep(1);
     }
   }
@@ -543,7 +568,7 @@ test("the handshake fires on the real opening frame: capabilities read from the 
   const client = makeClient();
   await client.connect();
   await until(() => client.inbox.length > 0, "the opening frame");
-  const first = client.inbox[0];
+  const [first] = client.inbox;
 
   // Where the hub actually puts it.
   expect((first.payload as { capabilities?: string[] }).capabilities).toEqual([
@@ -855,7 +880,9 @@ test("G3 a send command is accepted by the hub and its reflecting frame arrives 
     (e) => e.verb === "send" && e.instanceId === id
   );
   expect(relayed?.machineId).toBe(MACHINE);
-  expect((relayed?.payload as { message?: unknown }).message).toEqual(message);
+  expect(
+    (relayed?.payload as { message?: unknown } | undefined)?.message
+  ).toEqual(message);
 
   // Nothing the daemon returns confirms a `send`, so the hub must not claim it.
   await quiet();
@@ -1015,7 +1042,9 @@ test("G3 a control command reaches applied only when the daemon answers it", asy
   const control = daemon.received.find(
     (e) => e.verb === "control" && e.instanceId === id
   );
-  expect((control?.payload as { method?: string }).method).toBe("interrupt");
+  expect((control?.payload as { method?: string } | undefined)?.method).toBe(
+    "interrupt"
+  );
   const requestId = control?.requestId;
   expect(typeof requestId).toBe("string");
 
@@ -1165,7 +1194,7 @@ test("the backlog/live boundary holds when frames keep arriving during the resub
   // Reconnect and keep the daemon talking THROUGH the resume: the events
   // either side of the boundary seq must arrive exactly once each.
   const reconnected = client.connect();
-  for (let ordinal = 81; ordinal <= 140; ordinal++) {
+  for (let ordinal = 81; ordinal <= 140; ordinal += 1) {
     daemon.emit(id, ordinal);
   }
   await reconnected;
@@ -1308,7 +1337,7 @@ test("a gap invented on the wire is healed by exactly one resubscribe, not fifty
   // from beyond the cursor — the hub's ring still holds the truth, so the
   // resubscribe this provokes is answered for real.
   const before = client.transcript(id).length;
-  for (let seq = 20; seq < 30; seq++) {
+  for (let seq = 20; seq < 30; seq += 1) {
     handleStreamMessage(client.state, client.host, {
       type: "stream.event",
       event: { seq, sessionId: id, frame: frameFor(id, seq) },
@@ -1401,7 +1430,7 @@ test("two sessions on one socket keep independent sequences", async () => {
     "both subscriptions"
   );
 
-  for (let ordinal = 1; ordinal <= 40; ordinal++) {
+  for (let ordinal = 1; ordinal <= 40; ordinal += 1) {
     daemon.emit(first, ordinal);
     daemon.emit(second, ordinal);
   }
@@ -1429,15 +1458,19 @@ test("two dashboards following one session see byte-identical streams", async ()
   const id = session("fanout");
   const a = makeClient();
   const b = makeClient();
-  for (const client of [a, b]) {
-    await client.connect();
-    await until(() => client.state.capable, "capability");
-    client.watch([id]);
-    await until(
-      () => client.state.cursors[id]?.subscribed === true,
-      "subscription"
-    );
-  }
+  // a and b are independent clients with no shared state, so each one's
+  // connect-then-subscribe sequence can run concurrently with the other's.
+  await Promise.all(
+    [a, b].map(async (client) => {
+      await client.connect();
+      await until(() => client.state.capable, "capability");
+      client.watch([id]);
+      await until(
+        () => client.state.cursors[id]?.subscribed === true,
+        "subscription"
+      );
+    })
+  );
 
   await emitRun(daemon, id, 1, 60, () =>
     Math.min(a.transcript(id).length, b.transcript(id).length)

@@ -85,6 +85,7 @@ const makeTestRegistry = (): RegistryShape & {
         entry.subscriptions = new Set(instanceIds);
       }
     },
+    // biome-ignore lint/suspicious/noEmptyBlockStatements: this test registry doesn't track dashboard origins
     noteDashboardOrigin: () => {},
     dashboardOrigin: () => undefined,
     rememberRequester: (requestId, socket) => requesters.set(requestId, socket),
@@ -97,9 +98,12 @@ const makeTestRegistry = (): RegistryShape & {
 };
 
 const pending: PendingShape = {
+  // biome-ignore lint/suspicious/noEmptyBlockStatements: this test pipeline never awaits a permission ask, so remembering one is a no-op
   remember: () => {},
   get: () => undefined,
+  // biome-ignore lint/suspicious/noEmptyBlockStatements: this test pipeline never awaits a permission ask, so resolving one is a no-op
   resolve: () => {},
+  // biome-ignore lint/suspicious/noEmptyBlockStatements: this test pipeline never awaits a permission ask, so forgetting one is a no-op
   forget: () => {},
   list: () => [],
 };
@@ -183,11 +187,12 @@ const until = async <T>(
   read: () => T | undefined,
   what: string
 ): Promise<T> => {
-  for (let waited = 0; waited < 400; waited++) {
+  for (let waited = 0; waited < 400; waited += 1) {
     const value = read();
     if (value !== undefined) {
       return value;
     }
+    // biome-ignore lint/performance/noAwaitInLoops: polls until the value appears or the budget expires; each check depends on the previous sleep
     await Bun.sleep(5);
   }
   throw new Error(`timed out waiting for ${what}`);
@@ -247,8 +252,10 @@ const openSession = (id: string, sessionId?: string): void => {
 afterAll(async () => {
   app.stop();
   for (const suffix of ["", "-shm", "-wal"]) {
+    // biome-ignore lint/performance/noAwaitInLoops: teardown of a handful of scratch files; order doesn't matter but each delete is best-effort
     await Bun.file(`${DB_FILE}${suffix}`)
       .delete()
+      // biome-ignore lint/suspicious/noEmptyBlockStatements: a missing scratch file (e.g. no -wal ever created) is not worth reporting during teardown
       .catch(() => {});
   }
 });
@@ -325,7 +332,7 @@ test("a register restores the newest orphans only, within the horizon and under 
   // 22 sessions that stopped inside the last few minutes, and 3 that stopped
   // two hours ago — the shape of the machine that came back after 36 hours.
   const recent: string[] = [];
-  for (let index = 0; index < 22; index++) {
+  for (let index = 0; index < 22; index += 1) {
     const id = `inst-recent-${String(index).padStart(2, "0")}`;
     openSession(id, `sess-${id}`);
     // Oldest first, so "newest first" has something to sort.
@@ -333,7 +340,7 @@ test("a register restores the newest orphans only, within the horizon and under 
     recent.push(id);
   }
   const stale: string[] = [];
-  for (let index = 0; index < 3; index++) {
+  for (let index = 0; index < 3; index += 1) {
     const id = `inst-stale-${index}`;
     openSession(id, `sess-${id}`);
     backdate(id, 2 * 60 * 60_000);
@@ -441,7 +448,11 @@ test("a session on a machine the hub cannot reach reads unknown, and the column 
   const agent = await connect("/ws");
   // Presence is the registry's: a socket the hub is holding is what makes the
   // overlay pass a stored status through rather than answering `unknown`.
-  registry.registerAgent(MACHINE, { id: "sock-truth", send: () => {} });
+  registry.registerAgent(MACHINE, {
+    id: "sock-truth",
+    // biome-ignore lint/suspicious/noEmptyBlockStatements: this stub socket only needs to exist for presence checks; nothing in these tests reads what it sends
+    send: () => {},
+  });
   await beat(agent, ["overlay-live"]);
   expect(statusOf("overlay-live")).toBe("running");
   db.stopInstance("overlay-stopped");
@@ -476,7 +487,11 @@ test("the instances frame carries the same derived status, plus pulses and hubBu
 
   openSession("frame-live", "sess-frame-live");
   const agent = await connect("/ws");
-  registry.registerAgent(MACHINE, { id: "sock-truth", send: () => {} });
+  registry.registerAgent(MACHINE, {
+    id: "sock-truth",
+    // biome-ignore lint/suspicious/noEmptyBlockStatements: this stub socket only needs to exist for presence checks; nothing in these tests reads what it sends
+    send: () => {},
+  });
   await beat(agent, ["frame-live"]);
 
   const pulse: SessionPulse = {
@@ -543,7 +558,11 @@ test("the instances frame carries the same derived status, plus pulses and hubBu
 
   // And a dead session's pulse is dropped with it: a live reading that outlives
   // its process is the same stale-liveness lie, in memory instead of a column.
-  registry.registerAgent(MACHINE, { id: "sock-truth", send: () => {} });
+  registry.registerAgent(MACHINE, {
+    id: "sock-truth",
+    // biome-ignore lint/suspicious/noEmptyBlockStatements: this stub socket only needs to exist for presence checks; nothing in these tests reads what it sends
+    send: () => {},
+  });
   await beat(agent, []);
   expect(statusOf("frame-live")).toBe("sleeping");
   const later = await connect("/ws/dashboard");

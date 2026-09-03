@@ -290,7 +290,12 @@ describe("the ad-hoc pid ledger", () => {
     const dir = mkdtempSync(join(tmpdir(), "whiffle-ledger-"));
     try {
       expect(
-        await sweepSessiondOrphans(() => {}, join(dir, "missing.json"))
+        await sweepSessiondOrphans(
+          () => {
+            // no kills expected; this test only checks the missing-ledger no-op path
+          },
+          join(dir, "missing.json")
+        )
       ).toEqual([]);
     } finally {
       rmSync(dir, { recursive: true, force: true });

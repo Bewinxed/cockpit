@@ -72,14 +72,14 @@ const VELOCITY_WINDOW = 80;
 type Phase = "idle" | "armed" | "claimed";
 /** One point of the integrated settle: seconds since release, px, px/s. */
 interface Sample {
-    t: number;
-    x: number;
-    v: number 
+  t: number;
+  v: number;
+  x: number;
 }
 /** A card in view: its element and its distance from the focus. */
 interface Card {
-    el: HTMLElement;
-    delta: number 
+  delta: number;
+  el: HTMLElement;
 }
 
 export function createDeck(
@@ -179,6 +179,7 @@ export function createDeck(
     const now = at / 1000;
     const i = path.findIndex((sample) => sample.t >= now);
     if (i < 0) {
+      // biome-ignore lint/style/useAtIndex: path is non-empty here (checked above); .at(-1) would widen the return to Sample | undefined
       return path[path.length - 1];
     }
     if (i === 0) {
@@ -227,8 +228,9 @@ export function createDeck(
     if (samples.length < 2) {
       return 0;
     }
+    // biome-ignore lint/style/useAtIndex: samples has >= 2 elements here (checked above); .at(-1) would widen to undefined
     const last = samples[samples.length - 1];
-    let first = samples[0];
+    let [first] = samples;
     for (const sample of samples) {
       if (last.t - sample.t <= VELOCITY_WINDOW) {
         first = sample;
@@ -249,14 +251,17 @@ export function createDeck(
   function spring(velocity: number) {
     stopSettle();
     path = integrate(offset, velocity);
+    // biome-ignore lint/style/useAtIndex: integrate() always returns at least one point; .at(-1) would widen this to undefined
     const duration = path[path.length - 1].t;
 
     const kept: Sample[] = [path[0]];
-    for (let i = 1; i < path.length - 1; i++) {
+    for (let i = 1; i < path.length - 1; i += 1) {
+      // biome-ignore lint/style/useAtIndex: kept is never empty (seeded above); .at(-1) would widen to undefined
       if ((path[i].t - kept[kept.length - 1].t) * 1000 >= KEYFRAME_MS) {
         kept.push(path[i]);
       }
     }
+    // biome-ignore lint/style/useAtIndex: integrate() always returns at least one point; .at(-1) would widen to undefined, and push() needs a Sample
     kept.push(path[path.length - 1]);
 
     animations = cards.map(({ el, delta }) =>
@@ -283,7 +288,9 @@ export function createDeck(
           land();
         }
       },
-      () => {}
+      () => {
+        /* cancelled mid-settle — a newer spring() or stopSettle() already took over */
+      }
     );
 
     const touchdown =
@@ -292,6 +299,7 @@ export function createDeck(
           i > 0 &&
           Math.abs(sample.x) < height * LAND &&
           Math.abs(sample.v) < Math.abs(path[i - 1].v)
+        // biome-ignore lint/style/useAtIndex: integrate() always returns at least one point; .at(-1) would widen this fallback to undefined
       ) ?? path[path.length - 1];
     landing = setTimeout(() => {
       lifted = false;
@@ -401,6 +409,7 @@ export function createDeck(
         hold();
       };
 
+      // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the two-finger swipe/settle touchmove handler — one state machine, not split in this pass
       const onMove = (event: TouchEvent) => {
         if (phase === "idle") {
           return;

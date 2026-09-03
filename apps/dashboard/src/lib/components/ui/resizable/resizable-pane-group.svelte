@@ -1,5 +1,5 @@
 <script lang="ts">
-  import * as ResizablePrimitive from "paneforge";
+  import { PaneGroup, type PaneGroupProps } from "paneforge";
   import { cn } from "$lib/utils.js";
 
   let {
@@ -7,12 +7,12 @@
     this: paneGroup = $bindable(),
     class: className,
     ...restProps
-  }: ResizablePrimitive.PaneGroupProps & {
-    this?: ResizablePrimitive.PaneGroup;
+  }: PaneGroupProps & {
+    this?: PaneGroup;
   } = $props();
 </script>
 
-<ResizablePrimitive.PaneGroup
+<PaneGroup
   class={cn(
 		"cn-resizable-panel-group flex h-full w-full data-[direction=vertical]:flex-col",
 		className

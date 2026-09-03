@@ -8,7 +8,9 @@
   import { tick } from "svelte";
   import ProviderLogo from "$lib/components/features/ProviderLogo.svelte";
   import { Button, type ButtonSize } from "$lib/components/ui/button";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Command from "$lib/components/ui/command";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Popover from "$lib/components/ui/popover";
   import { IconRefresh, IconUnfold } from "$lib/icons";
   import {
@@ -58,14 +60,18 @@
   );
 
   /** Why the list is thin, when it is — said under it rather than as a fake row. */
-  const note = $derived(
-    models.error ??
-      (models.loading
-        ? "Asking a running session what it offers…"
-        : models.offered.length === 0
-          ? "No list yet — refresh it through a running session, or type an id."
-          : null)
-  );
+  const note = $derived.by(() => {
+    if (models.error !== null) {
+      return models.error;
+    }
+    if (models.loading) {
+      return "Asking a running session what it offers…";
+    }
+    if (models.offered.length === 0) {
+      return "No list yet — refresh it through a running session, or type an id.";
+    }
+    return null;
+  });
 
   function opened(next: boolean) {
     if (next) {
@@ -79,6 +85,7 @@
   function closeAndFocusTrigger() {
     open = false;
     typed = "";
+    // biome-ignore lint/complexity/noVoid: focusing the trigger after close is fire-and-forget — nothing awaits it and there is nothing to report if it fails
     void tick().then(() => triggerRef?.focus());
   }
 
@@ -97,6 +104,15 @@
     }
   }
 
+  // biome-ignore lint/complexity/noVoid: onSelect handlers are sync — the pick is fire-and-forget, and choose()'s own callers already own its rejection
+  const selectCustom = () => void choose(trimmed, true);
+  // biome-ignore lint/complexity/noVoid: onSelect handlers are sync — the pick is fire-and-forget, and choose()'s own callers already own its rejection
+  const selectRecent = (id: string) => void choose(id);
+  // biome-ignore lint/complexity/noVoid: onSelect handlers are sync — the pick is fire-and-forget, and choose()'s own callers already own its rejection
+  const selectDefault = () => void choose(MODEL_DEFAULT);
+  // biome-ignore lint/complexity/noVoid: onSelect handlers are sync — the pick is fire-and-forget, and choose()'s own callers already own its rejection
+  const selectModel = (model: string) => void choose(model);
+
   // The picker says for itself why a refresh failed; it is about the list, not
   // about the session, so it never reaches the page's error slot — and the
   // popover stays open, because the point was to look at what came back.
@@ -106,7 +122,11 @@
   // list and reopening it retries. Nothing the operator asked for is lost, so
   // there is nothing to report. It is NOT the class of swallowed rejection that
   // ate every send from a plain-http origin — that one sat on a user action.
-  const refresh = () => void refreshModels().catch(() => {});
+  const refresh = () =>
+    // biome-ignore lint/complexity/noVoid: the refresh is fire-and-forget by intent — see the comment above
+    void refreshModels().catch(() => {
+      // Log-only boundary: the popover already shows the last-known list.
+    });
 </script>
 
 <Popover.Root onOpenChange={opened} bind:open>
@@ -141,11 +161,7 @@
       <Command.List>
         {#if custom}
           <Command.Group heading="Custom">
-            <Command.Item
-              forceMount
-              onSelect={() => void choose(trimmed, true)}
-              value={trimmed}
-            >
+            <Command.Item forceMount onSelect={selectCustom} value={trimmed}>
               <ProviderLogo model={trimmed} />
               <span class="flex flex-col">
                 <span>Use <span class="font-mono">{trimmed}</span></span>
@@ -166,7 +182,7 @@
             {#each models.recent as id (id)}
               <Command.Item
                 data-checked={id === value}
-                onSelect={() => void choose(id)}
+                onSelect={() => selectRecent(id)}
                 title={id}
                 value={id}
               >
@@ -182,7 +198,7 @@
             <Command.Item
               data-checked={value === MODEL_DEFAULT}
               keywords={['default']}
-              onSelect={() => void choose(MODEL_DEFAULT)}
+              onSelect={selectDefault}
               value="default-model"
             >
               <span class="flex flex-col">
@@ -197,7 +213,7 @@
             <Command.Item
               data-checked={covers(row, value)}
               keywords={[row.displayName]}
-              onSelect={() => void choose(row.value)}
+              onSelect={() => selectModel(row.value)}
               title={row.value}
               value={row.value}
             >

@@ -1,8 +1,10 @@
 <script lang="ts">
   import type { FleetMcpConfig, FleetMcpServer } from "@whiffle/core";
   import { Button } from "$lib/components/ui/button";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Dialog from "$lib/components/ui/dialog";
   import { Input } from "$lib/components/ui/input";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as ToggleGroup from "$lib/components/ui/toggle-group";
   import {
     isRemoteMcp,
@@ -16,7 +18,7 @@
   import KeyValueRows from "./KeyValueRows.svelte";
 
   let {
-    open = $bindable(false),
+    open: dialogOpen = $bindable(false),
     editing = null,
     taken = [],
     onsaved,
@@ -49,17 +51,25 @@
   let named = $state(false);
 
   const nameProblem = $derived(mcpNameProblem(name, taken));
-  const filled = $derived(
-    mode === "bunx"
-      ? pkg.trim() !== ""
-      : mode === "command"
-        ? command.trim() !== ""
-        : url.trim() !== ""
-  );
+  const saveLabel = $derived.by(() => {
+    if (busy) {
+      return "Saving…";
+    }
+    return editing ? "Save" : "Add server";
+  });
+  const filled = $derived.by(() => {
+    if (mode === "bunx") {
+      return pkg.trim() !== "";
+    }
+    if (mode === "command") {
+      return command.trim() !== "";
+    }
+    return url.trim() !== "";
+  });
 
   let seeded = $state(false);
   $effect(() => {
-    if (!open) {
+    if (!dialogOpen) {
       seeded = false;
       return;
     }
@@ -88,12 +98,12 @@
     }
     if (isRemoteMcp(editing.config)) {
       mode = "remote";
-      url = editing.config.url;
+      ({ url } = editing.config);
       transport = editing.config.type;
       headers = recordToPairs(editing.config.headers);
     } else {
       mode = "command";
-      command = editing.config.command;
+      ({ command } = editing.config);
       argsLine = (editing.config.args ?? []).join(" ");
       env = recordToPairs(editing.config.env);
     }
@@ -120,6 +130,13 @@
     };
   }
 
+  /** The package field suggests a name until the reader has typed their own. */
+  function suggestName(): void {
+    if (!named) {
+      name = suggestMcpName(pkg);
+    }
+  }
+
   async function save(event: SubmitEvent) {
     event.preventDefault();
     if (nameProblem || !filled || busy) {
@@ -131,7 +148,7 @@
       onsaved(
         await saveMcpServer(name.trim(), build(), editing?.enabled ?? true)
       );
-      open = false;
+      dialogOpen = false;
     } catch (error) {
       failed = error instanceof Error ? error.message : String(error);
     } finally {
@@ -140,7 +157,7 @@
   }
 </script>
 
-<Dialog.Root bind:open>
+<Dialog.Root bind:open={dialogOpen}>
   <Dialog.Content class="rounded-[var(--radius-shell)] shadow-xl sm:max-w-lg">
     <Dialog.Header>
       <Dialog.Title
@@ -154,7 +171,11 @@
     <form class="flex flex-col gap-3" onsubmit={save}>
       <ToggleGroup.Root
         class="w-full"
-        onValueChange={(next) => next && (mode = next as Mode)}
+        onValueChange={(next) => {
+          if (next) {
+            mode = next as Mode;
+          }
+        }}
         size="sm"
         type="single"
         value={mode}
@@ -173,17 +194,19 @@
       <p class="text-micro text-muted-foreground">{HOW[mode]}</p>
 
       {#if mode === 'bunx'}
+        <!-- biome-ignore lint/a11y/noLabelWithoutControl: the `Input` component (shadcn-svelte) renders a native <input> as its only child -->
         <label class="flex flex-col gap-1.5 text-caption"
           >Package
           <Input
             autocomplete="off"
             class="font-mono text-sm md:text-sm"
-            oninput={() => !named && (name = suggestMcpName(pkg))}
+            oninput={suggestName}
             placeholder="@modelcontextprotocol/server-filesystem"
             spellcheck="false"
             bind:value={pkg}
           />
         </label>
+        <!-- biome-ignore lint/a11y/noLabelWithoutControl: the `Input` component (shadcn-svelte) renders a native <input> as its only child -->
         <label class="flex flex-col gap-1.5 text-caption"
           >Arguments (optional)
           <Input
@@ -195,6 +218,7 @@
           />
         </label>
       {:else if mode === 'command'}
+        <!-- biome-ignore lint/a11y/noLabelWithoutControl: the `Input` component (shadcn-svelte) renders a native <input> as its only child -->
         <label class="flex flex-col gap-1.5 text-caption"
           >Command
           <Input
@@ -205,6 +229,7 @@
             bind:value={command}
           />
         </label>
+        <!-- biome-ignore lint/a11y/noLabelWithoutControl: the `Input` component (shadcn-svelte) renders a native <input> as its only child -->
         <label class="flex flex-col gap-1.5 text-caption"
           >Arguments
           <Input
@@ -225,6 +250,7 @@
           bind:rows={env}
         />
       {:else}
+        <!-- biome-ignore lint/a11y/noLabelWithoutControl: the `Input` component (shadcn-svelte) renders a native <input> as its only child -->
         <label class="flex flex-col gap-1.5 text-caption"
           >URL
           <Input
@@ -239,7 +265,11 @@
           <legend class="mb-1">Transport</legend>
           <ToggleGroup.Root
             class="w-full"
-            onValueChange={(next) => next && (transport = next as 'http' | 'sse')}
+            onValueChange={(next) => {
+              if (next) {
+                transport = next as 'http' | 'sse';
+              }
+            }}
             size="sm"
             type="single"
             value={transport}
@@ -264,13 +294,16 @@
         />
       {/if}
 
+      <!-- biome-ignore lint/a11y/noLabelWithoutControl: the `Input` component (shadcn-svelte) renders a native <input> as its only child -->
       <label class="flex flex-col gap-1.5 text-caption"
         >Name
         <Input
           aria-invalid={name !== '' && nameProblem ? 'true' : undefined}
           autocomplete="off"
           class="font-mono text-sm md:text-sm"
-          oninput={() => (named = true)}
+          oninput={() => {
+            named = true;
+          }}
           placeholder="filesystem"
           spellcheck="false"
           bind:value={name}
@@ -295,7 +328,9 @@
       <div class="flex justify-end gap-2 pt-1">
         <Button
           disabled={busy}
-          onclick={() => (open = false)}
+          onclick={() => {
+            dialogOpen = false;
+          }}
           type="button"
           variant="outline"
           >Cancel</Button
@@ -303,7 +338,7 @@
         <Button
           disabled={busy || !filled || nameProblem !== undefined}
           type="submit"
-          >{busy ? 'Saving…' : editing ? 'Save' : 'Add server'}</Button
+          >{saveLabel}</Button
         >
       </div>
     </form>

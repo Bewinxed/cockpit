@@ -2,10 +2,13 @@
   import { untrack } from "svelte";
   import { toast } from "svelte-sonner";
   import { goto } from "$app/navigation";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Alert from "$lib/components/ui/alert";
   import { Badge } from "$lib/components/ui/badge";
   import { Button } from "$lib/components/ui/button";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Card from "$lib/components/ui/card";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Tooltip from "$lib/components/ui/tooltip";
   import { IconPlus, IconSubagent, IconTrash } from "$lib/icons";
   import { confirm } from "$lib/whiffle/confirm.svelte";
@@ -35,7 +38,7 @@
       return;
     }
     latch = data;
-    types = data.types;
+    ({ types } = data);
   });
 
   async function askRemove(row: DelegateType) {
@@ -302,6 +305,7 @@
     font-weight: var(--weight-strong);
     color: var(--ink-strong);
   }
+  /* biome-ignore lint/style/noDescendingSpecificity: .head .sub code and .phead code sit in disjoint markup subtrees, ordering here is presentation-only */
   .phead code {
     font-family: var(--font-mono);
     font-size: 0.9em;
@@ -311,6 +315,7 @@
     font-size: var(--text-sm);
     color: var(--ink-muted);
   }
+  /* biome-ignore lint/style/noDescendingSpecificity: .head .sub code and .psub code sit in disjoint markup subtrees, ordering here is presentation-only */
   .psub code {
     font-family: var(--font-mono);
     font-size: 0.9em;

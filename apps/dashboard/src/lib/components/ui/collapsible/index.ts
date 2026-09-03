@@ -1,13 +1,14 @@
-import Root from "./collapsible.svelte";
-import Content from "./collapsible-content.svelte";
-import Trigger from "./collapsible-trigger.svelte";
-
+// biome-ignore lint/performance/noBarrelFile: this is the component's public API surface, re-exporting its parts under the shadcn-svelte convention
 export {
-  Content,
-  Content as CollapsibleContent,
-  Root,
+  default as Root,
   //
-  Root as Collapsible,
-  Trigger,
-  Trigger as CollapsibleTrigger,
-};
+  default as Collapsible,
+} from "./collapsible.svelte";
+export {
+  default as Content,
+  default as CollapsibleContent,
+} from "./collapsible-content.svelte";
+export {
+  default as Trigger,
+  default as CollapsibleTrigger,
+} from "./collapsible-trigger.svelte";

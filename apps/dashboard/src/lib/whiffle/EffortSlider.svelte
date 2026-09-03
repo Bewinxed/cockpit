@@ -62,7 +62,7 @@
   const listed = (names: string[]): string =>
     names.length <= 1
       ? (names[0] ?? "")
-      : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+      : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
 
   function choose(stop: EffortStop | undefined) {
     if (disabled || !stop?.reachable || stop.value === value) {
@@ -118,7 +118,12 @@
 
   /** Steps over what the model cannot reach, so the keyboard never lands out of range. */
   function step(direction: 1 | -1) {
-    const from = index < 0 ? (direction === 1 ? -1 : stops.length) : index;
+    let from: number;
+    if (index < 0) {
+      from = direction === 1 ? -1 : stops.length;
+    } else {
+      from = index;
+    }
     for (
       let next = from + direction;
       next >= 0 && next < stops.length;
@@ -140,7 +145,7 @@
       ArrowLeft: () => step(-1),
       ArrowDown: () => step(-1),
       Home: () => choose(reachable[0]),
-      End: () => choose(reachable[reachable.length - 1]),
+      End: () => choose(reachable.at(-1)),
     };
     const move = keys[event.key];
     if (!move) {
@@ -148,6 +153,22 @@
     }
     event.preventDefault();
     move();
+  }
+
+  /** Past the chosen stop, ahead of it, or off the reachable scale entirely. */
+  function stopClass(stop: EffortStop, position: number): string {
+    if (!stop.reachable) {
+      return "is-blocked";
+    }
+    return position <= index ? "is-past" : "is-ahead";
+  }
+
+  /** Off the reachable scale, the chosen stop, or neither. */
+  function markClass(stop: EffortStop): string {
+    if (!stop.reachable) {
+      return "is-blocked";
+    }
+    return stop.value === value ? "is-on" : "";
   }
 </script>
 
@@ -188,11 +209,7 @@
 
       {#each stops as stop, position (stop.value)}
         <span
-          class="effort-stop {stop.reachable
-            ? position <= index
-              ? 'is-past'
-              : 'is-ahead'
-            : 'is-blocked'}"
+          class="effort-stop {stopClass(stop, position)}"
           style="left: {at(position)}%;"
         ></span>
       {/each}
@@ -206,11 +223,7 @@
   <div class="effort-marks">
     {#each stops as stop (stop.value)}
       <button
-        class="effort-mark {!stop.reachable
-          ? 'is-blocked'
-          : stop.value === value
-            ? 'is-on'
-            : ''}"
+        class="effort-mark {markClass(stop)}"
         disabled={disabled || !stop.reachable}
         onclick={() => choose(stop)}
         title={stop.reachable ? stop.description : `${stop.label} is not offered by this model`}

@@ -80,6 +80,7 @@ const harness = (): Harness => {
     setLegacySubscriptions: (socket, ids) => legacy.set(socket.id, ids),
     isMachineConnected: (machineId) => connected.has(machineId),
     relaySend: (envelope) => {
+      // biome-ignore lint/suspicious/noUnnecessaryConditions: `state.refuse` is mutated through the `refuse` setter on the returned harness, invisible to narrowing from this closure's initializer alone.
       if (state.refuse) {
         return false;
       }
@@ -87,6 +88,7 @@ const harness = (): Harness => {
       return true;
     },
     relayControl: (envelope) => {
+      // biome-ignore lint/suspicious/noUnnecessaryConditions: `state.refuse` is mutated through the `refuse` setter on the returned harness, invisible to narrowing from this closure's initializer alone.
       if (state.refuse) {
         return false;
       }
@@ -113,13 +115,13 @@ const harness = (): Harness => {
 const hubs: ReturnType<typeof createStreamHub>[] = [];
 
 interface Delta {
-    type: "stream.event";
-    event: SessionStreamEvent 
+  event: SessionStreamEvent;
+  type: "stream.event";
 }
 interface Backlog {
-  type: "stream.backlog";
-  sessionId: string;
   events: SessionStreamEvent[];
+  sessionId: string;
+  type: "stream.backlog";
 }
 
 /** Every message this socket was sent, in order, with its `type` narrowed. */
@@ -151,7 +153,7 @@ test("the sequencer stamps 1..N per session and counts each session on its own",
 
 test("a session is sequenced whether or not anybody is following it", () => {
   const { hub } = harness();
-  for (let n = 0; n < 3; n++) {
+  for (let n = 0; n < 3; n += 1) {
     hub.sequence(SESSION, { n });
   }
 
@@ -175,7 +177,7 @@ test("a session is sequenced whether or not anybody is following it", () => {
 
 test("a resume inside the ring answers with a contiguous backlog from afterSeq + 1", () => {
   const { hub } = harness();
-  for (let n = 1; n <= 5; n++) {
+  for (let n = 1; n <= 5; n += 1) {
     hub.sequence(SESSION, { n });
   }
 
@@ -209,7 +211,7 @@ test("a client already current gets an empty backlog rather than silence", () =>
 
 test("a resume older than the ring answers with a reset naming the next seq", () => {
   const { hub } = harness();
-  for (let n = 1; n <= RING_SIZE + 10; n++) {
+  for (let n = 1; n <= RING_SIZE + 10; n += 1) {
     hub.sequence(SESSION, { n });
   }
 
@@ -229,7 +231,7 @@ test("a resume older than the ring answers with a reset naming the next seq", ()
 
 test("the ring wraps without dropping a seq: the last RING_SIZE events still replay whole", () => {
   const { hub } = harness();
-  for (let n = 1; n <= RING_SIZE + 10; n++) {
+  for (let n = 1; n <= RING_SIZE + 10; n += 1) {
     hub.sequence(SESSION, { n });
   }
 
@@ -252,14 +254,19 @@ test("the ring wraps without dropping a seq: the last RING_SIZE events still rep
   // Contiguous ascending, no hole where the write pointer wrapped.
   const seqs = backlog?.events.map((event) => event.seq) ?? [];
   expect(
-    seqs.every((seq, index) => index === 0 || seq === seqs[index - 1]! + 1)
+    seqs.every(
+      (seq, index) =>
+        index === 0 ||
+        // biome-ignore lint/style/noNonNullAssertion: `index === 0 ||` short-circuits before this runs, so index - 1 is always a valid seqs index.
+        seq === seqs[index - 1]! + 1
+    )
   ).toBe(true);
 });
 
 test("a resume from a dead epoch — afterSeq past the head — answers with a reset, not a backlog", () => {
   const { hub } = harness();
   // A restarted hub counts from 1 again; the client still holds seq 900.
-  for (let n = 1; n <= 3; n++) {
+  for (let n = 1; n <= 3; n += 1) {
     hub.sequence(SESSION, { n });
   }
 
@@ -295,7 +302,7 @@ test("a resume the client cannot express — a malformed afterSeq — answers wi
 
 test("backlog and live delivery meet with no duplicate and no gap", () => {
   const { hub } = harness();
-  for (let n = 1; n <= 5; n++) {
+  for (let n = 1; n <= 5; n += 1) {
     hub.sequence(SESSION, { n });
   }
 
@@ -305,23 +312,22 @@ test("backlog and live delivery meet with no duplicate and no gap", () => {
     sessionId: SESSION,
     afterSeq: 2,
   });
-  for (let n = 6; n <= 8; n++) {
+  for (let n = 6; n <= 8; n += 1) {
     hub.sequence(SESSION, { n });
   }
 
   // What the client actually applies, in the order it arrives: the backlog's
   // events flattened, then every live delta.
   const applied: number[] = [];
-  for (const message of socket.sent as {
-    type: string;
-    events?: { seq: number }[];
-    event?: { seq: number };
-  }[]) {
+  for (const message of socket.sent as (
+    | { type: "stream.backlog"; events: { seq: number }[] }
+    | { type: "stream.event"; event: { seq: number } }
+  )[]) {
     if (message.type === "stream.backlog") {
-      applied.push(...message.events!.map((e) => e.seq));
+      applied.push(...message.events.map((e) => e.seq));
     }
     if (message.type === "stream.event") {
-      applied.push(message.event!.seq);
+      applied.push(message.event.seq);
     }
   }
   expect(applied).toEqual([3, 4, 5, 6, 7, 8]);
@@ -420,7 +426,7 @@ test("a legacy subscribe that omits a streamed session does not silently unsubsc
 
 test("a session gone quiet loses its replay window but never its sequence", () => {
   const { hub } = harness();
-  for (let n = 1; n <= 5; n++) {
+  for (let n = 1; n <= 5; n += 1) {
     hub.sequence(SESSION, { n });
   }
 
@@ -549,8 +555,8 @@ test("a command from a socket that follows no stream is still acknowledged, twic
     kind: "set-permission-mode",
     payload: { args: ["plan"] },
   });
-  const requestId = (h.relayed[0]?.envelope.payload as ControlPayload)
-    .requestId;
+  // biome-ignore lint/correctness/noUnsafeOptionalChaining: h.relayed[0] is guaranteed to exist — the command dispatched immediately above is the only thing that can populate it.
+  const { requestId } = h.relayed[0]?.envelope.payload as ControlPayload;
   expect(
     h.hub.settleCommand(requestId, {
       kind: "control_result",
@@ -618,8 +624,8 @@ test("a command whose socket dies before the daemon answers is consumed, not bro
     kind: "set-model",
     payload: { args: ["opus"] },
   });
-  const requestId = (h.relayed[0]?.envelope.payload as ControlPayload)
-    .requestId;
+  // biome-ignore lint/correctness/noUnsafeOptionalChaining: h.relayed[0] is guaranteed to exist — the command dispatched immediately above is the only thing that can populate it.
+  const { requestId } = h.relayed[0]?.envelope.payload as ControlPayload;
   h.hub.dropSocket(socket.id);
 
   // Dropping the socket forgets what it was waiting for, so the reply falls
@@ -652,7 +658,9 @@ const makeTestRegistry = (): RegistryShape & {
   const requesters = new Map<string, HubSocket>();
   return {
     forwarded,
-    registerAgent: () => {},
+    registerAgent: () => {
+      // stub: this suite routes by machineId → agentSocket directly, not the registry
+    },
     dropAgent: () => undefined,
     agent: (machineId) => (machineId === MACHINE ? agentSocket : undefined),
     machineIds: () => [MACHINE],
@@ -677,7 +685,9 @@ const makeTestRegistry = (): RegistryShape & {
         entry.subscriptions = new Set(instanceIds);
       }
     },
-    noteDashboardOrigin: () => {},
+    noteDashboardOrigin: () => {
+      // stub: this suite never asserts on the dashboard origin
+    },
     dashboardOrigin: () => undefined,
     rememberRequester: (requestId, socket) => requesters.set(requestId, socket),
     takeRequester: (requestId) => {
@@ -689,10 +699,16 @@ const makeTestRegistry = (): RegistryShape & {
 };
 
 const pending: PendingShape = {
-  remember: () => {},
+  remember: () => {
+    // stub: this suite never exercises pending-permission tracking
+  },
   get: () => undefined,
-  resolve: () => {},
-  forget: () => {},
+  resolve: () => {
+    // stub: this suite never exercises pending-permission tracking
+  },
+  forget: () => {
+    // stub: this suite never exercises pending-permission tracking
+  },
   list: () => [],
 };
 
@@ -706,21 +722,24 @@ afterAll(async () => {
   }
   app.stop();
   for (const suffix of ["", "-shm", "-wal"]) {
+    // biome-ignore lint/performance/noAwaitInLoops: three fixed cleanup paths, sequential for simplicity in a teardown that runs once.
     await Bun.file(`${DB_FILE}${suffix}`)
       .delete()
-      .catch(() => {});
+      .catch(() => {
+        // best effort: the file may never have been created (e.g. no -wal)
+      });
   }
 });
 
 interface Wire {
-  close(): void;
+  close: () => void;
   readonly inbox: Record<string, unknown>[];
   /** Waits for the first inbound message matching, and returns it. */
-  next(
+  next: (
     match: (message: Record<string, unknown>) => boolean,
     label: string
-  ): Promise<Record<string, unknown>>;
-  send(message: unknown): void;
+  ) => Promise<Record<string, unknown>>;
+  send: (message: unknown) => void;
   readonly socket: WebSocket;
 }
 
@@ -745,11 +764,12 @@ const openSocket = async (path: string): Promise<Wire> => {
     socket,
     send: (message) => socket.send(JSON.stringify(message)),
     next: async (match, label) => {
-      for (let waited = 0; waited < 400; waited++) {
+      for (let waited = 0; waited < 400; waited += 1) {
         const found = inbox.find(match);
         if (found) {
           return found;
         }
+        // biome-ignore lint/performance/noAwaitInLoops: polling loop — each wait must observe the inbox again before deciding whether to wait once more.
         await Bun.sleep(5);
       }
       throw new Error(
@@ -867,6 +887,7 @@ test("a send command reaches the machine as the relay op it names and stops at a
     .find((e) => e.verb === "send");
   expect(relayed?.instanceId).toBe(SESSION);
   expect(relayed?.machineId).toBe(MACHINE);
+  // biome-ignore lint/correctness/noUnsafeOptionalChaining: `relayed` is asserted present by the two expects above — it comes from the same `find` result.
   expect((relayed?.payload as SendPayload).message).toEqual(
     message as SendPayload["message"]
   );
@@ -924,6 +945,7 @@ test("each control command reaches the machine as its own method, and only its o
       kind: entry.kind,
       payload: entry.payload,
     });
+    // biome-ignore lint/performance/noAwaitInLoops: each command is sent and acked before the next, so `controls` below reflects `cases`' order.
     await dashboard.next(
       isAck(`ctl-${index}`, "accepted"),
       `${entry.kind} accepted`
@@ -977,16 +999,21 @@ test("a control command is applied when the daemon confirms it, in its own words
     .filter((envelope) => envelope.verb === "control")
     .map((envelope) => envelope.payload as ControlPayload);
   const [good, bad] = controls;
+  if (!(good && bad)) {
+    throw new Error(
+      `expected both commands to have been forwarded; got ${controls.length}`
+    );
+  }
 
   agent.send({
     verb: "frames",
     machineId: MACHINE,
     instanceId: SESSION,
-    requestId: good!.requestId,
+    requestId: good.requestId,
     payload: {
       kind: "control_result",
       instanceId: SESSION,
-      requestId: good!.requestId,
+      requestId: good.requestId,
       ok: true,
     },
   });
@@ -994,11 +1021,11 @@ test("a control command is applied when the daemon confirms it, in its own words
     verb: "frames",
     machineId: MACHINE,
     instanceId: SESSION,
-    requestId: bad!.requestId,
+    requestId: bad.requestId,
     payload: {
       kind: "control_result",
       instanceId: SESSION,
-      requestId: bad!.requestId,
+      requestId: bad.requestId,
       ok: false,
       error: "nonsense is not an effort level",
     },
@@ -1147,7 +1174,7 @@ test("a reconnecting client resumes the stream across the socket it lost", async
   await Bun.sleep(30);
 
   // Three more frames while nobody is listening.
-  for (let n = 2; n <= 4; n++) {
+  for (let n = 2; n <= 4; n += 1) {
     agent.send({
       verb: "frames",
       machineId: MACHINE,

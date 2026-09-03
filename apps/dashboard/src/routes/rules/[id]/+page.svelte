@@ -18,6 +18,7 @@
   import { Switch } from "$lib/components/ui/switch";
   import { Textarea } from "$lib/components/ui/textarea";
   import { Toggle } from "$lib/components/ui/toggle";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as ToggleGroup from "$lib/components/ui/toggle-group";
   import { IconArrowRight, IconTrash } from "$lib/icons";
   import { whiffle } from "$lib/whiffle/client.svelte";
@@ -211,6 +212,13 @@
     }
   }
 
+  const saveLabel = $derived.by(() => {
+    if (busy) {
+      return "Saving…";
+    }
+    return data.composing ? "Create rule" : "Save changes";
+  });
+
   async function remove() {
     if (!id) {
       return;
@@ -256,7 +264,9 @@
           aria-invalid={shown('name') || duplicate ? 'true' : undefined}
           autocomplete="off"
           class="w-full border-0 bg-transparent p-0 text-display text-foreground caret-primary outline-none placeholder:text-faint"
-          onblur={() => (touched.name = true)}
+          onblur={() => {
+            touched.name = true;
+          }}
           placeholder="Name this rule"
           spellcheck="false"
           bind:value={draft.name}
@@ -276,6 +286,7 @@
         {ruleSentence(draft)}
       </p>
 
+      <!-- biome-ignore lint/a11y/noLabelWithoutControl: wraps the <Switch> component; the native control it renders is not visible to Biome -->
       <label class="flex w-fit items-center gap-3">
         <Switch bind:checked={draft.enabled} />
         <span class="text-caption">
@@ -368,7 +379,11 @@
       {#if draft.trigger === 'pattern'}
         <ToggleGroup.Root
           class="w-full"
-          onValueChange={(next) => next && (draft.matchKind = next as 'phrase' | 'regex')}
+          onValueChange={(next) => {
+            if (next) {
+              draft.matchKind = next as 'phrase' | 'regex';
+            }
+          }}
           size="sm"
           type="single"
           value={draft.matchKind}
@@ -382,13 +397,16 @@
           </ToggleGroup.Item>
         </ToggleGroup.Root>
 
+        <!-- biome-ignore lint/a11y/noLabelWithoutControl: wraps the <Input> component; the native control it renders is not visible to Biome -->
         <label class="flex flex-col gap-1.5 text-caption">
           {draft.matchKind === 'phrase' ? 'Phrase' : 'Expression'}
           <Input
             aria-invalid={shown('pattern') ? 'true' : undefined}
             autocomplete="off"
             class="font-mono text-sm md:text-sm"
-            onblur={() => (touched.pattern = true)}
+            onblur={() => {
+              touched.pattern = true;
+            }}
             placeholder={draft.matchKind === 'phrase'
               ? 'honest caveat'
               : 'should (work|be fine)|probably works'}
@@ -407,7 +425,9 @@
 
         <div class="flex flex-wrap items-center gap-2">
           <Toggle
-            onPressedChange={(next) => (draft.caseSensitive = next)}
+            onPressedChange={(next) => {
+              draft.caseSensitive = next;
+            }}
             pressed={draft.caseSensitive}
             size="sm"
             variant="outline"
@@ -416,7 +436,9 @@
           </Toggle>
           {#if draft.matchKind === 'phrase'}
             <Toggle
-              onPressedChange={(next) => (draft.wholeWord = next)}
+              onPressedChange={(next) => {
+                draft.wholeWord = next;
+              }}
               pressed={draft.wholeWord}
               size="sm"
               variant="outline"
@@ -430,7 +452,11 @@
           <legend class="mb-1.5">Read</legend>
           <ToggleGroup.Root
             class="w-full"
-            onValueChange={(next) => next && (draft.watch = next as RuleWatch)}
+            onValueChange={(next) => {
+              if (next) {
+                draft.watch = next as RuleWatch;
+              }
+            }}
             size="sm"
             type="single"
             value={draft.watch}
@@ -498,12 +524,15 @@
       </fieldset>
 
       {#if draft.action === 'reply'}
+        <!-- biome-ignore lint/a11y/noLabelWithoutControl: wraps the <Textarea> component; the native control it renders is not visible to Biome -->
         <label class="flex flex-col gap-1.5 text-caption">
           Reply
           <Textarea
             aria-invalid={shown('reply') ? 'true' : undefined}
             class="resize-y text-sm md:text-sm"
-            onblur={() => (touched.reply = true)}
+            onblur={() => {
+              touched.reply = true;
+            }}
             placeholder="if there's an honest caveat that you are aware of and you're just reporting it to the user instead of fixing it, then your work is not done yet"
             rows={4}
             bind:value={draft.reply}
@@ -513,12 +542,15 @@
           {/if}
         </label>
       {:else}
+        <!-- biome-ignore lint/a11y/noLabelWithoutControl: wraps the <Textarea> component; the native control it renders is not visible to Biome -->
         <label class="flex flex-col gap-1.5 text-caption">
           Supervisor instructions
           <Textarea
             aria-invalid={shown('prompt') ? 'true' : undefined}
             class="resize-y text-sm md:text-sm"
-            onblur={() => (touched.prompt = true)}
+            onblur={() => {
+              touched.prompt = true;
+            }}
             placeholder="If the agent claims work is done without pasting test output, reject the claim. Tell it to run the tests and paste the full output."
             rows={4}
             bind:value={draft.prompt}
@@ -555,6 +587,7 @@
         </fieldset>
 
         {#if draft.timing === 'immediate'}
+          <!-- biome-ignore lint/a11y/noLabelWithoutControl: wraps the <Switch> component; the native control it renders is not visible to Biome -->
           <label class="flex items-start gap-3">
             <Switch class="mt-0.5" bind:checked={draft.interrupt} />
             <span class="flex flex-col gap-0.5">
@@ -586,6 +619,7 @@
       </div>
 
       <div class="grid gap-4 sm:grid-cols-2">
+        <!-- biome-ignore lint/a11y/noLabelWithoutControl: wraps the <NativeSelect> component; the native control it renders is not visible to Biome -->
         <label class="flex flex-col gap-1.5 text-caption">
           Machine
           <NativeSelect
@@ -600,6 +634,7 @@
           </NativeSelect>
         </label>
 
+        <!-- biome-ignore lint/a11y/noLabelWithoutControl: wraps the <NativeSelect> component; the native control it renders is not visible to Biome -->
         <label class="flex flex-col gap-1.5 text-caption">
           Project
           <NativeSelect
@@ -614,6 +649,7 @@
           </NativeSelect>
         </label>
 
+        <!-- biome-ignore lint/a11y/noLabelWithoutControl: wraps the <NativeSelect> component; the native control it renders is not visible to Biome -->
         <label class="flex flex-col gap-1.5 text-caption">
           Harness
           <NativeSelect
@@ -628,6 +664,7 @@
           </NativeSelect>
         </label>
 
+        <!-- biome-ignore lint/a11y/noLabelWithoutControl: wraps the <NativeSelect> component; the native control it renders is not visible to Biome -->
         <label class="flex flex-col gap-1.5 text-caption">
           Model
           <NativeSelect
@@ -663,6 +700,7 @@
           </p>
         </div>
 
+        <!-- biome-ignore lint/a11y/noLabelWithoutControl: wraps the <Switch> component; the native control it renders is not visible to Biome -->
         <label class="flex items-start gap-3">
           <Switch class="mt-0.5" bind:checked={draft.requireAck} />
           <span class="flex flex-col gap-0.5">
@@ -672,10 +710,10 @@
             <span class="max-w-prose text-micro text-muted-foreground">
               {#if draft.requireAck}
                 The session has to call
-                <span class="font-mono">acknowledge_rule</span> and say what it
-                did about it. Until then the rule fires again every time it is
-                tripped, and the reminder counts up. It stops after ten in one
-                session.
+                <span class="font-mono">acknowledge_rule</span>
+                and say what it did about it. Until then the rule fires again
+                every time it is tripped, and the reminder counts up. It stops
+                after ten in one session.
               {:else}
                 The rule fires once per session and then goes quiet, whether or
                 not anything came of it.
@@ -725,7 +763,7 @@
           Cancel
         </Button>
         <Button disabled={busy || deleting} type="submit">
-          {busy ? 'Saving…' : data.composing ? 'Create rule' : 'Save changes'}
+          {saveLabel}
         </Button>
       </div>
     </div>

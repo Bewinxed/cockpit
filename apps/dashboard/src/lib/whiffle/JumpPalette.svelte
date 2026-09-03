@@ -4,6 +4,7 @@
    * at. It reads the store and nothing else — no endpoint exists for this.
    */
   import { goto } from "$app/navigation";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Command from "$lib/components/ui/command";
   import { Kbd } from "$lib/components/ui/kbd";
   import { ACTIVITY_LABEL } from "./activity";

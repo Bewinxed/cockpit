@@ -1,52 +1,66 @@
-import Root from "./context-menu.svelte";
-import CheckboxItem from "./context-menu-checkbox-item.svelte";
-import Content from "./context-menu-content.svelte";
-import Group from "./context-menu-group.svelte";
-import GroupHeading from "./context-menu-group-heading.svelte";
-import Item from "./context-menu-item.svelte";
-import Label from "./context-menu-label.svelte";
-import Portal from "./context-menu-portal.svelte";
-import RadioGroup from "./context-menu-radio-group.svelte";
-import RadioItem from "./context-menu-radio-item.svelte";
-import Separator from "./context-menu-separator.svelte";
-import Shortcut from "./context-menu-shortcut.svelte";
-import Sub from "./context-menu-sub.svelte";
-import SubContent from "./context-menu-sub-content.svelte";
-import SubTrigger from "./context-menu-sub-trigger.svelte";
-import Trigger from "./context-menu-trigger.svelte";
-
+// biome-ignore lint/performance/noBarrelFile: this is the component's public API surface, re-exporting its parts under the shadcn-svelte convention
 export {
-  CheckboxItem,
-  CheckboxItem as ContextMenuCheckboxItem,
-  Content,
-  Content as ContextMenuContent,
-  Group,
-  Group as ContextMenuGroup,
-  GroupHeading,
-  GroupHeading as ContextMenuGroupHeading,
-  Item,
-  Item as ContextMenuItem,
-  Label,
-  Label as ContextMenuLabel,
-  Portal,
-  Portal as ContextMenuPortal,
-  RadioGroup,
-  RadioGroup as ContextMenuRadioGroup,
-  RadioItem,
-  RadioItem as ContextMenuRadioItem,
-  Root,
+  default as Root,
   //
-  Root as ContextMenu,
-  Separator,
-  Separator as ContextMenuSeparator,
-  Shortcut,
-  Shortcut as ContextMenuShortcut,
-  Sub,
-  Sub as ContextMenuSub,
-  SubContent,
-  SubContent as ContextMenuSubContent,
-  SubTrigger,
-  SubTrigger as ContextMenuSubTrigger,
-  Trigger,
-  Trigger as ContextMenuTrigger,
-};
+  default as ContextMenu,
+} from "./context-menu.svelte";
+export {
+  default as CheckboxItem,
+  default as ContextMenuCheckboxItem,
+} from "./context-menu-checkbox-item.svelte";
+export {
+  default as Content,
+  default as ContextMenuContent,
+} from "./context-menu-content.svelte";
+export {
+  default as Group,
+  default as ContextMenuGroup,
+} from "./context-menu-group.svelte";
+export {
+  default as GroupHeading,
+  default as ContextMenuGroupHeading,
+} from "./context-menu-group-heading.svelte";
+export {
+  default as Item,
+  default as ContextMenuItem,
+} from "./context-menu-item.svelte";
+export {
+  default as Label,
+  default as ContextMenuLabel,
+} from "./context-menu-label.svelte";
+export {
+  default as Portal,
+  default as ContextMenuPortal,
+} from "./context-menu-portal.svelte";
+export {
+  default as RadioGroup,
+  default as ContextMenuRadioGroup,
+} from "./context-menu-radio-group.svelte";
+export {
+  default as RadioItem,
+  default as ContextMenuRadioItem,
+} from "./context-menu-radio-item.svelte";
+export {
+  default as Separator,
+  default as ContextMenuSeparator,
+} from "./context-menu-separator.svelte";
+export {
+  default as Shortcut,
+  default as ContextMenuShortcut,
+} from "./context-menu-shortcut.svelte";
+export {
+  default as Sub,
+  default as ContextMenuSub,
+} from "./context-menu-sub.svelte";
+export {
+  default as SubContent,
+  default as ContextMenuSubContent,
+} from "./context-menu-sub-content.svelte";
+export {
+  default as SubTrigger,
+  default as ContextMenuSubTrigger,
+} from "./context-menu-sub-trigger.svelte";
+export {
+  default as Trigger,
+  default as ContextMenuTrigger,
+} from "./context-menu-trigger.svelte";

@@ -93,7 +93,9 @@ test("an init frame carries the whole `/` menu, and which of it is skills", () =
   expect(metadata?.slashCommands).toEqual(["compact", "my-plugin:greet"]);
   expect(metadata?.skills).toEqual(["my-plugin:greet"]);
   // The store classifies from exactly these two, and the palette from that.
+  // biome-ignore lint/style/noNonNullAssertion: the expect above just asserted metadata.skills is set
   expect(classifyCommand("compact", metadata!.skills!)).toBe("builtin");
+  // biome-ignore lint/style/noNonNullAssertion: the expect above just asserted metadata.skills is set
   expect(classifyCommand("my-plugin:greet", metadata!.skills!)).toBe("skill");
 });
 
@@ -121,7 +123,7 @@ test("a permission_denied frame becomes a note naming the tool and the reason", 
     message: "the auto-deny message",
   } as never);
   expect(mapping.messages).toHaveLength(1);
-  const note = mapping.messages[0];
+  const [note] = mapping.messages;
   expect(note.type).toBe("ui.system_note");
   expect(note.content).toBe(
     "The SDK denied Bash without asking (sandboxOverride): commands may not run outside the sandbox"
@@ -183,6 +185,7 @@ test("the model a spawn asks for reaches the branch and the tool card", () => {
   expect(mapping.branch?.model).toBe("opus");
 
   const branches: Record<string, SubagentState> = {};
+  // biome-ignore lint/style/noNonNullAssertion: the expect above just asserted mapping.branch is set
   applyBranchEvent(branches, "i1", mapping.branch!);
   expect(branches.toolu_1.model).toBe("opus");
   expect(mapping.messages[0].metadata?.subagentModel).toBe("opus");
@@ -206,6 +209,7 @@ test("a forwarded frame names the model that answered, without moving the branch
 
   const branches: Record<string, SubagentState> = {};
   applyBranchEvent(branches, "i1", { toolUseId: "toolu_1", status: "running" });
+  // biome-ignore lint/style/noNonNullAssertion: the expect above just asserted mapping.branch is set
   applyBranchEvent(branches, "i1", mapping.branch!);
   expect(branches.toolu_1.status).toBe("running");
 });
@@ -675,7 +679,7 @@ test("an answer settles the ask it names — allowed answers it, denied denies i
   foldDelegateEvent(list, askRow(2, "per_2", { command: "rm -rf /" }));
   foldDelegateEvent(list, answerRow(3, "per_1", "allow"));
   foldDelegateEvent(list, answerRow(4, "per_2", "deny"));
-  expect(list.map((row) => row.status)).toEqual([
+  expect(list.map((entry) => entry.status)).toEqual([
     "answered",
     "denied",
     null,
@@ -687,7 +691,7 @@ test("an answer to an ask nobody has is still recorded, and so is a report", () 
   const list: DelegateEvent[] = [];
   foldDelegateEvent(list, answerRow(7, "per_gone", "allow"));
   foldDelegateEvent(list, reportRow(8, "All gates green."));
-  expect(list.map((row) => row.kind)).toEqual(["answer", "report"]);
+  expect(list.map((entry) => entry.kind)).toEqual(["answer", "report"]);
   expect(list[1].payload).toEqual({ body: "All gates green.", failed: false });
 });
 
@@ -1038,8 +1042,7 @@ const ruleFrame = (text: string, name = "rule:Honest caveat"): SDKMessage =>
   }) as unknown as SDKMessage;
 
 test("a rule firing renders as a rule, never as the reader own words", () => {
-  const messages =
-    mapFrame("i1", ruleFrame("your work is not done yet")).messages ?? [];
+  const { messages } = mapFrame("i1", ruleFrame("your work is not done yet"));
 
   expect(messages).toHaveLength(1);
   expect(messages[0].type).toBe("user.peer");
@@ -1059,7 +1062,7 @@ test("a rule with no name still says what it is", () => {
     message: { role: "user", content: "do the thing" },
     origin: { kind: "system" },
   } as unknown as SDKMessage;
-  const messages = mapFrame("i1", nameless).messages ?? [];
+  const { messages } = mapFrame("i1", nameless);
   expect(messages[0].metadata?.ruleName).toBe("a rule");
 });
 

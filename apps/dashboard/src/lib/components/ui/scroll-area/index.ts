@@ -1,10 +1,6 @@
-import Root from "./scroll-area.svelte";
-import Scrollbar from "./scroll-area-scrollbar.svelte";
-
+// biome-ignore lint/performance/noBarrelFile: shadcn-svelte component barrel — this re-export surface is the public import path consumers use across the app
+export { default as Root, default as ScrollArea } from "./scroll-area.svelte";
 export {
-  Root,
-  //,
-  Root as ScrollArea,
-  Scrollbar,
-  Scrollbar as ScrollAreaScrollbar,
-};
+  default as Scrollbar,
+  default as ScrollAreaScrollbar,
+} from "./scroll-area-scrollbar.svelte";

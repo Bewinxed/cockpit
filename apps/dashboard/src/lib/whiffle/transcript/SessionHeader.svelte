@@ -32,9 +32,13 @@
   import type { EffortLevel, PermissionMode } from "@whiffle/core";
   import { TextMorph } from "torph/svelte";
   import { Button } from "$lib/components/ui/button";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Drawer from "$lib/components/ui/drawer";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Popover from "$lib/components/ui/popover";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Select from "$lib/components/ui/select";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as ToggleGroup from "$lib/components/ui/toggle-group";
   import { IsMobile } from "$lib/hooks/is-mobile.svelte";
   import { IconChat, IconFlow, IconSettings, IconUnfold } from "$lib/icons";
@@ -261,12 +265,12 @@
     return !!flight && flight.settled && out(slot) && !failure(slot);
   }
 
-  const thrown = (error: unknown): string =>
-    error instanceof Error
-      ? error.message
-      : typeof error === "string"
-        ? error
-        : "";
+  const thrown = (error: unknown): string => {
+    if (error instanceof Error) {
+      return error.message;
+    }
+    return typeof error === "string" ? error : "";
+  };
 
   function apply<T>(
     slot: Slot,
@@ -276,11 +280,12 @@
     if (out(slot)) {
       return;
     }
-    const token = (counter[slot] += 1);
+    counter[slot] += 1;
+    const token = counter[slot];
     /** This row's attempt, or null once a newer one has replaced it. */
     const mine = (): Attempt | null =>
       counter[slot] === token ? attempt[slot] : null;
-    attempt[slot] = {
+    const created: Attempt = {
       commandId: null,
       local: false,
       refused: null,
@@ -288,11 +293,13 @@
       settled: false,
       value,
     };
+    attempt[slot] = created;
     const change = send(value);
     if (typeof change === "string") {
-      attempt[slot]!.commandId = change;
+      created.commandId = change;
     } else if (change) {
-      attempt[slot]!.local = true;
+      created.local = true;
+      // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — both outcomes are already handled inline via the .then/.catch callbacks below.
       void change.then(
         () => {
           const flight = mine();
@@ -322,13 +329,15 @@
     }, SETTLE);
   }
 
-  const pill = $derived(
-    activity === "blocked"
-      ? { status: "attn" as const, label: "needs you" }
-      : activity === "working"
-        ? { status: "live" as const, label: "working" }
-        : { status: "idle" as const, label: "idle" }
-  );
+  const pill = $derived.by(() => {
+    if (activity === "blocked") {
+      return { status: "attn" as const, label: "needs you" };
+    }
+    if (activity === "working") {
+      return { status: "live" as const, label: "working" };
+    }
+    return { status: "idle" as const, label: "idle" };
+  });
 
   // A single-select toggle can hand back `undefined` when the active item is
   // pressed again; the view always has to be one of the two, so an empty

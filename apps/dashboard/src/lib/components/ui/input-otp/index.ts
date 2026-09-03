@@ -1,15 +1,14 @@
-import Root from "./input-otp.svelte";
-import Group from "./input-otp-group.svelte";
-import Separator from "./input-otp-separator.svelte";
-import Slot from "./input-otp-slot.svelte";
-
+// biome-ignore lint/performance/noBarrelFile: this is the shadcn-svelte component group's public re-export surface, not an accidental barrel
+export { default as Root, default as InputOTP } from "./input-otp.svelte";
 export {
-  Group,
-  Group as InputOTPGroup,
-  Root,
-  Root as InputOTP,
-  Separator,
-  Separator as InputOTPSeparator,
-  Slot,
-  Slot as InputOTPSlot,
-};
+  default as Group,
+  default as InputOTPGroup,
+} from "./input-otp-group.svelte";
+export {
+  default as Separator,
+  default as InputOTPSeparator,
+} from "./input-otp-separator.svelte";
+export {
+  default as Slot,
+  default as InputOTPSlot,
+} from "./input-otp-slot.svelte";

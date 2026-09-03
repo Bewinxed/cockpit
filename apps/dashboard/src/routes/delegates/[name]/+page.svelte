@@ -3,6 +3,7 @@
   import { toast } from "svelte-sonner";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Alert from "$lib/components/ui/alert";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
@@ -161,6 +162,7 @@
     {/if}
 
     <header class="flex flex-col gap-3">
+      <!-- biome-ignore lint/a11y/noLabelWithoutControl: the <Input> component renders a native input as its only child; Biome can't see through the component boundary -->
       <label class="flex flex-col gap-1.5">
         <span class="text-micro text-muted-foreground">Name</span>
         <Input
@@ -168,7 +170,9 @@
           autocomplete="off"
           class="font-mono"
           disabled={!data.composing}
-          onblur={() => (touched.name = true)}
+          onblur={() => {
+            touched.name = true;
+          }}
           placeholder="explore"
           spellcheck="false"
           bind:value={draft.name}
@@ -179,7 +183,7 @@
             : 'The name is the key a running call already asks for by; renaming means creating a new type.'}
         </span>
       </label>
-      {#if shown('name') && problem && problem.includes('name')}
+      {#if shown('name') && problem?.includes('name')}
         <p class="text-micro text-destructive">{problem}</p>
       {:else if duplicate}
         <p class="text-micro text-destructive">{duplicate}</p>
@@ -201,7 +205,9 @@
       <Textarea
         aria-invalid={shown('description') && problem?.includes('description') ? 'true' : undefined}
         class="resize-y text-sm md:text-sm"
-        onblur={() => (touched.description = true)}
+        onblur={() => {
+          touched.description = true;
+        }}
         placeholder="Read-only codebase exploration and fan-out search; returns conclusions, not file dumps."
         rows={4}
         bind:value={draft.description}
@@ -223,6 +229,7 @@
       </div>
 
       <div class="grid gap-4 sm:grid-cols-3">
+        <!-- biome-ignore lint/a11y/noLabelWithoutControl: the <NativeSelect> component renders a native select as its only child; Biome can't see through the component boundary -->
         <label class="flex flex-col gap-1.5 text-caption">
           Harness
           <NativeSelect class="w-full" bind:value={draft.harness}>
@@ -232,27 +239,35 @@
           </NativeSelect>
         </label>
 
+        <!-- biome-ignore lint/a11y/noLabelWithoutControl: the <Input> component renders a native input as its only child; Biome can't see through the component boundary -->
         <label class="flex flex-col gap-1.5 text-caption">
           Model
           <Input
             aria-invalid={shown('model') && problem?.includes('model') ? 'true' : undefined}
             autocomplete="off"
             class="font-mono text-sm md:text-sm"
-            onblur={() => (touched.model = true)}
+            onblur={() => {
+              touched.model = true;
+            }}
             placeholder="sonnet"
             spellcheck="false"
             bind:value={draft.model}
           />
         </label>
 
+        <!-- biome-ignore lint/a11y/noLabelWithoutControl: the <NativeSelect> component renders a native select as its only child; Biome can't see through the component boundary -->
         <label class="flex flex-col gap-1.5 text-caption">
           Effort
           <NativeSelect
             class="w-full"
             onchange={(event) => {
               const next = event.currentTarget.value;
-              if (next === '') delete draft.effort;
-              else draft.effort = next as DelegateType['effort'];
+              if (next === '') {
+                // biome-ignore lint/performance/noDelete: removes the key entirely so an unset effort is omitted from the saved payload, not serialized as effort: undefined
+                delete draft.effort;
+              } else {
+                draft.effort = next as DelegateType['effort'];
+              }
             }}
             value={draft.effort ?? ''}
           >
@@ -279,6 +294,7 @@
         </p>
       </div>
 
+      <!-- biome-ignore lint/a11y/noLabelWithoutControl: the <Input> component renders a native input as its only child; Biome can't see through the component boundary -->
       <label class="flex flex-col gap-1.5 text-caption">
         Skills
         <Input
@@ -290,6 +306,7 @@
         />
       </label>
 
+      <!-- biome-ignore lint/a11y/noLabelWithoutControl: the <Input> component renders a native input as its only child; Biome can't see through the component boundary -->
       <label class="flex flex-col gap-1.5 text-caption">
         Tools denied
         <Input
@@ -303,6 +320,7 @@
 
       <!-- The one field here that widens rather than narrows: a delegate is a
            leaf unless its type (or the call itself) says otherwise. -->
+      <!-- biome-ignore lint/a11y/noLabelWithoutControl: the <Switch> component renders a native checkbox input; Biome can't see through the component boundary -->
       <label class="flex w-fit items-center gap-3">
         <Switch bind:checked={canDelegate} />
         <span class="text-caption">
@@ -356,7 +374,13 @@
           Cancel
         </Button>
         <Button disabled={busy || deleting} type="submit">
-          {busy ? 'Saving…' : data.composing ? 'Create delegate type' : 'Save changes'}
+          {#if busy}
+            Saving…
+          {:else if data.composing}
+            Create delegate type
+          {:else}
+            Save changes
+          {/if}
         </Button>
       </div>
     </div>

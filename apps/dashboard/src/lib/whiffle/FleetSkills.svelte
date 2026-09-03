@@ -6,11 +6,14 @@
     MarketplacePluginInfo,
   } from "@whiffle/core";
   import { toast } from "svelte-sonner";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Alert from "$lib/components/ui/alert";
   import { Button } from "$lib/components/ui/button";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Card from "$lib/components/ui/card";
   import { Skeleton } from "$lib/components/ui/skeleton";
   import { Toggle } from "$lib/components/ui/toggle";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Tooltip from "$lib/components/ui/tooltip";
   import {
     IconPlus,
@@ -43,7 +46,7 @@
     skills,
     machines,
     settling,
-    error,
+    error: hubError,
   }: {
     config: FleetConfig;
     skills: FleetSkillMeta[];
@@ -61,8 +64,8 @@
   let unread = $state<Record<string, string>>({});
   let working = $state<Record<string, boolean>>({});
 
-  const message = (error: unknown) =>
-    error instanceof Error ? error.message : String(error);
+  const message = (err: unknown) =>
+    err instanceof Error ? err.message : String(err);
   const installed = (id: string): boolean =>
     config.plugins.some((row) => row.id === id);
 
@@ -91,8 +94,8 @@
     working[row.name] = true;
     try {
       landed(await saveSkill(row.name, { source: row.source, enabled }));
-    } catch (error) {
-      toast.error(message(error));
+    } catch (err) {
+      toast.error(message(err));
     } finally {
       delete working[row.name];
     }
@@ -110,8 +113,8 @@
       } else {
         toast.success(`${row.name} changed — the machines get the new files.`);
       }
-    } catch (error) {
-      toast.error(message(error));
+    } catch (err) {
+      toast.error(message(err));
     } finally {
       delete working[row.name];
     }
@@ -136,8 +139,8 @@
       } else {
         toast.success(`${row.id} fetched — the machines get the files.`);
       }
-    } catch (error) {
-      toast.error(message(error));
+    } catch (err) {
+      toast.error(message(err));
     } finally {
       delete busy[row.id];
     }
@@ -151,8 +154,8 @@
         skills.findIndex((other) => other.name === row.name),
         1
       );
-    } catch (error) {
-      toast.error(message(error));
+    } catch (err) {
+      toast.error(message(err));
     } finally {
       delete working[row.name];
     }
@@ -175,8 +178,8 @@
     delete unread[name];
     try {
       listings[name] = await marketplaceCatalog(host.machineId, name);
-    } catch (error) {
-      unread[name] = message(error);
+    } catch (err) {
+      unread[name] = message(err);
     } finally {
       delete reading[name];
     }
@@ -193,8 +196,8 @@
       if (browsing === name) {
         browsing = null;
       }
-    } catch (error) {
-      toast.error(message(error));
+    } catch (err) {
+      toast.error(message(err));
     } finally {
       delete busy[name];
     }
@@ -208,8 +211,8 @@
     busy[id] = true;
     try {
       config.plugins.push(await savePlugin(id, { enabled: true }));
-    } catch (error) {
-      toast.error(message(error));
+    } catch (err) {
+      toast.error(message(err));
     } finally {
       delete busy[id];
     }
@@ -223,8 +226,8 @@
       if (at !== -1) {
         config.plugins[at] = row;
       }
-    } catch (error) {
-      toast.error(message(error));
+    } catch (err) {
+      toast.error(message(err));
     } finally {
       delete busy[id];
     }
@@ -238,8 +241,8 @@
         config.plugins.findIndex((row) => row.id === id),
         1
       );
-    } catch (error) {
-      toast.error(message(error));
+    } catch (err) {
+      toast.error(message(err));
     } finally {
       delete busy[id];
     }
@@ -292,21 +295,21 @@
     then install its plugins.
   </p>
   <div class="flex shrink-0 items-center gap-2">
-    <Button onclick={() => (linking = true)} size="sm" variant="outline"
+    <Button onclick={() => { linking = true; }} size="sm" variant="outline"
       >Link marketplace</Button
     >
-    <Button onclick={() => (fetching = true)} size="sm">
+    <Button onclick={() => { fetching = true; }} size="sm">
       <IconPlus class="shrink-0" />
       Add skill
     </Button>
   </div>
 </div>
 
-{#if error}
+{#if hubError}
   <Alert.Root class={warnAlert}>
     <IconWarningTriangle />
     <Alert.Description class="text-caption text-[var(--warning-11)]"
-      >{error}</Alert.Description
+      >{hubError}</Alert.Description
     >
   </Alert.Root>
 {:else}
@@ -322,7 +325,11 @@
           No skills fetched yet. Paste what you would otherwise have run and the
           hub downloads the files itself.
         </p>
-        <Button class="self-start" onclick={() => (fetching = true)} size="sm">
+        <Button
+          class="self-start"
+          onclick={() => { fetching = true; }}
+          size="sm"
+        >
           <IconPlus class="shrink-0" />
           Add skill
         </Button>
@@ -478,7 +485,7 @@
         </p>
         <Button
           class="self-start"
-          onclick={() => (linking = true)}
+          onclick={() => { linking = true; }}
           size="sm"
           variant="outline"
           >Link marketplace</Button
@@ -778,8 +785,8 @@
 
   <p class="text-micro text-muted-foreground">
     Either way, a skill is in every session's
-    <span class="font-mono">/</span> menu on that machine once the machine has
-    it.
+    <span class="font-mono">/</span>
+    menu on that machine once the machine has it.
   </p>
 
   <MachineInventory

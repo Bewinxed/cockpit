@@ -1,6 +1,10 @@
 import { readEnv, WHIFFLE_ENV } from "@whiffle/core";
 import type { RequestHandler } from "./$types";
 
+const WS_SCHEME = /^ws(s?):\/\//;
+const TRAILING_WS_PATH = /\/ws\/?$/;
+const TRAILING_SLASHES = /\/+$/;
+
 /**
  * The hub's HTTP origin, derived from WHIFFLE_HUB_URL. That variable is a
  * WebSocket URL (e.g. `ws://localhost:3456/ws`) — the same one the agent and
@@ -11,8 +15,10 @@ import type { RequestHandler } from "./$types";
  */
 const HUB_URL = (() => {
   const raw = readEnv(WHIFFLE_ENV.hubUrl) || "http://localhost:3456";
-  const http = raw.replace(/^ws(s?):\/\//, "http$1://").replace(/\/ws\/?$/, "");
-  return http.replace(/\/+$/, "");
+  const http = raw
+    .replace(WS_SCHEME, "http$1://")
+    .replace(TRAILING_WS_PATH, "");
+  return http.replace(TRAILING_SLASHES, "");
 })();
 
 /**
@@ -21,6 +27,7 @@ const HUB_URL = (() => {
 async function proxyToHub(request: Request, path: string): Promise<Response> {
   const url = new URL(request.url);
   const targetUrl = `${HUB_URL}/api/${path}${url.search}`;
+  const authorization = request.headers.get("authorization");
 
   try {
     const response = await fetch(targetUrl, {
@@ -28,9 +35,7 @@ async function proxyToHub(request: Request, path: string): Promise<Response> {
       headers: {
         "Content-Type": "application/json",
         // Forward relevant headers
-        ...(request.headers.get("authorization") && {
-          Authorization: request.headers.get("authorization")!,
-        }),
+        ...(authorization && { Authorization: authorization }),
       },
       body:
         request.method !== "GET" && request.method !== "HEAD"

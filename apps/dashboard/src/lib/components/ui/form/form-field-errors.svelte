@@ -1,5 +1,5 @@
 <script lang="ts">
-  import * as FormPrimitive from "formsnap";
+  import { FieldErrors, type FieldErrorsProps } from "formsnap";
   import { cn, type WithoutChild } from "$lib/utils.js";
 
   let {
@@ -8,13 +8,13 @@
     errorClasses,
     children: childrenProp,
     ...restProps
-  }: WithoutChild<FormPrimitive.FieldErrorsProps> & {
+  }: WithoutChild<FieldErrorsProps> & {
     errorClasses?: string | undefined | null;
   } = $props();
 </script>
 
-<FormPrimitive.FieldErrors
-  class={cn("text-sm font-medium text-destructive", className)}
+<FieldErrors
+  class={cn("font-medium text-destructive text-sm", className)}
   bind:ref
   {...restProps}
 >
@@ -22,9 +22,9 @@
     {#if childrenProp}
       {@render childrenProp({ errors, errorProps })}
     {:else}
-      {#each errors as error (error)}
-        <div {...errorProps} class={cn(errorClasses)}>{error}</div>
+      {#each errors as err (err)}
+        <div {...errorProps} class={cn(errorClasses)}>{err}</div>
       {/each}
     {/if}
   {/snippet}
-</FormPrimitive.FieldErrors>
+</FieldErrors>

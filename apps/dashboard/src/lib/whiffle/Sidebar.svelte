@@ -195,6 +195,7 @@
   <a class="brand" href="/session">
     <span aria-hidden="true" class="logo">
       <svg
+        aria-hidden="true"
         fill="none"
         stroke="currentColor"
         stroke-width="1.7"
@@ -269,9 +270,11 @@
 
     {#if whiffle.machines.length > 0}
       <div class="sec">Machines</div>
+      <!-- biome-ignore lint/a11y/useSemanticElements: ul/li's default list-style and inset margin would need new resets this pass has no way to verify visually; the div+role pairing is already accessible -->
       <div class="rows" role="list">
         {#each whiffle.machines as machine (machine.machineId)}
           <MachineMenu {machine}>
+            <!-- biome-ignore lint/a11y/useSemanticElements: see the .rows container above -->
             <div class="row machine" role="listitem">
               <OsMark class="os" os={machine.os} />
               <span class="nm">{machineLabel(machine.hostname)}</span>
@@ -308,10 +311,11 @@
         {/if}
       </p>
     {:else}
+      <!-- biome-ignore lint/a11y/useSemanticElements: see the Machines .rows container above -->
       <div class="rows" role="list">
         {#each orderedProjects as project (project.id)}
           {@const sessions = sessionsOf(project)}
-          {@const open = !collapsed.has(project.id)}
+          {@const expanded = !collapsed.has(project.id)}
           <FolderMenu
             cwd={project.cwd}
             name={project.name}
@@ -320,15 +324,16 @@
               newSession({ projectId: project.id, machineId: project.machineId, cwd: project.cwd })}
             {project}
           >
+            <!-- biome-ignore lint/a11y/useSemanticElements: see the Machines .rows container above -->
             <div class="folder" role="listitem">
               <button
-                aria-expanded={open}
+                aria-expanded={expanded}
                 class="folder-h"
                 onclick={() => toggle(project.id)}
                 type="button"
                 class:on={path === `/project/${project.id}`}
               >
-                <span aria-hidden="true" class="tw" class:open
+                <span aria-hidden="true" class="tw" class:open={expanded}
                   ><IconChevronRight /></span
                 >
                 <span class="mark m{markHue(project.cwd)}"
@@ -341,7 +346,7 @@
               </button>
             </div>
           </FolderMenu>
-          {#if open}
+          {#if expanded}
             <div class="sub">
               {#each sessions as row (row.id)}
                 {@const Sprite = sessionSprite(row.id)}
@@ -440,7 +445,9 @@
         {#if !showAllNR && notRunning.length > SIDEBAR_CAP}
           <button
             class="row dim"
-            onclick={() => (showAllNR = true)}
+            onclick={() => {
+              showAllNR = true;
+            }}
             type="button"
           >
             {notRunning.length - SIDEBAR_CAP}
@@ -464,7 +471,9 @@
 </div>
 
 <SpawnPanel
-  onclose={() => (spawnOpen = false)}
+  onclose={() => {
+    spawnOpen = false;
+  }}
   open={spawnOpen}
   prefill={spawnPrefill}
 />
@@ -710,6 +719,7 @@
   .tw.open {
     transform: rotate(90deg);
   }
+  /* biome-ignore lint/style/noDescendingSpecificity: .tw is the folder-toggle chevron, .nav-i .ic is the top-nav icon slot — they never target the same svg */
   .tw :global(svg) {
     width: 13px;
     height: 13px;
@@ -797,6 +807,7 @@
     background-image: var(--mark-overlay);
     background-color: var(--mark-1);
   }
+  /* biome-ignore lint/style/noDescendingSpecificity: .mark is the folder/session color chip, .nav-i .ic is the top-nav icon slot — they never target the same svg */
   .mark :global(svg) {
     width: 11px;
     height: 11px;

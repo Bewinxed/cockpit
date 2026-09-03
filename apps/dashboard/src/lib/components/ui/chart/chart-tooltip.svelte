@@ -9,7 +9,7 @@
     useChart,
   } from "./chart-utils.js";
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // biome-ignore lint/suspicious/noExplicitAny: default formatter must accept any tooltip value shape
   function defaultFormatter(value: any, _payload: TooltipPayload[]) {
     return `${value}`;
   }
@@ -36,7 +36,7 @@
     labelKey?: string;
     hideIndicator?: boolean;
     labelClassName?: string;
-    labelFormatter?: // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    labelFormatter?: // biome-ignore lint/suspicious/noExplicitAny: label formatter must accept any tooltip value shape
       | ((value: any, payload: TooltipPayload[]) => string | number | Snippet)
       | null;
     formatter?: Snippet<
@@ -70,6 +70,7 @@
     const tooltipData = chartCtx.tooltip.data;
 
     // Get the x-axis label value from the raw tooltip data (e.g. a Date or month string)
+    // biome-ignore lint/suspicious/noEqualsToNull: must catch both null and undefined tooltip data, not just null
     const dataLabel = tooltipData == null ? undefined : chartCtx.x(tooltipData);
 
     const key = labelKey ?? item?.label ?? item?.key ?? "value";

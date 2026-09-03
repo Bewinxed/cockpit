@@ -1,22 +1,22 @@
-import Root from "./input-group.svelte";
-import Addon from "./input-group-addon.svelte";
-import Button from "./input-group-button.svelte";
-import Input from "./input-group-input.svelte";
-import Text from "./input-group-text.svelte";
-import Textarea from "./input-group-textarea.svelte";
-
+// biome-ignore lint/performance/noBarrelFile: this is the shadcn-svelte component group's public re-export surface, not an accidental barrel
+export { default as Root, default as InputGroup } from "./input-group.svelte";
 export {
-  Addon,
-  Addon as InputGroupAddon,
-  Button,
-  Button as InputGroupButton,
-  Input,
-  Input as InputGroupInput,
-  Root,
-  //
-  Root as InputGroup,
-  Text,
-  Text as InputGroupText,
-  Textarea,
-  Textarea as InputGroupTextarea,
-};
+  default as Addon,
+  default as InputGroupAddon,
+} from "./input-group-addon.svelte";
+export {
+  default as Button,
+  default as InputGroupButton,
+} from "./input-group-button.svelte";
+export {
+  default as Input,
+  default as InputGroupInput,
+} from "./input-group-input.svelte";
+export {
+  default as Text,
+  default as InputGroupText,
+} from "./input-group-text.svelte";
+export {
+  default as Textarea,
+  default as InputGroupTextarea,
+} from "./input-group-textarea.svelte";

@@ -16,7 +16,7 @@
 </script>
 
 <CommandPrimitive.Root
-  class={cn("rounded-[var(--radius-control)] bg-popover p-1 text-popover-foreground flex size-full flex-col overflow-hidden", className)}
+  class={cn("flex size-full flex-col overflow-hidden rounded-[var(--radius-control)] bg-popover p-1 text-popover-foreground", className)}
   data-slot="command"
   bind:this={api}
   bind:ref

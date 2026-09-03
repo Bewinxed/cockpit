@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { SDKStatus } from "@whiffle/core";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Popover from "$lib/components/ui/popover";
   import IconWindow from "~icons/solar/layers-minimalistic-bold-duotone";
   import IconCompact from "~icons/solar/magic-stick-3-bold-duotone";
@@ -82,11 +83,23 @@
   );
 
   const shown = $derived(usage?.percentage ?? 0);
+
+  const meterTitle = $derived.by(() => {
+    if (compacting) {
+      return "Compacting the context window";
+    }
+    if (usage) {
+      return `Context: ${usage.totalTokens.toLocaleString()} of ${usage.maxTokens.toLocaleString()} tokens`;
+    }
+    return "Context usage";
+  });
 </script>
 
 <Popover.Root
   onOpenChange={(open) => {
-    if (open) onrefresh?.();
+    if (open) {
+      onrefresh?.();
+    }
   }}
 >
   <Popover.Trigger
@@ -99,11 +112,7 @@
            focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring
            transition-[background-color,color] duration-150 ease-out
            {compacting ? 'text-foreground' : TEXT[band]}"
-    title={compacting
-      ? 'Compacting the context window'
-      : usage
-        ? `Context: ${usage.totalTokens.toLocaleString()} of ${usage.maxTokens.toLocaleString()} tokens`
-        : 'Context usage'}
+    title={meterTitle}
   >
     {#if compacting}
       <IconCompact class="size-3.5 animate-pulse" />

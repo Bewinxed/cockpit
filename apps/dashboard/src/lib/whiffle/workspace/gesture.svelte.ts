@@ -53,14 +53,14 @@ const KEYFRAME_MS = 8;
 type Phase = "idle" | "tracking" | "decided";
 /** One point of the integrated settle: seconds since release, px, px/s. */
 interface Sample {
-    t: number;
-    x: number;
-    v: number 
+  t: number;
+  v: number;
+  x: number;
 }
 /** A pane in view: its element and its distance from the active tab. */
 interface Pane {
-    el: HTMLElement;
-    delta: number 
+  delta: number;
+  el: HTMLElement;
 }
 
 /**
@@ -88,7 +88,7 @@ function fenced(target: EventTarget | null, fence: HTMLElement): boolean {
   // computed style is what separates "this scrolls" from "this is cut off".
   let node: HTMLElement | null = target;
   while (node && node !== fence) {
-    const overflowX = getComputedStyle(node).overflowX;
+    const { overflowX } = getComputedStyle(node);
     if (
       (overflowX === "auto" || overflowX === "scroll") &&
       node.scrollWidth - node.clientWidth > 4
@@ -205,6 +205,7 @@ export function createSwipe(
     const now = at / 1000;
     const i = path.findIndex((sample) => sample.t >= now);
     if (i < 0) {
+      // biome-ignore lint/style/useAtIndex: path is non-empty here (checked above); .at(-1) would widen the return to Sample | undefined
       return path[path.length - 1];
     }
     if (i === 0) {
@@ -239,14 +240,17 @@ export function createSwipe(
   function spring(velocity: number) {
     stopSettle();
     path = integrate(offset, velocity);
+    // biome-ignore lint/style/useAtIndex: integrate() always returns at least one point; .at(-1) would widen this to undefined
     const duration = path[path.length - 1].t;
 
     const kept: Sample[] = [path[0]];
-    for (let i = 1; i < path.length - 1; i++) {
+    for (let i = 1; i < path.length - 1; i += 1) {
+      // biome-ignore lint/style/useAtIndex: kept is never empty (seeded above); .at(-1) would widen to undefined
       if ((path[i].t - kept[kept.length - 1].t) * 1000 >= KEYFRAME_MS) {
         kept.push(path[i]);
       }
     }
+    // biome-ignore lint/style/useAtIndex: integrate() always returns at least one point; .at(-1) would widen to undefined, and push() needs a Sample
     kept.push(path[path.length - 1]);
 
     animations = panes.map(({ el, delta }) =>
@@ -273,7 +277,9 @@ export function createSwipe(
           land();
         }
       },
-      () => {}
+      () => {
+        /* cancelled mid-settle — a newer spring() or stopSettle() already took over */
+      }
     );
   }
 
@@ -308,7 +314,8 @@ export function createSwipe(
     if (samples.length < 2) {
       return 0;
     }
-    const first = samples[0];
+    const [first] = samples;
+    // biome-ignore lint/style/useAtIndex: samples has >= 2 elements here (checked above); .at(-1) would widen to undefined
     const last = samples[samples.length - 1];
     const dt = last.t - first.t;
     return dt > 0 ? (last.x - first.x) / dt : 0;
@@ -318,7 +325,12 @@ export function createSwipe(
     const velocity = releaseVelocity();
     const { prev, next } = neighbours();
     const left = offset < 0;
-    const target = offset === 0 ? null : left ? next : prev;
+    let target: string | null;
+    if (offset === 0) {
+      target = null;
+    } else {
+      target = left ? next : prev;
+    }
     const far = width > 0 && Math.abs(offset) / width > COMMIT;
     const flicked = left ? velocity < -FLICK : velocity > FLICK;
 
@@ -407,7 +419,7 @@ export function createSwipe(
         if (fenced(event.target, node)) {
           return;
         }
-        const touch = event.touches[0];
+        const [touch] = event.touches;
         startX = touch.clientX;
         startY = touch.clientY;
         samples = [{ x: touch.clientX, t: performance.now() }];
@@ -415,6 +427,7 @@ export function createSwipe(
         hold();
       };
 
+      // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the one-finger tab-swipe touchmove handler — one state machine, not split in this pass
       const onMove = (event: TouchEvent) => {
         if (phase !== "tracking" && phase !== "decided") {
           return;
@@ -423,7 +436,7 @@ export function createSwipe(
           standDown();
           return;
         }
-        const touch = event.touches[0];
+        const [touch] = event.touches;
         const dx = touch.clientX - startX;
         const dy = touch.clientY - startY;
 
@@ -464,7 +477,11 @@ export function createSwipe(
           ? Math.max(-width, Math.min(width, base + dx))
           : base + resist(dx);
         paint(offset);
-        targetId = offset < 0 ? next : offset > 0 ? prev : null;
+        if (offset < 0) {
+          targetId = next;
+        } else {
+          targetId = offset > 0 ? prev : null;
+        }
         past = width > 0 && Math.abs(offset) / width > COMMIT;
       };
 

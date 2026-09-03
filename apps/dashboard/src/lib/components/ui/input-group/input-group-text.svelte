@@ -11,7 +11,7 @@
 </script>
 
 <span
-  class={cn("gap-2 text-sm text-muted-foreground [&_svg:not([class*='size-'])]:size-4 flex items-center [&_svg]:pointer-events-none", className)}
+  class={cn("flex items-center gap-2 text-muted-foreground text-sm [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none", className)}
   bind:this={ref}
   {...restProps}
 >

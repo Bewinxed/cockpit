@@ -11,7 +11,7 @@
 </script>
 
 <div
-  class={cn("gap-2 text-sm leading-snug font-medium underline-offset-4 line-clamp-1 flex w-fit items-center", className)}
+  class={cn("line-clamp-1 flex w-fit items-center gap-2 font-medium text-sm leading-snug underline-offset-4", className)}
   data-slot="item-title"
   bind:this={ref}
   {...restProps}

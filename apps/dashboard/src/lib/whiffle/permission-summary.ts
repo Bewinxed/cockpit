@@ -51,7 +51,7 @@ const RULE_LABEL_MAX = 30;
 /** One suggestion as a rule, written the way the SDK writes them: `Bash(git status:*)`. */
 function ruleText(update: PermissionUpdate): string | null {
   if ("rules" in update) {
-    const rule = update.rules[0];
+    const [rule] = update.rules;
     if (!rule) {
       return null;
     }

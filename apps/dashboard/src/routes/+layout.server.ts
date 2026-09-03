@@ -20,6 +20,8 @@ const RAIL_DEFAULT = 340;
  */
 const WORKSPACE_KEY = "whiffle-workspace";
 
+const SESSION_PATH = /^\/session\/([^/]+)/;
+
 /**
  * Whether this browser is a phone, for the session surface's first paint.
  * The deck-or-grid decision is a media query on the client, which the server
@@ -97,6 +99,7 @@ function parse(raw: string | null | undefined): WorkspaceV1 | null {
   }
   try {
     const held = JSON.parse(raw) as WorkspaceV1;
+    // biome-ignore lint/suspicious/noUnnecessaryConditions: JSON.parse can return null at runtime (e.g. stored literal "null") despite the WorkspaceV1 cast
     if (held?.v !== 1 || !validate(held.root)) {
       return null;
     }
@@ -129,7 +132,7 @@ const blank = (): WorkspaceV1 => ({
 
 /** The conversation the URL names, or '' on the board and everywhere else. */
 function currentId(pathname: string): string {
-  const match = /^\/session\/([^/]+)/.exec(pathname);
+  const match = SESSION_PATH.exec(pathname);
   return match ? decodeURIComponent(match[1]) : "";
 }
 
@@ -139,6 +142,7 @@ export const load: LayoutServerLoad = async ({
   request,
   url,
   untrack,
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: first-paint reconciliation of the workspace cookie against the URL — one pass, not split in this pass
 }) => {
   const narrow = narrowOf(cookies.get(NARROW_KEY), request.headers);
   const stored = Number(cookies.get(RAIL_KEY));
@@ -158,9 +162,10 @@ export const load: LayoutServerLoad = async ({
   if (urlId) {
     workspace ??= blank();
     const leaves = leavesOf(workspace.root);
+    const { focusedLeaf } = workspace;
     const leaf =
       leaves.find((l) => l.tabs.includes(urlId)) ??
-      leaves.find((l) => l.id === workspace!.focusedLeaf) ??
+      leaves.find((l) => l.id === focusedLeaf) ??
       leaves[0];
     if (!leaf.tabs.includes(urlId)) {
       leaf.tabs.push(urlId);
@@ -178,8 +183,8 @@ export const load: LayoutServerLoad = async ({
     }
   } else if (pathname === "/session" && workspace) {
     const leaves = leavesOf(workspace.root);
-    const leaf =
-      leaves.find((l) => l.id === workspace!.focusedLeaf) ?? leaves[0];
+    const { focusedLeaf } = workspace;
+    const leaf = leaves.find((l) => l.id === focusedLeaf) ?? leaves[0];
     leaf.active = null;
   }
 
@@ -234,6 +239,7 @@ export const load: LayoutServerLoad = async ({
         }),
       });
       if (response.ok) {
+        // biome-ignore lint/performance/noAwaitInLoops: the await resolves the iterable once, before the loop starts — the loop body itself never awaits
         for (const { id, title } of (await response.json()) as {
           id: string;
           title: string | null;

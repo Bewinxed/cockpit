@@ -41,7 +41,7 @@
 
 {#if hasContent}
   <div
-    class={cn("text-sm text-destructive font-normal", className)}
+    class={cn("font-normal text-destructive text-sm", className)}
     data-slot="field-error"
     role="alert"
     bind:this={ref}
@@ -53,9 +53,9 @@
       {singleErrorMessage}
     {:else if isMultipleErrors}
       <ul class="ml-4 flex list-disc flex-col gap-1">
-        {#each errors ?? [] as error, index (index)}
-          {#if error?.message}
-            <li>{error.message}</li>
+        {#each errors ?? [] as err, index (index)}
+          {#if err?.message}
+            <li>{err.message}</li>
           {/if}
         {/each}
       </ul>

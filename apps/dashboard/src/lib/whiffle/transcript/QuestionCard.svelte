@@ -36,7 +36,10 @@
 
   const chosen = (question: string): string[] => {
     const value = answers[question];
-    return Array.isArray(value) ? value : value ? [value] : [];
+    if (Array.isArray(value)) {
+      return value;
+    }
+    return value ? [value] : [];
   };
   const isSelected = (question: string, label: string): boolean =>
     chosen(question).includes(label);
@@ -170,6 +173,7 @@
     background: var(--brand-solid);
     color: var(--on-brand);
   }
+  /* biome-ignore lint/style/noDescendingSpecificity: cascade order is load-bearing — .kc's base rules must lose to .opt.sel .kc above them. */
   .kc {
     display: inline-grid;
     place-items: center;

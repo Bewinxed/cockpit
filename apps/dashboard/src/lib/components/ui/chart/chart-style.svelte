@@ -6,31 +6,31 @@
   const colorConfig = $derived(
     config
       ? Object.entries(config).filter(
-          ([, config]) => config.theme || config.color
+          ([, entryConfig]) => entryConfig.theme || entryConfig.color
         )
       : null
   );
 
   const themeContents = $derived.by(() => {
-    if (!(colorConfig && colorConfig.length)) {
+    if (!colorConfig?.length) {
       return;
     }
 
-    const themeContents = [];
+    const rules: string[] = [];
     for (const [_theme, prefix] of Object.entries(THEMES)) {
       let content = `${prefix} [data-chart=${id}] {\n`;
       const color = colorConfig.map(([key, itemConfig]) => {
         const theme = _theme as keyof typeof itemConfig.theme;
-        const color = itemConfig.theme?.[theme] || itemConfig.color;
-        return color ? `\t--color-${key}: ${color};` : null;
+        const resolvedColor = itemConfig.theme?.[theme] || itemConfig.color;
+        return resolvedColor ? `\t--color-${key}: ${resolvedColor};` : null;
       });
 
       content += `${color.join("\n")}\n}`;
 
-      themeContents.push(content);
+      rules.push(content);
     }
 
-    return themeContents.join("\n");
+    return rules.join("\n");
   });
 </script>
 

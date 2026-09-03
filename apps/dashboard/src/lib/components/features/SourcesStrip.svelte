@@ -10,6 +10,7 @@
    * there is no empty state: an answer with nothing to cite renders nothing.
    */
   import { fly } from "svelte/transition";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for importing a component group
   import * as Collapsible from "$lib/components/ui/collapsible";
   import { IconChevronRight } from "$lib/icons";
   import { faviconFor, type SourceRef } from "$lib/whiffle/sources";
@@ -44,11 +45,14 @@
         {source.host.charAt(0)}
       </span>
     {:else}
+      <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: onerror is an image-load callback, not a user interaction — falls back to the host initial when the favicon 404s -->
       <img
         alt=""
         class="size-full object-cover"
         loading="lazy"
-        onerror={() => (failed[source.host] = true)}
+        onerror={() => {
+          failed[source.host] = true;
+        }}
         src={faviconFor(source.host)}
       >
     {/if}

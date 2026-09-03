@@ -33,5 +33,6 @@
 {#if child}
   {@render child({ props: mergedProps })}
 {:else}
+  <!-- biome-ignore lint/a11y/useValidAnchor: href comes from restProps, supplied by the consumer of this generic wrapper -->
   <a bind:this={ref} {...mergedProps}> {@render children?.()} </a>
 {/if}

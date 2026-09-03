@@ -2,6 +2,7 @@
   import type { AuthState } from "@whiffle/core";
   import { toast } from "svelte-sonner";
   import { Button } from "$lib/components/ui/button";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Dialog from "$lib/components/ui/dialog";
   import { Input } from "$lib/components/ui/input";
   /**
@@ -22,7 +23,7 @@
 
   let {
     machine,
-    open = $bindable(false),
+    open: dialogOpen = $bindable(false),
   }: { machine: Machine; open?: boolean } = $props();
 
   let password = $state("");
@@ -51,7 +52,7 @@
       );
       // Cleared the moment it has been used, whatever the answer was.
       password = "";
-      open = false;
+      dialogOpen = false;
       toast.success(`${machine.hostname} ${SAID[state] ?? "unlocked"}.`);
     } catch (error) {
       failed = error instanceof Error ? error.message : String(error);
@@ -68,7 +69,7 @@
       failed = null;
     }
   }}
-  bind:open
+  bind:open={dialogOpen}
 >
   <Dialog.Content class="sm:max-w-md">
     <Dialog.Header>
@@ -106,7 +107,9 @@
       <div class="flex justify-end gap-[var(--space-2)]">
         <Button
           disabled={busy}
-          onclick={() => (open = false)}
+          onclick={() => {
+            dialogOpen = false;
+          }}
           type="button"
           variant="outline"
         >

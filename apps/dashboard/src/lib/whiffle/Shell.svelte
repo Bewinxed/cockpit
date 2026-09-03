@@ -13,6 +13,7 @@
   import { afterNavigate } from "$app/navigation";
   import { page } from "$app/state";
   import { Button } from "$lib/components/ui/button";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Sheet from "$lib/components/ui/sheet";
   import ThemeSwitcher from "$lib/components/ui/ThemeSwitcher.svelte";
   import { IconSearch, IconShield, IconSidebar } from "$lib/icons";
@@ -75,6 +76,7 @@
     document.documentElement.style.setProperty("--rail-w", `${railWidth}px`);
     try {
       localStorage.setItem(RAIL_KEY, String(railWidth));
+      // biome-ignore lint/suspicious/noDocumentCookie: +layout.server.ts reads this same cookie for the SSR-resolved rail width; the Cookie Store API is unavailable in every browser this app supports
       document.cookie = `${RAIL_KEY}=${railWidth};path=/;max-age=31536000;samesite=lax`;
     } catch {
       // A browser that will not store just starts at the default next time.
@@ -202,7 +204,9 @@
   const CONNECT_GRACE = 4000;
   let graceOver = $state(false);
   onMount(() => {
-    const timer = setTimeout(() => (graceOver = true), CONNECT_GRACE);
+    const timer = setTimeout(() => {
+      graceOver = true;
+    }, CONNECT_GRACE);
     return () => clearTimeout(timer);
   });
   const showBanner = $derived.by(() => {
@@ -228,7 +232,9 @@
     if (whiffle.status === "connected") {
       return;
     }
-    const timer = setInterval(() => (now = Date.now()), 250);
+    const timer = setInterval(() => {
+      now = Date.now();
+    }, 250);
     return () => clearInterval(timer);
   });
   const retryIn = $derived(
@@ -275,7 +281,9 @@
       <button
         aria-label="Open navigation"
         class="burger min-[900px]:hidden"
-        onclick={() => (railOpen = true)}
+        onclick={() => {
+          railOpen = true;
+        }}
         type="button"
       >
         <IconSidebar />
@@ -325,7 +333,9 @@
              The old phone thumb bar duplicated it; that bar is gone. -->
         <Button
           class="jump"
-          onclick={() => (jumpOpen = true)}
+          onclick={() => {
+            jumpOpen = true;
+          }}
           size="sm"
           title="Jump to session (⌘K)"
           variant="outline"
@@ -345,7 +355,9 @@
           </a>
         {/if}
         <AssistantOrb
-          onclick={() => (assistantOpen = !assistantOpen)}
+          onclick={() => {
+            assistantOpen = !assistantOpen;
+          }}
           open={assistantOpen}
           bind:ref={orbEl}
         />

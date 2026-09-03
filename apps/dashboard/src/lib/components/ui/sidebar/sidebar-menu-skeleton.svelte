@@ -18,7 +18,7 @@
 </script>
 
 <div
-  class={cn("h-8 gap-2 rounded-[var(--radius-control)] px-2 flex items-center", className)}
+  class={cn("flex h-8 items-center gap-2 rounded-[var(--radius-control)] px-2", className)}
   data-sidebar="menu-skeleton"
   data-slot="sidebar-menu-skeleton"
   bind:this={ref}

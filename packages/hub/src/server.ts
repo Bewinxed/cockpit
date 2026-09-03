@@ -219,7 +219,11 @@ const ndjsonNewestFirst = (rows: unknown[]): ReadableStream<Uint8Array> => {
         return;
       }
       let chunk = "";
-      for (let n = 0; n < TRANSCRIPT_FLUSH && cursor >= 0; n++, cursor--) {
+      for (
+        let n = 0;
+        n < TRANSCRIPT_FLUSH && cursor >= 0;
+        n += 1, cursor -= 1
+      ) {
         chunk += `${JSON.stringify(rows[cursor])}\n`;
       }
       controller.enqueue(encoder.encode(chunk));
@@ -336,7 +340,8 @@ const renderDelegateAsk = (payload: unknown): string => {
   const summary =
     input === undefined || input === null
       ? ""
-      : typeof input === "string"
+      : // biome-ignore lint/style/noNestedTernary: input is either a string or an arbitrary value to stringify — two mutually exclusive shapes, not a simplifiable condition.
+        typeof input === "string"
         ? input
         : JSON.stringify(input);
   return `${toolName ?? "a tool"}${summary ? ` — ${summary}` : ""}`;
@@ -590,7 +595,7 @@ const peekBuild = (payload: unknown): BuildInfo | undefined => {
   if (typeof payload !== "object" || payload === null) {
     return undefined;
   }
-  const build = (payload as { build?: unknown }).build;
+  const { build } = payload as { build?: unknown };
   if (typeof build !== "object" || build === null) {
     return undefined;
   }
@@ -620,11 +625,16 @@ const peekDeploy = (payload: unknown): DeployInfo | undefined => {
   if (typeof payload !== "object" || payload === null) {
     return undefined;
   }
-  const deploy = (payload as { deploy?: unknown }).deploy;
+  const { deploy } = payload as { deploy?: unknown };
   if (typeof deploy !== "object" || deploy === null) {
     return undefined;
   }
-  const { kind, detail, updated, failure } = deploy as Partial<DeployInfo>;
+  const {
+    kind,
+    detail,
+    updated,
+    failure: deployFailure,
+  } = deploy as Partial<DeployInfo>;
   if (typeof kind !== "string" || !DEPLOY_KINDS.includes(kind as DeployKind)) {
     return undefined;
   }
@@ -632,7 +642,7 @@ const peekDeploy = (payload: unknown): DeployInfo | undefined => {
     kind: kind as DeployKind,
     ...(typeof detail === "string" ? { detail } : {}),
     ...(updated === true ? { updated: true } : {}),
-    ...(typeof failure === "string" ? { failure } : {}),
+    ...(typeof deployFailure === "string" ? { failure: deployFailure } : {}),
   };
 };
 
@@ -685,7 +695,7 @@ const peekInstall = (payload: unknown): string | undefined => {
   if (peek(payload, "method") !== "installTool") {
     return undefined;
   }
-  const args = (payload as { args?: unknown }).args;
+  const { args } = payload as { args?: unknown };
   const id = Array.isArray(args) ? args[0] : undefined;
   return typeof id === "string" ? id : undefined;
 };
@@ -697,7 +707,7 @@ const peekAnswer = (
   if (peek(payload, "method") !== RESOLVE_PERMISSION) {
     return undefined;
   }
-  const args = (payload as { args?: unknown }).args;
+  const { args } = payload as { args?: unknown };
   if (!Array.isArray(args) || typeof args[0] !== "string") {
     return undefined;
   }
@@ -724,7 +734,7 @@ const peekToolStatus = (payload: unknown): ToolStatus | undefined => {
   if (typeof payload !== "object" || payload === null) {
     return undefined;
   }
-  const result = (payload as { result?: unknown }).result;
+  const { result } = payload as { result?: unknown };
   return isToolStatus(result) ? result : undefined;
 };
 
@@ -743,7 +753,7 @@ const peekFleetReport = (payload: unknown): FleetSyncReport | undefined => {
   if (typeof payload !== "object" || payload === null) {
     return undefined;
   }
-  const result = (payload as { result?: unknown }).result;
+  const { result } = payload as { result?: unknown };
   return isFleetReport(result) ? result : undefined;
 };
 
@@ -873,7 +883,7 @@ const peekQueue = (
   if (typeof payload !== "object" || payload === null) {
     return undefined;
   }
-  const message = (payload as { message?: unknown }).message;
+  const { message } = payload as { message?: unknown };
   if (typeof message !== "object" || message === null) {
     return undefined;
   }
@@ -912,7 +922,7 @@ const peekInit = (
   if (typeof payload !== "object" || payload === null) {
     return undefined;
   }
-  const message = (payload as { message?: unknown }).message;
+  const { message } = payload as { message?: unknown };
   if (typeof message !== "object" || message === null) {
     return undefined;
   }
@@ -950,7 +960,8 @@ const userTurnText = (message: unknown): string | undefined => {
   const text =
     typeof content === "string"
       ? content
-      : Array.isArray(content)
+      : // biome-ignore lint/style/noNestedTernary: content is either a block array or absent — two mutually exclusive shapes on the wire, not a simplifiable condition.
+        Array.isArray(content)
         ? content
             .filter((block): block is { type: "text"; text: string } => {
               const b = block as { type?: unknown; text?: unknown };
@@ -990,9 +1001,9 @@ const peekPeer = (payload: unknown): string | undefined => {
   if (typeof payload !== "object" || payload === null) {
     return undefined;
   }
-  const message = (
-    payload as { message?: { origin?: { kind?: string; name?: string } } }
-  ).message;
+  const { message } = payload as {
+    message?: { origin?: { kind?: string; name?: string } };
+  };
   if (message?.origin?.kind !== "peer") {
     return undefined;
   }
@@ -1011,7 +1022,7 @@ const isQuerySend = (payload: unknown): boolean => {
   if (typeof payload !== "object" || payload === null) {
     return false;
   }
-  const message = (payload as { message?: { shouldQuery?: unknown } }).message;
+  const { message } = payload as { message?: { shouldQuery?: unknown } };
   return message?.shouldQuery !== false;
 };
 
@@ -1079,6 +1090,7 @@ export const createServer = ({
    * itself makes.
    */
   let hubBuild: BuildInfo | undefined;
+  // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — boot must not stall on this, and `hubBuild` is read as still-undefined until it resolves.
   void buildInfo().then((info) => {
     hubBuild = info;
   });
@@ -1189,6 +1201,7 @@ export const createServer = ({
       if (delegate?.parentInstanceId !== parentInstanceId) {
         continue;
       }
+      // biome-ignore lint/performance/noDelete: an undefined assignment would leave the key present on `payload`, which is broadcast verbatim — the field must be genuinely absent, not present-but-undefined.
       delete payload.routedTo;
       registry.broadcast(parked);
       telegram?.onAsk(parked);
@@ -1425,13 +1438,14 @@ export const createServer = ({
    * again, and a stale row on disk claiming a transcript lives somewhere it
    * no longer does would be worse than the question being asked twice.
    */
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: resolves a session's location from the cache, the stored row, or a live ask across every machine and harness in one place; splitting it would scatter the fallback order this depends on.
   const locateSession = async (id: string): Promise<SessionLocation | null> => {
     const known = locations.get(id);
     if (known !== undefined) {
       return known;
     }
 
-    const row = db.getInstancesByIds([id])[0];
+    const [row] = db.getInstancesByIds([id]);
     if (row?.machineId) {
       const found: SessionLocation = {
         id,
@@ -1457,6 +1471,7 @@ export const createServer = ({
       // One machine, every adapter at once: the asks are independent reads and
       // the machine answers them concurrently, so the wait is the slowest one
       // rather than their sum.
+      // biome-ignore lint/performance/noAwaitInLoops: machines are asked one at a time and the loop returns on the first hit — a session found on the second machine must not race an ask still in flight to the first.
       const answers = await Promise.all(
         kinds.map(async (harness) => {
           const answer = await callAgent(
@@ -1531,6 +1546,7 @@ export const createServer = ({
    * promotes it. That single distinction is most of the difference between a
    * board that reports 178 live sessions and one that reports 42.
    */
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: builds every field of a restore's spawn payload (model, effort, permission mode, delegate wiring) from the stored row in one place; splitting it would scatter the fallback order this depends on.
   const restore = (agent: HubSocket, row: InstanceRow): void => {
     const payload: SpawnPayload = {
       instanceId: row.id,
@@ -1752,6 +1768,7 @@ export const createServer = ({
    * harness summary is a different string, and a row named with one would
    * disagree with the strip it is meant to agree with.
    */
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: matches the daemon's session list against unnamed rows and picks the naming source per harness in one place; splitting it would scatter the fallback order this depends on.
   const nameStoredSessions = async (machineId: string): Promise<void> => {
     const unnamed = db.unnamedSessions(machineId);
     if (unnamed.length === 0) {
@@ -1780,6 +1797,7 @@ export const createServer = ({
     // from the given title is not a mismatch with what the client would show.
     const names = new Map<string, string>();
     for (const info of answer.result as NeutralSessionInfo[]) {
+      // biome-ignore lint/suspicious/noUnnecessaryConditions: `answer.result` is an untrusted control reply cast to this type, not a value TS actually proved shaped — a malformed entry can still be null at runtime.
       if (typeof info?.sessionId !== "string") {
         continue;
       }
@@ -2264,6 +2282,7 @@ export const createServer = ({
     }
 
     for (const file of files) {
+      // biome-ignore lint/performance/noAwaitInLoops: each write is a control round-trip to the same machine over one socket; concurrent writes would race the daemon's own file handling.
       const answer = await writeMachineFile(
         machineId,
         agent,
@@ -2286,6 +2305,7 @@ export const createServer = ({
   /** A definition changed: every machine that is online takes it now. */
   const fanOutAgents = (): void => {
     for (const machineId of registry.machineIds()) {
+      // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — each machine's push runs independently and nothing here waits on any of them.
       void pushAgents(machineId);
     }
   };
@@ -2305,6 +2325,7 @@ export const createServer = ({
    * cannot be resolved keeps its sentence on the row and is left to the old
    * path, which is the only one that still needs a machine to reach github.
    */
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: groups ids by marketplace, resolves each group, and stores every outcome (resolved or errored) in one place; splitting it would scatter the per-marketplace fallback this depends on.
   const resolvePlugins = async (ids: readonly string[]): Promise<void> => {
     if (ids.length === 0) {
       return;
@@ -2333,6 +2354,7 @@ export const createServer = ({
         }
         continue;
       }
+      // biome-ignore lint/performance/noAwaitInLoops: one marketplace's plugins are resolved at a time, keeping each marketplace's fetch and its writes to `db.putPluginPayload` grouped together.
       const resolved = await resolveMarketplacePlugins(
         marketplace,
         source,
@@ -2358,6 +2380,7 @@ export const createServer = ({
   // been attempted yet. Done once at boot rather than on every sync: a resolved
   // plugin is bytes the fleet already agrees on, and re-fetching it would be a
   // download per restart for a file nobody asked to change.
+  // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — boot must not stall on network fetches for plugins that were already unresolved.
   void resolvePlugins(db.unresolvedPlugins());
 
   const fanOutFleet = (): void => {
@@ -2389,9 +2412,9 @@ export const createServer = ({
     // one. Never required — a legacy send or an older dashboard build logs
     // with it absent — but it is the one thing that makes "a send landed on
     // the wrong session" provable after the fact instead of merely suspected.
-    const provenance = (
-      message.payload as { provenance?: { clientId?: string } }
-    )?.provenance;
+    const { provenance } = message.payload as {
+      provenance?: { clientId?: string };
+    };
     const from = peekPeer(message.payload);
     const forwarded = forward(message, dashboard);
     // Logged after the guard, not before: a message the guard drops (no agent
@@ -2677,6 +2700,7 @@ export const createServer = ({
           );
 
           return await Promise.all(
+            // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: resolves every field of one supervisor answer (title, model, harness, whether it needs asking again) in one place; splitting it would scatter the fallback order this route depends on.
             [...asked.values()].map(async (ask) => {
               const row = rows.get(ask.id);
               const named = row?.title ?? row?.derivedTitle;
@@ -2726,8 +2750,8 @@ export const createServer = ({
       )
       // Where a conversation lives, for a client that wants the answer without
       // the transcript — see `locateSession` for the resolution order.
-      .get("/api/instances/:id/location", async ({ params }) => {
-        const id = params.id;
+      .get("/api/instances/:id/location", ({ params }) => {
+        const { id } = params;
         if (!id) {
           return null;
         }
@@ -2759,6 +2783,7 @@ export const createServer = ({
             harness: t.Optional(t.String()),
           }),
         },
+        // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: resolves the session's machine/cwd/harness from the query, the row, or a live locate in one place; splitting it would scatter the fallback order this route depends on.
         async ({ params, query, status }) => {
           const row = query.machine
             ? undefined
@@ -2776,10 +2801,10 @@ export const createServer = ({
             if (!where) {
               return status(404, `no session ${params.id}`);
             }
-            machineId = where.machineId;
+            ({ machineId } = where);
             sessionKey = where.sessionId;
             cwd = where.cwd || undefined;
-            harness = where.harness;
+            ({ harness } = where);
           }
 
           const answer = await callAgent(
@@ -3015,7 +3040,7 @@ export const createServer = ({
       .post("/api/rules", { body: ruleBody }, ({ body, status }) => {
         const draft = body as unknown as RuleDraft;
         const wrong = ruleProblem(draft);
-        const first = Object.values(wrong)[0];
+        const [first] = Object.values(wrong);
         if (first) {
           return status(400, first);
         }
@@ -3032,7 +3057,7 @@ export const createServer = ({
       .put("/api/rules/:id", { body: ruleBody }, ({ params, body, status }) => {
         const draft = body as unknown as RuleDraft;
         const wrong = ruleProblem(draft);
-        const first = Object.values(wrong)[0];
+        const [first] = Object.values(wrong);
         if (first) {
           return status(400, first);
         }
@@ -3118,14 +3143,14 @@ export const createServer = ({
               "Say what you actually did about it — an acknowledgement of under ten characters is not one."
             );
           }
-          const pending = db.pendingRuleStates(body.instanceId);
-          if (pending.length === 0) {
+          const outstanding = db.pendingRuleStates(body.instanceId);
+          if (outstanding.length === 0) {
             return status(
               400,
               "There is nothing outstanding for this session."
             );
           }
-          const settled = pending
+          const settled = outstanding
             .map((state) => db.ackRule(state.ruleId, body.instanceId, note))
             .filter((state) => state !== undefined);
           return { acknowledged: settled.length };
@@ -3160,7 +3185,6 @@ export const createServer = ({
         const model =
           dbConfig?.model || readEnv(WHIFFLE_ENV.supervisorModel) || null;
         const enabled = dbConfig?.enabled ?? false;
-        const configured = !!(baseUrl && model);
 
         const config = {
           enabled,
@@ -3168,11 +3192,11 @@ export const createServer = ({
           model,
         };
 
-        if (!configured) {
+        if (!(baseUrl && model)) {
           return { config, status: { configured: false } };
         }
 
-        const probeResult = await probe(baseUrl!, model!);
+        const probeResult = await probe(baseUrl, model);
         return {
           config,
           status: {
@@ -3267,6 +3291,7 @@ export const createServer = ({
           // reaches them already carries the files rather than a name to go and
           // resolve. A fetch that fails leaves its sentence on the row and the
           // fan-out still happens — the fleet is not held up by one plugin.
+          // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — the route returns immediately and the resolve/fan-out continues after the response is sent.
           void resolvePlugins([params.id]).finally(() => fanOutFleet());
           return plugin;
         }
@@ -3310,6 +3335,7 @@ export const createServer = ({
             cwd: t.Optional(t.String()),
           }),
         },
+        // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: resolves a skill from any of its source shapes (url/npm/repo/fromMachine) in one place; splitting it would scatter the validation order this route depends on.
         async ({ params, body, status }) => {
           if (!SKILL_NAME.test(params.name)) {
             return status(400, `${params.name} is not a usable skill name`);
@@ -3385,10 +3411,11 @@ export const createServer = ({
         }
       )
       // The same source, fetched again — for a skill whose repo has moved on.
+      // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: resolves and re-diffs every field of a refreshed skill in one place; splitting it would scatter the validation order this route depends on.
       .post("/api/fleet/skills/:name/refresh", async ({ params, status }) => {
         const stored = db
           .listSkills()
-          .find((skill) => skill.name === params.name);
+          .find((entry) => entry.name === params.name);
         if (!stored) {
           return status(404, `no skill ${params.name}`);
         }
@@ -3623,6 +3650,7 @@ export const createServer = ({
             path: t.Optional(t.String()),
           }),
         },
+        // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: validates and merges every field of an adopted memory doc in one place; splitting it would scatter the validation order this route depends on.
         async ({ body, status }) => {
           const read = await readMachineMemory(body.machineId);
           if (!read.ok) {
@@ -3642,7 +3670,7 @@ export const createServer = ({
             }
 
             const theirs = (read.copy.docs ?? []).find(
-              (doc) => doc.path === body.path
+              (entry) => entry.path === body.path
             );
             if (!theirs) {
               return status(
@@ -3702,6 +3730,7 @@ export const createServer = ({
             path: t.Optional(t.String()),
           }),
         },
+        // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: validates and pushes every field of a memory write in one place; splitting it would scatter the validation order this route depends on.
         async ({ body, status }) => {
           const agent = registry.agent(body.machineId);
           if (!agent) {
@@ -3845,7 +3874,7 @@ export const createServer = ({
           const { expectedHash, ...rest } = body;
           const draft = rest as unknown as HookDraft;
           const wrong = hookProblem(draft);
-          const first = Object.values(wrong)[0];
+          const [first] = Object.values(wrong);
           if (first) {
             return status(400, first);
           }
@@ -4001,6 +4030,7 @@ export const createServer = ({
       // opencode plugin (and anything else outside the WebSocket tunnel) forwards
       // its spawns and sends through here, and the hub relays them like the
       // dashboard's own. Fire-and-forget — the tool has nothing to wait on.
+      // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: validates and relays every field of a spawn request in one place; splitting it would scatter the validation order this route depends on.
       .post("/api/relay/spawn", { body: t.Any() }, ({ body, status }) => {
         const machineId = peek(body, "machineId");
         const instanceId = peek(body, "instanceId");
@@ -4061,6 +4091,7 @@ export const createServer = ({
         // `type` is a relay-only convenience: SpawnPayload itself has no such
         // field, and it must not ride along into the envelope the daemon spawns
         // from — it already did its one job resolving harness/model/etc above.
+        // biome-ignore lint/performance/noDelete: an undefined assignment would leave the key present on `body`, which is forwarded to the daemon verbatim — the field must be genuinely absent.
         delete (body as Record<string, unknown>).type;
 
         const parent = peekParent(body);
@@ -4154,6 +4185,7 @@ export const createServer = ({
             console.warn(
               `[hub] downgraded urgent send to ${instanceId}: not its delegate`
             );
+            // biome-ignore lint/performance/noDelete: an undefined assignment would leave the key present, and the check above reads `.urgent === true` — a present-but-undefined value must still read as not urgent, but the field must not ride along into what gets relayed.
             delete (body as Record<string, unknown>).urgent;
           }
         }
@@ -4256,7 +4288,7 @@ export const createServer = ({
         if (!agent) {
           return status(404, `machine ${row.machineId} is not connected`);
         }
-        const result = (body as { result?: unknown }).result;
+        const { result } = body as { result?: unknown };
         agent.send({
           verb: "control",
           machineId: row.machineId,
@@ -4420,6 +4452,7 @@ export const createServer = ({
         };
       })
       .ws("/ws", {
+        // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: dispatches every agent socket verb (register, frames, pulse, control_result, etc.) through one handler; splitting it would scatter the ordering guarantees across several functions.
         message(ws, message) {
           if (!isEnvelope(message)) {
             console.warn("[hub] dropped malformed frame", message);
@@ -4507,9 +4540,11 @@ export const createServer = ({
               sendFleetSync(message.machineId, ws);
               // After `settleInstances`, so the rows this reads the machine's home
               // out of are the ones the returning daemon just accounted for.
+              // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — nothing here is waiting on it, and register must not stall on it.
               void pushAgents(message.machineId);
               // And what its stored conversations are called, for the ones nobody
               // has ever named — off the catalog the daemon just read anyway.
+              // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — nothing here is waiting on it, and register must not stall on it.
               void nameStoredSessions(message.machineId);
               // The ledger the returning agent reattaches against: what this hub
               // has already ingested of each session the daemon is about to hold.
@@ -4620,6 +4655,7 @@ export const createServer = ({
                   console.warn(
                     `[hub] downgraded urgent send to ${message.instanceId}: not its delegate`
                   );
+                  // biome-ignore lint/performance/noDelete: an undefined assignment would leave the key present, and the check above reads `.urgent === true` — a present-but-undefined value must still read as not urgent, but the field must not ride along into what gets relayed.
                   delete (message.payload as Record<string, unknown>).urgent;
                 }
               }
@@ -4805,8 +4841,7 @@ export const createServer = ({
               // in its first frame instead of a blank row. Relayed unchanged below
               // — this is a copy, not an interception.
               if (kind === "pulse" && message.instanceId) {
-                const pulse = (message.payload as { pulse?: SessionPulse })
-                  .pulse;
+                const { pulse } = message.payload as { pulse?: SessionPulse };
                 if (pulse) {
                   pulses.set(message.instanceId, pulse);
                 }
@@ -4898,7 +4933,7 @@ export const createServer = ({
                       // A failed turn's report carries the harness's own error
                       // words — "(no text)" once stood in for a 403 that was
                       // sitting right in the result frame.
-                      const errors = (neutral as { errors?: string[] }).errors;
+                      const { errors } = neutral as { errors?: string[] };
                       const body =
                         text ||
                         (errors?.length
@@ -5134,6 +5169,7 @@ export const createServer = ({
           // is a rail that fills before the REST snapshot lands.
           ws.send(instancesFrame(""));
         },
+        // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: dispatches every dashboard socket message shape (stream protocol, subscribe, control, send, ack) through one handler; splitting it would scatter the ordering guarantees across several functions.
         message(ws, message) {
           // The Ledger Protocol's own shapes are not envelopes and must be read
           // before the envelope check, which would otherwise log them as junk.

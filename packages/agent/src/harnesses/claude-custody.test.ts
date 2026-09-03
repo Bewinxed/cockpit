@@ -29,7 +29,7 @@ const fixture = readFileSync(
   "utf8"
 )
   .split("\n")
-  .filter((line) => line.trim() && !line.startsWith("#"));
+  .filter((entry) => entry.trim() && !entry.startsWith("#"));
 
 const line = (marker: string): string => {
   const found = fixture.find((entry) => entry.includes(marker));
@@ -52,24 +52,26 @@ interface Recorded {
 }
 
 const recorder = (): Recorded => {
-  const rec: Partial<Recorded> = {
-    frames: [],
-    permissions: [],
-    sessions: [],
-    busy: [],
-  };
-  rec.ctx = {
+  const frames: NeutralMessage[] = [];
+  const permissions: Recorded["permissions"] = [];
+  const sessions: string[] = [];
+  const busy: boolean[] = [];
+  const ctx: HarnessContext = {
     instanceId: "inst-1",
     cwd: "/tmp",
-    frame: (message) => rec.frames!.push(message),
+    frame: (message) => frames.push(message),
     permission: (request) =>
-      rec.permissions!.push(request as Recorded["permissions"][number]),
-    busy: (active) => rec.busy!.push(active),
-    session: (sessionId) => rec.sessions!.push(sessionId),
-    failed: () => {},
-    emit: () => {},
+      permissions.push(request as Recorded["permissions"][number]),
+    busy: (active) => busy.push(active),
+    session: (sessionId) => sessions.push(sessionId),
+    failed: () => {
+      // Not exercised: no test in this file drives custody into a failure.
+    },
+    emit: () => {
+      // Not exercised: custody never emits an envelope in these tests.
+    },
   };
-  return rec as Recorded;
+  return { frames, permissions, sessions, busy, ctx };
 };
 
 interface Rig {
@@ -151,7 +153,8 @@ test("a parked permission is re-parked by requestId and answered with a raw cont
   r.custody.resolvePermission("req-perm-1", result);
 
   expect(r.written).toHaveLength(1);
-  expect(JSON.parse(r.written[0]!)).toEqual({
+  const [response] = r.written;
+  expect(JSON.parse(response)).toEqual({
     type: "control_response",
     response: {
       subtype: "success",
@@ -161,7 +164,7 @@ test("a parked permission is re-parked by requestId and answered with a raw cont
   });
   // The line is newline-terminated: the CLI frames its stdin on newlines, and a
   // response that never terminates is a permission that never lands.
-  expect(r.written[0]!.endsWith("\n")).toBe(true);
+  expect(response.endsWith("\n")).toBe(true);
   expect(r.custody.parked).toEqual([]);
 
   // A second answer to the same id is an error, not a second write.
@@ -181,7 +184,8 @@ test("a NON-permission control during custody fails visibly, in band", () => {
   // call fails instead of hanging on the whiffle server that died with the
   // agent.
   expect(r.written).toHaveLength(1);
-  const answer = JSON.parse(r.written[0]!) as {
+  const [response] = r.written;
+  const answer = JSON.parse(response) as {
     type: string;
     response: { subtype: string; request_id: string; error: string };
   };
@@ -227,7 +231,7 @@ test("the boundary hand-off fires at the turn's next result line, once", () => {
 
   // The in-flight turn COMPLETED and was captured — that is what custody buys
   // over today's restart, which loses it mid-tool.
-  expect(r.rec.frames.at(-1)!.type).toBe("result");
+  expect(r.rec.frames.at(-1)?.type).toBe("result");
   expect(r.rec.busy.at(-1)).toBe(false);
   // Then, and only then: stdin EOF and the respawn-with-resume.
   expect(r.stdinEnds).toBe(1);
@@ -255,7 +259,7 @@ test("a turn sent during custody is held and delivered by the hand-off", () => {
   expect(r.written).toEqual([]);
 
   r.custody.ingest(line('"type":"result"'));
-  expect(r.handoffs[0]!.held).toEqual([{ message, extras: {} }]);
+  expect(r.handoffs[0]?.held).toEqual([{ message, extras: {} }]);
 });
 
 test("a stop during custody answers every parked ask rather than leaving it hanging", async () => {
@@ -264,7 +268,8 @@ test("a stop during custody answers every parked ask rather than leaving it hang
   await r.custody.stop();
 
   expect(r.custody.parked).toEqual([]);
-  const answer = JSON.parse(r.written[0]!) as {
+  const [response] = r.written;
+  const answer = JSON.parse(response) as {
     response: { subtype: string; request_id: string };
   };
   expect(answer.response.subtype).toBe("error");
@@ -299,6 +304,7 @@ test("custody survives the owner being torn down and rebuilt, and replays withou
   );
   try {
     const deadline = Date.now() + 10_000;
+    // biome-ignore lint/performance/noAwaitInLoops: polls for the daemon to come up; each probe must wait for the last one to answer before trying again
     while (Date.now() < deadline && !(await probeEndpoint(endpoint, 200))) {
       await Bun.sleep(25);
     }
@@ -334,14 +340,21 @@ test("custody survives the owner being torn down and rebuilt, and replays withou
     recA.ctx.frame = (frame) => seen.push(frame);
     await first.adopt("inst-live", recA.ctx, {
       afterSeq: 0,
-      onHandoff: () => {},
+      onHandoff: () => {
+        // Not exercised: this life is torn down before any hand-off fires.
+      },
     });
     while (seen.length < 5) {
+      // biome-ignore lint/performance/noAwaitInLoops: paced polling, not parallel work
       await Bun.sleep(10);
     }
     // The init line named the session — what the hand-off would resume with.
     expect(recA.sessions).toEqual(["ses-live"]);
-    const lastN = Number(textOf(seen.at(-1)!));
+    const lastFrame = seen.at(-1);
+    if (!lastFrame) {
+      throw new Error("no frames observed");
+    }
+    const lastN = Number(textOf(lastFrame));
     const cursor = seen.length; // seq is 1-based and 1:1 with lines here
 
     // ---- the death and the absence -----------------------------------
@@ -361,9 +374,12 @@ test("custody survives the owner being torn down and rebuilt, and replays withou
     await second.adopt("inst-live", recB.ctx, {
       afterSeq: cursor,
       sessionId: "ses-live",
-      onHandoff: () => {},
+      onHandoff: () => {
+        // Not exercised: nothing in this test drives a second hand-off.
+      },
     });
     while (replayed.length < 10) {
+      // biome-ignore lint/performance/noAwaitInLoops: paced polling, not parallel work
       await Bun.sleep(10);
     }
 
@@ -371,7 +387,8 @@ test("custody survives the owner being torn down and rebuilt, and replays withou
     // where the first life stopped, one per frame, forever after.
     const numbers = replayed.map((frame) => Number(textOf(frame)));
     expect(numbers[0]).toBe(lastN + 1);
-    for (let i = 1; i < numbers.length; i++) {
+    for (let i = 1; i < numbers.length; i += 1) {
+      // biome-ignore lint/style/noNonNullAssertion: i starts at 1 and stays below numbers.length, so i - 1 is always a valid index
       expect(numbers[i]).toBe(numbers[i - 1]! + 1);
     }
 

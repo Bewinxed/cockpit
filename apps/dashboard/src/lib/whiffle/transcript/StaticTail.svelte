@@ -53,7 +53,7 @@
      announce into it. Two logs on one screen would double every announcement
      for the instant both exist. -->
 <div class="tail">
-  <div aria-label="Session transcript" class="tr">
+  <section aria-label="Session transcript" class="tr">
     {#if rows.length === 0}
       <p class="empty">Loading transcript…</p>
     {/if}
@@ -91,7 +91,7 @@
         {/if}
       </div>
     {/each}
-  </div>
+  </section>
   <!-- The seal. It exists only once every row above it has parsed, which is the
      one thing the stylesheet can ask about and the parser can answer honestly.
      See `.tail > .tr` below. -->

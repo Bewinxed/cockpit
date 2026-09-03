@@ -3,6 +3,7 @@
   import type { Snippet } from "svelte";
   import { toast } from "svelte-sonner";
   import { goto } from "$app/navigation";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as ContextMenu from "$lib/components/ui/context-menu";
   import { UPDATE_TIMEOUT_MS } from "$lib/config";
   import {
@@ -47,7 +48,9 @@
       error: (err: unknown) =>
         err instanceof Error ? err.message : String(err),
     });
-    await updating.catch(() => {});
+    await updating.catch(() => {
+      // toast.promise above already reported the failure.
+    });
   }
 </script>
 
@@ -68,17 +71,30 @@
       <IconPlus />
       New session here
     </ContextMenu.Item>
-    <ContextMenu.Item onSelect={() => (loggingIn = true)}>
+    <ContextMenu.Item
+      onSelect={() => {
+        loggingIn = true;
+      }}
+    >
       <IconKey />
       Log in…
     </ContextMenu.Item>
     {#if isMac && stuck}
-      <ContextMenu.Item onSelect={() => (unlocking = true)}>
+      <ContextMenu.Item
+        onSelect={() => {
+          unlocking = true;
+        }}
+      >
         <IconKey />
         Unlock keychain…
       </ContextMenu.Item>
     {/if}
-    <ContextMenu.Item onSelect={() => void updateClaudeCode()}>
+    <ContextMenu.Item
+      onSelect={() => {
+        // biome-ignore lint/complexity/noVoid: fire-and-forget; toast.promise above already tracks the outcome
+        void updateClaudeCode();
+      }}
+    >
       <IconDownload />
       Update Claude Code
     </ContextMenu.Item>

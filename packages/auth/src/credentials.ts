@@ -3,8 +3,8 @@
  * Compatible with Claude Code's credential format
  */
 
-import { homedir } from "os";
-import { join } from "path";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import type { OAuthTokens, StoredCredentials } from "./oauth";
 import { isTokenExpired, refreshAccessToken } from "./oauth";
 
@@ -70,7 +70,7 @@ export async function saveCredentials(tokens: OAuthTokens): Promise<void> {
   await Bun.write(CREDENTIALS_FILE, JSON.stringify(credentials, null, 2));
 
   // Set restrictive permissions (owner read/write only)
-  const { chmod } = await import("fs/promises");
+  const { chmod } = await import("node:fs/promises");
   await chmod(CREDENTIALS_FILE, 0o600);
 }
 
@@ -78,7 +78,7 @@ export async function saveCredentials(tokens: OAuthTokens): Promise<void> {
  * Delete stored credentials
  */
 export async function deleteCredentials(): Promise<void> {
-  const { unlink } = await import("fs/promises");
+  const { unlink } = await import("node:fs/promises");
   try {
     await unlink(CREDENTIALS_FILE);
   } catch {

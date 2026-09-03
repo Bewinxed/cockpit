@@ -1,7 +1,9 @@
 <script lang="ts">
   import type { LimitWindow } from "@whiffle/core";
   import { Badge } from "$lib/components/ui/badge";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Card from "$lib/components/ui/card";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Table from "$lib/components/ui/table";
   import { whiffle } from "$lib/whiffle/client.svelte";
   import HarnessGlyph from "$lib/whiffle/HarnessGlyph.svelte";
@@ -48,6 +50,16 @@
     reading === null ? (data.limits?.machines[0]?.limits.error ?? null) : null
   );
 
+  const readingErrorMessage = $derived.by(() => {
+    if (readingError === "not signed in") {
+      return "This machine is not signed in to Claude, so there is no limit to read. Sign in on the machine to restore this reading.";
+    }
+    if (readingError === "token expired") {
+      return "The Claude login on this machine has expired. Claude Code owns that file — signing in there restores this reading.";
+    }
+    return readingError;
+  });
+
   const windows = $derived(reading?.windows ?? []);
   /** Session first, then the weekly windows fullest-first: worst news nearest the top. */
   const orderedWindows = $derived([
@@ -61,20 +73,26 @@
     orderedWindows.find((w) => w.isActive) ?? orderedWindows[0] ?? null
   );
 
-  const band = (pct: number): "ok" | "warn" | "bad" =>
-    pct >= 90 ? "bad" : pct >= 70 ? "warn" : "ok";
+  const band = (pct: number): "ok" | "warn" | "bad" => {
+    if (pct >= 90) {
+      return "bad";
+    }
+    return pct >= 70 ? "warn" : "ok";
+  };
 
-  const windowLabel = (w: LimitWindow): string =>
-    w.group === "session"
-      ? "5-hour"
-      : w.scopeLabel
-        ? `Weekly · ${w.scopeLabel}`
-        : "Weekly";
+  const windowLabel = (w: LimitWindow): string => {
+    if (w.group === "session") {
+      return "5-hour";
+    }
+    return w.scopeLabel ? `Weekly · ${w.scopeLabel}` : "Weekly";
+  };
 
   /** A live clock; the countdowns only ever show minutes. */
   let now = $state(Date.now());
   $effect(() => {
-    const timer = setInterval(() => (now = Date.now()), 30_000);
+    const timer = setInterval(() => {
+      now = Date.now();
+    }, 30_000);
     return () => clearInterval(timer);
   });
 
@@ -205,7 +223,7 @@
     const groups: { day: string; blocks: typeof allBlocks }[] = [];
     for (const block of allBlocks) {
       const day = dayKey(block.startTime);
-      const last = groups[groups.length - 1];
+      const last = groups.at(-1);
       if (last && last.day === day) {
         last.blocks.push(block);
       } else {
@@ -250,15 +268,11 @@
       <Card.Root class="q-card">
         <Card.Content class="q-body">
           <p class="note" role="alert">
-            {readingError === 'not signed in'
-              ? 'This machine is not signed in to Claude, so there is no limit to read. Sign in on the machine to restore this reading.'
-              : readingError === 'token expired'
-                ? 'The Claude login on this machine has expired. Claude Code owns that file — signing in there restores this reading.'
-                : readingError}
+            {readingErrorMessage}
           </p>
         </Card.Content>
       </Card.Root>
-    {:else if !reading && !data.limits}
+    {:else if !(reading || data.limits)}
       <Card.Root class="q-card">
         <Card.Content class="q-body">
           <p class="note">
@@ -481,7 +495,7 @@
                   </Table.Cell>
                   <Table.Cell class="muted">{row.machine}</Table.Cell>
                   <Table.Cell class="num muted">
-                    {row.contextPct !== null ? `${Math.round(row.contextPct)}%` : '—'}
+                    {row.contextPct === null ? '—' : `${Math.round(row.contextPct)}%`}
                   </Table.Cell>
                   <Table.Cell class="num">{usd(row.cost)}</Table.Cell>
                 </Table.Row>
@@ -547,8 +561,9 @@
         <Card.Content class="q-body">
           <p class="unpriced-text">
             No published price for
-            <span class="mono">{missing.join(', ')}</span> yet — the total
-            cannot account for it. Those models read as $0 rather than a guess.
+            <span class="mono">{missing.join(', ')}</span>
+            yet — the total cannot account for it. Those models read as $0
+            rather than a guess.
           </p>
         </Card.Content>
       </Card.Root>
@@ -582,6 +597,7 @@
             {#each dayGroups as group (group.day)}
               <Table.Body>
                 <Table.Row class="dayrow">
+                  <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; Biome can't see through the component -->
                   <Table.Head colspan={5} scope="colgroup"
                     >{group.day}</Table.Head
                   >

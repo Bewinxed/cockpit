@@ -111,6 +111,8 @@ export const makeDelegateTypes = (
       .get("seeded") !== null;
 
   const put = (draft: DelegateType): DelegateType => {
+    const canDelegate =
+      draft.canDelegate === undefined ? null : Number(draft.canDelegate);
     sqlite
       .query(
         `INSERT INTO delegate_types (name, description, harness, model, effort, skills, deny_tools, can_delegate, created_at)
@@ -132,7 +134,7 @@ export const makeDelegateTypes = (
         draft.effort ?? null,
         draft.skills ? JSON.stringify(draft.skills) : null,
         draft.denyTools ? JSON.stringify(draft.denyTools) : null,
-        draft.canDelegate === undefined ? null : draft.canDelegate ? 1 : 0,
+        canDelegate,
         Date.now()
       );
     return draft;

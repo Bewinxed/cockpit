@@ -1,7 +1,7 @@
 import http from "node:http";
+import path from "node:path";
 import { sveltekit } from "@sveltejs/kit/vite";
 import tailwindcss from "@tailwindcss/vite";
-import path from "path";
 import Icons from "unplugin-icons/vite";
 import { defineConfig, type Plugin } from "vite";
 

@@ -11,7 +11,7 @@
 </script>
 
 <div
-  class={cn("text-base font-medium", className)}
+  class={cn("font-medium text-base", className)}
   data-slot="card-title"
   bind:this={ref}
   {...restProps}

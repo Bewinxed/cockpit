@@ -61,10 +61,13 @@
 <div>
   <div class="flex items-center gap-2">
     {#if step < candidates.length}
+      <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: onerror is an image-load lifecycle event, not user interaction -->
       <img
         alt=""
         class="size-5 shrink-0 rounded-[var(--radius-mark)]"
-        onerror={() => (step += 1)}
+        onerror={() => {
+          step += 1;
+        }}
         src={candidates[step]}
       >
     {:else}

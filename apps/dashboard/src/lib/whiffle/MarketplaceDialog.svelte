@@ -1,12 +1,13 @@
 <script lang="ts">
   import type { FleetMarketplace } from "@whiffle/core";
   import { Button } from "$lib/components/ui/button";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Dialog from "$lib/components/ui/dialog";
   import { Input } from "$lib/components/ui/input";
   import { saveMarketplace } from "./fleet";
 
   let {
-    open = $bindable(false),
+    open: dialogOpen = $bindable(false),
     taken = [],
     onsaved,
   }: {
@@ -23,6 +24,12 @@
   const clash = $derived(taken.includes(name.trim()));
   const ready = $derived(name.trim() !== "" && source.trim() !== "" && !clash);
 
+  function resetForm(): void {
+    name = "";
+    source = "";
+    failed = undefined;
+  }
+
   async function link(event: SubmitEvent) {
     event.preventDefault();
     if (!ready || busy) {
@@ -32,7 +39,7 @@
     failed = undefined;
     try {
       onsaved(await saveMarketplace(name.trim(), source.trim()));
-      open = false;
+      dialogOpen = false;
     } catch (error) {
       failed = error instanceof Error ? error.message : String(error);
     } finally {
@@ -42,8 +49,13 @@
 </script>
 
 <Dialog.Root
-  onOpenChange={(next) => { if (next) return; name = ''; source = ''; failed = undefined; }}
-  bind:open
+  onOpenChange={(next) => {
+    if (next) {
+      return;
+    }
+    resetForm();
+  }}
+  bind:open={dialogOpen}
 >
   <Dialog.Content class="rounded-[var(--radius-shell)] shadow-xl sm:max-w-lg">
     <Dialog.Header>
@@ -54,6 +66,7 @@
       >
     </Dialog.Header>
     <form class="flex flex-col gap-3" onsubmit={link}>
+      <!-- biome-ignore lint/a11y/noLabelWithoutControl: the `Input` component (shadcn-svelte) renders a native <input> as its only child -->
       <label class="flex flex-col gap-1.5 text-caption"
         >Source
         <Input
@@ -67,11 +80,13 @@
           >A GitHub <span class="font-mono">owner/repo</span>, a git URL, or a
           URL that ends in <span class="font-mono">marketplace.json</span>.
           Anthropic publishes
-          <span class="font-mono">anthropics/skills</span> and
+          <span class="font-mono">anthropics/skills</span>
+          and
           <span class="font-mono">anthropics/claude-plugins-official</span
           >.</span
         >
       </label>
+      <!-- biome-ignore lint/a11y/noLabelWithoutControl: the `Input` component (shadcn-svelte) renders a native <input> as its only child -->
       <label class="flex flex-col gap-1.5 text-caption"
         >Name
         <Input
@@ -99,7 +114,9 @@
       <div class="flex justify-end gap-2 pt-1">
         <Button
           disabled={busy}
-          onclick={() => (open = false)}
+          onclick={() => {
+            dialogOpen = false;
+          }}
           type="button"
           variant="outline"
           >Cancel</Button

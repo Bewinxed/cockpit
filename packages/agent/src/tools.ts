@@ -88,6 +88,7 @@ const npmGlobalBin = async (bin: string): Promise<string | undefined> => {
       ? [join(root, `${bin}.cmd`), join(root, `${bin}.exe`)]
       : [join(root, "bin", bin)];
   for (const candidate of candidates) {
+    // biome-ignore lint/performance/noAwaitInLoops: candidates are tried in priority order and the loop returns on the first that exists
     if (await Bun.file(candidate).exists()) {
       return candidate;
     }
@@ -109,6 +110,7 @@ const locate = async (spec: ToolSpec): Promise<string | undefined> => {
 
   for (const wellKnown of spec.wellKnownPaths ?? []) {
     const path = expandHome(wellKnown);
+    // biome-ignore lint/performance/noAwaitInLoops: well-known paths are tried in priority order and the loop returns on the first that exists
     if (await Bun.file(path).exists()) {
       return path;
     }
@@ -253,11 +255,13 @@ const NATIVE_ROUTINES: Record<string, (spec: ToolSpec) => Promise<void>> = {
       throw new Error(tail(unpacked.stderr.toString()));
     }
 
-    for (const bin of ["node", "npm", "npx"]) {
-      await Bun.$`ln -sf ${join(NODE_DIR, "bin", bin)} ${join(LOCAL_BIN, bin)}`
-        .quiet()
-        .nothrow();
-    }
+    await Promise.all(
+      ["node", "npm", "npx"].map((bin) =>
+        Bun.$`ln -sf ${join(NODE_DIR, "bin", bin)} ${join(LOCAL_BIN, bin)}`
+          .quiet()
+          .nothrow()
+      )
+    );
   },
 };
 
@@ -340,6 +344,7 @@ const satisfy = async (spec: ToolSpec): Promise<ToolStatus | undefined> => {
       continue;
     }
 
+    // biome-ignore lint/performance/noAwaitInLoops: requirements are checked in order and the loop returns on the first unmet one
     let status = await probeTool(needed);
     if (status.state === "missing") {
       status = await install(needed, undefined, false);

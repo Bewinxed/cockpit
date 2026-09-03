@@ -1,13 +1,10 @@
-<script lang="ts">
-  /**
-   * The tail of a transcript that is catching up: one short assistant line,
-   * in the skeleton's language, under the last row the reader left. The
-   * transcript above it is already on screen; this stands where the turns
-   * that arrived while they were away are about to land, and leaves when
-   * they do.
-   */
-</script>
-
+<!--
+  The tail of a transcript that is catching up: one short assistant line,
+  in the skeleton's language, under the last row the reader left. The
+  transcript above it is already on screen; this stands where the turns
+  that arrived while they were away are about to land, and leaves when
+  they do.
+-->
 <div aria-busy="true" class="catchup" role="status">
   <span class="spoken">Catching up…</span>
   <div class="who"><span class="mark"></span><span class="name"></span></div>

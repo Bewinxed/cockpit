@@ -3,7 +3,7 @@
  * Uses PKCE flow for secure authentication
  */
 
-import { createHash, randomBytes } from "crypto";
+import { createHash, randomBytes } from "node:crypto";
 
 // OAuth Configuration for Claude MAX
 // Uses the same client ID as OpenCode/Claude Code for PKCE flow
@@ -95,9 +95,9 @@ export async function exchangeCodeForTokens(
   let actualCode = code;
   let actualState = state;
   if (code.includes("#")) {
-    const parts = code.split("#");
-    actualCode = parts[0];
-    actualState = parts[1] || state;
+    const [codePart, statePart] = code.split("#");
+    actualCode = codePart;
+    actualState = statePart || state;
   }
 
   const body = {

@@ -38,6 +38,7 @@
       return;
     }
     let live = true;
+    // biome-ignore lint/complexity/noVoid: fire-and-forget — the `live` flag guards against a stale result after the effect re-runs
     void tokenize(text, lang).then((result) => {
       if (live) {
         painted = result;

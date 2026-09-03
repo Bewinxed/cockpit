@@ -10,7 +10,8 @@ import { Registry, RegistryLayer } from "./registry";
 import { createServer } from "./server";
 import { createTelegramBridge } from "./telegram";
 
-export { migrateLegacyDb };
+// biome-ignore lint/performance/noBarrelFile: re-exporting one already-imported name is not a barrel; `whiffle deploy init` (see migrate-db.ts) needs migrateLegacyDb importable from this entrypoint.
+export { migrateLegacyDb } from "./migrate-db";
 
 const main = Effect.gen(function* () {
   const registry = yield* Registry;

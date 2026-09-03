@@ -4,6 +4,7 @@
    * whatever the current `confirm(...)` call asked for, and answers it. Every
    * destructive action in the app funnels through this one dialog.
    */
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as AlertDialog from "$lib/components/ui/alert-dialog";
   import { confirmHost } from "./confirm.svelte";
 
@@ -12,7 +13,9 @@
 
 <AlertDialog.Root
   onOpenChange={(next) => {
-    if (!next) confirmHost.answer(false);
+    if (!next) {
+      confirmHost.answer(false);
+    }
   }}
   open={pending !== null}
 >

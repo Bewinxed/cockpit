@@ -64,6 +64,7 @@ export function refreshTasks(viewId: string): void {
     viewId,
     setTimeout(() => {
       scheduled.delete(viewId);
+      // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — refreshTasks is a sync scheduling API, nothing here awaits the read.
       void read(viewId);
     }, DEBOUNCE_MS)
   );
@@ -75,6 +76,7 @@ export function invalidateTasks(viewId: string): void {
   refreshTasks(viewId);
 }
 
+// biome-ignore lint/suspicious/useAwait: async is load-bearing here — the early `return;`/`return inflight;`/`return work;` branches mix a bare undefined with promises, which only typechecks against Promise<void> because async auto-wraps it.
 async function read(viewId: string): Promise<void> {
   // A read already out is the answer to this one too.
   const inflight = running.get(viewId);
@@ -263,6 +265,7 @@ function remember(machineId: string, home: string): string {
  * answer, and a second copy of this heuristic would be a second cache to go
  * stale differently.
  */
+// biome-ignore lint/suspicious/useAwait: async is load-bearing here — the early `return known;`/`return remember(...)` branches return a bare value that only typechecks against Promise<string | null> because async auto-wraps it.
 export async function homeOf(machineId: string): Promise<string | null> {
   const known = homes.get(machineId);
   if (known) {

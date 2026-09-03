@@ -35,7 +35,10 @@ test("the caret has to be inside the mention", () => {
 test("a bare @ offers everything", () => {
   const found = mentionAt("@", 1);
   expect(found).toEqual({ term: "", start: 0 });
-  expect(matchPeers(peers, found!.term)).toHaveLength(2);
+  if (!found) {
+    throw new Error("expected a mention");
+  }
+  expect(matchPeers(peers, found.term)).toHaveLength(2);
 });
 
 test("matching is unanchored and case-insensitive", () => {

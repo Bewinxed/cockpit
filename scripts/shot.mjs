@@ -50,6 +50,7 @@ await page.addInitScript(
 
 await page
   .goto(url, { waitUntil: "networkidle", timeout: 30_000 })
+  // biome-ignore lint/suspicious/noEmptyBlockStatements: navigation errors are ignored; the screenshot below still runs against whatever loaded
   .catch(() => {});
 await page.waitForTimeout(wait);
 await page

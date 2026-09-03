@@ -1,31 +1,34 @@
-import Root from "./pagination.svelte";
-import Content from "./pagination-content.svelte";
-import Ellipsis from "./pagination-ellipsis.svelte";
-import Item from "./pagination-item.svelte";
-import Link from "./pagination-link.svelte";
-import Next from "./pagination-next.svelte";
-import NextButton from "./pagination-next-button.svelte";
-import PrevButton from "./pagination-prev-button.svelte";
-import Previous from "./pagination-previous.svelte";
-
+// biome-ignore lint/performance/noBarrelFile: shadcn-svelte component barrel — this re-export surface is the public import path consumers use across the app
+export { default as Root, default as Pagination } from "./pagination.svelte";
 export {
-  Content,
-  Content as PaginationContent,
-  Ellipsis,
-  Ellipsis as PaginationEllipsis,
-  Item,
-  Item as PaginationItem,
-  Link,
-  Link as PaginationLink,
-  Next,
-  Next as PaginationNext,
-  NextButton, // old
-  NextButton as PaginationNextButton, // old
-  PrevButton, // old
-  PrevButton as PaginationPrevButton, // old
-  Previous,
-  Previous as PaginationPrevious,
-  Root,
-  //
-  Root as Pagination,
-};
+  default as Content,
+  default as PaginationContent,
+} from "./pagination-content.svelte";
+export {
+  default as Ellipsis,
+  default as PaginationEllipsis,
+} from "./pagination-ellipsis.svelte";
+export {
+  default as Item,
+  default as PaginationItem,
+} from "./pagination-item.svelte";
+export {
+  default as Link,
+  default as PaginationLink,
+} from "./pagination-link.svelte";
+export {
+  default as Next,
+  default as PaginationNext,
+} from "./pagination-next.svelte";
+export {
+  default as NextButton,
+  default as PaginationNextButton,
+} from "./pagination-next-button.svelte"; // old
+export {
+  default as PrevButton,
+  default as PaginationPrevButton,
+} from "./pagination-prev-button.svelte"; // old
+export {
+  default as Previous,
+  default as PaginationPrevious,
+} from "./pagination-previous.svelte";

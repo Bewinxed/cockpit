@@ -1,5 +1,4 @@
 import type { FleetHook, FleetItemState, HookDraft } from "@whiffle/core";
-import { HOOK_TEMPLATES } from "@whiffle/core";
 import type { Machine } from "./client.svelte";
 
 /**
@@ -14,8 +13,9 @@ import type { Machine } from "./client.svelte";
  * `fetch` wrappers rather than the socket.
  */
 
-export type { FleetHook, HookDraft };
-export { HOOK_TEMPLATES };
+export type { FleetHook, HookDraft } from "@whiffle/core";
+// biome-ignore lint/performance/noBarrelFile: consumers import the templates from this file's public surface, not straight off @whiffle/core
+export { HOOK_TEMPLATES } from "@whiffle/core";
 
 /** What `GET /api/fleet/hooks` answers with. */
 export interface HooksPayload {

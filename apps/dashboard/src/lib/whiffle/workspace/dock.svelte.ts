@@ -28,14 +28,14 @@ export const paneViews = $state<Record<string, "chat" | "flow">>({});
 
 /** A group's slot for one tab. Registered while the group keeps it mounted. */
 export function slot(node: HTMLElement, param: { id: string; shown: boolean }) {
-  let id = param.id;
+  let { id } = param;
   slots.set(id, { el: node, shown: param.shown });
   return {
     update(next: { id: string; shown: boolean }) {
       if (next.id !== id && slots.get(id)?.el === node) {
         slots.delete(id);
       }
-      id = next.id;
+      ({ id } = next);
       slots.set(id, { el: node, shown: next.shown });
     },
     destroy() {

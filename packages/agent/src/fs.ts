@@ -55,13 +55,12 @@ const list = async (path: string): Promise<FsEntry[]> => {
       kind: dirent.isDirectory() ? ("dir" as const) : ("file" as const),
       size: dirent.isDirectory() ? 0 : Bun.file(`${path}/${dirent.name}`).size,
     }))
-    .sort((a, b) =>
-      a.kind === b.kind
-        ? a.name.localeCompare(b.name)
-        : a.kind === "dir"
-          ? -1
-          : 1
-    );
+    .sort((a, b) => {
+      if (a.kind !== b.kind) {
+        return a.kind === "dir" ? -1 : 1;
+      }
+      return a.name.localeCompare(b.name);
+    });
 };
 
 const read = async (path: string): Promise<string> => {

@@ -15,7 +15,7 @@ const LIMIT = 80;
  * untitled rather than taking a made-up one.
  */
 export function briefTitle(prompt: string): string | undefined {
-  const first = prompt.split("\n").find((line) => line.trim().length > 0);
+  const first = prompt.split("\n").find((text) => text.trim().length > 0);
   if (!first) {
     return undefined;
   }

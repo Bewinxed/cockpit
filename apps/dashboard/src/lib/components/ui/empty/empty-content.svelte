@@ -12,7 +12,7 @@
 
 <div
   class={cn(
-		"gap-4 text-sm flex w-full max-w-sm min-w-0 flex-col items-center text-balance",
+		"flex w-full min-w-0 max-w-sm flex-col items-center gap-4 text-balance text-sm",
 		className
 	)}
   data-slot="empty-content"

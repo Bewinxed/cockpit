@@ -3,6 +3,7 @@ import type { ToolStatus } from "./tools";
 
 // Delegate types: named presets the `delegate` tool's `type` param resolves,
 // so routing is by description instead of a raw model string.
+// biome-ignore lint/performance/noBarrelFile: this is the package's public API surface — packages/core's consumers (hub, cli, dashboard) import from "@whiffle/core" as one module, not per-file.
 export * from "./delegate-types";
 // Fleet MCP + skills desired state, sync reports, and the `/` menu (NEW.md §11).
 export * from "./fleet";
@@ -202,14 +203,19 @@ export type ReposResult =
   | RepoInfo[]
   | { error: "gh-missing" | "gh-unauthenticated" };
 
+const TRAILING_SLASHES = /\/+$/;
+const URL_SCHEME_AND_HOST = /^[a-z][a-z0-9+.-]*:\/\/[^/]+\//i;
+const SCP_LIKE_HOST = /^[^/]+@[^:]+:/;
+const DOT_GIT_SUFFIX = /\.git$/;
+
 /** `owner/name`, however the repository was written. */
 export const repoPath = (repo: string): string =>
   repo
     .trim()
-    .replace(/\/+$/, "")
-    .replace(/^[a-z][a-z0-9+.-]*:\/\/[^/]+\//i, "")
-    .replace(/^[^/]+@[^:]+:/, "")
-    .replace(/\.git$/, "");
+    .replace(TRAILING_SLASHES, "")
+    .replace(URL_SCHEME_AND_HOST, "")
+    .replace(SCP_LIKE_HOST, "")
+    .replace(DOT_GIT_SUFFIX, "");
 
 /** `send`: one turn of input for a live session's prompt stream. */
 export interface SendPayload {
@@ -299,7 +305,7 @@ export const RESOLVE_PERMISSION = "resolvePermission";
 
 /**
  * The tool that asks the reader rather than the machine. Its permission request
- * *is* the question, so it settles through {@link RESOLVE_PERMISSION} like any
+ * is the question, so it settles through {@link RESOLVE_PERMISSION} like any
  * other: the choices arrive as the request's `input`, and the answer goes back
  * as `updatedInput`.
  */

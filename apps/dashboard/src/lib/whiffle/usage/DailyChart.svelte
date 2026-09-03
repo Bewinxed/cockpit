@@ -38,7 +38,7 @@
   let range = $state<RangeId>("30d");
   let points = $state<DayPoint[]>([]);
   let loading = $state(true);
-  let error = $state<string | null>(null);
+  let loadError = $state<string | null>(null);
 
   const chartConfig = {
     claude: { label: "Claude", color: "var(--chart-1)" },
@@ -76,7 +76,7 @@
 
   async function load(): Promise<void> {
     loading = true;
-    error = null;
+    loadError = null;
     const spec = RANGES.find((r) => r.id === range) ?? RANGES[1];
     const sinceParam = spec.days
       ? `&since=${Date.now() - spec.days * DAY_MS}`
@@ -95,11 +95,14 @@
 
       const allDays = new Set([...cMap.keys(), ...oMap.keys()]);
       const today = Math.floor(Date.now() / DAY_MS) * DAY_MS;
-      const start = spec.days
-        ? today - spec.days * DAY_MS
-        : allDays.size > 0
-          ? Math.min(...allDays)
-          : today - 30 * DAY_MS;
+      let start: number;
+      if (spec.days) {
+        start = today - spec.days * DAY_MS;
+      } else if (allDays.size > 0) {
+        start = Math.min(...allDays);
+      } else {
+        start = today - 30 * DAY_MS;
+      }
 
       const out: DayPoint[] = [];
       for (let d = start; d <= today; d += DAY_MS) {
@@ -112,13 +115,14 @@
       }
       points = out;
     } catch {
-      error = "Could not read the daily totals.";
+      loadError = "Could not read the daily totals.";
     } finally {
       loading = false;
     }
   }
 
   $effect(() => {
+    // biome-ignore lint/complexity/noVoid: fire-and-forget — the effect reruns on `range`, load() manages its own loading/error state
     void load();
   });
 </script>
@@ -137,7 +141,10 @@
                  {range === r.id
             ? 'bg-card text-foreground shadow-sm'
             : 'text-muted-foreground hover:text-foreground'}"
-          onclick={() => (range = r.id)}
+          onclick={() => {
+            range = r.id;
+          }}
+          type="button"
         >
           {r.label}
         </button>
@@ -145,8 +152,8 @@
     </div>
   </div>
 
-  {#if error}
-    <p class="text-caption text-error" role="alert">{error}</p>
+  {#if loadError}
+    <p class="text-caption text-error" role="alert">{loadError}</p>
   {:else if loading}
     <div class="h-56 w-full rounded-[var(--radius-card)] bg-muted/40"></div>
   {:else}

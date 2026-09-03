@@ -21,7 +21,7 @@
 
   /** Keeps exactly one empty line at the end, however the lines were edited. */
   function settle() {
-    const last = rows[rows.length - 1];
+    const last = rows.at(-1);
     if (!last || last.key.trim() || last.value.trim()) {
       rows.push({ key: "", value: "" });
     }

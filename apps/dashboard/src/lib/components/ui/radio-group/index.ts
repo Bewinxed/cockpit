@@ -1,10 +1,6 @@
-import Root from "./radio-group.svelte";
-import Item from "./radio-group-item.svelte";
-
+// biome-ignore lint/performance/noBarrelFile: shadcn-svelte component barrel — this re-export surface is the public import path consumers use across the app
+export { default as Root, default as RadioGroup } from "./radio-group.svelte";
 export {
-  Item,
-  Item as RadioGroupItem,
-  Root,
-  //
-  Root as RadioGroup,
-};
+  default as Item,
+  default as RadioGroupItem,
+} from "./radio-group-item.svelte";

@@ -20,7 +20,7 @@
 <Button
   aria-disabled={!emblaCtx.canScrollNext}
   class={cn(
-		"rounded-full absolute touch-manipulation",
+		"absolute touch-manipulation rounded-full",
 		emblaCtx.orientation === "horizontal"
 			? "inset-y-0 -end-12 my-auto"
 			: "start-1/2 -bottom-12 -translate-x-1/2 rotate-90",

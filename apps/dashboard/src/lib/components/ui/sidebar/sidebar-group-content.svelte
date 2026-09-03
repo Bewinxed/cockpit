@@ -11,7 +11,7 @@
 </script>
 
 <div
-  class={cn("text-sm w-full", className)}
+  class={cn("w-full text-sm", className)}
   data-sidebar="group-content"
   data-slot="sidebar-group-content"
   bind:this={ref}

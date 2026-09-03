@@ -21,6 +21,7 @@ import { writeVendoredMarketplace } from "./fleet";
  * are running out of.
  */
 const VENDOR_DIR = mkdtempSync(join(tmpdir(), "whiffle-vendor-"));
+const UNSAFE_PATH_RE = /unsafe path/;
 
 const b64 = (text: string): string => Buffer.from(text).toString("base64");
 
@@ -81,7 +82,7 @@ test("a path that climbs out of the directory is refused", async () => {
       [payload("escape", { "../../evil.sh": "rm -rf /" })],
       VENDOR_DIR
     )
-  ).rejects.toThrow(/unsafe path/);
+  ).rejects.toThrow(UNSAFE_PATH_RE);
 });
 
 test("a payload with no files leaves the plugin it already wrote alone", async () => {

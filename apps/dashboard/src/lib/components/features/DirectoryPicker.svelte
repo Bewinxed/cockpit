@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { FsEntry, SDKSessionInfo } from "@whiffle/core";
   import { Button } from "$lib/components/ui/button";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for importing a component group
   import * as Collapsible from "$lib/components/ui/collapsible";
   /** Walks a machine's filesystem over the `fs` verb so a cwd can be picked, not typed. */
   import { IconArrowUp, IconCheck, IconFolder, IconSpinner } from "$lib/icons";
@@ -17,10 +18,12 @@
   let path = $state("/");
   let entries = $state<FsEntry[]>([]);
   let loading = $state(false);
-  let error = $state<string | null>(null);
+  let errorMessage = $state<string | null>(null);
 
   /** Only lives while the panel is open — a directory may have changed by the next visit. */
   const cache = new Map<string, FsEntry[]>();
+
+  const TRAILING_SLASHES = /(?!^)\/+$/;
 
   const dirs = $derived(
     entries
@@ -53,11 +56,11 @@
   }
 
   /** Typed cwds arrive with trailing slashes; `parent` and `join` assume none. */
-  const trim = (path: string) => path.replace(/(?!^)\/+$/, "");
+  const trim = (dir: string) => dir.replace(TRAILING_SLASHES, "");
 
   async function go(next: string) {
     path = next;
-    error = null;
+    errorMessage = null;
     const cached = cache.get(next);
     if (cached) {
       entries = cached;
@@ -77,7 +80,7 @@
         return;
       }
       entries = [];
-      error = err instanceof Error ? err.message : String(err);
+      errorMessage = err instanceof Error ? err.message : String(err);
     } finally {
       loading = false;
     }
@@ -94,6 +97,7 @@
       return;
     }
     open = true;
+    // biome-ignore lint/complexity/noVoid: fire-and-forget — the panel opens immediately, the listing fills in when it arrives
     void go(seed());
   }
 
@@ -105,7 +109,9 @@
 
 <svelte:window
   onkeydown={(event: KeyboardEvent) => {
-    if (open && event.key === 'Escape') collapse();
+    if (open && event.key === 'Escape') {
+      collapse();
+    }
   }}
 />
 
@@ -144,8 +150,10 @@
             <IconSpinner class="size-3.5 animate-spin" />
             Reading directory…
           </span>
-        {:else if error}
-          <span class="block px-2 py-1 text-xs text-destructive">{error}</span>
+        {:else if errorMessage}
+          <span class="block px-2 py-1 text-xs text-destructive"
+            >{errorMessage}</span
+          >
         {:else}
           {#each dirs as dir (dir.name)}
             <Button

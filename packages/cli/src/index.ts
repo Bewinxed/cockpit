@@ -1,3 +1,4 @@
+// biome-ignore lint/performance/noBarrelFile: this is the package's public entrypoint; consumers import "@whiffle/cli" and expect one surface
 export { type CliConfig, CONFIG_PATH, readConfig, writeConfig } from "./config";
 export {
   type DiscoverOptions,

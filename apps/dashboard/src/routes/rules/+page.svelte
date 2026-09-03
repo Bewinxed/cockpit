@@ -4,11 +4,14 @@
   import { untrack } from "svelte";
   import { toast } from "svelte-sonner";
   import { goto } from "$app/navigation";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Alert from "$lib/components/ui/alert";
   import { Badge } from "$lib/components/ui/badge";
   import { Button } from "$lib/components/ui/button";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Card from "$lib/components/ui/card";
   import { Toggle } from "$lib/components/ui/toggle";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Tooltip from "$lib/components/ui/tooltip";
   import { IconAlert, IconPlus, IconTrash } from "$lib/icons";
   import { confirm } from "$lib/whiffle/confirm.svelte";
@@ -60,7 +63,7 @@
       return;
     }
     latch = data;
-    rules = data.rules;
+    ({ rules } = data);
   });
 
   const pendingTotal = $derived(

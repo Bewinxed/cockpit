@@ -56,23 +56,31 @@ const ctx: HarnessContext = {
       session?.resolvePermission(request.requestId, { behavior: "allow" });
     }, 100);
   },
-  busy: () => {},
-  session: () => {},
+  busy: () => {
+    // not measured by this proof
+  },
+  session: () => {
+    // not measured by this proof
+  },
   failed: (error) => {
     failures.push(`failed(): ${String(error)}`);
   },
-  emit: () => {},
-  closed: () => {},
+  emit: () => {
+    // not measured by this proof
+  },
+  closed: () => {
+    // not measured by this proof
+  },
 };
 
 interface TaskFrameShape {
-  subtype?: string;
-  tool_use_id?: string;
-  subagent_type?: string;
   description?: string;
   status?: string;
+  subagent_type?: string;
+  subtype?: string;
   summary?: string;
   task_type?: string;
+  tool_use_id?: string;
 }
 
 /** One DIAG line per task_* system frame, in the shape the branch rule reads. */
@@ -83,10 +91,10 @@ function dumpTaskFrames(label: string, from: number): number {
       continue;
     }
     const shape = f as unknown as TaskFrameShape;
-    if (!(shape.subtype && shape.subtype.startsWith("task_"))) {
+    if (!shape.subtype?.startsWith("task_")) {
       continue;
     }
-    count++;
+    count += 1;
     console.log(
       `DIAG ${label} task_frame: ${JSON.stringify({
         subtype: shape.subtype,
@@ -110,13 +118,12 @@ function dumpToolUses(label: string, from: number): number {
     if (f.type !== "assistant") {
       continue;
     }
-    const message = (f as unknown as { message?: { content?: unknown[] } })
-      .message;
+    const { message } = f as unknown as { message?: { content?: unknown[] } };
     for (const block of message?.content ?? []) {
       if ((block as { type?: string }).type !== "tool_use") {
         continue;
       }
-      count++;
+      count += 1;
       const tu = block as {
         id?: string;
         name?: string;
@@ -126,9 +133,9 @@ function dumpToolUses(label: string, from: number): number {
         `DIAG ${label} tool_use: ${JSON.stringify({
           id: tu.id ?? null,
           name: tu.name ?? null,
-          subagent_type: (tu.input ?? {}).subagent_type ?? null,
-          description: (tu.input ?? {}).description ?? null,
-          command: (tu.input ?? {}).command ?? null,
+          subagent_type: tu.input?.subagent_type ?? null,
+          description: tu.input?.description ?? null,
+          command: tu.input?.command ?? null,
         })}`
       );
     }
@@ -215,7 +222,9 @@ const user = (content: string): NeutralMessage =>
   }
 }
 
-await session.stop().catch(() => {});
+await session.stop().catch(() => {
+  // best effort: the proof is done either way
+});
 
 console.log("task-frames-proof: done");
 process.exit(failures.length ? 1 : 0);

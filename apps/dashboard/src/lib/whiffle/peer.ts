@@ -43,6 +43,8 @@ export function matchPeers(peers: PeerTarget[], term: string): PeerTarget[] {
  * opens a word — an email address or a `foo@bar` in a path is not an address
  * for us, and popping a menu over one would fight the reader mid-sentence.
  */
+const WHITESPACE = /\s/;
+
 export function mentionAt(
   text: string,
   caret: number
@@ -53,12 +55,12 @@ export function mentionAt(
     return null;
   }
   // Opening a word: start of input, or preceded by whitespace.
-  if (at > 0 && !/\s/.test(before[at - 1])) {
+  if (at > 0 && !WHITESPACE.test(before[at - 1])) {
     return null;
   }
   const term = before.slice(at + 1);
   // Still one word — a space ends the mention.
-  if (/\s/.test(term)) {
+  if (WHITESPACE.test(term)) {
     return null;
   }
   return { term, start: at };

@@ -11,7 +11,7 @@
 </script>
 
 <span
-  class={cn("text-xs tracking-widest text-muted-foreground group-focus/menubar-item:text-accent-foreground ml-auto", className)}
+  class={cn("ml-auto text-muted-foreground text-xs tracking-widest group-focus/menubar-item:text-accent-foreground", className)}
   data-slot="menubar-shortcut"
   bind:this={ref}
   {...restProps}

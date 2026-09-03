@@ -1,7 +1,6 @@
-import Root from "./slider.svelte";
-
+// biome-ignore lint/performance/noBarrelFile: shadcn-svelte component barrel — every consumer imports the group from this index
 export {
-  Root,
+  default as Root,
   //
-  Root as Slider,
-};
+  default as Slider,
+} from "./slider.svelte";

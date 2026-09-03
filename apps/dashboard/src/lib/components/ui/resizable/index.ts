@@ -1,13 +1,10 @@
-import { Pane } from "paneforge";
-import Handle from "./resizable-handle.svelte";
-import PaneGroup from "./resizable-pane-group.svelte";
-
+// biome-ignore lint/performance/noBarrelFile: shadcn-svelte component barrel — this re-export surface is the public import path consumers use across the app
+export { Pane, Pane as ResizablePane } from "paneforge";
 export {
-  Handle,
-  Handle as ResizableHandle,
-  Pane,
-  Pane as ResizablePane,
-  PaneGroup,
-  //
-  PaneGroup as ResizablePaneGroup,
-};
+  default as Handle,
+  default as ResizableHandle,
+} from "./resizable-handle.svelte";
+export {
+  default as PaneGroup,
+  default as ResizablePaneGroup,
+} from "./resizable-pane-group.svelte";

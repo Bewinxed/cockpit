@@ -42,9 +42,15 @@
     }[activity]
   );
 
-  const label = $derived(
-    stale ? UNKNOWN_LABEL : sleeping ? SLEEPING_LABEL : ACTIVITY_LABEL[activity]
-  );
+  const label = $derived.by(() => {
+    if (stale) {
+      return UNKNOWN_LABEL;
+    }
+    if (sleeping) {
+      return SLEEPING_LABEL;
+    }
+    return ACTIVITY_LABEL[activity];
+  });
 </script>
 
 <span

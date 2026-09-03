@@ -10,7 +10,7 @@
 </script>
 
 <DialogPrimitive.Overlay
-  class={cn("bg-[var(--scrim)] duration-100 supports-backdrop-filter:backdrop-blur-xs data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0 fixed inset-0 isolate z-50", className)}
+  class={cn("data-open:fade-in-0 data-closed:fade-out-0 fixed inset-0 isolate z-50 bg-[var(--scrim)] duration-100 data-closed:animate-out data-open:animate-in supports-backdrop-filter:backdrop-blur-xs", className)}
   data-slot="dialog-overlay"
   bind:ref
   {...restProps}

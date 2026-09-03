@@ -19,7 +19,7 @@ const check = (name: string, pass: boolean) => {
   if (pass) {
     console.log(`PASS ${name}`);
   } else {
-    failures++;
+    failures += 1;
     console.log(`FAIL ${name}`);
   }
 };
@@ -105,6 +105,7 @@ check(
 // fork_of: the roster is the only network hop a fork touches, so stub fetch
 // with a fixed instances/agents response rather than reaching a real hub.
 const realFetch = globalThis.fetch;
+// biome-ignore lint/suspicious/useAwait: must stay async to satisfy typeof fetch's Promise<Response> return type
 globalThis.fetch = (async (input: unknown) => {
   const url = String(input);
   if (url.endsWith("/api/instances")) {
@@ -146,6 +147,7 @@ check(
 
 // fork_of pointed at a delegate this session does not own: refused, no spawn.
 envelopes.length = 0;
+// biome-ignore lint/suspicious/useAwait: must stay async to satisfy typeof fetch's Promise<Response> return type
 globalThis.fetch = (async (input: unknown) => {
   const url = String(input);
   if (url.endsWith("/api/instances")) {
@@ -185,6 +187,7 @@ check(
 
 // fork_of pointed at your own delegate that never emitted a sessionId: refused, no spawn.
 envelopes.length = 0;
+// biome-ignore lint/suspicious/useAwait: must stay async to satisfy typeof fetch's Promise<Response> return type
 globalThis.fetch = (async (input: unknown) => {
   const url = String(input);
   if (url.endsWith("/api/instances")) {
@@ -312,10 +315,11 @@ const emptyCacheActions = handoffActions({
 envelopes.length = 0;
 const realFetchForRefetch = globalThis.fetch;
 let refetchCalls = 0;
+// biome-ignore lint/suspicious/useAwait: must stay async to satisfy typeof fetch's Promise<Response> return type
 globalThis.fetch = (async (input: unknown) => {
   const url = String(input);
   if (url.endsWith("/api/delegate-types")) {
-    refetchCalls++;
+    refetchCalls += 1;
     return new Response(
       JSON.stringify({
         types: [

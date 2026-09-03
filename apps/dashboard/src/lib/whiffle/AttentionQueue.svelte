@@ -55,7 +55,9 @@
   /** Ticks the relative ages without re-reading the store. */
   let now = $state(Date.now());
   $effect(() => {
-    const timer = setInterval(() => (now = Date.now()), 15_000);
+    const timer = setInterval(() => {
+      now = Date.now();
+    }, 15_000);
     return () => clearInterval(timer);
   });
 

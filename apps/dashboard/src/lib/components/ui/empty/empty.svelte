@@ -12,7 +12,7 @@
 
 <div
   class={cn(
-		"gap-4 rounded-[var(--radius-panel)] border-dashed p-12 flex w-full min-w-0 flex-1 flex-col items-center justify-center text-center text-balance",
+		"flex w-full min-w-0 flex-1 flex-col items-center justify-center gap-4 text-balance rounded-[var(--radius-panel)] border-dashed p-12 text-center",
 		className
 	)}
   data-slot="empty"

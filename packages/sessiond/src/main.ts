@@ -27,7 +27,9 @@ const main = async (): Promise<void> => {
     await server.close();
     process.exit(0);
   };
+  // biome-ignore lint/complexity/noVoid: signal handlers are sync callbacks; shutdown() is fire-and-forget by design
   process.on("SIGTERM", () => void shutdown("SIGTERM"));
+  // biome-ignore lint/complexity/noVoid: signal handlers are sync callbacks; shutdown() is fire-and-forget by design
   process.on("SIGINT", () => void shutdown("SIGINT"));
 };
 

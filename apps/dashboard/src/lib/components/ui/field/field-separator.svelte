@@ -17,7 +17,7 @@
 </script>
 
 <div
-  class={cn("-my-2 h-5 text-sm group-data-[variant=outline]/field-group:-mb-2 relative", className)}
+  class={cn("relative -my-2 h-5 text-sm group-data-[variant=outline]/field-group:-mb-2", className)}
   data-content={hasContent}
   data-slot="field-separator"
   bind:this={ref}

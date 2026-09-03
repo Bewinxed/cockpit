@@ -878,8 +878,8 @@ const make = (path: string): DbShape => {
       .from(fleetMemoryDocs)
       .orderBy(fleetMemoryDocs.path)
       .all()
-      .map(({ path, content, hash, updatedAt }) => ({
-        path,
+      .map(({ path: docPath, content, hash, updatedAt }) => ({
+        path: docPath,
         content,
         hash,
         updatedAt,
@@ -963,6 +963,7 @@ const make = (path: string): DbShape => {
       model,
       effort,
       canDelegate,
+      // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: opens (or reuses) the one live row for a conversation across every optional field a spawn can carry — see the "one conversation, one live row" invariant below.
     }) => {
       const now = new Date();
 
@@ -1448,11 +1449,13 @@ const make = (path: string): DbShape => {
           return {
             hash: stored.hash,
             content: stored.content,
-            docs: listFleetMemoryDocs().map(({ path, hash, content }) => ({
-              path,
-              hash,
-              content,
-            })),
+            docs: listFleetMemoryDocs().map(
+              ({ path: docPath, hash, content }) => ({
+                path: docPath,
+                hash,
+                content,
+              })
+            ),
           };
         })(),
         // Always an array, like `skills` above, never omitted: this hub is not
@@ -1778,11 +1781,11 @@ const make = (path: string): DbShape => {
       db.delete(fleetMemory).where(eq(fleetMemory.id, MEMORY_ID)).run();
     },
     listFleetMemoryDocs,
-    getFleetMemoryDoc: (path) => {
+    getFleetMemoryDoc: (docPath) => {
       const row = db
         .select()
         .from(fleetMemoryDocs)
-        .where(eq(fleetMemoryDocs.path, path))
+        .where(eq(fleetMemoryDocs.path, docPath))
         .get();
       return row
         ? {
@@ -1793,9 +1796,9 @@ const make = (path: string): DbShape => {
           }
         : undefined;
     },
-    putFleetMemoryDoc: ({ path, content }) => {
+    putFleetMemoryDoc: ({ path: docPath, content }) => {
       const row = {
-        path,
+        path: docPath,
         content,
         hash: hashText(content),
         updatedAt: new Date(),
@@ -1813,19 +1816,19 @@ const make = (path: string): DbShape => {
         .run();
       return row;
     },
-    deleteFleetMemoryDoc: (path) => {
-      db.delete(fleetMemoryDocs).where(eq(fleetMemoryDocs.path, path)).run();
+    deleteFleetMemoryDoc: (docPath) => {
+      db.delete(fleetMemoryDocs).where(eq(fleetMemoryDocs.path, docPath)).run();
     },
-    recordFleetMemory: ({ content, hash, source, path }) => {
+    recordFleetMemory: ({ content, hash, source, path: docPath }) => {
       db.insert(fleetMemoryHistory)
-        .values({ content, hash, source, path: path ?? null })
+        .values({ content, hash, source, path: docPath ?? null })
         .run();
       // Pruned within the one document's own history: a set of ten would
       // otherwise have each save evict the main file's past nine times over.
       const of =
-        path === undefined
+        docPath === undefined
           ? isNull(fleetMemoryHistory.path)
-          : eq(fleetMemoryHistory.path, path);
+          : eq(fleetMemoryHistory.path, docPath);
       const keep = db
         .select({ id: fleetMemoryHistory.id })
         .from(fleetMemoryHistory)
@@ -1838,14 +1841,14 @@ const make = (path: string): DbShape => {
         .where(and(of, notInArray(fleetMemoryHistory.id, keep)))
         .run();
     },
-    listFleetMemoryHistory: (path) =>
+    listFleetMemoryHistory: (docPath) =>
       db
         .select()
         .from(fleetMemoryHistory)
         .where(
-          path === undefined
+          docPath === undefined
             ? isNull(fleetMemoryHistory.path)
-            : eq(fleetMemoryHistory.path, path)
+            : eq(fleetMemoryHistory.path, docPath)
         )
         .orderBy(desc(fleetMemoryHistory.id))
         .all()
@@ -2101,14 +2104,18 @@ const make = (path: string): DbShape => {
         .all(),
     listUsageLimits: () => db.select().from(usageLimits).all(),
     usageSummary: ({ since, until, harness, machineId, groupBy }) => {
-      const key =
-        groupBy === "day"
-          ? sql<number>`(${usageBuckets.hourStart} / 86400000) * 86400000`
-          : groupBy === "model"
-            ? usageBuckets.model
-            : groupBy === "project"
-              ? usageBuckets.project
-              : usageBuckets.sessionId;
+      const key = (() => {
+        if (groupBy === "day") {
+          return sql<number>`(${usageBuckets.hourStart} / 86400000) * 86400000`;
+        }
+        if (groupBy === "model") {
+          return usageBuckets.model;
+        }
+        if (groupBy === "project") {
+          return usageBuckets.project;
+        }
+        return usageBuckets.sessionId;
+      })();
 
       const rows = db
         .select({
@@ -2457,7 +2464,7 @@ const make = (path: string): DbShape => {
     ackRule: (ruleId, instanceId, note) => {
       const id = `${ruleId}:${instanceId}`;
       const row = db.select().from(ruleState).where(eq(ruleState.id, id)).get();
-      if (!row || row.status !== "pending") {
+      if (row?.status !== "pending") {
         return;
       }
       const now = new Date();

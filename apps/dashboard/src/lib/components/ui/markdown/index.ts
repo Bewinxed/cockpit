@@ -1,3 +1,2 @@
-import Markdown from "./markdown.svelte";
-
-export { Markdown };
+// biome-ignore lint/performance/noBarrelFile: this is the shadcn-svelte component group's public re-export surface, not an accidental barrel
+export { default as Markdown } from "./markdown.svelte";

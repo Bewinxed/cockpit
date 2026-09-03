@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Handle, Position, useStore } from "@xyflow/svelte";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for importing a component group
   import * as Collapsible from "$lib/components/ui/collapsible";
   import { IconCheck, IconClose, IconSpinner } from "$lib/icons";
   import {
@@ -25,9 +26,16 @@
   const zoom = $derived(viewport.zoom);
 
   // Semantic zoom levels
-  const zoomLevel = $derived(
-    zoom < 0.5 ? "overview" : zoom < 1.0 ? "summary" : "detail"
-  );
+  function zoomLevelFor(z: number): "overview" | "summary" | "detail" {
+    if (z < 0.5) {
+      return "overview";
+    }
+    if (z < 1.0) {
+      return "summary";
+    }
+    return "detail";
+  }
+  const zoomLevel = $derived(zoomLevelFor(zoom));
 
   // Get primary tool info (first in group)
   const primaryTool = $derived(data?.messages?.[0]);
@@ -41,15 +49,19 @@
   const isStreaming = $derived(data?.isStreaming || toolStatus === "pending");
 
   /** The dot is the only status cue at overview zoom, so it says the word too. */
-  const statusLabel = $derived(
-    isStreaming
-      ? "Running"
-      : toolStatus === "success"
-        ? "Done"
-        : toolStatus === "error"
-          ? "Failed"
-          : "Pending"
-  );
+  function statusLabelFor(streaming: boolean, status: string): string {
+    if (streaming) {
+      return "Running";
+    }
+    if (status === "success") {
+      return "Done";
+    }
+    if (status === "error") {
+      return "Failed";
+    }
+    return "Pending";
+  }
+  const statusLabel = $derived(statusLabelFor(isStreaming, toolStatus));
 
   // The face and ink a tool wears everywhere else in the app.
   const family = $derived(toolFamily(toolName));
@@ -97,6 +109,16 @@
     }
   });
 
+  const statusDotColor = $derived.by(() => {
+    if (statusColor === "text-success") {
+      return "bg-success";
+    }
+    if (statusColor === "text-error") {
+      return "bg-error";
+    }
+    return "bg-warning";
+  });
+
   // Expanded state for detail view - use derived to react to data changes
   const initialExpanded = $derived(data?.expanded ?? false);
   let expanded = $state(false);
@@ -127,11 +149,7 @@
         <family.icon class="h-4 w-4 {family.color}" />
       </div>
       <div
-        class="w-2 h-2 rounded-full {statusColor === 'text-success'
-          ? 'bg-success'
-          : statusColor === 'text-error'
-            ? 'bg-error'
-            : 'bg-warning'}"
+        class="w-2 h-2 rounded-full {statusDotColor}"
         title={statusLabel}
       ></div>
       {#if toolCount > 1}
@@ -176,7 +194,9 @@
 
       {#if resultPreview && !isStreaming}
         <Collapsible.Root
-          onOpenChange={() => expanded = !expanded}
+          onOpenChange={() => {
+            expanded = !expanded;
+          }}
           open={expanded}
         >
           <Collapsible.Trigger

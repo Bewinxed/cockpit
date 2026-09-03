@@ -25,5 +25,6 @@
 {#if child}
   {@render child({ props: attrs })}
 {:else}
+  <!-- biome-ignore lint/a11y/useValidAnchor: href is spread in via attrs (the href prop); static analysis can't see it through the spread -->
   <a bind:this={ref} {...attrs}> {@render children?.()} </a>
 {/if}

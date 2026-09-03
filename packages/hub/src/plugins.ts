@@ -33,6 +33,9 @@ import { downloadRepo, get, readTree, unpack } from "./skills";
 
 /** `owner/repo` as a marketplace source names it, with an optional `@ref`. */
 const GITHUB_SLUG = /^([\w.-]+)\/([\w.-]+?)(?:@([\w./-]+))?$/;
+const HTTP_URL_PREFIX = /^https?:\/\//;
+const LEADING_SLASHES = /^\/+/;
+const DOT_GIT_SUFFIX = /\.git$/;
 
 /** A plugin id is `name@marketplace`; the name is what the manifest lists. */
 export const pluginName = (id: string): string => id.split("@")[0] ?? id;
@@ -70,11 +73,11 @@ const marketplaceRoot = async (
     return await downloadRepo(slug[1], slug[2], slug[3], work);
   }
 
-  const url = /^https?:\/\//.test(trimmed) ? new URL(trimmed) : undefined;
+  const url = HTTP_URL_PREFIX.test(trimmed) ? new URL(trimmed) : undefined;
   if (url?.hostname === "github.com") {
     const [owner, repo] = url.pathname
-      .replace(/^\/+/, "")
-      .replace(/\.git$/, "")
+      .replace(LEADING_SLASHES, "")
+      .replace(DOT_GIT_SUFFIX, "")
       .split("/");
     if (owner && repo) {
       return await downloadRepo(owner, repo, undefined, work);
@@ -100,8 +103,9 @@ const pluginRoot = async (
   entry: { name?: string; source?: unknown },
   marketplace: string,
   work: string
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one branch per plugin source kind (vendored path, github repo, git-subdir/url archive) — see the file-level comment on why the hub resolves these itself.
 ): Promise<string> => {
-  const source = entry.source;
+  const { source } = entry;
 
   // Vendored: a path relative to the marketplace, already downloaded.
   if (typeof source === "string") {
@@ -138,8 +142,8 @@ const pluginRoot = async (
     let root: string;
     if (url.hostname === "github.com") {
       const [owner, repo] = url.pathname
-        .replace(/^\/+/, "")
-        .replace(/\.git$/, "")
+        .replace(LEADING_SLASHES, "")
+        .replace(DOT_GIT_SUFFIX, "")
         .split("/");
       if (!(owner && repo)) {
         throw new Error(`${href} is not a github repository`);
@@ -206,6 +210,7 @@ export const resolveMarketplacePlugins = async (
         continue;
       }
       try {
+        // biome-ignore lint/performance/noAwaitInLoops: plugins of one marketplace are fetched one at a time to stay a good citizen of the source (github/CDN) and to keep each plugin's error attributable to its own name.
         const dir = await pluginRoot(entry, root, work);
         const { files, hash, bytes } = await readTree(dir, `plugin ${name}`);
         resolved.push({ name, marketplace, hash, bytes, files });

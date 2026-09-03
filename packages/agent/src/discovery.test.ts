@@ -15,6 +15,7 @@ describe("rediscoverHub", () => {
       browseMdns: async () => ["http://10.0.0.9:3456"],
       tailscaleCandidates: async () => [],
       probe: async (url) => url === "http://10.0.0.9:3456",
+      // biome-ignore lint/suspicious/useAwait: repin's type requires Promise<void>; this stub just records the call
       repin: async (url) => {
         repinned.push(url);
       },
@@ -33,6 +34,7 @@ describe("rediscoverHub", () => {
         { ip: "http://100.64.0.5:3456", host: "new-host" },
       ],
       probe: async (url) => url === "http://100.64.0.5:3456",
+      // biome-ignore lint/suspicious/useAwait: repin's type requires Promise<void>; this stub just records the call
       repin: async (url) => {
         repinned.push(url);
       },
@@ -48,15 +50,18 @@ describe("rediscoverHub", () => {
     const repinned: string[] = [];
     const winner = await rediscoverHub({
       readCachedHubUrl: async () => "http://10.0.0.2:3456",
+      // biome-ignore lint/suspicious/useAwait: browseMdns's type requires Promise<string[]>; this stub just records the call
       browseMdns: async () => {
         mdnsCalled = true;
         return [];
       },
+      // biome-ignore lint/suspicious/useAwait: tailscaleCandidates's type requires a promise; this stub just records the call
       tailscaleCandidates: async () => {
         tailscaleCalled = true;
         return [];
       },
       probe: async (url) => url === "http://10.0.0.2:3456",
+      // biome-ignore lint/suspicious/useAwait: repin's type requires Promise<void>; this stub just records the call
       repin: async (url) => {
         repinned.push(url);
       },
@@ -79,6 +84,7 @@ describe("rediscoverHub", () => {
         { ip: "http://100.64.0.5:3456", host: "new-host" },
       ],
       probe: async () => false,
+      // biome-ignore lint/suspicious/useAwait: repin's type requires Promise<void>; this stub just records the call
       repin: async (url) => {
         repinned.push(url);
       },

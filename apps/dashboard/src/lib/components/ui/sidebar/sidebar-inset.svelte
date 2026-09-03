@@ -11,7 +11,7 @@
 </script>
 
 <main
-  class={cn("bg-background md:peer-data-[variant=inset]:m-2 md:peer-data-[variant=inset]:ml-0 md:peer-data-[variant=inset]:rounded-[var(--radius-panel)] md:peer-data-[variant=inset]:shadow-[var(--shadow-tile)] md:peer-data-[variant=inset]:peer-data-[state=collapsed]:ml-2 relative flex w-full flex-1 flex-col", className)}
+  class={cn("relative flex w-full flex-1 flex-col bg-background md:peer-data-[variant=inset]:peer-data-[state=collapsed]:ml-2 md:peer-data-[variant=inset]:m-2 md:peer-data-[variant=inset]:ml-0 md:peer-data-[variant=inset]:rounded-[var(--radius-panel)] md:peer-data-[variant=inset]:shadow-[var(--shadow-tile)]", className)}
   data-slot="sidebar-inset"
   bind:this={ref}
   {...restProps}

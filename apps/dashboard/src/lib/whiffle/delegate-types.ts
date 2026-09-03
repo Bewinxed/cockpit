@@ -1,5 +1,5 @@
 import type { DelegateEffort, DelegateType } from "@whiffle/core";
-import { delegateTypeProblem, HARNESSES } from "@whiffle/core";
+import { HARNESSES } from "@whiffle/core";
 
 /**
  * The dashboard's side of delegate types: fetch wrappers in the shape
@@ -11,8 +11,12 @@ import { delegateTypeProblem, HARNESSES } from "@whiffle/core";
  * rather than re-derived, so the form's refusals agree with the hub's own.
  */
 
-export type { DelegateEffort, DelegateType };
-export { delegateTypeProblem };
+// biome-ignore lint/performance/noBarrelFile: re-exporting @whiffle/core's validator keeps the hub's own delegate-type rules the single source of truth
+export {
+  type DelegateEffort,
+  type DelegateType,
+  delegateTypeProblem,
+} from "@whiffle/core";
 
 /** `DelegateType['harness']` is the same three-value union `HARNESSES` already is. */
 export const DELEGATE_HARNESSES = HARNESSES;

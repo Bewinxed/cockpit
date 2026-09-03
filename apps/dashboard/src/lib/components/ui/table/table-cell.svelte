@@ -11,7 +11,7 @@
 </script>
 
 <td
-  class={cn("p-3 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0", className)}
+  class={cn("whitespace-nowrap p-3 align-middle [&:has([role=checkbox])]:pr-0", className)}
   data-slot="table-cell"
   bind:this={ref}
   {...restProps}

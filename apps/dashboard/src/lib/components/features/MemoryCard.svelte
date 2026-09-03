@@ -182,6 +182,9 @@
          which is why this needs no key handler of its own. -->
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <!-- biome-ignore lint/a11y/useKeyWithClickEvents: the click is a convenience shortcut; the Edit button above is the keyboard-reachable affordance -->
+    <!-- biome-ignore lint/a11y/noStaticElementInteractions: same convenience shortcut, no interactive semantics intended -->
+    <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: same convenience shortcut, no interactive semantics intended -->
     <div
       class="max-h-[60vh] min-h-40 overflow-y-auto px-[var(--space-4)] py-[var(--space-3)] {save ? 'cursor-text' : ''}"
       onclick={bodyClick}

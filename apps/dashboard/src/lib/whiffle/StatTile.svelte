@@ -5,6 +5,7 @@
    * of the well), a subtitle, and a semantic badge.
    */
   import type { Snippet } from "svelte";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Card from "$lib/components/ui/card";
 
   interface Props {
@@ -26,6 +27,7 @@
     unit,
     icon,
     href,
+    // biome-ignore lint/correctness/noUnusedVariables: accepted for the Props contract; not yet wired to a click target
     onclick,
     tone = "default",
     subtitle,

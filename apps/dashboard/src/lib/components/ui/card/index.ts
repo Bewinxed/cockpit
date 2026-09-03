@@ -1,25 +1,18 @@
-import Root from "./card.svelte";
-import Action from "./card-action.svelte";
-import Content from "./card-content.svelte";
-import Description from "./card-description.svelte";
-import Footer from "./card-footer.svelte";
-import Header from "./card-header.svelte";
-import Title from "./card-title.svelte";
-
+// biome-ignore lint/performance/noBarrelFile: this is the component's public API surface, re-exporting its parts under the shadcn-svelte convention
 export {
-  Action,
-  Action as CardAction,
-  Content,
-  Content as CardContent,
-  Description,
-  Description as CardDescription,
-  Footer,
-  Footer as CardFooter,
-  Header,
-  Header as CardHeader,
-  Root,
+  default as Root,
   //
-  Root as Card,
-  Title,
-  Title as CardTitle,
-};
+  default as Card,
+} from "./card.svelte";
+export { default as Action, default as CardAction } from "./card-action.svelte";
+export {
+  default as Content,
+  default as CardContent,
+} from "./card-content.svelte";
+export {
+  default as Description,
+  default as CardDescription,
+} from "./card-description.svelte";
+export { default as Footer, default as CardFooter } from "./card-footer.svelte";
+export { default as Header, default as CardHeader } from "./card-header.svelte";
+export { default as Title, default as CardTitle } from "./card-title.svelte";

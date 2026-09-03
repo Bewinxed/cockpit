@@ -81,6 +81,7 @@ export const writeSkill = async (
   const target = join(dir, skill.name);
   await rm(target, { recursive: true, force: true });
   for (const file of skill.files ?? []) {
+    // biome-ignore lint/performance/noAwaitInLoops: writes must land after the directory removal above; a failed write partway through still has to leave whatever files it got to
     await Bun.write(
       join(target, file.path),
       Buffer.from(file.contentBase64, "base64")
@@ -98,6 +99,7 @@ export const syncSkillFiles = async (
   desired: FleetSkillPayload[],
   managed: Record<string, string>,
   report: Record<string, FleetItemState>
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: writes every skill this machine doesn't have yet and removes what the fleet no longer carries, reporting each one
 ): Promise<Record<string, string>> => {
   const written: Record<string, string> = {};
   for (const skill of desired) {
@@ -136,6 +138,7 @@ export const syncSkillFiles = async (
     }
 
     try {
+      // biome-ignore lint/performance/noAwaitInLoops: each skill's directory write must finish before its hash is recorded, or a crash mid-loop would claim an unwritten skill
       await writeSkill(dir, skill);
       written[skill.name] = skill.hash;
       report[skill.name] = { state: "applied" };
@@ -153,6 +156,7 @@ export const syncSkillFiles = async (
     if (wanted.has(name)) {
       continue;
     }
+    // biome-ignore lint/performance/noAwaitInLoops: removals are independent, but mirror the write loop above rather than adding a second concurrency strategy for the same directory
     await rm(join(dir, name), { recursive: true, force: true });
     report[name] = { state: "removed" };
   }

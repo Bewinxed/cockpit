@@ -11,7 +11,7 @@
 </script>
 
 <div
-  class={cn("gap-2 flex flex-col", className)}
+  class={cn("flex flex-col gap-2", className)}
   data-slot="dialog-header"
   bind:this={ref}
   {...restProps}

@@ -36,4 +36,7 @@ const read = async (): Promise<BuildInfo> => {
 let reported: Promise<BuildInfo> | undefined;
 
 /** Read once and kept: a running hub is whatever it started as. */
-export const buildInfo = (): Promise<BuildInfo> => (reported ??= read());
+export const buildInfo = (): Promise<BuildInfo> => {
+  reported ??= read();
+  return reported;
+};

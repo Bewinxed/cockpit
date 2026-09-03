@@ -49,7 +49,8 @@ const SESSION_SPRITES: Component[] = [
 export function sessionSprite(seed: string | null | undefined): Component {
   const s = seed ?? "";
   let h = 0;
-  for (let i = 0; i < s.length; i++) {
+  for (let i = 0; i < s.length; i += 1) {
+    // biome-ignore lint/suspicious/noBitwiseOperators: `| 0` truncates to a 32-bit int, matching the hash's C-style overflow
     h = (h * 37 + s.charCodeAt(i)) | 0;
   }
   return SESSION_SPRITES[Math.abs(h) % SESSION_SPRITES.length];
@@ -59,7 +60,8 @@ export function sessionSprite(seed: string | null | undefined): Component {
 export function markHue(seed: string | null | undefined): MarkHue {
   const s = seed ?? "";
   let h = 0;
-  for (let i = 0; i < s.length; i++) {
+  for (let i = 0; i < s.length; i += 1) {
+    // biome-ignore lint/suspicious/noBitwiseOperators: `| 0` truncates to a 32-bit int, matching the hash's C-style overflow
     h = (h * 31 + s.charCodeAt(i)) | 0;
   }
   return ((Math.abs(h) % 8) + 1) as MarkHue;

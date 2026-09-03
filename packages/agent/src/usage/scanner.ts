@@ -1,3 +1,4 @@
+import type { Stats } from "node:fs";
 import { stat } from "node:fs/promises";
 import type { UsageBucket } from "@whiffle/core";
 import { floorToHour, totalTokens } from "@whiffle/core";
@@ -52,7 +53,7 @@ const readTail = async (
   offset: number
 ): Promise<{ text: string; nextOffset: number }> => {
   const file = Bun.file(path);
-  const size = file.size;
+  const { size } = file;
   if (size <= offset) {
     return { text: "", nextOffset: offset };
   }
@@ -74,7 +75,7 @@ const readWhole = async (
   path: string
 ): Promise<{ text: string; nextOffset: number }> => {
   const file = Bun.file(path);
-  const size = file.size;
+  const { size } = file;
   const text = await file.text();
   if (text.endsWith("\n")) {
     return { text, nextOffset: size };
@@ -233,8 +234,9 @@ export class UsageScanner {
     let claudeParsed = 0;
     for (const file of await listClaudeFiles()) {
       claudeFiles += 1;
-      let info;
+      let info: Stats;
       try {
+        // biome-ignore lint/performance/noAwaitInLoops: each file folds into the shared dedup maps and buckets in sequence
         info = await stat(file.path);
       } catch {
         continue;
@@ -295,8 +297,9 @@ export class UsageScanner {
     let claudeKept = 0;
     for (const file of await listClaudeFiles()) {
       claudeFiles += 1;
-      let info;
+      let info: Stats;
       try {
+        // biome-ignore lint/performance/noAwaitInLoops: each file folds into the shared dedup maps and buckets in sequence
         info = await stat(file.path);
       } catch {
         continue;

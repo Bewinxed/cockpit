@@ -24,11 +24,14 @@ import {
 } from "@whiffle/core";
 import { briefTitle } from "../brief-title";
 
+const WS_SCHEME = /^ws/;
+const WS_PATH_SUFFIX = /\/ws$/;
+
 /** Where the hub answers REST, derived from the websocket url the daemon uses. */
 const hubHttpUrl = (): string => {
   const ws =
     process.env[WHIFFLE_ENV.hubUrl] ?? `ws://localhost:${WHIFFLE_HUB_PORT}/ws`;
-  return ws.replace(/^ws/, "http").replace(/\/ws$/, "");
+  return ws.replace(WS_SCHEME, "http").replace(WS_PATH_SUFFIX, "");
 };
 
 /**
@@ -113,10 +116,11 @@ async function fetchInstances(): Promise<{
   const rows = (await instancesRes.json()) as InstanceRow[];
   const hosts = new Map<string, string>();
   if (agentsRes?.ok) {
-    for (const agent of (await agentsRes.json()) as {
+    const agents = (await agentsRes.json()) as {
       machineId: string;
       hostname: string;
-    }[]) {
+    }[];
+    for (const agent of agents) {
       hosts.set(agent.machineId, agent.hostname);
     }
   }
@@ -182,16 +186,20 @@ async function resolveForkSource(
     }
     if (outside) {
       throw new Error(
-        `"${target}" is not your delegate — you can only fork your own delegates.`
+        `"${target}" is not your delegate — you can only fork your own delegates.`,
+        { cause: error }
       );
     }
     throw error;
   }
 }
 
+/** An `@` prefix on a target name, optional. */
+const AT_PREFIX = /^@/;
+
 /** Resolves what the model typed to one session; ambiguity is reported, not guessed. */
 function resolve(peers: Peer[], target: string): Peer {
-  const needle = target.trim().toLowerCase().replace(/^@/, "");
+  const needle = target.trim().toLowerCase().replace(AT_PREFIX, "");
   const byId = peers.find((peer) => peer.row.id === needle);
   if (byId) {
     return byId;
@@ -280,18 +288,21 @@ export interface HandoffActions {
    * that a rule fired at all, so it has no id to name — the hub settles
    * everything outstanding for the session from the note alone.
    */
+  // biome-ignore lint/style/useConsistentMethodSignatures: this interface is implemented by the handoffActions object literal below; property-style would change parameter variance against that implementation
   acknowledgeConcern(note: string): Promise<string>;
   /**
    * Answers a delegate's parked ask. `answers` is keyed by the exact question
    * text, each value the chosen option label; `deny` refuses it. Neither means
    * "allow with no changes" — the tool ask's own input stands.
    */
+  // biome-ignore lint/style/useConsistentMethodSignatures: implemented below; property-style would change parameter variance against that implementation
   answerDelegate(
     target: string,
     requestId: string,
     answers?: Record<string, string>,
     deny?: boolean
   ): Promise<string>;
+  // biome-ignore lint/style/useConsistentMethodSignatures: implemented below; property-style would change parameter variance against that implementation
   delegate(
     prompt: string,
     opts?: {
@@ -314,17 +325,23 @@ export interface HandoffActions {
       canDelegate?: boolean;
     }
   ): Promise<HandoffResult>;
+  // biome-ignore lint/style/useConsistentMethodSignatures: implemented below; property-style would change parameter variance against that implementation
   handoff(target: string, message: string, urgent?: boolean): Promise<string>;
+  // biome-ignore lint/style/useConsistentMethodSignatures: implemented below; property-style would change parameter variance against that implementation
   interruptDelegate(target: string): Promise<string>;
+  // biome-ignore lint/style/useConsistentMethodSignatures: implemented below; property-style would change parameter variance against that implementation
   listSessions(): Promise<string>;
   /** Pushes a note to the owner's Telegram — no peer, no ask, fire-and-forget. */
+  // biome-ignore lint/style/useConsistentMethodSignatures: implemented below; property-style would change parameter variance against that implementation
   sendToUser(message: string): Promise<string>;
+  // biome-ignore lint/style/useConsistentMethodSignatures: implemented below; property-style would change parameter variance against that implementation
   startSession(
     cwd: string,
     prompt: string,
     sideQuest?: boolean,
     model?: string
   ): Promise<HandoffResult>;
+  // biome-ignore lint/style/useConsistentMethodSignatures: implemented below; property-style would change parameter variance against that implementation
   stopDelegate(target: string): Promise<string>;
 }
 
@@ -354,7 +371,8 @@ function resolveDelegate(
     }
     if (outside) {
       throw new Error(
-        `"${target}" is not your delegate — you can only stop or interrupt your own delegates.`
+        `"${target}" is not your delegate — you can only stop or interrupt your own delegates.`,
+        { cause: error }
       );
     }
     throw error;
@@ -436,6 +454,7 @@ export const handoffActions = ({
     );
   },
 
+  // biome-ignore lint/suspicious/useAwait: HandoffActions.startSession returns Promise<HandoffResult>; dropping async would need every return wrapped instead
   async startSession(
     workdir: string,
     prompt: string,
@@ -484,6 +503,7 @@ export const handoffActions = ({
     };
   },
 
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: resolves a delegate type, a fork source, and every spawn option in one pass, so the model gets one refusal naming exactly what's wrong
   async delegate(
     prompt: string,
     opts?: {
@@ -671,11 +691,14 @@ export const handoffActions = ({
     // folds these into the input it kept (settledQuestionResult in
     // @whiffle/core, mirroring the dashboard's questionAnswer). A denial says so
     // in words for the same reason: the model is told why, not merely that.
-    const result: PermissionResult = deny
-      ? { behavior: "deny", message: QUESTION_DISMISSED }
-      : answers
-        ? { behavior: "allow", updatedInput: { answers } }
-        : { behavior: "allow" };
+    let result: PermissionResult;
+    if (deny) {
+      result = { behavior: "deny", message: QUESTION_DISMISSED };
+    } else if (answers) {
+      result = { behavior: "allow", updatedInput: { answers } };
+    } else {
+      result = { behavior: "allow" };
+    }
     emit({
       verb: "control",
       machineId: peer.row.machineId,
@@ -694,6 +717,7 @@ export const handoffActions = ({
       : `Answered your delegate ${peer.label}'s ask (${requestId}).`;
   },
 
+  // biome-ignore lint/suspicious/useAwait: HandoffActions.sendToUser returns Promise<string>; dropping async would need the return wrapped instead
   async sendToUser(message: string): Promise<string> {
     emit({
       verb: "frames",

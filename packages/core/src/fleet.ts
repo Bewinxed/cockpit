@@ -177,7 +177,7 @@ export interface FleetPluginPayload {
 
 /**
  * One subagent the fleet keeps (NEW.md §11), without the file it is. A subagent
- * *is* its markdown — YAML front matter over a body that becomes the system
+ * is its markdown — YAML front matter over a body that becomes the system
  * prompt — and its identity is the front matter's `name`, not the filename. So
  * whiffle stores the file verbatim and re-models none of it.
  */
@@ -225,11 +225,16 @@ export interface AgentFrontMatter {
 export const AGENT_NAME = /^[a-z][a-z0-9-]*$/;
 
 const FRONT_MATTER = /^---\r?\n([\s\S]*?)\r?\n---/;
+const QUOTED_SCALAR = /^(["'])([\s\S]*)\1$/;
+const LINE_SPLIT = /\r?\n/;
+const TOP_LEVEL_KEY = /^([A-Za-z][A-Za-z0-9_-]*):(.*)$/;
+const INDENTED_LINE = /^\s+\S/;
+const SEQUENCE_ITEM = /^\s*-\s+/;
 
 /** `"a"`, `'a'` or a bare word — YAML's three ways of writing one scalar. */
 const unquote = (value: string): string => {
   const trimmed = value.trim();
-  const quoted = /^(["'])([\s\S]*)\1$/.exec(trimmed);
+  const quoted = QUOTED_SCALAR.exec(trimmed);
   return quoted ? quoted[2] : trimmed;
 };
 
@@ -248,17 +253,18 @@ const splitList = (value: string): string[] =>
  * be storing the file verbatim. A block scalar (`|`, `>`) folds to one line and
  * a block sequence joins with commas, so both reach the reader as themselves.
  */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: parses YAML front matter's scalars, folded block scalars, and inline sequences in one pass — see the block comment above for why this stays one function instead of a dependency.
 export const parseAgentFrontMatter = (content: string): AgentFrontMatter => {
   const block = FRONT_MATTER.exec(content);
   if (!block) {
     return {};
   }
 
-  const lines = block[1].split(/\r?\n/);
+  const lines = block[1].split(LINE_SPLIT);
   const fields: Record<string, string> = {};
   for (let at = 0; at < lines.length; at += 1) {
     // Top-level keys only: an indented line belongs to whatever opened above it.
-    const pair = /^([A-Za-z][A-Za-z0-9_-]*):(.*)$/.exec(lines[at]);
+    const pair = TOP_LEVEL_KEY.exec(lines[at]);
     if (!pair) {
       continue;
     }
@@ -267,14 +273,16 @@ export const parseAgentFrontMatter = (content: string): AgentFrontMatter => {
 
     if (value.startsWith("|") || value.startsWith(">")) {
       const folded: string[] = [];
-      while (at + 1 < lines.length && /^\s+\S/.test(lines[at + 1])) {
-        folded.push(lines[++at].trim());
+      while (at + 1 < lines.length && INDENTED_LINE.test(lines[at + 1])) {
+        at += 1;
+        folded.push(lines[at].trim());
       }
       fields[key] = folded.join(" ");
     } else if (value === "") {
       const items: string[] = [];
-      while (at + 1 < lines.length && /^\s*-\s+/.test(lines[at + 1])) {
-        items.push(unquote(lines[++at].replace(/^\s*-\s+/, "")));
+      while (at + 1 < lines.length && SEQUENCE_ITEM.test(lines[at + 1])) {
+        at += 1;
+        items.push(unquote(lines[at].replace(SEQUENCE_ITEM, "")));
       }
       if (items.length > 0) {
         fields[key] = items.join(", ");
@@ -327,11 +335,13 @@ export const agentProblem = (
  * ever stored that a machine would then have to turn away — and nothing under
  * `~/.claude/memories/` is ever a write anywhere else.
  */
+const WINDOWS_DRIVE_PREFIX = /^[A-Za-z]:/;
+
 export const memoryDocProblem = (path: string): string | undefined => {
   if (!path.endsWith(".md")) {
     return "a linked document is markdown — its path has to end in .md";
   }
-  if (path.startsWith("/") || /^[A-Za-z]:/.test(path)) {
+  if (path.startsWith("/") || WINDOWS_DRIVE_PREFIX.test(path)) {
     return `“${path}” is absolute — a document's path is relative to ~/.claude/memories/`;
   }
   if (path.includes("\\")) {

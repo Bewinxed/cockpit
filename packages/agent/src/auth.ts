@@ -21,7 +21,12 @@ const PROBE_TIMEOUT_MS = 20_000;
  * a process and no tokens.
  */
 const idle: AsyncIterable<SDKUserMessage> = {
-  [Symbol.asyncIterator]: () => ({ next: () => new Promise<never>(() => {}) }),
+  [Symbol.asyncIterator]: () => ({
+    next: () =>
+      new Promise<never>(() => {
+        // never resolves: this iterable is deliberately silent, forever
+      }),
+  }),
 };
 
 /**

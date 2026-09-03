@@ -328,7 +328,7 @@ export const restartStack = async (
 
 /**
  * The deployment trigger (C8): the poller decides *whether*, this decides
- * *what*. Kept here rather than in `deploy.ts` so that module stays a pure
+ * what. Kept here rather than in `deploy.ts` so that module stays a pure
  * observer — it can be read, and tested, without the ability to pull anything.
  *
  * `restartAgent: true` is the point of the whole channel. A daemon that pulled

@@ -11,7 +11,7 @@
 </script>
 
 <Separator
-  class={cn("mx-2 bg-sidebar-border w-auto", className)}
+  class={cn("mx-2 w-auto bg-sidebar-border", className)}
   data-sidebar="separator"
   data-slot="sidebar-separator"
   bind:ref

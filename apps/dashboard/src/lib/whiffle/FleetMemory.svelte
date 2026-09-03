@@ -4,11 +4,14 @@
   import { toast } from "svelte-sonner";
   import DiffView from "$lib/components/features/DiffView.svelte";
   import MemoryCard from "$lib/components/features/MemoryCard.svelte";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Alert from "$lib/components/ui/alert";
   import { Button } from "$lib/components/ui/button";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Card from "$lib/components/ui/card";
   import { Input } from "$lib/components/ui/input";
   import { Skeleton } from "$lib/components/ui/skeleton";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Tooltip from "$lib/components/ui/tooltip";
   import {
     IconCheck,
@@ -47,7 +50,7 @@
     docs = $bindable(),
     machines,
     settling,
-    error,
+    error: loadError,
   }: {
     memory: FleetMemoryRow | null;
     docs: FleetMemoryDocRow[];
@@ -77,8 +80,8 @@
   let reading = $state<Record<number, boolean>>({});
   let restoring = $state<number | null>(null);
 
-  const message = (error: unknown) =>
-    error instanceof Error ? error.message : String(error);
+  const message = (caught: unknown) =>
+    caught instanceof Error ? caught.message : String(caught);
 
   // Quiet Ledger surfaces (DESIGN.md · mocks/v5-components.html .panel / .callout).
   const panelList =
@@ -97,7 +100,10 @@
    * perfectly in sync while nothing was loading them.
    */
   const hookFailed = $derived(
-    machines.filter((row) => row.fleet?.memoryHook?.state === "failed")
+    machines.flatMap((row) => {
+      const hook = row.fleet?.memoryHook;
+      return hook?.state === "failed" ? [{ machine: row, hook }] : [];
+    })
   );
   const applied = $derived(
     machines.filter((row) => row.fleet?.memory?.state === "applied")
@@ -129,8 +135,8 @@
     historyError = null;
     try {
       versions = await memoryHistory();
-    } catch (error) {
-      historyError = message(error);
+    } catch (caught) {
+      historyError = message(caught);
     } finally {
       loadingHistory = false;
     }
@@ -138,6 +144,7 @@
   function toggleHistory() {
     historyOpen = !historyOpen;
     if (historyOpen && versions === null && !loadingHistory) {
+      // biome-ignore lint/complexity/noVoid: fire-and-forget — the panel opens now, the list fills in when it lands
       void loadHistory();
     }
   }
@@ -146,6 +153,7 @@
     memory = row;
     conflict = null;
     editing = false;
+    // biome-ignore lint/complexity/noVoid: fire-and-forget — the write already landed, the history list is a courtesy refresh
     void refreshHistory();
   }
   async function write(
@@ -170,8 +178,8 @@
     saving = true;
     try {
       await write(mine, conflict.hash);
-    } catch (error) {
-      toast.error(message(error));
+    } catch (caught) {
+      toast.error(message(caught));
     } finally {
       saving = false;
     }
@@ -193,8 +201,8 @@
       conflict = null;
       editing = false;
       await refreshHistory();
-    } catch (error) {
-      toast.error(message(error));
+    } catch (caught) {
+      toast.error(message(caught));
     } finally {
       clearing = false;
     }
@@ -216,8 +224,8 @@
     delete unread[machine.machineId];
     try {
       copies[machine.machineId] = await peekMemory(machine.machineId);
-    } catch (error) {
-      unread[machine.machineId] = message(error);
+    } catch (caught) {
+      unread[machine.machineId] = message(caught);
     } finally {
       delete peeking[machine.machineId];
     }
@@ -232,8 +240,8 @@
       toast.success(
         `The fleet now keeps ${machineLabel(machine.hostname)}'s memory.`
       );
-    } catch (error) {
-      toast.error(message(error));
+    } catch (caught) {
+      toast.error(message(caught));
     } finally {
       delete busy[machine.machineId];
     }
@@ -249,8 +257,8 @@
       toast.success(
         `${machineLabel(machine.hostname)} takes the fleet's copy.`
       );
-    } catch (error) {
-      toast.error(message(error));
+    } catch (caught) {
+      toast.error(message(caught));
     } finally {
       delete busy[machine.machineId];
     }
@@ -268,9 +276,9 @@
     reading[row.id] = true;
     try {
       contents[row.id] = (await memoryVersion(row.id)).content;
-    } catch (error) {
+    } catch (caught) {
       shown = null;
-      toast.error(message(error));
+      toast.error(message(caught));
     } finally {
       delete reading[row.id];
     }
@@ -282,8 +290,8 @@
       landed(await restoreMemory(row.id));
       shown = null;
       toast.success("Restored — every machine gets it.");
-    } catch (error) {
-      toast.error(message(error));
+    } catch (caught) {
+      toast.error(message(caught));
     } finally {
       restoring = null;
     }
@@ -332,8 +340,8 @@
     try {
       await removeMemoryDoc(path);
       docs = docs.filter((doc) => doc.path !== path);
-    } catch (error) {
-      toast.error(message(error));
+    } catch (caught) {
+      toast.error(message(caught));
     } finally {
       delete docBusy[path];
     }
@@ -346,8 +354,8 @@
       toast.success(
         `The fleet now keeps ${machineLabel(machine.hostname)}'s ${path}.`
       );
-    } catch (error) {
-      toast.error(message(error));
+    } catch (caught) {
+      toast.error(message(caught));
     } finally {
       delete docBusy[path];
     }
@@ -360,8 +368,8 @@
       toast.success(
         `${machineLabel(machine.hostname)} takes the fleet's ${path}.`
       );
-    } catch (error) {
-      toast.error(message(error));
+    } catch (caught) {
+      toast.error(message(caught));
     } finally {
       delete docBusy[path];
     }
@@ -409,6 +417,7 @@
     draftPath = "";
     asked = false;
     drafting = true;
+    // biome-ignore lint/complexity/noVoid: fire-and-forget — focuses the field once it mounts, nothing awaits it
     void tick().then(() => pathField?.focus());
   }
 
@@ -672,15 +681,16 @@
 
 <p class="max-w-prose text-caption">
   One memory for the fleet. What you write here is
-  <span class="font-mono">~/.claude/CLAUDE.md</span> on every machine, so what
-  you taught Claude Code on one of them is what it knows on all of them.
+  <span class="font-mono">~/.claude/CLAUDE.md</span>
+  on every machine, so what you taught Claude Code on one of them is what it
+  knows on all of them.
 </p>
 
-{#if error}
+{#if loadError}
   <Alert.Root class={warnAlert}>
     <IconWarningTriangle />
     <Alert.Description class="text-caption text-[var(--warning-11)]"
-      >{error}</Alert.Description
+      >{loadError}</Alert.Description
     >
   </Alert.Root>
 {:else}
@@ -788,9 +798,9 @@
     And the documents it links, under
     <span class="font-mono">~/.claude/memories/</span>. The main file is loaded
     flat into every session; a
-    <span class="font-mono">models/&lt;model&gt;.md</span> is put in front of
-    the session actually running that model, so what only one model needs stays
-    off every other one's context.
+    <span class="font-mono">models/&lt;model&gt;.md</span>
+    is put in front of the session actually running that model, so what only one
+    model needs stays off every other one's context.
   </p>
   <!-- Wrapped so a form that refuses a path already taken can send the reader
        to the card that has it. -->
@@ -815,15 +825,14 @@
         Whiffle registers. Where it did not register, the files are on the
         machine and nothing reads them.
       </p>
-      {#each hookFailed as machine (machine.machineId)}
-        {@const item = machine.fleet!.memoryHook!}
+      {#each hookFailed as { machine, hook } (machine.machineId)}
         <FleetFault
           group={{
             origin: 'machine',
-            cause: causeOf(item.detail),
+            cause: causeOf(hook.detail),
             scope: 'memoryHook',
             machineId: machine.machineId,
-            faults: [{ origin: 'machine', scope: 'memoryHook', key: '', machineId: machine.machineId, detail: item.detail, cause: causeOf(item.detail) }],
+            faults: [{ origin: 'machine', scope: 'memoryHook', key: '', machineId: machine.machineId, detail: hook.detail, cause: causeOf(hook.detail) }],
           }}
           {machines}
         />
@@ -946,7 +955,8 @@
         <IconCheck class="size-3.5 shrink-0 text-success" />
         <span
           >In sync on
-          {applied.length} machine{applied.length === 1 ? '' : 's'}</span
+          {applied.length}
+          machine{applied.length === 1 ? '' : 's'}</span
         >
         {#if asleep.length > 0}
           <span>{names(asleep)} offline — they sync when back.</span>

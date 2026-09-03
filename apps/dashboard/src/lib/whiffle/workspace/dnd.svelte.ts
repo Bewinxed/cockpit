@@ -20,6 +20,7 @@
  * especially when the commands the menu carries do the same jobs.
  */
 
+// biome-ignore lint/style/noExportedImports: export-from here would make this a single-export barrel file, flagged by noBarrelFile instead
 import { combine } from "@atlaskit/pragmatic-drag-and-drop/combine";
 import {
   draggable,
@@ -161,7 +162,11 @@ export function dragSession(
 ) {
   let current = params;
   if (coarse()) {
-    return { update: (next: typeof params) => (current = next) };
+    return {
+      update: (next: typeof params) => {
+        current = next;
+      },
+    };
   }
 
   const cleanup = draggable({
@@ -189,7 +194,9 @@ export function dragSession(
   });
 
   return {
-    update: (next: typeof params) => (current = next),
+    update: (next: typeof params) => {
+      current = next;
+    },
     destroy: cleanup,
   };
 }
@@ -201,7 +208,11 @@ export function dragSession(
 export function paneDropTarget(node: HTMLElement, leafId: string) {
   let current = leafId;
   if (coarse()) {
-    return { update: (next: string) => (current = next) };
+    return {
+      update: (next: string) => {
+        current = next;
+      },
+    };
   }
 
   const allowedEdge = (
@@ -267,7 +278,12 @@ export function paneDropTarget(node: HTMLElement, leafId: string) {
     },
   });
 
-  return { update: (next: string) => (current = next), destroy: cleanup };
+  return {
+    update: (next: string) => {
+      current = next;
+    },
+    destroy: cleanup,
+  };
 }
 
 /**
@@ -282,7 +298,11 @@ export function tabDropTarget(
 ) {
   let current = params;
   if (coarse()) {
-    return { update: (next: typeof params) => (current = next) };
+    return {
+      update: (next: typeof params) => {
+        current = next;
+      },
+    };
   }
 
   const cleanup = dropTargetForElements({
@@ -339,7 +359,9 @@ export function tabDropTarget(
   });
 
   return {
-    update: (next: typeof params) => (current = next),
+    update: (next: typeof params) => {
+      current = next;
+    },
     destroy: cleanup,
   };
 }

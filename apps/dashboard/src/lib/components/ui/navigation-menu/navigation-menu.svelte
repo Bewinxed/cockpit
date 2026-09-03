@@ -16,7 +16,7 @@
 
 <NavigationMenuPrimitive.Root
   class={cn(
-		"max-w-max group/navigation-menu relative flex max-w-max flex-1 items-center justify-center",
+		"group/navigation-menu relative flex max-w-max max-w-max flex-1 items-center justify-center",
 		className
 	)}
   data-slot="navigation-menu"

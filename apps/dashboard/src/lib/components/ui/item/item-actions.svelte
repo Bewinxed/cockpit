@@ -11,7 +11,7 @@
 </script>
 
 <div
-  class={cn("gap-2 flex items-center", className)}
+  class={cn("flex items-center gap-2", className)}
   data-slot="item-actions"
   bind:this={ref}
   {...restProps}

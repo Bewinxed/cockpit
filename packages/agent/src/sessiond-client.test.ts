@@ -46,6 +46,7 @@ const startDaemon = async (): Promise<string> => {
   cleanups.push(() => daemon.kill("SIGKILL"));
   const deadline = Date.now() + 10_000;
   while (Date.now() < deadline) {
+    // biome-ignore lint/performance/noAwaitInLoops: polls the daemon at a fixed interval until it binds or the deadline passes
     if (await probeEndpoint(endpoint, 200)) {
       return endpoint;
     }
@@ -95,10 +96,15 @@ test("a child keeps running and its ring keeps filling while the agent side is t
     0
   );
   while (seen.length < 5) {
+    // biome-ignore lint/performance/noAwaitInLoops: polls for the child's own lines to arrive at a fixed interval
     await Bun.sleep(10);
   }
 
-  const cursor = seen.at(-1)!.seq;
+  const lastSeen = seen.at(-1);
+  if (!lastSeen) {
+    throw new Error("no lines seen from the child yet");
+  }
+  const cursor = lastSeen.seq;
   // THE DEATH. Everything the agent held for this child goes away: the
   // socket, the cursor, the object. The child does not.
   first.close();
@@ -110,9 +116,12 @@ test("a child keeps running and its ring keeps filling while the agent side is t
   const second = await SessiondClient.connect(endpoint);
   cleanups.push(() => second.close());
   const held = second.procs.find((proc) => proc.procId === procId);
-  expect(held?.alive).toBe(true);
+  if (!held) {
+    throw new Error(`${procId} is not among the second life's procs`);
+  }
+  expect(held.alive).toBe(true);
   // The ring kept filling with nobody attached — the whole tmux property.
-  expect(held!.head).toBeGreaterThan(cursor);
+  expect(held.head).toBeGreaterThan(cursor);
 
   const replayed: { seq: number; n: number }[] = [];
   second.subscribe(
@@ -121,29 +130,45 @@ test("a child keeps running and its ring keeps filling while the agent side is t
     cursor
   );
   while (replayed.length < 10) {
+    // biome-ignore lint/performance/noAwaitInLoops: polls for the replay to arrive at a fixed interval
     await Bun.sleep(10);
   }
 
+  const [firstReplayed] = replayed;
+  const lastReplayed = replayed.at(-1);
+  if (!(firstReplayed && lastReplayed)) {
+    throw new Error("no lines replayed for the second life");
+  }
   // NO GAP: the replay resumes at exactly the line after the cursor.
-  expect(replayed[0]!.seq).toBe(cursor + 1);
+  expect(firstReplayed.seq).toBe(cursor + 1);
   // NO DUPLICATE and no hole across the seam: seqs are strictly +1, and the
   // child's own counter moves in lockstep with them, so nothing sessiond
   // handed over was invented or dropped.
-  for (let i = 1; i < replayed.length; i++) {
-    expect(replayed[i]!.seq).toBe(replayed[i - 1]!.seq + 1);
-    expect(replayed[i]!.n).toBe(replayed[i - 1]!.n + 1);
+  for (let i = 1; i < replayed.length; i += 1) {
+    const cur = replayed[i];
+    const prev = replayed[i - 1];
+    if (!(cur && prev)) {
+      throw new Error(`replayed[${i}] or its predecessor is missing`);
+    }
+    expect(cur.seq).toBe(prev.seq + 1);
+    expect(cur.n).toBe(prev.n + 1);
   }
   // And the two lives join without overlap: the last line of the first life
   // is one before the first line of the second.
-  expect(seen.at(-1)!.n + 1).toBe(replayed[0]!.n);
+  expect(lastSeen.n + 1).toBe(firstReplayed.n);
 
   // The hand-off's graceful half still reaches a child nobody spawned in
   // this process: stdin EOF, and it goes away on its own terms.
   const exited = new Promise<void>((resolve) => {
     second.subscribe(
       procId,
-      { line: () => {}, exit: () => resolve() },
-      replayed.at(-1)!.seq
+      {
+        line: () => {
+          // only the exit matters for this assertion
+        },
+        exit: () => resolve(),
+      },
+      lastReplayed.seq
     );
   });
   await second.stdinEnd(procId);

@@ -128,8 +128,11 @@ test("the caret has to be inside the command", () => {
 test("a bare slash offers everything", () => {
   const found = commandAt("/", 1);
   expect(found).toEqual({ term: "", start: 0 });
+  if (!found) {
+    throw new Error("expected commandAt to find a token");
+  }
   expect(
-    filterCommands([builtin("review"), builtin("agents")], found!.term)
+    filterCommands([builtin("review"), builtin("agents")], found.term)
   ).toHaveLength(2);
 });
 

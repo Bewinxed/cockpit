@@ -184,7 +184,7 @@ function filterModelsDev(raw: unknown): PricingSnapshot {
     }
     const prefix = provider === "opencode-go" ? "opencode-go/" : "";
     for (const [id, m] of Object.entries(catalog.models)) {
-      const cost = m.cost;
+      const { cost } = m;
       if (!cost || cost.input === undefined || cost.output === undefined) {
         continue;
       }

@@ -38,6 +38,7 @@
   } = $props();
 </script>
 
+<!-- biome-ignore lint/a11y/useSemanticElements: <fieldset> carries browser-default border/padding this design resets everywhere it's used; keeping the div avoids a visual regression -->
 <div
   class={cn(fieldVariants({ orientation }), className)}
   data-orientation={orientation}

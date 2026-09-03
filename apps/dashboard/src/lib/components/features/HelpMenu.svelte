@@ -72,7 +72,9 @@
 <Tabs.Root
   class="font-mono text-sm bg-background border border-border rounded-[var(--radius-card)] overflow-hidden"
   loop
-  onValueChange={(value) => (activeTab = value as Tab)}
+  onValueChange={(value) => {
+    activeTab = value as Tab;
+  }}
   value={activeTab}
 >
   <!-- Header with tabs -->

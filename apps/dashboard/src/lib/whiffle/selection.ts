@@ -29,6 +29,9 @@ export function quoteBlock(text: string, existingDraft: string): string {
   return head ? `${head}\n\n${quoted}\n\n` : `${quoted}\n\n`;
 }
 
+/** The last whitespace in a run — greedy, so it finds the latest boundary. */
+const LAST_WHITESPACE = /^[\s\S]*\s/;
+
 /** Cut at the last word boundary that fits, and say that it was cut. */
 function capped(text: string): string {
   if (text.length <= QUOTE_MAX) {
@@ -37,7 +40,7 @@ function capped(text: string): string {
   const head = text.slice(0, QUOTE_MAX);
   // Greedy up to the last whitespace in the run; a single unbroken token that
   // long has no boundary to cut at and takes the hard cut.
-  const boundary = /^[\s\S]*\s/.exec(head);
+  const boundary = LAST_WHITESPACE.exec(head);
   return `${(boundary ? boundary[0] : head).trimEnd()}…`;
 }
 

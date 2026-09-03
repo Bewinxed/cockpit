@@ -69,6 +69,7 @@ test("a plain task_notification yields one system.task line, and creates no bran
   );
 
   const branches: Record<string, SubagentState> = {};
+  // biome-ignore lint/style/noNonNullAssertion: mapFrame's preceding call is a task tool_use/task_notification, which always produces a branch — the assertion states that test setup invariant.
   applyBranchEvent(branches, "i1", mapping.branch!);
   expect(branches).toEqual({});
 });
@@ -90,6 +91,7 @@ test('a failed plain task reads "task failed"', () => {
 test("a subagentSpawn tool_use then task frames leave exactly one branch that updates", () => {
   const branches: Record<string, SubagentState> = {};
   const spawn = mapFrame("i1", taskToolUse("toolu_agent"));
+  // biome-ignore lint/style/noNonNullAssertion: mapFrame's preceding call is a task tool_use/task_notification, which always produces a branch — the assertion states that test setup invariant.
   applyBranchEvent(branches, "i1", spawn.branch!);
   expect(Object.keys(branches)).toHaveLength(1);
   expect(branches.toolu_agent.subagentType).toBe("general-purpose");
@@ -142,6 +144,7 @@ test("a real subagent task_notification is suppressed: one branch, zero system.t
 
   // tool_use spawn mints the branch (subagentSpawn).
   const spawn = mapFrame("i1", taskToolUse("toolu_agent"));
+  // biome-ignore lint/style/noNonNullAssertion: mapFrame's preceding call is a task tool_use/task_notification, which always produces a branch — the assertion states that test setup invariant.
   applyBranchEvent(branches, "i1", spawn.branch!);
   expect(Object.keys(branches)).toHaveLength(1);
 
@@ -155,6 +158,7 @@ test("a real subagent task_notification is suppressed: one branch, zero system.t
       description: "research it",
     })
   );
+  // biome-ignore lint/style/noNonNullAssertion: mapFrame's preceding call is a task tool_use/task_notification, which always produces a branch — the assertion states that test setup invariant.
   applyBranchEvent(branches, "i1", started.branch!);
 
   // task_notification: mapFrame still emits the line, but the seam suppresses it.
@@ -167,6 +171,7 @@ test("a real subagent task_notification is suppressed: one branch, zero system.t
       summary: "SUBAGENT-MARKER",
     })
   );
+  // biome-ignore lint/style/noNonNullAssertion: mapFrame's preceding call is a task tool_use/task_notification, which always produces a branch — the assertion states that test setup invariant.
   applyBranchEvent(branches, "i1", notified.branch!);
   expect(Object.keys(branches)).toHaveLength(1);
   expect(branches.toolu_agent.status).toBe("complete");
@@ -190,6 +195,7 @@ test("a plain task_notification survives suppression: exactly one system.task li
       summary: "probe availability",
     })
   );
+  // biome-ignore lint/style/noNonNullAssertion: mapFrame's preceding call is a task tool_use/task_notification, which always produces a branch — the assertion states that test setup invariant.
   applyBranchEvent(branches, "i1", mapping.branch!);
   expect(branches).toEqual({});
 

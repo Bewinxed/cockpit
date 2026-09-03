@@ -10,7 +10,7 @@
 </script>
 
 <AlertDialogPrimitive.Description
-  class={cn("text-sm text-balance text-muted-foreground md:text-pretty *:[a]:underline *:[a]:underline-offset-3 *:[a]:hover:text-foreground", className)}
+  class={cn("text-balance text-muted-foreground text-sm md:text-pretty *:[a]:underline *:[a]:underline-offset-3 *:[a]:hover:text-foreground", className)}
   data-slot="alert-dialog-description"
   bind:ref
   {...restProps}

@@ -109,6 +109,7 @@ afterAll(() => rmSync(scratch, { recursive: true, force: true }));
 /** A git runner that records every call, so "never ran" can be asserted. */
 const spy = (): { git: GitRunner; calls: string[][] } => {
   const calls: string[][] = [];
+  // biome-ignore lint/suspicious/useAwait: GitRunner's type requires Promise<Ran>; this stub just records the call
   const git: GitRunner = async (root, args) => {
     calls.push([root, ...args]);
     return { ok: false, out: "", err: "this runner must never be reached" };
@@ -161,10 +162,13 @@ describe("the marker is the guard (G2)", () => {
     const watcher = new DeployWatcher({
       root: unmarked,
       git,
+      // biome-ignore lint/suspicious/useAwait: update's type requires a promise; this stub just records the call
       update: async (state) => {
         runs.push(state);
       },
-      report: () => {},
+      report: () => {
+        // no-op: this test doesn't assert on report
+      },
     });
     await watcher.tick();
     await watcher.tick();
@@ -186,7 +190,9 @@ describe("a marked clone that falls behind (G2)", () => {
         // scratch origin and nothing else.
         await sh(state.root, "git", ...pullArgs("main"));
       },
-      report: () => {},
+      report: () => {
+        // no-op: this test doesn't assert on report
+      },
     });
 
     // Level to begin with: nothing to do, and nothing done.
@@ -204,6 +210,7 @@ describe("a marked clone that falls behind (G2)", () => {
 
     // Four more minutes of polling on the same head: still one update.
     for (let index = 0; index < 4; index += 1) {
+      // biome-ignore lint/performance/noAwaitInLoops: each tick must observe the previous one's state, one poll at a time
       await watcher.tick();
     }
     expect(runs.length).toBe(1);
@@ -235,6 +242,7 @@ describe("a marked clone that falls behind (G2)", () => {
     const ticks: string[] = [];
     const watcher = new DeployWatcher({
       root: behind,
+      // biome-ignore lint/suspicious/useAwait: update's type requires a promise; this stub just records the call then throws
       update: async () => {
         attempts += 1;
         throw new Error("the dashboard build failed");
@@ -292,10 +300,11 @@ describe("a diverged clone refuses loudly (G3)", () => {
     const reported: DeployState[] = [];
     const watcher = new DeployWatcher({
       root: diverged,
+      // biome-ignore lint/suspicious/useAwait: update's type requires a promise; this stub just records the call
       update: async (state) => {
         runs.push(state);
       },
-      report: (tick) => reported.push(tick.state),
+      report: (t) => reported.push(t.state),
     });
     const tick = await watcher.tick();
 
@@ -329,7 +338,7 @@ describe("a diverged clone refuses loudly (G3)", () => {
     expect(await sh(diverged, "git", "rev-parse", "HEAD")).toBe(localHead);
   });
 
-  test("the trigger itself refuses any state but `behind`", async () => {
+  test("the trigger itself refuses any state but `behind`", () => {
     const states: DeployState[] = [
       { kind: "unmarked", root: "/tmp/nope" },
       { kind: "current", root: "/tmp/nope", head: "abc1234" },

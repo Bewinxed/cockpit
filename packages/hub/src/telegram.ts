@@ -303,6 +303,7 @@ export const createTelegramBridge = ({
     filesBase: `${API_BASE}/file/bot${token}`,
   });
 
+  // biome-ignore lint/suspicious/useAwait: the declared Promise return type is what callers await; the body is a tail call into `call`, nothing here needs its own await
   const send = async (
     text: string,
     buttons?: InlineButton[][]
@@ -369,14 +370,14 @@ export const createTelegramBridge = ({
     if (!row) {
       return `${mark} <b>${esc(instanceId.slice(0, 8))}</b>`;
     }
-    const hostname =
+    const machineLabel =
       db.listAgents().find((agent) => agent.machineId === row.machineId)
         ?.hostname ?? row.machineId;
     const project = row.projectId
       ? db.listProjects().find((candidate) => candidate.id === row.projectId)
           ?.name
       : undefined;
-    const parts = [`<b>${esc(leaf(row.cwd))}</b>`, esc(hostname)];
+    const parts = [`<b>${esc(leaf(row.cwd))}</b>`, esc(machineLabel)];
     if (project) {
       parts.push(esc(project));
     }
@@ -467,12 +468,13 @@ export const createTelegramBridge = ({
     return delivered;
   };
 
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: builds the ask's message, buttons and tracking entry from one permission request in a single pass
   const onAsk = (envelope: Envelope): void => {
     if (chatId === undefined || !envelope.requestId) {
       return;
     }
     const request = envelope.payload as PermissionRequest;
-    const requestId = envelope.requestId;
+    const { requestId } = envelope;
     const lines = [header(request.instanceId, "❓")];
     let buttons: InlineButton[][] | undefined;
 
@@ -520,6 +522,7 @@ export const createTelegramBridge = ({
     }
 
     const text = fit(lines);
+    // biome-ignore lint/complexity/noVoid: fire-and-forget; onAsk has nothing to return to and a failed send is not this handler's business
     void send(text, buttons).then((message) => {
       if (!message) {
         return;
@@ -542,6 +545,7 @@ export const createTelegramBridge = ({
     if (!asked.has(requestId)) {
       return;
     }
+    // biome-ignore lint/complexity/noVoid: fire-and-forget; onSettled has nothing to return to and a failed close is not this handler's business
     void close(requestId, "☑️ Answered in the dashboard");
   };
 
@@ -558,6 +562,7 @@ export const createTelegramBridge = ({
     const text = fit([
       `${header(instanceId, "💥")} — <code>${esc(clip(message, 900))}</code>`,
     ]);
+    // biome-ignore lint/complexity/noVoid: fire-and-forget; onError has nothing to return to and a failed send is not this handler's business
     void send(text).then((sent) => {
       if (sent) {
         track(sent.message_id, { instanceId, machineId: row.machineId, text });
@@ -581,6 +586,7 @@ export const createTelegramBridge = ({
       `→ ${esc(dashboardUrl(registry))}/session/${instanceId}`,
     ];
     const text = fit(lines);
+    // biome-ignore lint/complexity/noVoid: fire-and-forget; onSupervisor has nothing to return to and a failed send is not this handler's business
     void send(text).then((sent) => {
       if (sent) {
         track(sent.message_id, { instanceId, machineId: row.machineId, text });
@@ -594,6 +600,7 @@ export const createTelegramBridge = ({
     }
     const { instanceId, text: raw } = envelope.payload as UserMessage;
     const text = esc(clip(raw, MESSAGE_LIMIT));
+    // biome-ignore lint/complexity/noVoid: fire-and-forget; onUserMessage has nothing to return to and a failed send is not this handler's business
     void send(text).then((sent) => {
       if (sent) {
         track(sent.message_id, {
@@ -607,6 +614,7 @@ export const createTelegramBridge = ({
 
   const onCallback = async (
     query: NonNullable<TelegramUpdate["callback_query"]>
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: parses the callback tag, acks Telegram first, then routes permission/allow-always/deny through their settlement and message-edit paths
   ): Promise<void> => {
     const [tag, requestId, arg] = (query.data ?? "").split(":");
     const envelope = requestId ? pending.get(requestId) : undefined;
@@ -668,6 +676,7 @@ export const createTelegramBridge = ({
     );
   };
 
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: routes one incoming Telegram message across reply-to-ask, media intake, and plain-text-to-session paths
   const onMessage = async (message: TelegramMessage): Promise<void> => {
     const typed = message.text?.trim();
     if (!(typed || carriesMedia(message))) {
@@ -771,6 +780,7 @@ export const createTelegramBridge = ({
   };
 
   const start = (): void => {
+    // biome-ignore lint/complexity/noVoid: fire-and-forget; the poll loop below runs for the process's whole life and reports its own failures via console.warn
     void (async () => {
       let offset = 0;
       let backoff = BACKOFF_FLOOR_MS;
@@ -780,6 +790,7 @@ export const createTelegramBridge = ({
       for (;;) {
         try {
           const updates =
+            // biome-ignore lint/performance/noAwaitInLoops: long-polls Telegram in an infinite loop; the next getUpdates must start from the offset the previous one returned
             (await call<TelegramUpdate[]>("getUpdates", {
               offset,
               timeout: POLL_SECONDS,
@@ -787,6 +798,7 @@ export const createTelegramBridge = ({
           backoff = BACKOFF_FLOOR_MS;
           for (const update of updates) {
             offset = update.update_id + 1;
+            // biome-ignore lint/performance/noAwaitInLoops: updates must be handled in Telegram's own order — offset only advances after each one settles
             await onUpdate(update);
           }
         } catch (error) {

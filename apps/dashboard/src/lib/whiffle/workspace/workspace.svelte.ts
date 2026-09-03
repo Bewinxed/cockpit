@@ -72,8 +72,11 @@ const KEY = "whiffle-workspace";
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 
 let seq = 0;
-const nodeId = (): string =>
-  `p${Date.now().toString(36)}${(seq++).toString(36)}`;
+const nodeId = (): string => {
+  const id = `p${Date.now().toString(36)}${seq.toString(36)}`;
+  seq += 1;
+  return id;
+};
 
 const emptyLeaf = (): LeafNode => ({
   t: "l",
@@ -97,6 +100,7 @@ const fromCookie = (): string | null => {
     return null;
   }
   const match = new RegExp(`(?:^|;\\s*)${KEY}=([^;]*)`).exec(document.cookie);
+  // biome-ignore lint/suspicious/noUnnecessaryConditions: exec() can return null at runtime when the cookie is absent; Biome's inference here is narrower than the real type
   if (!match) {
     return null;
   }
@@ -134,6 +138,7 @@ function parse(raw: string | null | undefined): WorkspaceV1 | null {
   }
   try {
     const held = JSON.parse(raw) as WorkspaceV1;
+    // biome-ignore lint/suspicious/noUnnecessaryConditions: JSON.parse can return null at runtime (e.g. stored literal "null") despite the WorkspaceV1 cast
     if (held?.v !== 1 || !validate(held.root)) {
       return null;
     }
@@ -188,6 +193,7 @@ function save(): void {
     // A browser that will not store just starts the layout over next time.
   }
   try {
+    // biome-ignore lint/suspicious/noDocumentCookie: Cookie Store API is async and unsupported in Safari; this write must stay synchronous with the try/catch fallback below
     document.cookie = `${KEY}=${encodeURIComponent(payload)}; path=/; max-age=${COOKIE_MAX_AGE}; samesite=lax`;
   } catch {
     // Cookies refused: SSR falls back to the URL's session alone.
@@ -223,7 +229,7 @@ function focused(): LeafNode {
   if (named) {
     return named;
   }
-  const first = leavesOf(held.root)[0];
+  const [first] = leavesOf(held.root);
   held.focusedLeaf = first.id;
   return first;
 }

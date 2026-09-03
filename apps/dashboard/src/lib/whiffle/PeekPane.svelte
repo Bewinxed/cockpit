@@ -26,6 +26,7 @@
   import { fade } from "svelte/transition";
   import { goto } from "$app/navigation";
   import { Button } from "$lib/components/ui/button";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as ContextMenu from "$lib/components/ui/context-menu";
   import {
     IconClose,
@@ -96,6 +97,7 @@
     }
     untrack(() => {
       if (next.browsing) {
+        // biome-ignore lint/complexity/noVoid: fire-and-forget inside untrack — the store the effect reads is what this call updates
         void openTranscript({
           viewId: next.viewId,
           machineId: next.browsing.machineId,
@@ -120,6 +122,7 @@
     if (!id || target?.browsing || !whiffle.session(id)?.sessionId) {
       return;
     }
+    // biome-ignore lint/complexity/noVoid: fire-and-forget inside untrack — the store the effect reads is what this call updates
     untrack(() => void backfillSession(id));
   });
 
@@ -141,15 +144,18 @@
   const activity = $derived(
     target ? whiffle.activityOf(target.viewId) : "idle"
   );
-  const stateLabel = $derived(
-    failed
-      ? "Failed"
-      : sleeping
-        ? SLEEPING_LABEL
-        : stale
-          ? UNKNOWN_LABEL
-          : ACTIVITY_LABEL[activity]
-  );
+  const stateLabel = $derived.by(() => {
+    if (failed) {
+      return "Failed";
+    }
+    if (sleeping) {
+      return SLEEPING_LABEL;
+    }
+    if (stale) {
+      return UNKNOWN_LABEL;
+    }
+    return ACTIVITY_LABEL[activity];
+  });
   const tool = $derived(target ? whiffle.currentToolOf(target.viewId) : null);
 
   /** What the session is about, from the SDK's own title for its transcript. */
@@ -221,6 +227,7 @@
     if (!(id && machineId && running)) {
       return;
     }
+    // biome-ignore lint/complexity/noVoid: fire-and-forget inside untrack — the store the effect reads is what this call updates
     untrack(() => void refreshContext(id, machineId));
   });
 
@@ -284,7 +291,9 @@
   // The pane crossfades between sessions, but it does not announce itself on
   // arrival — the board it sits beside did not either.
   let painted = $state(false);
-  onMount(() => void (painted = true));
+  onMount(() => {
+    painted = true;
+  });
 </script>
 
 <!-- The card is the session, not the column: with nothing peeked there is
@@ -366,7 +375,7 @@
                 Open
               </ContextMenu.Item>
               <ContextMenu.Item
-                disabled={!forkable || !machine}
+                disabled={!(forkable && machine)}
                 onSelect={fork}
               >
                 <IconFork />
@@ -413,8 +422,12 @@
               <span class="ml-auto flex shrink-0 items-center gap-1">
                 <ContextMeter
                   compaction={session?.lastCompaction ?? null}
-                  onrefresh={() =>
-                    session && void refreshContext(session.instanceId, session.machineId)}
+                  onrefresh={() => {
+                    if (session) {
+                      // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — the meter re-renders off the store this call updates
+                      void refreshContext(session.instanceId, session.machineId);
+                    }
+                  }}
                   status={session?.sdkStatus ?? null}
                   usage={session?.context ?? null}
                 />

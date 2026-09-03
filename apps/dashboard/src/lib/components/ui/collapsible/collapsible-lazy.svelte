@@ -20,7 +20,9 @@
   // Keep content through the collapsible-up animation (200ms + slack), then drop it.
   $effect(() => {
     if (!open && rendered) {
-      const timer = setTimeout(() => (rendered = false), 220);
+      const timer = setTimeout(() => {
+        rendered = false;
+      }, 220);
       return () => clearTimeout(timer);
     }
   });

@@ -330,6 +330,9 @@ export type HookMatcherKind = "all" | "exact" | "regex";
  * meaning "a literal dot" has written a regular expression and needs to be
  * told so before they save.
  */
+const PLAIN_MATCHER_NARROW = /^[A-Za-z0-9_|]+$/;
+const PLAIN_MATCHER_WIDE = /^[A-Za-z0-9_\-, |]+$/;
+
 export function hookMatcherKind(
   matcher: string | undefined,
   event?: HookEvent
@@ -340,8 +343,8 @@ export function hookMatcherKind(
   }
   const plain =
     event && NARROW_EVENTS.has(event)
-      ? /^[A-Za-z0-9_|]+$/
-      : /^[A-Za-z0-9_\-, |]+$/;
+      ? PLAIN_MATCHER_NARROW
+      : PLAIN_MATCHER_WIDE;
   return plain.test(text) ? "exact" : "regex";
 }
 
@@ -349,6 +352,9 @@ export function hookMatcherKind(
  * Whether `value` matches, by the same branch Claude Code takes. The editor's
  * test box calls this so what it shows is what the fleet will do.
  */
+const SEPARATOR_NARROW = /\|/;
+const SEPARATOR_WIDE = /[|,]/;
+
 export function hookMatches(
   matcher: string | undefined,
   value: string,
@@ -360,7 +366,8 @@ export function hookMatches(
   }
   const text = (matcher ?? "").trim();
   if (kind === "exact") {
-    const separator = event && NARROW_EVENTS.has(event) ? /\|/ : /[|,]/;
+    const separator =
+      event && NARROW_EVENTS.has(event) ? SEPARATOR_NARROW : SEPARATOR_WIDE;
     return text
       .split(separator)
       .map((part) => part.trim())
@@ -480,6 +487,8 @@ export interface FleetHook extends FleetPlacement {
 export type HookDraft = Omit<FleetHook, "id" | "hash">;
 
 const NAME_SHAPE = /^[A-Za-z0-9][A-Za-z0-9 ._-]*$/;
+const INVALID_REGEX_PREFIX = /^Invalid regular expression:\s*/;
+const SENTENCE_SEPARATOR = /[|,]/;
 
 /**
  * Everything wrong with a draft, as whole sentences the form prints under the
@@ -487,6 +496,7 @@ const NAME_SHAPE = /^[A-Za-z0-9][A-Za-z0-9 ._-]*$/;
  * safe to execute on every machine, so this is deliberately strict about the
  * cases that fail silently rather than loudly.
  */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: walks every draft field once per handler type — the last gate before a hook's script runs unattended on every machine in the fleet (see the block comment above).
 export function hookProblem(draft: Partial<HookDraft>): Record<string, string> {
   const wrong: Record<string, string> = {};
 
@@ -510,17 +520,18 @@ export function hookProblem(draft: Partial<HookDraft>): Record<string, string> {
   }
   if (matcher !== "" && hookMatcherKind(matcher, draft.event) === "regex") {
     try {
+      // biome-ignore lint/correctness/noUnusedInstantiation: constructed only to let an invalid pattern throw here, before it is ever stored — the instance itself is unused by design.
       new RegExp(matcher);
     } catch (error) {
       wrong.matcher = `That is not a valid regular expression — ${
         error instanceof Error
-          ? error.message.replace(/^Invalid regular expression:\s*/, "")
+          ? error.message.replace(INVALID_REGEX_PREFIX, "")
           : "it will not compile"
       }.`;
     }
   }
 
-  const handler = draft.handler;
+  const { handler } = draft;
   if (!handler) {
     wrong.handler = "Choose what this hook should run.";
     return wrong;
@@ -557,17 +568,21 @@ export function hookProblem(draft: Partial<HookDraft>): Record<string, string> {
         wrong.script =
           "This has both a script and a command. Keep one — whiffle points the hook at whichever it writes.";
       }
-      if (handler.args && handler.args.length > 0 && script !== "") {
-        // args means exec form: `command` is spawned directly with no shell.
-        // A written script is spawned as the executable, so args are its
-        // arguments — legal, but only if the reader knows that.
-        if (handler.args.some((arg) => typeof arg !== "string")) {
-          wrong.args = "Every argument is a string.";
-        }
+      // args means exec form: `command` is spawned directly with no shell.
+      // A written script is spawned as the executable, so args are its
+      // arguments — legal, but only if the reader knows that.
+      if (
+        handler.args &&
+        handler.args.length > 0 &&
+        script !== "" &&
+        handler.args.some((arg) => typeof arg !== "string")
+      ) {
+        wrong.args = "Every argument is a string.";
       }
       break;
     }
     case "http": {
+      // biome-ignore lint/suspicious/noUnnecessaryConditions: `handler` is Partial<HookDraft>'s field — typed as a required HookHttpHandler, but this draft is unvalidated form state where url can genuinely be missing.
       const url = handler.url?.trim() ?? "";
       if (url === "") {
         wrong.url = "Give the URL this hook posts to.";
@@ -589,9 +604,11 @@ export function hookProblem(draft: Partial<HookDraft>): Record<string, string> {
       break;
     }
     case "mcp_tool": {
+      // biome-ignore lint/suspicious/noUnnecessaryConditions: same unvalidated-draft reasoning as the url check above — mcp_server_name is typed required but the draft can omit it.
       if (!handler.mcp_server_name?.trim()) {
         wrong.mcp_server_name = "Name the MCP server holding the tool.";
       }
+      // biome-ignore lint/suspicious/noUnnecessaryConditions: same unvalidated-draft reasoning — tool_name is typed required but the draft can omit it.
       if (!handler.tool_name?.trim()) {
         wrong.tool_name = "Name the tool to call.";
       }
@@ -599,6 +616,7 @@ export function hookProblem(draft: Partial<HookDraft>): Record<string, string> {
     }
     case "prompt":
     case "agent": {
+      // biome-ignore lint/suspicious/noUnnecessaryConditions: same unvalidated-draft reasoning — prompt is typed required but the draft can omit it.
       if (!handler.prompt?.trim()) {
         wrong.prompt = "Write the prompt this hook evaluates.";
       }
@@ -629,30 +647,48 @@ export function hookSentence(draft: Partial<HookDraft>): string {
 
   const matcher = draft.matcher?.trim() ?? "";
   const kind = hookMatcherKind(matcher, draft.event);
-  const narrowed =
-    !info?.filters || kind === "all"
-      ? ""
-      : kind === "exact"
+  let narrowed = "";
+  if (info?.filters && kind !== "all") {
+    narrowed =
+      kind === "exact"
         ? ` and the ${info.filters} is ${matcher
-            .split(/[|,]/)
+            .split(SENTENCE_SEPARATOR)
             .map((p) => `“${p.trim()}”`)
             .join(" or ")}`
         : ` and the ${info.filters} matches the expression “${matcher}”`;
+  }
 
-  const handler = draft.handler;
-  const runs = handler
-    ? handler.type === "command"
-      ? draft.script?.trim()
-        ? "run this machine’s copy of the script below"
-        : `run \`${handler.command ?? "…"}\``
-      : handler.type === "http"
-        ? `post the event to ${handler.url || "…"}`
-        : handler.type === "mcp_tool"
-          ? `call ${handler.mcp_server_name || "…"}’s ${handler.tool_name || "…"} tool`
-          : handler.type === "prompt"
-            ? "ask a model to decide"
-            : "spawn a subagent to decide"
-    : "do something";
+  const { handler } = draft;
+  let runs = "do something";
+  if (handler) {
+    switch (handler.type) {
+      case "command": {
+        runs = draft.script?.trim()
+          ? "run this machine’s copy of the script below"
+          : `run \`${handler.command ?? "…"}\``;
+        break;
+      }
+      case "http": {
+        runs = `post the event to ${handler.url || "…"}`;
+        break;
+      }
+      case "mcp_tool": {
+        runs = `call ${handler.mcp_server_name || "…"}’s ${handler.tool_name || "…"} tool`;
+        break;
+      }
+      case "prompt": {
+        runs = "ask a model to decide";
+        break;
+      }
+      case "agent": {
+        runs = "spawn a subagent to decide";
+        break;
+      }
+      default: {
+        runs = "spawn a subagent to decide";
+      }
+    }
+  }
 
   const where =
     draft.scope && draft.scope !== "user"
@@ -691,6 +727,7 @@ export const HOOK_TEMPLATES: {
         "# Runs after Claude edits a file. The event JSON arrives on stdin.",
         "set -euo pipefail",
         "",
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: this is shell syntax for the generated bash script, not a JS template placeholder — the ${...} is meant for bash to expand, not this string.
         'cd "${CLAUDE_PROJECT_DIR:-.}"',
         "[ -f package.json ] || exit 0",
         "command -v bun >/dev/null 2>&1 || exit 0",
@@ -714,6 +751,7 @@ export const HOOK_TEMPLATES: {
         "# Appends the command Claude is about to run to ~/.claude/command-log.",
         "set -euo pipefail",
         "",
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: shell syntax for bash to expand, same as above.
         'log="${HOME}/.claude/command-log"',
         "input=$(cat)",
         'printf \'%s\\t%s\\n\' "$(date -Iseconds)" "$input" >> "$log"',

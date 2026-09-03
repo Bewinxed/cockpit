@@ -8,7 +8,14 @@ import {
   RetryError,
   streamText,
 } from "ai";
-import * as v from "valibot";
+import {
+  type InferOutput,
+  literal,
+  object,
+  safeParse,
+  string,
+  union,
+} from "valibot";
 
 /**
  * Structured verdict a supervisor LLM returns for a single evaluation.
@@ -19,18 +26,18 @@ import * as v from "valibot";
  * (Valibot's Standard Schema does not yet implement toJsonSchema — this
  * is the designed fallback from PLAN.md C2.)
  */
-export const VerdictSchema = v.object({
-  verdict: v.union([
-    v.literal("silent"),
-    v.literal("reply"),
-    v.literal("escalate"),
-    v.literal("ask_operator"),
+export const VerdictSchema = object({
+  verdict: union([
+    literal("silent"),
+    literal("reply"),
+    literal("escalate"),
+    literal("ask_operator"),
   ]),
-  message: v.string(),
-  note: v.string(),
+  message: string(),
+  note: string(),
 });
 
-export type Verdict = v.InferOutput<typeof VerdictSchema>;
+export type Verdict = InferOutput<typeof VerdictSchema>;
 
 /** JSON Schema for the provider's structured-output / guided-decoding mode. */
 const VerdictJsonSchema = jsonSchema<Verdict>(
@@ -49,7 +56,7 @@ const VerdictJsonSchema = jsonSchema<Verdict>(
   },
   {
     validate: (value) => {
-      const result = v.safeParse(VerdictSchema, value);
+      const result = safeParse(VerdictSchema, value);
       return result.success
         ? { success: true, value: result.output }
         : { success: false, error: new Error("verdict schema mismatch") };
@@ -64,8 +71,10 @@ const VerdictJsonSchema = jsonSchema<Verdict>(
  * both share one convention. `supportsStructuredOutputs` must be declared or
  * the provider silently strips `response_format` and the model free-texts.
  */
+const TRAILING_SLASHES = /\/+$/;
+
 function providerFor(baseUrl: string, apiKey?: string) {
-  const root = baseUrl.replace(/\/+$/, "");
+  const root = baseUrl.replace(TRAILING_SLASHES, "");
   return createOpenAICompatible({
     name: "supervisor",
     baseURL: root.endsWith("/v1") ? root : `${root}/v1`,
@@ -79,18 +88,14 @@ function providerFor(baseUrl: string, apiKey?: string) {
  * this element answers; rules cannot ask_operator (that is autopilot's tool),
  * so the space is silent/reply/escalate.
  */
-export const RuleVerdictSchema = v.object({
-  rule: v.string(),
-  verdict: v.union([
-    v.literal("silent"),
-    v.literal("reply"),
-    v.literal("escalate"),
-  ]),
-  message: v.string(),
-  note: v.string(),
+export const RuleVerdictSchema = object({
+  rule: string(),
+  verdict: union([literal("silent"), literal("reply"), literal("escalate")]),
+  message: string(),
+  note: string(),
 });
 
-export type RuleVerdict = v.InferOutput<typeof RuleVerdictSchema>;
+export type RuleVerdict = InferOutput<typeof RuleVerdictSchema>;
 
 const RuleVerdictJsonSchema = jsonSchema<RuleVerdict>(
   {
@@ -106,7 +111,7 @@ const RuleVerdictJsonSchema = jsonSchema<RuleVerdict>(
   },
   {
     validate: (value) => {
-      const result = v.safeParse(RuleVerdictSchema, value);
+      const result = safeParse(RuleVerdictSchema, value);
       return result.success
         ? { success: true, value: result.output }
         : { success: false, error: new Error("rule verdict schema mismatch") };
@@ -158,7 +163,7 @@ export async function verdictStream(
       abortSignal: AbortSignal.timeout(req.timeoutMs),
     });
     for await (const element of result.elementStream) {
-      count++;
+      count += 1;
       await req.onVerdict(element);
     }
     // A garbage or truncated stream can END without ever yielding — the SDK

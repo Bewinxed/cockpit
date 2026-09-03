@@ -401,7 +401,7 @@ function blockToMessage(
             handoffKind: handoff,
             handoffBrief: String(
               input.prompt ??
-                (block.input as { message?: unknown })?.message ??
+                (block.input as { message?: unknown }).message ??
                 ""
             ),
           },
@@ -496,6 +496,7 @@ function truncateSummary(summary: string | undefined): string {
 }
 
 /** What one SDK frame does to an instance's UI state. */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one switch over every SDK message subtype, each case self-contained
 export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
   const mapping = empty();
   const uuid = uuidOf(sdk);
@@ -551,7 +552,7 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
     }
 
     case "user": {
-      const content = sdk.message.content;
+      const { content } = sdk.message;
       // A subagent's opening prompt has no local copy to render from, and it is
       // the first thing its branch should say. The main loop's own text does
       // have one, added on send, so it is skipped — except when it isn't the
@@ -709,17 +710,17 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
         if (block.type !== "tool_result") {
           continue;
         }
-        const text = resultText(block.content);
+        const resultBody = resultText(block.content);
         // A launch is not a report. It says the delegate started, so that is all
         // it does here: the branch moves to running and the metadata stops —
         // it never reaches a `result`, a message, or the card.
-        if (subagentLaunch(text)) {
+        if (subagentLaunch(resultBody)) {
           mapping.branch = { toolUseId: block.tool_use_id, status: "running" };
           continue;
         }
         mapping.toolResults.push({
           toolId: block.tool_use_id,
-          result: text,
+          result: resultBody,
           isError: block.is_error === true,
           structuredContent: block.structuredContent,
           questionResult: block.questionResult,
@@ -729,7 +730,7 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
     }
 
     case "stream_event": {
-      const event = sdk.event;
+      const { event } = sdk;
       if (
         event.type === "content_block_delta" &&
         event.delta.type === "text_delta"
@@ -900,7 +901,7 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
           break;
         }
         case "task_updated": {
-          const patch = sdk.patch;
+          const { patch } = sdk;
           mapping.branch = {
             taskId: sdk.task_id,
             description: patch?.description,
@@ -1061,7 +1062,7 @@ export function applyBranchEvent(
   // `task_updated` names only the task, so an already-known branch answers for it.
   const key =
     event.toolUseId ??
-    Object.values(branches).find((branch) => branch.taskId === event.taskId)
+    Object.values(branches).find((row) => row.taskId === event.taskId)
       ?.toolUseId;
   if (!key) {
     return;
@@ -1210,7 +1211,7 @@ function currentStep(branch: SubagentState, tools: Message[]): string {
   if (writing) {
     return writing;
   }
-  const last = tools[tools.length - 1];
+  const last = tools.at(-1);
   if (last) {
     return stepLine(last);
   }
@@ -1292,7 +1293,7 @@ function transcriptUserText(message: unknown): string | null {
   if (typeof message !== "object" || message === null) {
     return null;
   }
-  const content = (message as { content?: unknown }).content;
+  const { content } = message as { content?: unknown };
   if (typeof content === "string") {
     return content;
   }
@@ -1300,7 +1301,7 @@ function transcriptUserText(message: unknown): string | null {
     return null;
   }
   const text = content
-    .filter((block: unknown) => (block as { type?: string })?.type === "text")
+    .filter((block: unknown) => (block as { type?: string }).type === "text")
     .map((block: unknown) => String((block as { text?: unknown }).text ?? ""))
     .join("\n");
   return text || null;
@@ -1317,11 +1318,11 @@ function transcriptUserImages(message: unknown): MessageMetadata["images"] {
     return undefined;
   }
   const images = content
-    .filter((block: unknown) => (block as { type?: string })?.type === "image")
+    .filter((block: unknown) => (block as { type?: string }).type === "image")
     .map((block: unknown) => {
-      const source = (
-        block as { source?: { media_type?: string; data?: string } }
-      ).source;
+      const { source } = block as {
+        source?: { media_type?: string; data?: string };
+      };
       const mediaType = source?.media_type ?? "image/png";
       return {
         mediaType,
@@ -1376,6 +1377,10 @@ function userBody(
   };
 }
 
+const TASK_NOTIFICATION_SUMMARY = /<summary>([\s\S]*?)<\/summary>/;
+const TASK_NOTIFICATION_TOOL_USE_ID = /<tool-use-id>(\S+?)<\/tool-use-id>/;
+const LOCAL_COMMAND_NAME = /<command-name>([\s\S]*?)<\/command-name>/;
+
 /** Harness-injected content arrives with role "user" but is not the human. */
 function systemNote(
   text: string
@@ -1389,11 +1394,11 @@ function systemNote(
     head.startsWith("[SYSTEM NOTIFICATION") ||
     head.startsWith("<task-notification>")
   ) {
-    const summary = /<summary>([\s\S]*?)<\/summary>/.exec(text)?.[1]?.trim();
+    const summary = TASK_NOTIFICATION_SUMMARY.exec(text)?.[1]?.trim();
     // The tool-use id names the Task call this notification echoes. When that
     // call's branch is in the transcript, the branch already shows the same
     // report — the renderer folds this note away on it.
-    const taskToolId = /<tool-use-id>(\S+?)<\/tool-use-id>/.exec(text)?.[1];
+    const taskToolId = TASK_NOTIFICATION_TOOL_USE_ID.exec(text)?.[1];
     return {
       kind: "Task notification",
       title: summary ?? firstPlainLine(text),
@@ -1408,9 +1413,7 @@ function systemNote(
     head.startsWith("<command-name>") ||
     head.startsWith("<local-command-stdout>")
   ) {
-    const command = /<command-name>([\s\S]*?)<\/command-name>/
-      .exec(text)?.[1]
-      ?.trim();
+    const command = LOCAL_COMMAND_NAME.exec(text)?.[1]?.trim();
     return { kind: "Local command", title: command ?? firstPlainLine(text) };
   }
   if (head.startsWith("<system-reminder>")) {
@@ -1464,6 +1467,8 @@ export interface Transcript {
  * `supervisor:autopilot` → "Autopilot"; `supervisor:<rule>` → "Supervisor — <rule>".
  * Falls back to something honest rather than empty when a hub predates the naming.
  */
+const RULE_PREFIX = /^rule:/;
+
 const ruleLabel = (name?: string): string => {
   if (!name) {
     return "a rule";
@@ -1474,7 +1479,7 @@ const ruleLabel = (name?: string): string => {
       ? "Autopilot"
       : `Supervisor — ${tail || "a rule"}`;
   }
-  return name.replace(/^rule:/, "").trim() || "a rule";
+  return name.replace(RULE_PREFIX, "").trim() || "a rule";
 };
 
 export function turnStart(
@@ -1500,12 +1505,13 @@ export function turnStart(
  * render as `user.peer` instead of as the reader's own words.
  */
 const HANDOFF_MARKER = "[Hand-off from the ";
+const HANDOFF_SENDER_NAME = /^\[Hand-off from the (.*?) session/;
 
 function handoffFrom(text: string): string | null {
   if (!text.startsWith(HANDOFF_MARKER)) {
     return null;
   }
-  const name = /^\[Hand-off from the (.*?) session/.exec(text)?.[1]?.trim();
+  const name = HANDOFF_SENDER_NAME.exec(text)?.[1]?.trim();
   return name || null;
 }
 
@@ -1625,10 +1631,12 @@ export function matchesSession(
  * Legacy: an ask's input arrives as an object on its `delegate_events` row, so
  * this only unpacks the transcripts written before that table existed.
  */
+const ASK_BODY_PATTERN = /^([A-Za-z_][\w-]*) — (\{.*\})$/s;
+
 export function askBodyParts(
   body: string
 ): { tool: string; input: Record<string, JsonValue> } | null {
-  const match = /^([A-Za-z_][\w-]*) — (\{.*\})$/s.exec(body);
+  const match = ASK_BODY_PATTERN.exec(body);
   if (!match) {
     return null;
   }
@@ -1653,7 +1661,7 @@ export function askBodyParts(
  * how the callers below tell a question ask from a tool ask.
  */
 function questionBlocks(input: Record<string, JsonValue>): string[] {
-  const questions = input.questions;
+  const { questions } = input;
   if (!Array.isArray(questions)) {
     return [];
   }
@@ -1710,7 +1718,7 @@ export function askShortOf(
  * anything else as formatted JSON.
  */
 export function askDetailOf(
-  toolName: string | null,
+  _toolName: string | null,
   input: Record<string, JsonValue>
 ): string {
   const questions = questionBlocks(input);
@@ -1888,12 +1896,12 @@ function spannedByToolCalls(transcript: SessionMessage[]): Int32Array {
         continue;
       }
       open.delete(block.tool_use_id);
-      depth[from + 1]++;
-      depth[index]--;
+      depth[from + 1] += 1;
+      depth[index] -= 1;
     }
   });
 
-  for (let index = 1; index < depth.length; index++) {
+  for (let index = 1; index < depth.length; index += 1) {
     depth[index] += depth[index - 1];
   }
   return depth;
@@ -1920,10 +1928,11 @@ export function turnBoundaries(
   for (let cursor = size; cursor < transcript.length; cursor += size) {
     let index = cursor;
     while (index > 0 && !cuttable(index)) {
-      index--;
+      index -= 1;
     }
     // A turn longer than one chunk snaps onto the boundary already taken, and
     // stays one chunk rather than being cut where the pairs would not survive.
+    // biome-ignore lint/style/useAtIndex: boundaries always starts with [0] — .at(-1) would widen to number | undefined for no reason
     if (index > boundaries[boundaries.length - 1]) {
       boundaries.push(index);
     }
@@ -1936,6 +1945,7 @@ export function turnBoundaries(
  * is the raw SDK message, so the live mapping does the work — only user text,
  * which live sessions render from the local copy, is handled here.
  */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one pass folding every stored transcript entry kind into the live-session shape
 export function mapTranscript(
   instanceId: string,
   transcript: SessionMessage[]
@@ -2062,7 +2072,7 @@ export function mapTranscript(
       if (recorded) {
         message.timestamp = recorded;
       } else {
-        delete message.timestamp;
+        message.timestamp = undefined;
       }
     }
 
@@ -2234,6 +2244,7 @@ export function isDelegateReport(
 }
 
 /** Folds a tool result into the `tool.use` it answers. */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one dispatch over every tool-result shape a `tool.use` can be answered by
 export function applyToolResult(
   messages: Message[],
   { toolId, result, isError, structuredContent, questionResult }: ToolResult
@@ -2271,7 +2282,7 @@ export function applyToolResult(
       target.metadata?.handoffKind === "delegate" &&
       typeof sc.delegateInstanceId === "string"
     ) {
-      delegateInstanceId = sc.delegateInstanceId;
+      ({ delegateInstanceId } = sc as { delegateInstanceId: string });
     } else if (
       target.metadata?.handoffKind === "start" &&
       typeof sc.instanceId === "string"

@@ -1,7 +1,6 @@
-import Root from "./skeleton.svelte";
-
+// biome-ignore lint/performance/noBarrelFile: shadcn-svelte component barrel — every consumer imports the group from this index
 export {
-  Root,
+  default as Root,
   //
-  Root as Skeleton,
-};
+  default as Skeleton,
+} from "./skeleton.svelte";

@@ -167,6 +167,7 @@ export interface StreamHost {
    * the same function the legacy per-frame path calls, given the unwrapped
    * frame. The stream orders; it does not reshape.
    */
+  // biome-ignore lint/style/useConsistentMethodSignatures: property-style signatures check contravariantly; client.svelte.ts's streamHost object literal implements this port and a switch could reject that assignment.
   applyFrame(sessionId: string, frame: unknown): void;
   clearTimer?: (handle: number) => void;
   /**
@@ -186,10 +187,13 @@ export interface StreamHost {
    * which need announcing — this file only guarantees the call.
    */
   noteFailure?: (record: CommandRecord) => void;
+  // biome-ignore lint/style/useConsistentMethodSignatures: property-style signatures check contravariantly; client.svelte.ts's streamHost object literal implements this port and a switch could reject that assignment.
   now(): number;
   /** Re-read this session's transcript through the path that already exists. */
+  // biome-ignore lint/style/useConsistentMethodSignatures: property-style signatures check contravariantly; client.svelte.ts's streamHost object literal implements this port and a switch could reject that assignment.
   rereadHistory(sessionId: string): void;
   /** Put a client message on the dashboard socket; false when it is not open. */
+  // biome-ignore lint/style/useConsistentMethodSignatures: property-style signatures check contravariantly; client.svelte.ts's streamHost object literal implements this port and a switch could reject that assignment.
   sendToHub(message: StreamClientMessage): boolean;
   /**
    * Run `run` after `delayMs` and hand back a handle {@link clearTimer} can
@@ -204,6 +208,7 @@ export interface StreamHost {
    * unset to drive the clock by hand; the client passes one.
    */
   setTimer?: (delayMs: number, run: () => void) => number;
+  // biome-ignore lint/style/useConsistentMethodSignatures: property-style signatures check contravariantly; client.svelte.ts's streamHost object literal implements this port and a switch could reject that assignment.
   warn(message: string, detail?: unknown): void;
 }
 
@@ -469,7 +474,7 @@ export function handleStreamMessage(
   if (typeof message !== "object" || message === null) {
     return false;
   }
-  const type = (message as { type?: unknown }).type;
+  const { type } = message as { type?: unknown };
   if (typeof type !== "string" || !STREAM_MESSAGE_TYPES.has(type)) {
     return false;
   }
@@ -501,7 +506,7 @@ function applyDelta(
   host: StreamHost,
   message: StreamDelta
 ): DeltaOutcome {
-  const event = message.event;
+  const { event } = message;
   if (
     !event ||
     typeof event.seq !== "number" ||
@@ -539,9 +544,9 @@ function applyEvent(
   cursor: SessionCursor,
   event: SessionStreamEvent
 ): void {
-  const frame = event.frame;
+  const { frame } = event;
   if (typeof frame === "object" && frame !== null) {
-    const kind = (frame as { kind?: unknown }).kind;
+    const { kind } = frame as { kind?: unknown };
     if (typeof kind === "string") {
       cursor.streamed.add(kind);
     }
@@ -591,7 +596,7 @@ function applyBacklog(
   host: StreamHost,
   message: StreamBacklog
 ): void {
-  const sessionId = message.sessionId;
+  const { sessionId } = message;
   const events = Array.isArray(message.events) ? message.events : [];
   const cursor = cursorFor(state, sessionId);
   cursor.subscribed = true;
@@ -738,7 +743,7 @@ function advanceStage(
   // `applied` on a send that already settled at `accepted` finds nothing left
   // to fire.
   if (record.effects && isSettled(record)) {
-    const settled = record.effects.settled;
+    const { settled } = record.effects;
     record.effects = undefined;
     settled?.(stage as SettleStage | "failed", record.reason);
   }
@@ -784,6 +789,7 @@ export interface CommandSubmission {
    * is `accepted` (the send went out), a resolved promise is `applied` (the
    * daemon answered), a throw or rejection is `failed`.
    */
+  // biome-ignore lint/suspicious/noConfusingVoidType: void here means "a callback that may or may not return a value, ignored either way" — client.svelte.ts and its tests build `legacy` thunks typed plain `() => void`, and narrowing to `undefined` breaks that assignment's special-case compatibility.
   legacy: () => void | Promise<unknown>;
   machineId: string;
   /** Exactly the payload the corresponding relay op takes today. */

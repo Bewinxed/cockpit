@@ -1,7 +1,6 @@
-import Root from "./checkbox.svelte";
-
+// biome-ignore lint/performance/noBarrelFile: this is the component's public API surface, re-exporting its parts under the shadcn-svelte convention
 export {
-  Root,
+  default as Root,
   //
-  Root as Checkbox,
-};
+  default as Checkbox,
+} from "./checkbox.svelte";

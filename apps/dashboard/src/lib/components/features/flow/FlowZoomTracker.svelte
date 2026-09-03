@@ -33,7 +33,7 @@
    * Check if a number is valid (not NaN, not Infinity)
    */
   function isValidNumber(n: unknown): n is number {
-    return typeof n === "number" && !isNaN(n) && isFinite(n);
+    return typeof n === "number" && !Number.isNaN(n) && Number.isFinite(n);
   }
 
   /**
@@ -145,6 +145,7 @@
   });
 
   // Compensate viewport after layout changes
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: reconciles pending viewport compensation against layout/zoom/pan state; not refactored in this lint pass
   $effect(() => {
     if (pendingCompensation && !isCompensating) {
       const { nodeId, oldPosition } = pendingCompensation;

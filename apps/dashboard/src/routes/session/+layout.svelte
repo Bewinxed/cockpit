@@ -62,6 +62,9 @@
   );
 
   $effect(() => {
+    // The Cookie Store API is async and unsupported in Safari; this write must
+    // land synchronously before the next SSR request reads it back.
+    // biome-ignore lint/suspicious/noDocumentCookie: needs the synchronous write; Cookie Store API is async and Safari lacks it
     document.cookie = `whiffle-narrow=${mobile.current ? 1 : 0};path=/;max-age=31536000;samesite=lax`;
   });
 

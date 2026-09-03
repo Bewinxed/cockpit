@@ -1,4 +1,5 @@
 <script lang="ts">
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Collapsible from "$lib/components/ui/collapsible";
   import { IconChevronRight } from "$lib/icons";
   import type { SubagentState } from "$lib/utils/flow-types";
@@ -34,7 +35,12 @@
   );
   const model = $derived(branch.model ?? spawn.metadata?.subagentModel);
   const failed = $derived(branch.status === "error");
-  const phase = $derived(failed ? "failed" : view.running ? "running" : "done");
+  const phase = $derived.by(() => {
+    if (failed) {
+      return "failed";
+    }
+    return view.running ? "running" : "done";
+  });
 
   // Elapsed is a clock, not a frame: a running branch has to re-read it on its
   // own, or the pill freezes at whatever second its last message arrived.
@@ -43,7 +49,9 @@
     if (!view.running) {
       return;
     }
-    const tick = setInterval(() => (now = Date.now()), 1000);
+    const tick = setInterval(() => {
+      now = Date.now();
+    }, 1000);
     return () => clearInterval(tick);
   });
   const elapsed = $derived(
@@ -257,6 +265,7 @@
     background-color: var(--mark-8);
   }
 
+  /* biome-ignore lint/style/noDescendingSpecificity: cascade order is load-bearing — .tk's base color must lose to the :hover rule above it. */
   .tk {
     font-family: var(--font-mono);
     color: var(--ink-strong);

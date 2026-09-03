@@ -1,3 +1,4 @@
+// biome-ignore lint/style/useFilenamingConvention: renaming would break the "./spawnPrefs.svelte" import path used by routes/project/[id]/+page.svelte, a file this batch does not own
 import type { EffortLevel, PermissionMode } from "@whiffle/core";
 import { MODEL_DEFAULT } from "./models.svelte";
 

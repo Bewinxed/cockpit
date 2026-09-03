@@ -178,6 +178,10 @@
     // A pane born off screen would otherwise hold an empty transcript until it
     // was first looked at, so the first build never consults the tier.
     if (!isFocused && primed) {
+      // Read, not used: this is `built`'s reactive dependency on the unfocused
+      // tier's own clock — its change is what re-runs this branch to re-check
+      // the print, in place of the tracked reads `untrack` below hides.
+      // biome-ignore lint/complexity/noVoid: see comment above — a bare reference would look unused and get "cleaned up".
       void rebuildTick;
       return untrack(() =>
         printOf() === builtPrint ? { rows: frozen, shifted: false } : run()
@@ -243,8 +247,8 @@
 
   function build(): { rows: Row[]; shifted: boolean } {
     const folded = buildRowsFrom(session, memo);
-    memo = folded.memo;
-    const next = folded.rows;
+    const { rows: next } = folded;
+    ({ memo } = folded);
     // PREPEND DETECTION for virtua's `shift` mode: an older history chunk
     // arriving puts new rows ABOVE everything on screen — without `shift`,
     // virtua keeps the scroll OFFSET and the content lurches toward the top
@@ -261,12 +265,12 @@
     // event, and virtua's range stays latched at empty until the reader
     // scrolls — a switched-to pane with a sized box and not one row in it.
     const oldFirst = frozen[0]?.key;
-    const oldLast = frozen[frozen.length - 1]?.key;
+    const oldLast = frozen.at(-1)?.key;
     const shifted =
       untrack(() => landed) &&
       frozen.length > 0 &&
       next.length > frozen.length &&
-      next[next.length - 1]?.key === oldLast &&
+      next.at(-1)?.key === oldLast &&
       oldFirst !== undefined &&
       next.findIndex((row) => row.key === oldFirst) > 0;
     return { rows: next, shifted };
@@ -479,7 +483,8 @@
     let last = performance.now();
     const step = (now: number): void => {
       if (!(scroller && atBottom)) {
-        return stopFollow();
+        stopFollow();
+        return;
       }
       const dt = Math.min(64, now - last);
       last = now;
@@ -489,7 +494,8 @@
           scroller.scrollTop = target();
           lastWrite = scroller.scrollTop;
         }
-        return stopFollow();
+        stopFollow();
+        return;
       }
       // Duration-bounded, not distance-bounded: any engagement finishes in
       // ≤400ms (remaining/0.4 px/s closes the whole gap in 0.4s, recomputed
@@ -621,12 +627,18 @@
     if (!active) {
       return;
     }
+    // Read, not used: these two are this effect's tracked dependencies, read
+    // in this order and only after the `active` guard above — see the doc
+    // comment above this effect for why the order and the guard matter.
+    // biome-ignore lint/complexity/noVoid: see comment above — a bare reference would look unused and get "cleaned up".
     void rows.length;
+    // biome-ignore lint/complexity/noVoid: see comment above — a bare reference would look unused and get "cleaned up".
     void session.streaming;
     if (rows.length === 0) {
       return;
     }
     if (!landed || atBottom) {
+      // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — this effect does not await the land, it only arms it.
       void tick().then(land);
     } else {
       returning = false;
@@ -645,8 +657,13 @@
     if (!(active && scroller)) {
       return;
     }
+    // Read, not used: this effect's tracked dependencies — see the comment
+    // above it for why it re-arms on these and nothing else.
+    // biome-ignore lint/complexity/noVoid: see comment above — a bare reference would look unused and get "cleaned up".
     void compacting;
+    // biome-ignore lint/complexity/noVoid: see comment above — a bare reference would look unused and get "cleaned up".
     void catching;
+    // biome-ignore lint/complexity/noVoid: see comment above — a bare reference would look unused and get "cleaned up".
     void (rows.length === 0);
     const box = scroller;
     const observer = new ResizeObserver(() => {
@@ -828,7 +845,7 @@
   // finished minutes ago.
   let wasBusy = false;
   $effect(() => {
-    const busy = session.busy;
+    const { busy } = session;
     if (active && landed && wasBusy && !busy) {
       announcement = "Turn finished";
     }
@@ -847,7 +864,7 @@
     if (session.pending.length > 0) {
       return "Agent needs your permission";
     }
-    if (rows[rows.length - 1]?.kind === "question") {
+    if (rows.at(-1)?.kind === "question") {
       return "Question from the agent";
     }
     return "";

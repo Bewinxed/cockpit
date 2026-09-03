@@ -64,8 +64,12 @@ const ctx: HarnessContext = {
   failed: (error) => {
     failedCalls.push(error);
   },
-  emit: () => {},
-  closed: () => {},
+  emit: () => {
+    // no-op: this proof doesn't assert on raw frame emission
+  },
+  closed: () => {
+    // no-op: this proof doesn't assert on close
+  },
 };
 
 // --- helpers ---
@@ -73,11 +77,11 @@ let assertions = 0;
 let failures = 0;
 
 function record(name: string, pass: boolean, detail?: string): void {
-  assertions++;
+  assertions += 1;
   if (pass) {
     console.log(`PASS ${name}`);
   } else {
-    failures++;
+    failures += 1;
     console.log(`FAIL ${name}${detail ? `: ${detail}` : ""}`);
   }
 }
@@ -147,7 +151,7 @@ function waitForResultIn(
 function makeCtx(cwd: string, instanceId: string) {
   const ownFrames: NeutralMessage[] = [];
   const holder: { session: HarnessSession | null } = { session: null };
-  const ctx: HarnessContext = {
+  const isolatedCtx: HarnessContext = {
     instanceId,
     cwd,
     frame: (message) => {
@@ -162,13 +166,23 @@ function makeCtx(cwd: string, instanceId: string) {
         100
       );
     },
-    busy: () => {},
-    session: () => {},
-    failed: () => {},
-    emit: () => {},
-    closed: () => {},
+    busy: () => {
+      // no-op: tests I/J don't assert on busy transitions
+    },
+    session: () => {
+      // no-op: tests I/J don't assert on the session callback
+    },
+    failed: () => {
+      // no-op: tests I/J don't assert on failed calls
+    },
+    emit: () => {
+      // no-op: this proof doesn't assert on raw frame emission
+    },
+    closed: () => {
+      // no-op: this proof doesn't assert on close
+    },
   };
-  return { ctx, frames: ownFrames, holder };
+  return { ctx: isolatedCtx, frames: ownFrames, holder };
 }
 
 /** Flattened text of an assistant frame's `text` blocks. */
@@ -205,7 +219,7 @@ function toolResultIds(slice: NeutralMessage[]): string[] {
     if (frame.type !== "user") {
       continue;
     }
-    const content = frame.message.content;
+    const { content } = frame.message;
     if (typeof content === "string") {
       continue;
     }
@@ -363,14 +377,14 @@ if (!session) {
 
   record(
     "C: busy ended false",
-    busyTransitions.length > 0 &&
-      busyTransitions[busyTransitions.length - 1] === false
+    busyTransitions.length > 0 && busyTransitions.at(-1) === false
   );
 }
 
 // ============================ Test D (transcript) ===========================
 {
   const transcript = await harness.getSessionMessages(
+    // biome-ignore lint/style/noNonNullAssertion: a spawn that reached this point always carries a sessionId
     session.sessionId!,
     PROOF_DIR
   );
@@ -502,6 +516,7 @@ if (!session) {
           );
       }
       if (!reply) {
+        // biome-ignore lint/performance/noAwaitInLoops: polls in order until the reply appears, no concurrent work to parallelize
         await Bun.sleep(500);
       }
     }
@@ -526,8 +541,7 @@ if (!session) {
 
   record(
     "G: busy is false at the end",
-    busyTransitions.length > 0 &&
-      busyTransitions[busyTransitions.length - 1] === false
+    busyTransitions.length > 0 && busyTransitions.at(-1) === false
   );
 
   record("G: failed() never fired", failedCalls.length === failedBefore);
@@ -633,12 +647,14 @@ if (!session) {
       {
         instanceId: "proof-i",
         cwd: PROOF_DIR,
+        // biome-ignore lint/style/noNonNullAssertion: a spawn that reached this point always carries a sessionId
         resume: { sessionKey: sessionI.sessionId!, atMessage: alphaMsgId },
       } as SpawnPayload,
       ctxI
     );
 
     const transcript = await harness.getSessionMessages(
+      // biome-ignore lint/style/noNonNullAssertion: a spawn that reached this point always carries a sessionId
       sessionI.sessionId!,
       PROOF_DIR
     );
@@ -694,6 +710,7 @@ if (!session) {
       const deadline = Date.now() + ms;
       let exists = false;
       while (Date.now() < deadline && !exists) {
+        // biome-ignore lint/performance/noAwaitInLoops: polls in order until the file appears, no concurrent work to parallelize
         exists = await Bun.file(`${cmdDir}/AGENTS.md`).exists();
         if (!exists) {
           await Bun.sleep(2000);

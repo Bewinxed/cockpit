@@ -28,6 +28,8 @@ import {
   parseServerAnnouncement,
 } from "./opencode";
 
+const LOCALHOST_URL_PATTERN = /^http:\/\/127\.0\.0\.1:\d+$/;
+
 const cleanups: (() => void)[] = [];
 afterEach(() => {
   for (const cleanup of cleanups.splice(0).reverse()) {
@@ -56,6 +58,7 @@ const startDaemon = async (): Promise<string> => {
   cleanups.push(() => daemon.kill("SIGKILL"));
   const deadline = Date.now() + 10_000;
   while (Date.now() < deadline) {
+    // biome-ignore lint/performance/noAwaitInLoops: polling for the daemon to bind; must retry sequentially until the deadline
     if (await probeEndpoint(endpoint, 200)) {
       return endpoint;
     }
@@ -88,6 +91,7 @@ const fakeServerScript = (dir: string): string => {
       "  if (req.url && req.url.startsWith('/event')) {",
       "    subscriptions++;",
       "    res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive' });",
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: this is JS source text written to the fake server script file, not an interpolated string here
       "    const timer = setInterval(() => res.write(`data: ${JSON.stringify({ type: 'server.connected', subscription: subscriptions })}\\n\\n`), 20);",
       "    req.on('close', () => clearInterval(timer));",
       "    return;",
@@ -97,6 +101,7 @@ const fakeServerScript = (dir: string): string => {
       "});",
       "server.listen(0, '127.0.0.1', () => {",
       "  process.stdout.write('Warning: OPENCODE_SERVER_PASSWORD is not set; server is unsecured.\\n');",
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: this is JS source text written to the fake server script file, not an interpolated string here
       "  process.stdout.write(`opencode server listening on http://127.0.0.1:${server.address().port}\\n`);",
       "});",
     ].join("\n")
@@ -152,17 +157,20 @@ test("the server is spawned through sessiond, its port read from the ring, and o
     sessiond: client,
     spec: serverSpec(dir),
   });
-  expect(url).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
+  expect(url).toMatch(LOCALHOST_URL_PATTERN);
 
   // sessiond owns it, not this process.
   const held = (await client.list()).procs.find(
     (proc) => proc.procId === OPENCODE_SERVER_PROC_ID
   );
   expect(held?.alive).toBe(true);
+  // biome-ignore lint/style/noNonNullAssertion: invariant: held?.alive was just asserted true, so held exists
   expect(held!.pid).toBeGreaterThan(0);
+  // biome-ignore lint/style/noNonNullAssertion: invariant: held?.alive was just asserted true, so held exists
   expect(held!.pid).not.toBe(process.pid);
   cleanups.push(() => {
     try {
+      // biome-ignore lint/style/noNonNullAssertion: invariant: held?.alive was just asserted true, so held exists
       process.kill(held!.pid, "SIGKILL");
     } catch {
       /* already gone */
@@ -184,6 +192,7 @@ test("the server is spawned through sessiond, its port read from the ring, and o
     (proc) => proc.procId === OPENCODE_SERVER_PROC_ID
   );
   expect(stillHeld).toHaveLength(1);
+  // biome-ignore lint/style/noNonNullAssertion: invariant: toHaveLength(1) just confirmed one element, and held?.alive confirmed held exists
   expect(stillHeld[0]!.pid).toBe(held!.pid);
 }, 30_000);
 
@@ -197,9 +206,10 @@ test("a torn-down agent side rebuilds onto the still-running server and re-subsc
     sessiond: first,
     spec: serverSpec(dir),
   });
-  const pid = (await first.list()).procs.find(
+  // biome-ignore lint/style/noNonNullAssertion: invariant: attachOpencodeServer above just spawned this exact procId
+  const { pid } = (await first.list()).procs.find(
     (proc) => proc.procId === OPENCODE_SERVER_PROC_ID
-  )!.pid;
+  )!;
   cleanups.push(() => {
     try {
       process.kill(pid, "SIGKILL");
@@ -231,6 +241,7 @@ test("a torn-down agent side rebuilds onto the still-running server and re-subsc
     (proc) => proc.procId === OPENCODE_SERVER_PROC_ID
   );
   expect(after?.alive).toBe(true);
+  // biome-ignore lint/style/noNonNullAssertion: invariant: after?.alive was just asserted true, so after exists
   expect(after!.pid).toBe(pid);
 
   // And the SSE pump re-subscribes: a SECOND, distinct subscription lands on

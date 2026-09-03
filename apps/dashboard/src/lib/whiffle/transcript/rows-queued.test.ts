@@ -13,6 +13,9 @@ import type { SessionState } from "../client.svelte";
 import type { Message } from "../types";
 import { buildRows } from "./rows";
 
+const SSR_COUNT_BINDING = /^\s*\{ssrCount\}\s*$/m;
+const SSR_COUNT_LITERAL = /ssrCount=\{built\.rows\.length\}/;
+
 const queued = (queueId: string, text: string): QueuedMessage => ({
   queueId,
   text,
@@ -133,6 +136,6 @@ test("the transcript hands ssrCount to the server render only", async () => {
   expect(source).toContain(
     "const ssrCount = $derived(browser ? undefined : built.rows.length);"
   );
-  expect(source).toMatch(/^\s*\{ssrCount\}\s*$/m);
-  expect(source).not.toMatch(/ssrCount=\{built\.rows\.length\}/);
+  expect(source).toMatch(SSR_COUNT_BINDING);
+  expect(source).not.toMatch(SSR_COUNT_LITERAL);
 });

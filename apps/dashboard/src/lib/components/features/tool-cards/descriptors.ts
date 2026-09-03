@@ -220,12 +220,22 @@ const EDIT_TOOLS = new Set([
 const WRITE_TOOLS = new Set(["write", "create_file", "write_file"]);
 
 const MCP_NAME = /^mcp__(.+?)__(.+)$/;
+const NUMBERED_LINE = /^\s*\d+→/;
+const GREP_FOUND_COUNT = /^Found (\d+) (\w+)/i;
+const GREP_TALLY = /:(\d+)\s*$/;
+const NO_FILES_FOUND = /^no files found/i;
+const LEADING_WWW = /^www\./;
+const SERVER_LABEL_SEPARATORS = /[_\-.]+/;
+const TRAILING_SLASH = /\/$/;
+const ERROR_LINE =
+  /^\s*(error\b|fatal\b|traceback\b|exit code\b|command failed\b)|:\s*error\b/i;
 
 /**
  * The one classifier: both the sentence and the group header dispatch on it.
  * An MCP tool is classified on its own name first — the browser's `computer`
  * and `navigate` are the same act whether or not a server carried them.
  */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the single dispatch table from raw tool name to FamilyId; not refactored in this lint pass
 export function familyId(toolName: string | undefined): FamilyId {
   const raw = toolName ?? "";
   const mcp = MCP_NAME.exec(raw);
@@ -383,7 +393,7 @@ function readFact(result: string | undefined): string | undefined {
   }
   const numbered = result
     .split("\n")
-    .filter((line) => /^\s*\d+→/.test(line)).length;
+    .filter((line) => NUMBERED_LINE.test(line)).length;
   const lines = numbered || countLines(result);
   return lines > 0 ? `${lines} lines` : undefined;
 }
@@ -399,7 +409,7 @@ function grepFact(
   if (!result) {
     return undefined;
   }
-  const found = /^Found (\d+) (\w+)/i.exec(firstLine(result) ?? "");
+  const found = GREP_FOUND_COUNT.exec(firstLine(result) ?? "");
   if (found) {
     return `${found[1]} ${found[2].toLowerCase()}`;
   }
@@ -408,7 +418,7 @@ function grepFact(
   }
   let total = 0;
   for (const line of result.split("\n")) {
-    const tally = /:(\d+)\s*$/.exec(line);
+    const tally = GREP_TALLY.exec(line);
     if (tally) {
       total += Number(tally[1]);
     }
@@ -417,7 +427,7 @@ function grepFact(
 }
 
 function globFact(result: string | undefined): string | undefined {
-  if (!result || /^no files found/i.test(result.trim())) {
+  if (!result || NO_FILES_FOUND.test(result.trim())) {
     return undefined;
   }
   const files = countLines(result);
@@ -429,7 +439,7 @@ const hostOf = (url: string | undefined): string | undefined => {
     return undefined;
   }
   try {
-    return new URL(url).hostname.replace(/^www\./, "");
+    return new URL(url).hostname.replace(LEADING_WWW, "");
   } catch {
     return undefined;
   }
@@ -448,7 +458,7 @@ const faviconUrl = (host: string): string =>
 const TLD_LABELS = new Set(["ai", "com", "io", "org", "net"]);
 
 function readServer(server: string): { label: string; host?: string } {
-  const parts = server.split(/[_\-.]+/).filter(Boolean);
+  const parts = server.split(SERVER_LABEL_SEPARATORS).filter(Boolean);
   const cut =
     parts.length <= 3
       ? parts.findIndex(
@@ -539,6 +549,7 @@ export function describeTool(
   };
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the per-family switch that builds each tool's one-sentence description; not refactored in this lint pass
 function sentence(
   toolName: string | undefined,
   input: Record<string, unknown> | undefined,
@@ -573,12 +584,11 @@ function sentence(
       const path = str(input?.file_path) ?? str(input?.path);
       const offset = int(input?.offset);
       const limit = int(input?.limit);
-      const span =
-        offset === undefined
-          ? ""
-          : limit === undefined
-            ? `:${offset}+`
-            : `:${offset}–${offset + limit}`;
+      let span = "";
+      if (offset !== undefined) {
+        span =
+          limit === undefined ? `:${offset}+` : `:${offset}–${offset + limit}`;
+      }
       return {
         ...base,
         label: "Read",
@@ -641,14 +651,22 @@ function sentence(
       const search = name.toLowerCase() === "websearch";
       const url = str(input?.url);
       const host = hostOf(url);
+      let label = "Fetched";
+      if (search) {
+        label = "Searched the web";
+      } else if (host) {
+        label = `Fetched ${host}`;
+      }
+      let object: string | undefined;
+      if (search) {
+        object = str(input?.query);
+      } else if (url) {
+        object = oneLine(url);
+      }
       return {
         ...base,
-        label: search
-          ? "Searched the web"
-          : host
-            ? `Fetched ${host}`
-            : "Fetched",
-        object: search ? str(input?.query) : url ? oneLine(url) : undefined,
+        label,
+        object,
         favicon: host ? faviconUrl(host) : undefined,
         secondLine: firstLine(output),
         expanded: "web",
@@ -708,7 +726,7 @@ function sentence(
       let target = url ? oneLine(url) : undefined;
       if (url && host) {
         try {
-          target = `${host}${new URL(url).pathname.replace(/\/$/, "")}`;
+          target = `${host}${new URL(url).pathname.replace(TRAILING_SLASH, "")}`;
         } catch {
           /* keep the raw url */
         }
@@ -789,7 +807,5 @@ export function errorLine(result: string | undefined): string | undefined {
  * so a red well never swallows the thing the operator came to read.
  */
 export function isErrorLine(line: string): boolean {
-  return /^\s*(error\b|fatal\b|traceback\b|exit code\b|command failed\b)|:\s*error\b/i.test(
-    line
-  );
+  return ERROR_LINE.test(line);
 }

@@ -59,8 +59,9 @@ export function identifyBlocks(
   let blockStart = floorToHour(sorted[0].firstTs);
   let current: UsageBucket[] = [sorted[0]];
 
-  for (let i = 1; i < sorted.length; i++) {
+  for (let i = 1; i < sorted.length; i += 1) {
     const bucket = sorted[i];
+    // biome-ignore lint/style/useAtIndex: `current` always has >=1 element here (seeded with sorted[0], only ever pushed to); .at(-1) would widen to UsageBucket | undefined for no reason.
     const prevLast = current[current.length - 1].lastTs;
     const sinceStart = bucket.firstTs - blockStart;
     const sinceLast = bucket.firstTs - prevLast;
@@ -85,8 +86,9 @@ function createBlock(
   now: number
 ): UsageBlock {
   const end = start + SESSION_DURATION_MS;
-  const firstTs = buckets[0].firstTs;
-  const lastTs = buckets[buckets.length - 1].lastTs;
+  const { firstTs } = buckets[0];
+  // biome-ignore lint/style/useAtIndex: `buckets` is the non-empty group passed in from identifyBlocks; .at(-1) would widen to UsageBucket | undefined for no reason.
+  const { lastTs } = buckets[buckets.length - 1];
   const isActive = now - lastTs < SESSION_DURATION_MS && now < end;
 
   const tokens: UsageTokens = {

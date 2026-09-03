@@ -62,7 +62,7 @@
   const extra = $derived(group.faults.length - shown.length);
 
   let busy = $state(false);
-  let open = $state(false);
+  let disclosureOpen = $state(false);
 
   const message = (error: unknown) =>
     error instanceof Error ? error.message : String(error);
@@ -95,6 +95,7 @@
       let stillFailing = 0;
       for (const fault of group.faults) {
         if (fault.scope === "skills") {
+          // biome-ignore lint/performance/noAwaitInLoops: rows are re-resolved one at a time, in order, so the toast's final count is right
           if ((await refreshSkill(fault.key)).error) {
             stillFailing += 1;
           }
@@ -121,22 +122,26 @@
   }
 
   /** What the button will do, said before it is pressed rather than after. */
-  const actionLabel = $derived(
-    copy.action === "resync"
-      ? "Sync this machine"
-      : copy.action === "refresh"
-        ? group.faults.length > 1
-          ? `Fetch all ${group.faults.length} again`
-          : "Fetch again"
-        : ""
-  );
-  const actionHint = $derived(
-    copy.action === "resync"
-      ? "Applies the fleet’s setup to this machine again and reports what came of it."
-      : copy.action === "refresh"
-        ? "Downloads the content at the hub, once, then hands the bytes to every machine."
-        : ""
-  );
+  const actionLabel = $derived.by(() => {
+    if (copy.action === "resync") {
+      return "Sync this machine";
+    }
+    if (copy.action === "refresh") {
+      return group.faults.length > 1
+        ? `Fetch all ${group.faults.length} again`
+        : "Fetch again";
+    }
+    return "";
+  });
+  const actionHint = $derived.by(() => {
+    if (copy.action === "resync") {
+      return "Applies the fleet’s setup to this machine again and reports what came of it.";
+    }
+    if (copy.action === "refresh") {
+      return "Downloads the content at the hub, once, then hands the bytes to every machine.";
+    }
+    return "";
+  });
 </script>
 
 <div class="fault" class:hub={group.origin === 'hub'}>
@@ -207,19 +212,19 @@
       <pre class="said">{group.faults[0].detail}</pre>
     {:else}
       <button
-        aria-expanded={open}
+        aria-expanded={disclosureOpen}
         class="disclose"
-        onclick={() => (open = !open)}
+        onclick={() => { disclosureOpen = !disclosureOpen; }}
         type="button"
       >
-        {#if open}
+        {#if disclosureOpen}
           <IconChevronDown class="size-3.5 shrink-0" />
         {:else}
           <IconChevronRight class="size-3.5 shrink-0" />
         {/if}
         What it said
       </button>
-      {#if open}
+      {#if disclosureOpen}
         {#each shown as fault (fault.scope + fault.key)}
           {#if fault.detail}
             <pre

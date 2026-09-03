@@ -11,7 +11,7 @@
 </script>
 
 <div
-  class={cn("p-2 relative flex w-full min-w-0 flex-col", className)}
+  class={cn("relative flex w-full min-w-0 flex-col p-2", className)}
   data-sidebar="group"
   data-slot="sidebar-group"
   bind:this={ref}

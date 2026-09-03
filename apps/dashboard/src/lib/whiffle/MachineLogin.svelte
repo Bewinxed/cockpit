@@ -2,6 +2,7 @@
   import type { AuthState } from "@whiffle/core";
   import { toast } from "svelte-sonner";
   import { Button } from "$lib/components/ui/button";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Dialog from "$lib/components/ui/dialog";
   import { Input } from "$lib/components/ui/input";
   /**
@@ -19,7 +20,7 @@
 
   let {
     machine,
-    open = $bindable(false),
+    open: dialogOpen = $bindable(false),
   }: { machine: Machine; open?: boolean } = $props();
 
   let url = $state<string | null>(null);
@@ -44,7 +45,7 @@
    */
   let asked = $state(false);
   $effect(() => {
-    if (!open) {
+    if (!dialogOpen) {
       asked = false;
       return;
     }
@@ -52,6 +53,7 @@
       return;
     }
     asked = true;
+    // biome-ignore lint/complexity/noVoid: fire-and-forget; `begin` reports through `failed`/`busy` state, not its promise
     void begin();
   });
 
@@ -65,7 +67,7 @@
         "beginLogin",
         []
       );
-      url = challenge.url;
+      ({ url } = challenge);
     } catch (error) {
       failed = error instanceof Error ? error.message : String(error);
     } finally {
@@ -87,7 +89,7 @@
         [code.trim()]
       );
       code = "";
-      open = false;
+      dialogOpen = false;
       toast.success(`${machine.hostname} ${SAID[state] ?? "is logged in"}.`);
     } catch (error) {
       failed = error instanceof Error ? error.message : String(error);
@@ -99,12 +101,14 @@
 
 <Dialog.Root
   onOpenChange={(next) => {
-    if (next) return;
+    if (next) {
+      return;
+    }
     url = null;
     code = '';
     failed = null;
   }}
-  bind:open
+  bind:open={dialogOpen}
 >
   <Dialog.Content class="sm:max-w-lg">
     <Dialog.Header>
@@ -154,7 +158,9 @@
       <div class="flex justify-end gap-[var(--space-2)]">
         <Button
           disabled={busy}
-          onclick={() => (open = false)}
+          onclick={() => {
+            dialogOpen = false;
+          }}
           type="button"
           variant="outline"
         >

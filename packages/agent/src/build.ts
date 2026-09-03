@@ -40,4 +40,7 @@ let reported: Promise<BuildInfo> | undefined;
  * Read once and kept: a running daemon is whatever it started as, however the
  * checkout under it moves on. Learning that it moved is what an update is for.
  */
-export const buildInfo = (): Promise<BuildInfo> => (reported ??= read());
+export const buildInfo = (): Promise<BuildInfo> => {
+  reported ??= read();
+  return reported;
+};

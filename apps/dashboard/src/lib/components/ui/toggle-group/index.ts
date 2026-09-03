@@ -1,10 +1,10 @@
-import Root from "./toggle-group.svelte";
-import Item from "./toggle-group-item.svelte";
-
+// biome-ignore lint/performance/noBarrelFile: shadcn-svelte component barrel — every consumer imports the group from this index
 export {
-  Item,
-  Item as ToggleGroupItem,
-  Root,
+  default as Root,
   //
-  Root as ToggleGroup,
-};
+  default as ToggleGroup,
+} from "./toggle-group.svelte";
+export {
+  default as Item,
+  default as ToggleGroupItem,
+} from "./toggle-group-item.svelte";

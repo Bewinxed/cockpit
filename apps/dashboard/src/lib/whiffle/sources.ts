@@ -51,9 +51,12 @@ const inputUrl = (input: JsonValue | undefined): string | undefined => {
   if (typeof input !== "object" || input === null || Array.isArray(input)) {
     return undefined;
   }
-  const url = input.url;
+  const { url } = input;
   return typeof url === "string" ? url : undefined;
 };
+
+const TRAILING_SLASH = /\/$/;
+const LEADING_WWW = /^www\./;
 
 /** A source, or nothing when the text that looked like a URL is not one. */
 function ref(url: string, title: string | null): SourceRef | null {
@@ -68,9 +71,9 @@ function ref(url: string, title: string | null): SourceRef | null {
   }
   parsed.hash = "";
   return {
-    url: parsed.toString().replace(/\/$/, ""),
+    url: parsed.toString().replace(TRAILING_SLASH, ""),
     title: title?.trim() || null,
-    host: parsed.hostname.replace(/^www\./, ""),
+    host: parsed.hostname.replace(LEADING_WWW, ""),
   };
 }
 
@@ -91,7 +94,7 @@ function exaSearchSources(result: string): SourceRef[] {
     const trimmed = line.trim();
     const named = EXA_TITLE.exec(trimmed);
     if (named) {
-      title = named[1];
+      [, title] = named;
       continue;
     }
     const url = EXA_URL.exec(trimmed);
@@ -107,12 +110,13 @@ function exaSearchSources(result: string): SourceRef[] {
 const BARE_URL = /^(https?:\/\/\S+)$/;
 const MARKDOWN_LINK = /^\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/;
 
+const LEADING_ORDINAL = /^\d+[.)]\s*/;
+const LEADING_TITLE_LABEL = /^Title:\s*/i;
+
 /** `N. <title>` and `Title: <title>` are the two ways a result names itself. */
 const titleLine = (line: string): string | null =>
-  line
-    .replace(/^\d+[.)]\s*/, "")
-    .replace(/^Title:\s*/i, "")
-    .trim() || null;
+  line.replace(LEADING_ORDINAL, "").replace(LEADING_TITLE_LABEL, "").trim() ||
+  null;
 
 /**
  * `firecrawl_search` prints entries whose URL stands on its own line, under the

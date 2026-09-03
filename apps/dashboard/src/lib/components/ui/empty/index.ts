@@ -1,22 +1,16 @@
-import Root from "./empty.svelte";
-import Content from "./empty-content.svelte";
-import Description from "./empty-description.svelte";
-import Header from "./empty-header.svelte";
-import Media from "./empty-media.svelte";
-import Title from "./empty-title.svelte";
-
+// biome-ignore lint/performance/noBarrelFile: this is the shadcn-svelte component group's public re-export surface, not an accidental barrel
+export { default as Root, default as Empty } from "./empty.svelte";
 export {
-  Content,
-  Content as EmptyContent,
-  Description,
-  Description as EmptyDescription,
-  Header,
-  Header as EmptyHeader,
-  Media,
-  Media as EmptyMedia,
-  Root,
-  //
-  Root as Empty,
-  Title,
-  Title as EmptyTitle,
-};
+  default as Content,
+  default as EmptyContent,
+} from "./empty-content.svelte";
+export {
+  default as Description,
+  default as EmptyDescription,
+} from "./empty-description.svelte";
+export {
+  default as Header,
+  default as EmptyHeader,
+} from "./empty-header.svelte";
+export { default as Media, default as EmptyMedia } from "./empty-media.svelte";
+export { default as Title, default as EmptyTitle } from "./empty-title.svelte";

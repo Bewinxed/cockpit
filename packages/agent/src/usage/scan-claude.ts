@@ -1,3 +1,4 @@
+import type { Dirent } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -55,7 +56,7 @@ async function walk(
   project: string | null,
   out: ClaudeFile[]
 ): Promise<void> {
-  let entries;
+  let entries: Dirent[];
   try {
     entries = await readdir(root, { withFileTypes: true });
   } catch {
@@ -64,6 +65,7 @@ async function walk(
   for (const entry of entries) {
     const full = join(root, entry.name);
     if (entry.isDirectory()) {
+      // biome-ignore lint/performance/noAwaitInLoops: recursive walk; siblings push into the same shared `out` array in a stable, reproducible order
       await walk(full, project ?? entry.name, out);
     } else if (entry.name.endsWith(".jsonl")) {
       out.push({ path: full, project: project ?? "unknown" });
@@ -75,6 +77,7 @@ async function walk(
 export const listClaudeFiles = async (): Promise<ClaudeFile[]> => {
   const files: ClaudeFile[] = [];
   for (const dir of claudeConfigDirs()) {
+    // biome-ignore lint/performance/noAwaitInLoops: each config dir walks into the same shared `files` array in a stable, reproducible order
     await walk(join(dir, "projects"), null, files);
   }
   return files;
@@ -98,13 +101,11 @@ const parseClaudeRecord = (
   project: string
 ): ScannedRecord | null => {
   const line = raw as TranscriptLine;
-  const sessionId = line.sessionId;
-  const requestId = line.requestId;
-  const message = line.message;
+  const { sessionId, requestId, message } = line;
   if (!(sessionId && requestId)) {
     return null;
   }
-  if (!(message && message.id && message.model)) {
+  if (!(message?.id && message.model)) {
     return null;
   }
   if (!message.usage) {
@@ -117,8 +118,8 @@ const parseClaudeRecord = (
   }
 
   const tokens: UsageTokens = {
-    input: message.usage.input_tokens ?? 0,
-    output: message.usage.output_tokens ?? 0,
+    input: message.usage.input_tokens,
+    output: message.usage.output_tokens,
     cacheCreation: cacheCreationCount(message.usage),
     cacheRead: message.usage.cache_read_input_tokens ?? 0,
     reasoning: 0,

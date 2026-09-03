@@ -6,6 +6,7 @@
  * with `node:fs`. Import it from the node-only subpath `@whiffle/core/usage/limits`.
  */
 
+// biome-ignore lint/performance/noBarrelFile: the deliberate browser-safe re-export surface described above — @whiffle/core/usage is the public entry point.
 export * from "./blocks";
 export * from "./pricing";
 export * from "./tokens";

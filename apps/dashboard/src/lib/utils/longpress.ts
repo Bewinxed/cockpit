@@ -34,7 +34,7 @@ export function enableLongPressMenus(): () => void {
     if (event.touches.length !== 1) {
       return cancel();
     }
-    const touch = event.touches[0];
+    const [touch] = event.touches;
     const target = event.target as HTMLElement | null;
     // Only where a menu actually is — a long press on a paragraph should keep
     // meaning what the platform says it means (text selection).
@@ -59,7 +59,7 @@ export function enableLongPressMenus(): () => void {
   };
 
   const onTouchMove = (event: TouchEvent) => {
-    const touch = event.touches[0];
+    const [touch] = event.touches;
     if (!touch) {
       return cancel();
     }

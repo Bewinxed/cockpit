@@ -12,8 +12,8 @@ import { piHarness } from "./pi";
 const registry = new Map<HarnessKind, Harness>();
 
 /** Registers a harness; the last registration for a kind wins. */
-export const registerHarness = (harness: Harness): void => {
-  registry.set(harness.kind, harness);
+export const registerHarness = (adapter: Harness): void => {
+  registry.set(adapter.kind, adapter);
 };
 
 registerHarness(claudeHarness);

@@ -4,6 +4,7 @@
   import type { Snippet } from "svelte";
   import type { ButtonVariant } from "$lib/components/ui/button/index.js";
   import { cn, type WithoutChildrenOrChild } from "$lib/utils.js";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups — the sub-components below are addressed via RangeCalendar.X
   import * as RangeCalendar from "./index.js";
 
   let {
@@ -45,7 +46,7 @@
 
 <RangeCalendarPrimitive.Root
   class={cn(
-		"p-3 [--cell-radius:var(--radius-pill)] [--cell-size:--spacing(8)] group/calendar bg-background p-3 [[data-slot=card-content]_&]:bg-transparent [[data-slot=popover-content]_&]:bg-transparent",
+		"group/calendar bg-background p-3 p-3 [--cell-radius:var(--radius-pill)] [--cell-size:--spacing(8)] [[data-slot=card-content]_&]:bg-transparent [[data-slot=popover-content]_&]:bg-transparent",
 		className
 	)}
   {disableDaysOutsideMonth}

@@ -1,21 +1,20 @@
-import Root from "./tabs.svelte";
-import Content from "./tabs-content.svelte";
-import List, {
+// biome-ignore lint/performance/noBarrelFile: shadcn-svelte component barrel — every consumer imports the group from this index
+export {
+  default as Root,
+  //
+  default as Tabs,
+} from "./tabs.svelte";
+export {
+  default as Content,
+  default as TabsContent,
+} from "./tabs-content.svelte";
+export {
+  default as List,
+  default as TabsList,
   type TabsListVariant,
   tabsListVariants,
 } from "./tabs-list.svelte";
-import Trigger from "./tabs-trigger.svelte";
-
 export {
-  Content,
-  Content as TabsContent,
-  List,
-  List as TabsList,
-  Root,
-  //
-  Root as Tabs,
-  type TabsListVariant,
-  Trigger,
-  Trigger as TabsTrigger,
-  tabsListVariants,
-};
+  default as Trigger,
+  default as TabsTrigger,
+} from "./tabs-trigger.svelte";

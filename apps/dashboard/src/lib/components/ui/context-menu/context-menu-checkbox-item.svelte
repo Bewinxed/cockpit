@@ -21,7 +21,7 @@
 
 <ContextMenuPrimitive.CheckboxItem
   class={cn(
-		"gap-2 rounded-[var(--radius-card)] py-2 pr-8 pl-3 text-sm focus:bg-accent focus:text-accent-foreground data-inset:pl-9.5 [&_svg:not([class*='size-'])]:size-4 relative flex cursor-default items-center outline-hidden select-none data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+		"relative flex cursor-default select-none items-center gap-2 rounded-[var(--radius-card)] py-2 pr-8 pl-3 text-sm outline-hidden focus:bg-accent focus:text-accent-foreground data-disabled:pointer-events-none data-inset:pl-9.5 data-disabled:opacity-50 [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
 		className
 	)}
   data-inset={inset}

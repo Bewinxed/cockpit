@@ -12,6 +12,7 @@
    */
   import { toast } from "svelte-sonner";
   import { Button } from "$lib/components/ui/button";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Popover from "$lib/components/ui/popover";
   import {
     IconCheck,
@@ -47,6 +48,16 @@
 
   let asked = $state<Record<string, boolean>>({});
 
+  function toneFor(state: string | undefined): string {
+    if (state === "applied") {
+      return "text-success hover:bg-success/10";
+    }
+    if (state === "failed") {
+      return "bg-warning/10 text-warning hover:bg-warning/20";
+    }
+    return "text-faint hover:bg-muted";
+  }
+
   async function resync(machine: Machine) {
     asked[machine.machineId] = true;
     try {
@@ -64,7 +75,7 @@
     {@const item = machine.fleet?.[kind]?.[name]}
     {@const online = machine.status === 'online'}
     {@const os = machineOs(machine.os)}
-    {@const tone = item?.state === 'applied' ? 'text-success hover:bg-success/10' : item?.state === 'failed' ? 'bg-warning/10 text-warning hover:bg-warning/20' : 'text-faint hover:bg-muted'}
+    {@const tone = toneFor(item?.state)}
     <Popover.Root>
       <Popover.Trigger
         aria-label="{machineLabel(machine.hostname)}: {item?.state ?? 'not reported'}"

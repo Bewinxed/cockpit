@@ -79,7 +79,9 @@ const makeTestRegistry = (): RegistryShape & {
         entry.subscriptions = new Set(instanceIds);
       }
     },
-    noteDashboardOrigin: () => {},
+    noteDashboardOrigin: () => {
+      // stub: this suite never asserts on the dashboard origin
+    },
     dashboardOrigin: () => undefined,
     rememberRequester: (requestId, socket) => requesters.set(requestId, socket),
     takeRequester: (requestId) => {
@@ -91,10 +93,16 @@ const makeTestRegistry = (): RegistryShape & {
 };
 
 const pending: PendingShape = {
-  remember: () => {},
+  remember: () => {
+    // stub: this suite never exercises pending-permission tracking
+  },
   get: () => undefined,
-  resolve: () => {},
-  forget: () => {},
+  resolve: () => {
+    // stub: this suite never exercises pending-permission tracking
+  },
+  forget: () => {
+    // stub: this suite never exercises pending-permission tracking
+  },
   list: () => [],
 };
 
@@ -126,7 +134,9 @@ db.upsertAgent({
 
 const socketFor = (machineId: string): HubSocket => ({
   id: `sock-${machineId}`,
-  send: () => {},
+  send: () => {
+    // stub: this suite asserts on presence, not on what a socket receives
+  },
 });
 registry.registerAgent(LIVE, socketFor(LIVE));
 registry.registerAgent(DROPPED, socketFor(DROPPED));
@@ -134,9 +144,12 @@ registry.registerAgent(DROPPED, socketFor(DROPPED));
 afterAll(async () => {
   app.stop();
   for (const suffix of ["", "-shm", "-wal"]) {
+    // biome-ignore lint/performance/noAwaitInLoops: three fixed cleanup paths, sequential for simplicity in a teardown that runs once.
     await Bun.file(`${DB_FILE}${suffix}`)
       .delete()
-      .catch(() => {});
+      .catch(() => {
+        // best effort: the file may never have been created (e.g. no -wal)
+      });
   }
 });
 
@@ -237,9 +250,10 @@ test("the instances frame and /api/agents say the same thing about the same mach
   });
 
   let frame: Record<string, unknown> | undefined;
-  for (let waited = 0; waited < 400 && !frame; waited++) {
+  for (let waited = 0; waited < 400 && !frame; waited += 1) {
     frame = inbox.find((message) => message.verb === "frames");
     if (!frame) {
+      // biome-ignore lint/performance/noAwaitInLoops: polling loop — each wait must observe the inbox again before deciding whether to wait once more.
       await Bun.sleep(5);
     }
   }

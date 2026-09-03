@@ -76,11 +76,16 @@ beforeAll(async () => {
     stdio: "ignore",
   });
   const deadline = Date.now() + 10_000;
+  // biome-ignore lint/performance/noAwaitInLoops: polls the daemon at a fixed interval until it binds or the deadline passes
   while (Date.now() < deadline && !(await probeEndpoint(endpoint, 200))) {
     await Bun.sleep(25);
   }
   client = await SessiondClient.connect(endpoint);
-  epoch = client.epoch!;
+  const connectedEpoch = client.epoch;
+  if (!connectedEpoch) {
+    throw new Error("connected client carries no epoch");
+  }
+  epoch = connectedEpoch;
   expect(epoch).toBeTruthy();
 });
 
@@ -88,7 +93,10 @@ afterAll(async () => {
   // The children are killed BEFORE the daemon, so nothing is orphaned onto a
   // machine full of the operator's real work.
   for (const procId of spawned) {
-    await client.signal(procId, "SIGKILL").catch(() => {});
+    // biome-ignore lint/performance/noAwaitInLoops: children are killed one at a time before the daemon, so none is orphaned onto the operator's machine
+    await client.signal(procId, "SIGKILL").catch(() => {
+      // already dead is fine; the point is nothing is left running
+    });
   }
   await Bun.sleep(50);
   client.close();
@@ -138,7 +146,8 @@ const waitFor = async (
   predicate: () => boolean | Promise<boolean>,
   why: string
 ): Promise<void> => {
-  for (let waited = 0; waited < 400; waited++) {
+  for (let waited = 0; waited < 400; waited += 1) {
+    // biome-ignore lint/performance/noAwaitInLoops: polls the predicate at a fixed interval until it passes or the wait times out
     if (await predicate()) {
       return;
     }
@@ -153,6 +162,7 @@ const headOf = async (procId: string): Promise<number> =>
 
 /** How far the ring's head has to be pushed to guarantee it dropped line 1. */
 const OVERFLOW_LINES = 4200; // > SESSIOND_RING_LINES (4096, design §6)
+const RESUMES_AT_LINE_RE = /resumes at line \d+/;
 
 test("a stale-epoch mark replays nothing and follows from head", async () => {
   const procId = `honest-loss-${crypto.randomUUID()}`;
@@ -260,10 +270,13 @@ test("a ring that overflowed during the absence lands a sessiond_stream_gap fram
   );
   const seam = sunk.find(
     (frame) => messageOf(frame).subtype === "sessiond_stream_gap"
-  )!;
+  );
+  if (!seam) {
+    throw new Error("no sessiond_stream_gap frame arrived");
+  }
   // It says where the seam is, so the operator reads a hole rather than a
   // transcript that quietly skipped four thousand lines.
-  expect(messageOf(seam).text).toMatch(/resumes at line \d+/);
+  expect(messageOf(seam).text).toMatch(RESUMES_AT_LINE_RE);
   // And no line from before the seam was replayed as if it were current.
   expect(sunk.filter((frame) => noteOf(frame) !== undefined)).toEqual([]);
 }, 60_000);
@@ -337,8 +350,11 @@ test("survivors reports what sessiond holds, with the cwd needed to adopt it", a
   // The cwd is what makes it adoptable at all — sessiond echoes back the spec's.
   expect(found?.cwd).toBe(dir);
 
+  if (!found) {
+    throw new Error(`${procId} did not show up as a survivor`);
+  }
   // Adoptable on exactly that row, with no help from the hub.
-  expect(await supervisor.reattachFrom({ ok: true }, [found!])).toEqual([
+  expect(await supervisor.reattachFrom({ ok: true }, [found])).toEqual([
     procId,
   ]);
   // And once carried, it is no longer an unclaimed survivor.

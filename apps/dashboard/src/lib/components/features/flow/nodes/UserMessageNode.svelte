@@ -17,9 +17,16 @@
   const zoom = $derived(viewport.zoom);
 
   // Semantic zoom levels
-  const zoomLevel = $derived(
-    zoom < 0.5 ? "overview" : zoom < 1.0 ? "summary" : "detail"
-  );
+  function zoomLevelFor(z: number): "overview" | "summary" | "detail" {
+    if (z < 0.5) {
+      return "overview";
+    }
+    if (z < 1.0) {
+      return "summary";
+    }
+    return "detail";
+  }
+  const zoomLevel = $derived(zoomLevelFor(zoom));
 
   // User messages show full content at all levels per spec
   const displayContent = $derived(
